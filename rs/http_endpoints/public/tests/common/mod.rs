@@ -144,6 +144,7 @@ pub fn default_read_certified_state(
             },
             content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
         },
+        height_witness: vec![1, 2, 3],
     };
 
     Some((rs, mht, cert))

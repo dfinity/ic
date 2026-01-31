@@ -533,6 +533,7 @@ mod tests {
                 signature: ThresholdSignatureShare::fake(node_test_id(node)),
                 content,
             },
+            height_witness: vec![1, 2, 3],
         })
     }
 
@@ -542,6 +543,7 @@ mod tests {
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
             signed: Signed { content, signature },
+            height_witness: vec![1, 2, 3],
         })
     }
 

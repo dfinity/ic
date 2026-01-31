@@ -209,6 +209,8 @@ pub struct Certification {
     pub height: Height,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignature<CertificationContent>>,
+    /// witness data for the height
+    pub height_witness: Vec<u8>,
 }
 
 impl HasHeight for Certification {
@@ -222,6 +224,7 @@ impl CountBytes for Certification {
         std::mem::size_of::<Height>()
             + self.signed.content.hash.get_ref().0.len()
             + self.signed.signature.count_bytes()
+            + self.height_witness.len()
     }
 }
 
@@ -233,6 +236,8 @@ pub struct CertificationShare {
     pub height: Height,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignatureShare<CertificationContent>>,
+    /// witness data for the height
+    pub height_witness: Vec<u8>,
 }
 
 impl HasHeight for CertificationShare {

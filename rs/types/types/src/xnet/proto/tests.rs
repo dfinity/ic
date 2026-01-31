@@ -123,6 +123,7 @@ fn certification_for_test() -> Certification {
             content: certification_content_for_test(),
             signature: threshold_signature_for_test(),
         },
+        height_witness: vec![1, 2, 3],
     }
 }
 

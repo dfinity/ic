@@ -781,6 +781,7 @@ fn can_retrieve_subnet_metrics(
                     hash_tree.digest().to_vec(),
                 ))),
             },
+            height_witness: vec![1, 2, 3],
         };
 
         (state, hash_tree, certification)
@@ -1207,6 +1208,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
                                 CryptoHash(hash_tree.digest().to_vec()),
                             )),
                         },
+                        height_witness: vec![1, 2, 3],
                     };
 
                     Some((hash_tree, certification))

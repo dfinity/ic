@@ -873,6 +873,7 @@ impl Player {
                     },
                 },
             },
+            height_witness: vec![1, 2, 3],
         }
     }
 
@@ -1677,6 +1678,7 @@ mod tests {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
             },
+            height_witness: vec![1, 2, 3],
         })
     }
 

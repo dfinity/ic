@@ -72,6 +72,7 @@ mod tests {
                 signature,
                 content: CertificationContent::new(hash),
             },
+            height_witness: vec![1, 2, 3],
         }
     }
 
