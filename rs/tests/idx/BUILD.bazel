@@ -38,6 +38,8 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
     ],
 )
