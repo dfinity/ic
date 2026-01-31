@@ -218,7 +218,9 @@ fn get_ingress_payload(
         certified_height: Height::from(0),
     };
     let past_payload = HashSet::new();
-    manager.get_ingress_payload(&past_payload, &validation_context, byte_limit)
+    manager
+        .get_ingress_payload(&past_payload, &validation_context, byte_limit)
+        .payload
 }
 
 /// Validate payload

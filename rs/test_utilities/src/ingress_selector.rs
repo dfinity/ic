@@ -1,6 +1,7 @@
+use ic_consensus_features::HASHES_IN_BLOCKS_ENABLED;
 use ic_interfaces::{
+    consensus::PayloadWithSizeEstimate,
     ingress_manager::{IngressPayloadValidationError, IngressSelector, IngressSetQuery},
-    validation::ValidationResult,
 };
 use ic_types::{
     CountBytes, Height, NumBytes, Time,
@@ -8,7 +9,7 @@ use ic_types::{
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
     ingress::IngressSets,
-    messages::SignedIngress,
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, SignedIngress},
     time::UNIX_EPOCH,
 };
 use std::collections::VecDeque;
@@ -57,7 +58,7 @@ impl IngressSelector for FakeIngressSelector {
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
         byte_limit: NumBytes,
-    ) -> IngressPayload {
+    ) -> PayloadWithSizeEstimate<IngressPayload> {
         let mut queue = self.queue.lock().unwrap();
 
         // Find the index of a payload that fits in byte_limit
@@ -65,30 +66,48 @@ impl IngressSelector for FakeIngressSelector {
             .iter()
             .enumerate()
             .find(|(_, payloads)| {
-                (payloads
-                    .iter()
-                    .map(|payload| payload.count_bytes())
-                    .sum::<usize>() as u64)
-                    < byte_limit.get()
+                if HASHES_IN_BLOCKS_ENABLED {
+                    ((payloads.len() * EXPECTED_MESSAGE_ID_LENGTH) as u64) < byte_limit.get()
+                } else {
+                    (payloads
+                        .iter()
+                        .map(|payload| payload.count_bytes())
+                        .sum::<usize>() as u64)
+                        < byte_limit.get()
+                }
             })
             .map(|(idx, _)| idx);
 
         // Return the found payload or default
-        match payload_idx {
+        let payload = match payload_idx {
             Some(idx) => queue
                 .remove(idx)
                 .map(|payload| payload.into())
                 .unwrap_or_default(),
             None => IngressPayload::default(),
+        };
+
+        PayloadWithSizeEstimate {
+            wire_size_estimate: if HASHES_IN_BLOCKS_ENABLED {
+                payload.total_ids_size_estimate()
+            } else {
+                payload.total_messages_size_estimate() + payload.total_ids_size_estimate()
+            },
+            payload,
         }
     }
+
     fn validate_ingress_payload(
         &self,
-        _payload: &IngressPayload,
+        payload: &IngressPayload,
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
-    ) -> ValidationResult<IngressPayloadValidationError> {
-        Ok(())
+    ) -> Result<NumBytes, IngressPayloadValidationError> {
+        if HASHES_IN_BLOCKS_ENABLED {
+            Ok(payload.total_ids_size_estimate())
+        } else {
+            Ok(payload.total_ids_size_estimate() + payload.total_messages_size_estimate())
+        }
     }
 
     fn filter_past_payloads(
