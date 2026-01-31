@@ -13,6 +13,7 @@ use ic_protobuf::registry::{
     subnet::v1::{
         CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
         ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+        catch_up_package_contents::CupType,
     },
 };
 use ic_registry_keys::{
@@ -105,6 +106,7 @@ impl Registry {
                 response.high_threshold_transcript_record,
             ),
             chain_key_initializations,
+            cup_type: Some(CupType::Genesis(())),
             ..Default::default()
         };
 
