@@ -2,7 +2,7 @@ use super::*;
 
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::Vote,
+    pb::v1::{MaturityDisbursement, Vote},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::ProposalId;
@@ -784,4 +784,108 @@ fn test_register_recent_neuron_ballot_migration_notfull() {
     let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
     assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
     assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(22));
+}
+
+#[test]
+fn test_total_maturity_disbursements_in_progress_e8s_equivalent() {
+    let mut store = new_heap_based();
+
+    // Create a neuron without maturity disbursements (should not contribute to total)
+    let neuron_without_disbursements = create_model_neuron(1);
+    store.create(neuron_without_disbursements).unwrap();
+
+    assert_eq!(
+        store.total_maturity_disbursements_in_progress_e8s_equivalent(),
+        0
+    );
+
+    // Create a neuron with maturity disbursements
+    let controller_2 = PrincipalId::new_user_test_id(2);
+    let subaccount_2 = Subaccount::from(&controller_2);
+    let neuron_2 = NeuronBuilder::new(
+        NeuronId { id: 2 },
+        subaccount_2,
+        controller_2,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 10_000_000_000,
+            aging_since_timestamp_seconds: 123_456_789,
+        },
+        123_456_789,
+    )
+    .with_maturity_disbursements_in_progress(vec![
+        MaturityDisbursement {
+            amount_e8s: 100_000_000,
+            finalize_disbursement_timestamp_seconds: 1,
+            ..Default::default()
+        },
+        MaturityDisbursement {
+            amount_e8s: 200_000_000,
+            finalize_disbursement_timestamp_seconds: 2,
+            ..Default::default()
+        },
+    ])
+    .build();
+
+    store.create(neuron_2.clone()).unwrap();
+
+    assert_eq!(
+        store.total_maturity_disbursements_in_progress_e8s_equivalent(),
+        300_000_000
+    );
+
+    // Create a third neuron with more maturity disbursements
+    let controller_3 = PrincipalId::new_user_test_id(3);
+    let subaccount_3 = Subaccount::from(&controller_3);
+    let neuron_3 = NeuronBuilder::new(
+        NeuronId { id: 3 },
+        subaccount_3,
+        controller_3,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 10_000_000_000,
+            aging_since_timestamp_seconds: 123_456_789,
+        },
+        123_456_789,
+    )
+    .with_maturity_disbursements_in_progress(vec![MaturityDisbursement {
+        amount_e8s: 500_000_000,
+        finalize_disbursement_timestamp_seconds: 3,
+        ..Default::default()
+    }])
+    .build();
+
+    store.create(neuron_3).unwrap();
+
+    // Should return the sum of all maturity disbursements across all neurons
+    assert_eq!(
+        store.total_maturity_disbursements_in_progress_e8s_equivalent(),
+        800_000_000
+    );
+
+    // Update neuron_2 to add more disbursements
+    let mut updated_neuron_2 = neuron_2.clone();
+    updated_neuron_2.maturity_disbursements_in_progress = vec![
+        MaturityDisbursement {
+            amount_e8s: 100_000_000,
+            finalize_disbursement_timestamp_seconds: 1,
+            ..Default::default()
+        },
+        MaturityDisbursement {
+            amount_e8s: 200_000_000,
+            finalize_disbursement_timestamp_seconds: 2,
+            ..Default::default()
+        },
+        MaturityDisbursement {
+            amount_e8s: 150_000_000,
+            finalize_disbursement_timestamp_seconds: 4,
+            ..Default::default()
+        },
+    ];
+
+    store.update(&neuron_2, updated_neuron_2).unwrap();
+
+    // Should reflect the updated disbursements (300 + 150 + 500 = 950)
+    assert_eq!(
+        store.total_maturity_disbursements_in_progress_e8s_equivalent(),
+        950_000_000
+    );
 }
