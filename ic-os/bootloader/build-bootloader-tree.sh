@@ -6,11 +6,7 @@
 
 set -euxo pipefail
 
-cleanup() {
-    podman rm -f "${CONTAINER_NAME}"
-    rm -rf "${TMP_DIR}"
-}
-trap cleanup EXIT
+trap 'sudo rm -rf "${TMP_DIR}"' EXIT
 
 while getopts "o:" OPT; do
     case "${OPT}" in
@@ -28,7 +24,7 @@ TMP_DIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
 BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
-podman build --iidfile "${TMP_DIR}/iidfile" - <<<"
+podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
     RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
@@ -48,6 +44,6 @@ podman build --iidfile "${TMP_DIR}/iidfile" - <<<"
 IMAGE_ID=$(cut -d':' -f2 <"${TMP_DIR}/iidfile")
 CONTAINER_NAME="${IMAGE_ID}_container"
 
-podman create --name "${CONTAINER_NAME}" "${IMAGE_ID}"
-podman export "${CONTAINER_NAME}" | tar --strip-components=1 -C "${TMP_DIR}" -x build
+podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" create --name "${CONTAINER_NAME}" "${IMAGE_ID}"
+podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" export "${CONTAINER_NAME}" | tar --strip-components=1 -C "${TMP_DIR}" -x build
 tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMP_DIR}" boot
