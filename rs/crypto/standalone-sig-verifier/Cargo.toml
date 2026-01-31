@@ -7,16 +7,15 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-ed25519 = { path = "../../../packages/ic-ed25519" }
+ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
+ic-secp256r1 = { path = "../../../packages/ic-secp256r1" }
+
 ic-crypto-iccsa = { path = "../iccsa" }
 ic-crypto-internal-basic-sig-cose = { path = "../internal/crypto_lib/basic_sig/cose" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../internal/crypto_lib/basic_sig/der_utils" }
-ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
-ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
-ic-crypto-internal-basic-sig-ed25519 = { path = "../internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../internal/crypto_lib/basic_sig/rsa_pkcs1" }
-ic-crypto-sha2 = { path = "../sha2" }
 ic-types = { path = "../../types/types" }
-p256 = { workspace = true }
 simple_asn1 = { workspace = true }
 
 [dev-dependencies]

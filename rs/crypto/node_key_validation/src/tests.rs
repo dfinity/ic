@@ -158,8 +158,7 @@ mod node_signing_public_key_validation {
         let result = ValidNodeSigningPublicKey::try_from(invalid_node_signing_key);
 
         assert_matches!(result, Err(KeyValidationError { error })
-            if error.contains("invalid node signing key: PublicKeyBytesFromProtoError")
-            && error.contains("Wrong data length")
+            if error.contains("invalid node signing key: Unexpected length 33")
         );
     }
 
@@ -167,16 +166,15 @@ mod node_signing_public_key_validation {
     fn should_fail_if_node_signing_key_verification_fails() {
         let (corrupted_node_signing_public_key, node_id_for_corrupted_node_signing_key) = {
             let mut corrupted_public_key = valid_node_signing_public_key();
-            corrupted_public_key.key_value = {
-                let nspk_bytes =
-                    BasicSigEd25519PublicKeyBytes::try_from(&corrupted_public_key).unwrap();
-                invalidate_valid_ed25519_pubkey(nspk_bytes).0.to_vec()
-            };
+            invalidate_ed25519_pubkey(&mut corrupted_public_key.key_value);
+
             let node_id_for_corrupted_node_signing_key = {
-                let corrupted_key = &corrupted_public_key.key_value;
-                let mut buf = [0; BasicSigEd25519PublicKeyBytes::SIZE];
-                buf.copy_from_slice(corrupted_key);
-                derive_node_id(BasicSigEd25519PublicKeyBytes(buf))
+                // Only fails if the length is incorrect which should not happen
+                let pubkey_der =
+                    ic_ed25519::PublicKey::convert_raw_to_der(&corrupted_public_key.key_value)
+                        .expect("Conversion failed");
+
+                NodeId::from(PrincipalId::new_self_authenticating(&pubkey_der))
             };
             (corrupted_public_key, node_id_for_corrupted_node_signing_key)
         };
@@ -187,7 +185,7 @@ mod node_signing_public_key_validation {
         ));
 
         assert_matches!(result, Err(KeyValidationError { error })
-            if error == "invalid node signing key: verification failed"
+            if error == "invalid node signing key: has torsion component"
         );
     }
 
@@ -499,15 +497,19 @@ fn should_correctly_display_key_validation_error() {
     );
 }
 
-fn invalidate_valid_ed25519_pubkey(
-    valid_pubkey: BasicSigEd25519PublicKeyBytes,
-) -> BasicSigEd25519PublicKeyBytes {
+fn invalidate_ed25519_pubkey(key: &mut Vec<u8>) {
+    assert_eq!(key.len(), 32);
+
+    let mut key_arr = [0u8; 32];
+    key_arr.copy_from_slice(key);
+
     use curve25519_dalek::edwards::CompressedEdwardsY;
-    let point_of_prime_order = CompressedEdwardsY(valid_pubkey.0).decompress().unwrap();
+    let point_of_prime_order = CompressedEdwardsY(key_arr).decompress().unwrap();
     let point_of_order_8 = CompressedEdwardsY([0; 32]).decompress().unwrap();
     let point_of_composite_order = point_of_prime_order + point_of_order_8;
     assert!(!point_of_composite_order.is_torsion_free());
-    BasicSigEd25519PublicKeyBytes(point_of_composite_order.compress().0)
+
+    *key = point_of_composite_order.compress().0.to_vec();
 }
 
 fn node_id(n: u64) -> NodeId {

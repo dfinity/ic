@@ -985,7 +985,7 @@ mod validate_pks_and_sks {
                     ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(
-                    "invalid node signing key: verification failed".to_string(),
+                    "invalid node signing key: InvalidKeyEncoding".to_string(),
                 )),
             },
             ParameterizedTest {

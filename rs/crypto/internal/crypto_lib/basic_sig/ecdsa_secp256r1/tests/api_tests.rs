@@ -126,7 +126,7 @@ mod keygen {
         assert_matches!(pk_result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes: _, internal_error})
              if algorithm == AlgorithmId::EcdsaP256
              && internal_error.contains(
-                 "non-canonical encoding"
+                 "Non-canonical encoding"
              )
         );
     }

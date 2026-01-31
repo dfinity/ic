@@ -2,7 +2,6 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use simple_asn1::{ASN1Block, OID};
 
 #[cfg(test)]
@@ -98,51 +97,6 @@ pub fn algo_id_and_public_key_bytes_from_der(
 ) -> Result<(PkixAlgorithmIdentifier, Vec<u8>), KeyDerParsingError> {
     let kp = KeyDerParser::new(der);
     kp.get_algo_id_and_public_key_bytes()
-}
-
-/// Parse a public key and verify if it is of the expected type and size
-///
-/// The format is SubjectPublicKeyInfo as defined in RFC 5480
-pub fn parse_public_key(
-    der: &[u8],
-    algorithm: AlgorithmId,
-    expected_algo_id: PkixAlgorithmIdentifier,
-    expected_pk_len: Option<usize>,
-) -> CryptoResult<Vec<u8>> {
-    let (algo_id, pk_bytes) = algo_id_and_public_key_bytes_from_der(der).map_err(|e| {
-        CryptoError::MalformedPublicKey {
-            algorithm,
-            key_bytes: Some(der.to_vec()),
-            internal_error: e.internal_error,
-        }
-    })?;
-
-    if algo_id != expected_algo_id {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm,
-            key_bytes: Some(der.to_vec()),
-            internal_error: format!(
-                "Wrong algorithm identifier for {algorithm:?}: expected {expected_algo_id:?} got {algo_id:?}"
-            ),
-        });
-    }
-
-    if let Some(expected_pk_len) = expected_pk_len
-        && pk_bytes.len() != expected_pk_len
-    {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm,
-            key_bytes: Some(der.to_vec()),
-            internal_error: format!(
-                "Wrong length for {:?} expected {} got {}",
-                algorithm,
-                expected_pk_len,
-                pk_bytes.len()
-            ),
-        });
-    }
-
-    Ok(pk_bytes)
 }
 
 /// Parser for DER-encoded keys.
