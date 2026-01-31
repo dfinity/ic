@@ -28,7 +28,9 @@
 //! registry, the switch-over is *not* atomic. This is the reason why the
 //! switch-over is handled in this component.
 
-use crate::internal_state::{InternalState, write_certified_changes_to_local_store};
+use crate::internal_state::{
+    InternalState, SuccessfulPoll, write_certified_changes_to_local_store,
+};
 use ic_config::{
     Config,
     metrics::{Config as MetricsConfig, Exporter},
@@ -42,8 +44,8 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    NodeId, RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey,
-    registry::RegistryClientError,
+    NodeId, RegistryVersion, Time, crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError, time::current_time,
 };
 use metrics::RegistryReplicatorMetrics;
 use std::{
@@ -52,7 +54,7 @@ use std::{
     net::SocketAddr,
     path::Path,
     sync::{
-        Arc,
+        Arc, RwLock,
         atomic::{AtomicBool, Ordering},
     },
     time::Duration,
@@ -84,6 +86,8 @@ pub struct RegistryReplicator {
     local_store: Arc<dyn LocalStore>,
     started: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
+    init_time: Time,
+    latest_certified_time: Arc<RwLock<Option<Time>>>,
     poll_delay: Duration,
     metrics: Arc<RegistryReplicatorMetrics>,
 }
@@ -100,6 +104,8 @@ impl RegistryReplicator {
         config_nns_urls: Vec<Url>,
         config_nns_pub_key: Option<ThresholdSigPublicKey>,
     ) -> Self {
+        let init_time = current_time();
+
         let local_store = Arc::new(LocalStoreImpl::new(&local_store_path));
         std::fs::create_dir_all(local_store_path)
             .expect("Could not create directory for registry local store.");
@@ -138,6 +144,8 @@ impl RegistryReplicator {
             local_store,
             started: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),
+            init_time,
+            latest_certified_time: Arc::new(RwLock::new(None)),
             poll_delay,
             metrics,
         }
@@ -257,6 +265,8 @@ impl RegistryReplicator {
         (nns_urls, nns_pub_key)
     }
 
+    // Initializes the local registry store by repeatedly polling the registry canister
+    // until no more changes are available.
     async fn initialize_local_store(
         logger: &ReplicaLogger,
         local_store: Arc<dyn LocalStore>,
@@ -294,7 +304,11 @@ impl RegistryReplicator {
             )
             .await
             {
-                Ok(last_stored_version) => {
+                Ok(SuccessfulPoll {
+                    last_stored_version,
+                    last_available_version,
+                    certified_time: _,
+                }) => {
                     if last_stored_version == registry_version {
                         // The last stored version is the same as the requested version, which
                         // means we fetched the latest version.
@@ -303,7 +317,9 @@ impl RegistryReplicator {
 
                     info!(
                         logger,
-                        "Stored registry versions up to: {}", last_stored_version
+                        "Stored registry versions up to: {}/{}",
+                        last_stored_version,
+                        last_available_version
                     );
                     registry_version = last_stored_version;
                     timeout = 1;
@@ -322,7 +338,7 @@ impl RegistryReplicator {
 
         info!(
             logger,
-            "Finished local store initialization at registry version: {}", registry_version
+            "Finished local store initialization at registry version: {}", registry_version,
         );
     }
 
@@ -346,6 +362,7 @@ impl RegistryReplicator {
             self.local_store.clone(),
             self.config_nns_urls.clone(),
             self.config_nns_pub_key,
+            self.init_time,
             self.poll_delay,
         );
 
@@ -354,6 +371,7 @@ impl RegistryReplicator {
         let registry_client = Arc::clone(&self.registry_client);
         let cancelled = Arc::clone(&self.cancelled);
         let started = Arc::clone(&self.started);
+        let latest_certified_time = Arc::clone(&self.latest_certified_time);
         let poll_delay = self.poll_delay;
 
         let future = async move {
@@ -366,12 +384,22 @@ impl RegistryReplicator {
                 // `poll_delay` when constructing the underlying
                 // `RegistryCanister` abstraction, we are guaranteed that
                 // `poll()` returns after a maximal duration of `poll_delay`.
-                if let Err(msg) = internal_state.poll().await {
-                    warn!(logger, "Polling the NNS registry failed: {}", msg);
-                    metrics.poll_count.with_label_values(&["error"]).inc();
-                } else {
-                    debug!(logger, "Polling the NNS succeeded.");
-                    metrics.poll_count.with_label_values(&["success"]).inc();
+                match internal_state.poll().await {
+                    Ok(maybe_certified_time) => {
+                        debug!(logger, "Polling the NNS succeeded.");
+                        metrics.poll_count.with_label_values(&["success"]).inc();
+
+                        *latest_certified_time.write().unwrap() = maybe_certified_time;
+                        if let Some(certified_time) = maybe_certified_time {
+                            metrics
+                                .latest_certified_time
+                                .set(certified_time.as_nanos_since_unix_epoch());
+                        }
+                    }
+                    Err(msg) => {
+                        warn!(logger, "Polling the NNS registry failed: {}", msg);
+                        metrics.poll_count.with_label_values(&["error"]).inc();
+                    }
                 }
                 timer.observe_duration();
 
@@ -410,10 +438,15 @@ impl RegistryReplicator {
             self.local_store.clone(),
             self.config_nns_urls.clone(),
             self.config_nns_pub_key,
+            self.init_time,
             self.poll_delay,
         )
         .poll()
         .await;
+
+        if let Ok(maybe_latest_certified_time) = poll_result {
+            *self.latest_certified_time.write().unwrap() = maybe_latest_certified_time;
+        }
 
         // Update the registry client with the latest changes, regardless of whether
         // the polling succeeded or failed. Return any error from either operation.
@@ -454,6 +487,20 @@ impl RegistryReplicator {
         }
     }
 
+    // The field `self.latest_certified_time` keeps track of the certified time of
+    // the response containing the latest replicated registry version that was
+    // certified after the replicator was started.
+    // If `None`, then either the latest replicated version has not reached the latest
+    // version on the canister, or it has but we were unable to verify this because
+    // we have not yet received a response containing that version that was certified
+    // after the replicator was started.
+    // If `Some`, then we have replicated all versions that were certified before
+    // the replicator was started.
+    pub fn has_replicated_all_versions_certified_before_init(&self) -> bool {
+        let latest_certified_time = *self.latest_certified_time.read().unwrap();
+        latest_certified_time.is_some()
+    }
+
     /// Instruct the replicator to stop polling for registry updates.
     /// This does not wait for the polling to actually stop: An ongoing poll might still be in
     /// progress, potentially modifying the local store after this function returns. Though, it is
@@ -473,6 +520,10 @@ impl RegistryReplicator {
 
     pub fn get_local_store(&self) -> Arc<dyn LocalStore> {
         self.local_store.clone()
+    }
+
+    pub fn get_latest_certified_time(&self) -> Arc<RwLock<Option<Time>>> {
+        Arc::clone(&self.latest_certified_time)
     }
 
     pub fn get_poll_delay(&self) -> Duration {
