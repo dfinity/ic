@@ -67,8 +67,8 @@ DEV_DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
+    "@crate_index//:hex",
     "@crate_index//:mockall",
-    "@crate_index//:proptest",
     "@crate_index//:prost",
     "@crate_index//:rstest",
     "@crate_index//:serde_cbor",
@@ -134,9 +134,20 @@ rust_test(
     crate = ":malicious_consensus",
     crate_features = [
         "malicious_code",
-        "proptest",
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES,
+)
+
+rust_test(
+    name = "consensus_prop_test",
+    crate = ":malicious_consensus",
+    crate_features = [
+        "malicious_code",
+        "proptest",
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES + [
+        "@crate_index//:proptest",
+    ],
 )
 
 rust_test(
