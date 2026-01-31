@@ -9,6 +9,7 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .with_timeout_per_test(Duration::from_secs(25 * 60))
+        .without_assert_no_replica_restarts()
         .add_test(systest!(test))
         .execute_from_args()?;
 

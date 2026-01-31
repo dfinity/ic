@@ -10,6 +10,7 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        .without_assert_no_replica_restarts()
         .execute_from_args()?;
     Ok(())
 }

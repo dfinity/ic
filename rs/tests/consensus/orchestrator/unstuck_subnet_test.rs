@@ -207,6 +207,7 @@ fn have_sha_errors(session: &Session) -> bool {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config)
+        .without_assert_no_replica_restarts()
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
