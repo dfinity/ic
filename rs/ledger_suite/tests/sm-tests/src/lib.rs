@@ -41,7 +41,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc::metadata_key::MetadataKey;
-use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -61,6 +61,7 @@ use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc107;
 use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
+use icrc_ledger_types::icrc107::set_fee_collector::{SetFeeCollectorArgs, SetFeeCollectorError};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
@@ -4429,6 +4430,372 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     // have been successfully spawned.
     let archives = list_archives(&env, canister_id);
     assert_eq!(archives.len(), 1);
+}
+
+fn set_fc_107(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    caller: PrincipalId,
+    fee_collector: Option<Account>,
+) -> Result<Nat, SetFeeCollectorError> {
+    let now = system_time_to_nanos(env.time());
+    let fc107_args = SetFeeCollectorArgs {
+        fee_collector,
+        created_at_time: now,
+    };
+    Decode!(
+        &env.execute_ingress_as(
+            caller,
+            canister_id,
+            "icrc107_set_fee_collector",
+            Encode!(&fc107_args).unwrap(),
+        ).unwrap().bytes(), Result<Nat, SetFeeCollectorError>
+    )
+    .expect("failed to decode set fee collector result")
+}
+
+pub fn set_fc_107_by_controller(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    fee_collector: Option<Account>,
+) {
+    let controllers = env
+        .get_controllers(canister_id)
+        .expect("ledger should have a controller");
+    assert_eq!(controllers.len(), 1);
+    let controller = controllers[0];
+    let result = set_fc_107(env, canister_id, controller, fee_collector);
+    assert!(result.is_ok());
+}
+
+fn send_tx_and_verify_fee_collection(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    active_fc: Option<Account>,
+    inactive_fcs: Vec<Account>,
+) {
+    let from = Account::from(PrincipalId::new_user_test_id(1001).0);
+    let spender = Account::from(PrincipalId::new_user_test_id(1002).0);
+    let to = Account::from(PrincipalId::new_user_test_id(1003).0);
+    let from_balance = balance_of(env, canister_id, from);
+
+    let active_fc_balance = if let Some(fc) = active_fc {
+        assert_ne!(from, fc);
+        assert_ne!(spender, fc);
+        assert_ne!(to, fc);
+        Some(balance_of(env, canister_id, fc))
+    } else {
+        None
+    };
+    let mut inactive_fcs_balances = vec![];
+    for fc in &inactive_fcs {
+        inactive_fcs_balances.push(balance_of(env, canister_id, *fc));
+        assert_ne!(from, *fc);
+        assert_ne!(spender, *fc);
+        assert_ne!(to, *fc);
+    }
+    let tot_supply = total_supply(env, canister_id);
+
+    const NUM_FEE_COLLECTED: u64 = 3;
+    const MINT_AMOUNT: u64 = 1_000_000;
+    const BURN_AMOUNT: u64 = 12_000;
+
+    transfer(env, canister_id, MINTER, from, MINT_AMOUNT).expect("failed to mint funds");
+    transfer(env, canister_id, from, to, 1).expect("failed to transfer funds");
+    let approve_args = default_approve_args(spender.owner, u64::MAX);
+    send_approval(env, canister_id, from.owner, &approve_args).expect("approval failed");
+    let transfer_from_args = default_transfer_from_args(from.owner, to.owner, 1);
+    send_transfer_from(env, canister_id, spender.owner, &transfer_from_args)
+        .expect("transfer from failed");
+    transfer(env, canister_id, from, MINTER, BURN_AMOUNT).expect("failed to burn funds");
+
+    assert_eq!(
+        balance_of(env, canister_id, from),
+        from_balance + MINT_AMOUNT - BURN_AMOUNT - 2 - NUM_FEE_COLLECTED * FEE
+    );
+    if let Some(active_fc) = active_fc {
+        assert_eq!(
+            balance_of(env, canister_id, active_fc),
+            active_fc_balance.unwrap() + NUM_FEE_COLLECTED * FEE
+        );
+        assert_eq!(
+            total_supply(env, canister_id),
+            tot_supply + MINT_AMOUNT - BURN_AMOUNT
+        );
+    } else {
+        assert_eq!(
+            total_supply(env, canister_id),
+            tot_supply + MINT_AMOUNT - BURN_AMOUNT - NUM_FEE_COLLECTED * FEE
+        );
+    }
+
+    for (fc, balance) in inactive_fcs.iter().zip(inactive_fcs_balances.iter()) {
+        assert_eq!(balance_of(env, canister_id, *fc), *balance);
+    }
+}
+
+pub fn test_fee_collector_107_access_denied<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    let fee_collector = Account::from(PrincipalId::new_user_test_id(1).0);
+    let non_controller = Account::from(PrincipalId::new_user_test_id(2).0);
+    let result = set_fc_107(
+        &env,
+        canister_id,
+        non_controller.owner.into(),
+        Some(fee_collector),
+    );
+
+    let err = result.unwrap_err();
+    assert_eq!(err, SetFeeCollectorError::AccessDenied("The `icrc107_set_fee_collector` endpoint can only be called by the canister controller".to_string()));
+}
+
+pub fn test_fee_collector_107_smoke<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    let fee_collector_1 = Account::from(PrincipalId::new_user_test_id(1).0);
+    let fee_collector_2 = Account::from(PrincipalId::new_user_test_id(2).0);
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        None,
+        vec![fee_collector_1, fee_collector_2],
+    );
+
+    set_fc_107_by_controller(&env, canister_id, Some(fee_collector_1));
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        Some(fee_collector_1),
+        vec![fee_collector_2],
+    );
+
+    set_fc_107_by_controller(&env, canister_id, Some(fee_collector_2));
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        Some(fee_collector_2),
+        vec![fee_collector_1],
+    );
+
+    set_fc_107_by_controller(&env, canister_id, None);
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        None,
+        vec![fee_collector_1, fee_collector_2],
+    );
+}
+
+pub fn test_fee_collector_107_with_proptest<Tokens>(
+    ledger_wasm_current: Vec<u8>,
+    init_args: Vec<u8>,
+    minter: Arc<BasicIdentity>,
+) where
+    Tokens: TokensType + Default + std::fmt::Display + From<u64>,
+{
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
+    let minter_principal: Principal = minter.sender().unwrap();
+    const TX_COUNT: usize = 150;
+    runner
+        .run(
+            &(
+                valid_transactions_strategy(minter, FEE, TX_COUNT, now).no_shrink(),
+                proptest::collection::vec(
+                    proptest::option::of(proptest::option::of(arb_account())),
+                    TX_COUNT..=TX_COUNT,
+                )
+                .no_shrink(),
+            ),
+            |(transactions, fee_collectors)| {
+                let env = StateMachine::new();
+                env.set_time(now);
+                let ledger_id = env
+                    .install_canister(ledger_wasm_current.clone(), init_args.clone(), None)
+                    .unwrap();
+
+                let mut in_memory_ledger = InMemoryLedger::<Account, Tokens>::default();
+
+                let mut total_blocks = 0u64;
+                for tx_index in 0..TX_COUNT {
+                    total_blocks += 1;
+                    if let Some(fee_collector) = fee_collectors[tx_index] {
+                        total_blocks += 1;
+                        in_memory_ledger.set_fee_collector_107(
+                            TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(
+                                env.time(),
+                            )),
+                            &fee_collector,
+                        );
+                        set_fc_107_by_controller(&env, ledger_id, fee_collector);
+                    }
+                    in_memory_ledger.apply_arg_with_caller(
+                        &transactions[tx_index],
+                        TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(env.time())),
+                        minter_principal,
+                        Some(FEE.into()),
+                    );
+                    apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
+                }
+                in_memory_ledger.verify_balances_and_allowances(
+                    &env,
+                    ledger_id,
+                    total_blocks,
+                    AllowancesRecentlyPurged::Yes,
+                );
+
+                verify_ledger_state::<Tokens>(&env, ledger_id, None, AllowancesRecentlyPurged::Yes);
+
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+pub fn test_fee_collector_107_upgrade<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+
+    let fee_collector_1 = Account::from(PrincipalId::new_user_test_id(1).0);
+
+    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector_1]);
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&upgrade_args).unwrap(),
+    )
+    .expect("failed to upgrade the ledger");
+
+    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector_1]);
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_fee_collector: Some(ChangeFeeCollector::SetTo(fee_collector_1)),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&upgrade_args).unwrap(),
+    )
+    .expect("failed to upgrade the ledger");
+
+    send_tx_and_verify_fee_collection(&env, canister_id, Some(fee_collector_1), vec![]);
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&upgrade_args).unwrap(),
+    )
+    .expect("failed to upgrade the ledger");
+
+    send_tx_and_verify_fee_collection(&env, canister_id, Some(fee_collector_1), vec![]);
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_fee_collector: Some(ChangeFeeCollector::Unset),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
+        .expect("failed to upgrade the ledger");
+
+    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector_1]);
+}
+
+pub fn test_fee_collector_107_init<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let fee_collector = Account::from(PrincipalId::new_user_test_id(1).0);
+
+    for fee_collector_account in [None, Some(fee_collector)] {
+        let env = StateMachine::new();
+
+        let args = encode_init_args(InitArgs {
+            fee_collector_account,
+            ..init_args(vec![])
+        });
+        let args = Encode!(&args).unwrap();
+        let canister_id = env
+            .install_canister(ledger_wasm.clone(), args, None)
+            .unwrap();
+
+        send_tx_and_verify_fee_collection(&env, canister_id, fee_collector_account, vec![]);
+    }
+}
+
+pub fn test_fee_collector_107_upgrade_legacy<T>(
+    ledger_wasm_legacy_fc: Vec<u8>,
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let fee_col_legacy = Account::from(PrincipalId::new_user_test_id(1).0);
+    let fee_col_107 = Account::from(PrincipalId::new_user_test_id(2).0);
+
+    let init_params = [None, Some(fee_col_legacy)];
+    let upgrade_params = [
+        None,
+        Some(ChangeFeeCollector::Unset),
+        Some(ChangeFeeCollector::SetTo(fee_col_107)),
+    ];
+
+    for init_fee_collector in init_params {
+        for upgrade_fee_collector in &upgrade_params {
+            let env = StateMachine::new();
+            let args = encode_init_args(InitArgs {
+                fee_collector_account: init_fee_collector,
+                ..init_args(vec![])
+            });
+            let args = Encode!(&args).unwrap();
+            let canister_id = env
+                .install_canister(ledger_wasm_legacy_fc.clone(), args, None)
+                .unwrap();
+
+            let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+                change_fee_collector: upgrade_fee_collector.clone(),
+                ..UpgradeArgs::default()
+            }));
+            env.upgrade_canister(
+                canister_id,
+                ledger_wasm.clone(),
+                Encode!(&upgrade_args).unwrap(),
+            )
+            .expect("failed to upgrade the ledger");
+
+            let active_fc = match upgrade_fee_collector {
+                Some(ChangeFeeCollector::SetTo(fee_collector)) => Some(*fee_collector),
+                Some(ChangeFeeCollector::Unset) => None,
+                None => init_fee_collector,
+            };
+            let mut inactive_fcs = vec![];
+            if active_fc != Some(fee_col_legacy) {
+                inactive_fcs.push(fee_col_legacy);
+            }
+            if active_fc != Some(fee_col_107) {
+                inactive_fcs.push(fee_col_107);
+            }
+
+            send_tx_and_verify_fee_collection(&env, canister_id, active_fc, inactive_fcs);
+        }
+    }
 }
 
 pub mod metadata {

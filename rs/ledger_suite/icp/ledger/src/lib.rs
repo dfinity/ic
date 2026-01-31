@@ -255,8 +255,12 @@ impl LedgerContext for Ledger {
         &mut self.stable_approvals
     }
 
-    fn fee_collector(&self) -> Option<&ic_ledger_core::block::FeeCollector<Self::AccountId>> {
+    fn fee_collector(&self) -> Option<Self::AccountId> {
         None
+    }
+
+    fn set_fee_collector(&mut self, _fee_collector: Option<Self::AccountId>) {
+        trap("ICP ledger does not allow setting the fee collector");
     }
 }
 
@@ -317,12 +321,6 @@ impl LedgerData for Ledger {
 
     fn on_purged_transaction(&mut self, height: BlockIndex) {
         self.blocks_notified.remove(height);
-    }
-
-    fn fee_collector_mut(
-        &mut self,
-    ) -> Option<&mut ic_ledger_core::block::FeeCollector<Self::AccountId>> {
-        None
     }
 
     fn increment_archiving_failure_metric(&mut self) {

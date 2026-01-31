@@ -1,8 +1,8 @@
 use crate::common::{
     ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
     index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
-    ledger_get_all_blocks, ledger_wasm, parse_index_logs, wait_until_sync_is_completed,
-    wait_until_sync_is_completed_or_error,
+    install_ledger_with_wasm, ledger_get_all_blocks, ledger_mainnet_v5_wasm, ledger_wasm,
+    parse_index_logs, wait_until_sync_is_completed, wait_until_sync_is_completed_or_error,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
@@ -14,7 +14,9 @@ use ic_icrc1_index_ng::{
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
     InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
 };
-use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+use ic_icrc1_ledger::{
+    BTYPE_107_LEDGER_SET, ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs,
+};
 use ic_icrc1_test_utils::icrc3::account_to_icrc3_value;
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
@@ -24,7 +26,9 @@ use ic_ledger_core::block::BlockType;
 use ic_ledger_suite_state_machine_helpers::{
     add_block, archive_blocks, get_logs, set_icrc3_enabled,
 };
-use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
+use ic_ledger_suite_state_machine_tests::{
+    set_fc_107_by_controller, test_http_request_decoding_quota,
+};
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -37,6 +41,8 @@ use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
+#[cfg(not(feature = "icrc3_disabled"))]
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -63,6 +69,7 @@ fn upgrade_ledger(
     env: &StateMachine,
     ledger_id: CanisterId,
     fee_collector_account: Option<Account>,
+    legacy_fc_wasm: bool,
 ) {
     let change_fee_collector =
         Some(fee_collector_account.map_or(ChangeFeeCollector::Unset, ChangeFeeCollector::SetTo));
@@ -77,7 +84,12 @@ fn upgrade_ledger(
         change_archive_options: None,
         index_principal: None,
     }));
-    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
+    let wasm = if legacy_fc_wasm {
+        ledger_mainnet_v5_wasm()
+    } else {
+        ledger_wasm()
+    };
+    env.upgrade_canister(ledger_id, wasm, Encode!(&args).unwrap())
         .unwrap()
 }
 
@@ -238,6 +250,27 @@ fn transfer(
         memo: None,
     };
     icrc1_transfer(env, ledger_id, owner.into(), req)
+}
+
+fn transfer_from(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    from: Account,
+    to: Account,
+    spender: Account,
+    amount: u64,
+) -> BlockIndex {
+    let Account { owner, subaccount } = spender;
+    let req = TransferFromArgs {
+        spender_subaccount: subaccount,
+        from,
+        to,
+        amount: amount.into(),
+        created_at_time: None,
+        fee: None,
+        memo: None,
+    };
+    icrc2_transfer_from(env, ledger_id, owner.into(), req)
 }
 
 fn icrc2_approve(
@@ -1232,28 +1265,52 @@ fn assert_contain_same_elements<T: Debug + Eq + Hash>(vl: Vec<T>, vr: Vec<T>) {
     )
 }
 
-#[test]
-fn test_fee_collector() {
+fn test_fee_collector_ranges(legacy: bool) {
     let env = &StateMachine::new();
     let fee_collector = account(42, 0);
     let minter = minter_identity().sender().unwrap();
-    let ledger_id = install_ledger(
-        env,
-        vec![(account(1, 0), 10_000_000)], // txid: 0
-        default_archive_options(),
-        Some(fee_collector),
-        minter,
-    );
+    let ledger_id = if legacy {
+        install_ledger_with_wasm(
+            env,
+            vec![(account(1, 0), 10_000_000)],
+            default_archive_options(),
+            Some(fee_collector),
+            minter,
+            ledger_mainnet_v5_wasm(),
+        )
+    } else {
+        install_ledger(
+            env,
+            vec![(account(1, 0), 10_000_000)],
+            default_archive_options(),
+            Some(fee_collector),
+            minter,
+        )
+    };
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let mut range_start = 0u64;
+    let mut curr_txid = 0u64;
+    if !legacy {
+        curr_txid += 1; // init fee collector block
+    }
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, fee_collector),
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000); // txid: 1
-    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 2
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000); // txid: 3
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000);
+    approve(env, ledger_id, account(1, 0), account(3, 0), 200_000);
+    transfer_from(
+        env,
+        ledger_id,
+        account(1, 0),
+        account(2, 0),
+        account(3, 0),
+        150_000,
+    );
+    curr_txid += 3;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1262,16 +1319,25 @@ fn test_fee_collector() {
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
+    let mut expected = vec![(
+        fee_collector,
+        vec![(range_start.into(), (curr_txid + 1).into())],
+    )];
+
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
+        expected.clone(),
     );
 
     // Remove the fee collector to burn some transactions fees.
-    upgrade_ledger(env, ledger_id, None);
+    upgrade_ledger(env, ledger_id, None, legacy);
+    if !legacy {
+        curr_txid += 1; // upgrade fee collector block
+    }
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 4
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000); // txid: 5
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000);
+    curr_txid += 2;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1282,14 +1348,22 @@ fn test_fee_collector() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
+        expected.clone(),
     );
 
     // Add a new fee collector different from the first one.
     let new_fee_collector = account(42, 42);
-    upgrade_ledger(env, ledger_id, Some(new_fee_collector));
+    upgrade_ledger(env, ledger_id, Some(new_fee_collector), legacy);
+    if !legacy {
+        curr_txid += 1; // upgrade fee collector block
+        range_start = curr_txid; // new fee collector starts at the upgrade block
+    }
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 6
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+    curr_txid += 1;
+    if legacy {
+        range_start = curr_txid; // legacy fee collector starts at the first tx after it is set
+    }
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1300,19 +1374,32 @@ fn test_fee_collector() {
         );
     }
 
+    expected.push((
+        new_fee_collector,
+        vec![(range_start.into(), (curr_txid + 1).into())],
+    ));
+
+    println!("expected: {:?}", expected);
+
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
-            (fee_collector, vec![(0u8.into(), 4u8.into())]),
-        ],
+        expected.clone(),
     );
 
     // Add back the original fee_collector and make a couple of transactions again.
-    upgrade_ledger(env, ledger_id, Some(fee_collector));
+    upgrade_ledger(env, ledger_id, Some(fee_collector), legacy);
+    if !legacy {
+        curr_txid += 1; // upgrade fee collector block
+        range_start = curr_txid; // new fee collector starts at the upgrade block
+    }
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 7
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 8
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+    curr_txid += 1;
+    if legacy {
+        range_start = curr_txid; // legacy fee collector starts at the first tx after it is set
+    }
+    approve(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+    curr_txid += 1;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1323,20 +1410,56 @@ fn test_fee_collector() {
         );
     }
 
+    expected[0]
+        .1
+        .push((range_start.into(), (curr_txid + 1).into()));
+
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
-            (
-                fee_collector,
-                vec![(0u8.into(), 4u8.into()), (7u8.into(), 9u8.into())],
-            ),
-        ],
+        expected.clone(),
     );
+
+    if !legacy {
+        set_fc_107_by_controller(env, ledger_id, Some(new_fee_collector));
+        curr_txid += 1;
+        range_start = curr_txid;
+        transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+        approve(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+        curr_txid += 2;
+
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+
+        for fee_collector in &[fee_collector, new_fee_collector] {
+            assert_eq!(
+                icrc1_balance_of(env, ledger_id, *fee_collector),
+                icrc1_balance_of(env, index_id, *fee_collector)
+            );
+        }
+
+        expected[1]
+            .1
+            .push((range_start.into(), (curr_txid + 1).into()));
+
+        assert_contain_same_elements(get_fee_collectors_ranges(env, index_id).ranges, expected);
+    }
 }
 
 #[test]
-fn test_fee_collector_107() {
+fn test_fee_collector_ranges_legacy() {
+    test_fee_collector_ranges(true);
+}
+
+#[cfg(not(feature = "icrc3_disabled"))]
+#[test]
+fn test_fee_collector_ranges_107() {
+    test_fee_collector_ranges(false);
+}
+
+// This test uses the test ledger to test edge cases such as
+// specifying the legacy fee collector after the 107 fee collector block
+// was genereated, which could not be tested with the prod ledger.
+#[test]
+fn test_fee_collector_107_edge_cases() {
     let env = &StateMachine::new();
     let ledger_id = install_icrc3_test_ledger(env);
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
@@ -1445,7 +1568,7 @@ fn test_fee_collector_107() {
     assert_eq!(4, icrc1_balance_of(env, index_id, feecol_107));
 
     // Set 107 fee collector to burn
-    block_id = add_fee_collector_107_block(block_id, None, Some("107ledger_set".to_string()));
+    block_id = add_fee_collector_107_block(block_id, None, Some(BTYPE_107_LEDGER_SET.to_string()));
 
     // No fees collected
     add_mint_block(block_id, None, None);
@@ -1474,6 +1597,83 @@ fn add_custom_block(
         Nat::from(block_id),
         add_block(env, ledger_id, &block).expect("error adding mint block to ICRC-3 test ledger")
     );
+}
+
+#[cfg(not(feature = "icrc3_disabled"))]
+#[test]
+fn test_fee_collector_107_with_ledger() {
+    let env = &StateMachine::new();
+    let feecol_legacy = account(101, 0);
+    let feecol_107_1 = account(102, 0);
+    let feecol_107_2 = account(103, 0);
+    let sending_account = account(1, 0);
+    let receiving_account = account(2, 0);
+    let mut expected_balances = BTreeMap::new();
+    let ledger_id = install_ledger_with_wasm(
+        env,
+        vec![(sending_account, 10_000_000)],
+        default_archive_options(),
+        Some(feecol_legacy),
+        account(1000, 0).owner,
+        ledger_mainnet_v5_wasm(),
+    );
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let verify_fc_balances = |expected_balances: &BTreeMap<Account, u64>| {
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+        for (fc_account, balance) in expected_balances {
+            assert_eq!(*balance, icrc1_balance_of(env, index_id, *fc_account));
+            assert_eq!(*balance, icrc1_balance_of(env, ledger_id, *fc_account));
+        }
+    };
+
+    // Legacy fee collector collects the fees
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_legacy, FEE);
+    expected_balances.insert(feecol_107_1, 0);
+    expected_balances.insert(feecol_107_2, 0);
+    verify_fc_balances(&expected_balances);
+
+    // Legacy fee collector does not collect approve fees
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
+
+    // Set 107 fee collector to burn
+    upgrade_ledger(env, ledger_id, None, false);
+
+    // No fees are collected
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
+
+    set_fc_107_by_controller(env, ledger_id, Some(feecol_107_1));
+
+    // The new fee collector collects all fees
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_107_1, expected_balances[&feecol_107_1] + FEE);
+    verify_fc_balances(&expected_balances);
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_107_1, expected_balances[&feecol_107_1] + FEE);
+    verify_fc_balances(&expected_balances);
+
+    set_fc_107_by_controller(env, ledger_id, Some(feecol_107_2));
+
+    // The second new fee collector collects all fees
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_107_2, expected_balances[&feecol_107_2] + FEE);
+    verify_fc_balances(&expected_balances);
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_107_2, expected_balances[&feecol_107_2] + FEE);
+    verify_fc_balances(&expected_balances);
+
+    set_fc_107_by_controller(env, ledger_id, None);
+
+    // No fees are collected
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
 }
 
 #[test]

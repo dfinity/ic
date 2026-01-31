@@ -11,8 +11,8 @@ use ic_certification::{
     HashTree,
     hash_tree::{Label, empty, fork, label, leaf},
 };
-use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
+use ic_icrc1::{Operation, blocks::encoded_block_to_generic_block};
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::runtime::{CdkRuntime, Runtime};
 use ic_ledger_canister_core::{archive::Archive, blockchain::BlockDataContainer};
@@ -37,6 +37,7 @@ use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc::metadata_key::MetadataKey,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
+    icrc107::schema::BTYPE_107,
 };
 use icrc_ledger_types::{
     icrc::generic_value::ICRC3Value,
@@ -72,6 +73,7 @@ const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 const MAX_U64_ENCODING_BYTES: usize = 10;
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
 const MAX_TAKE_ALLOWANCES: u64 = 500;
+pub const BTYPE_107_LEDGER_SET: &str = "107ledger_set";
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -87,11 +89,12 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
 ///   * 3 - the blocks are stored in stable structures.
+///   * 4 - the ledger uses the ICRC-107 fee collector.
 #[cfg(not(feature = "next-ledger-version"))]
-pub const LEDGER_VERSION: u64 = 3;
+pub const LEDGER_VERSION: u64 = 4;
 
 #[cfg(feature = "next-ledger-version")]
-pub const LEDGER_VERSION: u64 = 4;
+pub const LEDGER_VERSION: u64 = 5;
 
 #[derive(Clone, Debug)]
 pub struct Icrc1ArchiveWasm;
@@ -281,15 +284,6 @@ pub struct InitArgs {
 pub enum ChangeFeeCollector {
     Unset,
     SetTo(Account),
-}
-
-impl From<ChangeFeeCollector> for Option<FeeCollector<Account>> {
-    fn from(value: ChangeFeeCollector) -> Self {
-        match value {
-            ChangeFeeCollector::Unset => None,
-            ChangeFeeCollector::SetTo(account) => Some(FeeCollector::from(account)),
-        }
-    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
@@ -590,6 +584,9 @@ pub struct Ledger {
 
     #[serde(default = "wasm_token_type")]
     pub token_type: String,
+
+    #[serde(default)]
+    fee_collector_107: Option<Account>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -701,7 +698,7 @@ impl Ledger {
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
             minting_account,
-            fee_collector: fee_collector_account.map(FeeCollector::from),
+            fee_collector: None,
             transfer_fee: Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
                 panic!("failed to convert transfer fee {transfer_fee} to tokens: {e}")
             }),
@@ -716,11 +713,14 @@ impl Ledger {
             ledger_version: LEDGER_VERSION,
             index_principal,
             token_type: wasm_token_type(),
+            fee_collector_107: fee_collector_account,
         };
 
-        if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
-        {
+        if ledger.fee_collector_107 == Some(ledger.minting_account) {
             ic_cdk::trap("The fee collector account cannot be the same as the minting account");
+        }
+        if ledger.fee_collector_107.is_some() {
+            ledger.ledger_set_107_fee_collector(ledger.fee_collector_107);
         }
 
         for (account, balance) in initial_balances.into_iter() {
@@ -734,6 +734,38 @@ impl Ledger {
         }
 
         ledger
+    }
+
+    pub fn ledger_set_107_fee_collector(&mut self, fee_collector: Option<Account>) {
+        self.fee_collector_107 = fee_collector;
+        let op: Operation<Tokens> = Operation::FeeCollector {
+            fee_collector,
+            caller: None,
+            mthd: Some(BTYPE_107_LEDGER_SET.to_string()),
+        };
+        let tx = Transaction {
+            operation: op,
+            created_at_time: None,
+            memo: None,
+        };
+        let block = Block {
+            parent_hash: self.blockchain.last_hash,
+            transaction: tx,
+            effective_fee: None,
+            timestamp: ic_cdk::api::time(),
+            fee_collector: None,
+            fee_collector_block_index: None,
+            btype: Some(BTYPE_107.to_string()),
+        };
+        if let Err(e) = self.blockchain.add_block(block) {
+            ic_cdk::trap(format!(
+                "failed to add fee collector block to the ledger: {e}"
+            ));
+        }
+    }
+
+    pub fn legacy_fee_collector(&self) -> Option<Account> {
+        self.fee_collector.as_ref().map(|fc| fc.fee_collector)
     }
 }
 
@@ -759,8 +791,12 @@ impl LedgerContext for Ledger {
         &mut self.stable_approvals
     }
 
-    fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>> {
-        self.fee_collector.as_ref()
+    fn fee_collector(&self) -> Option<Self::AccountId> {
+        self.fee_collector_107
+    }
+
+    fn set_fee_collector(&mut self, fee_collector: Option<Self::AccountId>) {
+        self.fee_collector_107 = fee_collector;
     }
 }
 
@@ -820,10 +856,6 @@ impl LedgerData for Ledger {
     }
 
     fn on_purged_transaction(&mut self, _height: BlockIndex) {}
-
-    fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>> {
-        self.fee_collector.as_mut()
-    }
 
     fn increment_archiving_failure_metric(&mut self) {
         ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
@@ -936,9 +968,13 @@ impl Ledger {
             self.max_memo_length = max_memo_length;
         }
         if let Some(change_fee_collector) = args.change_fee_collector {
-            self.fee_collector = change_fee_collector.into();
-            if self.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(self.minting_account)
-            {
+            let fee_collector = match change_fee_collector {
+                ChangeFeeCollector::Unset => None,
+                ChangeFeeCollector::SetTo(account) => Some(account),
+            };
+
+            self.ledger_set_107_fee_collector(fee_collector);
+            if self.fee_collector_107 == Some(self.minting_account) {
                 ic_cdk::trap(
                     "The fee collector account cannot be the same account as the minting account",
                 );
@@ -1362,4 +1398,10 @@ impl BlockDataContainer for StableBlockDataContainer {
     ) -> R {
         BLOCKS_MEMORY.with(|cell| f(&mut cell.borrow_mut()))
     }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct GetFeeCollectorError {
+    pub error_code: Nat,
+    pub message: String,
 }
