@@ -10102,6 +10102,7 @@ dependencies = [
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
+ "ic-types",
  "icp-ledger",
  "icrc-ledger-types",
  "num-traits",

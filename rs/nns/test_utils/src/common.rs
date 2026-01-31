@@ -83,6 +83,7 @@ impl NnsInitPayloadsBuilder {
             sns_wasms: SnsWasmCanisterInitPayloadBuilder::new(),
             index: ic_icp_index::InitArg {
                 ledger_id: LEDGER_CANISTER_ID.get().into(),
+                retrieve_blocks_from_ledger_interval_seconds: None,
             },
             subnet_rental: SubnetRentalCanisterInitPayloadBuilder::new(),
         }
