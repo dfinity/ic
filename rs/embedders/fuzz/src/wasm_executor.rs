@@ -30,7 +30,8 @@ use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    ComputeAllocation, MemoryAllocation, NumBytes,
+    ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    messages::CallContextId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
 };
@@ -90,7 +91,13 @@ pub fn run_fuzzer(module: ICWasmModule) {
 
 #[inline(always)]
 fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
-    let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
+    let api_type = ApiType::update(
+        UNIX_EPOCH,
+        vec![1_u8; 10],
+        Cycles::new(10_000_000_000),
+        user_test_id(24).get(),
+        CallContextId::from(0),
+    );
     let canister_current_memory_usage = NumBytes::new(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let compilation_cache = Arc::new(CompilationCacheBuilder::new().build());
