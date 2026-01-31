@@ -46,6 +46,7 @@ use ic_types::{
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
+use num_traits::SaturatingSub;
 use prometheus::Histogram;
 use std::{
     cell::RefCell,
@@ -1552,34 +1553,32 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
                 let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
                 for canister in state.canisters_iter_mut() {
-                    let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
-                    self.metrics
-                        .canister_heap_delta_debits
-                        .observe(heap_delta_debit as f64);
-                    let install_code_debit = canister.scheduler_state.install_code_debit.get();
-                    self.metrics
-                        .canister_install_code_debits
-                        .observe(install_code_debit as f64);
-
-                    if heap_delta_debit > 0 || install_code_debit > 0 {
+                    if canister.scheduler_state.heap_delta_debit.get() > 0 {
                         let canister = Arc::make_mut(canister);
-                        canister.scheduler_state.heap_delta_debit =
-                            match self.rate_limiting_of_heap_delta {
-                                FlagStatus::Enabled => NumBytes::from(
-                                    heap_delta_debit
-                                        .saturating_sub(self.config.heap_delta_rate_limit.get()),
-                                ),
-                                FlagStatus::Disabled => NumBytes::from(0),
-                            };
+                        let heap_delta_debit = &mut canister.scheduler_state.heap_delta_debit;
+                        if self.rate_limiting_of_heap_delta == FlagStatus::Enabled {
+                            *heap_delta_debit =
+                                heap_delta_debit.saturating_sub(&self.config.heap_delta_rate_limit);
+                            self.metrics
+                                .canister_heap_delta_debits
+                                .observe(heap_delta_debit.get() as f64);
+                        } else {
+                            *heap_delta_debit = NumBytes::from(0);
+                        }
+                    }
 
-                        canister.scheduler_state.install_code_debit =
-                            match self.rate_limiting_of_instructions {
-                                FlagStatus::Enabled => NumInstructions::from(
-                                    install_code_debit
-                                        .saturating_sub(self.config.install_code_rate_limit.get()),
-                                ),
-                                FlagStatus::Disabled => NumInstructions::from(0),
-                            };
+                    if canister.scheduler_state.install_code_debit.get() > 0 {
+                        let canister = Arc::make_mut(canister);
+                        let install_code_debit = &mut canister.scheduler_state.install_code_debit;
+                        if self.rate_limiting_of_instructions == FlagStatus::Enabled {
+                            *install_code_debit = install_code_debit
+                                .saturating_sub(&self.config.install_code_rate_limit);
+                            self.metrics
+                                .canister_install_code_debits
+                                .observe(install_code_debit.get() as f64);
+                        } else {
+                            *install_code_debit = NumInstructions::from(0);
+                        }
                     }
 
                     self.metrics
