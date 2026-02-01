@@ -337,8 +337,8 @@ Examples:
   # Show the top 5 tests on PRs where failures had the highest impact in the last week
   bazel run //ci/githubstats:query -- top 5 impact --prs --week
 
-  # Show the 100 slowest tests in the last month
-  bazel run //ci/githubstats:query -- top 100 duration_p90 --month
+  # Show the 100 slowest tests in the last month that took at least 30 minutes
+  bazel run //ci/githubstats:query -- top 100 duration_p90 --ge '30 minutes' --month
 """,
     )
     top_parser.add_argument(
