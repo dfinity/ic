@@ -100,6 +100,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:wat",
+    "@crate_index//:wsl",
 ]
 
 TEST_DEPENDENCIES = [

@@ -10047,6 +10047,7 @@ dependencies = [
 name = "ic-https-outcalls-pricing"
 version = "0.9.0"
 dependencies = [
+ "ic-config",
  "ic-types",
 ]
 
@@ -12597,7 +12598,7 @@ dependencies = [
 
 [[package]]
 name = "ic-pub-key"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hex",
  "ic-ed25519 0.6.0",
@@ -19706,6 +19707,7 @@ dependencies = [
  "url",
  "walrus 0.23.3",
  "wat",
+ "wsl",
 ]
 
 [[package]]
