@@ -11,7 +11,6 @@ use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version_with_retries,
     rw_message::store_message,
-    set_sandbox_env_vars,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
@@ -45,7 +44,7 @@ use slog::{Logger, info};
 use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(8)),
+    vcpus: Some(NrOfVCPUs::new(16)),
     memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
     boot_image_minimal_size_gibibytes: None,
 };
@@ -235,7 +234,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let upgrade_version = get_guestos_update_img_version();
     let upgrade_image_url = get_guestos_update_img_url();
     let upgrade_image_hash = get_guestos_update_img_sha256();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     std::fs::write(
         env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
         serde_json::to_string(&guest_launch_measurements).unwrap(),
@@ -252,8 +251,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             vec![upgrade_image_url.to_string()],
         ));
     }
-
-    set_sandbox_env_vars();
 
     let output_dir = env.get_path("recovery_output");
 
@@ -334,7 +331,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
-        replica_version: Some(current_version),
+        replica_version: None,
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
@@ -580,10 +577,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
     let command_args =
         nns_subnet_recovery_same_nodes_local_cli_args(node, &session, &subnet_recovery, logger);
     let command = format!(
-        // XXX: the underlying code will try to download ic-admin iff IC_ADMIN_BIN is not set, BUT
-        // ic-admin is never actually used. To avoid downloading ic-admin unnecessarily we set
-        // IC_ADMIN_BIN to a dummy value.
-        r#"IC_ADMIN_BIN="/bin/false" /opt/ic/bin/ic-recovery \
+        r#"/opt/ic/bin/ic-recovery \
         {command_args} \
         "#
     );

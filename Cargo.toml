@@ -133,6 +133,7 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
+    "rs/dogecoin/ckdoge/agent",
     "rs/dogecoin/ckdoge/minter",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
@@ -903,6 +904,7 @@ wasmparser = "0.243.0"
 wasmprinter = "0.243.0"
 wast = "243.0.0"
 wat = "1.243.0"
+wsl = "0.1.0"
 which = "6.0.3"
 wirm = { version = "2.1.0", features = ["parallel"] }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
