@@ -177,14 +177,7 @@ impl ICWasmModule {
                                 let func_name = export.name;
                                 if let Ok(wasm_method) = WasmMethod::try_from(func_name.to_string())
                                 {
-                                    match wasm_method {
-                                        WasmMethod::Query(_)
-                                        | WasmMethod::CompositeQuery(_)
-                                        | WasmMethod::Update(_) => {
-                                            wasm_methods.insert(wasm_method);
-                                        }
-                                        _ => (),
-                                    }
+                                    wasm_methods.insert(wasm_method);
                                 }
                             }
                             ExternalKind::Global => {

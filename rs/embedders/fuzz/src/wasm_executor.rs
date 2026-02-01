@@ -27,7 +27,7 @@ use ic_replicated_state::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;
 use ic_test_utilities_state::SystemStateBuilder;
-use ic_test_utilities_types::ids::user_test_id;
+use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
@@ -81,8 +81,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
 
     // For determinism, all methods are executed
     for wasm_method in wasm_methods.iter() {
-        let func_ref = FuncRef::Method(wasm_method.clone());
-        let wasm_execution_input = setup_wasm_execution_input(func_ref);
+        let wasm_execution_input = setup_wasm_execution_input(wasm_method);
         let (_compilation_result, _execution_result) = &wasm_executor
             .clone()
             .execute(wasm_execution_input, &execution_state);
@@ -90,14 +89,33 @@ pub fn run_fuzzer(module: ICWasmModule) {
 }
 
 #[inline(always)]
-fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
-    let api_type = ApiType::update(
-        UNIX_EPOCH,
-        vec![1_u8; 10],
-        Cycles::new(10_000_000_000),
-        user_test_id(24).get(),
-        CallContextId::from(0),
-    );
+fn setup_wasm_execution_input(wasm_method: &WasmMethod) -> WasmExecutionInput {
+    let func_ref = FuncRef::Method(wasm_method.clone());
+    let api_type = match wasm_method {
+        // System methods are temporarily used under Update
+        WasmMethod::Update(_) | WasmMethod::System(_) => ApiType::update(
+            UNIX_EPOCH,
+            vec![1_u8; 10],
+            Cycles::new(10_000_000_000),
+            user_test_id(24).get(),
+            CallContextId::from(0),
+        ),
+        WasmMethod::Query(_) => ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(24).get(),
+            subnet_test_id(1),
+            vec![1_u8; 10],
+            None,
+        ),
+        WasmMethod::CompositeQuery(_) => ApiType::composite_query(
+            UNIX_EPOCH,
+            user_test_id(24).get(),
+            subnet_test_id(1),
+            vec![1_u8; 10],
+            None,
+            CallContextId::from(0),
+        ),
+    };
     let canister_current_memory_usage = NumBytes::new(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let compilation_cache = Arc::new(CompilationCacheBuilder::new().build());
