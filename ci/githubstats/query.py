@@ -25,6 +25,11 @@ ORG = "dfinity"
 REPO = "ic"
 
 
+def die(*args):
+    print(*args, file=sys.stderr)
+    sys.exit(1)
+
+
 @contextlib.contextmanager
 def githubstats_db_cursor(conninfo: str, timeout: int):
     """Context manager that yields a cursor connected to the github PostgreSQL database."""
@@ -120,6 +125,17 @@ def top(args):
         if args.eq is not None
         else (None, None)
     )
+    if value is not None:
+        if args.order_by in ("impact", "duration_p90"):
+            try:
+                value = pd.Timedelta(value).to_pytimedelta()
+            except ValueError:
+                die(f"Can't parse '{value}' to an interval!")
+        else:
+            try:
+                value = float(value)
+            except ValueError:
+                die(f"Can't parse '{value}' to a number!")
 
     order_by = sql.Identifier(args.order_by)
 
@@ -361,11 +377,11 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
     )
 
     condition_group = top_parser.add_mutually_exclusive_group()
-    condition_group.add_argument("--gt", metavar="F", type=float, help="Only show tests where COLUMN > F")
-    condition_group.add_argument("--ge", metavar="F", type=float, help="Only show tests where COLUMN >= F")
-    condition_group.add_argument("--lt", metavar="F", type=float, help="Only show tests where COLUMN < F")
-    condition_group.add_argument("--le", metavar="F", type=float, help="Only show tests where COLUMN <= F")
-    condition_group.add_argument("--eq", metavar="F", type=float, help="Only show tests where COLUMN = F")
+    condition_group.add_argument("--gt", metavar="F", type=str, help="Only show tests where COLUMN > F")
+    condition_group.add_argument("--ge", metavar="F", type=str, help="Only show tests where COLUMN >= F")
+    condition_group.add_argument("--lt", metavar="F", type=str, help="Only show tests where COLUMN < F")
+    condition_group.add_argument("--le", metavar="F", type=str, help="Only show tests where COLUMN <= F")
+    condition_group.add_argument("--eq", metavar="F", type=str, help="Only show tests where COLUMN = F")
 
     top_parser.add_argument(
         "--owner", metavar="TEAM", type=str, help="Filter tests by owner (a regex for the GitHub username or team)"
