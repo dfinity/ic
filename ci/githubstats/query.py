@@ -129,8 +129,8 @@ def top(args):
         if args.order_by in ("impact", "duration_p90"):
             try:
                 value = pd.Timedelta(value).to_pytimedelta()
-            except ValueError:
-                die(f"Can't parse '{value}' to an interval!")
+            except ValueError as e:
+                die(f"Can't parse '{value}' to an interval because: {e}!")
         else:
             try:
                 value = float(value)
