@@ -124,7 +124,8 @@ def top(args):
     order_by = sql.Identifier(args.order_by)
 
     query = sql.SQL((THIS_SCRIPT_DIR / "top.sql").read_text()).format(
-        hide=sql.Literal(args.hide if args.hide else ""),
+        exclude=sql.Literal(args.exclude if args.exclude else ""),
+        include=sql.Literal(args.include if args.include else ""),
         period=sql.SQL(period(args)),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
@@ -371,7 +372,8 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
         "--owner", metavar="TEAM", type=str, help="Filter tests by owner (a regex for the GitHub username or team)"
     )
 
-    top_parser.add_argument("--hide", metavar="TEST", type=str, help="Hide tests matching this SQL LIKE pattern")
+    top_parser.add_argument("--exclude", metavar="TEST", type=str, help="Exclude tests matching this SQL LIKE pattern")
+    top_parser.add_argument("--include", metavar="TEST", type=str, help="Include only tests matching this SQL LIKE pattern")
 
     top_parser.set_defaults(func=top)
 
