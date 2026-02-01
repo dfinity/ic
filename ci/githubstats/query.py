@@ -373,7 +373,9 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
     )
 
     top_parser.add_argument("--exclude", metavar="TEST", type=str, help="Exclude tests matching this SQL LIKE pattern")
-    top_parser.add_argument("--include", metavar="TEST", type=str, help="Include only tests matching this SQL LIKE pattern")
+    top_parser.add_argument(
+        "--include", metavar="TEST", type=str, help="Include only tests matching this SQL LIKE pattern"
+    )
 
     top_parser.set_defaults(func=top)
 
