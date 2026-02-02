@@ -442,16 +442,13 @@ mod tests {
 
         for (payload, expected_err) in invalid_payloads_with_expected_errors() {
             let output = registry.migrate_node_operator_inner(
-                payload,
+                payload.clone(),
                 PrincipalId::new_user_test_id(1),
                 now_plus_13_hours(),
             );
 
-            let expected: Result<(), MigrateError> = Err(expected_err);
-            assert_eq!(
-                output, expected,
-                "Expected: {expected:?} but found result: {output:?}"
-            );
+            let expected = Err(expected_err);
+            assert_eq!(output, expected, "{payload:?}");
         }
     }
 
@@ -464,16 +461,15 @@ mod tests {
             new_node_operator_id: Some(PrincipalId::new_user_test_id(2)),
         };
 
-        let expected_err: Result<(), MigrateError> = Err(MigrateError::MissingNodeOperator {
-            principal: payload.old_node_operator_id.unwrap(),
-        });
-
         let resp = registry.migrate_node_operator_inner(
-            payload,
+            payload.clone(),
             PrincipalId::new_user_test_id(3),
             now_plus_13_hours(),
         );
 
+        let expected_err = Err(MigrateError::MissingNodeOperator {
+            principal: payload.old_node_operator_id.unwrap(),
+        });
         assert_eq!(resp, expected_err);
     }
 
@@ -487,12 +483,15 @@ mod tests {
         let old_node_provider_id = PrincipalId::new_user_test_id(3);
         let new_node_provider_id = PrincipalId::new_user_test_id(4);
 
+        let dc_id = "dc".to_string();
+
         let mutations = vec![
             upsert(
                 make_node_operator_record_key(old_node_operator_id).as_bytes(),
                 NodeOperatorRecord {
                     node_operator_principal_id: old_node_operator_id.to_vec(),
                     node_provider_principal_id: old_node_provider_id.to_vec(),
+                    dc_id: dc_id.clone(),
                     ..Default::default()
                 }
                 .encode_to_vec(),
@@ -502,6 +501,7 @@ mod tests {
                 NodeOperatorRecord {
                     node_operator_principal_id: new_node_operator_id.to_vec(),
                     node_provider_principal_id: new_node_provider_id.to_vec(),
+                    dc_id: dc_id.clone(),
                     ..Default::default()
                 }
                 .encode_to_vec(),
@@ -515,17 +515,16 @@ mod tests {
             new_node_operator_id: Some(new_node_operator_id),
         };
 
-        let expected_err: Result<(), MigrateError> = Err(MigrateError::NodeProviderMismatch {
-            old: old_node_provider_id,
-            new: new_node_provider_id,
-        });
-
         let resp = registry.migrate_node_operator_inner(
-            payload,
+            payload.clone(),
             old_node_provider_id,
             now_plus_13_hours(),
         );
 
+        let expected_err = Err(MigrateError::NodeProviderMismatch {
+            old: old_node_provider_id,
+            new: new_node_provider_id,
+        });
         assert_eq!(resp, expected_err)
     }
 
@@ -571,12 +570,10 @@ mod tests {
             new_node_operator_id: Some(new_node_operator_id),
         };
 
-        let expected_err: Result<(), MigrateError> =
-            Err(MigrateError::DataCenterMismatch { old: dc1, new: dc2 });
-
         let resp =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
 
+        let expected_err = Err(MigrateError::DataCenterMismatch { old: dc1, new: dc2 });
         assert_eq!(resp, expected_err)
     }
 
@@ -623,13 +620,12 @@ mod tests {
 
         let caller = PrincipalId::new_user_test_id(999);
 
-        let expected_err: Result<(), MigrateError> = Err(MigrateError::NotAuthorized {
+        let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+
+        let expected_err = Err(MigrateError::NotAuthorized {
             caller,
             expected: node_provider_id,
         });
-
-        let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
-
         assert_eq!(resp, expected_err)
     }
 
@@ -1087,10 +1083,10 @@ mod tests {
         };
 
         let resp = registry.migrate_node_operator_inner(payload.clone(), caller, now_system_time());
-        let expected_err: Result<(), MigrateError> = Err(MigrateError::OldOperatorRateLimit {
+
+        let expected_err = Err(MigrateError::OldOperatorRateLimit {
             principal: old_node_operator_id,
         });
-
         assert_eq!(resp, expected_err);
 
         let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
@@ -1127,10 +1123,10 @@ mod tests {
         let past = now - Duration::from_secs(4 * 60 * 60);
 
         let resp = registry.migrate_node_operator_inner(payload.clone(), caller, past);
-        let expected_err: Result<(), MigrateError> = Err(MigrateError::OldOperatorRateLimit {
+
+        let expected_err = Err(MigrateError::OldOperatorRateLimit {
             principal: old_node_operator_id,
         });
-
         assert_eq!(resp, expected_err);
 
         let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
@@ -1202,7 +1198,7 @@ mod tests {
         // let resp = setup
         //     .registry
         //     .migrate_node_operator_inner(payload, caller, now_plus_13_hours());
-        // let expected_err: Result<(), MigrateError> = Err(MigrateError::OldOperatorRateLimit {
+        // let expected_err = Err(MigrateError::OldOperatorRateLimit {
         //     principal: destination_node_operator,
         // });
         // assert_eq!(resp, expected_err);
