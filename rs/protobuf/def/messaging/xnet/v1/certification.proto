@@ -4,8 +4,8 @@
 syntax = "proto3";
 package messaging.xnet.v1;
 
-import "types/v1/signature.proto";
 import "messaging/xnet/v1/witness.proto";
+import "types/v1/signature.proto";
 
 // State tree root hash.
 message CertificationContent {
