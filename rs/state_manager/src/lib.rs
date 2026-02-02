@@ -1296,6 +1296,7 @@ impl StateManagerImpl {
 
     /// Finish all asynchronous operations.
     pub fn flush_all(&self) {
+        self.flush_hash_channel();
         self.flush_tip_channel();
         self.state_layout().flush_checkpoint_removal_channel();
     }
@@ -1500,7 +1501,7 @@ impl StateManagerImpl {
             starting_time.elapsed()
         );
 
-        let latest_state_height = AtomicU64::new(0);
+        let latest_state_height = Arc::new(AtomicU64::new(0));
         let latest_certified_height = AtomicU64::new(0);
         let fast_forward_height = AtomicU64::new(0);
 
@@ -1606,7 +1607,7 @@ impl StateManagerImpl {
         }
 
         report_last_diverged_state(&log, &metrics, &state_layout);
-
+        let latest_height_update_time = Arc::new(Mutex::new(Instant::now()));
         Self {
             log,
             metrics,
@@ -1616,7 +1617,7 @@ impl StateManagerImpl {
             own_subnet_id,
             own_subnet_type,
             deallocator_thread,
-            latest_state_height: Arc::new(latest_state_height),
+            latest_state_height,
             latest_certified_height,
             fast_forward_height,
             persist_metadata_guard,
@@ -1626,7 +1627,7 @@ impl StateManagerImpl {
             _hash_thread_handle,
             fd_factory,
             malicious_flags,
-            latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
+            latest_height_update_time,
             started_height,
         }
     }
@@ -2115,6 +2116,11 @@ impl StateManagerImpl {
             last_checkpoint_to_keep
         );
 
+        let tip_height = {
+            let states = self.states.read();
+            states.tip_height
+        };
+
         // In debug builds we store the latest_state_height here so
         // that we can verify later that this height is retained.
         #[cfg(debug_assertions)]
@@ -2213,6 +2219,7 @@ impl StateManagerImpl {
         // as decisions to retain a checkpoint or an in-memory state are made independently.
         let inmemory_heights_to_keep = std::iter::once(latest_certified_height)
             .chain(extra_inmemory_heights_to_keep.iter().copied())
+            .chain(std::iter::once(tip_height))
             .collect::<BTreeSet<_>>();
 
         let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
@@ -3171,14 +3178,35 @@ impl StateManager for StateManagerImpl {
                 .send(HashRequest::Wait { sender })
                 .expect("Failed to send `Wait` to hash channel");
             recv.recv().expect("Failed to wait for hash channel");
-            // Now, snapshot and certification_metadata must have an entry at height-1, so we can unwrap.
-            let states = self.states.read();
-            states
-                .certifications_metadata
-                .get(&(height - Height::from(1)))
-                .unwrap()
-                .certified_state_hash
-                .clone()
+            let prev_height = height.decrement();
+            // At height 0, we don't have a hash yet, so we have to compute it.
+            if prev_height.get() == 0 {
+                println!("prev height == 0");
+                let states = self.states.read();
+                let initial_state = &states
+                    .snapshots
+                    .get(0)
+                    .expect("Initial state should always be present in states.snapshots.")
+                    .state;
+                let certification = StateManagerImpl::compute_certification_metadata(
+                    &initial_state,
+                    prev_height,
+                    &self.metrics,
+                    &self.log,
+                )
+                .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+                certification.certified_state_hash.clone()
+            } else {
+                // After awaiting the hashing thread, snapshot and certification_metadata
+                // must have an entry at height-1, so we can unwrap.
+                let states = self.states.read();
+                states
+                    .certifications_metadata
+                    .get(&prev_height)
+                    .expect("The previous state hash should be available after awaiting the hash thread.")
+                    .certified_state_hash
+                    .clone()
+            }
         };
         // Write the previous state hash to the state.
         state
@@ -3550,6 +3578,16 @@ fn spawn_hash_thread(
             .unwrap(),
     );
     (handle, hash_req_sender)
+}
+
+impl StateManagerImpl {
+    pub fn flush_hash_channel(&self) {
+        let (sender, recv) = bounded(1);
+        self.hash_channel
+            .send(HashRequest::Wait { sender })
+            .expect("failed to send Wait message to hashing thread");
+        recv.recv().expect("failed to wait for hashing thread");
+    }
 }
 
 struct CertifiedStateSnapshotImpl {
