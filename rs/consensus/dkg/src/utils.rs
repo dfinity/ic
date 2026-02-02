@@ -201,6 +201,7 @@ mod tests {
     use crate::utils::vetkd_key_ids_for_subnet;
     use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_consensus_utils::pool_reader::PoolReader;
+    use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_interfaces_registry::RegistryValue;
     use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_management_canister_types_private::{
@@ -332,7 +333,7 @@ mod tests {
                 transcripts_for_remote_subnets: vec![(
                     dkg_id_with_transcript.clone(),
                     CallbackId::from(0),
-                    Err("dummy".to_string()),
+                    Ok(dummy_transcript_for_tests()),
                 )],
             };
 
