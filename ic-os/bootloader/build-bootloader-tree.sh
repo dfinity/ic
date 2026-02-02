@@ -58,5 +58,5 @@ IMAGE_ID=$(cut -d':' -f2 <"${TMP_DIR}/iidfile")
 echo >&2 "exporting container /build/boot"
 CONTAINER_NAME=$(uuidgen) # track name in case we need to `podman rm -f` it
 # run the container which will print a deterministic tarball of /build/boot to stdout
-podman run --rm --name "$CONTAINER_NAME" "${IMAGE_ID}" > "${OUT_FILE:?out file missing}"
+podman run --rm --name "$CONTAINER_NAME" "${IMAGE_ID}" >"${OUT_FILE:?out file missing}"
 CONTAINER_NAME= # unset CONTAINER_NAME so that cleanup() doesn't try to rm it
