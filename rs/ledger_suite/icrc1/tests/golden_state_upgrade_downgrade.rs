@@ -764,7 +764,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
     for canister_config in canister_configs {
-        canister_config.perform_upgrade_downgrade_testing(&state_machine);
+        canister_config.perform_upgrade_downgrade_testing(&state_machine, true);
     }
 }
 
