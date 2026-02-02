@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load(
     "//rs/tests:common.bzl",
+    "CANISTER_SANDBOX_RUNTIME_DEPS",
     "IC_GATEWAY_RUNTIME_DEPS",
     "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS",
     "MAINNET_ENV",
@@ -12,7 +13,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 ENV = MAINNET_ENV
 
-RUNTIME_DEPS = IC_GATEWAY_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS | IMPERSONATE_UPSTREAMS_RUNTIME_DEPS | {
+RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | IC_GATEWAY_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS | IMPERSONATE_UPSTREAMS_RUNTIME_DEPS | {
     "RECOVERY_GUESTOS_IMG_PATH": "//ic-os/guestos/envs/recovery-dev:update-img.tar.zst",
 }
 
@@ -34,6 +35,7 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
@@ -41,15 +43,12 @@ rust_library(
 
 system_test_nns(
     name = "nr_broken_dfinity_node",
-    data = [
-        "//rs/tests:recovery/binaries",
-    ],
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -72,14 +71,12 @@ system_test_nns(
 # is run. This authorizes the test to download the test data.
 system_test_nns(
     name = "nr_large_with_mainnet_state",
-    data = [
-        "//rs/tests:recovery/binaries",
-    ],
     enable_head_nns_variant = False,
     env = ENV,
     flaky = True,
     guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
     guestos_update = "test",
+    setupos = "mainnet_latest_dev",
     tags = [
         "manual", # to prevent the job to be ran twice.
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
@@ -87,11 +84,7 @@ system_test_nns(
     ],
     test_timeout = "eternal", # "eternal" (1 hour) is not even enough for this test. Use `--test_timeout=10800` when running it.
     uses_setupos_mainnet_latest_img = True,
-    runtime_deps = RUNTIME_DEPS | {
-        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
-        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
-        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
-    },
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -105,9 +98,9 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -119,15 +112,12 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_no_bless_fix_like_np",
-    data = [
-        "//rs/tests:recovery/binaries",
-    ],
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -139,15 +129,12 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_seq_np_actions",
-    data = [
-        "//rs/tests:recovery/binaries",
-    ],
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.

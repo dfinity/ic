@@ -147,7 +147,7 @@ system_test_nns(
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -170,7 +170,7 @@ system_test_nns(
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -192,7 +192,7 @@ system_test_nns(
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -233,7 +233,7 @@ system_test_nns(
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -277,7 +277,7 @@ system_test_nns(
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -317,12 +317,12 @@ system_test_nns(
         "USE_MAINNET_STATE": "false",
     },
     guestos_update = "test",
+    setupos = "mainnet_latest_dev",
     tags = [
         "dynamic_testnet",
         "manual",
     ],
     test_driver_target = ":nns_recovery_testnet_bin",
-    uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
@@ -334,6 +334,7 @@ system_test_nns(
         "USE_MAINNET_STATE": "true",
     },
     guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
+    setupos = "mainnet_latest_dev",
     prometheus_vm_resources = {
         "vcpus": 32,
         "memory_kibibytes": 125000000,
@@ -344,12 +345,7 @@ system_test_nns(
         "manual",
     ],
     test_driver_target = ":nns_recovery_testnet_bin",
-    uses_setupos_mainnet_latest_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
-        # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
-        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
-        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
-    },
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -368,11 +364,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
-        # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
-        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
-        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
-    },
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",

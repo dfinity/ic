@@ -1,8 +1,8 @@
 // Represents an account on the ckBTC ledger.
 type Account = record { owner : principal; subaccount : opt blob };
 
-type environment_variable = record { 
-    name: text; 
+type environment_variable = record {
+    name: text;
     value: text;
 };
 
@@ -204,6 +204,10 @@ type InitArgs = record {
     // E.g., "dfx_test_key" on the local replica.
     ecdsa_key_name : text;
 
+    // The minimal amount of BTC that can be converted to ckBTC.
+    // UTXOs with lower values will be ignored.
+    deposit_btc_min_amount : opt nat64;
+
     // The minimal amount of ckBTC that can be converted to BTC.
     retrieve_btc_min_amount : nat64;
 
@@ -242,6 +246,10 @@ type InitArgs = record {
 
 // The upgrade parameters of the minter canister.
 type UpgradeArgs = record {
+    // The minimal amount of BTC that can be converted to ckBTC.
+    // UTXOs with lower values will be ignored.
+    deposit_btc_min_amount : opt nat64;
+
     // The minimal amount of ckBTC that the minter converts to BTC.
     retrieve_btc_min_amount : opt nat64;
 
@@ -372,6 +380,9 @@ type MinterInfo = record {
     retrieve_btc_min_amount : nat64;
     // The same as `check_fee`, but the old name is kept here to be backward compatible.
     kyt_fee : nat64;
+    // Minimal amount of BTC that can be deposited to be converted into ckBTC.
+    // UTXOs with lower values will be ignored.
+    deposit_btc_min_amount : opt nat64;
 };
 
 type ReimbursementReason = variant {

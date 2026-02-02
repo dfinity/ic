@@ -1,7 +1,7 @@
 use anyhow::Result;
+use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
-use ic_consensus_system_test_utils::set_sandbox_env_vars;
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
@@ -21,7 +21,9 @@ use ic_types::{ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{Logger, info};
 use ssh2::Session;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
+use std::io::Cursor;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
@@ -186,10 +188,6 @@ fn setup_recovered_nns(
     let recovered_nns_node = topology.unassigned_nodes().next().unwrap();
     fetch_ic_config(&env, &nns_node);
 
-    // The following ensures ic-replay and ic-recovery know where to get their required dependencies.
-    let recovery_dir = get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
-
     // Wait until we have fetched ic-replay before setting the test neuron (which needs ic-replay)
     fetch_mainnet_ic_replay_thread
         .join()
@@ -275,21 +273,92 @@ fn setup_recovered_nns(
 }
 
 fn fetch_mainnet_ic_replay(env: &TestEnv) {
-    // TODO (CON-1624): fetch the mainnet version of ic-replay
-    std::fs::copy(
-        get_dependency_path(std::env::var("IC_REPLAY_PATH").unwrap()),
-        env.get_path(PATH_IC_REPLAY),
-    )
-    .unwrap();
+    let logger = env.logger();
+    let version = get_mainnet_nns_revision();
+    let mainnet_ic_replica_url =
+        format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
+    let ic_replay_path = env.get_path(PATH_IC_REPLAY);
+    let ic_replay_gz_path = env.get_path("ic-replay.gz");
+    // let mut tmp_file = tempfile::tempfile().unwrap();
+    info!(
+        logger,
+        "Downloading {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?} ..."
+    );
+    let response = reqwest::blocking::get(mainnet_ic_replica_url.clone())
+        .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_replica_url:?} because {e:?}"));
+    if !response.status().is_success() {
+        panic!("Failed to download {mainnet_ic_replica_url}");
+    }
+    let bytes = response.bytes().unwrap();
+    let mut content = Cursor::new(bytes);
+    let mut ic_replay_gz_file = File::create(ic_replay_gz_path.clone()).unwrap();
+    std::io::copy(&mut content, &mut ic_replay_gz_file).unwrap_or_else(|e| {
+        panic!("Can't copy {mainnet_ic_replica_url} to {ic_replay_gz_path:?} because {e:?}")
+    });
+    info!(
+        logger,
+        "Downloaded {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?}. Uncompressing to {ic_replay_path:?} ..."
+    );
+    let ic_replay_gz_file = File::open(ic_replay_gz_path.clone()).unwrap();
+    let mut gz = GzDecoder::new(&ic_replay_gz_file);
+    let mut ic_replay_file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .mode(0o755)
+        .open(ic_replay_path.clone())
+        .unwrap();
+    std::io::copy(&mut gz, &mut ic_replay_file).unwrap_or_else(|e| {
+        panic!("Can't uncompress {ic_replay_gz_path:?} to {ic_replay_path:?} because {e:?}")
+    });
+    info!(
+        logger,
+        "Uncompressed {ic_replay_gz_path:?} to {ic_replay_path:?}"
+    );
 }
 
 fn fetch_mainnet_ic_recovery(env: &TestEnv) {
-    // TODO (CON-1624): fetch the mainnet version of ic-recovery
-    std::fs::copy(
-        get_dependency_path(std::env::var("IC_RECOVERY_PATH").unwrap()),
-        env.get_path(PATH_IC_RECOVERY),
-    )
-    .unwrap();
+    let logger = env.logger();
+    let version = get_mainnet_nns_revision();
+    let mainnet_ic_recovery_url =
+        format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
+    let ic_recovery_path = env.get_path(PATH_IC_RECOVERY);
+    let ic_recovery_gz_path = env.get_path("ic-recovery.gz");
+    info!(
+        logger,
+        "Downloading {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?} ..."
+    );
+    let response = reqwest::blocking::get(mainnet_ic_recovery_url.clone())
+        .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_recovery_url:?} because {e:?}"));
+    if !response.status().is_success() {
+        panic!("Failed to download {mainnet_ic_recovery_url}");
+    }
+    let bytes = response.bytes().unwrap();
+    let mut content = Cursor::new(bytes);
+    let mut ic_recovery_gz_file = File::create(ic_recovery_gz_path.clone()).unwrap();
+    std::io::copy(&mut content, &mut ic_recovery_gz_file).unwrap_or_else(|e| {
+        panic!("Can't copy {mainnet_ic_recovery_url} to {ic_recovery_gz_path:?} because {e:?}")
+    });
+    info!(
+        logger,
+        "Downloaded {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?}. Uncompressing to {ic_recovery_path:?} ..."
+    );
+    let ic_recovery_gz_file = File::open(ic_recovery_gz_path.clone()).unwrap();
+    let mut gz = GzDecoder::new(&ic_recovery_gz_file);
+    let mut ic_recovery_file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .mode(0o755)
+        .open(ic_recovery_path.clone())
+        .unwrap();
+    std::io::copy(&mut gz, &mut ic_recovery_file).unwrap_or_else(|e| {
+        panic!("Can't uncompress {ic_recovery_gz_path:?} to {ic_recovery_path:?} because {e:?}")
+    });
+    info!(
+        logger,
+        "Uncompressed {ic_recovery_gz_path:?} to {ic_recovery_path:?}"
+    );
 }
 
 fn fetch_nns_state_from_backup_pod(env: &TestEnv) {
@@ -471,12 +540,6 @@ fn recover_nns_subnet(
     let _session = aux_node.block_on_ssh_session();
 
     info!(logger, "Starting ic-recovery ...");
-    let recovery_binaries_path =
-        std::fs::canonicalize(get_dependency_path("rs/tests/recovery/binaries")).unwrap();
-
-    let dir = env.base_path();
-    std::os::unix::fs::symlink(recovery_binaries_path, dir.join("recovery/binaries")).unwrap();
-
     let nns_url: Url = nns_node.get_public_url();
     let replica_version = get_guestos_img_version();
     let subnet_id = SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap());
@@ -487,11 +550,11 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    let ic_recovery_path = env.get_path(PATH_IC_RECOVERY);
-    let mut cmd = Command::new(ic_recovery_path);
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    let mut cmd = Command::new(env.get_path(PATH_IC_RECOVERY));
     cmd.arg("--skip-prompts")
         .arg("--dir")
-        .arg(dir)
+        .arg(recovery_dir)
         .arg("--nns-url")
         .arg(nns_url.to_string())
         .arg("--replica-version")
@@ -714,8 +777,7 @@ fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
     let logger: slog::Logger = env.logger();
     let set_testnet_env_vars_sh_path = env.get_path(PATH_SET_TESTNET_ENV_VARS_SH);
     let set_testnet_env_vars_sh_str = set_testnet_env_vars_sh_path.display();
-    let ic_admin =
-        fs::canonicalize(get_dependency_path("rs/tests/recovery/binaries/ic-admin")).unwrap();
+    let ic_admin = fs::canonicalize(get_dependency_path_from_env("IC_ADMIN_PATH")).unwrap();
     let pem = env.get_path("neuron_secret_key.pem");
     let mut pem_file = File::create(&pem).unwrap();
     pem_file

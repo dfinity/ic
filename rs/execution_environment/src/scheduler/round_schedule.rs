@@ -11,6 +11,8 @@ use crate::{
     util::debug_assert_or_critical_error,
 };
 
+use more_asserts::debug_assert_gt;
+
 use super::SchedulerMetrics;
 
 /// Round metrics required to prioritize a canister.
@@ -261,7 +263,7 @@ impl RoundSchedule {
         }
         let last_prioritized_long = idx;
         let new_execution_cores = self.scheduler_cores - last_prioritized_long;
-        debug_assert!(new_execution_cores > 0);
+        debug_assert_gt!(new_execution_cores, 0);
         for canister_id in scheduling_order.new_canister_ids {
             let canister_state = canisters.remove(canister_id).unwrap();
             canisters_partitioned_by_cores[idx].push(canister_state);
@@ -329,8 +331,7 @@ impl RoundSchedule {
         // Fully divide the free allocation across all canisters.
         for canister in canister_states.values_mut() {
             // De-facto compute allocation includes bonus allocation
-            let factual = canister.scheduler_state.compute_allocation.as_percent() as i64
-                * multiplier
+            let factual = canister.compute_allocation().as_percent() as i64 * multiplier
                 + free_capacity_per_canister;
             // Increase accumulated priority by de-facto compute allocation.
             canister.scheduler_state.accumulated_priority += factual.into();
@@ -421,15 +422,14 @@ impl RoundSchedule {
             if is_reset_round {
                 // By default, each canister accumulated priority is set to its compute allocation.
                 canister.scheduler_state.accumulated_priority =
-                    (canister.scheduler_state.compute_allocation.as_percent() as i64 * multiplier)
-                        .into();
+                    (canister.compute_allocation().as_percent() as i64 * multiplier).into();
                 canister.scheduler_state.priority_credit = Default::default();
             }
 
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
 
-            let compute_allocation = canister.scheduler_state.compute_allocation;
+            let compute_allocation = canister.compute_allocation();
             let accumulated_priority = canister.scheduler_state.accumulated_priority;
             round_states.push(CanisterRoundState {
                 canister_id,
@@ -443,11 +443,11 @@ impl RoundSchedule {
             accumulated_priority_invariant += accumulated_priority;
             accumulated_priority_deviation +=
                 accumulated_priority.get() as f64 * accumulated_priority.get() as f64;
-            if !canister.has_input() {
+            if canister.has_input() {
                 canister
                     .system_state
-                    .canister_metrics
-                    .skipped_round_due_to_no_messages += 1;
+                    .canister_metrics_mut()
+                    .observe_round_scheduled();
             }
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.
