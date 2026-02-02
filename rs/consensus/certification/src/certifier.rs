@@ -339,7 +339,7 @@ impl CertifierImpl {
                     .all(|share| share.signed.signature.signer != self.replica_config.node_id)
             })
             .cloned()
-            .filter_map(|(height, hash, _)| {
+            .filter_map(|(height, hash, witness)| {
                 let content = CertificationContent::new(hash);
                 let dkg_id =
                     active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), height)?;
@@ -349,6 +349,7 @@ impl CertifierImpl {
                 {
                     Ok(signature) => Some(CertificationShare {
                         height,
+                        witness,
                         signed: Signed { content, signature },
                     }),
                     Err(err) => {
@@ -385,7 +386,17 @@ impl CertifierImpl {
             }
         }
 
-        let shares = certification_pool.shares_at_height(height).map(|s| Signed {
+        let shares: Vec<_> = certification_pool.shares_at_height(height).collect();
+        let witness = if let Some(share) = shares.first() {
+            share.witness.clone()
+        } else {
+            error!(
+                self.log,
+                "CertifierImpl::aggregate called on an empty collection of shares"
+            );
+            return vec![];
+        };
+        let signatures = shares.into_iter().map(|s| Signed {
             content: CertificationTuple(s.height, s.signed.content),
             signature: s.signed.signature,
         });
@@ -396,12 +407,13 @@ impl CertifierImpl {
             Box::new(|cert: &CertificationTuple| {
                 active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), cert.height())
             }),
-            shares,
+            signatures,
         )
         .into_iter()
         .map(|signed_cert_tuple| {
             CertificationMessage::Certification(Certification {
                 height: signed_cert_tuple.content.0,
+                witness: witness.clone(),
                 signed: Signed {
                     content: signed_cert_tuple.content.1,
                     signature: signed_cert_tuple.signature,
@@ -636,6 +648,7 @@ mod tests {
         to_unvalidated(CertificationMessage::CertificationShare(
             CertificationShare {
                 height,
+                witness: Witness::new_for_testing(Digest([0; 32])),
                 signed: Signed {
                     signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
                     content,
@@ -663,6 +676,7 @@ mod tests {
         signature.signer = dkg_id;
         to_unvalidated(CertificationMessage::Certification(Certification {
             height,
+            witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed { content, signature },
         }))
     }
@@ -1356,6 +1370,7 @@ mod tests {
                         .validated
                         .insert(CertificationMessage::Certification(Certification {
                             height: Height::from(height),
+                            witness: Witness::new_for_testing(Digest([0; 32])),
                             signed: Signed {
                                 content: gen_content(),
                                 signature: ThresholdSignature::fake(),

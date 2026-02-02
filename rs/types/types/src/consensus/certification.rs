@@ -9,6 +9,7 @@ use crate::{
     },
     crypto::{CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
 };
+use ic_crypto_tree_hash::Witness;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
@@ -207,6 +208,8 @@ impl AsRef<CertificationContent> for CertificationMessage {
 pub struct Certification {
     /// the height that the CertificationContent belongs to
     pub height: Height,
+    /// the witness for the height
+    pub witness: Witness,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignature<CertificationContent>>,
 }
@@ -231,6 +234,8 @@ impl CountBytes for Certification {
 pub struct CertificationShare {
     /// the height that the CertificationContent belongs to
     pub height: Height,
+    /// the witness for the height
+    pub witness: Witness,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignatureShare<CertificationContent>>,
 }

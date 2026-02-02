@@ -218,6 +218,7 @@ pub(crate) mod test {
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
     use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_interfaces_mocks::messaging::MockXNetPayloadBuilder;
     use ic_interfaces_mocks::payload_builder::{
@@ -316,6 +317,7 @@ pub(crate) mod test {
             merkle_proof,
             certification: Certification {
                 height: Height::from(height),
+                witness: Witness::new_for_testing(Digest([0; 32])),
                 signed: Signed {
                     signature: ThresholdSignature::fake(),
                     content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(

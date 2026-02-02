@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/for_verification_only",
+    "//rs/crypto/tree_hash",
     "//rs/execution_environment",
     "//rs/interfaces",
     "//rs/interfaces/registry",
