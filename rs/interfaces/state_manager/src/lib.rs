@@ -1,6 +1,6 @@
 //! The state manager public interface.
 
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
     consensus::certification::Certification, state_manager::StateManagerResult,
@@ -99,7 +99,7 @@ impl<State> Labeled<State> {
 // tag::state-manager-interface[]
 pub trait StateManager: StateReader {
     /// Returns a snapshot of the list of state hashes that need to be
-    /// certified ("the list" below).
+    /// certified and witnesses for the state height ("the list" below).
     ///
     /// The actual list is maintained by the StateManager.  The
     /// following operations can modify the list:
@@ -123,8 +123,8 @@ pub trait StateManager: StateReader {
     /// ```text
     /// sm.commit_and_certify(state_1, h_1, scope_1)
     /// sm.commit_and_certify(state_1, h_2, scope_1)
-    /// sm.list_state_hashes_to_certify() = [(h_2, H_2)]
-    /// sm.list_state_hashes_to_certify() = [(h_1, H_1), (h_2, H_2)]
+    /// sm.list_state_hashes_to_certify() = [(h_2, H_2, W_2)]
+    /// sm.list_state_hashes_to_certify() = [(h_1, H_1, W_1), (h_2, H_2, W_2)]
     /// ```
     ///
     /// # Properties
@@ -142,9 +142,15 @@ pub trait StateManager: StateReader {
     ///   let l_1 = state_manager.list_state_hashes_to_certify()
     ///   ...
     ///   let l_2 = state_manager.list_state_hashes_to_certify()
-    ///   ∀ (h_1, H_1) ∈ l_1, (h_2, H_2) ∈ l_2: h_1 = h_2 ⇒ H_1 = H_2
+    ///   ∀ (h_1, H_1, W_1) ∈ l_1, (h_2, H_2, W_2) ∈ l_2: h_1 = h_2 ⇒ H_1 = H_2
     ///   ```
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)>;
+    ///
+    /// * The hash of the witness w.r.t. state height is equal to the hash of the state:
+    ///
+    ///   ```text
+    ///   ∀ (h, H, W) ∈ state_manager.list_state_hashes_to_certify(): digest(/"metadata"/"height"/h, W) = H.
+    ///   ```
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)>;
 
     /// Delivers a `certification` corresponding to some state hash / height
     /// pair.

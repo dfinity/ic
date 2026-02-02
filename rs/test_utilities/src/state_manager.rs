@@ -1,5 +1,5 @@
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -183,13 +183,21 @@ impl StateManager for FakeStateManager {
         });
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)> {
         self.states
             .read()
             .unwrap()
             .iter()
             .filter(|s| s.height > Height::from(0) && s.certification.is_none())
-            .map(|s| (s.height, s.partial_hash.clone()))
+            .map(|s| {
+                (
+                    s.height,
+                    s.partial_hash.clone(),
+                    Witness::new_for_testing(
+                        s.partial_hash.clone().get().0.to_vec().try_into().unwrap(),
+                    ),
+                )
+            })
             .collect()
     }
 
@@ -690,7 +698,7 @@ impl StateManager for RefMockStateManager {
             .fetch_state(height, root_hash, cup_interval_length)
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)> {
         self.mock.read().unwrap().list_state_hashes_to_certify()
     }
 

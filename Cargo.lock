@@ -7777,6 +7777,7 @@ dependencies = [
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-test-utils-crypto-returning-ok",
+ "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",

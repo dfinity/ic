@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-consensus-utils = { path = "../utils" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }

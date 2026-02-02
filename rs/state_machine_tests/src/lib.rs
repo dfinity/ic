@@ -19,7 +19,7 @@ use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
 };
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, MatchPatternPath, MixedHashTree, Path as LabeledTreePath,
+    Label, LabeledTree, MatchPatternPath, MixedHashTree, Path as LabeledTreePath, Witness,
     sparse_labeled_tree_from_paths,
 };
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
@@ -938,7 +938,7 @@ impl Deref for StateMachineStateManager {
 }
 
 impl StateManager for StateMachineStateManager {
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)> {
         self.deref().list_state_hashes_to_certify()
     }
 
@@ -5023,7 +5023,7 @@ pub fn certify_latest_state_helper(
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
         let state_hashes = state_manager.list_state_hashes_to_certify();
-        let (height, hash) = state_hashes.last().unwrap();
+        let (height, hash, _) = state_hashes.last().unwrap();
         state_manager
             .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
     }

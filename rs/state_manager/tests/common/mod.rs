@@ -75,7 +75,7 @@ pub fn certify_height(state_manager: &impl StateManager, h: Height) -> Certifica
     let hash = state_manager
         .list_state_hashes_to_certify()
         .into_iter()
-        .find_map(|(height, hash)| if height == h { Some(hash) } else { None })
+        .find_map(|(height, hash, _)| if height == h { Some(hash) } else { None })
         .expect("no hash to certify");
 
     let certification = Certification {

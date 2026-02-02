@@ -1121,6 +1121,12 @@ pub enum Witness {
     Known(),
 }
 
+impl Witness {
+    pub fn new_for_testing(digest: Digest) -> Self {
+        Self::Pruned { digest }
+    }
+}
+
 fn write_witness(witness: &Witness, level: u8, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let indent = String::from_utf8(vec![b' '; (level.saturating_mul(8)) as usize])
         .expect("String was not valid utf8");

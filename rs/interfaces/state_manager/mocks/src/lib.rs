@@ -1,4 +1,4 @@
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager, StateReader,
 };
@@ -49,7 +49,7 @@ mock! {
 
         fn fetch_state(&self, height: Height, root_hash: CryptoHashOfState, cup_interval_length: Height);
 
-        fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)>;
+        fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)>;
 
         fn deliver_state_certification(&self, certification: Certification);
 

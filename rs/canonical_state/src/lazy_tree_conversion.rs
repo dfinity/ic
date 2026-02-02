@@ -965,3 +965,8 @@ fn canister_metadata_as_tree(
         mk_tree: |_name, section, _version| Blob(section.content(), Some(section.hash())),
     })
 }
+
+pub fn state_height_as_tree(height: &Height) -> LazyTree<'_> {
+    let metadata_lazy_tree = fork(FiniteMap::default().with_tree(HEIGHT_LABEL, num(height.get())));
+    fork(FiniteMap::default().with_tree(METADATA_LABEL, metadata_lazy_tree))
+}

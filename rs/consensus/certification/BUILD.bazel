@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/consensus/utils",
+    "//rs/crypto/tree_hash",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
