@@ -31,6 +31,8 @@ const MIGRATION_CAPACITY_INTERVAL: Duration =
 
 impl Registry {
     /// Migrates a node operator record and node records to a new node operator principal.
+    /// If the migration is successful, the old node operator record is removed from the
+    /// registry.
     ///
     /// This is the public entry point called by the canister. It retrieves the caller
     /// and current time, then delegates to the inner implementation.
@@ -83,6 +85,15 @@ impl Registry {
     }
 
     /// Validates all business rules and returns the mutations for node operator records.
+    ///
+    /// The validation checks the following business rules:
+    /// 1. The old node operator record must exist.
+    /// 2. The caller must be the owner (Node Provider) of the old node operator record.
+    /// 3. The old node operator record must have been created at least
+    ///    [`MIGRATION_CAPACITY_INTERVAL`] ago.
+    /// 4. The new node operator record (if it exists) must be owned by the same Node Provider
+    ///    as the old one.
+    /// 5. Both node operator records must belong to the same Data Center.
     fn get_operator_mutations_if_business_rules_are_valid(
         &self,
         old_node_operator_id: PrincipalId,
@@ -196,6 +207,12 @@ impl Registry {
     }
 
     /// Merges data from the old node operator record into the new node operator record.
+    ///
+    /// The update is performed as follows:
+    /// 1. `node_allowance` is added from the old record to the new record.
+    /// 2. `ipv6` field is copied from the old record (legacy field).
+    /// 3. `rewardable_nodes` map counts are merged: values from the old record are added to the new one.
+    /// 4. `max_rewardable_nodes` map counts are merged: values from the old record are added to the new one.
     fn update_new_node_operator_record(
         old_node_operator_record: &NodeOperatorRecord,
         new_node_operator_record: &mut NodeOperatorRecord,
