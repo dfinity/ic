@@ -2196,7 +2196,7 @@ mod tests {
                             // stop and reboot
                             // Though, we should start to download it in advance
                             assert_has_prepared_upgrade();
-                            assert_has_not_cleared_version_and_image(&upgrade);
+                            assert_has_not_cleared_version_and_image(upgrade);
                             Ok(OrchestratorControlFlow::Assigned(local_cup.subnet_id))
                         }
                         (None, Some(upgrade)) => {
@@ -2210,7 +2210,7 @@ mod tests {
                                 // Thus, we cannot be sure whether the replica version was recalled
                                 // or not. We should thus wait until the replicator has caught up.
                                 assert_has_not_prepared_upgrade();
-                                assert_has_not_cleared_version_and_image(&upgrade);
+                                assert_has_not_cleared_version_and_image(upgrade);
                                 Err(OrchestratorError::UpgradeError(format!(
                                     "Delaying upgrade to {} until registry data is recent enough.",
                                     upgrade.replica_version,
@@ -2218,7 +2218,7 @@ mod tests {
                             } else if upgrade.is_recalled {
                                 // The replica version was recalled, so we should not upgrade
                                 assert_has_not_prepared_upgrade();
-                                assert_has_not_cleared_version_and_image(&upgrade);
+                                assert_has_not_cleared_version_and_image(upgrade);
                                 Err(OrchestratorError::UpgradeError(format!(
                                     "Not upgrading to recalled replica version {}",
                                     upgrade.replica_version,
@@ -2258,7 +2258,7 @@ mod tests {
                             // has not reached either of them yet, so we are expected to be `Leaving`
                             // Though, we should start to download the upgrade in advance
                             assert_has_prepared_upgrade();
-                            assert_has_not_cleared_version_and_image(&upgrade);
+                            assert_has_not_cleared_version_and_image(upgrade);
                             Ok(OrchestratorControlFlow::Leaving(local_cup.subnet_id))
                         }
                         (Some(leaving_registry_version), Some(upgrade))
@@ -2275,7 +2275,7 @@ mod tests {
                                 // Thus, we cannot be sure whether the replica version was recalled
                                 // or not. We should thus wait until the replicator has caught up.
                                 assert_has_not_prepared_upgrade();
-                                assert_has_not_cleared_version_and_image(&upgrade);
+                                assert_has_not_cleared_version_and_image(upgrade);
                                 Err(OrchestratorError::UpgradeError(format!(
                                     "Delaying upgrade to {} until registry data is recent enough.",
                                     upgrade.replica_version,
@@ -2283,7 +2283,7 @@ mod tests {
                             } else if upgrade.is_recalled {
                                 // The replica version was recalled, so we should not upgrade
                                 assert_has_not_prepared_upgrade();
-                                assert_has_not_cleared_version_and_image(&upgrade);
+                                assert_has_not_cleared_version_and_image(upgrade);
                                 Err(OrchestratorError::UpgradeError(format!(
                                     "Not upgrading to recalled replica version {}",
                                     upgrade.replica_version,
@@ -2303,7 +2303,7 @@ mod tests {
                             // subnet takes precedence, and we are expected to be `Unassigned`
                             assert_has_not_prepared_upgrade();
                             // In that case, the prepared image will be kept
-                            assert_has_not_cleared_version_and_image(&upgrade);
+                            assert_has_not_cleared_version_and_image(upgrade);
                             Ok(OrchestratorControlFlow::Unassigned)
                         }
                     }
@@ -2336,7 +2336,7 @@ mod tests {
                         // `Assigned` and not stop and reboot
                         // Though, we should start to download the upgrade in advance
                         assert_has_prepared_upgrade();
-                        assert_has_not_cleared_version_and_image(&upgrade);
+                        assert_has_not_cleared_version_and_image(upgrade);
                         Ok(OrchestratorControlFlow::Assigned(registry_cup.subnet_id))
                     }
                     (Some((_registry_cup, _)), Some(upgrade)) => {
@@ -2350,7 +2350,7 @@ mod tests {
                             // Thus, we cannot be sure whether the replica version was recalled
                             // or not. We should thus wait until the replicator has caught up.
                             assert_has_not_prepared_upgrade();
-                            assert_has_not_cleared_version_and_image(&upgrade);
+                            assert_has_not_cleared_version_and_image(upgrade);
                             Err(OrchestratorError::UpgradeError(format!(
                                 "Delaying upgrade to {} until registry data is recent enough.",
                                 upgrade.replica_version,
@@ -2358,7 +2358,7 @@ mod tests {
                         } else if upgrade.is_recalled {
                             // The replica version was recalled, so we should not upgrade
                             assert_has_not_prepared_upgrade();
-                            assert_has_not_cleared_version_and_image(&upgrade);
+                            assert_has_not_cleared_version_and_image(upgrade);
                             Err(OrchestratorError::UpgradeError(format!(
                                 "Not upgrading to recalled replica version {}",
                                 upgrade.replica_version,
