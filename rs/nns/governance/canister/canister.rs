@@ -299,9 +299,7 @@ fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronRes
 }
 
 #[update]
-async fn create_neuron(
-    request: CreateNeuronRequest,
-) -> Result<CreateNeuronResponse, GovernanceError> {
+async fn create_neuron(request: CreateNeuronRequest) -> CreateNeuronResponse {
     debug_log("create_neuron");
     Governance::create_neuron(governance_ref(), caller(), request)
         .await

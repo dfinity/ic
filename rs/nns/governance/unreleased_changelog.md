@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* A `create_neuron` method to create neurons through staking ICPs using the ICRC2 standard.
+
 ## Changed
 
 ## Deprecated

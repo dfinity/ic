@@ -12,7 +12,7 @@ use crate::{
 
 use ic_cdk::println;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::{CreateNeuronRequest, CreateNeuronResponse};
+use ic_nns_governance_api::{CreateNeuronRequest, CreatedNeuron};
 use ic_types::PrincipalId;
 use icp_ledger::Subaccount;
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
@@ -25,7 +25,7 @@ impl Governance {
         governance: &'static LocalKey<RefCell<Self>>,
         caller: PrincipalId,
         request: CreateNeuronRequest,
-    ) -> Result<CreateNeuronResponse, GovernanceError> {
+    ) -> Result<CreatedNeuron, GovernanceError> {
         let CreateNeuronRequest {
             source_subaccount,
             amount_e8s,
@@ -37,14 +37,16 @@ impl Governance {
         } = request;
 
         // Validate source_subaccount is 32 bytes if present.
-        if let Some(ref source_subaccount) = source_subaccount {
-            if source_subaccount.len() != 32 {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "A source subaccount can only be 32 bytes",
-                ));
-            }
-        }
+        let source_subaccount = source_subaccount
+            .map(|s| {
+                <[u8; 32]>::try_from(s.as_slice()).map_err(|_| {
+                    GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "A source subaccount can only be 32 bytes",
+                    )
+                })
+            })
+            .transpose()?;
 
         // Validate amount_e8s is present.
         let amount_e8s = amount_e8s.ok_or_else(|| {
@@ -60,68 +62,91 @@ impl Governance {
             set_following.validate_intrinsically()?;
         }
 
+        let dissolve_delay_seconds =
+            dissolve_delay_seconds.unwrap_or(INITIAL_NEURON_DISSOLVE_DELAY);
+        if dissolve_delay_seconds < INITIAL_NEURON_DISSOLVE_DELAY {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!(
+                    "Dissolve delay {dissolve_delay_seconds} is less than the default dissolve \
+            delay {INITIAL_NEURON_DISSOLVE_DELAY}"
+                ),
+            ));
+        }
+        if dissolve_delay_seconds > MAX_DISSOLVE_DELAY_SECONDS {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!(
+                    "Dissolve delay {dissolve_delay_seconds} is greater than the maximum \
+            dissolve delay {MAX_DISSOLVE_DELAY_SECONDS}"
+                ),
+            ));
+        }
+
+        // We borrow the `governance` mutably here to reserve the neuron limit, generate the neuron
+        // ID and subaccount. Usually, after some mutations happen, if any of the operations fail,
+        // we need to consider rolling back the mutations. However, here the neuron limit
+        // reservation has a `Drop` implementation for rollback, and the `randomness` mutation is
+        // not so critical and we can simply let the mutation persist.
+        let (neuron_limit_reservation, neuron_subaccount, neuron_id) =
+            governance.with_borrow_mut(|governance| {
+                let neuron_limit_reservation = governance.rate_limiter.try_reserve(
+                    governance.env.now_system_time(),
+                    NEURON_RATE_LIMITER_KEY.to_string(),
+                    1,
+                )?;
+                let neuron_subaccount =
+                    governance.randomness.random_byte_array().map_err(|_| {
+                        GovernanceError::new_with_message(
+                            ErrorType::Unavailable,
+                            "Failed to generate neuron subaccount",
+                        )
+                    })?;
+                let neuron_subaccount = Subaccount(neuron_subaccount);
+                if governance
+                    .neuron_store
+                    .has_neuron_with_subaccount(neuron_subaccount)
+                {
+                    println!(
+                        "{LOG_PREFIX}Warning: An improbable event has occurred: a neuron \
+                    subaccount was generated randomly but there is already a neuron with the same \
+                    subaccount."
+                    );
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::Unavailable,
+                        "There is already a neuron with the same subaccount.",
+                    ));
+                }
+                let neuron_id = governance
+                    .neuron_store
+                    .new_neuron_id(&mut *governance.randomness)?;
+                Ok::<_, GovernanceError>((neuron_limit_reservation, neuron_subaccount, neuron_id))
+            })?;
+
         let (
-            neuron_limit_reservation,
             ledger,
-            neuron_subaccount,
-            neuron_id,
             default_followees,
             transaction_fees_e8s,
             neuron_minimum_stake_e8s,
             now_seconds,
-        ) = governance.with_borrow_mut(|governance| {
-            let neuron_limit_reservation = governance.rate_limiter.try_reserve(
-                governance.env.now_system_time(),
-                NEURON_RATE_LIMITER_KEY.to_string(),
-                1,
-            )?;
-            let neuron_subaccount = governance.randomness.random_byte_array().map_err(|_| {
-                GovernanceError::new_with_message(
-                    ErrorType::Unavailable,
-                    "Failed to generate neuron subaccount",
-                )
-            })?;
-            let neuron_subaccount = Subaccount(neuron_subaccount);
-            if governance
-                .neuron_store
-                .has_neuron_with_subaccount(neuron_subaccount)
-            {
-                println!(
-                    "{LOG_PREFIX}Warning: An improbable event has occurred: a neuron subaccount \
-                    was generated randomly but there is already a neuron with the same subaccount."
-                );
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::Unavailable,
-                    "There is already a neuron with the same subaccount.",
-                ));
-            }
-            let neuron_id = governance
-                .neuron_store
-                .new_neuron_id(&mut *governance.randomness)?;
-            Ok::<_, GovernanceError>((
-                neuron_limit_reservation,
+        ) = governance.with_borrow(|governance| {
+            (
                 governance.get_ledger(),
-                neuron_subaccount,
-                neuron_id,
                 governance.heap_data.default_followees.clone(),
                 governance.transaction_fee(),
                 governance.economics().neuron_minimum_stake_e8s,
                 governance.env.now(),
-            ))
-        })?;
-
-        // source_subaccount has already been validated to be 32 bytes if present.
-        let source_subaccount = source_subaccount.map(|s| {
-            <[u8; 32]>::try_from(s.as_slice())
-                .expect("source_subaccount should have been validated to be 32 bytes")
+            )
         });
+
         let source_account = Icrc1Account {
+            // Note: it is critical to use the caller as the owner of the source account, rather
+            // than the controller passed in the request. Only when we use the caller for the
+            // `icrc2_transfer_from`, we make sure that the caller is the one who is staking the
+            // ICP.
             owner: caller.0,
             subaccount: source_subaccount,
         };
-        let dissolve_delay_seconds = dissolve_delay_seconds
-            .unwrap_or(INITIAL_NEURON_DISSOLVE_DELAY)
-            .clamp(INITIAL_NEURON_DISSOLVE_DELAY, MAX_DISSOLVE_DELAY_SECONDS);
         let dissolving = dissolving.unwrap_or(false);
         let dissolve_state_and_age = if dissolving {
             DissolveStateAndAge::DissolvingOrDissolved {
@@ -138,7 +163,8 @@ impl Governance {
         if amount_e8s <= neuron_minimum_stake_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
-                "Amount {amount_e8s} e8s is less than the minimum stake for a neuron {neuron_minimum_stake_e8s} e8s",
+                "Amount {amount_e8s} e8s is less than the minimum stake for a neuron \
+                {neuron_minimum_stake_e8s} e8s",
             ));
         }
         let neuron_account = Icrc1Account {
@@ -175,8 +201,7 @@ impl Governance {
         )?;
 
         // Step 1: Add new neuron with 0 stake. We do this before the transfer to ensure that a
-        // neuron can be created. Failing at this point is OK as no meaningful mutation has been made
-        // (only `randomness` is mutated to generate the ID and subaccount).
+        // neuron can be created.
         let neuron = NeuronBuilder::new(
             neuron_id,
             neuron_subaccount,
@@ -210,6 +235,7 @@ impl Governance {
                 // concurrent operation can modify the neuron, and hence do anything with the stake.
             }
             Err(transfer_error) => {
+                // Roll back adding the neuron.
                 if let Err(remove_error) = governance
                     .with_borrow_mut(|governance| governance.remove_neuron(neuron.clone()))
                 {
@@ -254,7 +280,7 @@ impl Governance {
             }
         });
 
-        Ok(CreateNeuronResponse {
+        Ok(CreatedNeuron {
             neuron_id: Some(neuron.id()),
         })
     }
