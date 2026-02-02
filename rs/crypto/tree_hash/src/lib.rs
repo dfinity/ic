@@ -1132,6 +1132,17 @@ impl Witness {
     pub fn new_for_testing(digest: Digest) -> Self {
         Self::Pruned { digest }
     }
+
+    pub fn new_for_testing_with_height() -> Self {
+        let height_witness = Self::Node {
+            label: "height".into(),
+            sub_witness: Box::new(Self::Known()),
+        };
+        Self::Node {
+            label: "metadata".into(),
+            sub_witness: Box::new(height_witness),
+        }
+    }
 }
 
 fn write_witness(witness: &Witness, level: u8, f: &mut fmt::Formatter<'_>) -> fmt::Result {

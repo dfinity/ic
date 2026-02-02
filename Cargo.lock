@@ -7775,6 +7775,8 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-artifact-pool",
+ "ic-canonical-state",
+ "ic-canonical-state-tree-hash",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-test-utils-crypto-returning-ok",
