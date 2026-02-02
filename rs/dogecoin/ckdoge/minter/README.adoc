@@ -130,7 +130,7 @@ All ckDOGE transactions issued by the ckDOGE minter and recorded on the ledger u
 . burning ckDOGE after a withdrawal request to DOGE,
 
 ==== Design
-The general idea is to encode the memo as a https://cbor.io/[CBOR] message and use the transaction type to select the message type. The messages will follow the compact encoding described in the https://twittner.gitlab.io/minicbor/minicbor_derive/index.html[minicbor] package documentation.
+The general idea is to encode the memo as a https://cbor.io/[CBOR] message and use the transaction type to select the message type. The messages follow the compact encoding described in the https://twittner.gitlab.io/minicbor/minicbor_derive/index.html[minicbor] package documentation.
 
 .Example Implementation in Typescript
 ====
