@@ -849,7 +849,7 @@ impl ValidNnsFunction {
                 an SNS specified by its governance canister ID."
             }
             ValidNnsFunction::ReviseElectedGuestosVersions => {
-                "Change the set of elected GuestOS versions.\
+                "Change the set of elected GuestOS versions.\n\n\
                 The version to elect (identified by the hash of the installation image) is added \
                 to the registry. Besides creating a record for that version, the proposal also \
                 appends that version to the list of elected versions that can be installed on \

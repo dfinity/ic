@@ -48,11 +48,12 @@ impl LocallyDescribableProposalAction for Motion {
 impl LocallyDescribableProposalAction for ApproveGenesisKyc {
     const TYPE_NAME: &'static str = "Approve Genesis KYC";
 
-    const TYPE_DESCRIPTION: &'static str = "Set GenesisKYC=true for batches of principals. \
+    const TYPE_DESCRIPTION: &'static str = "Set GenesisKYC=true for batches of principals. \n\n\
         When new neurons are created at Genesis, they have GenesisKYC=false. This restricts what \
         actions they can perform. Specifically, they cannot spawn new neurons, and once their \
         dissolve delays are zero, they cannot be disbursed and their balances unlocked to new \
-        accounts. (Special note: The Genesis event disburses all ICP in the form of neurons, \
+        accounts. \n\n\
+        (Special note: The Genesis event disburses all ICP in the form of neurons, \
         whose principals must be KYCed. Consequently, all neurons created after Genesis have \
         GenesisKYC=true set automatically since they must have been derived from balances that \
         have already been KYCed.)";
