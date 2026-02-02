@@ -35,10 +35,16 @@ use std::{
     collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::{Arc, Mutex, RwLock},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
+
+#[cfg(not(test))]
+const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_mins(30);
+// For ease of testing, we reduce this timeout in tests.
+#[cfg(test)]
+const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(5);
 
 #[must_use = "This may be a `Stop` variant, which should be handled"]
 #[derive(Debug, PartialEq, Eq)]
@@ -123,6 +129,8 @@ pub trait RegistryHelperWithRecalledReplicaVersions: Send + Sync {
 
     fn get_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId>;
 
+    fn get_root_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId>;
+
     fn get_replica_version(
         &self,
         subnet_id: SubnetId,
@@ -166,6 +174,10 @@ impl RegistryHelperWithRecalledReplicaVersions for RegistryHelper {
 
     fn get_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
         self.get_subnet_id(version)
+    }
+
+    fn get_root_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
+        self.get_root_subnet_id(version)
     }
 
     fn get_replica_version(
@@ -215,6 +227,7 @@ pub(crate) struct Upgrade {
     pub ic_binary_dir: PathBuf,
     pub image_path: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
+    init_time: Instant,
     pub logger: ReplicaLogger,
     node_id: NodeId,
     disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
@@ -241,6 +254,8 @@ impl Upgrade {
         orchestrator_data_directory: PathBuf,
         disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
     ) -> Self {
+        let init_time = Instant::now();
+
         let value = Self {
             registry,
             metrics,
@@ -253,6 +268,7 @@ impl Upgrade {
             ic_binary_dir,
             image_path: release_content_dir.join("image.bin"),
             registry_replicator,
+            init_time,
             logger: logger.clone(),
             prepared_upgrade_version: None,
             orchestrator_data_directory,
@@ -456,36 +472,11 @@ impl Upgrade {
             .registry
             .get_replica_version(subnet_id, cup_registry_version)?;
         if new_replica_version != self.replica_version {
-            if !self
-                .registry_replicator
-                .has_replicated_all_versions_certified_before_init()
-            {
-                // Until the replicator has caught up with the registry canister, we cannot be
-                // entirely sure that the latest registry version that we have locally correctly
-                // reflects the recalled replica versions. Thus, we delay the upgrade until then.
-                return Err(OrchestratorError::UpgradeError(format!(
-                    "Delaying upgrade to {} until registry data is recent enough. Latest registry version: {}",
-                    new_replica_version, latest_registry_version
-                )));
-            }
-
-            let recalled_versions = self
-                .registry
-                .get_recalled_replica_versions(subnet_id, latest_registry_version)?;
-
-            if recalled_versions.contains(&new_replica_version) {
-                // The new replica version has been recalled. Do not upgrade. The only way to leave
-                // this branch is via subnet recovery.
-                self.metrics
-                    .recalled_version_upgrade_blocks
-                    .with_label_values(&[new_replica_version.as_ref()])
-                    .inc();
-
-                return Err(OrchestratorError::UpgradeError(format!(
-                    "Not upgrading to recalled replica version {} at registry version {}",
-                    new_replica_version, latest_registry_version
-                )));
-            }
+            self.ensure_upgrade_should_be_executed(
+                subnet_id,
+                latest_registry_version,
+                &new_replica_version,
+            )?;
 
             info!(
                 self.logger,
@@ -666,6 +657,57 @@ impl Upgrade {
                 e,
             )
         })
+    }
+
+    /// Ensure that an upgrade to the given `new_replica_version` should be executed.
+    /// Returns an error if the upgrade should be delayed or blocked, for example due to the new
+    /// replica version being recalled.
+    fn ensure_upgrade_should_be_executed(
+        &self,
+        subnet_id: SubnetId,
+        latest_registry_version: RegistryVersion,
+        new_replica_version: &ReplicaVersion,
+    ) -> OrchestratorResult<()> {
+        if subnet_id == self.registry.get_root_subnet_id(latest_registry_version)? {
+            // Upgrades on the NNS subnet are never blocked or delayed.
+            return Ok(());
+        }
+
+        // Until the replicator has caught up with the registry canister, we cannot be entirely sure
+        // that the latest registry version that we have locally correctly reflects the recalled
+        // replica versions. Thus, we delay the upgrade until then.
+        // An exception is made after some time as a safeguard against staying stuck in this state
+        // forever, for example if the NNS subnet is unreachable for an extended period of time.
+        if !self
+            .registry_replicator
+            .has_replicated_all_versions_certified_before_init()
+            && self.init_time.elapsed() < TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR
+        {
+            return Err(OrchestratorError::UpgradeError(format!(
+                "Delaying upgrade to {} until registry data is recent enough. Latest registry version: {}",
+                new_replica_version, latest_registry_version
+            )));
+        }
+
+        let recalled_versions = self
+            .registry
+            .get_recalled_replica_versions(subnet_id, latest_registry_version)?;
+
+        if recalled_versions.contains(&new_replica_version) {
+            // The new replica version has been recalled. Do not upgrade. The only way to leave
+            // this branch is via subnet recovery.
+            self.metrics
+                .recalled_version_upgrade_blocks
+                .with_label_values(&[new_replica_version.as_ref()])
+                .inc();
+
+            return Err(OrchestratorError::UpgradeError(format!(
+                "Not upgrading to recalled replica version {} at registry version {}",
+                new_replica_version, latest_registry_version
+            )));
+        }
+
+        Ok(())
     }
 
     // Stop the replica if the given CUP is unsigned and higher than the given height.
@@ -1221,8 +1263,8 @@ mod tests {
     use ic_protobuf::types::v1 as pb;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
-        make_catch_up_package_contents_key, make_replica_version_key, make_subnet_record_key,
-        make_unassigned_nodes_config_record_key,
+        ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key, make_replica_version_key,
+        make_subnet_record_key, make_unassigned_nodes_config_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
@@ -1230,7 +1272,7 @@ mod tests {
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_list_record};
-    use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, SUBNET_42, node_test_id, subnet_test_id};
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
     use ic_types::{
         PrincipalId, Time,
@@ -1304,6 +1346,10 @@ mod tests {
 
         fn get_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
             self.inner.get_subnet_id(version)
+        }
+
+        fn get_root_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
+            self.inner.get_root_subnet_id(version)
         }
 
         fn get_replica_version(
@@ -1437,6 +1483,20 @@ mod tests {
         };
 
         make_cup_with_summary(height, summary_payload)
+    }
+
+    fn add_root_subnet_id_to_provider(
+        data_provider: &ProtoRegistryDataProvider,
+        registry_version: RegistryVersion,
+        root_subnet_id: SubnetId,
+    ) {
+        data_provider
+            .add(
+                ROOT_SUBNET_ID_KEY,
+                registry_version,
+                Some(ic_types::subnet_id_into_protobuf(root_subnet_id)),
+            )
+            .unwrap();
     }
 
     fn add_replica_version_to_provider(
@@ -1803,6 +1863,11 @@ mod tests {
                 return false;
             }
 
+            if highest_cup.subnet_id == SUBNET_42 {
+                // We are on the NNS subnet, which should never trigger this check
+                return false;
+            }
+
             if let Some(leaving_registry_version) = &self.is_leaving {
                 return &highest_cup.registry_version < leaving_registry_version;
             }
@@ -1819,15 +1884,21 @@ mod tests {
 
             let mut mock_helper = MockRegistryHelperWithRecalledReplicaVersions::new();
 
-            // Another subnet (to avoid having an empty subnet list)
-            let other_subnet_id = subnet_test_id(12345678);
+            // NNS subnet
+            let nns_subnet_id = SUBNET_42;
+            add_root_subnet_id_to_provider(
+                &data_provider,
+                RegistryVersion::from(1),
+                nns_subnet_id,
+            );
+
             // Another node in the subnet (to avoid having an empty subnet in case the current node
             // leaves)
             let other_node_id = node_test_id(87654321);
 
             // Initialize the subnet list
             let mut subnet_list = BTreeSet::new();
-            subnet_list.insert(other_subnet_id);
+            subnet_list.insert(nns_subnet_id);
             if let Some(local_cup) = &self.has_local_cup {
                 subnet_list.insert(local_cup.subnet_id);
             }
@@ -1862,18 +1933,16 @@ mod tests {
                     &upgrade.replica_version,
                 );
 
-                if upgrade.has_replicated_versions_before_init {
-                    // TODO(NODE-1754): Replace this mock expectation with actual registry mutations
-                    // once the registry changes concerning recalled replica versions are merged.
-                    let recalled_replica_versions = if upgrade.is_recalled {
-                        vec![upgrade.replica_version.clone()]
-                    } else {
-                        vec![]
-                    };
-                    mock_helper
-                        .expect_get_recalled_replica_versions()
-                        .return_once(move |_, _| Ok(recalled_replica_versions));
-                }
+                // TODO(NODE-1754): Replace this mock expectation with actual registry mutations
+                // once the registry changes concerning recalled replica versions are merged.
+                let recalled_replica_versions = if upgrade.is_recalled {
+                    vec![upgrade.replica_version.clone()]
+                } else {
+                    vec![]
+                };
+                mock_helper
+                    .expect_get_recalled_replica_versions()
+                    .returning(move |_, _| Ok(recalled_replica_versions.clone()));
             }
 
             if let Some(local_cup) = &self.has_local_cup {
@@ -2629,129 +2698,7 @@ mod tests {
         }
     }
 
-    #[rstest]
-    #[tokio::test]
-    async fn test_upgrade_scenarios(
-        #[values(NODE_1)] node_id: NodeId,
-        #[values(ReplicaVersion::try_from("replica_version_0.1").unwrap())] current_replica_version: ReplicaVersion,
-        #[values(
-            None,
-            Some(CUPScenario {
-                height: Height::from(100),
-                subnet_id: SUBNET_1,
-                registry_version: RegistryVersion::from(10),
-            }),
-            Some(CUPScenario {
-                height: Height::from(1000),
-                subnet_id: SUBNET_1,
-                registry_version: RegistryVersion::from(100),
-            }),
-        )]
-        has_local_cup: Option<CUPScenario>,
-        #[values(
-            None,
-            Some((
-                CUPScenario {
-                    height: Height::from(101),
-                    subnet_id: SUBNET_1,
-                    registry_version: RegistryVersion::from(51),
-                },
-                RegistryVersion::from(52),
-            )),
-            Some((
-                CUPScenario {
-                    height: Height::from(1001),
-                    subnet_id: SUBNET_1,
-                    registry_version: RegistryVersion::from(100),
-                },
-                RegistryVersion::from(101),
-            )),
-        )]
-        has_registry_cup: Option<(CUPScenario, RegistryVersion)>,
-        // Note: the initial subnet assignment should normally not be `Assigned` if the node has
-        // no local CUP and vice versa. However, we still test these combinations to verify that
-        // the code behaves correctly even if such invalid states occur.
-        // For example, if the node left the subnet and thus set to `Unassigned` but failed to
-        // delete the local CUP because of an IO error in the previous upgrade loop, then they would
-        // start the loop with a local CUP but with an `Unassigned` initial subnet assignment.
-        #[values(
-            SubnetAssignment::Unknown,
-            SubnetAssignment::Unassigned,
-            SubnetAssignment::Assigned(SUBNET_1)
-        )]
-        initial_subnet_assignment: SubnetAssignment,
-        #[values(
-            None,
-            Some(RegistryVersion::from(5)),
-            Some(RegistryVersion::from(10)),
-            Some(RegistryVersion::from(50)),
-            Some(RegistryVersion::from(100)),
-            Some(RegistryVersion::from(150))
-        )]
-        is_leaving: Option<RegistryVersion>,
-        #[values(false, true)] does_upgrade: bool,
-        #[values(ReplicaVersion::try_from("replica_version_0.2").unwrap())] upgrade_replica_version: ReplicaVersion,
-        #[values(
-            RegistryVersion::from(3),
-            RegistryVersion::from(5),
-            RegistryVersion::from(10),
-            RegistryVersion::from(75),
-            RegistryVersion::from(100),
-            RegistryVersion::from(150),
-            RegistryVersion::from(175)
-        )]
-        upgrade_registry_version: RegistryVersion,
-        #[values(false, true)] upgrade_is_recalled: bool,
-        #[values(false, true)] upgrade_has_replicated_versions_before_init: bool,
-    ) {
-        let upgrade_to = does_upgrade.then_some(ReplicaUpgradeScenario {
-            replica_version: upgrade_replica_version,
-            registry_version: upgrade_registry_version,
-            is_recalled: upgrade_is_recalled,
-            has_replicated_versions_before_init: upgrade_has_replicated_versions_before_init,
-        });
-
-        let test_scenario = UpgradeTestScenario {
-            node_id,
-            current_replica_version,
-            has_local_cup,
-            has_registry_cup,
-            initial_subnet_assignment,
-            is_leaving,
-            upgrade_to,
-        };
-
-        if test_scenario.has_local_cup.is_none()
-            && test_scenario.has_registry_cup.is_none()
-            && matches!(
-                test_scenario.initial_subnet_assignment,
-                SubnetAssignment::Assigned(_)
-            )
-        {
-            // Invalid scenario: having an `Assigned` initial subnet assignment
-            // means that the node previously had a local or registry CUP
-            return;
-        }
-
-        if test_scenario.has_local_cup.is_none()
-            && test_scenario.has_registry_cup.is_some()
-            && test_scenario.is_leaving.is_some()
-        {
-            // Untested scenario: being unassigned, seeing a genesis CUP but
-            // instantly having to leave (unlikely in practice and complex to
-            // test)
-            return;
-        }
-
-        if let Some(highest_cup) = test_scenario.highest_cup()
-            && let Some(leaving_registry_version) = test_scenario.is_leaving
-            && highest_cup.registry_version >= leaving_registry_version
-        {
-            // TODO(CON-1630): leaving scenario is untested for now as it involves
-            // mocking state removal and process (replica) management
-            return;
-        }
-
+    async fn test_upgrade(test_scenario: UpgradeTestScenario) {
         let logger = InMemoryReplicaLogger::new();
         let replica_logger = ReplicaLogger::from(&logger);
         let (registry_helper, data_provider) = test_scenario.setup_registry(replica_logger.clone());
@@ -2886,6 +2833,222 @@ mod tests {
                     || !matches!(flow_result, Ok(OrchestratorControlFlow::Stop))
             );
         }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_upgrade_scenarios(
+        #[values(NODE_1)] node_id: NodeId,
+        #[values(ReplicaVersion::try_from("replica_version_0.1").unwrap())] current_replica_version: ReplicaVersion,
+        #[values(
+            None,
+            Some(CUPScenario {
+                height: Height::from(100),
+                subnet_id: SUBNET_1,
+                registry_version: RegistryVersion::from(10),
+            }),
+            Some(CUPScenario {
+                height: Height::from(1000),
+                subnet_id: SUBNET_1,
+                registry_version: RegistryVersion::from(100),
+            }),
+        )]
+        has_local_cup: Option<CUPScenario>,
+        #[values(
+            None,
+            Some((
+                CUPScenario {
+                    height: Height::from(101),
+                    subnet_id: SUBNET_1,
+                    registry_version: RegistryVersion::from(51),
+                },
+                RegistryVersion::from(52),
+            )),
+            Some((
+                CUPScenario {
+                    height: Height::from(1001),
+                    subnet_id: SUBNET_1,
+                    registry_version: RegistryVersion::from(100),
+                },
+                RegistryVersion::from(101),
+            )),
+        )]
+        has_registry_cup: Option<(CUPScenario, RegistryVersion)>,
+        // Note: the initial subnet assignment should normally not be `Assigned` if the node has
+        // no local CUP and vice versa. However, we still test these combinations to verify that
+        // the code behaves correctly even if such invalid states occur.
+        // For example, if the node left the subnet and thus set to `Unassigned` but failed to
+        // delete the local CUP because of an IO error in the previous upgrade loop, then they would
+        // start the loop with a local CUP but with an `Unassigned` initial subnet assignment.
+        #[values(
+            SubnetAssignment::Unknown,
+            SubnetAssignment::Unassigned,
+            SubnetAssignment::Assigned(SUBNET_1)
+        )]
+        initial_subnet_assignment: SubnetAssignment,
+        #[values(
+            None,
+            Some(RegistryVersion::from(5)),
+            Some(RegistryVersion::from(10)),
+            Some(RegistryVersion::from(50)),
+            Some(RegistryVersion::from(100)),
+            Some(RegistryVersion::from(150))
+        )]
+        is_leaving: Option<RegistryVersion>,
+        #[values(false, true)] does_upgrade: bool,
+        #[values(ReplicaVersion::try_from("replica_version_0.2").unwrap())] upgrade_replica_version: ReplicaVersion,
+        #[values(
+            RegistryVersion::from(3),
+            RegistryVersion::from(5),
+            RegistryVersion::from(10),
+            RegistryVersion::from(75),
+            RegistryVersion::from(100),
+            RegistryVersion::from(150),
+            RegistryVersion::from(175)
+        )]
+        upgrade_registry_version: RegistryVersion,
+        #[values(false, true)] upgrade_is_recalled: bool,
+        #[values(false, true)] upgrade_has_replicated_versions_before_init: bool,
+    ) {
+        let upgrade_to = does_upgrade.then_some(ReplicaUpgradeScenario {
+            replica_version: upgrade_replica_version,
+            registry_version: upgrade_registry_version,
+            is_recalled: upgrade_is_recalled,
+            has_replicated_versions_before_init: upgrade_has_replicated_versions_before_init,
+        });
+
+        let test_scenario = UpgradeTestScenario {
+            node_id,
+            current_replica_version,
+            has_local_cup,
+            has_registry_cup,
+            initial_subnet_assignment,
+            is_leaving,
+            upgrade_to,
+        };
+
+        if test_scenario.has_local_cup.is_none()
+            && test_scenario.has_registry_cup.is_none()
+            && matches!(
+                test_scenario.initial_subnet_assignment,
+                SubnetAssignment::Assigned(_)
+            )
+        {
+            // Invalid scenario: having an `Assigned` initial subnet assignment
+            // means that the node previously had a local or registry CUP
+            return;
+        }
+
+        if test_scenario.has_local_cup.is_none()
+            && test_scenario.has_registry_cup.is_some()
+            && test_scenario.is_leaving.is_some()
+        {
+            // Untested scenario: being unassigned, seeing a genesis CUP but
+            // instantly having to leave (unlikely in practice and complex to
+            // test)
+            return;
+        }
+
+        if let Some(highest_cup) = test_scenario.highest_cup()
+            && let Some(leaving_registry_version) = test_scenario.is_leaving
+            && highest_cup.registry_version >= leaving_registry_version
+        {
+            // TODO(CON-1630): leaving scenario is untested for now as it involves
+            // mocking state removal and process (replica) management
+            return;
+        }
+
+        test_upgrade(test_scenario).await;
+    }
+
+    #[tokio::test]
+    async fn test_ignore_recalled_versions_if_nns() {
+        let test_scenario = UpgradeTestScenario {
+            node_id: NODE_1,
+            current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
+            has_local_cup: Some(CUPScenario {
+                height: Height::from(100),
+                // Set as the NNS subnet in `setup_registry`
+                subnet_id: SUBNET_42,
+                registry_version: RegistryVersion::from(10),
+            }),
+            has_registry_cup: None,
+            initial_subnet_assignment: SubnetAssignment::Unknown,
+            is_leaving: None,
+            upgrade_to: Some(ReplicaUpgradeScenario {
+                replica_version: ReplicaVersion::try_from("replica_version_0.2").unwrap(),
+                registry_version: RegistryVersion::from(10),
+                is_recalled: true,
+                has_replicated_versions_before_init: false,
+            }),
+        };
+
+        let logger = InMemoryReplicaLogger::new();
+        let replica_logger = ReplicaLogger::from(&logger);
+        let (registry_helper, data_provider) = test_scenario.setup_registry(replica_logger.clone());
+
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let mut upgrade_loop = create_upgrade_for_test(
+            tmp_path,
+            replica_logger,
+            test_scenario.clone(),
+            data_provider,
+            registry_helper,
+        )
+        .await;
+
+        let flow_result = upgrade_loop.check().await;
+
+        // Assert that despite the replicator not having replicated all versions before init,
+        // and the version being recalled, we proceed with upgrading as it is the NNS subnet.
+        assert_matches!(flow_result, Ok(OrchestratorControlFlow::Stop));
+    }
+
+    #[tokio::test]
+    async fn test_ignore_up_to_date_replicator_after_timeout() {
+        let test_scenario = UpgradeTestScenario {
+            node_id: NODE_1,
+            current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
+            has_local_cup: Some(CUPScenario {
+                height: Height::from(100),
+                subnet_id: SUBNET_1,
+                registry_version: RegistryVersion::from(10),
+            }),
+            has_registry_cup: None,
+            initial_subnet_assignment: SubnetAssignment::Unknown,
+            is_leaving: None,
+            upgrade_to: Some(ReplicaUpgradeScenario {
+                replica_version: ReplicaVersion::try_from("replica_version_0.2").unwrap(),
+                registry_version: RegistryVersion::from(10),
+                is_recalled: true,
+                has_replicated_versions_before_init: false,
+            }),
+        };
+
+        let logger = InMemoryReplicaLogger::new();
+        let replica_logger = ReplicaLogger::from(&logger);
+        let (registry_helper, data_provider) = test_scenario.setup_registry(replica_logger.clone());
+
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let mut upgrade_loop = create_upgrade_for_test(
+            tmp_path,
+            replica_logger,
+            test_scenario.clone(),
+            data_provider,
+            registry_helper,
+        )
+        .await;
+
+        // Ensure we hit the timeout
+        tokio::time::sleep(TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR + Duration::from_secs(2)).await;
+
+        let flow_result = upgrade_loop.check().await;
+
+        // Assert that despite the replicator not having replicated all versions before init,
+        // we proceed with the our own view of the registry after the timeout.
+        assert_matches!(flow_result, Err(OrchestratorError::UpgradeError(err)) if err.contains("Not upgrading to recalled replica version"));
     }
 
     fn make_ecdsa_key_id() -> MasterPublicKeyId {

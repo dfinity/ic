@@ -94,6 +94,19 @@ impl RegistryHelper {
         }
     }
 
+    /// Return the root `SubnetId`
+    pub(crate) fn get_root_subnet_id(
+        &self,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<SubnetId> {
+        match self.registry_client.get_root_subnet_id(version)? {
+            Some(subnet_id) => Ok(subnet_id),
+            None => Err(OrchestratorError::UpgradeError(
+                "Root subnet ID missing in registry".to_string(),
+            )),
+        }
+    }
+
     pub(crate) fn get_api_boundary_node_record(
         &self,
         node_id: NodeId,
