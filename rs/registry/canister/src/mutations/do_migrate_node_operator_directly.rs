@@ -461,11 +461,14 @@ mod tests {
             new_node_operator_id: Some(PrincipalId::new_user_test_id(2)),
         };
 
+        let original_registry = registry.clone();
         let resp = registry.migrate_node_operator_inner(
             payload.clone(),
             PrincipalId::new_user_test_id(3),
             now_plus_13_hours(),
         );
+
+        assert_eq!(registry, original_registry);
 
         let expected_err = Err(MigrateError::MissingNodeOperator {
             principal: payload.old_node_operator_id.unwrap(),
@@ -515,11 +518,13 @@ mod tests {
             new_node_operator_id: Some(new_node_operator_id),
         };
 
+        let original_registry = registry.clone();
         let resp = registry.migrate_node_operator_inner(
             payload.clone(),
             old_node_provider_id,
             now_plus_13_hours(),
         );
+        assert_eq!(original_registry, registry);
 
         let expected_err = Err(MigrateError::NodeProviderMismatch {
             old: old_node_provider_id,
@@ -570,8 +575,10 @@ mod tests {
             new_node_operator_id: Some(new_node_operator_id),
         };
 
+        let original_registry = registry.clone();
         let resp =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
+        assert_eq!(original_registry, registry);
 
         let expected_err = Err(MigrateError::DataCenterMismatch { old: dc1, new: dc2 });
         assert_eq!(resp, expected_err)
@@ -620,7 +627,9 @@ mod tests {
 
         let caller = PrincipalId::new_user_test_id(999);
 
+        let original_registry = registry.clone();
         let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+        assert_eq!(original_registry, registry);
 
         let expected_err = Err(MigrateError::NotAuthorized {
             caller,
@@ -1082,7 +1091,9 @@ mod tests {
             old_node_operator_id: Some(old_node_operator_id),
         };
 
+        let original_registry = registry.clone();
         let resp = registry.migrate_node_operator_inner(payload.clone(), caller, now_system_time());
+        assert_eq!(original_registry, registry);
 
         let expected_err = Err(MigrateError::OldOperatorRateLimit {
             principal: old_node_operator_id,
@@ -1122,7 +1133,9 @@ mod tests {
         let now = now_system_time();
         let past = now - Duration::from_secs(4 * 60 * 60);
 
+        let original_registry = registry.clone();
         let resp = registry.migrate_node_operator_inner(payload.clone(), caller, past);
+        assert_eq!(original_registry, registry);
 
         let expected_err = Err(MigrateError::OldOperatorRateLimit {
             principal: old_node_operator_id,
