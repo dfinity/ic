@@ -214,7 +214,7 @@ pub fn test(env: TestEnv) {
             .expect("Failed to build HTTP client");
 
         let response = client
-            .get(&format!("{p8s_url}/api/v1/targets"))
+            .get(format!("{p8s_url}/api/v1/targets"))
             .send()
             .await
             .expect("Failed to query Prometheus targets");
