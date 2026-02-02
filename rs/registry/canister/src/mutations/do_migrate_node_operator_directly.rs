@@ -911,7 +911,7 @@ mod tests {
         let node_provider_id = PrincipalId::new_user_test_id(999);
 
         // Old Operator spec variables
-        let rewardable_nodes = vec![
+        let old_rewardable_nodes = vec![
             (NodeRewardType::Type1.to_string(), 5),
             (NodeRewardType::Type2.to_string(), 10),
         ];
@@ -923,8 +923,8 @@ mod tests {
             node_provider_id,
             node_allowance,
             dc,
-            rewardable_nodes.clone(),
-            rewardable_nodes.clone(),
+            old_rewardable_nodes.clone(),
+            old_rewardable_nodes.clone(),
         );
         // Add nodes owned by the old node operator under test
         for _ in 0..3 {
@@ -994,7 +994,7 @@ mod tests {
                 ..old_node_operator_record
             }
         );
-        let rewardable_nodes: BTreeMap<_, _> = rewardable_nodes.into_iter().collect();
+        let rewardable_nodes: BTreeMap<_, _> = old_rewardable_nodes.into_iter().collect();
         let new_rewardable_nodes: BTreeMap<_, _> = new_rewardable_nodes.into_iter().collect();
         compare_rewardable_nodes(
             new_node_operator_record.rewardable_nodes,
@@ -1107,14 +1107,14 @@ mod tests {
     }
 
     fn compare_rewardable_nodes(
-        expected: BTreeMap<String, u32>,
+        observed: BTreeMap<String, u32>,
         old: BTreeMap<String, u32>,
         new: BTreeMap<String, u32>,
     ) {
         let mut new_mut = new;
         let mut old_mut = old;
 
-        for (expected_key, expected_value) in expected.iter() {
+        for (expected_key, expected_value) in observed.iter() {
             let old_value = old_mut.remove(expected_key).unwrap_or_default();
             let new_value = new_mut.remove(expected_key).unwrap_or_default();
 
@@ -1175,7 +1175,7 @@ mod tests {
         let resp =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
 
-        assert!(resp.is_ok());
+        assert_eq!(resp, Ok(()));
     }
 
     #[test]
@@ -1218,7 +1218,7 @@ mod tests {
         let resp =
             registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
 
-        assert!(resp.is_ok());
+        assert_eq!(resp, Ok(()));
     }
 
     #[test]
@@ -1267,7 +1267,7 @@ mod tests {
                 node_provider_id,
                 now_plus_13_hours(),
             );
-            assert!(resp.is_ok());
+            assert_eq!(resp, Ok(()));
         }
 
         // Step 3: Verify results.
@@ -1303,7 +1303,7 @@ mod tests {
                 setup.registry.latest_version(),
             );
 
-            assert_eq!(maybe_record, None);
+            assert_eq!(maybe_record, None, "{old_node_operator}");
 
             // Validate that all of the nodes have been moved to the new node operator
             for node in setup.fetch_nodes_originally_for_node_operator(*old_node_operator) {
