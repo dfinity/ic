@@ -250,7 +250,7 @@ impl DkgSummary {
 
     /// Adds provided transcripts as current transcripts to the summary. Should
     /// be used for testing only.
-    pub fn with_current_transcripts_for_test_only(
+    pub fn with_current_transcripts(
         mut self,
         current_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
     ) -> Self {
