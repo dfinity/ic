@@ -4,10 +4,16 @@
 # the /boot/grub and /boot/efi portions. From this, the grub and
 # efi partitions of the disk image can be built.
 
-set -exo pipefail
+set -euo pipefail
+
+# when set, cleanup() will `rm -f` it
+CONTAINER_NAME=
 
 cleanup() {
-    podman rm -f "${CONTAINER}"
+    if [ -n "${CONTAINER_NAME:-}" ]; then
+        echo >&2 "warning: have to force delete container"
+        podman rm -f "$CONTAINER_NAME"
+    fi
     rm -rf "${TMP_DIR}"
 }
 trap cleanup EXIT
@@ -28,6 +34,7 @@ TMP_DIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
 BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
+echo >&2 "building container"
 podman build --no-cache --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
@@ -43,11 +50,13 @@ podman build --no-cache --iidfile "${TMP_DIR}/iidfile" - <<<"
         test keystatus gfxmenu regexp probe \
         efi_gop efi_uga all_video gfxterm font \
         echo read ls cat png jpeg halt reboot loadenv lvm
+    CMD tar cf - --sort=name --owner=root:0 --group=root:0  '--mtime=UTC 1970-01-01 00:00:00' -C /build boot
 "
 
 IMAGE_ID=$(cut -d':' -f2 <"${TMP_DIR}/iidfile")
 
-CONTAINER=$(podman run -d "${IMAGE_ID}")
-
-podman export "${CONTAINER}" | tar --strip-components=1 -C "${TMP_DIR}" -x build
-tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMP_DIR}" boot
+echo >&2 "exporting container /build/boot"
+CONTAINER_NAME=$(uuidgen) # track name in case we need to `podman rm -f` it
+# run the container which will print a deterministic tarball of /build/boot to stdout
+podman run --rm --name "$CONTAINER_NAME" "${IMAGE_ID}" > "${OUT_FILE:?out file missing}"
+CONTAINER_NAME= # unset CONTAINER_NAME so that cleanup() doesn't try to rm it
