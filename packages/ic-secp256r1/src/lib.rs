@@ -298,6 +298,69 @@ fn pem_encode(raw: &[u8], label: &'static str) -> String {
     pem::encode(&pem::Pem::new(label, raw))
 }
 
+/// Error if a signature is not a valid encoding
+#[derive(Copy, Clone, Debug)]
+pub enum InvalidSignatureEncoding {
+    /// The encoding was not valid; no further details available
+    InvalidEncoding,
+}
+
+/// The length of a P-256 signature
+///
+/// Note this is the length for the underlying signature rather than the DER encoding,
+/// which has a variable length
+pub const SIGNATURE_LENGTH: usize = 64;
+
+/// An ECDSA P-256 signature
+#[derive(Clone, Debug)]
+pub struct Signature {
+    sig: p256::ecdsa::Signature,
+}
+
+impl Signature {
+    fn new(sig: p256::ecdsa::Signature) -> Self {
+        Self { sig }
+    }
+
+    fn inner(&self) -> &p256::ecdsa::Signature {
+        &self.sig
+    }
+
+    /// Return the signature encoded in the standard encoding
+    ///
+    /// This consists of r || s both encoded as a fixed length field
+    /// Sometimes referred to as IEEE 1363 format
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, InvalidSignatureEncoding> {
+        p256::ecdsa::Signature::try_from(bytes)
+            .map_err(|_| InvalidSignatureEncoding::InvalidEncoding)
+            .map(Self::new)
+    }
+
+    /// Return the signature in DER encoding
+    ///
+    /// This encoding is variable length due to use of ASN.1
+    pub fn from_der(der: &[u8]) -> Result<Self, InvalidSignatureEncoding> {
+        p256::ecdsa::Signature::from_der(der)
+            .map_err(|_| InvalidSignatureEncoding::InvalidEncoding)
+            .map(Self::new)
+    }
+
+    /// Return the signature encoded in the standard encoding
+    ///
+    /// This consists of r || s both encoded as a fixed length field
+    /// Sometimes referred to as IEEE 1363 format
+    pub fn as_bytes(&self) -> [u8; SIGNATURE_LENGTH] {
+        self.sig.to_bytes().into()
+    }
+
+    /// Return the signature in DER encoding
+    ///
+    /// This encoding is variable length due to use of ASN.1
+    pub fn as_der(&self) -> Vec<u8> {
+        self.sig.to_der().as_bytes().to_vec()
+    }
+}
+
 /// An ECDSA private key
 #[derive(Clone, ZeroizeOnDrop)]
 pub struct PrivateKey {
@@ -406,19 +469,19 @@ impl PrivateKey {
     /// Sign a message
     ///
     /// The message is hashed with SHA-256
-    pub fn sign_message(&self, message: &[u8]) -> [u8; 64] {
-        use p256::ecdsa::{Signature, signature::Signer};
-        let sig: Signature = self.key.sign(message);
-        sig.to_bytes().into()
+    pub fn sign_message(&self, message: &[u8]) -> [u8; SIGNATURE_LENGTH] {
+        use p256::ecdsa::signature::Signer;
+        let sig = Signature::new(self.key.sign(message));
+        sig.as_bytes()
     }
 
     /// Sign a message, using a DER encoded signature
     ///
     /// The message is hashed with SHA-256
     pub fn sign_message_with_der_encoded_sig(&self, message: &[u8]) -> Vec<u8> {
-        use p256::ecdsa::{Signature, signature::Signer};
-        let sig: Signature = self.key.sign(message);
-        sig.to_der().as_bytes().to_vec()
+        use p256::ecdsa::signature::Signer;
+        let sig = Signature::new(self.key.sign(message));
+        sig.as_der()
     }
 
     /// Sign a message digest
@@ -592,12 +655,12 @@ impl PublicKey {
     /// ensure any non-malleability properties.
     pub fn verify_signature(&self, message: &[u8], signature: &[u8]) -> bool {
         use p256::ecdsa::signature::Verifier;
-        let signature = match p256::ecdsa::Signature::try_from(signature) {
-            Ok(sig) => sig,
-            Err(_) => return false,
-        };
 
-        self.key.verify(message, &signature).is_ok()
+        if let Ok(sig) = Signature::from_bytes(signature) {
+            self.key.verify(message, sig.inner()).is_ok()
+        } else {
+            false
+        }
     }
 
     /// Verify a (message,signature) pair
@@ -606,24 +669,23 @@ impl PublicKey {
     /// be in the DER encoded form which is used by certain protocols
     pub fn verify_signature_with_der_encoded_sig(&self, message: &[u8], signature: &[u8]) -> bool {
         use p256::ecdsa::signature::Verifier;
-        let signature = match p256::ecdsa::Signature::from_der(signature) {
-            Ok(sig) => sig,
-            Err(_) => return false,
-        };
 
-        self.key.verify(message, &signature).is_ok()
+        if let Ok(sig) = Signature::from_der(signature) {
+            self.key.verify(message, sig.inner()).is_ok()
+        } else {
+            false
+        }
     }
 
     /// Verify a (message digest,signature) pair
     pub fn verify_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
         use p256::ecdsa::signature::hazmat::PrehashVerifier;
 
-        let signature = match p256::ecdsa::Signature::try_from(signature) {
-            Ok(sig) => sig,
-            Err(_) => return false,
-        };
-
-        self.key.verify_prehash(digest, &signature).is_ok()
+        if let Ok(sig) = Signature::from_bytes(signature) {
+            self.key.verify_prehash(digest, sig.inner()).is_ok()
+        } else {
+            false
+        }
     }
 
     /// Derive a public key from this public key using a derivation path
@@ -652,22 +714,5 @@ impl PublicKey {
         };
 
         (derived_key, chain_code)
-    }
-}
-
-/// Error if a DER signature is not a valid encoding
-#[derive(Copy, Clone, Debug)]
-pub enum InvalidSignatureEncoding {
-    /// The encoding was not valid; no further details available
-    InvalidEncoding,
-}
-
-/// DER decode a P-256 signature and return the usual byte encoding
-pub fn signature_from_der_bytes(der: &[u8]) -> Result<Vec<u8>, InvalidSignatureEncoding> {
-    // The p256::ecdsa::Error type doesn't contain any useful information
-    if let Ok(sig) = p256::ecdsa::Signature::from_der(der) {
-        Ok(sig.to_bytes().to_vec())
-    } else {
-        Err(InvalidSignatureEncoding::InvalidEncoding)
     }
 }
