@@ -36,7 +36,7 @@ use crate::driver::{
     test_env_api::CreateDnsRecords,
 };
 
-pub const PROMETHEUS_VM_NAME: &str = "prometheus";
+const PROMETHEUS_VM_NAME: &str = "prometheus";
 
 /// The SHA-256 hash of the Prometheus VM disk image.
 /// The latest hash can be retrieved by checking the latest successful test of the farm repo on the master branch:

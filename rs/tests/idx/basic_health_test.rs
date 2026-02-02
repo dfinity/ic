@@ -208,7 +208,14 @@ pub fn test(env: TestEnv) {
         let p8s_url = p8s_urls.prometheus_url;
         let node_id = nodes[0].node_id.to_string();
 
-        let response = reqwest::get(&format!("{p8s_url}/api/v1/targets"))
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Failed to build HTTP client");
+
+        let response = client
+            .get(&format!("{p8s_url}/api/v1/targets"))
+            .send()
             .await
             .expect("Failed to query Prometheus targets");
 
