@@ -26,7 +26,7 @@ pub trait AttestationPackageVerifier: Sized {
         self,
         expected_custom_data: &T,
         blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
-        expected_chip_ids: &[[u8; 64]],
+        expected_chip_ids: &[impl AsRef<[u8]>],
     ) -> Result<Self::Target, VerificationError> {
         self.verify_custom_data(expected_custom_data)
             .verify_measurement(blessed_guest_launch_measurements)
@@ -36,7 +36,7 @@ pub trait AttestationPackageVerifier: Sized {
     /// Verify that the attestation report chip ID matches one of the expected chip IDs.
     fn verify_chip_id(
         self,
-        expected_chip_ids: &[[u8; 64]],
+        expected_chip_ids: &[impl AsRef<[u8]>],
     ) -> Result<Self::Target, VerificationError>;
 
     /// Verify that the attestation report custom data matches the expected custom data.
@@ -170,8 +170,14 @@ impl From<ParsedSevAttestationPackage> for SevAttestationPackage {
 impl<T: Borrow<ParsedSevAttestationPackage>> AttestationPackageVerifier for T {
     type Target = Self;
 
-    fn verify_chip_id(self, expected_chip_ids: &[[u8; 64]]) -> Result<Self, VerificationError> {
-        if !expected_chip_ids.contains(&self.borrow().attestation_report.chip_id) {
+    fn verify_chip_id(
+        self,
+        expected_chip_ids: &[impl AsRef<[u8]>],
+    ) -> Result<Self, VerificationError> {
+        if !expected_chip_ids
+            .iter()
+            .any(|id| id.as_ref() == self.borrow().attestation_report.chip_id)
+        {
             return Err(VerificationError::invalid_chip_id(format!(
                 "Expected one of chip IDs: {}, actual: {}",
                 expected_chip_ids
@@ -250,7 +256,7 @@ impl<T: AttestationPackageVerifier> AttestationPackageVerifier for Result<T, Ver
 
     fn verify_chip_id(
         self,
-        expected_chip_ids: &[[u8; 64]],
+        expected_chip_ids: &[impl AsRef<[u8]>],
     ) -> Result<Self::Target, VerificationError> {
         self?.verify_chip_id(expected_chip_ids)
     }
