@@ -469,6 +469,8 @@ pub struct DkgDataPayload {
     pub start_height: Height,
     /// The dealing messages
     pub messages: DealingMessages,
+    /// Transcripts that are computed for remote subnets.
+    pub transcripts_for_remote_subnets: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
 }
 
 impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
@@ -482,6 +484,10 @@ impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
                 .into_iter()
                 .map(Message::try_from)
                 .collect::<Result<_, _>>()?,
+            transcripts_for_remote_subnets: build_transcripts_vec_from_pb(
+                data_payload.transcripts_for_remote_subnets,
+            )
+            .map_err(ProxyDecodeError::Other)?,
         })
     }
 }
@@ -497,6 +503,7 @@ impl DkgDataPayload {
         Self {
             start_height,
             messages,
+            transcripts_for_remote_subnets: vec![],
         }
     }
 
@@ -505,8 +512,9 @@ impl DkgDataPayload {
         let DkgDataPayload {
             start_height: _,
             messages,
+            transcripts_for_remote_subnets,
         } = self;
-        messages.is_empty()
+        messages.is_empty() && transcripts_for_remote_subnets.is_empty()
     }
 }
 
@@ -543,6 +551,9 @@ impl From<&DkgDataPayload> for pb::DkgPayload {
                     .map(pb::DkgMessage::from)
                     .collect(),
                 summary_height: data_payload.start_height.get(),
+                transcripts_for_remote_subnets: build_callback_ided_transcripts_vec(
+                    data_payload.transcripts_for_remote_subnets.as_slice(),
+                ),
             })),
         }
     }
@@ -597,6 +608,8 @@ pub enum InvalidDkgPayloadReason {
         limit: usize,
         actual: usize,
     },
+    /// The early NiDKG transcripts that were included with this payload are invalid
+    InvalidEarlyNiDkgTranscripts,
 }
 
 /// Possible failures which could occur while validating a dkg payload. They don't imply that the
