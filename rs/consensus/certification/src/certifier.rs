@@ -620,12 +620,16 @@ fn validate_witness(
 mod tests {
     use super::*;
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
+    use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
+    use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
+    use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize_partial;
     use ic_consensus_mocks::{Dependencies, dependencies};
-    use ic_crypto_tree_hash::{Digest, Witness};
+    use ic_crypto_tree_hash::{Digest, Witness, sparse_labeled_tree_from_paths};
     use ic_interfaces::{
         certification::CertificationPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
     };
+    use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -721,6 +725,20 @@ mod tests {
                     })
                     .collect::<Vec<(Height, CryptoHashOfPartialState, Witness)>>(),
             );
+    }
+
+    fn unpruned_witness(
+        state: &ReplicatedState,
+        height: Height,
+    ) -> (Witness, CryptoHashOfPartialState) {
+        let lazy_tree = replicated_state_as_lazy_tree(state, height);
+        let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+        let paths = vec![vec![].into()];
+        let labeled_tree = sparse_labeled_tree_from_paths(&paths).unwrap();
+        let partial_tree = materialize_partial(&lazy_tree, &labeled_tree, None);
+        let witness = hash_tree.witness::<Witness>(&partial_tree).unwrap();
+        let hash = CryptoHashOfPartialState::from(CryptoHash(hash_tree.root_hash().0.to_vec()));
+        (witness, hash)
     }
 
     fn test_certification_validation<F>(height: Height, f: F)
@@ -1300,7 +1318,7 @@ mod tests {
 
     /// Test that certification validation fails for a malformed witness (pruned too aggressively).
     #[test]
-    fn test_invalidate_certificate_with_invalid_witness() {
+    fn test_invalidate_certificate_with_too_pruned_witness() {
         let height = Height::from(5);
         let test = |certifier: &CertifierImpl, cert: &mut Certification| {
             let witness_hash = gen_content(height).hash;
@@ -1316,6 +1334,32 @@ mod tests {
                     CertificationMessage::Certification(cert.clone()),
                     format!(
                         "Invalid witness @{}: InconsistentPartialTree {{ offending_path: [] }}",
+                        height
+                    )
+                ))
+            );
+        };
+        test_certification_validation(height, test);
+    }
+
+    /// Test that certification validation fails for a malformed witness (not pruned enough).
+    #[test]
+    fn test_invalidate_certificate_with_unpruned_witness() {
+        let height = Height::from(5);
+        let test = |certifier: &CertifierImpl, cert: &mut Certification| {
+            // a witness consisting only of the (correct) root hash,
+            // i.e., pruned too aggressively
+            let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+            let (witness, hash) = unpruned_witness(&state, height);
+            cert.witness = witness;
+            cert.signed.content.hash = hash;
+
+            assert_eq!(
+                certifier.validate_certification(cert),
+                Some(ChangeAction::HandleInvalid(
+                    CertificationMessage::Certification(cert.clone()),
+                    format!(
+                        "Invalid witness @{}: InconsistentPartialTree {{ offending_path: [api_boundary_nodes] }}",
                         height
                     )
                 ))
