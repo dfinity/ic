@@ -747,6 +747,7 @@ mod tests {
 
     #[test]
     fn successful_migration_when_new_operator_doesnt_exist() {
+        // Step 1: Prepare the world, i.e. populate the Registry.
         let mut setup = TestSetup::new();
 
         let old_node_operator_id = PrincipalId::new_user_test_id(1);
@@ -788,10 +789,13 @@ mod tests {
             new_node_operator_id: Some(new_node_operator_id),
         };
 
+        // Step 2: Run the code under test.
         setup
             .registry
             .migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours())
             .unwrap();
+
+        // Setup 3: Verify results.
 
         // Ensure that the new operator is there
         let new_node_operator_record = setup
@@ -885,6 +889,7 @@ mod tests {
 
     #[test]
     fn successful_migration_when_new_operator_exist() {
+        // Setup 1: Prepare the world, i.e. populate the Registry.
         let mut setup = TestSetup::new();
 
         let old_node_operator_id = PrincipalId::new_user_test_id(1);
@@ -942,10 +947,13 @@ mod tests {
             new_node_operator_id: Some(new_node_operator_id),
         };
 
+        // Step 2: Run the code under test.
         setup
             .registry
             .migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours())
             .unwrap();
+
+        // Step 3: Verify the results.
 
         // Ensure that the new operator is there
         let new_node_operator_record = setup
@@ -1156,6 +1164,7 @@ mod tests {
 
     #[test]
     fn migrate_whole_data_center_to_one_node_operator() {
+        // Step 1: Populate the world, i.e. populate the Registry.
         let mut setup = TestSetup::new();
 
         let node_provider_id = PrincipalId::new_user_test_id(999);
@@ -1187,6 +1196,7 @@ mod tests {
 
         let destination_node_operator = PrincipalId::new_user_test_id(42);
 
+        // Step 2: Run the code under test for each node operator.
         for old_node_operator in &old_node_operators {
             let payload = MigrateNodeOperatorPayload {
                 old_node_operator_id: Some(*old_node_operator),
@@ -1200,6 +1210,8 @@ mod tests {
             );
             assert!(resp.is_ok());
         }
+
+        // Step 3: Verify results.
 
         // Everything was migrated, now try migrating to a new one from destination_node_operator
         //
