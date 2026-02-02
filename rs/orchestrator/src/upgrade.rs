@@ -1886,11 +1886,7 @@ mod tests {
 
             // NNS subnet
             let nns_subnet_id = SUBNET_42;
-            add_root_subnet_id_to_provider(
-                &data_provider,
-                RegistryVersion::from(1),
-                nns_subnet_id,
-            );
+            add_root_subnet_id_to_provider(&data_provider, RegistryVersion::from(1), nns_subnet_id);
 
             // Another node in the subnet (to avoid having an empty subnet in case the current node
             // leaves)
