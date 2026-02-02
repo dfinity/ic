@@ -212,7 +212,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         version,
     )
     .expect("Failed to get DKG summary from CUP contents")
-    .with_current_transcripts_for_test_only(ni_transcripts);
+    .with_current_transcripts(ni_transcripts);
 
     let cup = make_genesis(summary);
     (registry_client, cup, cryptos)
