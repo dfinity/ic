@@ -41,7 +41,7 @@ use std::{
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
 #[cfg(not(test))]
-const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_mins(30);
+const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(1800); // 30 minutes
 // For ease of testing, we reduce this timeout in tests.
 #[cfg(test)]
 const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(5);
