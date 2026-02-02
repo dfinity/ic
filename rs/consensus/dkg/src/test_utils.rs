@@ -82,8 +82,6 @@ pub(super) fn complement_state_manager_with_reshare_chain_key_request(
     }
 }
 
-/// Creates a fake DKG dealing message for tests, using `node_idx` as the dummy
-/// seed and `node_test_id(node_idx)` as the dealer.
 pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> Message {
     let content = DealingContent::new(dummy_dealing(node_idx as u8), dkg_id);
     Message::fake(content, node_test_id(node_idx))
