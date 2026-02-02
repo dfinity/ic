@@ -820,7 +820,7 @@ mod tests {
             make_node_operator_record_key(old_node_operator_id).as_bytes(),
             setup.registry.latest_version(),
         );
-        assert!(old_node_operator_record.is_none());
+        assert_eq!(old_node_operator_record, None);
 
         // Ensure that the nodes owned by the old operator show the new operator now
         let nodes = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
@@ -992,7 +992,7 @@ mod tests {
             make_node_operator_record_key(old_node_operator_id).as_bytes(),
             setup.registry.latest_version(),
         );
-        assert!(old_node_operator_record.is_none());
+        assert_eq!(old_node_operator_record, None);
 
         // Ensure that the nodes owned by the old operator show the new operator now
         let nodes = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
@@ -1248,7 +1248,7 @@ mod tests {
                 setup.registry.latest_version(),
             );
 
-            assert!(maybe_record.is_none());
+            assert_eq!(maybe_record, None);
 
             // Validate that all of the nodes have been moved to the new node operator
             for node in setup.fetch_nodes_originally_for_node_operator(*old_node_operator) {
