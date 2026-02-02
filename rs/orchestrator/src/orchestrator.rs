@@ -46,12 +46,25 @@ const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
 /// The subnet is initially in the `Unknown` state. After the upgrade loop runs for the first time,
 /// it will initialize it to either `Unassigned` or `Assigned(subnet_id)`.
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub(crate) enum SubnetAssignment {
     #[default]
     Unknown,
     Unassigned,
     Assigned(SubnetId),
+}
+
+impl PartialEq for SubnetAssignment {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (SubnetAssignment::Unknown, SubnetAssignment::Unknown) => false,
+            (SubnetAssignment::Unassigned, SubnetAssignment::Unassigned) => true,
+            (SubnetAssignment::Assigned(sid1), SubnetAssignment::Assigned(sid2)) => sid1 == sid2,
+            (SubnetAssignment::Unknown, _) => false,
+            (SubnetAssignment::Unassigned, _) => false,
+            (SubnetAssignment::Assigned(_), _) => false,
+        }
+    }
 }
 
 pub struct Orchestrator {
@@ -252,12 +265,15 @@ impl Orchestrator {
                 Arc::clone(&registry_client),
             );
 
+        let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
+
         let upgrade = Some(
             Upgrade::new(
                 Arc::clone(&registry),
                 Arc::clone(&metrics),
                 Arc::clone(&replica_process),
                 cup_provider,
+                Arc::clone(&subnet_assignment),
                 replica_version.clone(),
                 args.replica_config_file.clone(),
                 node_id,
@@ -331,8 +347,6 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
-
         let orchestrator_dashboard = Some(OrchestratorDashboard::new(
             Arc::clone(&registry),
             node_id,
@@ -386,7 +400,6 @@ impl Orchestrator {
     ///    to do the rotation and attempt to register the rotated key.
     pub async fn start_tasks(&mut self, cancellation_token: CancellationToken) {
         async fn upgrade_checks(
-            subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             mut upgrade: Upgrade,
             cancellation_token: CancellationToken,
             log: ReplicaLogger,
@@ -403,20 +416,10 @@ impl Orchestrator {
                     Ok(Ok(control_flow)) => {
                         upgrade.metrics.failed_consecutive_upgrade_checks.reset();
 
-                        match control_flow {
-                            OrchestratorControlFlow::Assigned(subnet_id)
-                            | OrchestratorControlFlow::Leaving(subnet_id) => {
-                                *subnet_assignment.write().unwrap() =
-                                    SubnetAssignment::Assigned(subnet_id);
-                            }
-                            OrchestratorControlFlow::Unassigned => {
-                                *subnet_assignment.write().unwrap() = SubnetAssignment::Unassigned;
-                            }
-                            OrchestratorControlFlow::Stop => {
-                                // Wake up all orchestrator tasks and instruct them to stop.
-                                cancellation_token.cancel();
-                                break;
-                            }
+                        if matches!(control_flow, OrchestratorControlFlow::Stop) {
+                            // Wake up all orchestrator tasks and instruct them to stop.
+                            cancellation_token.cancel();
+                            break;
                         }
 
                         let node_id = upgrade.node_id();
@@ -590,12 +593,7 @@ impl Orchestrator {
         if let Some(upgrade) = self.upgrade.take() {
             self.task_tracker.spawn(
                 "GuestOS_upgrade",
-                upgrade_checks(
-                    Arc::clone(&self.subnet_assignment),
-                    upgrade,
-                    cancellation_token.clone(),
-                    self.logger.clone(),
-                ),
+                upgrade_checks(upgrade, cancellation_token.clone(), self.logger.clone()),
             );
         }
 
