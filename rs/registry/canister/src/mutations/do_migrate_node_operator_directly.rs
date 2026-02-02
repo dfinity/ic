@@ -382,6 +382,7 @@ mod tests {
         upsert,
     };
     use ic_types::{NodeId, PrincipalId};
+    use itertools::Itertools;
     use prost::Message;
 
     use crate::{
@@ -793,6 +794,9 @@ mod tests {
             .registry
             .get_node_operator_or_panic(old_node_operator_id);
 
+        let extra_node_records =
+            setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
+
         // Step 2: Run the code under test.
         setup
             .registry
@@ -830,8 +834,16 @@ mod tests {
 
         // Ensure that the extra nodes weren't touched
         let nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
-        for node in nodes {
-            assert_eq!(node.node_operator_id, extra_node_operator.to_vec());
+        for (new_node_record, extra_node_record) in nodes
+            .into_iter()
+            .sorted_by_key(|n| n.http.clone().unwrap().ip_addr)
+            .zip(
+                extra_node_records
+                    .into_iter()
+                    .sorted_by_key(|n| n.http.clone().unwrap().ip_addr),
+            )
+        {
+            assert_eq!(new_node_record, extra_node_record);
         }
 
         // Validate number of mutations and their keys, values are checked above
@@ -948,6 +960,10 @@ mod tests {
             .registry
             .get_node_operator_or_panic(old_node_operator_id);
 
+        let new_records = setup.fetch_nodes_originally_for_node_operator(new_node_operator_id);
+        let old_node_records = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
+        let extra_records = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
+
         // Step 2: Run the code under test.
         setup
             .registry
@@ -996,20 +1012,50 @@ mod tests {
 
         // Ensure that the nodes owned by the old operator show the new operator now
         let nodes = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
-        for node in nodes {
-            assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
+        for (new_node_record, old_node_record) in nodes
+            .into_iter()
+            .sorted_by_key(|n| n.http.clone().unwrap().ip_addr)
+            .zip(
+                old_node_records
+                    .into_iter()
+                    .sorted_by_key(|n| n.http.clone().unwrap().ip_addr),
+            )
+        {
+            assert_eq!(
+                new_node_record,
+                NodeRecord {
+                    node_operator_id: new_node_record.node_operator_id.to_vec(),
+                    ..old_node_record
+                }
+            );
         }
         // Ensure that the nodes owned by the new operator still are owned by the
         // same node operator
         let nodes = setup.fetch_nodes_originally_for_node_operator(new_node_operator_id);
-        for node in nodes {
-            assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
+        for (new_node_record, old_node_record) in nodes
+            .into_iter()
+            .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr)
+            .zip(
+                new_records
+                    .into_iter()
+                    .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr),
+            )
+        {
+            assert_eq!(new_node_record, old_node_record);
         }
 
         // Ensure that the extra nodes weren't touched
         let nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
-        for node in nodes {
-            assert_eq!(node.node_operator_id, extra_node_operator.to_vec());
+        for (new_node_record, old_node_record) in nodes
+            .into_iter()
+            .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr)
+            .zip(
+                extra_records
+                    .into_iter()
+                    .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr),
+            )
+        {
+            assert_eq!(new_node_record, old_node_record);
         }
 
         // Validate number of mutations and their keys, values are checked above
