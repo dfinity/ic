@@ -7,7 +7,7 @@ The ckDOGE Minter canister is a https://github.com/dfinity/ICRC-1/blob/8c526e1da
 
 == Interact with the ckDOGE minter
 
-TIP: To interact with the minter or ledger as exemplified below with `dfx`, make sure to locate yourself in `rs/dogecoin/ckdoge/mainnet`.
+TIP: To interact with the minter or ledger as exemplified below with `dfx`, make sure to navigate to `rs/dogecoin/ckdoge/mainnet`.
 
 NOTE: Dogecoin testnet is not supported.
 
@@ -61,9 +61,9 @@ Similarly, the argument to `update_balance` can specify full account details too
 dfx canister --network ic call minter update_balance '(record { owner = opt principal ".."; subaccount = opt blob ".." })'
 ----
 
-You now have some ckDOGE, you can enjoy the Internet Computer speed and low fees!
+You now have some ckDOGE and can enjoy the Internet Computer speed and low fees!
 
-If you would like to transfer them to your wallet (plug, stoic, ...), copy the principal of your wallet and paste it over PRINCIPAL and change AMOUNT to the desired amount (in satoshis) in the following command:
+If you would like to transfer them to your wallet (plug, stoic, ...), copy the principal of your wallet and paste it over PRINCIPAL and change AMOUNT to the desired amount (in koinus) in the following command:
 [source,shell]
 ----
 dfx canister --network ic call ledger icrc1_transfer "(record { to = record { owner = principal "PRINCIPAL" }; amount = AMOUNT; })"
