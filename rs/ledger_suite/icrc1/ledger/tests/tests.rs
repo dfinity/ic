@@ -807,11 +807,10 @@ fn test_fee_collector_107_init() {
 
 #[test]
 fn test_fee_collector_107_upgrade_legacy() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy(
-        ledger_mainnet_v5_wasm(),
-        ledger_wasm(),
-        encode_init_args,
-    );
+    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy::<
+        LedgerArgument,
+        Tokens,
+    >(ledger_mainnet_v5_wasm(), ledger_wasm(), encode_init_args);
 }
 
 mod metrics {
