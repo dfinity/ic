@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package types.v1;
 
-import "types/v1/types.proto";
 import "google/protobuf/empty.proto";
+import "types/v1/types.proto";
 
 message DkgMessage {
   NodeId signer = 5;
