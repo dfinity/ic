@@ -626,6 +626,7 @@ mod tests {
         };
 
         let caller = PrincipalId::new_user_test_id(999);
+        assert_ne!(caller, node_provider_id);
 
         let original_registry = registry.clone();
         let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
@@ -711,14 +712,14 @@ mod tests {
             &mut self,
             node_operator_id: PrincipalId,
             node_provider_id: PrincipalId,
-            allowance: u64,
+            node_allowance: u64,
             dc: &str,
             rewardable_nodes: Vec<(String, u32)>,
             max_rewardable_nodes: Vec<(String, u32)>,
         ) {
             let node_operator_record = NodeOperatorRecord {
                 node_operator_principal_id: node_operator_id.to_vec(),
-                node_allowance: allowance,
+                node_allowance,
                 node_provider_principal_id: node_provider_id.to_vec(),
                 dc_id: dc.to_string(),
                 max_rewardable_nodes: max_rewardable_nodes.into_iter().collect(),
@@ -758,13 +759,13 @@ mod tests {
             (NodeRewardType::Type1.to_string(), 5),
             (NodeRewardType::Type2.to_string(), 10),
         ];
-        let allowance = 5;
+        let node_allowance = 5;
         let dc = "dc";
 
         setup.add_node_operator(
             old_node_operator_id,
             caller,
-            allowance,
+            node_allowance,
             dc,
             rewardable_nodes.clone(),
             rewardable_nodes.clone(),
@@ -802,7 +803,7 @@ mod tests {
             new_node_operator_record.node_provider_principal_id,
             caller.to_vec()
         );
-        assert_eq!(new_node_operator_record.node_allowance, allowance);
+        assert_eq!(new_node_operator_record.node_allowance, node_allowance);
         assert_eq!(
             new_node_operator_record.rewardable_nodes,
             rewardable_nodes.clone().into_iter().collect()
@@ -896,13 +897,13 @@ mod tests {
             (NodeRewardType::Type1.to_string(), 5),
             (NodeRewardType::Type2.to_string(), 10),
         ];
-        let allowance = 5;
+        let node_allowance = 5;
         let dc = "dc";
 
         setup.add_node_operator(
             old_node_operator_id,
             caller,
-            allowance,
+            node_allowance,
             dc,
             rewardable_nodes.clone(),
             rewardable_nodes.clone(),
@@ -914,12 +915,12 @@ mod tests {
 
         // New operator spec variables
         let new_rewardable_nodes = vec![(NodeRewardType::Type1.to_string(), 1)];
-        let new_allowance = 5;
+        let new_node_allowance = 5;
 
         setup.add_node_operator(
             new_node_operator_id,
             caller,
-            new_allowance,
+            new_node_allowance,
             dc,
             new_rewardable_nodes.clone(),
             new_rewardable_nodes.clone(),
@@ -958,7 +959,7 @@ mod tests {
         );
         assert_eq!(
             new_node_operator_record.node_allowance,
-            allowance + new_allowance
+            node_allowance + new_node_allowance
         );
         let rewardable_nodes: BTreeMap<_, _> = rewardable_nodes.into_iter().collect();
         let new_rewardable_nodes: BTreeMap<_, _> = new_rewardable_nodes.into_iter().collect();
