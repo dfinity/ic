@@ -22,7 +22,7 @@ use std::{cmp::min, sync::Arc};
 
 /// The ShareAggregator is responsible for aggregating shares of random beacons,
 /// notarizations, and finalizations into full objects
-pub struct ShareAggregator {
+pub(crate) struct ShareAggregator {
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
     message_routing: Arc<dyn MessageRouting>,

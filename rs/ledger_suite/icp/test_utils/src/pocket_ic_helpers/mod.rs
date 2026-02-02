@@ -1,7 +1,6 @@
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::CanisterSettings;
-use ic_nns_constants::ALL_NNS_CANISTER_IDS;
 use pocket_ic::PocketIc;
 use serde::Deserialize;
 
@@ -17,20 +16,11 @@ pub fn install_canister(
     arg: Vec<u8>,
     wasm_bytes: Vec<u8>,
     controller: Option<PrincipalId>,
+    canister_settings: Option<CanisterSettings>,
 ) {
     let controller_principal = controller.map(|c| c.0);
-    let memory_allocation = if ALL_NNS_CANISTER_IDS.contains(&&canister_id) {
-        let memory_allocation_bytes = ic_nns_constants::memory_allocation_of(canister_id);
-        Some(Nat::from(memory_allocation_bytes))
-    } else {
-        None
-    };
-    let settings = Some(CanisterSettings {
-        memory_allocation,
-        ..Default::default()
-    });
     let canister_id = pocket_ic
-        .create_canister_with_id(controller_principal, settings, canister_id.into())
+        .create_canister_with_id(controller_principal, canister_settings, canister_id.into())
         .unwrap();
     pocket_ic.install_canister(canister_id, wasm_bytes, arg, controller_principal);
     pocket_ic.add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER);

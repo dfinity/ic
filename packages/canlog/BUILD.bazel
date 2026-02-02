@@ -6,7 +6,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-canister-log",
     "@crate_index//:ic0",
-    "@crate_index//:regex",
+    "@crate_index//:regex-lite",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
 ]

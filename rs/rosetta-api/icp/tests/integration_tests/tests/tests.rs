@@ -23,9 +23,9 @@ use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::Command;
-use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
+use tokio::time::sleep;
 use url::Url;
 
 pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
@@ -166,7 +166,7 @@ impl RosettaTestingClient {
                 );
             }
             attempts += 1;
-            sleep(DURATION_BETWEEN_ATTEMPTS);
+            sleep(DURATION_BETWEEN_ATTEMPTS).await;
         }
         Ok(())
     }
@@ -254,9 +254,9 @@ impl TestEnv {
                     println!("call to /network/status was successfull");
                     break;
                 }
-                Err(Error(err)) if matches_blockchain_is_empty_error(&err) => {
+                Err(Error(err)) if matches_blockchain_is_empty_or_still_syncing_error(&err) => {
                     retries -= 1;
-                    sleep(DURATION_BETWEEN_ATTEMPTS);
+                    sleep(DURATION_BETWEEN_ATTEMPTS).await;
                 }
                 Err(Error(err)) => {
                     panic!("Unable to call /network/status: {err:?}")
@@ -407,8 +407,10 @@ impl TestEnv {
     }
 }
 
-fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error) -> bool {
-    (error.code == 700 || error.code == 712 || error.code == 721)
+fn matches_blockchain_is_empty_or_still_syncing_error(
+    error: &rosetta_core::miscellaneous::Error,
+) -> bool {
+    (error.code == 700 || error.code == 702 || error.code == 712 || error.code == 721)
         && error.details.is_some()
         && error
             .details
@@ -416,7 +418,7 @@ fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error)
             .unwrap()
             .get("error_message")
             .is_some_and( |e| {
-                e == "Blockchain is empty" || e == "Block not found: 0" || e == "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database."
+                e == "Blockchain is empty" || e == "The node is still syncing the blocks from the ledger canister. Please wait until the initial sync is complete." || e == "Block not found: 0" || e == "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database."
             })
 }
 
@@ -1231,7 +1233,7 @@ async fn test_network_status_single_genesis_transaction() {
     let mut env = TestEnv::setup(false, true).await.unwrap();
     let t1 = env.pocket_ic.get_time().await;
     // We need to advance the time to make sure only a single transaction gets into the genesis block
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(1)).await;
     let t2 = env.pocket_ic.get_time().await;
     assert!(t1 < t2);
     env.pocket_ic.stop_progress().await;

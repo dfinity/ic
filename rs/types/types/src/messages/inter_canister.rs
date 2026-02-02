@@ -7,12 +7,12 @@ use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
-    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, Method, Payload as _, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
-    StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs, FetchCanisterLogsRequest, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload as _,
+    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    RenameCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -25,6 +25,7 @@ use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::Reverse,
     convert::{From, TryFrom, TryInto},
     hash::{Hash, Hasher},
     mem::size_of,
@@ -162,6 +163,12 @@ impl Request {
                 Ok(record) => Some(record.canister_id()),
                 Err(_) => None,
             },
+            Ok(Method::CanisterMetadata) => {
+                match CanisterMetadataRequest::decode(&self.method_payload) {
+                    Ok(record) => Some(record.canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
@@ -412,7 +419,7 @@ impl Payload {
     }
 
     /// Returns the size of this `Payload` in bytes.
-    fn size_bytes(&self) -> NumBytes {
+    pub fn size_bytes(&self) -> NumBytes {
         match self {
             Payload::Data(data) => NumBytes::from(data.len() as u64),
             Payload::Reject(context) => context.size_bytes(),
@@ -541,7 +548,10 @@ impl Hash for Response {
 /// refunds for best-effort calls.
 ///
 /// Represents an _anonymous refund_.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
+///
+/// Refunds are ordered by amount (larger amounts first). Ties are broken by
+/// canister ID (smaller IDs first).
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Refund {
     /// Whom this refund is to be delivered to.
@@ -565,6 +575,19 @@ impl Refund {
 
     pub fn amount(&self) -> Cycles {
         self.amount
+    }
+}
+
+impl PartialOrd for Refund {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Refund {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Order by amount decreasing, then by recipient increasing.
+        (Reverse(self.amount), &self.recipient).cmp(&(Reverse(other.amount), &other.recipient))
     }
 }
 
@@ -782,7 +805,6 @@ impl From<&RequestMetadata> for pb_queues::RequestMetadata {
         Self {
             call_tree_depth: metadata.call_tree_depth,
             call_tree_start_time_nanos: metadata.call_tree_start_time.as_nanos_since_unix_epoch(),
-            call_subtree_deadline_nanos: None,
         }
     }
 }

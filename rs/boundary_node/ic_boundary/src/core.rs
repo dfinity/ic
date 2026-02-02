@@ -22,31 +22,36 @@ use ic_bn_lib::{
     http::{
         self as bnhttp,
         shed::{
-            ShedResponse,
-            sharded::{ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor},
+            sharded::ShardedLittleLoadShedderLayer,
             system::{SystemInfo, SystemLoadShedderLayer},
         },
     },
     prometheus::Registry,
     pubsub::BrokerBuilder,
     tasks::TaskManager,
-    tls::verify::NoopServerCertVerifier,
+    tls::{acme::alpn as AcmeAlpn, resolver::StubResolver, verify::NoopServerCertVerifier},
+};
+use ic_bn_lib_common::{
+    traits::{http::Client, shed::TypeExtractor},
+    types::{
+        http::{ALPN_ACME, ClientOptions, Metrics as HttpServerMetrics, ServerOptions},
+        shed::{ShardedOptions, ShedResponse},
+        tls::TlsOptions,
+    },
 };
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
-use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
-use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey};
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
-use ic_registry_local_store::{LocalStore, LocalStoreImpl};
-use ic_registry_replicator::RegistryReplicator;
+use ic_registry_local_store::LocalStoreImpl;
 use ic_types::messages::MessageId;
 use nix::unistd::{Pid, getpgid, setpgid};
-use rustls::client::danger::ServerCertVerifier;
+use rustls::{client::danger::ServerCertVerifier, server::ResolvesServerCert};
 use tokio::{
     select,
     signal::unix::SignalKind,
@@ -59,10 +64,9 @@ use tracing::warn;
 use crate::{
     bouncer,
     check::{Checker, Runner as CheckRunner},
-    cli::Cli,
+    cli::{self, Cli},
     dns::DnsResolver,
     errors::ErrorCause,
-    firewall::{FirewallGenerator, SystemdReloader},
     http::{
         PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH, PATH_QUERY_V2, PATH_QUERY_V3,
         PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS, PATH_SUBNET_READ_STATE_V2,
@@ -86,19 +90,12 @@ use crate::{
     rate_limiting::{RateLimit, generic},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
-    snapshot::{
-        RegistryReplicatorRunner, RegistrySnapshot, SnapshotPersister, Snapshotter,
-        generate_stub_snapshot, generate_stub_subnet,
-    },
+    snapshot::{RegistrySnapshot, Snapshotter, generate_stub_snapshot, generate_stub_subnet},
     tls_verify::TlsVerifier,
 };
 
-#[cfg(feature = "tls")]
-use {crate::cli, rustls::server::ResolvesServerCert};
-
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
-const SYSTEMCTL_BIN: &str = "/usr/bin/systemctl";
 
 pub const SECOND: Duration = Duration::from_secs(1);
 
@@ -122,33 +119,13 @@ pub fn decoder_config() -> DecoderConfig {
 pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if cli.http_client.http_client_timeout_connect > cli.health.health_check_timeout {
         cli.health.health_check_timeout = cli.http_client.http_client_timeout_connect;
+
         warn!(
-            "Health check timeout should be longer than HTTP client connect timeout, capping it to client timeout"
+            "`--health-check-timeout` should be longer than `--http-client-timeout-connect`, increasing it to client timeout"
         );
     }
 
-    if !(cli.registry.registry_local_store_path.is_none()
-        ^ cli.registry.registry_stub_replica.is_empty())
-    {
-        bail!(
-            "Local store path and Stub Replica are mutually exclusive and at least one of them must be specified"
-        );
-    }
-
-    #[cfg(feature = "tls")]
-    if cli.listen.listen_http_port.is_none()
-        && cli.listen.listen_http_unix_socket.is_none()
-        && cli.listen.listen_https_port.is_none()
-    {
-        bail!(
-            "at least one of --listen-http-port / --listen-https-port / --listen-http-unix-socket must be specified"
-        );
-    }
-
-    #[cfg(not(feature = "tls"))]
-    if cli.listen.listen_http_port.is_none() && cli.listen.listen_http_unix_socket.is_none() {
-        bail!("at least one of --listen-http-port / --listen-http-unix-socket must be specified");
-    }
+    warn!("Starting {SERVICE_NAME}");
 
     // Make sure ic-boundary is the leader of its own process group
     // Needed for correct execution of API BNs
@@ -167,26 +144,24 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // Metrics
     let metrics_registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
-    warn!(
-        msg = format!("Starting {SERVICE_NAME}"),
-        metrics_addr = cli.obs.obs_metrics_addr.to_string().as_str(),
-    );
-
     let mut tasks = TaskManager::new();
 
     let routing_table = Arc::new(ArcSwapOption::empty());
     let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
-    // DNS
+    // Setup Registry-based DNS resolver
     let dns_resolver = DnsResolver::new(registry_snapshot.clone());
 
     // TLS client
+
+    // Pick a TLS certificate verifier - Registry-based or a No-op one
     let tls_verifier: Arc<dyn ServerCertVerifier> = if cli.misc.skip_replica_tls_verification {
         Arc::new(NoopServerCertVerifier::default())
     } else {
         Arc::new(TlsVerifier::new(registry_snapshot.clone()))
     };
 
+    // We talk only TLS1.3 to the replicas
     let mut tls_config_client =
         rustls::ClientConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
             .dangerous() // Nothing really dangerous here
@@ -206,25 +181,36 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         4096 * cli.network.network_http_client_count as usize,
     );
 
-    let mut http_client_opts: bnhttp::client::Options<DnsResolver> = (&cli.http_client).into();
+    // HTTP clients
+
+    let mut http_client_opts: ClientOptions = (&cli.http_client).into();
     http_client_opts.user_agent = SERVICE_NAME.into();
     http_client_opts.tls_config = Some(tls_config_client);
-    http_client_opts.dns_resolver = Some(dns_resolver);
 
     // HTTP client for health checks
-    let http_client_check = bnhttp::ReqwestClient::new(http_client_opts.clone())
-        .context("unable to create HTTP client for checks")?;
+    let http_client_check =
+        bnhttp::ReqwestClient::new(http_client_opts.clone(), Some(dns_resolver.clone()))
+            .context("unable to create HTTP client for checks")?;
     let http_client_check = Arc::new(http_client_check);
 
-    // HTTP client for normal requests
-    let http_client = Arc::new(
-        bnhttp::ReqwestClientLeastLoaded::new(
-            http_client_opts,
-            cli.network.network_http_client_count as usize,
-            Some(&metrics_registry),
-        )
-        .context("unable to create HTTP client")?,
-    );
+    // HTTP client for normal requests.
+    // Pick normal or LeastLoaded one depending on if we need >1 client
+    let http_client = if cli.network.network_http_client_count > 1 {
+        Arc::new(
+            bnhttp::ReqwestClientLeastLoaded::new(
+                http_client_opts,
+                Some(dns_resolver.clone()),
+                cli.network.network_http_client_count as usize,
+                Some(&metrics_registry),
+            )
+            .context("unable to create HTTP client")?,
+        ) as Arc<dyn Client>
+    } else {
+        Arc::new(
+            bnhttp::ReqwestClient::new(http_client_opts, Some(dns_resolver.clone()))
+                .context("unable to create HTTP client")?,
+        ) as Arc<dyn Client>
+    };
 
     // Setup registry-related stuff
     let persister = Persister::new(routing_table.clone());
@@ -233,32 +219,24 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
 
     // Registry Client
-    let registry_client = if let Some(v) = &cli.registry.registry_local_store_path {
-        // Store
-        let local_store = Arc::new(LocalStoreImpl::new(v.clone()));
-
-        // Client
-        let registry_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
-        registry_client
-            .fetch_and_start_polling()
-            .context("failed to start registry client")?;
+    let registry_client = if cli.registry.registry_local_store_path.is_some() {
+        let persister = WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry));
 
         // Snapshotting
-        setup_registry(
-            &cli,
-            local_store.clone(),
-            registry_client.clone(),
-            registry_snapshot.clone(),
-            WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
-            http_client_check,
-            &metrics_registry,
-            channel_snapshot_send,
-            channel_snapshot_recv.clone(),
-            &mut tasks,
+        Some(
+            setup_registry(
+                &cli,
+                registry_snapshot.clone(),
+                persister,
+                http_client_check,
+                &metrics_registry,
+                channel_snapshot_send,
+                channel_snapshot_recv.clone(),
+                &mut tasks,
+            )
+            .await
+            .context("unable to init Registry")?,
         )
-        .context("unable to init Registry")?;
-
-        Some(registry_client)
     } else {
         // Prepare a stub routing table and snapshot if there's no local store specified
         let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
@@ -304,12 +282,6 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
                 .context("failed to convert root NNS key to DER")?;
 
             agent.set_root_key(der_encoded_root_key);
-        } else if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
-            // Set the root key if it was provided
-            let root_key = parse_threshold_sig_key(v).context("failed to parse NNS public key")?;
-            let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
-                .context("failed to convert NNS key to DER")?;
-            agent.set_root_key(der_encoded_root_key);
         }
 
         Some(agent)
@@ -319,7 +291,9 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
 
     // Caching
     let cache_state = if cli.cache.cache_size.is_some() {
-        Some(Arc::new(CacheState::new(&cli.cache, &metrics_registry)?))
+        Some(Arc::new(
+            CacheState::new(&cli.cache, &metrics_registry).context("unable to setup cache")?,
+        ))
     } else {
         None
     };
@@ -338,6 +312,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         poll_interval: cli.rate_limiting.rate_limit_generic_poll_interval,
         autoscale: cli.rate_limiting.rate_limit_generic_autoscale,
     };
+
     let generic_limiter = if let Some(v) = &cli.rate_limiting.rate_limit_generic_file {
         Some(Arc::new(generic::GenericLimiter::new_from_file(
             v.clone(),
@@ -357,6 +332,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     } else {
         None
     };
+
     if let Some(v) = &generic_limiter {
         tasks.add("generic_limiter", v.clone());
     }
@@ -376,7 +352,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // Prepare Axum Router
     let router = setup_router(
         bouncer,
-        generic_limiter.clone(),
+        generic_limiter,
         &cli,
         &metrics_registry,
         cache_state.clone(),
@@ -385,10 +361,10 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     );
 
     // HTTP server metrics
-    let http_metrics = bnhttp::server::Metrics::new(&metrics_registry);
+    let http_metrics = HttpServerMetrics::new(&metrics_registry);
 
     // HTTP server options
-    let server_opts: bnhttp::server::Options = (&cli.http_server).into();
+    let server_opts: ServerOptions = (&cli.http_server).into();
 
     // HTTP
     if let Some(v) = cli.listen.listen_http_port {
@@ -433,7 +409,6 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     }
 
     // HTTPS
-    #[cfg(feature = "tls")]
     if cli.listen.listen_https_port.is_some() {
         let srv = setup_https(
             router,
@@ -441,6 +416,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
             &cli,
             &metrics_registry,
             http_metrics.clone(),
+            &mut tasks,
         )
         .context("unable to setup HTTPS")?;
 
@@ -479,27 +455,28 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     tasks.add_interval("metrics_runner", metrics_runner, 5 * SECOND);
 
     // HTTP Logs Anonymization
-    let salt_fetcher = cli
-        .obs
+    cli.obs
         .obs_log_anonymization_canister_id
         .and_then(|canister_id| {
             agent.as_ref().map(|agent| {
-                Arc::new(AnonymizationSaltFetcher::new(
+                let fetcher = Arc::new(AnonymizationSaltFetcher::new(
                     agent.clone(),
                     canister_id,
                     cli.obs.obs_log_anonymization_poll_interval,
                     anonymization_salt,
                     &metrics_registry,
-                ))
+                ));
+
+                tasks.add("anonymization_salt_fetcher", fetcher.clone());
+
+                fetcher
             })
         });
-    if let Some(v) = &salt_fetcher {
-        tasks.add("anonymization_salt_fetcher", v.clone());
-    }
 
     // Start the tasks
     tasks.start();
 
+    warn!("Started, waiting for shutdown signal");
     // Wait for Ctrl-C or SIGTERM
     let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate()).unwrap();
     select! {
@@ -571,7 +548,7 @@ impl Identity for NodeSender {
 
 async fn create_identity(
     crypto_config: CryptoConfig,
-    registry_client: Arc<RegistryClientImpl>,
+    registry_client: Arc<dyn RegistryClient>,
 ) -> Result<Box<dyn Identity>, Error> {
     let crypto_component = tokio::task::spawn_blocking({
         let registry_client = registry_client.clone();
@@ -601,8 +578,6 @@ async fn create_identity(
     })
     .await??;
 
-    let node_id = derive_node_id(&public_key).expect("failed to derive node id");
-
     // Custom Signer
     Ok(Box::new(
         NodeSender::new(
@@ -611,7 +586,7 @@ async fn create_identity(
                 #[allow(clippy::disallowed_methods)]
                 let sig = tokio::task::block_in_place(|| {
                     crypto_component
-                        .sign_basic(msg, node_id, registry_client.get_latest_version())
+                        .sign_basic(msg)
                         .map(|value| value.get().0)
                         .map_err(|err| anyhow!("failed to sign message: {err:?}"))
                 })?;
@@ -625,7 +600,7 @@ async fn create_identity(
 
 async fn create_agent(
     crypto_config: Option<CryptoConfig>,
-    registry_client: Option<Arc<RegistryClientImpl>>,
+    registry_client: Option<Arc<dyn RegistryClient>>,
     port: u16,
 ) -> Result<Agent, Error> {
     let identity = match (crypto_config, registry_client) {
@@ -642,47 +617,38 @@ async fn create_agent(
 }
 
 /// Sets up registry-related stuff
-fn setup_registry(
+async fn setup_registry(
     cli: &Cli,
-    local_store: Arc<dyn LocalStore>,
-    registry_client: Arc<dyn RegistryClient>,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
-    http_client_check: Arc<dyn bnhttp::Client>,
+    http_client_check: Arc<dyn Client>,
     metrics_registry: &Registry,
     channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
     channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     tasks: &mut TaskManager,
-) -> Result<(), Error> {
+) -> Result<Arc<dyn RegistryClient>, Error> {
+    let local_store = Arc::new(LocalStoreImpl::new(
+        cli.registry.registry_local_store_path.clone().unwrap(),
+    ));
+
+    let registry_client = Arc::new(RegistryClientImpl::new(local_store, None));
+    registry_client
+        .fetch_and_start_polling()
+        .context("failed to start registry client")?;
+
     // Snapshots
     let snapshotter = WithMetricsSnapshot(
-        {
-            let mut snapshotter = Snapshotter::new(
-                registry_snapshot.clone(),
-                channel_snapshot_send,
-                registry_client.clone(),
-                cli.registry.registry_min_version_age,
-            );
-
-            if let Some(v) = &cli.nftables.nftables_system_replicas_path {
-                let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
-
-                let fw_generator = FirewallGenerator::new(
-                    v.clone(),
-                    cli.nftables.nftables_system_replicas_var.clone(),
-                );
-
-                let persister = SnapshotPersister::new(fw_generator, fw_reloader);
-                snapshotter.set_persister(persister);
-            }
-
-            snapshotter
-        },
+        Snapshotter::new(
+            registry_snapshot.clone(),
+            channel_snapshot_send,
+            registry_client.clone(),
+            cli.registry.registry_min_version_age,
+        ),
         MetricParamsSnapshot::new(metrics_registry),
     );
     tasks.add_interval("snapshotter", Arc::new(snapshotter), 5 * SECOND);
 
-    // Checks
+    // Start the health checking
     let checker = Checker::new(http_client_check, cli.health.health_check_timeout);
     let checker = WithMetricsCheck(checker, MetricParamsCheck::new(metrics_registry));
     let check_runner = CheckRunner::new(
@@ -695,59 +661,10 @@ fn setup_registry(
     );
     tasks.add("check_runner", Arc::new(check_runner));
 
-    if cli.registry.registry_disable_replicator {
-        return Ok(());
-    }
-
-    // Check if we require an NNS key
-    let nns_pub_key = {
-        // Check if the local store is initialized
-        if !local_store
-            .get_changelog_since_version(ZERO_REGISTRY_VERSION)
-            .expect("failed to read registry local store")
-            .is_empty()
-        {
-            None
-        } else {
-            // If it's not - then we need an NNS public key to initialize it
-            let nns_pub_key_path = cli
-                .registry
-                .registry_nns_pub_key_pem
-                .clone()
-                .expect("NNS public key is required to init Registry local store");
-
-            Some(
-                parse_threshold_sig_key(&nns_pub_key_path).expect("failed to parse NNS public key"),
-            )
-        }
-    };
-
-    // Notice no-op logger
-    let logger = ic_logger::new_replica_logger(
-        slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()),
-        &ic_config::logger::Config::default(),
-    );
-
-    let replicator = RegistryReplicator::new_with_clients(
-        logger,
-        local_store,
-        registry_client,
-        cli.registry.registry_nns_poll_interval,
-    );
-    let replicator_runner = RegistryReplicatorRunner::new(
-        replicator,
-        cli.registry.registry_nns_urls.clone(),
-        nns_pub_key,
-    );
-    tasks.add("registry_replicator", Arc::new(replicator_runner));
-
-    Ok(())
+    Ok(registry_client)
 }
 
-#[cfg(feature = "tls")]
 fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
-    use ic_bn_lib::tls;
-
     let cert = cli
         .tls_cert_path
         .clone()
@@ -760,15 +677,14 @@ fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
     let cert = std::fs::read(cert).context("unable to read TLS cert")?;
     let key = std::fs::read(key).context("unable to read TLS key")?;
 
-    let resolver = tls::StubResolver::new(&cert, &key)?;
+    let resolver = StubResolver::new(&cert, &key)?;
     Ok(Arc::new(resolver))
 }
 
-#[cfg(feature = "tls")]
-fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
-    use ic_bn_lib::tls;
-    use tokio_util::sync::CancellationToken;
-
+fn setup_tls_resolver_acme(
+    cli: &cli::Tls,
+    tasks: &mut TaskManager,
+) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     let path = cli
         .tls_acme_credentials_path
         .clone()
@@ -779,20 +695,37 @@ fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
         .clone()
         .ok_or(anyhow!("hostname not specified"))?;
 
-    let opts = tls::acme::AcmeOptions::new(
+    let tls_config = if cli.tls_acme_disable_tls_cert_verification {
+        let cfg = ic_bn_lib::rustls_acme::futures_rustls::rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoopServerCertVerifier::default()))
+            .with_no_client_auth();
+
+        Some(cfg)
+    } else {
+        None
+    };
+
+    let opts = AcmeAlpn::Opts::new(
+        cli.tls_acme_url.clone(),
         vec![hostname],
-        path,
-        cli.tls_acme_staging,
         "mailto:boundary-nodes@dfinity.org".into(),
+        path,
+        tls_config,
     );
 
-    Ok(tls::acme::alpn::new(opts, CancellationToken::new()))
+    let acme = Arc::new(AcmeAlpn::AcmeAlpn::new(opts));
+    tasks.add("acme_alpn", acme.clone());
+
+    Ok(acme)
 }
 
 /// Try to load the static resolver first, then ACME one.
-/// This is needed for integration tests where we cannot easily separate test/prod environments
-#[cfg(feature = "tls")]
-fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
+/// This is needed for the integration tests where we cannot easily separate test/prod environments.
+fn setup_tls_resolver(
+    cli: &cli::Tls,
+    tasks: &mut TaskManager,
+) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     warn!("TLS: Trying resolver: static files");
     match setup_tls_resolver_stub(cli) {
         Ok(v) => {
@@ -804,10 +737,10 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
     }
 
     warn!(
-        "TLS: Trying resolver: ACME ALPN-01 (staging: {})",
-        cli.tls_acme_staging
+        "TLS: Trying resolver: ACME ALPN-01 (URL: {})",
+        cli.tls_acme_url
     );
-    match setup_tls_resolver_acme(cli) {
+    match setup_tls_resolver_acme(cli, tasks) {
         Ok(v) => {
             warn!("TLS: ACME resolver loaded");
             return Ok(v);
@@ -819,20 +752,20 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
     bail!("TLS: no resolvers were able to load")
 }
 
-#[cfg(feature = "tls")]
 fn setup_https(
     router: Router,
-    opts: bnhttp::server::Options,
+    opts: ServerOptions,
     cli: &Cli,
     registry: &Registry,
-    metrics: bnhttp::server::Metrics,
+    metrics: HttpServerMetrics,
+    tasks: &mut TaskManager,
 ) -> Result<bnhttp::Server, Error> {
     use ic_bn_lib::tls;
 
-    let resolver = setup_tls_resolver(&cli.tls).context("unable to setup TLS resolver")?;
+    let resolver = setup_tls_resolver(&cli.tls, tasks).context("unable to setup TLS resolver")?;
 
-    let tls_opts = tls::Options {
-        additional_alpn: vec![bnhttp::ALPN_ACME.to_vec()],
+    let tls_opts = TlsOptions {
+        additional_alpn: vec![ALPN_ACME.to_vec()],
         sessions_count: cli.http_server.http_server_tls_session_cache_size,
         sessions_tti: cli.http_server.http_server_tls_session_cache_tti,
         ticket_lifetime: cli.http_server.http_server_tls_ticket_lifetime,
@@ -857,6 +790,7 @@ fn setup_https(
 
 #[derive(Clone, Debug)]
 struct RequestTypeExtractor;
+
 impl TypeExtractor for RequestTypeExtractor {
     type Type = RequestType;
     type Request = Request;
@@ -1116,4 +1050,81 @@ pub fn error_source<E: StdError + 'static>(error: &impl StdError) -> Option<&E> 
     }
 
     None
+}
+
+#[cfg(test)]
+mod test {
+    use std::time::Instant;
+
+    use clap::Parser;
+    use http::StatusCode;
+    use ic_bn_lib::tests::pebble::Env;
+
+    use crate::cli::Cli;
+
+    use super::*;
+
+    /// Tests `ic-boundary` startup using ACME certificates obtained from Pebble
+    #[tokio::test]
+    async fn test_startup() {
+        let pebble_env = Env::new().await;
+        let acme_cache_path = tempfile::TempDir::new().unwrap();
+        let acme_url = format!("https://{}/dir", pebble_env.addr_acme());
+
+        let args = &[
+            "",
+            "--listen-https-port",
+            "5001", // Pebble challenges on port 5001 by default
+            "--tls-hostname",
+            "foo.bar", // Pebble's DNS resolves any hostname to 127.0.0.1 by default
+            "--tls-acme-url",
+            &acme_url,
+            "--tls-acme-credentials-path",
+            acme_cache_path.path().to_str().unwrap(),
+            "--tls-acme-disable-tls-cert-verification",
+            "--registry-stub-replica",
+            "127.0.0.1:1443", // Doesn't really matter
+        ];
+
+        let cli = Cli::parse_from(args);
+
+        tokio::spawn(async move {
+            if let Err(e) = main(cli).await {
+                panic!("Unable to start ic-boundary: {e}");
+            }
+        });
+
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap();
+
+        // Poke ic-boundary until it issues the certificate
+        let start = Instant::now();
+        loop {
+            let req = client.get("https://127.0.0.1:5001/health").build().unwrap();
+            let res = client.execute(req).await;
+            match res {
+                Ok(v) => {
+                    if v.status() == StatusCode::NO_CONTENT {
+                        return;
+                    }
+
+                    println!("Status code incorrect: {}", v.status());
+                }
+
+                Err(e) => {
+                    println!("Error: {e:#}");
+                }
+            };
+
+            if start.elapsed() > Duration::from_secs(120) {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        panic!("Unable to query ic-boundary: timed out");
+    }
 }

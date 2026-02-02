@@ -36,4 +36,9 @@ class ProcessExecutor:
                 logging.debug(result.stdout)
             raise subprocess.CalledProcessError(result.returncode, command, result.args, result.stderr)
         else:
+            if log_command:
+                logging.info("Process Executor succeeded for " + str(command))
+            else:
+                logging.info("Process Executor succeeded")
+            logging.debug(result.stderr)
             return result.stdout.strip()

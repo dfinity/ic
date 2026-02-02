@@ -5,6 +5,8 @@ pub struct CallContext {
     pub responded: bool,
     #[prost(message, optional, tag = "6")]
     pub available_funds: ::core::option::Option<super::super::queues::v1::Funds>,
+    #[prost(message, optional, tag = "13")]
+    pub available_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(bool, tag = "8")]
     pub deleted: bool,
     #[prost(uint64, tag = "9")]
@@ -13,7 +15,7 @@ pub struct CallContext {
     pub instructions_executed: u64,
     #[prost(message, optional, tag = "11")]
     pub metadata: ::core::option::Option<super::super::queues::v1::RequestMetadata>,
-    #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 3, 4, 7")]
+    #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 4, 7, 12")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
 /// Nested message and enum types in `CallContext`.
@@ -24,6 +26,15 @@ pub mod call_context {
         pub user_id: ::core::option::Option<super::super::super::super::types::v1::UserId>,
         #[prost(bytes = "vec", tag = "2")]
         pub message_id: ::prost::alloc::vec::Vec<u8>,
+        #[prost(string, tag = "3")]
+        pub method_name: ::prost::alloc::string::String,
+    }
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Query {
+        #[prost(message, optional, tag = "1")]
+        pub user_id: ::core::option::Option<super::super::super::super::types::v1::UserId>,
+        #[prost(string, tag = "2")]
+        pub method_name: ::prost::alloc::string::String,
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct CanisterUpdateOrQuery {
@@ -34,6 +45,8 @@ pub mod call_context {
         /// If non-zero, this originates from a best-effort canister update call.
         #[prost(uint32, tag = "3")]
         pub deadline_seconds: u32,
+        #[prost(string, tag = "4")]
+        pub method_name: ::prost::alloc::string::String,
     }
     /// System task is either a Heartbeat or a GlobalTimer.
     #[derive(Clone, Copy, PartialEq, ::prost::Message)]
@@ -44,12 +57,12 @@ pub mod call_context {
         Ingress(Ingress),
         #[prost(message, tag = "2")]
         CanisterUpdate(CanisterUpdateOrQuery),
-        #[prost(message, tag = "3")]
-        Query(super::super::super::super::types::v1::UserId),
         #[prost(message, tag = "4")]
         CanisterQuery(CanisterUpdateOrQuery),
         #[prost(message, tag = "7")]
         SystemTask(SystemTask),
+        #[prost(message, tag = "12")]
+        UserQuery(Query),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -307,17 +320,27 @@ pub mod execution_task {
         #[prost(message, optional, tag = "4")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
-        #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 3, 5")]
+        #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 6, 3, 5")]
         pub input: ::core::option::Option<aborted_execution::Input>,
     }
     /// Nested message and enum types in `AbortedExecution`.
     pub mod aborted_execution {
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct AbortedResponse {
+            #[prost(message, optional, tag = "7")]
+            pub response: ::core::option::Option<super::super::super::super::queues::v1::Response>,
+            #[prost(message, optional, tag = "8")]
+            pub callback: ::core::option::Option<super::super::Callback>,
+        }
         #[derive(Clone, PartialEq, ::prost::Oneof)]
         pub enum Input {
             #[prost(message, tag = "1")]
             Request(super::super::super::super::queues::v1::Request),
+            /// TODO(DSM-95): Remove once we switch to `AbortedResponse` below.
             #[prost(message, tag = "2")]
             Response(super::super::super::super::queues::v1::Response),
+            #[prost(message, tag = "6")]
+            AbortedResponse(AbortedResponse),
             #[prost(message, tag = "3")]
             Ingress(super::super::super::super::ingress::v1::Ingress),
             #[prost(enumeration = "super::CanisterTask", tag = "5")]
@@ -462,6 +485,8 @@ pub struct CanisterRename {
     pub total_num_changes: u64,
     #[prost(message, optional, tag = "3")]
     pub rename_to: ::core::option::Option<RenameTo>,
+    #[prost(message, optional, tag = "4")]
+    pub requested_by: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RenameTo {
@@ -601,6 +626,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
+/// Next ID: 58
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -613,10 +639,10 @@ pub struct CanisterStateBits {
     pub execution_state_bits: ::core::option::Option<ExecutionStateBits>,
     #[prost(uint64, tag = "8")]
     pub memory_allocation: u64,
+    #[prost(uint64, tag = "57")]
+    pub rounds_scheduled: u64,
     #[prost(uint64, tag = "15")]
     pub scheduled_as_first: u64,
-    #[prost(uint64, tag = "17")]
-    pub skipped_round_due_to_no_messages: u64,
     /// In how many rounds a canister is executed.
     #[prost(uint64, tag = "18")]
     pub executed: u64,
@@ -674,6 +700,9 @@ pub struct CanisterStateBits {
     /// Log visibility for the canister.
     #[prost(message, optional, tag = "51")]
     pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
+    /// The capacity of the canister log in bytes.
+    #[prost(uint64, tag = "56")]
+    pub log_memory_limit: u64,
     /// Log records of the canister.
     #[prost(message, repeated, tag = "43")]
     pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,

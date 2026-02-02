@@ -8,7 +8,9 @@ use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
 use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
-    get_subnet_record, membership::Membership, pool_reader::PoolReader,
+    get_subnet_record,
+    membership::Membership,
+    pool_reader::{PoolReader, UnexpectedChainLength},
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
@@ -32,6 +34,7 @@ use ic_types::{
     time::current_time,
 };
 use num_traits::ops::saturating::SaturatingSub;
+use rayon::ThreadPool;
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -61,19 +64,20 @@ pub(crate) fn subnet_records_for_registry_version(
 }
 
 /// A consensus subcomponent that is responsible for creating block proposals.
-pub struct BlockMaker {
+pub(crate) struct BlockMaker {
     time_source: Arc<dyn TimeSource>,
-    pub(crate) replica_config: ReplicaConfig,
+    replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
     pub(crate) membership: Arc<Membership>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-    pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    thread_pool: Arc<ThreadPool>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
     // available across the subnet.
@@ -92,6 +96,7 @@ impl BlockMaker {
         payload_builder: Arc<dyn PayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
+        thread_pool: Arc<ThreadPool>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         stable_registry_version_age: Duration,
         metrics_registry: MetricsRegistry,
@@ -106,6 +111,7 @@ impl BlockMaker {
             payload_builder,
             dkg_pool,
             idkg_pool,
+            thread_pool,
             state_manager,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
@@ -363,6 +369,7 @@ impl BlockMaker {
                                 self.replica_config.subnet_id,
                                 &*self.registry_client,
                                 &*self.crypto,
+                                self.thread_pool.as_ref(),
                                 pool,
                                 self.idkg_pool.clone(),
                                 &*self.state_manager,
@@ -420,8 +427,28 @@ impl BlockMaker {
         parent: &Block,
         subnet_records: &SubnetRecords,
     ) -> BatchPayload {
-        let past_payloads =
-            pool.get_payloads_from_height(context.certified_height.increment(), parent.clone());
+        let start_height = context.certified_height.increment();
+        let past_payloads = match pool.get_payloads_from_height(start_height, parent.clone()) {
+            Ok(past_payloads) => past_payloads,
+            Err(UnexpectedChainLength { expected, returned }) => {
+                self.metrics
+                    .get_payload_calls
+                    .with_label_values(&["error"])
+                    .inc();
+                error!(
+                    self.log,
+                    "Missing past payloads when attempting to build new batch payload at height {}. \
+                    Certified height: {}, expected past payloads len: {}, real past payloads len: {}. \
+                    Proposing an empty payload",
+                    height,
+                    context.certified_height,
+                    expected,
+                    returned,
+                );
+                return BatchPayload::default();
+            }
+        };
+
         let payload =
             self.payload_builder
                 .get_payload(height, &past_payloads, context, subnet_records);
@@ -601,17 +628,22 @@ pub(super) fn is_time_to_make_block(
 
 #[cfg(test)]
 mod tests {
+    use crate::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
+
     use super::*;
     use ic_consensus_mocks::{Dependencies, MockPayloadBuilder, dependencies_with_subnet_params};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_consensus::IDkgStatsNoOp;
+    use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::FromParent};
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{HasHeight, HasVersion, dkg},
-        crypto::CryptoHash,
+        consensus::{
+            CatchUpContent, CatchUpPackage, HasHeight, HasVersion, HashedRandomBeacon, dkg,
+        },
+        crypto::{CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf},
+        signature::ThresholdSignature,
         *,
     };
     use rstest::rstest;
@@ -671,6 +703,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -692,7 +725,8 @@ mod tests {
             let next_height = start.height().increment();
             let start_hash = start.content.get_hash();
             let expected_payloads = PoolReader::new(&pool)
-                .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
+                .get_payloads_from_height(certified_height.increment(), start.as_ref().clone())
+                .unwrap();
             let returned_payload =
                 DkgPayload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
@@ -752,6 +786,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -784,6 +819,148 @@ mod tests {
             // is already available.
             assert!(run_block_maker().is_none());
         })
+    }
+
+    #[test]
+    fn test_build_batch_payload() {
+        let subnet_id = subnet_test_id(0);
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let node_ids: Vec<_> = (0..13).map(node_test_id).collect();
+            let dkg_interval_length = 9;
+            let Dependencies {
+                mut pool,
+                membership,
+                registry,
+                crypto,
+                time_source,
+                replica_config,
+                state_manager,
+                dkg_pool,
+                idkg_pool,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            );
+
+            pool.advance_round_normal_operation_n(8);
+
+            // Make block at height 9
+            let next_proposal = pool.make_next_block();
+            assert_eq!(next_proposal.height().get(), 9);
+            // Make and insert beacon at height 9
+            let next_beacon = pool.make_next_beacon();
+            pool.insert_validated(next_beacon.clone());
+            // Make and insert beacon at height 10
+            let summary_beacon = RandomBeacon::from_parent(&next_beacon);
+            pool.insert_validated(summary_beacon.clone());
+            // Make summary at height 10
+            let summary =
+                pool.make_next_block_from_parent(next_proposal.content.get_value(), Rank(0));
+            let cup = CatchUpPackage {
+                content: CatchUpContent::new(
+                    HashedBlock::new(
+                        ic_types::crypto::crypto_hash,
+                        summary.content.get_value().clone(),
+                    ),
+                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, summary_beacon.clone()),
+                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    None,
+                ),
+                signature: ThresholdSignature {
+                    signer: summary_beacon.signature.signer.clone(),
+                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+                },
+            };
+            // Insert the Summary before the next proposal
+            pool.notarize(&summary);
+            pool.insert_validated(summary);
+
+            // Payload builder always returns a batch payload with some canister HTTP data
+            let mut payload_builder = MockPayloadBuilder::new();
+            let expected_payload = BatchPayload {
+                canister_http: vec![1; 64],
+                ..Default::default()
+            };
+            payload_builder
+                .expect_get_payload()
+                .return_const(expected_payload.clone());
+            let certified_height = Height::from(1);
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(certified_height);
+
+            // Find the rank 0 blockmaker for height 11
+            let replica_config = ReplicaConfig {
+                node_id: (0..13)
+                    .map(node_test_id)
+                    .find(|node_id| {
+                        membership.get_block_maker_rank(
+                            summary_beacon.height().increment(),
+                            &summary_beacon,
+                            *node_id,
+                        ) == Ok(Some(Rank(0)))
+                    })
+                    .unwrap(),
+                subnet_id: replica_config.subnet_id,
+            };
+
+            let block_maker = BlockMaker::new(
+                Arc::clone(&time_source) as Arc<_>,
+                replica_config,
+                Arc::clone(&registry) as Arc<dyn RegistryClient>,
+                membership.clone(),
+                crypto.clone(),
+                Arc::new(payload_builder),
+                dkg_pool.clone(),
+                idkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
+                state_manager.clone(),
+                Duration::from_millis(0),
+                MetricsRegistry::new(),
+                no_op_logger(),
+            );
+
+            // Create the next block, the batch payload should be empty due to the missing past payloads
+            let proposal = {
+                let reader = PoolReader::new(&pool);
+                block_maker.on_state_change(&reader)
+            }
+            .expect("Block creation should succeed");
+            let block = proposal.content.into_inner();
+            let empty_batch_payload = &block.payload.as_ref().as_data().batch;
+            assert!(empty_batch_payload.is_empty());
+
+            // Insert the missing proposal, the batch payload should be created as expected
+            pool.insert_validated(next_proposal);
+            let proposal = {
+                let reader = PoolReader::new(&pool);
+                block_maker.on_state_change(&reader)
+            }
+            .expect("Block creation should succeed");
+            let block = proposal.content.into_inner();
+            let filled_batch_payload = &block.payload.as_ref().as_data().batch;
+            assert_eq!(filled_batch_payload, &expected_payload);
+
+            // Insert the cup at height 10, the batch payload should be empty
+            // Since payloads below the CUP are not returned
+            pool.insert_validated(cup);
+            let proposal = {
+                let reader = PoolReader::new(&pool);
+                block_maker.on_state_change(&reader)
+            }
+            .expect("Block creation should succeed");
+            let block = proposal.content.into_inner();
+            let empty_batch_payload = &block.payload.as_ref().as_data().batch;
+            assert!(empty_batch_payload.is_empty());
+        });
     }
 
     // We expect block maker to correctly detect version change and start making only empty blocks.
@@ -880,6 +1057,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -919,6 +1097,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -994,6 +1173,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -1003,12 +1183,21 @@ mod tests {
             let delay = Duration::from_millis(1000);
 
             // We add a new version every `delay` ms.
+            let v1_timestamp = registry
+                .get_version_timestamp(RegistryVersion::from(1))
+                .unwrap();
             std::thread::sleep(delay);
             add_subnet_record(&registry_data_provider, 2, subnet_id, record.clone());
             registry.update_to_latest_version();
+            let v2_timestamp = registry
+                .get_version_timestamp(RegistryVersion::from(2))
+                .unwrap();
             std::thread::sleep(delay);
             add_subnet_record(&registry_data_provider, 3, subnet_id, record.clone());
             registry.update_to_latest_version();
+            let v3_timestamp = registry
+                .get_version_timestamp(RegistryVersion::from(3))
+                .unwrap();
             std::thread::sleep(delay);
             add_subnet_record(&registry_data_provider, 4, subnet_id, record);
             registry.update_to_latest_version();
@@ -1017,20 +1206,22 @@ mod tests {
             assert_eq!(registry.get_latest_version(), RegistryVersion::from(4));
 
             // Now we just request versions at every interval of the previously added
-            // version. To avoid hitting the boundaries, we use a little offset.
-            let offset = delay / 10 * 3;
+            // version.
             let mut parent = pool.get_cache().finalized_block();
-            block_maker.stable_registry_version_age = offset;
+            block_maker.stable_registry_version_age =
+                current_time().saturating_duration_since(v3_timestamp);
             assert_eq!(
                 block_maker.get_stable_registry_version(&parent).unwrap(),
                 RegistryVersion::from(3)
             );
-            block_maker.stable_registry_version_age = offset + delay;
+            block_maker.stable_registry_version_age =
+                current_time().saturating_duration_since(v2_timestamp);
             assert_eq!(
                 block_maker.get_stable_registry_version(&parent).unwrap(),
                 RegistryVersion::from(2)
             );
-            block_maker.stable_registry_version_age = offset + delay * 2;
+            block_maker.stable_registry_version_age =
+                current_time().saturating_duration_since(v1_timestamp);
             assert_eq!(
                 block_maker.get_stable_registry_version(&parent).unwrap(),
                 RegistryVersion::from(1)

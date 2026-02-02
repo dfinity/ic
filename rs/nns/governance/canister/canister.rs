@@ -26,15 +26,16 @@ use ic_nns_governance::{
 use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
-    GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
+    GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    GetPendingProposalsRequest, Governance as ApiGovernanceProto, GovernanceError,
+    ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons,
     ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
+    ListNodeProvidersResponse, ListProposalInfoRequest, ListProposalInfoResponse,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
-    ProposalInfo, RestoreAgingSummary, RewardEvent, SettleCommunityFundParticipation,
-    SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
-    UpdateNodeProvider, Vote,
+    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData, NeuronInfo,
+    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
@@ -76,10 +77,8 @@ fn schedule_timers() {
 
 const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
 fn schedule_spawn_neurons() {
-    ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, || {
-        ic_cdk::futures::spawn_017_compat(async {
-            governance_mut().maybe_spawn_neurons().await;
-        });
+    ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, async || {
+        governance_mut().maybe_spawn_neurons().await;
     });
 }
 
@@ -87,10 +86,8 @@ fn schedule_spawn_neurons() {
 const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 
 fn schedule_vote_processing() {
-    ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
-        ic_cdk::futures::spawn_017_compat(async {
-            governance_mut().process_voting_state_machines().await;
-        });
+    ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, async || {
+        governance_mut().process_voting_state_machines().await;
     });
 }
 
@@ -360,21 +357,29 @@ fn get_neurons_fund_audit_info(
 }
 
 #[query]
-fn get_pending_proposals() -> Vec<ProposalInfo> {
+fn get_pending_proposals(req: Option<GetPendingProposalsRequest>) -> Vec<ProposalInfo> {
     debug_log("get_pending_proposals");
-    with_governance(|governance| governance.get_pending_proposals(&caller()))
+    with_governance(|governance| governance.get_pending_proposals(&caller(), req))
 }
 
 #[query]
-fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
+fn list_proposals(req: ListProposalInfoRequest) -> ListProposalInfoResponse {
     debug_log("list_proposals");
-    with_governance(|governance| governance.list_proposals(&caller(), &req.into()))
+    with_governance(|governance| governance.list_proposals(&caller(), req))
 }
 
 #[query]
 fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
     debug_log("list_neurons");
     governance().list_neurons(&req, caller())
+}
+
+#[query]
+fn get_neuron_index(req: GetNeuronIndexRequest) -> Result<NeuronIndexData, GovernanceError> {
+    debug_log("get_neuron_index");
+    governance()
+        .get_neuron_index(req, caller())
+        .map_err(GovernanceError::from)
 }
 
 #[query]
@@ -391,6 +396,13 @@ async fn get_monthly_node_provider_rewards() -> Result<MonthlyNodeProviderReward
 {
     debug_log("get_monthly_node_provider_rewards");
     let rewards = governance_mut().get_monthly_node_provider_rewards().await?;
+    Ok(MonthlyNodeProviderRewards::from(rewards))
+}
+
+#[update(hidden = true)]
+async fn get_node_provider_rewards() -> Result<MonthlyNodeProviderRewards, GovernanceError> {
+    debug_log("get_node_provider_rewards");
+    let rewards = governance().get_node_providers_rewards_cached().await?;
     Ok(MonthlyNodeProviderRewards::from(rewards))
 }
 
@@ -550,6 +562,15 @@ fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
 fn get_restore_aging_summary() -> RestoreAgingSummary {
     let response = governance().get_restore_aging_summary().unwrap_or_default();
     RestoreAgingSummary::from(response)
+}
+
+#[query]
+fn list_neuron_votes(request: ListNeuronVotesRequest) -> ListNeuronVotesResponse {
+    with_governance(|governance| {
+        governance
+            .list_neuron_votes(request)
+            .map_err(GovernanceError::from)
+    })
 }
 
 #[query(

@@ -28,12 +28,12 @@ def test_no_owners(mock_finding):
 
 
 def test_main_owner(mock_finding):
-    project = Project(name="a", path="b", owner=Team.CRYPTO_TEAM)
+    project = Project(name="a", path="b", owner=Team.CONSENSUS_TEAM)
 
     owners = project.get_owners_for(mock_finding)
 
     assert len(owners) == 1
-    assert owners[0] == Team.CRYPTO_TEAM
+    assert owners[0] == Team.CONSENSUS_TEAM
 
 
 def test_sub_owner_exact_matching(mock_finding):
@@ -84,10 +84,10 @@ def test_main_owner_and_sub_owner(mock_finding):
     project = Project(
         name="a",
         path="b",
-        owner=Team.CRYPTO_TEAM,
+        owner=Team.CONSENSUS_TEAM,
         owner_by_path={
             "/matching/prefix": [Team.NODE_TEAM, Team.BOUNDARY_NODE_TEAM],
-            "/different/prefix": [Team.GIX_TEAM],
+            "/different/prefix": [Team.OISY_TEAM],
         },
     )
     mock_finding.projects.append("/not/matching/prefix")
@@ -96,17 +96,20 @@ def test_main_owner_and_sub_owner(mock_finding):
     owners = project.get_owners_for(mock_finding)
 
     assert len(owners) == 3
-    assert Team.CRYPTO_TEAM in owners
+    assert Team.CONSENSUS_TEAM in owners
     assert Team.NODE_TEAM in owners
-    assert Team.CRYPTO_TEAM in owners
+    assert Team.CONSENSUS_TEAM in owners
 
 
 def test_owner_deduplication(mock_finding):
     project = Project(
         name="a",
         path="b",
-        owner=Team.CRYPTO_TEAM,
-        owner_by_path={"/prefix/a": [Team.TRUST_TEAM, Team.CRYPTO_TEAM], "/prefix/b": [Team.GIX_TEAM, Team.TRUST_TEAM]},
+        owner=Team.CONSENSUS_TEAM,
+        owner_by_path={
+            "/prefix/a": [Team.TRUST_TEAM, Team.CONSENSUS_TEAM],
+            "/prefix/b": [Team.OISY_TEAM, Team.TRUST_TEAM],
+        },
     )
     mock_finding.projects.append("/not/matching/prefix")
     mock_finding.projects.append("/prefix/a/b")
@@ -115,6 +118,6 @@ def test_owner_deduplication(mock_finding):
     owners = project.get_owners_for(mock_finding)
 
     assert len(owners) == 3
-    assert Team.CRYPTO_TEAM in owners
+    assert Team.CONSENSUS_TEAM in owners
     assert Team.TRUST_TEAM in owners
-    assert Team.GIX_TEAM in owners
+    assert Team.OISY_TEAM in owners

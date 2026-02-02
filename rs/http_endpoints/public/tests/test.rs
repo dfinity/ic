@@ -300,7 +300,7 @@ fn test_update_call_to_management_canister(
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -339,7 +339,7 @@ fn test_unauthorized_call(#[values(Call::V2, Call::V3, Call::V4)] endpoint: Call
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -588,7 +588,7 @@ fn test_status_code_when_ingress_filter_fails(
         let (_, send_response) = request.unwrap();
 
         let response = UserError::new(ErrorCode::IngressHistoryFull, "Test reject message");
-        send_response.send_response(Err(response));
+        send_response.send_response(Ok(Err(response)));
     });
 
     rt.block_on(async move {
@@ -1224,7 +1224,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1293,7 +1293,7 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1390,7 +1390,7 @@ fn test_sync_call_endpoint_responds_with_certificate(
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1476,7 +1476,7 @@ fn test_synchronous_call_endpoint_no_certification(#[values(Call::V3, Call::V4)]
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1576,7 +1576,7 @@ fn test_call_v3_response_when_state_reader_fails(
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1634,7 +1634,7 @@ fn test_call_response_when_p2p_not_running(
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 

@@ -57,10 +57,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         context: VetKdDerivationContext,
         input: Vec<u8>,
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
-        let master_public_key =
-            G2Affine::deserialize(&master_public_key).map_err(|_: PairingInvalidPoint| {
+        let master_public_key = G2Affine::deserialize_cached(&master_public_key).map_err(
+            |_: PairingInvalidPoint| {
                 VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentMasterPublicKey
-            })?;
+            },
+        )?;
 
         let transport_public_key =
             TransportPublicKey::deserialize(&transport_public_key).map_err(|e| match e {
@@ -76,7 +77,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         )?;
         let secret_bls_scalar =
             if let CspSecretKey::ThresBls12_381(secret_key_bytes) = &secret_key_from_store {
-                // We use the unchecked deserialization here because it is slighly cheaper, but mainly because
+                // We use the unchecked deserialization here because it is slightly cheaper, but mainly because
                 // it cannot fail, and the data is anyway trusted as it comes from the secret key store.
                 Ok(Scalar::deserialize_unchecked(
                     secret_key_bytes.inner_secret().expose_secret(),

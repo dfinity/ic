@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/http_utils",
     "@crate_index//:anyhow",
     "@crate_index//:mockall",
+    "@crate_index//:procfs",
     "@crate_index//:rusb",
     "@crate_index//:serde",
     "@crate_index//:serde_json",

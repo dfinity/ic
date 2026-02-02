@@ -61,4 +61,25 @@ impl MockBatchPayloadBuilder {
 
         self
     }
+
+    /// Expect the payload builder to return the serialized payload given by responses
+    /// Returns always ok on validation
+    pub fn with_response_and_max_size(
+        mut self,
+        response: Vec<u8>,
+        expected_max_size: NumBytes,
+    ) -> Self {
+        self.expect_build_payload()
+            .with(
+                predicate::always(),
+                predicate::eq(expected_max_size),
+                predicate::always(),
+                predicate::always(),
+            )
+            .return_const(response);
+        self.expect_validate_payload()
+            .returning(|_, _, _, _| Ok(()));
+
+        self
+    }
 }

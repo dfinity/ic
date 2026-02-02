@@ -20,29 +20,6 @@ For more information on the onboarding and installation process, as well as the 
 
 To build a SetupOS image, refer to the link:../README.adoc[IC-OS README]
 
-=== Running SetupOS interactively via Bazel
-
-This requires QEMU with qemu-system and qemu-kvm installed on the machine.  It only works in the 'dev' environment set up by Bazel.  Additionally, it's only likely to work within the CI container (run 'ci/container/container-run.sh' within the IC repo).
-
-Bazel can be used to boot a local VM with a GuestOS like this:
-
-    bazel run //ic-os/setupos/envs/dev:interactive-install
-
-In a VM or container without KVM support (the target above will tell you very loudly if that's your case), use:
-
-    bazel run //ic-os/setupos/envs/dev:interactive-install-no-kvm
-
-Both these targets will allocate a (sparse) 'vda' attached to the virtual machine as the first disk, while the SetupOS gets attached as the second disk ('vdb').  The system initially boots from the second disk, because the first disk is effectively zeroed out.  Installation then proceeds, with an interactive console available for debugging.  Once SetupOS installation finishes successfully, the system will reboot to the installed operating system.  The system will then remain there at the login prompt, until you log in and power it off.
-
-It is also possible to **debug and inspect** SetupOS interactively, without triggering installation:
-
-    bazel run //ic-os/setupos/envs/dev:interactive-debug
-    # The variant
-    #   //ic-os/setupos/envs/dev:interactive-debug-no-kvm
-    # is also available for those who do not have KVM acceleration available.
-
-In this mode, the installer does not run, and SetupOS can be inspected interactively as if freshly booted in a physical machine.  Of course, the installation target disk 'vda' is attached in this case too, should you want to proceed with the installation by hand.  Hit ENTER on the console to activate the root prompt.
-
 == Under the hood: Installation
 
 The SetupOS installation is initiated by the systemd service unit file `setupos.service`. This service is of type idle, which means the installation is triggered only after every other unit has either completed or started.

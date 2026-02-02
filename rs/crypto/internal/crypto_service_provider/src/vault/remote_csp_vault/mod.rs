@@ -4,9 +4,10 @@ use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
     CspTlsKeygenError, CspTlsSignError, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
-    IDkgTranscriptInternalBytes, PksAndSksContainsErrors, PublicRandomSeedGeneratorError,
-    ThresholdSchnorrCreateSigShareVaultError, ThresholdSchnorrSigShareBytes,
-    ValidatePksAndSksError, VetKdEncryptedKeyShareCreationVaultError,
+    IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternalBytes, PksAndSksContainsErrors,
+    PublicRandomSeedGeneratorError, ThresholdSchnorrCreateSigShareVaultError,
+    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
+    VetKdEncryptedKeyShareCreationVaultError,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -27,9 +28,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
-};
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
@@ -66,11 +65,7 @@ mod tests;
 #[tarpc::service]
 pub trait TarpcCspVault {
     // Corresponds to `BasicSignatureCspVault.sign()`.
-    async fn sign(
-        algorithm_id: AlgorithmId,
-        message: ByteBuf,
-        key_id: KeyId,
-    ) -> Result<CspSignature, CspBasicSignatureError>;
+    async fn sign(message: ByteBuf) -> Result<CspSignature, CspBasicSignatureError>;
 
     // Corresponds to `BasicSignatureCspVault.gen_node_signing_key_pair()`.
     async fn gen_node_signing_key_pair() -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
@@ -106,14 +101,23 @@ pub trait TarpcCspVault {
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError>;
 
     // Corresponds to `NiDkgCspVault.create_dealing()`.
-    #[allow(clippy::too_many_arguments)]
     async fn create_dealing(
         algorithm_id: AlgorithmId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-        maybe_resharing_secret: Option<KeyId>,
+    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError>;
+
+    // Corresponds to `NiDkgCspVault.create_resharing_dealing()`.
+    #[allow(clippy::too_many_arguments)]
+    async fn create_resharing_dealing(
+        algorithm_id: AlgorithmId,
+        dealer_index: NodeIndex,
+        threshold: NumberOfNodes,
+        epoch: Epoch,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        resharing_secret: KeyId,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError>;
 
     // Corresponds to `NiDkgCspVault.load_threshold_signing_key()`.
@@ -165,7 +169,7 @@ pub trait TarpcCspVault {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_verify_dealing_private`
@@ -181,7 +185,7 @@ pub trait TarpcCspVault {
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript`
     async fn idkg_load_transcript(
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,

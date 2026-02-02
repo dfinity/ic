@@ -1,5 +1,5 @@
 use crate::{
-    catch_up_package_provider::CatchUpPackageProvider,
+    catch_up_package_provider::LocalCUPReader,
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
@@ -43,7 +43,7 @@ const SOCKS_PROXY_PORT: u16 = 1080;
 pub(crate) struct Firewall {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
-    catchup_package_provider: Arc<CatchUpPackageProvider>,
+    local_cup_reader: LocalCUPReader,
     logger: ReplicaLogger,
     replica_config: ReplicaFirewallConfig,
     boundary_node_config: BoundaryNodeFirewallConfig,
@@ -63,7 +63,7 @@ impl Firewall {
         metrics: Arc<OrchestratorMetrics>,
         replica_config: ReplicaFirewallConfig,
         boundary_node_config: BoundaryNodeFirewallConfig,
-        catchup_package_provider: Arc<CatchUpPackageProvider>,
+        local_cup_reader: LocalCUPReader,
         logger: ReplicaLogger,
     ) -> Self {
         // Disable if the config is the default one (e.g if we're in a test)
@@ -81,7 +81,7 @@ impl Firewall {
         Self {
             registry,
             metrics,
-            catchup_package_provider,
+            local_cup_reader,
             replica_config,
             boundary_node_config,
             logger,
@@ -148,7 +148,7 @@ impl Firewall {
 
     // Get all the registry versions between the latest CUP and the latest version in the registry (inclusive)
     fn get_registry_versions(&mut self, registry_version: RegistryVersion) -> Vec<RegistryVersion> {
-        self.catchup_package_provider
+        self.local_cup_reader
             .get_local_cup()
             .map(|latest_cup| {
                 let cup_registry_version = latest_cup.get_oldest_registry_version_in_use();
@@ -710,6 +710,7 @@ fn split_ips_by_address_family(ips: &BTreeSet<IpAddr>) -> (Vec<String>, Vec<Stri
 mod tests {
     use std::{io::Write, path::Path};
 
+    use config_tool::guestos::generate_ic_config;
     use ic_config::{ConfigOptional, ConfigSource};
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::registry::{
@@ -722,7 +723,6 @@ mod tests {
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_subnet_type::SubnetType;
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_registry::{
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
     };
@@ -730,8 +730,6 @@ mod tests {
 
     use super::*;
 
-    const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/components/guestos/generate-ic-config/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES: &[u8] =
@@ -944,20 +942,26 @@ mod tests {
 
     /// Returns the `ic.json5` config filled with some dummy values.
     fn get_config() -> ConfigOptional {
-        // Make the string parsable by filling the template placeholders with dummy values
-        let cfg = String::from_utf8(CFG_TEMPLATE_BYTES.to_vec())
-            .unwrap()
-            .replace("{{ ipv6_address }}", "::")
-            .replace("{{ backup_retention_time_secs }}", "0")
-            .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
-            .replace("{{ malicious_behavior }}", "null")
-            .replace("{{ query_stats_epoch_length }}", "600");
-        let config_source = ConfigSource::Literal(cfg);
+        let template = generate_ic_config::IcConfigTemplate {
+            ipv6_address: "::".to_string(),
+            ipv6_prefix: "::/64".to_string(),
+            ipv4_address: "".to_string(),
+            ipv4_gateway: "".to_string(),
+            nns_urls: "http://www.fakeurl.com/".to_string(),
+            backup_retention_time_secs: "0".to_string(),
+            backup_purging_interval_secs: "0".to_string(),
+            query_stats_epoch_length: "600".to_string(),
+            jaeger_addr: "".to_string(),
+            domain_name: "".to_string(),
+            node_reward_type: "".to_string(),
+            malicious_behavior: "null".to_string(),
+        };
 
-        let config: ConfigOptional = config_source.load().unwrap();
-
-        config
+        let ic_json = generate_ic_config::render_ic_config(template)
+            .expect("Failed to render config template");
+        ConfigSource::Literal(ic_json)
+            .load()
+            .expect("Failed to parse dummy config")
     }
 
     /// When `TEST_UNDECLARED_OUTPUTS_DIR` is set, writes the `content` to a file in the specified
@@ -996,16 +1000,7 @@ mod tests {
             no_op_logger(),
         ));
 
-        let (crypto, _) =
-            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node_id);
-        let catch_up_package_provider = CatchUpPackageProvider::new(
-            registry_helper.clone(),
-            tmp_dir.join("cups"),
-            Arc::new(CryptoReturningOk::default()),
-            Arc::new(crypto),
-            no_op_logger(),
-            node_id,
-        );
+        let cup_reader = LocalCUPReader::new(tmp_dir.join("cups"), no_op_logger());
 
         Firewall::new(
             node_id,
@@ -1013,7 +1008,7 @@ mod tests {
             Arc::new(OrchestratorMetrics::new(&ic_metrics::MetricsRegistry::new())),
             config,
             boundary_node_config,
-            Arc::new(catch_up_package_provider),
+            cup_reader,
             no_op_logger(),
         )
     }
@@ -1194,6 +1189,7 @@ mod tests {
                     public_ipv4_config: None,
                     domain: None,
                     node_reward_type: None,
+                    ssh_node_state_write_access: vec![],
                 }),
             )
             .expect("Failed to add node record.");

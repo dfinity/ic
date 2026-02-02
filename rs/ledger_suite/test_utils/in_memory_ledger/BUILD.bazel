@@ -12,9 +12,13 @@ DEPENDENCIES = [
     "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
-    "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/types/types",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -59,7 +63,7 @@ MACRO_DEPENDENCIES = []
         name = "ic-ledger-suite-in-memory-ledger-unit-tests" + name_suffix,
         crate = ":ic-ledger-suite-in-memory-ledger" + name_suffix,
         crate_features = features,
-        deps = DEPENDENCIES + extra_deps,
+        deps = DEPENDENCIES + DEV_DEPENDENCIES + extra_deps,
     )
     for (name_suffix, features, extra_deps) in [
         (

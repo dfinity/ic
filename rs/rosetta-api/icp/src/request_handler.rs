@@ -7,6 +7,9 @@ mod construction_payloads;
 mod construction_preprocess;
 mod construction_submit;
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
     convert::{self, neuron_account_from_public_key},
@@ -36,18 +39,19 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::{CanisterId, crypto::DOMAIN_IC_REQUEST, messages::MessageId};
 use icp_ledger::{Block, BlockIndex};
+use rosetta_core::metrics::RosettaMetrics;
 use rosetta_core::{
     objects::ObjectMap,
     response_types::{MempoolResponse, MempoolTransactionResponse, NetworkListResponse},
 };
+use std::sync::atomic::AtomicBool;
 use std::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
     sync::Arc,
 };
 use strum::IntoEnumIterator;
-
-use rosetta_core::metrics::RosettaMetrics;
+use tracing::log::debug;
 
 /// The maximum amount of blocks to retrieve in a single search.
 const MAX_SEARCH_LIMIT: usize = 10_000;
@@ -57,6 +61,7 @@ pub struct RosettaRequestHandler {
     blockchain: String,
     ledger: Arc<dyn LedgerAccess + Send + Sync>,
     rosetta_metrics: RosettaMetrics,
+    initial_sync_complete: Arc<AtomicBool>,
 }
 
 // construction requests are implemented in their own module.
@@ -65,16 +70,19 @@ impl RosettaRequestHandler {
         blockchain: String,
         ledger: Arc<T>,
         rosetta_metrics: RosettaMetrics,
+        initial_sync_complete: Arc<AtomicBool>,
     ) -> Self {
         Self {
             blockchain,
             ledger,
             rosetta_metrics,
+            initial_sync_complete,
         }
     }
 
     pub fn new_with_default_blockchain<T: 'static + LedgerAccess + Send + Sync>(
         ledger: Arc<T>,
+        initial_sync_complete: Arc<AtomicBool>,
     ) -> Self {
         let canister_id = ledger.ledger_canister_id();
         let canister_id_str = hex::encode(canister_id.get().into_vec());
@@ -82,6 +90,7 @@ impl RosettaRequestHandler {
             crate::DEFAULT_BLOCKCHAIN.to_string(),
             ledger,
             RosettaMetrics::new(crate::DEFAULT_TOKEN_SYMBOL.to_string(), canister_id_str),
+            initial_sync_complete,
         )
     }
 
@@ -591,6 +600,15 @@ impl RosettaRequestHandler {
         msg: models::NetworkRequest,
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        if !self
+            .initial_sync_complete
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return Err(ApiError::NotAvailableOffline(
+                true,
+                "The node is still syncing the blocks from the ledger canister. Please wait until the initial sync is complete.".into(),
+            ));
+        }
         let rosetta_blocks_mode = self.ledger.read_blocks().await.rosetta_blocks_mode;
         let network_status = match rosetta_blocks_mode {
             // If rosetta mode is not enabled we simply fetched the latest verified block
@@ -920,22 +938,31 @@ impl RosettaRequestHandler {
 
 fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Result<(), ApiError> {
     verify_network_blockchain(net_id)?;
-    let id: CanisterId = net_id
-        .try_into()
-        .map_err(|err| ApiError::InvalidNetworkId(false, format!("{err:?}").into()))?;
+    let id = CanisterId::try_from(net_id).map_err(|err| {
+        let err_msg = format!("Invalid network ID ('{net_id:?}'): {err:?}");
+        debug!("{err_msg}");
+        ApiError::InvalidNetworkId(false, Details::from(err_msg))
+    })?;
     if *canister_id != id {
-        return Err(ApiError::InvalidNetworkId(false, "unknown network".into()));
+        let err_msg = format!("Invalid canister ID (expected '{canister_id}', received '{id}')");
+        debug!("{err_msg}");
+        return Err(ApiError::InvalidNetworkId(false, Details::from(err_msg)));
     }
     Ok(())
 }
 
 fn verify_network_blockchain(net_id: &NetworkIdentifier) -> Result<(), ApiError> {
+    const EXPECTED_BLOCKCHAIN: &str = "Internet Computer";
     match net_id.blockchain.as_str() {
-        "Internet Computer" => Ok(()),
-        _ => Err(ApiError::InvalidNetworkId(
-            false,
-            "unknown blockchain".into(),
-        )),
+        EXPECTED_BLOCKCHAIN => Ok(()),
+        _ => {
+            let err_msg = format!(
+                "Unknown blockchain (expected '{EXPECTED_BLOCKCHAIN}', received '{}')",
+                net_id.blockchain
+            );
+            debug!("{err_msg}");
+            Err(ApiError::InvalidNetworkId(false, Details::from(err_msg)))
+        }
     }
 }
 

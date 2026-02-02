@@ -125,7 +125,7 @@ impl IngressManager {
         ingress_hist_reader: Box<dyn IngressHistoryReader>,
         ingress_pool: Arc<RwLock<dyn IngressPool>>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_signature_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_signature_crypto: Arc<dyn IngressSigVerifier>,
         metrics_registry: MetricsRegistry,
         subnet_id: SubnetId,
         log: ReplicaLogger,
@@ -223,6 +223,7 @@ impl IngressManager {
 pub(crate) mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
+    use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_metrics::MetricsRegistry;
@@ -231,7 +232,6 @@ pub(crate) mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
-        crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
     };
     use ic_test_utilities_logger::with_test_replica_logger;

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import time
 import typing
 from html import unescape
 from pathlib import Path
@@ -296,24 +297,30 @@ class TrivyExecutor:
         for i in range(1, TRIVY_SCAN_RETRIES + 1):
             logging.debug(f"{i}. trivy scan attempt")
             trivy_output = ProcessExecutor.execute_command(command, path.resolve(), {})
-            with open(json_file_path, "r") as file:
-                # trivy ships its DB via their github which might get rate limited resulting in errors like:
-                #
-                # init error: DB error: failed to download vulnerability DB: OCI artifact error: OCI artifact error: OCI repository error: GET https://ghcr.io/v2/aquasecurity/trivy-db/manifests/2: TOOMANYREQUESTS: retry-after: 73.254µs, allowed: 44000/minute
-                #
-                # when this happens the json file will have size 0, in this case we will retry a few times and finally fail if we don't get the DB
-                # as future improvement we could consider creating a private AWS ECR pull-through cache rule as suggested here: https://github.com/aquasecurity/trivy/discussions/7668#discussioncomment-11053681
-                # and then configuring trivy to pull the DB from there which would give us a cached version if the original source is not available
-                if os.fstat(file.fileno()).st_size == 0:
-                    error_msg = f"trivy scan attempt failed with output:\n{trivy_output}"
-                    if i >= TRIVY_SCAN_RETRIES:
-                        logging.error(error_msg)
-                        raise RuntimeError(error_msg)
+            if os.path.exists(json_file_path):
+                with open(json_file_path, "r") as file:
+                    # trivy ships its DB via their github which might get rate limited resulting in errors like:
+                    #
+                    # init error: DB error: failed to download vulnerability DB: OCI artifact error: OCI artifact error: OCI repository error: GET https://ghcr.io/v2/aquasecurity/trivy-db/manifests/2: TOOMANYREQUESTS: retry-after: 73.254µs, allowed: 44000/minute
+                    #
+                    # when this happens the json file will have size 0, in this case we will retry a few times and finally fail if we don't get the DB
+                    # as future improvement we could consider creating a private AWS ECR pull-through cache rule as suggested here: https://github.com/aquasecurity/trivy/discussions/7668#discussioncomment-11053681
+                    # and then configuring trivy to pull the DB from there which would give us a cached version if the original source is not available
+                    if os.fstat(file.fileno()).st_size == 0:
+                        error_msg = f"trivy scan attempt failed (file size 0) with output:\n{trivy_output}"
                     else:
-                        logging.debug(error_msg)
-                else:
-                    trivy_data = json.load(file)
-                    break
+                        trivy_data = json.load(file)
+                        break
+            else:
+                error_msg = f"trivy scan attempt failed ({json_file_path} doesn't exists) with output:\n{trivy_output}"
+
+            # if we end up here json_file_path does not exist or the file has size 0
+            if i >= TRIVY_SCAN_RETRIES:
+                logging.error(error_msg)
+                raise RuntimeError(error_msg)
+
+            logging.debug(error_msg)
+            time.sleep(i)
 
         file_to_hash: typing.Dict[str, str] = {}
         with open(hash_file_path, "r") as file:

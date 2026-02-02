@@ -12,11 +12,12 @@ use crate::{
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, IC_00,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
-    RenameCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -428,10 +429,7 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
             try_from_option_field(item.effective_canister_id, "Ingress::effective_canister_id")
                 .ok();
         Ok(Self {
-            source: crate::user_id_try_from_protobuf(try_from_option_field(
-                item.source,
-                "Ingress::source",
-            )?)?,
+            source: crate::user_id_try_from_option(item.source, "Ingress::source")?,
             receiver: try_from_option_field(item.receiver, "Ingress::receiver")?,
             effective_canister_id,
             method_name: item.method_name,
@@ -498,6 +496,10 @@ pub fn extract_effective_canister_id(
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
         Ok(Method::CanisterInfo) => match CanisterInfoRequest::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
+        Ok(Method::CanisterMetadata) => match CanisterMetadataRequest::decode(ingress.arg()) {
             Ok(record) => Ok(Some(record.canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },

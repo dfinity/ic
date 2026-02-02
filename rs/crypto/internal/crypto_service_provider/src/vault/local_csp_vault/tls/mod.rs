@@ -68,8 +68,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         let common_name = &node.get().to_string()[..];
 
+        let seed = self.generate_seed();
         let (cert, secret_key) = generate_tls_key_pair_der(
-            &mut *self.rng_write_lock(),
+            seed,
             common_name,
             issuance_time.as_secs_since_unix_epoch(),
             RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE as u64,
@@ -148,20 +149,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         match &secret_key {
             CspSecretKey::TlsEd25519(secret_key_der) => {
-                let secret_key_bytes =
-                    ic_crypto_internal_basic_sig_ed25519::secret_key_from_pkcs8_v1_der(
-                        &secret_key_der.bytes,
-                    )
+                let secret_key = ic_ed25519::PrivateKey::deserialize_pkcs8(secret_key_der.bytes.expose_secret())
                     .map_err(|e| {
                         CspTlsSignError::MalformedSecretKey {
                             error: format!("Failed to convert TLS secret key DER from key store to Ed25519 secret key: {e:?}")
                     }})?;
 
+                let signature = secret_key.sign_message(message);
                 let signature_bytes =
-                    ic_crypto_internal_basic_sig_ed25519::sign(message, &secret_key_bytes)
-                        .map_err(|e| CspTlsSignError::SigningFailed {
-                            error: format!("{e}"),
-                        })?;
+                    ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes(signature);
 
                 Ok(CspSignature::Ed25519(signature_bytes))
             }

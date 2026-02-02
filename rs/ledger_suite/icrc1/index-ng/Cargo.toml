@@ -41,13 +41,12 @@ ic-icrc1-ledger = { path = "../ledger" }
 ic-ledger-suite-state-machine-helpers = { path = "../../test_utils/state_machine_helpers" }
 ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
+ic-icrc3-test-ledger = { path = "../test_utils/icrc3_test_ledger" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types = { path = "../../../types/types" }
 proptest = { workspace = true }
-serde_bytes = { workspace = true }
-serde_json = { workspace = true }
 
 [features]
 default = []

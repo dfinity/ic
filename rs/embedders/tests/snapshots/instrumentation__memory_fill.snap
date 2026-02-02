@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 63
+assertion_line: 65
 expression: out
 ---
 (module

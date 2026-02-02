@@ -14,6 +14,7 @@ use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_s
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::Stream;
+use ic_replicated_state::testing::StreamTesting;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
@@ -286,9 +287,7 @@ fn out_stream(messages_begin: StreamIndex, signals_end: StreamIndex) -> Stream {
 /// with one message enqueued.
 fn out_stream_with_message(messages_begin: StreamIndex, signals_end: StreamIndex) -> Stream {
     let mut stream = out_stream(messages_begin, signals_end);
-    stream.push(ic_types::messages::RequestOrResponse::Request(
-        RequestBuilder::new().build().into(),
-    ));
+    stream.push(RequestBuilder::new().build().into());
     stream
 }
 

@@ -26,14 +26,11 @@ Success::
 end::catalog[] */
 
 use ic_base_types::SubnetId;
-use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
-use ic_consensus_system_test_utils::{
-    rw_message::{
-        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-        store_message,
-    },
-    set_sandbox_env_vars,
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+    store_message,
 };
+use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
 use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -116,8 +113,7 @@ fn subnet_splitting_test(env: TestEnv) {
 
     let upload_node_destination = prepare_destination_subnet(&destination_subnet, &logger);
 
-    let recovery_dir = get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
 
     //
     // 2. Do subnet splitting
@@ -127,14 +123,18 @@ fn subnet_splitting_test(env: TestEnv) {
         "Starting splitting of subnet {}", source_subnet.subnet_id,
     );
 
+    let ssh_priv_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    let readonly_pub_key =
+        file_sync_helper::read_file(&env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME))
+            .expect("Couldn't read public key");
+
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: get_nns_node(&env.topology_snapshot()).get_public_url(),
         replica_version: Some(initial_replica_version.clone()),
-        key_file: Some(
-            env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-                .join(SSH_USERNAME),
-        ),
+        admin_key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: false,
@@ -143,12 +143,8 @@ fn subnet_splitting_test(env: TestEnv) {
     let subnet_splitting_args = SubnetSplittingArgs {
         source_subnet_id: source_subnet.subnet_id,
         destination_subnet_id: destination_subnet.subnet_id,
-        pub_key: Some(
-            file_sync_helper::read_file(
-                &env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME),
-            )
-            .expect("Couldn't read public key"),
-        ),
+        readonly_pub_key: Some(readonly_pub_key),
+        readonly_key_file: Some(ssh_priv_key_path),
         keep_downloaded_state: Some(true),
         download_node_source: Some(download_node_source.get_ip_addr()),
         upload_node_source: Some(upload_node_source.get_ip_addr()),
@@ -332,11 +328,13 @@ fn verify_common(
     );
 
     info!(logger, "Verifying that the subnet is healthy");
+    let new_msg = "New message in the canister!";
     assert_subnet_is_healthy(
         &nodes,
         replica_version,
         canister_id,
         canister_message,
+        new_msg,
         logger,
     );
     info!(logger, "Success!");

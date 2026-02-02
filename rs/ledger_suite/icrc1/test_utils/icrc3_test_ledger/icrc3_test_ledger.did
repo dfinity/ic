@@ -125,9 +125,26 @@ type MetadataValue = variant {
   Blob : blob
 };
 
+type ArchiveBlocksArgs = record {
+  archive_id : principal;
+  num_blocks : nat64
+};
+
+type BlockWithId = record {
+  id : nat;
+  block : ICRC3Value
+};
+
+type ArchiveBlocksResult = variant {
+    Ok : nat64;
+    Err : text;
+};
+
 service : () -> {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
+
+    add_block_with_id : (BlockWithId) -> (AddBlockResult);
 
     icrc1_supported_standards : () -> (vec StandardRecord) query;
 
@@ -141,4 +158,8 @@ service : () -> {
     get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;
 
     icrc1_metadata : () -> (vec record { text; MetadataValue }) query;    
+
+    set_icrc3_enabled : (bool) -> ();
+
+    archive_blocks : (ArchiveBlocksArgs) -> (ArchiveBlocksResult);
 }

@@ -38,7 +38,7 @@ create_test_img(
 # Postprocess SetupOS mainnet into a "test" image for use in nested tests
 create_test_img(
     name = "mainnet-latest-test-img",
-    source = "@mainnet_latest_setupos_disk_image//file",
+    source = "@mainnet_latest_hostos_images//:disk-img.tar.zst",
     tags = [
         "manual",
         "no-cache",
@@ -52,7 +52,7 @@ create_test_img(
 # Postprocess SetupOS mainnet dev into a "test" image for use in nested tests
 create_test_img(
     name = "mainnet-latest-test-img-dev",
-    source = "@mainnet_latest_setupos_disk_image_dev//file",
+    source = "@mainnet_latest_hostos_images_dev//:disk-img.tar.zst",
     tags = [
         "manual",
         "no-cache",

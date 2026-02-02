@@ -1,6 +1,6 @@
 use candid::Principal;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::get_dependency_path;
+use ic_system_test_driver::driver::test_env_api::get_dependency_path_from_env;
 use slog::{Logger, info};
 use std::fs;
 use std::io::Write;
@@ -61,7 +61,7 @@ pub enum BackendType {
 impl DfxCommandContext {
     pub fn new(env: &TestEnv) -> Self {
         let log = env.logger();
-        let path = fs::canonicalize(get_dependency_path("external/dfx/dfx")).unwrap();
+        let path = fs::canonicalize(get_dependency_path_from_env("DFX_PATH")).unwrap();
         let home_dir = fs::canonicalize(env.base_path()).unwrap();
         let working_dir = home_dir.clone();
         Self {

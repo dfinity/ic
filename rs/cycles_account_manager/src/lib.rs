@@ -15,13 +15,13 @@
 
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
+use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
 use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, MessageMemoryUsage, SystemState,
+    CanisterState, SystemState,
     canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
 };
 use ic_types::{
@@ -29,7 +29,8 @@ use ic_types::{
     PrincipalId, SubnetId,
     batch::CanisterCyclesCostSchedule,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
-    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Request, Response, SignedIngress},
+    canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -46,7 +47,7 @@ const DAY: Duration = Duration::from_secs(SECONDS_PER_DAY as u64);
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 310;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 324;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -330,10 +331,7 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> [(CyclesUseCase, Cycles); 3] {
-        let memory = match memory_allocation {
-            MemoryAllocation::Reserved(bytes) => bytes,
-            MemoryAllocation::BestEffort => memory_usage,
-        };
+        let memory = memory_allocation.allocated_bytes(memory_usage);
         [
             (
                 CyclesUseCase::Memory,
@@ -505,7 +503,6 @@ impl CyclesAccountManager {
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
-        canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
@@ -517,7 +514,7 @@ impl CyclesAccountManager {
             system_state.memory_allocation,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
-            canister_compute_allocation,
+            system_state.compute_allocation,
             subnet_size,
             cost_schedule,
             system_state.reserved_balance(),
@@ -545,14 +542,12 @@ impl CyclesAccountManager {
     ) -> Result<(), CanisterOutOfCyclesError> {
         let memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
-        let compute_allocation = canister.compute_allocation();
         let cycles = self.execution_cost(amount, subnet_size, cost_schedule, execution_mode);
         let reveal_top_up = canister.controllers().contains(sender);
         self.consume_cycles(
             &mut canister.system_state,
             memory_usage,
             message_memory,
-            compute_allocation,
             cycles,
             subnet_size,
             cost_schedule,
@@ -982,13 +977,13 @@ impl CyclesAccountManager {
         &self,
         log: &ReplicaLogger,
         error_counter: &IntCounter,
-        response: &Response,
+        response: &Payload,
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
         let max_expected_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
-        let transmitted_bytes = response.payload_size_bytes().get();
+        let transmitted_bytes = response.size_bytes().get();
         debug_assert!(transmitted_bytes <= max_expected_bytes);
         if max_expected_bytes < transmitted_bytes {
             error_counter.inc();
@@ -1026,7 +1021,6 @@ impl CyclesAccountManager {
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
-        canister_compute_allocation: ComputeAllocation,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         reveal_top_up: bool,
@@ -1036,7 +1030,7 @@ impl CyclesAccountManager {
             system_state.memory_allocation,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
-            canister_compute_allocation,
+            system_state.compute_allocation,
             subnet_size,
             cost_schedule,
             system_state.reserved_balance(),
@@ -1092,7 +1086,7 @@ impl CyclesAccountManager {
                 };
 
                 self.verify_cycles_balance_with_threshold(
-                    system_state.canister_id,
+                    system_state.canister_id(),
                     effective_cycles_balance,
                     cycles,
                     threshold,
@@ -1337,6 +1331,33 @@ impl CyclesAccountManager {
         }
     }
 
+    pub fn http_request_fee_v2(
+        &self,
+        request_size: NumBytes,
+        http_roundtrip_time: Duration,
+        raw_response_size: NumBytes,
+        transform: NumInstructions,
+        transformed_response_size: NumBytes,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => {
+                let n = subnet_size as u64;
+                (Cycles::new(1_000_000)
+                    + Cycles::new(50) * request_size.get()
+                    + Cycles::new(140_000) * n
+                    + Cycles::new(800) * n * n
+                    + Cycles::new(50) * raw_response_size.get()
+                    + Cycles::new(300) * http_roundtrip_time.as_millis() as u64
+                    + Cycles::new(transform.get() as u128 / 13)
+                    + (Cycles::new(10) * n + Cycles::new(650)) * transformed_response_size.get())
+                    * n
+            }
+        }
+    }
+
     pub fn http_request_fee_beta(
         &self,
         request_size: NumBytes,
@@ -1369,6 +1390,34 @@ impl CyclesAccountManager {
     /// when the canister doesn't have it set in the settings.
     pub fn default_reserved_balance_limit(&self) -> Cycles {
         self.config.default_reserved_balance_limit
+    }
+
+    pub fn fetch_canister_logs_fee(
+        &self,
+        response_size: NumBytes,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => {
+                (self.config.fetch_canister_logs_base_fee
+                    + self.config.fetch_canister_logs_per_byte_fee * response_size.get())
+                    * subnet_size
+            }
+        }
+    }
+
+    pub fn max_fetch_canister_logs_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        self.fetch_canister_logs_fee(
+            NumBytes::new(MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64),
+            subnet_size,
+            cost_schedule,
+        )
     }
 }
 

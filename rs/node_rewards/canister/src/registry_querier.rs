@@ -1,3 +1,5 @@
+use crate::chrono_utils::last_unix_timestamp_nanoseconds;
+use chrono::NaiveDate;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
@@ -11,7 +13,7 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_subnet_list_record_key,
 };
 use ic_types::registry::RegistryClientError;
-use rewards_calculation::types::{DayUtc, Region, RewardableNode, UnixTsNanos};
+use rewards_calculation::types::{Region, RewardableNode, UnixTsNanos};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -32,7 +34,7 @@ impl RegistryQuerier {
     }
 
     ///  Returns the latest registry version corresponding to the given timestamp.
-    pub fn version_for_timestamp(&self, ts: UnixTsNanos) -> Option<RegistryVersion> {
+    pub fn version_for_timestamp_nanoseconds(&self, ts: UnixTsNanos) -> Option<RegistryVersion> {
         self.registry_client
             .timestamp_to_versions_map()
             .range(..=ts)
@@ -42,22 +44,27 @@ impl RegistryQuerier {
     }
 
     ///  Returns a list of all subnets present in the registry at the specified version.
-    pub fn subnets_list(&self, version: RegistryVersion) -> Vec<SubnetId> {
+    pub fn subnets_list(&self, version: RegistryVersion) -> Result<Vec<SubnetId>, String> {
         let key = make_subnet_list_record_key();
-        let record = self
+        let record_bytes = self
             .registry_client
             .get_value(key.as_str(), version)
-            .expect("Failed to get SubnetListRecord")
-            .map(|v| {
-                SubnetListRecord::decode(v.as_slice()).expect("Failed to decode SubnetListRecord")
-            })
-            .unwrap_or_default();
+            .map_err(|e| format!("Failed to get SubnetListRecord: {:?}", e))?;
+
+        let record = if let Some(bytes) = record_bytes {
+            SubnetListRecord::decode(bytes.as_slice())
+                .map_err(|e| format!("Failed to decode SubnetListRecord: {:?}", e))?
+        } else {
+            SubnetListRecord::default()
+        };
 
         record
             .subnets
             .into_iter()
             .map(|s| {
-                SubnetId::from(PrincipalId::try_from(s.as_slice()).expect("Invalid subnet ID"))
+                let principal = PrincipalId::try_from(s.as_slice())
+                    .map_err(|e| format!("Invalid subnet ID: {:?}", e))?;
+                Ok(SubnetId::from(principal))
             })
             .collect()
     }
@@ -82,12 +89,12 @@ impl RegistryQuerier {
     /// version of that day.
     pub fn get_rewardable_nodes_per_provider(
         &self,
-        day_utc: &DayUtc,
+        date: &NaiveDate,
         provider_filter: Option<&PrincipalId>,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, Vec<RewardableNode>> = BTreeMap::new();
         let registry_version = self
-            .version_for_timestamp(day_utc.unix_timestamp_at_day_end_nanoseconds())
+            .version_for_timestamp_nanoseconds(last_unix_timestamp_nanoseconds(date))
             .unwrap();
         let nodes = self.nodes_in_version(registry_version)?;
 

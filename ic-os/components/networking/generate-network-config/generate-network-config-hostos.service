@@ -8,7 +8,7 @@ Before=systemd-networkd.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/hostos_tool generate-network-config
+ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/hostos_tool generate-network-config
 StandardOutput=journal+console
 StandardError=journal+console
 Restart=on-failure

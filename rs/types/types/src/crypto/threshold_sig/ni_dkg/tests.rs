@@ -7,6 +7,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
     Dealing, EncryptedShares, NUM_CHUNKS, NUM_ZK_REPETITIONS, PublicCoefficientsBytes, ZKProofDec,
     ZKProofShare,
 };
+use ic_crypto_test_utils_ni_dkg::dummy_dealing;
 use ic_management_canister_types_private::VetKdCurve;
 use std::str::FromStr;
 
@@ -48,7 +49,7 @@ fn should_correctly_convert_ni_dkg_transcript_to_csp_dkg_transcript() {
 // message should be well readable and in particular contain hex encodings where
 // applicable.
 fn should_correctly_format_dealing_display_message() {
-    let dealing = NiDkgDealing::dummy_dealing_for_tests(0);
+    let dealing = dummy_dealing(0);
 
     let display_text = format!("{dealing}");
 
@@ -118,7 +119,7 @@ fn should_correctly_format_dealing_display_message() {
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)]] }, \
-          zk_proof_decryptability: ZKProofDecHelper { first_move_y0: G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
+          zk_proof_decryptability: ZKProofDec { first_move_y0: G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           first_move_b: [G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \

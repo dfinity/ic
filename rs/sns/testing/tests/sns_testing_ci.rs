@@ -64,6 +64,7 @@ async fn prepare_network_for_test(
         sns: Some(IcpFeaturesConfig::DefaultConfig),
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
     };
     let current_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -153,7 +154,7 @@ async fn test_sns_testing_dev_nns_neuron_id() {
 
     // The following NNS neuron ID is hard-coded in sns-testing README.
     // If the test fails, then the README must be updated.
-    assert_eq!(dev_nns_neuron_id.id, 5562256181269567345);
+    assert_eq!(dev_nns_neuron_id.id, 3912484856864073044);
 }
 
 #[tokio::test]

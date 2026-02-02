@@ -10,9 +10,9 @@ DEPENDENCIES = [
     "//rs/bitcoin/consensus",
     "//rs/config",
     "//rs/consensus/certification",
+    "//rs/consensus/cup_utils",
     "//rs/crypto",
     "//rs/crypto/sha2",
-    "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/http_endpoints/async_utils",
     "//rs/http_endpoints/metrics",
@@ -21,7 +21,6 @@ DEPENDENCIES = [
     "//rs/http_endpoints/xnet",
     "//rs/https_outcalls/client",
     "//rs/interfaces",
-    "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/messaging",
@@ -121,10 +120,7 @@ rust_library(
 
 rust_binary(
     name = "replica",
-    srcs = [
-        "src/jemalloc_metrics.rs",
-        "src/main.rs",
-    ],
+    srcs = glob(["bin/replica/**"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + NONMALICIOUS_DEPENDENCIES + [":replica_lib"],
@@ -133,10 +129,7 @@ rust_binary(
 rust_binary(
     name = "malicious_replica",
     testonly = True,
-    srcs = [
-        "src/jemalloc_metrics.rs",
-        "src/main.rs",
-    ],
+    srcs = glob(["bin/replica/**"]),
     aliases = ALIASES,
     crate_features = ["malicious_code"],
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -148,9 +141,7 @@ rust_test(
     aliases = ALIASES,
     crate = ":replica",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "test_macos",
-    ],
+    tags = [],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -160,9 +151,7 @@ rust_test_suite(
     aliases = ALIASES,
     data = [":replica"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "test_macos",
-    ],
+    tags = [],
     deps = [":replica_lib"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

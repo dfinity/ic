@@ -1,0 +1,106 @@
+name: Kickoff
+
+on:
+  merge_group:
+  push:
+    branches:
+      - master
+      - 'dev-gh-*'
+  pull_request:
+    branches-ignore:
+      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci-main:
+    name: CI Main
+    # run on all events except for forked PRs
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/ci-main.yml
+    secrets: inherit
+    with:
+      commit-sha: ${{ github.sha }}
+    permissions:
+      contents: read
+      pull-requests: read
+
+  ci-pr-only:
+    name: CI PR Only
+    # only run on PRs and not forked PRs
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/ci-pr-only.yml
+    secrets: inherit
+    with:
+      commit-sha: ${{ github.sha }}
+    permissions:
+      contents: read
+      pull-requests: write
+
+
+## Explanation on the below jobs for posting required checks:
+## For accepting external contributions we need to trigger the workflow from `workflow_dispatch`, not the pull_request directly
+## We use status checks to post the result back to the PR and mark those checks as "required"
+
+  post-required-check-status-ci-main:
+    name: CI Main Required Check Status
+    runs-on: ubuntu-latest
+    needs: [ci-main]
+    # only run this job on pull requests or merge queues, but run it regardless of the previous result
+    if: (success() || failure()) && ( github.event_name == 'pull_request' || github.event_name == 'merge_group' )
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/post-commit-status
+        with:
+          # on pull requests the github.sha is the merge commit - here we use the head commit so that it will show up on PRs
+          commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          run-result: ${{ needs.ci-main.result }}
+          name: ci-main-status
+
+  post-required-check-status-ci-pr-only:
+    name: CI PR Only Post Required Check Status
+    runs-on: ubuntu-latest
+    needs: [ci-pr-only]
+    if: (success() || failure()) && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/post-commit-status
+        with:
+          # on pull requests the github.sha is the merge commit - here we use the head commit so that it will show up on PRs
+          commit-sha: ${{ github.event.pull_request.head.sha }}
+          run-result: ${{ needs.ci-pr-only.result }}
+          name: ci-pr-only-status
+
+# Because ci-pr-only is not run on merge groups, always mark the ci-pr-only-status as a success
+# This is a hack to get around the fact that status checks are still required for the merge queue, even if the workflow itself is not run
+  post-required-check-status-ci-pr-only-merge-queue:
+    name: Post Required Check Status Merge Queue
+    runs-on: ubuntu-latest
+    if: github.event_name == 'merge_group'
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/post-commit-status
+        with:
+          commit-sha: ${{ github.sha }}
+          run-result: 'success'
+          name: ci-pr-only-status

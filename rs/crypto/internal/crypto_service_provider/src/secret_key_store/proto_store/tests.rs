@@ -280,8 +280,7 @@ fn should_deserialize_all_existing_secret_key_stores() {
     for version in SecretKeyStoreVersion::all_versions() {
         let (_temp_dir, secret_key_store) =
             open_existing_secret_key_store_in_temp_dir(&version, CryptoMetrics::none(), None);
-        let guard = secret_key_store.keys.read();
-        assert_eq!(guard.keys().len(), 5);
+        assert_eq!(secret_key_store.keys.len(), 5);
 
         let test_vecs = vec![
             TestVector::mega_encryption(),
@@ -351,11 +350,11 @@ fn should_have_scope_for_mega_private_key_that_had_no_scope_before_migration() {
         CryptoMetrics::none(),
         None,
     );
-    let (_csp_key, scope) = with_read_lock(&secret_key_store.keys, |keys| {
-        keys.get(&TestVector::mega_encryption().key_id)
-            .map(|(csp_key, scope)| (csp_key.to_owned(), scope.to_owned()))
-    })
-    .expect("missing MEGa private key");
+    let (_csp_key, scope) = secret_key_store
+        .keys
+        .get(&TestVector::mega_encryption().key_id)
+        .map(|(csp_key, scope)| (csp_key.to_owned(), scope.to_owned()))
+        .expect("missing MEGa private key");
 
     assert_eq!(scope, Some(IDKG_MEGA_SCOPE));
 }
@@ -365,8 +364,7 @@ fn should_be_idempotent_when_opening_secret_key_store() {
     for version in SecretKeyStoreVersion::all_versions() {
         let (temp_dir, secret_key_store) =
             open_existing_secret_key_store_in_temp_dir(&version, CryptoMetrics::none(), None);
-        let secret_keys_after_first_opening =
-            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+        let secret_keys_after_first_opening = secret_key_store.keys.clone();
 
         let secret_key_store = ProtoSecretKeyStore::open(
             temp_dir.path(),
@@ -379,8 +377,7 @@ fn should_be_idempotent_when_opening_secret_key_store() {
             None,
             Arc::new(CryptoMetrics::none()),
         );
-        let secret_keys_after_second_opening =
-            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+        let secret_keys_after_second_opening = secret_key_store.keys.clone();
 
         assert_eq!(
             secret_keys_after_first_opening,
@@ -571,11 +568,11 @@ mod retain {
         assert_eq!(key_store.retain(|_, _| true, selected_scope), Ok(()));
         assert_eq!(key_store.retain(|_, _| false, selected_scope), Ok(()));
         assert_eq!(
-            key_store.retain(move |id, _| (id == &id_to_retain), selected_scope),
+            key_store.retain(move |id, _| id == &id_to_retain, selected_scope),
             Ok(())
         );
         assert_eq!(
-            key_store.retain(move |_, value| (value == &value_to_retain), selected_scope),
+            key_store.retain(move |_, value| value == &value_to_retain, selected_scope),
             Ok(())
         );
     }
@@ -594,7 +591,7 @@ mod retain {
         let initial_modified_time = file_modified_time_in_nanoseconds(&file);
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id), selected_scope),
+            key_store.retain(move |id, _| id == &key_id, selected_scope),
             Ok(())
         );
         assert!(key_store.contains(&key_id));
@@ -618,7 +615,7 @@ mod retain {
             .expect("insert should succeed");
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id_to_retain), selected_scope),
+            key_store.retain(move |id, _| id == &key_id_to_retain, selected_scope),
             Ok(())
         );
         assert!(!key_store.contains(&key_id));
@@ -639,7 +636,7 @@ mod retain {
 
         assert_eq!(
             key_store.retain(
-                move |_, value| (value == &key_value_to_retain),
+                move |_, value| value == &key_value_to_retain,
                 selected_scope
             ),
             Ok(())
@@ -661,7 +658,7 @@ mod retain {
             .expect("insert should succeed");
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id), different_scope),
+            key_store.retain(move |id, _| id == &key_id, different_scope),
             Ok(())
         );
         assert!(key_store.contains(&key_id));
@@ -760,10 +757,10 @@ mod retain_would_modify_keystore {
         assert!(!key_store.retain_would_modify_keystore(|_, _| false, selected_scope));
         assert!(
             !key_store
-                .retain_would_modify_keystore(move |id, _| (id == &id_to_retain), selected_scope)
+                .retain_would_modify_keystore(move |id, _| id == &id_to_retain, selected_scope)
         );
         assert!(!key_store.retain_would_modify_keystore(
-            move |_, value| (value == &value_to_retain),
+            move |_, value| value == &value_to_retain,
             selected_scope
         ));
     }
@@ -782,10 +779,8 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(
-            key_store.retain_would_modify_keystore(
-                move |id, _| (id == &key_id_to_retain),
-                selected_scope
-            )
+            key_store
+                .retain_would_modify_keystore(move |id, _| id == &key_id_to_retain, selected_scope)
         );
     }
 
@@ -803,7 +798,7 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(key_store.retain_would_modify_keystore(
-            move |_, value| (value == &key_value_to_retain),
+            move |_, value| value == &key_value_to_retain,
             selected_scope
         ));
     }
@@ -822,7 +817,7 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(
-            !key_store.retain_would_modify_keystore(move |id, _| (id == &key_id), different_scope)
+            !key_store.retain_would_modify_keystore(move |id, _| id == &key_id, different_scope)
         );
     }
 

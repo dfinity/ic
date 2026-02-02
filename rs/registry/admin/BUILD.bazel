@@ -12,10 +12,16 @@ rust_library(
         # Keep sorted.
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/protobuf",
+        "//rs/registry/client",
+        "//rs/registry/keys",
         "//rs/registry/local_store",
+        "//rs/registry/nns_data_provider_wrappers",
+        "//rs/registry/routing_table",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:prost",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
     ],
 )
 
@@ -133,7 +139,7 @@ rust_test(
         "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-        "IC_ADMIN_BIN": "$(rootpath //rs/registry/admin:ic-admin)",
+        "IC_ADMIN_PATH": "$(rootpath //rs/registry/admin:ic-admin)",
     },
     deps = [
         # Keep sorted.

@@ -1,0 +1,9 @@
+load("@rules_cc//cc:cc_import.bzl", "cc_import")
+
+# Use libvirt from the host environment
+cc_import(
+    name = "libvirt",
+    hdrs = glob(["include/libvirt/*.h"]),
+    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
+    visibility = ["//visibility:public"],
+)

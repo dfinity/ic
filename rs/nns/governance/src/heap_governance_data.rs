@@ -2,7 +2,7 @@ use crate::{
     neuron::Neuron,
     pb::v1::{
         Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics,
-        NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
+        NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent, Topic,
         XdrConversionRate as XdrConversionRatePb,
         governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
     },
@@ -35,6 +35,7 @@ pub struct HeapGovernanceData {
     pub spawning_neurons: Option<bool>,
     pub xdr_conversion_rate: XdrConversionRate,
     pub restore_aging_summary: Option<RestoreAgingSummary>,
+    pub topic_of_garbage_collected_proposals: HashMap<u64, Topic>,
 }
 
 /// Internal representation for `XdrConversionRatePb`.
@@ -203,6 +204,7 @@ pub fn initialize_governance(
         spawning_neurons,
         xdr_conversion_rate,
         restore_aging_summary,
+        topic_of_garbage_collected_proposals: HashMap::new(),
     };
 
     // Finally, return the result.
@@ -241,6 +243,7 @@ pub fn split_governance_proto(
         spawning_neurons,
         xdr_conversion_rate,
         restore_aging_summary,
+        topic_of_garbage_collected_proposals,
         rng_seed,
     } = governance_proto;
 
@@ -280,6 +283,10 @@ pub fn split_governance_proto(
 
             xdr_conversion_rate,
             restore_aging_summary,
+            topic_of_garbage_collected_proposals: topic_of_garbage_collected_proposals
+                .into_iter()
+                .map(|(k, v)| (k, Topic::try_from(v).unwrap_or(Topic::Unspecified)))
+                .collect(),
         },
         rng_seed,
     )
@@ -316,6 +323,7 @@ pub fn reassemble_governance_proto(
 
         xdr_conversion_rate,
         restore_aging_summary,
+        topic_of_garbage_collected_proposals,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
@@ -342,6 +350,10 @@ pub fn reassemble_governance_proto(
 
         xdr_conversion_rate: Some(xdr_conversion_rate),
         restore_aging_summary,
+        topic_of_garbage_collected_proposals: topic_of_garbage_collected_proposals
+            .into_iter()
+            .map(|(k, v)| (k, v as i32))
+            .collect(),
         rng_seed: rng_seed.map(|seed| seed.to_vec()),
     }
 }
@@ -380,6 +392,7 @@ mod tests {
                 xdr_permyriad_per_icp: Some(50_000),
             }),
             restore_aging_summary: None,
+            topic_of_garbage_collected_proposals: hashmap! { 1 => Topic::Unspecified as i32 },
             rng_seed: Some(vec![1u8; 32]),
         }
     }

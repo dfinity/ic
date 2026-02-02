@@ -14,7 +14,7 @@ use ic_types::{
 use std::sync::Arc;
 
 /// Random beacon maker is responsible for creating beacon shares
-pub struct RandomBeaconMaker {
+pub(crate) struct RandomBeaconMaker {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,

@@ -143,8 +143,12 @@ impl NeuronStore {
             }
 
             let voting_power = neuron.deciding_voting_power(voting_power_economics, now_seconds);
-            total_deciding_voting_power += voting_power as u128;
-            total_potential_voting_power += neuron.potential_voting_power(now_seconds) as u128;
+            // We don't handle overflow here, as in `get_voting_power_as_u64` below,
+            // the input arguments bigger than u64::MAX will result in an error.
+            total_deciding_voting_power =
+                total_deciding_voting_power.saturating_add(voting_power as u128);
+            total_potential_voting_power = total_potential_voting_power
+                .saturating_add(neuron.potential_voting_power(now_seconds) as u128);
             voting_power_map.insert(neuron.id().id, voting_power);
         };
 

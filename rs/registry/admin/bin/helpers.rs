@@ -5,13 +5,14 @@ use crate::{
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_protobuf::registry::subnet::v1::{
-    SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
+use ic_protobuf::registry::{
+    node::v1::NodeRecord as NodeRecordPb,
+    subnet::v1::{SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb},
 };
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_transport::Error;
-use ic_types::{PrincipalId, SubnetId};
+use ic_types::{NodeId, PrincipalId, SubnetId};
 use indexmap::IndexMap;
 use prost::Message;
 use std::{convert::TryFrom, fs::read_to_string, path::PathBuf};
@@ -45,6 +46,18 @@ pub(crate) async fn get_subnet_record_with_details(
     get_subnet_record(registry_canister, subnet_id)
         .await
         .with_node_details(all_nodes_with_details)
+}
+
+pub(crate) async fn get_node_record_pb(
+    registry_canister: &RegistryCanister,
+    node_id: NodeId,
+) -> NodeRecordPb {
+    let registry_answer = registry_canister
+        .get_value_with_update(make_node_record_key(node_id).into_bytes(), None)
+        .await;
+
+    let (bytes, _) = registry_answer.unwrap();
+    NodeRecordPb::decode(&bytes[..]).expect("Error decoding NodeRecord from registry.")
 }
 
 /// Extracts the summary from either a file or from a string.

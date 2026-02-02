@@ -1,10 +1,9 @@
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_ledger_core::block::{BlockIndex, BlockType};
-use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::{
-    AccountIdentifier, ArchiveInfo, Block, GetBlocksArgs, MAX_BLOCKS_PER_REQUEST,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, TransferArgs,
+    AccountIdentifier, ArchiveInfo, Block, GetBlocksArgs, LEDGER_CANISTER_ID,
+    MAX_BLOCKS_PER_REQUEST, QueryBlocksResponse, QueryEncodedBlocksResponse, TransferArgs,
 };
 use icp_ledger::{BinaryAccountBalanceArgs, TransferError};
 use pocket_ic::PocketIc;

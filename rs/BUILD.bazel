@@ -27,11 +27,6 @@
 # Can depend on: any other package.
 #
 # Dependants: none.
-#   Exceptions:
-#       //rs/pocket_ic_server:__pkg__ depends on
-#           //rs/tests/research:ic-hs
-#           //rs/tests/httpbin-rs:httpbin
-#           //rs/tests/research:spec_compliance
 package_group(
     name = "system-tests-pkg",
     packages = ["//rs/tests/..."],

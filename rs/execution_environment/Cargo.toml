@@ -43,7 +43,7 @@ ic-vetkeys = { workspace = true }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
-more-asserts = "0.3.1"
+more-asserts = { workspace = true }
 num-rational = "0.2.2"
 num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
@@ -51,12 +51,10 @@ prometheus = { workspace = true }
 rand = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
-threadpool = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
@@ -67,6 +65,7 @@ assert_matches = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 execution-environment-bench = { path = "benches/lib" }
+flate2 = { workspace = true }
 ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
@@ -81,12 +80,15 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 itertools = { workspace = true }
 libflate = { workspace = true }
+lazy_static = { workspace = true }
 maplit = "1.0.2"
 proptest = { workspace = true }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 rstest = { workspace = true }
+serde_bytes = { workspace = true }
 test-strategy = "0.3.1"
 wat = { workspace = true }
+wirm = { workspace = true }
 
 [build-dependencies]
 escargot = "0.5"

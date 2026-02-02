@@ -111,6 +111,60 @@ pub mod register_extension_response {
     PartialEq,
     ::prost::Message,
 )]
+pub struct CleanUpFailedRegisterExtensionRequest {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CleanUpFailedRegisterExtensionResponse {
+    #[prost(
+        oneof = "clean_up_failed_register_extension_response::Result",
+        tags = "1, 2"
+    )]
+    pub result: ::core::option::Option<clean_up_failed_register_extension_response::Result>,
+}
+/// Nested message and enum types in `CleanUpFailedRegisterExtensionResponse`.
+pub mod clean_up_failed_register_extension_response {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Ok {}
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Ok(Ok),
+        #[prost(message, tag = "2")]
+        Err(super::CanisterCallError),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct RegisterDappCanisterRequest {
     #[prost(message, optional, tag = "1")]
     pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,

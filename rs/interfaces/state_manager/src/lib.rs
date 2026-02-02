@@ -227,8 +227,11 @@ pub trait StateManager: StateReader {
     /// state and heights strictly less than the specified `height` can be removed, except
     /// for any heights provided in `extra_heights_to_keep`, which will still be retained.
     ///
+    /// The heights in `extra_heights_to_keep` only apply to this call.
+    ///
     /// Note that:
-    ///  * The initial state (height = 0) cannot be removed.
+    ///  * The initial state (height = 0) is not removed.
+    ///  * The latest state is not removed.
     ///  * Some states matching the removal criteria might be kept alive.  For
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.
@@ -238,6 +241,10 @@ pub trait StateManager: StateReader {
         height: Height,
         extra_heights_to_keep: &BTreeSet<Height>,
     );
+
+    /// Notify the state manager that it could skip cloning and hashing the state
+    /// at heights strictly less than the specified `height`.
+    fn update_fast_forward_height(&self, height: Height);
 
     /// Commits the `state` at given `height`, limits the certification to
     /// `scope`. The `state` must be the mutable state obtained via a call to
@@ -365,6 +372,10 @@ pub trait StateReader: Send + Sync {
     /// height.  If nothing was committed so far, returns an empty valid
     /// state.
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>>;
+
+    /// Returns a shared object of the state at the latest certified block
+    /// height. If nothing was certified so far, returns `None`.
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>>;
 
     /// Returns the height of the latest state available.
     fn latest_state_height(&self) -> Height;

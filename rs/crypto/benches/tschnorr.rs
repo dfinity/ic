@@ -3,9 +3,9 @@ use criterion::measurement::Measurement;
 use criterion::{BenchmarkGroup, Criterion, SamplingMode, criterion_group, criterion_main};
 use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
-    generate_tschnorr_protocol_inputs, random_crypto_component_not_in_receivers,
-    schnorr_sig_share_from_each_receiver,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, ThresholdSchnorrSigInputsOwned,
+    generate_key_transcript, generate_tschnorr_protocol_inputs,
+    random_crypto_component_not_in_receivers, schnorr_sig_share_from_each_receiver,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner};
@@ -72,12 +72,12 @@ fn bench_create_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                     test_case.alg,
                     rng,
                 );
-                signer.load_tschnorr_sig_transcripts(&inputs);
+                signer.load_tschnorr_sig_transcripts(&inputs.as_ref());
                 inputs
             },
             |inputs| {
                 signer
-                    .create_sig_share(inputs)
+                    .create_sig_share(&ThresholdSchnorrSigInputsOwned::as_ref(inputs))
                     .expect("failed to create signature share")
             },
             SmallInput,
@@ -115,9 +115,9 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                 let signer = env
                     .nodes
                     .random_filtered_by_receivers(&key_transcript.receivers, rng);
-                signer.load_tschnorr_sig_transcripts(&inputs);
+                signer.load_tschnorr_sig_transcripts(&inputs.as_ref());
                 let sig_share = signer
-                    .create_sig_share(&inputs)
+                    .create_sig_share(&inputs.as_ref())
                     .expect("failed to create signature share");
                 let verifier = env
                     .nodes
@@ -127,7 +127,11 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
             |(verifier, signer_id, inputs, sig_share)| {
                 let signer = *signer_id;
                 verifier
-                    .verify_sig_share(signer, inputs, sig_share)
+                    .verify_sig_share(
+                        signer,
+                        &ThresholdSchnorrSigInputsOwned::as_ref(inputs),
+                        sig_share,
+                    )
                     .expect("failed to verify signature share")
             },
             SmallInput,
@@ -163,12 +167,12 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
                     test_case.alg,
                     rng,
                 );
-                let sig_shares = schnorr_sig_share_from_each_receiver(&env, &inputs);
+                let sig_shares = schnorr_sig_share_from_each_receiver(&env, &inputs.as_ref());
                 (inputs, sig_shares)
             },
             |(inputs, sig_shares)| {
                 combiner
-                    .combine_sig_shares(inputs, sig_shares)
+                    .combine_sig_shares(&ThresholdSchnorrSigInputsOwned::as_ref(inputs), sig_shares)
                     .expect("failed to combine signature shares")
             },
             SmallInput,
@@ -205,15 +209,15 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
                     test_case.alg,
                     rng,
                 );
-                let sig_shares = schnorr_sig_share_from_each_receiver(&env, &inputs);
+                let sig_shares = schnorr_sig_share_from_each_receiver(&env, &inputs.as_ref());
                 let signature = combiner
-                    .combine_sig_shares(&inputs, &sig_shares)
+                    .combine_sig_shares(&inputs.as_ref(), &sig_shares)
                     .expect("failed to combine signature shares");
                 (inputs, signature)
             },
             |(inputs, signature)| {
                 verifier
-                    .verify_combined_sig(inputs, signature)
+                    .verify_combined_sig(&ThresholdSchnorrSigInputsOwned::as_ref(inputs), signature)
                     .expect("failed to verify combined signature")
             },
             SmallInput,

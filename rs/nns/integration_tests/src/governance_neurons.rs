@@ -16,12 +16,12 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::{
-    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest, ManageNeuron,
+    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Motion, Neuron,
     NeuronState, ProposalActionRequest, Topic,
     governance_error::ErrorType,
     list_neurons::NeuronSubaccount,
-    manage_neuron::{Command, DisburseMaturity, Merge, NeuronIdOrSubaccount, Spawn},
+    manage_neuron::{DisburseMaturity, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{self, Command as CommandResponse},
     neuron::DissolveState,
 };
@@ -33,9 +33,10 @@ use ic_nns_test_utils::{
         nns_claim_or_refresh_neuron, nns_disburse_maturity, nns_disburse_neuron,
         nns_governance_get_full_neuron, nns_governance_get_neuron_info,
         nns_governance_make_proposal, nns_increase_dissolve_delay, nns_join_community_fund,
-        nns_leave_community_fund, nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron,
-        nns_set_auto_stake_maturity, nns_set_followees_for_neuron, nns_start_dissolving,
-        setup_nns_canisters, state_machine_builder_for_nns_tests,
+        nns_leave_community_fund, nns_make_neuron_public, nns_remove_hot_key,
+        nns_send_icp_to_claim_or_refresh_neuron, nns_set_auto_stake_maturity,
+        nns_set_followees_for_neuron, nns_start_dissolving, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -111,12 +112,12 @@ fn test_merge_neurons_and_simulate_merge_neurons() {
         // Let us transfer ICP into the main account, and stake two neurons
         // owned by TEST_NEURON_1_OWNER_PRINCIPAL.
 
-        let mgmt_request = ManageNeuron {
+        let mgmt_request = ManageNeuronRequest {
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronIdProto {
                 id: TEST_NEURON_1_ID,
             })),
             id: None,
-            command: Some(Command::Merge(Merge {
+            command: Some(ManageNeuronCommandRequest::Merge(Merge {
                 source_neuron_id: Some(neuron_id_4),
             })),
         };
@@ -205,10 +206,10 @@ fn test_spawn_neuron() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
                     id: None,
-                    command: Some(Command::Spawn(Spawn {
+                    command: Some(ManageNeuronCommandRequest::Spawn(Spawn {
                         new_controller: None,
                         nonce: None,
                         percentage_to_spawn: None,
@@ -300,7 +301,10 @@ fn create_neuron_with_stake(
 ) -> NeuronIdProto {
     let nonce = 123_456;
     nns_send_icp_to_claim_or_refresh_neuron(state_machine, neuron_controller, stake, nonce);
-    nns_claim_or_refresh_neuron(state_machine, neuron_controller, nonce)
+    let neuron_id = nns_claim_or_refresh_neuron(state_machine, neuron_controller, nonce);
+    nns_make_neuron_public(state_machine, neuron_controller, neuron_id)
+        .expect("Failed to make neuron public");
+    neuron_id
 }
 
 /// Creates a neuron with some maturity, and returns the neuron id. This is done by (1) sending some

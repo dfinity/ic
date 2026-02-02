@@ -1,5 +1,5 @@
 use crate::common::storage::types::{IcrcOperation, RosettaBlock};
-use crate::common::types::{FeeMetadata, FeeSetter};
+use crate::common::types::{FeeCollectorMetadata, FeeMetadata, FeeSetter};
 use crate::{
     AppState, MultiTokenAppState,
     common::{
@@ -9,7 +9,8 @@ use crate::{
     },
 };
 use anyhow::{Context, bail};
-use candid::Nat;
+use candid::{Nat, Principal};
+use icrc_ledger_types::icrc1::account::Account;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
@@ -61,7 +62,7 @@ pub fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> 
     ))
 }
 
-pub fn get_rosetta_block_from_block_identifier(
+pub async fn get_rosetta_block_from_block_identifier(
     block_identifier: BlockIdentifier,
     storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
@@ -69,9 +70,10 @@ pub fn get_rosetta_block_from_block_identifier(
         &PartialBlockIdentifier::from(block_identifier),
         storage_client,
     )
+    .await
 }
 
-pub fn get_rosetta_block_from_partial_block_identifier(
+pub async fn get_rosetta_block_from_partial_block_identifier(
     partial_block_identifier: &PartialBlockIdentifier,
     storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
@@ -86,17 +88,20 @@ pub fn get_rosetta_block_from_partial_block_identifier(
                 let hash_buf = ByteBuf::from(hash_bytes);
                 storage_client
                     .get_block_by_hash(hash_buf.clone())
+                    .await
                     .with_context(|| format!("Unable to retrieve block with hash: {hash_buf:?}"))?
                     .with_context(|| format!("Block with hash {hash} could not be found"))?
             }
 
             (Some(block_idx), None) => storage_client
                 .get_block_at_idx(block_idx)
+                .await
                 .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
                 .with_context(|| format!("Block at index {block_idx} could not be found"))?,
             (Some(block_idx), Some(hash)) => {
                 let rosetta_block = storage_client
                     .get_block_at_idx(block_idx)
+                    .await
                     .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
                     .with_context(|| format!("Block at index {block_idx} could not be found"))?;
                 if &hex::encode(rosetta_block.clone().get_block_hash()) != hash {
@@ -112,6 +117,7 @@ pub fn get_rosetta_block_from_partial_block_identifier(
             }
             (None, None) => storage_client
                 .get_block_with_highest_block_idx()
+                .await
                 .with_context(|| "Unable to retrieve the latest block".to_string())?
                 .with_context(|| {
                     "Latest block could not be found, the blockchain is empty".to_string()
@@ -149,6 +155,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         Burn,
         Transfer,
         Approve,
+        FeeCollector,
     }
 
     // A builder which helps depict the icrc1 Operation and allows for an arbitrary order of rosetta_core Operations
@@ -162,6 +169,9 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         expected_allowance: Option<Nat>,
         expires_at: Option<u64>,
         allowance: Option<Nat>,
+        fee_collector: Option<Account>,
+        caller: Option<Principal>,
+        mthd: Option<String>,
     }
 
     impl IcrcOperationBuilder {
@@ -176,6 +186,9 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 expected_allowance: None,
                 expires_at: None,
                 allowance: None,
+                fee_collector: None,
+                caller: None,
+                mthd: None,
             }
         }
 
@@ -224,6 +237,21 @@ pub fn rosetta_core_operations_to_icrc1_operation(
             self
         }
 
+        pub fn with_fee_collector(mut self, fee_collector: Option<Account>) -> Self {
+            self.fee_collector = fee_collector;
+            self
+        }
+
+        pub fn with_caller(mut self, caller: Option<Principal>) -> Self {
+            self.caller = caller;
+            self
+        }
+
+        pub fn with_mthd(mut self, mthd: Option<String>) -> Self {
+            self.mthd = mthd;
+            self
+        }
+
         pub fn build(self) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
             Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer or Approve")? {
                 IcrcOperation::Mint => {
@@ -233,24 +261,20 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     if self.spender.is_some() {
                         bail!("Spender AccountIdentifier field is not allowed for Mint operation")
                     }
-                    if self.fee.is_some() {
-                        bail!("Fee field is not allowed for Mint operation")
-                    }
                     crate::common::storage::types::IcrcOperation::Mint{
                     to: self.to.context("Account field needs to be populated for Mint operation")?.try_into()?,
                     amount: self.amount.context("Amount field needs to be populated for Mint operation")?,
+                    fee: self.fee,
                 }},
                 IcrcOperation::Burn => {
                     if self.to.is_some() {
                         bail!("To AccountIdentifier field is not allowed for Burn operation")
                     }
-                    if self.fee.is_some() {
-                        bail!("Fee field is not allowed for Burn operation")
-                    }
                     crate::common::storage::types::IcrcOperation::Burn{
                     from: self.from.context("From AccountIdentifier field needs to be populated for Burn operation")?.try_into()?,
                     amount: self.amount.context("Amount field needs to be populated for Burn operation")?,
                     spender: self.spender.map(|spender| spender.try_into()).transpose()?,
+                    fee: self.fee,
                 }},
                 IcrcOperation::Transfer => crate::common::storage::types::IcrcOperation::Transfer{
                     from: self.from.context("From AccountIdentifier field needs to be populated for Transfer operation")?.try_into()?,
@@ -271,6 +295,11 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     expected_allowance: self.expected_allowance,
                     expires_at: self.expires_at,
                 }},
+                IcrcOperation::FeeCollector => crate::common::storage::types::IcrcOperation::FeeCollector{
+                    fee_collector: self.fee_collector,
+                    caller: self.caller,
+                    mthd: self.mthd,
+                },
             })
         }
     }
@@ -352,7 +381,6 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 let fee = operation
                     .amount
                     .context("Amount field needs to be populated for Approve operation")?;
-
                 // The fee inside of icrc1 operation is always the fee set by the user
                 let icrc1_operation_fee_set = match operation.metadata {
                     Some(metadata) => {
@@ -378,8 +406,17 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 )?;
                 icrc1_operation_builder.with_spender_accountidentifier(spender)
             }
-            // We do not have to convert this Operation on the icrc1 side as the crate::common::storage::types::IcrcOperation does not know anything about the FeeCollector
-            OperationType::FeeCollector => icrc1_operation_builder,
+            OperationType::FeeCollector => {
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for fee collector operations")?;
+                let fc_metadata = FeeCollectorMetadata::try_from(metadata)?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::FeeCollector)
+                    .with_fee_collector(fc_metadata.fee_collector)
+                    .with_caller(fc_metadata.caller)
+                    .with_mthd(fc_metadata.mthd)
+            }
         };
     }
     icrc1_operation_builder.build()
@@ -392,24 +429,48 @@ pub fn icrc1_operation_to_rosetta_core_operations(
 ) -> anyhow::Result<Vec<rosetta_core::objects::Operation>> {
     let mut operations = vec![];
     match operation {
-        crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
+        crate::common::storage::types::IcrcOperation::Mint { to, amount, fee } => {
             operations.push(rosetta_core::objects::Operation::new(
                 0,
                 OperationType::Mint.to_string(),
                 Some(to.into()),
                 Some(rosetta_core::objects::Amount::new(
                     BigInt::from(amount.0),
-                    currency,
+                    currency.clone(),
                 )),
                 None,
                 None,
-            ))
+            ));
+
+            if let Some(fee_paid) = fee_payed {
+                operations.push(rosetta_core::objects::Operation::new(
+                    1,
+                    OperationType::Fee.to_string(),
+                    Some(to.into()), // Mint fees are payed by the receiving account.
+                    Some(Amount::new(
+                        BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
+                        currency,
+                    )),
+                    None,
+                    // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
+                    Some(
+                        FeeMetadata {
+                            fee_set_by: match fee {
+                                Some(_) => FeeSetter::User,
+                                None => FeeSetter::Ledger,
+                            },
+                        }
+                        .try_into()?,
+                    ),
+                ));
+            }
         }
 
         crate::common::storage::types::IcrcOperation::Burn {
             from,
             spender,
             amount,
+            fee,
         } => {
             operations.push(rosetta_core::objects::Operation::new(
                 0,
@@ -417,20 +478,46 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 Some(from.into()),
                 Some(rosetta_core::objects::Amount::new(
                     BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
-                    currency,
+                    currency.clone(),
                 )),
                 None,
                 None,
             ));
 
+            let mut idx = 1;
+
             if let Some(spender) = spender {
                 operations.push(rosetta_core::objects::Operation::new(
-                    1,
+                    idx,
                     OperationType::Spender.to_string(),
                     Some(spender.into()),
                     None,
                     None,
                     None,
+                ));
+                idx += 1;
+            }
+
+            if let Some(fee_paid) = fee_payed {
+                operations.push(rosetta_core::objects::Operation::new(
+                    idx,
+                    OperationType::Fee.to_string(),
+                    Some(from.into()),
+                    Some(Amount::new(
+                        BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
+                        currency,
+                    )),
+                    None,
+                    // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
+                    Some(
+                        FeeMetadata {
+                            fee_set_by: match fee {
+                                Some(_) => FeeSetter::User,
+                                None => FeeSetter::Ledger,
+                            },
+                        }
+                        .try_into()?,
+                    ),
                 ));
             }
         }
@@ -487,7 +574,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                     Some(from.into()),
                     Some(Amount::new(
                         BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
-                        currency.clone(),
+                        currency,
                     )),
                     None,
                     // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
@@ -562,6 +649,27 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 ));
             }
         }
+        crate::common::storage::types::IcrcOperation::FeeCollector {
+            fee_collector,
+            caller,
+            mthd,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::FeeCollector.to_string(),
+                None,
+                None,
+                None,
+                Some(
+                    FeeCollectorMetadata {
+                        fee_collector,
+                        caller,
+                        mthd,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
     };
 
     Ok(operations)
@@ -576,32 +684,12 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operations(
 ) -> anyhow::Result<Vec<rosetta_core::objects::Operation>> {
     let icrc1_transaction = rosetta_block.get_transaction();
 
-    let mut operations = icrc1_operation_to_rosetta_core_operations(
+    let operations = icrc1_operation_to_rosetta_core_operations(
         icrc1_transaction.operation,
         currency.clone(),
         rosetta_block.get_fee_paid()?,
     )?;
 
-    if let Some(fee_collector) = rosetta_block.get_fee_collector()
-        && let Some(_fee_payed) = rosetta_block.get_fee_paid()?
-    {
-        operations.push(rosetta_core::objects::Operation::new(
-            operations.len().try_into().unwrap(),
-            OperationType::FeeCollector.to_string(),
-            Some(fee_collector.into()),
-            Some(rosetta_core::objects::Amount::new(
-                BigInt::from(
-                    rosetta_block
-                        .get_fee_paid()?
-                        .context("Fee payed needs to be populated for FeeCollector operation")?
-                        .0,
-                ),
-                currency.clone(),
-            )),
-            None,
-            None,
-        ));
-    }
     Ok(operations)
 }
 
@@ -668,6 +756,7 @@ pub fn rosetta_core_block_to_icrc1_block(
             )
         },
         fee_collector_block_index: block_metadata.fee_collector_block_index,
+        btype: block_metadata.btype,
     })
 }
 

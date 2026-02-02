@@ -1,6 +1,6 @@
 //! Types used by the Xnet component.
 use crate::ProxyDecodeError;
-use crate::{consensus::certification::Certification, messages::RequestOrResponse};
+use crate::{consensus::certification::Certification, messages::StreamMessage};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::queues::v1 as pb_queues;
@@ -317,6 +317,7 @@ impl StreamHeader {
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StreamSlice {
     header: StreamHeader,
+
     // Messages coming from a remote subnet, together with their indices.
     //
     // In case of messages, the indices are only known if there is at least one
@@ -324,11 +325,11 @@ pub struct StreamSlice {
     // None, not as a an empty queue with a fixed begin index.
     //
     // Invariant: `messages = None ∨ messages = Some(q) ∧ !q.is_empty()`
-    messages: Option<StreamIndexedQueue<RequestOrResponse>>,
+    messages: Option<StreamIndexedQueue<StreamMessage>>,
 }
 
 impl StreamSlice {
-    pub fn new(header: StreamHeader, messages: StreamIndexedQueue<RequestOrResponse>) -> Self {
+    pub fn new(header: StreamHeader, messages: StreamIndexedQueue<StreamMessage>) -> Self {
         let messages = if messages.is_empty() {
             None
         } else {
@@ -339,7 +340,7 @@ impl StreamSlice {
 
     pub fn from_parts(
         header: StreamHeader,
-        messages: Option<StreamIndexedQueue<RequestOrResponse>>,
+        messages: Option<StreamIndexedQueue<StreamMessage>>,
     ) -> Self {
         match messages {
             None => Self { header, messages },
@@ -351,11 +352,11 @@ impl StreamSlice {
         &self.header
     }
 
-    pub fn messages(&self) -> Option<&StreamIndexedQueue<RequestOrResponse>> {
+    pub fn messages(&self) -> Option<&StreamIndexedQueue<StreamMessage>> {
         self.messages.as_ref()
     }
 
-    pub fn pop_message(&mut self) -> Option<(StreamIndex, RequestOrResponse)> {
+    pub fn pop_message(&mut self) -> Option<(StreamIndex, StreamMessage)> {
         match self.messages {
             Some(ref mut q) => {
                 let result = q.pop();
@@ -389,7 +390,7 @@ pub struct CertifiedStreamSlice {
 
 pub mod testing {
     use super::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue};
-    use crate::messages::RequestOrResponse;
+    use crate::messages::StreamMessage;
 
     /// Provides test-only methods for `StreamHeader`.
     pub trait StreamHeaderTesting {
@@ -415,13 +416,13 @@ pub mod testing {
     /// Provides test-only methods for `StreamSlice`.
     pub trait StreamSliceTesting {
         /// Pushes a message onto the slice.
-        fn push_message(&mut self, message: RequestOrResponse);
+        fn push_message(&mut self, message: StreamMessage);
 
         fn header_mut(&mut self) -> &mut StreamHeader;
     }
 
     impl StreamSliceTesting for super::StreamSlice {
-        fn push_message(&mut self, message: RequestOrResponse) {
+        fn push_message(&mut self, message: StreamMessage) {
             match self.messages {
                 Some(ref mut q) => {
                     q.push(message);

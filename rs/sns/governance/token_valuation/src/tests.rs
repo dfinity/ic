@@ -155,6 +155,7 @@ async fn test_icps_per_sns_token_client() {
                                     },
                                     created_at_time: Some(GENESIS_TIMESTAMP_NANOSECONDS),
                                     memo: None,
+                                    fee: None,
                                 }),
                                 timestamp: GENESIS_TIMESTAMP_NANOSECONDS,
                                 kind: "mint".to_string(),
@@ -162,6 +163,7 @@ async fn test_icps_per_sns_token_client() {
                                 burn: None,
                                 approve: None,
                                 transfer: None,
+                                fee_collector: None,
                             },
                         ],
 

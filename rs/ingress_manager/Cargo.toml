@@ -35,6 +35,7 @@ ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-state = { path = "../test_utilities/state" }

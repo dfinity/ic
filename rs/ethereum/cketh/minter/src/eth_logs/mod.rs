@@ -8,7 +8,7 @@ use crate::eth_rpc::Hash;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
 use candid::Principal;
-use evm_rpc_client::Hex32;
+use evm_rpc_types::Hex32;
 use hex_literal::hex;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;

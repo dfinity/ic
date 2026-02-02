@@ -1,0 +1,11 @@
+package(default_visibility = ["//visibility:public"])
+
+genrule(
+    name = "make_executable",
+    srcs = [
+        "//:pebble-challtestsrv",
+    ],
+    outs = ["pebble-challtestsrv-bin"],
+    cmd = "cp $(locations //:pebble-challtestsrv) $@ && chmod +x $@",
+    executable = True,
+)

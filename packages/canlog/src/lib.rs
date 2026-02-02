@@ -52,7 +52,7 @@ extern crate self as canlog;
 mod tests;
 mod types;
 
-pub use crate::types::{LogFilter, RegexString, RegexSubstitution, Sort};
+pub use crate::types::{InvalidRegex, LogFilter, RegexString, RegexSubstitution, Sort};
 
 pub use ic_canister_log::{
     GlobalBuffer, Sink, declare_log_buffer, export as export_logs, log as raw_log,

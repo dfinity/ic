@@ -348,13 +348,16 @@ impl Neuron {
             MAX_DISSOLVE_DELAY_SECONDS,
         ) as u128;
         // 'd_stake' is the stake with bonus for dissolve delay.
-        let d_stake = stake + ((stake * d) / (MAX_DISSOLVE_DELAY_SECONDS as u128));
+        let d_stake =
+            stake.saturating_add((stake.saturating_mul(d)) / (MAX_DISSOLVE_DELAY_SECONDS as u128));
         // Sanity check.
         assert!(d_stake <= 2 * stake);
         // The voting power is also a function of the age of the
         // neuron, giving a bonus of up to 25% at the four year mark.
         let a = std::cmp::min(self.age_seconds(now_seconds), MAX_NEURON_AGE_FOR_AGE_BONUS) as u128;
-        let ad_stake = d_stake + ((d_stake * a) / (4 * MAX_NEURON_AGE_FOR_AGE_BONUS as u128));
+        let ad_stake = d_stake.saturating_add(
+            (d_stake.saturating_mul(a)) / (4 * MAX_NEURON_AGE_FOR_AGE_BONUS as u128),
+        );
         // Final stake 'ad_stake' is at most 5/4 of the 'd_stake'.
         assert!(ad_stake <= (5 * d_stake) / 4);
         // The final voting power is the stake adjusted by both age
@@ -412,16 +415,16 @@ impl Neuron {
             for f in followees.iter() {
                 if let Some(f_vote) = ballots.get(&f.id) {
                     if f_vote.vote == (Vote::Yes as i32) {
-                        yes += 1;
+                        yes = yes.saturating_add(1);
                     } else if f_vote.vote == (Vote::No as i32) {
-                        no += 1;
+                        no = no.saturating_add(1);
                     }
                 }
             }
-            if 2 * yes > followees.len() {
+            if yes.saturating_mul(2_usize) > followees.len() {
                 return Vote::Yes;
             }
-            if 2 * no >= followees.len() {
+            if no.saturating_mul(2_usize) >= followees.len() {
                 return Vote::No;
             }
         }
@@ -458,8 +461,10 @@ impl Neuron {
     ) -> u64 {
         let is_fresh = self.voting_power_refreshed_timestamp_seconds
             >= now_seconds
-                - voting_power_economics.get_start_reducing_voting_power_after_seconds()
-                - voting_power_economics.get_clear_following_after_seconds();
+                .saturating_sub(
+                    voting_power_economics.get_start_reducing_voting_power_after_seconds(),
+                )
+                .saturating_sub(voting_power_economics.get_clear_following_after_seconds());
         if is_fresh {
             return 0;
         }
@@ -765,7 +770,7 @@ impl Neuron {
                         "The dissolve delay must be set to a future time.",
                     ));
                 }
-                let desired_dd = d.dissolve_timestamp_seconds - now_seconds;
+                let desired_dd = d.dissolve_timestamp_seconds.saturating_sub(now_seconds);
                 let current_dd = self.dissolve_delay_seconds(now_seconds);
 
                 if current_dd > desired_dd {
@@ -775,7 +780,7 @@ impl Neuron {
                     ));
                 }
 
-                let dd_diff = desired_dd - current_dd;
+                let dd_diff = desired_dd.saturating_sub(current_dd);
                 if dd_diff == 0 {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
@@ -833,6 +838,7 @@ impl Neuron {
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
         requester: PrincipalId,
+        multi_query: bool,
     ) -> NeuronInfo {
         let mut recent_ballots = vec![];
         let mut joined_community_fund_timestamp_seconds = None;
@@ -853,8 +859,16 @@ impl Neuron {
         let visibility = Some(self.visibility() as i32);
         let deciding_voting_power = self.deciding_voting_power(voting_power_economics, now_seconds);
         let potential_voting_power = self.potential_voting_power(now_seconds);
+        let known_neuron_data = if multi_query {
+            None
+        } else {
+            self.known_neuron_data
+                .clone()
+                .map(api::KnownNeuronData::from)
+        };
 
         NeuronInfo {
+            id: Some(self.id()),
             retrieved_at_timestamp_seconds: now_seconds,
             state: self.state(now_seconds) as i32,
             age_seconds: self.age_seconds(now_seconds),
@@ -863,10 +877,7 @@ impl Neuron {
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds,
-            known_neuron_data: self
-                .known_neuron_data
-                .clone()
-                .map(api::KnownNeuronData::from),
+            known_neuron_data,
             neuron_type: self.neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds: Some(
@@ -1025,7 +1036,9 @@ impl Neuron {
     }
 
     pub fn is_funded(&self) -> bool {
-        let amount_e8s = self.stake_e8s() + self.maturity_e8s_equivalent;
+        let amount_e8s = self
+            .stake_e8s()
+            .saturating_add(self.maturity_e8s_equivalent);
         amount_e8s > 0
     }
 
@@ -1260,6 +1273,7 @@ impl Neuron {
         self,
         now_seconds: u64,
         voting_power_economics: &VotingPowerEconomics,
+        multi_query: bool,
     ) -> api::Neuron {
         let visibility = Some(self.visibility() as i32);
         let deciding_voting_power =
@@ -1309,7 +1323,11 @@ impl Neuron {
             .map(api::BallotInfo::from)
             .collect();
         let transfer = transfer.map(api::NeuronStakeTransfer::from);
-        let known_neuron_data = known_neuron_data.map(api::KnownNeuronData::from);
+        let known_neuron_data = if multi_query {
+            None
+        } else {
+            known_neuron_data.map(api::KnownNeuronData::from)
+        };
 
         let followees = followees
             .into_iter()

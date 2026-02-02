@@ -81,7 +81,7 @@ impl Mapping {
             })?;
 
         let len = metadata.len() as usize;
-        if len % PAGE_SIZE != 0 {
+        if !len.is_multiple_of(PAGE_SIZE) {
             return Err(PersistenceError::InvalidHeapFile {
                 path: path.display().to_string(),
                 file_size: len,

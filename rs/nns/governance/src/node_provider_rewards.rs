@@ -97,6 +97,9 @@ mod test {
             maximum_node_provider_rewards_e8s: None,
             registry_version: None,
             node_providers: vec![],
+            start_date: None,
+            end_date: None,
+            algorithm_version: None,
         };
 
         let rewards_2 = MonthlyNodeProviderRewards {
@@ -107,6 +110,9 @@ mod test {
             maximum_node_provider_rewards_e8s: None,
             registry_version: None,
             node_providers: vec![],
+            start_date: None,
+            end_date: None,
+            algorithm_version: None,
         };
 
         // Assert empty on start

@@ -3,10 +3,12 @@ Bare metal utility functions. Use this macro to define a target to launch an OS 
 """
 
 load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 def launch_bare_metal(name, image_zst_file):
     binary_name = name + "_main"
-    native.py_binary(
+    py_binary(
         name = binary_name,
         srcs = ["//ic-os/dev-tools/bare_metal_deployment:deploy.py"],
         main = "//ic-os/dev-tools/bare_metal_deployment:deploy.py",
@@ -22,8 +24,7 @@ def launch_bare_metal(name, image_zst_file):
         ],
         tags = ["manual"],
     )
-
-    native.sh_binary(
+    sh_binary(
         name = name,
         srcs = ["//toolchains/sysimage:proc_wrapper.sh"],
         args = [
@@ -33,6 +34,8 @@ def launch_bare_metal(name, image_zst_file):
             "$(location //rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config)",
             "--upload_img",
             "$(location " + image_zst_file + ")",
+            "--deterministic_ips_tool",
+            "$(location //rs/ic_os/networking/deterministic_ips:deterministic-ips)",
             "--idrac_script",
             "$(location //ic-os/dev-tools/bare_metal_deployment:redfish_scripts)" + "/IdracRedfishSupport-0.0.8.data/scripts/VirtualDiskExpansionREDFISH.py",
             "--benchmark_driver_script",
@@ -50,6 +53,7 @@ def launch_bare_metal(name, image_zst_file):
             "//ic-os/dev-tools/bare_metal_deployment:redfish_scripts",
             "//ic-os/dev-tools/bare_metal_deployment:benchmark_runner.sh",
             "//ic-os/dev-tools/bare_metal_deployment:benchmark_driver.sh",
+            "//rs/ic_os/networking/deterministic_ips:deterministic-ips",
             "//ic-os/dev-tools/hw_validation:stress.sh",
             "//ic-os/dev-tools/hw_validation:benchmark.sh",
         ],

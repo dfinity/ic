@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use icp_ledger::AccountIdentifier;
 use std::path::PathBuf;
@@ -49,7 +50,7 @@ pub struct ReplayToolArgs {
 #[derive(Clone, Subcommand)]
 pub enum SubCommand {
     /// Add a new version of the replica binary to the registry.
-    AddAndBlessReplicaVersion(AddAndBlessReplicaVersionCmd),
+    UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd),
 
     /// Add registry content from external registry store to the registry
     /// canister.
@@ -91,22 +92,19 @@ pub struct GetRecoveryCupCmd {
     pub height: u64,
     /// Output file
     pub output_file: PathBuf,
-    /// Registry store URI
-    pub registry_store_uri: Option<String>,
-    /// Registry store SHA256 hash
-    pub registry_store_sha256: Option<String>,
 }
 
 #[derive(Clone, Parser)]
-pub struct AddAndBlessReplicaVersionCmd {
+pub struct UpgradeSubnetToReplicaVersionCmd {
     /// The Replica version ID.
     pub replica_version_id: String,
-    /// JSON value of the replica version record.
-    pub replica_version_value: String,
-    /// If true, the registry record of the corresponding subnet will be
-    /// updated with the new replica version.
+    /// The Replica version record.
+    #[clap(value_parser = parse_json::<ReplicaVersionRecord>)]
+    pub replica_version_record: ReplicaVersionRecord,
+    /// If true, the replica version will be added and blessed in the registry
+    /// before upgrading the subnet to it.
     #[clap(long)]
-    pub update_subnet_record: bool,
+    pub add_and_bless_replica_version: bool,
 }
 
 #[derive(Clone, Parser)]
@@ -173,4 +171,8 @@ pub struct WithNeuronCmd {
     pub neuron_controller: PrincipalId,
     /// How much stake the neuron will have.
     pub neuron_stake_e8s: u64,
+}
+
+fn parse_json<T: serde::de::DeserializeOwned>(s: &str) -> Result<T, String> {
+    serde_json::from_str(s).map_err(|e| e.to_string())
 }

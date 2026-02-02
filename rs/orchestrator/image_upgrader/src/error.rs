@@ -22,6 +22,8 @@ pub enum UpgradeError {
 
     /// Generic error while handling reboot time
     RebootTimeError(String),
+
+    DiskEncryptionKeyExchangeError(String),
 }
 
 impl UpgradeError {
@@ -45,6 +47,9 @@ impl fmt::Display for UpgradeError {
                 write!(f, "Failed to read or write reboot time: {msg}")
             }
             UpgradeError::GenericError(msg) => write!(f, "Failed to upgrade: {msg}"),
+            UpgradeError::DiskEncryptionKeyExchangeError(msg) => {
+                write!(f, "Failed to exchange disk encryption key: {msg}")
+            }
         }
     }
 }

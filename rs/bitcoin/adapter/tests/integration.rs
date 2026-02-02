@@ -120,7 +120,7 @@ fn start_bitcoind<T: RpcClientType>(network: T) -> Daemon<T> {
     let name = format!("{}_CORE_PATH", T::NAME.to_uppercase());
     let path = std::env::var(&name).unwrap_or_else(|_| panic!("Failed to get {name} env variable"));
 
-    Daemon::new(&path, network, conf).unwrap()
+    Daemon::new(&path, network, conf)
 }
 
 fn start_client<T: RpcClientType>(
@@ -869,15 +869,19 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     wait_for_connection(client1, 1);
     wait_for_connection(client2, 1);
 
-    client1.generate_to_address(3, address1).unwrap();
+    // Note that both daemons should generate same number of new blocks.
+    // Otherwise the adapter client may run into "invalid message" due to
+    // daemon's height being lower, then it would not be able to finish
+    // syncing all blocks, which leads to test failure.
+    client1.generate_to_address(6, address1).unwrap();
     client2.generate_to_address(6, address2).unwrap();
 
-    wait_for_blocks(client1, 23);
+    wait_for_blocks(client1, 26);
     wait_for_blocks(client2, 26);
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
-    let blocks = sync_blocks::<T>(&adapter_client, &mut vec![], anchor, 29, 201);
-    assert_eq!(blocks.len(), 29);
+    let blocks = sync_blocks::<T>(&adapter_client, &mut vec![], anchor, 32, 250);
+    assert_eq!(blocks.len(), 32);
 }
 
 #[test]
@@ -1077,6 +1081,6 @@ fn test_btc_testnet_data() {
         .unwrap();
 
     let blocks =
-        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 9, 250);
+        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 9, 400);
     assert_eq!(blocks.len(), 9);
 }

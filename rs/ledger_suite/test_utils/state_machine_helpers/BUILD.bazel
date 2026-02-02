@@ -9,7 +9,7 @@ DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
-    "//rs/rosetta-api/icp/test_utils",
+    "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -17,6 +17,8 @@ DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:candid",
     "@crate_index//:num-traits",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = []

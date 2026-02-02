@@ -9,9 +9,9 @@ documentation.workspace = true
 [dependencies]
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
-ic-consensus = { path = "../../consensus" }
 ic-consensus-dkg = { path = "../../consensus/dkg" }
 ic-consensus-utils = { path = "../../consensus/utils" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../../crypto/test_utils/crypto_returning_ok" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
@@ -19,7 +19,6 @@ ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
-ic-test-utilities = { path = "../" }
 ic-test-utilities-consensus = { path = "../consensus" }
 ic-test-utilities-types = { path = "../types" }
 ic-types = { path = "../../types/types" }

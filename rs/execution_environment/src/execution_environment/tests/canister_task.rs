@@ -1199,7 +1199,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1220,7 +1220,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
         NumWasmPages::new(8)
     );
 
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     // Hence hook should be executed next.
     assert_eq!(
@@ -1307,7 +1307,7 @@ fn on_low_wasm_memory_is_executed() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 10 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1317,7 +1317,7 @@ fn on_low_wasm_memory_is_executed() {
     );
 
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory >= self.wasm_memory_threshold
     // hook is not executed.
     test.ingress(canister_id, "grow_mem", vec![]).unwrap();
     assert_eq!(
@@ -1326,7 +1326,7 @@ fn on_low_wasm_memory_is_executed() {
     );
 
     // wasm_memory.size = 8 + 7 = 15
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // hence hook will be executed. After hook execution we have:
     // wasm_memory.size = 15 + 5 = 20.
     test.ingress(canister_id, "grow_mem", vec![]).unwrap();
@@ -1357,7 +1357,7 @@ fn on_low_wasm_memory_is_executed_before_message() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1371,7 +1371,7 @@ fn on_low_wasm_memory_is_executed_before_message() {
 
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1415,7 +1415,7 @@ fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1429,7 +1429,7 @@ fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
 
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1515,7 +1515,7 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1530,7 +1530,7 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
 
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 3 = 4
-    // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory >= self.wasm_memory_threshold
     // Hook condition is not satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1540,7 +1540,7 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
 
     // Second ingress messages gets executed.
     // wasm_memory.size = 4 + 3 = 7
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1617,7 +1617,7 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1630,7 +1630,7 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
 
     // Ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1675,7 +1675,7 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
     );
 
     // Upgrade is executed, and the wasm_memory size reset to 1.
-    // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory >= self.wasm_memory_threshold
     // Hook condition is not satisfied.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1712,7 +1712,7 @@ fn hook_status_remains_executed_if_condition_holds_after_upgrade() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1726,7 +1726,7 @@ fn hook_status_remains_executed_if_condition_holds_after_upgrade() {
 
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1768,7 +1768,7 @@ fn hook_status_remains_executed_if_condition_holds_after_upgrade() {
     assert_eq!(result, Ok(()));
 
     // Hook condition is still satisfied.
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(13)
@@ -1801,11 +1801,11 @@ fn upgrade_changes_hook_status_to_ready() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 10 Wasm Pages
+    // wasm_memory_limit = 10 Wasm Pages
     // wasm_memory_threshold = 9 Wasm Pages
 
     // Initially wasm_memory.size = 1
-    // wasm_capacity - used_wasm_memory = wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory = wasm_memory_threshold
     // Hook condition is not satisfied.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1838,7 +1838,7 @@ fn upgrade_changes_hook_status_to_ready() {
     );
 
     // Upgrade is executed, and the used_wasm_memory size is 2.
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1875,7 +1875,7 @@ fn on_low_wasm_memory_is_executed_once() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1885,7 +1885,7 @@ fn on_low_wasm_memory_is_executed_once() {
     );
 
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // hence hook will be executed. After hook execution we have:
     // wasm_memory.size = 8 + 2 = 10.
     test.ingress(canister_id, "grow_mem", vec![]).unwrap();
@@ -1895,7 +1895,7 @@ fn on_low_wasm_memory_is_executed_once() {
     );
 
     // wasm_memory.size = 10 + 7 = 17
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // but because the hook is already executed it will not be executed again.
     test.ingress(canister_id, "grow_mem", vec![]).unwrap();
 
@@ -1940,7 +1940,7 @@ fn on_low_wasm_memory_runs_after_dts_execution() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1965,7 +1965,7 @@ fn on_low_wasm_memory_runs_after_dts_execution() {
 
     // After dts execution we should have the following:
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // hence hook will be executed.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1980,78 +1980,6 @@ fn on_low_wasm_memory_runs_after_dts_execution() {
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(13)
-    );
-}
-
-#[test]
-fn on_low_wasm_memory_is_executed_after_growing_stable_memory() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let wat = r#"(module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "stable_grow"
-                    (func $ic0_stable_grow (param $pages i32) (result i32)))
-            (func $stable_grow
-                (drop (call $ic0_stable_grow (i32.const 7)))
-                (call $msg_reply)
-            )
-            (export "canister_update stable_grow" (func $stable_grow))
-            (func (export "canister_on_low_wasm_memory")
-                (drop (memory.grow (i32.const 5)))
-            )
-            (memory 1 20)
-        )"#;
-
-    let canister_id = test.canister_from_wat(wat).unwrap();
-
-    test.canister_update_memory_allocation_and_wasm_memory_threshold(
-        canister_id,
-        (30 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-    )
-    .unwrap();
-
-    // Here we have:
-    // wasm_capacity = memory_allocation - used_stable_memory = 30 Wasm Pages - used_stable_memory
-    // wasm_memory_threshold = 20 Wasm Pages
-
-    // Initially wasm_memory.size = 1
-    assert_eq!(
-        test.execution_state(canister_id).wasm_memory.size,
-        NumWasmPages::new(1)
-    );
-    assert_eq!(
-        test.execution_state(canister_id).stable_memory.size,
-        NumWasmPages::new(0)
-    );
-
-    // stable_memory.size = 7
-    // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
-    // memory_allocation - used_stable_memory - used_wasm_memory > self.wasm_memory_threshold
-    // hence hook will not be executed.
-    test.ingress(canister_id, "stable_grow", vec![]).unwrap();
-    assert_eq!(
-        test.execution_state(canister_id).stable_memory.size,
-        NumWasmPages::new(7)
-    );
-    assert_eq!(
-        test.execution_state(canister_id).wasm_memory.size,
-        NumWasmPages::new(1)
-    );
-
-    // stable_memory.size = 7 + 7 = 14
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
-    // memory_allocation - used_stable_memory - used_wasm_memory < self.wasm_memory_threshold
-    // hence hook will be executed. After hook execution we have:
-    // wasm_memory.size = 1 + 5 = 6.
-    test.ingress(canister_id, "stable_grow", vec![]).unwrap();
-    assert_eq!(
-        test.execution_state(canister_id).stable_memory.size,
-        NumWasmPages::new(14)
-    );
-    assert_eq!(
-        test.execution_state(canister_id).wasm_memory.size,
-        NumWasmPages::new(6)
     );
 }
 

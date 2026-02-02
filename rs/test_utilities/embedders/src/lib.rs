@@ -3,7 +3,8 @@ use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
+use ic_config::flag_status::FlagStatus;
+use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -17,7 +18,7 @@ use ic_embedders::{
     },
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
+    ExecutionMode, HypervisorError, MessageMemoryUsage, SubnetAvailableMemory, SystemApi,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
@@ -124,6 +125,15 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
+        self.config.feature_flags.deterministic_memory_tracker = if enabled {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
+        self
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
@@ -171,10 +181,9 @@ impl WasmtimeInstanceBuilder {
             self.api_type,
             sandbox_safe_system_state,
             self.memory_usage,
-            ic_replicated_state::MessageMemoryUsage::ZERO,
+            MessageMemoryUsage::ZERO,
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(
-                    FlagStatus::Disabled,
                     self.num_instructions,
                     self.num_instructions,
                 ),

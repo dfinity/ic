@@ -11,6 +11,34 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-01-23: Proposal 140097
+
+https://dashboard.internetcomputer.org/proposal/140097
+
+### Changed
+
+* Stop the target canister before taking or loading a snapshot.
+
+
+# 2026-01-16: Proposal 140013
+
+http://dashboard.internetcomputer.org/proposal/140013
+
+## Added
+
+* Added `take_canister_snapshot`, and `load_canister_snapshot` methods. These
+  are only callable by the Governance canister though. What these do is
+  proxy/immediately forward to methods of the same name in the Management
+  (pseudo-)canister.
+
+
+# 2025-10-24: Proposal 139087
+
+Just a "maintenance" release, i.e. no behavior changes, just making
+sure that we do not become too behind, and avoid too many changes
+piling up in for the next "real" upgrade.
+
+
 # 2025-08-15: Proposal 137916
 
 http://dashboard.internetcomputer.org/proposal/137916

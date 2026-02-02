@@ -1,0 +1,8 @@
+[Unit]
+Description=Run boot-metrics service 10 minutes after boot
+
+[Timer]
+OnBootSec=10min
+
+[Install]
+WantedBy=timers.target

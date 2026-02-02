@@ -4,7 +4,7 @@ use crate::{EccCurveType, IdkgProtocolAlgorithm, idkg::mega::MEGaCiphertextType}
 ///
 /// The IDKG uses many different domain separators. To avoid any chance of
 /// accidental collision, all random oracles are instantiated using a DomainSep
-/// which is then internally converted into an unambigious string.
+/// which is then internally converted into an unambiguous string.
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum DomainSep {
     /// Used when creating the proof of dlog equivalence in a complaint

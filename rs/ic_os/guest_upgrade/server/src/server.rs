@@ -81,7 +81,7 @@ impl DiskEncryptionKeyExchangeServer {
                 ))
             })?;
 
-        println!("Server bound to port {port} and ready to accept connections");
+        println!("Disk encryption key exchange server bound to port {port} and ready");
 
         let shutdown_token_c = shutdown_token.clone();
         let runtime_c = runtime.clone();

@@ -1,4 +1,3 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
@@ -38,7 +37,6 @@ DEPENDENCIES = [
     "//rs/validator",
     "@crate_index//:askama",
     "@crate_index//:axum",
-    "@crate_index//:byte-unit",
     "@crate_index//:bytes",
     "@crate_index//:cfg-if",
     "@crate_index//:crossbeam",
@@ -51,10 +49,8 @@ DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:inferno",
-    "@crate_index//:mockall",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
-    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
@@ -65,7 +61,6 @@ DEPENDENCIES = [
     "@crate_index//:tokio-util",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
-    "@crate_index//:tracing",
     "@crate_index//:tracing-flame",
     "@crate_index//:tracing-subscriber",
 ]
@@ -75,8 +70,6 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
-BUILD_DEPENDENCIES = []
-
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
@@ -85,6 +78,7 @@ DEV_DEPENDENCIES = [
     "//rs/canonical_state",
     "//rs/certification/test-utils",
     "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/http_endpoints/test_agent",
     "//rs/interfaces/mocks",
@@ -93,12 +87,12 @@ DEV_DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/registry/routing_table",
-    "//rs/test_utilities",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "@crate_index//:maplit",
+    "@crate_index//:mockall",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
     "@crate_index//:reqwest",
@@ -112,18 +106,11 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
-cargo_build_script(
-    name = "build_script",
-    srcs = ["build.rs"],
-    aliases = ALIASES,
-    data = ["templates/dashboard.html"],  # build script data (e.g. template files) goes here
-    deps = BUILD_DEPENDENCIES,
-)
-
 rust_library(
     name = "public",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    compile_data = ["templates/dashboard.html"],
     crate_features = select({
         "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
         "//conditions:default": [],
@@ -135,7 +122,7 @@ rust_library(
         "//conditions:default": [],
     }),
     version = "0.9.0",
-    deps = DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
@@ -143,7 +130,7 @@ rust_test(
     aliases = ALIASES,
     crate = ":public",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite_with_extra_srcs(

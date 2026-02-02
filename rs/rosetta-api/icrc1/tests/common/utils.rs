@@ -7,6 +7,7 @@ use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
 use prometheus_parse::{Scrape, Value};
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::sync::Arc;
+use tokio::time::sleep;
 
 pub async fn get_rosetta_blocks_from_icrc1_ledger(
     icrc1_agent: Arc<Icrc1Agent>,
@@ -79,7 +80,7 @@ pub async fn wait_for_rosetta_block(
                 return last_block;
             }
         }
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        sleep(std::time::Duration::from_secs(1)).await;
     }
     last_block
 }

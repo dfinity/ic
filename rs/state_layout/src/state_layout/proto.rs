@@ -6,6 +6,8 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
+use ic_replicated_state::ExecutionTask;
+use ic_types::messages::{CanisterMessage, CanisterMessageOrTask};
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -24,7 +26,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             )
             .into(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
-            memory_allocation: item.memory_allocation.bytes().get(),
+            memory_allocation: item.memory_allocation.pre_allocated_bytes().get(),
             wasm_memory_threshold: Some(item.wasm_memory_threshold.get()),
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
@@ -32,8 +34,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             reserved_balance: Some(item.reserved_balance.into()),
             reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
             canister_status: Some((&item.status).into()),
+            rounds_scheduled: item.rounds_scheduled,
             scheduled_as_first: item.scheduled_as_first,
-            skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
             executed: item.executed,
             interrupted_during_execution: item.interrupted_during_execution,
             certified_data: item.certified_data.clone(),
@@ -59,6 +61,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
+            log_memory_limit: item.log_memory_limit.get(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -75,10 +78,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     }
 }
 
-impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
+impl TryFrom<(pb_canister_state_bits::CanisterStateBits, CanisterId)> for CanisterStateBits {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_state_bits::CanisterStateBits) -> Result<Self, Self::Error> {
+    fn try_from(
+        (value, own_canister_id): (pb_canister_state_bits::CanisterStateBits, CanisterId),
+    ) -> Result<Self, Self::Error> {
         let execution_state_bits = value
             .execution_state_bits
             .map(|b| b.try_into())
@@ -124,7 +129,43 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let tasks: pb_canister_state_bits::TaskQueue =
             try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
 
-        let task_queue = TaskQueue::try_from(tasks)?;
+        let mut status: CanisterStatus = try_from_option_field(
+            value.canister_status.map(|cs| (cs, own_canister_id)),
+            "CanisterStateBits::canister_status",
+        )?;
+        let mut task_queue = TaskQueue::try_from((tasks, own_canister_id))?;
+
+        // Forward compatibility: convert any `NewResponse` aborted execution into a
+        // `Response`, moving its callback into the call context manager.
+        if let Some(ExecutionTask::AbortedExecution { input, .. }) =
+            task_queue.mut_paused_or_aborted_task()
+            && let CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
+                response,
+                callback,
+            }) = input
+        {
+            match &mut status {
+                CanisterStatus::Running {
+                    call_context_manager,
+                }
+                | CanisterStatus::Stopping {
+                    call_context_manager,
+                    ..
+                } => {
+                    call_context_manager.insert_callback(
+                        response.originator_reply_callback,
+                        callback.as_ref().clone(),
+                    );
+                }
+                CanisterStatus::Stopped => {
+                    return Err(ProxyDecodeError::ValueOutOfRange {
+                        typ: "CanisterStatus",
+                        err: "Aborted execution in Stopped canister".to_string(),
+                    });
+                }
+            }
+            *input = CanisterMessageOrTask::Message(CanisterMessage::Response(response.clone()));
+        }
 
         Ok(Self {
             controllers,
@@ -143,21 +184,16 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .unwrap_or_default()
             .into(),
             execution_state_bits,
-            memory_allocation: MemoryAllocation::new_unchecked(NumBytes::from(
-                value.memory_allocation,
-            )),
+            memory_allocation: MemoryAllocation::from(NumBytes::from(value.memory_allocation)),
             wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,
             cycles_debit,
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
-            status: try_from_option_field(
-                value.canister_status,
-                "CanisterStateBits::canister_status",
-            )?,
+            status,
+            rounds_scheduled: value.rounds_scheduled,
             scheduled_as_first: value.scheduled_as_first,
-            skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
             executed: value.executed,
             interrupted_during_execution: value.interrupted_during_execution,
             certified_data: value.certified_data,
@@ -193,7 +229,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
-            canister_log: CanisterLog::new(
+            log_memory_limit: NumBytes::from(value.log_memory_limit),
+            canister_log: CanisterLog::new_aggregate(
                 value.next_canister_log_record_idx,
                 value
                     .canister_log_records

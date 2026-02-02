@@ -186,7 +186,6 @@
 
 #![forbid(unsafe_code)]
 
-use ic_crypto_internal_seed::XmdError;
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::{NumberOfNodes, Randomness};
@@ -205,7 +204,6 @@ use ic_types::crypto::canister_threshold_sig::error::{
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterThresholdError {
     CurveMismatch,
-    InconsistentCiphertext,
     InconsistentOpeningAndCommitment,
     InsufficientDealings,
     InsufficientOpenings(usize, usize),
@@ -223,6 +221,7 @@ pub enum CanisterThresholdError {
     InvalidSignature,
     InvalidSignatureShare,
     InvalidThreshold(usize, usize),
+    MalformedCiphertext,
     UnexpectedCommitmentType,
 }
 
@@ -390,14 +389,6 @@ impl From<CanisterThresholdError> for IDkgCreateTranscriptInternalError {
             CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             CanisterThresholdError::InsufficientDealings => Self::InsufficientDealings,
             x => Self::InternalError(format!("{x:?}")),
-        }
-    }
-}
-
-impl From<XmdError> for CanisterThresholdError {
-    fn from(e: XmdError) -> Self {
-        match e {
-            XmdError::InvalidOutputLength(x) => Self::InvalidArguments(format!("{x:?}")),
         }
     }
 }
@@ -581,6 +572,7 @@ pub fn compute_secret_shares_with_openings(
 pub enum IDkgVerifyDealingInternalError {
     UnsupportedAlgorithm,
     InvalidCommitment,
+    InvalidCiphertext,
     InvalidProof,
     InvalidRecipients,
     InternalError(String),
@@ -591,7 +583,9 @@ impl From<CanisterThresholdError> for IDkgVerifyDealingInternalError {
         match e {
             CanisterThresholdError::InvalidProof => Self::InvalidProof,
             CanisterThresholdError::InvalidCommitment => Self::InvalidCommitment,
+            CanisterThresholdError::UnexpectedCommitmentType => Self::InvalidCommitment,
             CanisterThresholdError::InvalidRecipients => Self::InvalidRecipients,
+            CanisterThresholdError::MalformedCiphertext => Self::InvalidCiphertext,
             x => Self::InternalError(format!("{x:?}")),
         }
     }
@@ -602,9 +596,10 @@ impl From<IDkgVerifyDealingInternalError> for IDkgVerifyDealingPrivateError {
         type Vdie = IDkgVerifyDealingInternalError;
         type Vdpe = IDkgVerifyDealingPrivateError;
         match error {
-            Vdie::InvalidCommitment | Vdie::InvalidProof | Vdie::InvalidRecipients => {
-                Vdpe::InvalidDealing(format!("{error:?}"))
-            }
+            Vdie::InvalidCommitment
+            | Vdie::InvalidProof
+            | Vdie::InvalidRecipients
+            | Vdie::InvalidCiphertext => Vdpe::InvalidDealing(format!("{error:?}")),
             Vdie::UnsupportedAlgorithm => Vdpe::InvalidArgument(format!("{error:?}")),
             Vdie::InternalError(e) => Vdpe::InternalError(e),
         }
@@ -685,6 +680,20 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
         Self::new(
             std::iter::once(extended_derivation_path.caller.to_vec())
                 .chain(extended_derivation_path.derivation_path.clone())
+                .map(crate::signing::key_derivation::DerivationIndex)
+                .collect::<Vec<_>>(),
+        )
+    }
+}
+
+impl From<ExtendedDerivationPath> for DerivationPath {
+    fn from(extended_derivation_path: ExtendedDerivationPath) -> Self {
+        // We use generalized derivation for all path bytestrings after prepending
+        // the caller's principal. It means only big-endian encoded 4-byte values
+        // less than 2^31 are compatible with BIP-32 non-hardened derivation path.
+        Self::new(
+            std::iter::once(extended_derivation_path.caller.to_vec())
+                .chain(extended_derivation_path.derivation_path)
                 .map(crate::signing::key_derivation::DerivationIndex)
                 .collect::<Vec<_>>(),
         )
@@ -1335,7 +1344,7 @@ impl From<CanisterThresholdError> for DeriveThresholdPublicKeyError {
         match e {
             CanisterThresholdError::InvalidArguments(s) => Self::InvalidArgument(s),
             CanisterThresholdError::CurveMismatch
-            | CanisterThresholdError::InconsistentCiphertext
+            | CanisterThresholdError::MalformedCiphertext
             | CanisterThresholdError::InconsistentOpeningAndCommitment
             | CanisterThresholdError::InsufficientDealings
             | CanisterThresholdError::InsufficientOpenings(_, _)

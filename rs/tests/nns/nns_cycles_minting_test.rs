@@ -1,4 +1,5 @@
 use anyhow::Result;
+use candid::{Decode, Nat};
 use canister_test::{Canister, Project, Wasm};
 use cycles_minting::{TestAgent, UserHandle, make_user_ed25519};
 use cycles_minting_canister::{CREATE_CANISTER_REFUND_FEE, DEFAULT_CYCLES_PER_XDR, TokensToCycles};
@@ -481,10 +482,11 @@ pub fn test(env: TestEnv) {
         .await;
 
         /* Test getting the total number of cycles minted. */
-        let cycles_minted: u64 = tst
-            .query_pb(&CYCLES_MINTING_CANISTER_ID, "total_cycles_minted", ())
+        let result: Vec<u8> = tst
+            .query(&CYCLES_MINTING_CANISTER_ID, "total_cycles_minted", vec![])
             .await
             .unwrap();
+        let cycles_minted: Nat = Decode!(&result, Nat).unwrap();
 
         // Total ICPs successfully minted.
         let total_icpts = initial_amount
@@ -498,11 +500,11 @@ pub fn test(env: TestEnv) {
         // Cycles are only minted when the amount needed exceeds the cycles balance of the CMC, so
         // the total amount of cylces is the sum of the minted cycles and the initial cycles
         // balance.
-        let total_cycles = cycles_minted + cmc_initial_cycles_balance;
+        let total_cycles: Nat = cycles_minted + cmc_initial_cycles_balance;
 
         assert_eq!(
-            Cycles::from(total_cycles),
-            icpts_to_cycles.to_cycles(total_icpts)
+            total_cycles,
+            Nat::from(icpts_to_cycles.to_cycles(total_icpts))
         );
     });
 }

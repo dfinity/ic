@@ -1,0 +1,32 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    # Ensures that we do not need to rebuild just because a _test.rs file
+    # changed.
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "rate_limits",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_rate_limits",
+    version = "0.0.1",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "rate_limits_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = [
+        # Keep sorted.
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:serde",
+    ],
+)

@@ -2,9 +2,10 @@ use super::test_fixtures::*;
 use crate::encoding::types::{self, STREAM_DEFAULT_FLAGS, STREAM_SUPPORTED_FLAGS, StreamFlagBits};
 use crate::{MAX_SUPPORTED_CERTIFICATION_VERSION, all_supported_versions};
 use assert_matches::assert_matches;
+use ic_certification_version::CertificationVersion;
 use ic_error_types::RejectCode;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::messages::{Payload, RejectContext, RequestOrResponse};
+use ic_types::messages::{Payload, RejectContext, StreamMessage};
 use ic_types::xnet::RejectReason;
 use std::convert::{TryFrom, TryInto};
 use strum::{EnumCount, IntoEnumIterator};
@@ -165,7 +166,7 @@ fn roundtrip_conversion_request() {
 
         assert_eq!(
             request,
-            types::RequestOrResponse::from((&request, certification_version))
+            types::StreamMessage::from((&request, certification_version))
                 .try_into()
                 .unwrap()
         );
@@ -179,7 +180,7 @@ fn roundtrip_conversion_response() {
 
         assert_eq!(
             response,
-            types::RequestOrResponse::from((&response, certification_version))
+            types::StreamMessage::from((&response, certification_version))
                 .try_into()
                 .unwrap()
         );
@@ -193,7 +194,7 @@ fn roundtrip_conversion_reject_response() {
 
         assert_eq!(
             response,
-            types::RequestOrResponse::from((&response, certification_version))
+            types::StreamMessage::from((&response, certification_version))
                 .try_into()
                 .unwrap()
         );
@@ -201,15 +202,32 @@ fn roundtrip_conversion_reject_response() {
 }
 
 #[test]
-fn try_from_empty_request_or_response() {
-    let message = types::RequestOrResponse {
+fn roundtrip_conversion_anonymous_refund() {
+    for certification_version in
+        all_supported_versions().filter(|v| v >= &CertificationVersion::V22)
+    {
+        let refund = anonymous_refund(certification_version);
+
+        assert_eq!(
+            refund,
+            types::StreamMessage::from((&refund, certification_version))
+                .try_into()
+                .unwrap()
+        );
+    }
+}
+
+#[test]
+fn try_from_empty_stream_message() {
+    let message = types::StreamMessage {
         request: None,
         response: None,
+        refund: None,
     };
 
     assert_matches!(
-        RequestOrResponse::try_from(message),
-        Err(ProxyDecodeError::Other(message)) if message == "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `RequestOrResponse { request: None, response: None }`"
+        StreamMessage::try_from(message),
+        Err(ProxyDecodeError::Other(message)) if message == "StreamMessage: expected exactly one of `request`, `response` or `refund` to be `Some(_)`, got `StreamMessage { request: None, response: None, refund: None }`"
     );
 }
 

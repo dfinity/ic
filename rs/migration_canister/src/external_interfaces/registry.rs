@@ -18,9 +18,7 @@ struct GetSubnetForCanisterResponse {
     subnet_id: Option<Principal>,
 }
 
-pub async fn get_subnet_for_canister(
-    canister_id: Principal,
-) -> ProcessingResult<Principal, ValidationError> {
+pub async fn get_subnet_for_canister(canister_id: Principal) -> Result<Principal, ValidationError> {
     let args = GetSubnetForCanisterArgs {
         principal: Some(canister_id),
     };
@@ -33,32 +31,35 @@ pub async fn get_subnet_for_canister(
     .await
     {
         Err(e) => {
-            println!(
+            let msg = format!(
                 "Call `get_subnet_for_canister` for {} failed: {:?}",
                 canister_id, e
             );
-            ProcessingResult::NoProgress
+            println!("{}", msg);
+            Err(ValidationError::CallFailed { reason: msg })
         }
         Ok(response) => match response.candid::<Result<GetSubnetForCanisterResponse, String>>() {
             Ok(Ok(GetSubnetForCanisterResponse { subnet_id })) => match subnet_id {
-                None => ProcessingResult::FatalFailure(ValidationError::CanisterNotFound {
+                None => Err(ValidationError::CanisterNotFound {
                     canister: canister_id,
                 }),
-                Some(subnet_id) => ProcessingResult::Success(subnet_id),
+                Some(subnet_id) => Ok(subnet_id),
             },
             Ok(Err(e)) => {
-                println!(
+                let msg = format!(
                     "Call `GetSubnetForCanisterResponse` for {} failed: {}",
                     canister_id, e
                 );
-                ProcessingResult::NoProgress
+                println!("{}", msg);
+                Err(ValidationError::CallFailed { reason: msg })
             }
             Err(e) => {
-                println!(
+                let msg = format!(
                     "Decoding `get_subnet_for_canister` for {} failed: {:?}",
                     canister_id, e
                 );
-                ProcessingResult::NoProgress
+                println!("{}", msg);
+                Err(ValidationError::CallFailed { reason: msg })
             }
         },
     }
@@ -79,12 +80,12 @@ struct MigrateCanisterResponse {
 }
 
 pub async fn migrate_canister(
-    source: Principal,
-    target_subnet: Principal,
+    migrated_canister: Principal,
+    replaced_canister_subnet: Principal,
 ) -> ProcessingResult<u64, Infallible> {
     let args = MigrateCanistersArgs {
-        canister_ids: vec![source],
-        target_subnet_id: target_subnet,
+        canister_ids: vec![migrated_canister],
+        target_subnet_id: replaced_canister_subnet,
     };
 
     match Call::bounded_wait(
@@ -95,7 +96,10 @@ pub async fn migrate_canister(
     .await
     {
         Err(e) => {
-            println!("Call `migrate_canisters` for {} failed: {:?}", source, e);
+            println!(
+                "Call `migrate_canisters` for {} failed: {:?}",
+                migrated_canister, e
+            );
             ProcessingResult::NoProgress
         }
         Ok(response) => match response.candid::<MigrateCanisterResponse>() {
@@ -105,7 +109,7 @@ pub async fn migrate_canister(
             Err(e) => {
                 println!(
                     "Decoding `migrate_canisters` for {} failed: {:?}",
-                    source, e
+                    migrated_canister, e
                 );
                 ProcessingResult::NoProgress
             }

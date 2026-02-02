@@ -396,25 +396,25 @@ fn expected_split_marker() -> (FileInfo, ChunkInfo) {
 /// `SUBNET_1`.
 ///
 /// `SystemMetadata` encodes the `CURRENT_CERTIFICATION_VERSION`, therefore the hashes in this
-/// test must be updated every time the current certification version is bumped or a new
+/// test must be updated every time the current certification version is bumped. Or when a new
 /// field is added to `SystemMetadata`.
 fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
-            size_bytes: 68,
+            size_bytes: 65,
             hash: [
-                184, 185, 50, 174, 192, 11, 79, 186, 145, 199, 208, 149, 110, 163, 79, 228, 98, 49,
-                222, 240, 10, 56, 68, 225, 230, 192, 65, 90, 56, 11, 222, 145,
+                39, 164, 64, 44, 9, 212, 165, 34, 200, 1, 22, 98, 99, 119, 129, 248, 168, 198, 240,
+                112, 49, 44, 231, 89, 60, 205, 99, 69, 54, 196, 180, 153,
             ],
         },
         ChunkInfo {
             file_index: 13,
-            size_bytes: 68,
+            size_bytes: 65,
             offset: 0,
             hash: [
-                215, 246, 84, 60, 210, 253, 199, 236, 204, 221, 179, 180, 78, 9, 85, 111, 132, 211,
-                126, 153, 137, 211, 133, 31, 95, 20, 77, 160, 132, 15, 32, 127,
+                75, 239, 176, 218, 222, 88, 114, 202, 3, 125, 101, 212, 81, 83, 236, 103, 150, 105,
+                15, 108, 238, 49, 193, 88, 80, 236, 163, 15, 212, 49, 214, 74,
             ],
         },
     )

@@ -6,20 +6,19 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
-    CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob, GlobalTimer, IC_00,
-    InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, OnLowWasmMemoryHookStatus, Payload, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    CanisterMetadataRequest, CanisterSettingsArgsBuilder, CanisterSnapshotDataKind,
+    CanisterSnapshotDataOffset, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
+    GlobalTimer, IC_00, InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, execution_state::NextScheduledMethod};
@@ -113,7 +112,7 @@ fn dts_subnet_config(
             // We should execute just one slice per round.
             max_instructions_per_round: slice_instruction_limit + slice_instruction_limit / 2,
             max_instructions_per_message: message_instruction_limit,
-            max_instructions_per_message_without_dts: slice_instruction_limit,
+            max_instructions_per_query_message: slice_instruction_limit,
             max_instructions_per_slice: slice_instruction_limit,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
@@ -131,7 +130,6 @@ fn dts_state_machine_config(subnet_config: SubnetConfig) -> StateMachineConfig {
                 cost_to_compile_wasm_instruction: 0.into(),
                 ..EmbeddersConfig::default()
             },
-            deterministic_time_slicing: FlagStatus::Enabled,
             ..Default::default()
         },
     )
@@ -147,8 +145,6 @@ fn dts_env(
             slice_instruction_limit,
         ))))
         .with_subnet_type(SubnetType::Application)
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
         .build()
 }
 
@@ -163,7 +159,7 @@ fn dts_install_code_env(
             max_instructions_per_install_code_slice: slice_instruction_limit,
             max_instructions_per_round: message_instruction_limit + message_instruction_limit,
             max_instructions_per_message: message_instruction_limit,
-            max_instructions_per_message_without_dts: slice_instruction_limit,
+            max_instructions_per_query_message: slice_instruction_limit,
             max_instructions_per_slice: message_instruction_limit,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
@@ -172,10 +168,7 @@ fn dts_install_code_env(
         },
         ..default_app_subnet_config
     };
-    let hypervisor_config = HypervisorConfig {
-        deterministic_time_slicing: FlagStatus::Enabled,
-        ..Default::default()
-    };
+    let hypervisor_config = HypervisorConfig::default();
     let state_machine = ic_state_machine_tests::StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             subnet_config.clone(),
@@ -1035,8 +1028,13 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             || method == Method::ReadCanisterSnapshotMetadata
             || method == Method::ReadCanisterSnapshotData
         {
-            env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(aborted_canister_id, None))
-                .unwrap();
+            env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+                aborted_canister_id,
+                None,
+                None,
+                None,
+            ))
+            .unwrap();
         }
 
         if method == Method::UploadCanisterSnapshotData {
@@ -1124,6 +1122,14 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             }
             Method::CanisterInfo => test_supported(|aborted_canister_id| {
                 let args = CanisterInfoRequest::new(aborted_canister_id, None).encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::CanisterMetadata => test_supported(|aborted_canister_id| {
+                let args =
+                    // The "git_commit_id" is one of the metadata sections in the universal canister
+                    // wasm (for any canister wasm built in the monorepo).
+                    CanisterMetadataRequest::new(aborted_canister_id, "git_commit_id".to_string())
+                        .encode();
                 (method, call_args().other_side(args))
             }),
             // No effective canister id.
@@ -1223,6 +1229,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 let args = TakeCanisterSnapshotArgs {
                     canister_id: aborted_canister_id.get(),
                     replace_snapshot: None,
+                    uninstall_code: None,
+                    sender_canister_version: None,
                 }
                 .encode();
                 (method, call_args().other_side(args))

@@ -1,22 +1,15 @@
-use crate::eth_rpc::Hash;
-use crate::lifecycle::EthereumNetwork;
-use crate::logs::{INFO, PrintProxySink, TRACE_HTTP};
-use crate::numeric::TransactionCount;
-use crate::state::State;
-use candid::Nat;
-use evm_rpc_client::{
-    Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient, FeeHistory,
-    FeeHistoryArgs, GetLogsArgs, GetLogsRpcConfig as EvmGetLogsRpcConfig,
-    GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, HttpOutcallError, IcRuntime,
-    LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
-    RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
-    RpcServices as EvmRpcServices, SendRawTransactionStatus, TransactionReceipt, ValidationError,
+use crate::{lifecycle::EthereumNetwork, logs::INFO, state::State};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
+use evm_rpc_types::{
+    ConsensusStrategy, EthSepoliaService, HttpOutcallError, MultiRpcResult as EvmMultiRpcResult,
+    RpcError, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
 };
 use ic_canister_log::log;
-use ic_ethereum_types::Address;
-use std::collections::{BTreeMap, BTreeSet};
-use std::convert::Infallible;
-use std::fmt::{Debug, Display};
+use ic_canister_runtime::IcRuntime;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Debug,
+};
 
 pub mod responses;
 
@@ -28,147 +21,46 @@ mod tests;
 // the headers size to 8 KiB. We chose a lower limit because headers observed on most providers
 // fit in the constant defined below, and if there is spike, then the payload size adjustment
 // should take care of that.
-const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
+pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 // We expect most of the calls to contain zero events.
-const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
-const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
+pub const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
 
-#[derive(Debug)]
-pub struct EthRpcClient {
-    evm_rpc_client: EvmRpcClient<IcRuntime, PrintProxySink>,
-}
+pub const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
-impl EthRpcClient {
-    pub fn from_state(state: &State) -> Self {
-        fn rpc_config(strategy: ConsensusStrategy) -> EvmRpcConfig {
-            EvmRpcConfig {
-                response_consensus: Some(strategy),
-                ..EvmRpcConfig::default()
-            }
-        }
+pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
+    const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
+    const MAX_NUM_RETRIES: u32 = 10;
 
-        let chain = state.ethereum_network();
-        let evm_rpc_id = state.evm_rpc_id();
-        const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
+    let chain = state.ethereum_network();
+    let evm_rpc_id = state.evm_rpc_id();
 
-        let providers = match chain {
-            EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
-            EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(vec![
-                EthSepoliaService::BlockPi,
-                EthSepoliaService::PublicNode,
-                EthSepoliaService::Alchemy,
-                EthSepoliaService::Ankr,
-            ])),
-        };
-        let min_threshold = match chain {
-            EthereumNetwork::Mainnet => 3_u8,
-            EthereumNetwork::Sepolia => 2_u8,
-        };
-        assert!(
-            min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
-            "BUG: min_threshold too high"
-        );
-        let response_consensus = ConsensusStrategy::Threshold {
+    let providers = match chain {
+        EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
+        EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(vec![
+            EthSepoliaService::BlockPi,
+            EthSepoliaService::PublicNode,
+            EthSepoliaService::Alchemy,
+            EthSepoliaService::Ankr,
+        ])),
+    };
+
+    let min_threshold = match chain {
+        EthereumNetwork::Mainnet => 3_u8,
+        EthereumNetwork::Sepolia => 2_u8,
+    };
+    assert!(
+        min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
+        "BUG: min_threshold too high"
+    );
+
+    EvmRpcClient::builder(IcRuntime::new(), evm_rpc_id)
+        .with_rpc_sources(providers)
+        .with_consensus_strategy(ConsensusStrategy::Threshold {
             total: Some(TOTAL_NUMBER_OF_PROVIDERS),
             min: min_threshold,
-        };
-        let evm_rpc_client = EvmRpcClient::builder_for_ic(TRACE_HTTP)
-            .with_providers(providers)
-            .with_evm_canister_id(evm_rpc_id)
-            .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
-            .with_override_rpc_config(OverrideRpcConfig {
-                eth_get_block_by_number: Some(rpc_config(response_consensus.clone())),
-                eth_get_logs: Some(EvmGetLogsRpcConfig {
-                    response_size_estimate: Some(
-                        ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
-                    ),
-                    response_consensus: Some(response_consensus.clone()),
-                    ..Default::default()
-                }),
-                eth_fee_history: Some(rpc_config(response_consensus.clone())),
-                eth_get_transaction_receipt: Some(rpc_config(response_consensus.clone())),
-                eth_get_transaction_count: Some(rpc_config(response_consensus.clone())),
-                eth_send_raw_transaction: Some(rpc_config(response_consensus)),
-            })
-            .build();
-
-        Self { evm_rpc_client }
-    }
-
-    pub async fn eth_get_logs(
-        &self,
-        params: GetLogsArgs,
-    ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
-        let evm_rpc_result = self.evm_rpc_client.eth_get_logs(params).await;
-        ReducedResult::from_internal(evm_rpc_result).result
-    }
-
-    pub async fn eth_get_block_by_number(
-        &self,
-        block: BlockTag,
-    ) -> Result<Block, MultiCallError<Block>> {
-        let evm_rpc_result = self.evm_rpc_client.eth_get_block_by_number(block).await;
-        ReducedResult::from_internal(evm_rpc_result).result
-    }
-
-    pub async fn eth_get_transaction_receipt(
-        &self,
-        tx_hash: Hash,
-    ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
-        let evm_rpc_result = self
-            .evm_rpc_client
-            .eth_get_transaction_receipt(tx_hash.to_string())
-            .await;
-        ReducedResult::from_internal(evm_rpc_result).result
-    }
-
-    pub async fn eth_fee_history(
-        &self,
-        params: FeeHistoryArgs,
-    ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-        let evm_rpc_result = self.evm_rpc_client.eth_fee_history(params).await;
-        ReduceWithStrategy::<StrictMajorityByKey>::reduce(evm_rpc_result).result
-    }
-
-    pub async fn eth_send_raw_transaction(
-        &self,
-        raw_signed_transaction_hex: String,
-    ) -> Result<SendRawTransactionStatus, MultiCallError<SendRawTransactionStatus>> {
-        let evm_rpc_result = self
-            .evm_rpc_client
-            .eth_send_raw_transaction(raw_signed_transaction_hex)
-            .await;
-        ReduceWithStrategy::<AnyOf>::reduce(evm_rpc_result).result
-    }
-
-    pub async fn eth_get_finalized_transaction_count(
-        &self,
-        address: Address,
-    ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        let evm_rpc_result = self
-            .evm_rpc_client
-            .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                address: Hex20::from(address.into_bytes()),
-                block: BlockTag::Finalized,
-            })
-            .await
-            .map(&|tx_count: Nat256| TransactionCount::from(tx_count));
-        ReducedResult::from_internal(evm_rpc_result).result
-    }
-
-    pub async fn eth_get_latest_transaction_count(
-        &self,
-        address: Address,
-    ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        let evm_rpc_result = self
-            .evm_rpc_client
-            .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                address: Hex20::from(address.into_bytes()),
-                block: BlockTag::Latest,
-            })
-            .await;
-        ReduceWithStrategy::<MinByKey>::reduce(evm_rpc_result).result
-    }
+        })
+        .with_retry_strategy(DoubleCycles::with_max_num_retries(MAX_NUM_RETRIES))
+        .build()
 }
 
 /// Aggregates responses of different providers to the same query.
@@ -191,26 +83,6 @@ impl<T> MultiCallResults<T> {
             ok_results: BTreeMap::new(),
             errors: BTreeMap::new(),
         }
-    }
-
-    fn map<U, E: Display, F: Fn(T) -> Result<U, E>, O: Fn(E) -> RpcError>(
-        self,
-        f: &F,
-        map_err: &O,
-    ) -> MultiCallResults<U> {
-        let mut errors = self.errors;
-        let ok_results = self
-            .ok_results
-            .into_iter()
-            .filter_map(|(provider, v)| match f(v) {
-                Ok(value) => Some((provider, value)),
-                Err(e) => {
-                    errors.insert(provider, map_err(e));
-                    None
-                }
-            })
-            .collect();
-        MultiCallResults { ok_results, errors }
     }
 
     fn insert_once(&mut self, provider: EvmRpcService, result: Result<T, RpcError>) {
@@ -282,101 +154,107 @@ pub enum MultiCallError<T> {
     InconsistentResults(MultiCallResults<T>),
 }
 
-#[derive(Eq, PartialEq, Debug)]
-pub struct ReducedResult<T> {
-    result: Result<T, MultiCallError<T>>,
+pub trait ReductionStrategy<T> {
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>>;
 }
 
-impl<T> ReducedResult<T> {
-    /// Transform a `ReducedResult<T>` into a `ReducedResult<U>` by applying a mapping function `F`.
-    /// The mapping function is also applied to the elements contained in the error `MultiCallError::InconsistentResults`,
-    /// which depending on the mapping function could lead to the mapped results no longer being inconsistent.
-    /// The final result in that case is given by applying the reduction function `R` to the mapped results.
-    pub fn map_reduce<
-        U,
-        E: Display,
-        F: Fn(T) -> Result<U, E>,
-        R: FnOnce(MultiCallResults<U>) -> Result<U, MultiCallError<U>>,
-    >(
+pub struct NoReduction;
+
+impl<T> ReductionStrategy<T> for NoReduction {
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
+        consistent_result_or_reduce(results, |inconsistent| {
+            Err(MultiCallError::InconsistentResults(inconsistent))
+        })
+    }
+}
+
+pub struct AnyOf;
+
+impl<T> ReductionStrategy<T> for AnyOf
+where
+    T: PartialEq,
+{
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
+        consistent_result_or_reduce(results, |inconsistent| {
+            inconsistent.at_least_one_ok().map(|(_, result)| result)
+        })
+    }
+}
+
+pub struct MinByKey<F> {
+    get_key: F,
+}
+
+impl<F> MinByKey<F> {
+    pub fn new(get_key: F) -> Self {
+        Self { get_key }
+    }
+}
+
+impl<T, F, K> ReductionStrategy<T> for MinByKey<F>
+where
+    T: Debug + PartialEq,
+    F: Fn(&T) -> K,
+    K: Ord,
+{
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
+        consistent_result_or_reduce(results, |inconsistent| {
+            inconsistent.reduce_with_min_by_key(|result| (self.get_key)(result))
+        })
+    }
+}
+
+pub struct StrictMajorityByKey<F> {
+    get_key: F,
+}
+
+impl<F> StrictMajorityByKey<F> {
+    pub fn new(get_key: F) -> Self {
+        Self { get_key }
+    }
+}
+
+impl<T, F, K> ReductionStrategy<T> for StrictMajorityByKey<F>
+where
+    T: Debug + PartialEq,
+    F: Fn(&T) -> K,
+    K: Ord,
+{
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
+        consistent_result_or_reduce(results, |inconsistent| {
+            inconsistent.reduce_with_strict_majority_by_key(|result| (self.get_key)(result))
+        })
+    }
+}
+
+fn consistent_result_or_reduce<T, F>(
+    result: EvmMultiRpcResult<T>,
+    reduce: F,
+) -> Result<T, MultiCallError<T>>
+where
+    F: Fn(MultiCallResults<T>) -> Result<T, MultiCallError<T>>,
+{
+    match result {
+        EvmMultiRpcResult::Consistent(result) => result.map_err(MultiCallError::ConsistentError),
+        EvmMultiRpcResult::Inconsistent(results) => {
+            reduce(MultiCallResults::from_non_empty_iter(results))
+        }
+    }
+}
+
+pub trait ToReducedWithStrategy<T> {
+    fn reduce_with_strategy(
         self,
-        fallible_op: &F,
-        reduction: R,
-    ) -> ReducedResult<U> {
-        let result = match self.result {
-            Ok(t) => fallible_op(t).map_err(|e| {
-                MultiCallError::<U>::ConsistentError(RpcError::ValidationError(
-                    ValidationError::Custom(e.to_string()),
-                ))
-            }),
-            Err(MultiCallError::ConsistentError(e)) => Err(MultiCallError::ConsistentError(e)),
-            Err(MultiCallError::InconsistentResults(results)) => {
-                reduction(results.map(fallible_op, &|e| {
-                    RpcError::ValidationError(ValidationError::Custom(e.to_string()))
-                }))
-            }
-        };
-        ReducedResult { result }
-    }
-
-    fn from_internal(value: EvmMultiRpcResult<T>) -> Self {
-        let result = match value {
-            EvmMultiRpcResult::Consistent(result) => match result {
-                Ok(t) => Ok(t),
-                Err(e) => Err(MultiCallError::ConsistentError(e)),
-            },
-            EvmMultiRpcResult::Inconsistent(results) => Err(MultiCallError::InconsistentResults(
-                MultiCallResults::from_non_empty_iter(results),
-            )),
-        };
-        Self { result }
-    }
+        strategy: impl ReductionStrategy<T>,
+    ) -> Result<T, MultiCallError<T>>;
 }
 
-trait ReduceWithStrategy<S> {
-    type Item;
-    fn reduce(self) -> ReducedResult<Self::Item>;
-}
-
-pub enum MinByKey {}
-pub enum AnyOf {}
-pub enum StrictMajorityByKey {}
-
-impl ReduceWithStrategy<StrictMajorityByKey> for EvmMultiRpcResult<FeeHistory> {
-    type Item = FeeHistory;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        ReducedResult::from_internal(self).map_reduce(
-            &|fee_history| Ok::<FeeHistory, Infallible>(fee_history),
-            |results| {
-                results.reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                })
-            },
-        )
-    }
-}
-
-impl ReduceWithStrategy<AnyOf> for EvmMultiRpcResult<SendRawTransactionStatus> {
-    type Item = SendRawTransactionStatus;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        ReducedResult::from_internal(self).map_reduce(
-            &|tx_status| Ok::<SendRawTransactionStatus, Infallible>(tx_status),
-            |results| results.at_least_one_ok().map(|(_provider, result)| result),
-        )
-    }
-}
-
-impl ReduceWithStrategy<MinByKey> for EvmMultiRpcResult<Nat256> {
-    type Item = TransactionCount;
-
-    fn reduce(self) -> ReducedResult<Self::Item> {
-        ReducedResult::from_internal(self).map_reduce(
-            &|tx_count: Nat256| {
-                Ok::<TransactionCount, Infallible>(TransactionCount::from(tx_count))
-            },
-            |results| results.reduce_with_min_by_key(|transaction_count| *transaction_count),
-        )
+impl<T> ToReducedWithStrategy<T> for EvmMultiRpcResult<T> {
+    fn reduce_with_strategy(
+        self,
+        strategy: impl ReductionStrategy<T>,
+    ) -> Result<T, MultiCallError<T>> {
+        strategy.reduce(self)
     }
 }
 

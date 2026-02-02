@@ -19,7 +19,8 @@ use ic_embedders::wasmtime_embedder::system_api::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
+    ExecutionMode, HypervisorError, MessageMemoryUsage, SubnetAvailableMemory,
+    SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -27,8 +28,7 @@ use ic_logger::{ReplicaLogger, error, info};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallContextAction, CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology,
-    ReplicatedState,
+    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
     CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
@@ -43,7 +43,7 @@ use ic_types::{
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::Arc,
+    sync::{Arc, atomic::AtomicU64},
     time::{Duration, Instant},
 };
 
@@ -96,7 +96,7 @@ pub(super) struct QueryContext<'a> {
     state: Labeled<Arc<ReplicatedState>>,
     network_topology: Arc<NetworkTopology>,
     // Certificate for certified queries + canister ID of the root query of this context
-    data_certificate: (Vec<u8>, CanisterId),
+    data_certificate: Option<(Vec<u8>, CanisterId)>,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
     instruction_overhead_per_query_call: RoundInstructions,
@@ -117,6 +117,9 @@ pub(super) struct QueryContext<'a> {
     /// The number of transient errors.
     transient_errors: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    /// An optional atomic to observe the number of instructions used in the query.
+    /// This should only be populated for http outcalls transformations.
+    instruction_observation: Option<Arc<AtomicU64>>,
 }
 
 impl<'a> QueryContext<'a> {
@@ -126,9 +129,10 @@ impl<'a> QueryContext<'a> {
         hypervisor: &'a Hypervisor,
         own_subnet_type: SubnetType,
         state: Labeled<Arc<ReplicatedState>>,
-        data_certificate: Vec<u8>,
+        data_certificate: Option<Vec<u8>>,
         subnet_available_memory: SubnetAvailableMemory,
         subnet_available_callbacks: i64,
+        subnet_memory_reservation: NumBytes,
         canister_guaranteed_callback_quota: u64,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
@@ -140,6 +144,7 @@ impl<'a> QueryContext<'a> {
         query_critical_error: &'a IntCounter,
         local_query_execution_stats: Option<&'a QueryStatsCollector>,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        instruction_observation: Option<Arc<AtomicU64>>,
     ) -> Self {
         let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
         let round_limits = RoundLimits {
@@ -148,6 +153,7 @@ impl<'a> QueryContext<'a> {
             subnet_available_callbacks,
             // Ignore compute allocation
             compute_allocation_used: 0,
+            subnet_memory_reservation,
         };
         Self {
             log,
@@ -155,7 +161,8 @@ impl<'a> QueryContext<'a> {
             own_subnet_type,
             state,
             network_topology,
-            data_certificate: (data_certificate, canister_id),
+            data_certificate: data_certificate
+                .map(|data_certificate| (data_certificate, canister_id)),
             max_instructions_per_query,
             max_query_call_graph_depth,
             instruction_overhead_per_query_call: as_round_instructions(
@@ -174,6 +181,7 @@ impl<'a> QueryContext<'a> {
             evaluated_canister_stats: BTreeMap::from([(canister_id, QueryStats::default())]),
             transient_errors: 0,
             cycles_account_manager,
+            instruction_observation,
         }
     }
 
@@ -195,7 +203,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-        let call_origin = CallOrigin::Query(query.source().into());
+        let call_origin = CallOrigin::Query(query.source().into(), query.method_name.clone());
 
         let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
             Ok(method) => method,
@@ -347,7 +355,7 @@ impl<'a> QueryContext<'a> {
                         | Some(CallOrigin::Ingress(..))
                         | Some(CallOrigin::SystemTask) => {}
 
-                        Some(CallOrigin::Query(_)) | Some(CallOrigin::CanisterQuery(_, _)) => {
+                        Some(CallOrigin::Query(..)) | Some(CallOrigin::CanisterQuery(..)) => {
                             // We never serialize messages of such types in the
                             // canister's state so these must have been produced
                             // by this module.
@@ -395,7 +403,7 @@ impl<'a> QueryContext<'a> {
             canister.system_state.memory_allocation,
             canister.memory_usage(),
             canister.message_memory_usage(),
-            canister.scheduler_state.compute_allocation,
+            canister.compute_allocation(),
             subnet_size,
             self.get_cost_schedule(),
             canister.system_state.reserved_balance(),
@@ -416,8 +424,7 @@ impl<'a> QueryContext<'a> {
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
             self.round_limits.instructions.get().max(0) as u64,
         ));
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let data_certificate = self.get_data_certificate(&canister.canister_id());
@@ -448,6 +455,13 @@ impl<'a> QueryContext<'a> {
             },
             Err(_) => 0,
         };
+
+        if let Some(atomic) = self.instruction_observation.as_ref() {
+            atomic.fetch_add(
+                instructions_executed.get(),
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        }
 
         // Add query statistics to the query aggregator.
         let stats = QueryStats {
@@ -603,12 +617,10 @@ impl<'a> QueryContext<'a> {
             Payload::Reject(_) => callback.on_reject.clone(),
         };
         let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
-                FuncRef::QueryClosure(closure)
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+                unreachable!("Unreachable in the QueryContext.")
             }
+            CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => FuncRef::QueryClosure(closure),
         };
 
         let time = self.state.get_ref().time();
@@ -618,8 +630,7 @@ impl<'a> QueryContext<'a> {
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
             self.round_limits.instructions.get().max(0) as u64,
         ));
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
         let api_type = match response.response_payload {
             Payload::Data(payload) => ApiType::composite_reply_callback(
@@ -736,10 +747,10 @@ impl<'a> QueryContext<'a> {
         call_context_instructions_executed: NumInstructions,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+                unreachable!("Unreachable in the QueryContext.")
+            }
+            CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
@@ -826,7 +837,11 @@ impl<'a> QueryContext<'a> {
             }
         };
 
-        let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
+        let call_origin = CallOrigin::CanisterQuery(
+            request.sender,
+            request.sender_reply_callback,
+            request.method_name.clone(),
+        );
 
         let method = match wasm_query_method(canister, request.method_name.clone()) {
             Ok(method) => method,
@@ -964,9 +979,7 @@ impl<'a> QueryContext<'a> {
             };
 
         match call_origin {
-            CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::Ingress(_, _)
-            | CallOrigin::SystemTask => {
+            CallOrigin::CanisterUpdate(..) | CallOrigin::Ingress(..) | CallOrigin::SystemTask => {
                 error!(
                     self.log,
                     "[EXC-BUG] Canister {}: unexpected callback with an update origin. This is a bug @{}",
@@ -980,7 +993,7 @@ impl<'a> QueryContext<'a> {
                 ))
             }
 
-            CallOrigin::Query(_) => match self.action_to_result(canister.canister_id(), action) {
+            CallOrigin::Query(..) => match self.action_to_result(canister.canister_id(), action) {
                 Some(Ok(wasm_result)) => {
                     ExecutionResult::Response(QueryResponse::UserResponse(wasm_result))
                 }
@@ -990,7 +1003,7 @@ impl<'a> QueryContext<'a> {
                     Err(err) => ExecutionResult::SystemError(err),
                 },
             },
-            CallOrigin::CanisterQuery(originator, callback_id) => {
+            CallOrigin::CanisterQuery(originator, callback_id, ref _method_name) => {
                 let canister_id = canister.canister_id();
                 let to_query_result = |payload| {
                     let response = Response {
@@ -1050,13 +1063,11 @@ impl<'a> QueryContext<'a> {
             format!("Canister {canister_id} did not produce a response"),
         );
         match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::SystemTask => {
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
                 unreachable!("Expected a query call context");
             }
-            CallOrigin::Query(_) => QueryResponse::UserError(error),
-            CallOrigin::CanisterQuery(originator, callback_id) => {
+            CallOrigin::Query(..) => QueryResponse::UserError(error),
+            CallOrigin::CanisterQuery(originator, callback_id, _method_name) => {
                 let response = Response {
                     originator,
                     respondent: canister_id,
@@ -1090,11 +1101,15 @@ impl<'a> QueryContext<'a> {
     }
 
     fn get_data_certificate(&self, canister_id: &CanisterId) -> Option<Vec<u8>> {
-        if canister_id != &self.data_certificate.1 {
-            None
-        } else {
-            Some(self.data_certificate.0.clone())
-        }
+        self.data_certificate.as_ref().and_then(
+            |(data_certificate, data_certificate_canister_id)| {
+                if canister_id != data_certificate_canister_id {
+                    None
+                } else {
+                    Some(data_certificate.clone())
+                }
+            },
+        )
     }
 
     /// Returns how many times each tracked System API call was invoked.

@@ -27,13 +27,23 @@ use http::{
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
 };
-use ic_agent::agent::route_provider::RoundRobinRouteProvider;
-use ic_gateway::ic_bn_lib::http::{
-    Client, ConnInfo,
-    headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
-    proxy::proxy,
+use ic_bn_lib_common::{
+    traits::http::Client,
+    types::http::{ClientOptions, ConnInfo},
 };
-use ic_gateway::{Cli, setup_router};
+use ic_gateway::{
+    Cli,
+    ic_bn_lib::{
+        http::{
+            dns::Resolver,
+            headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
+            proxy::proxy,
+        },
+        ic_agent::agent::route_provider::RoundRobinRouteProvider,
+        utils::health_manager::HealthManager,
+    },
+    setup_router,
+};
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
 use itertools::Itertools;
 use pocket_ic::RejectResponse;
@@ -57,9 +67,12 @@ use tokio::{
     task::{JoinHandle, JoinSet, spawn, spawn_blocking},
     time::{self, sleep},
 };
+use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
+use tracing::level_filters::LevelFilter;
 use tracing::{debug, error, trace};
+use tracing_subscriber::reload;
 
 // The maximum wait time for a computation to finish synchronously.
 pub(crate) const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -150,11 +163,33 @@ impl Drop for HttpGateway {
     }
 }
 
+#[derive(Default)]
+struct Graph(HashMap<(StateLabel, OpId), (StateLabel, OpOut)>);
+
+impl Graph {
+    fn store_result(
+        &mut self,
+        old_state_label: StateLabel,
+        op_id: OpId,
+        result: (StateLabel, OpOut),
+    ) {
+        self.0.insert((old_state_label, op_id), result);
+    }
+
+    fn read_result(&self, old_state_label: StateLabel, op_id: OpId) -> Option<(StateLabel, OpOut)> {
+        self.0.get(&(old_state_label, op_id)).cloned()
+    }
+
+    fn prune_result(&mut self, state_label: StateLabel, op_id: OpId) -> Option<()> {
+        self.0.remove(&(state_label, op_id)).map(|_| ())
+    }
+}
+
 /// The state of the PocketIC API.
 pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on `instances` and then on `graph`.
     instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
-    graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+    graph: Arc<RwLock<Graph>>,
     seed: AtomicU64,
     // PocketIC server port
     port: Option<u16>,
@@ -187,13 +222,6 @@ impl PocketIcApiStateBuilder {
     }
 
     pub fn build(self) -> Arc<ApiState> {
-        let graph: HashMap<StateLabel, Computations> = self
-            .initial_instances
-            .iter()
-            .map(|i| (i.get_state_label(), Computations::default()))
-            .collect();
-        let graph = Arc::new(RwLock::new(graph));
-
         let instances: Vec<_> = self
             .initial_instances
             .into_iter()
@@ -208,7 +236,7 @@ impl PocketIcApiStateBuilder {
 
         Arc::new(ApiState {
             instances,
-            graph,
+            graph: Arc::new(RwLock::new(Graph::default())),
             seed: AtomicU64::new(0),
             port: self.port,
             http_gateways: Arc::new(RwLock::new(Vec::new())),
@@ -232,6 +260,7 @@ pub enum OpOut {
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
     CanisterHttp(Vec<CanisterHttpRequest>),
+    CanisterSnapshotId(Vec<u8>),
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -249,6 +278,8 @@ pub enum PocketIcError {
     Forbidden(String),
     BlockmakerNotFound(NodeId),
     BlockmakerContainedInFailed(NodeId),
+    InvalidCanisterSnapshotDirectory(String),
+    CanisterSnapshotError(String),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -314,6 +345,12 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::Forbidden(msg)) => {
                 write!(f, "Forbidden({msg})")
             }
+            OpOut::Error(PocketIcError::InvalidCanisterSnapshotDirectory(msg)) => {
+                write!(f, "InvalidSnapshotDirectory({msg})")
+            }
+            OpOut::Error(PocketIcError::CanisterSnapshotError(msg)) => {
+                write!(f, "CanisterSnapshotError({msg})")
+            }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({subnet_id})"),
@@ -341,11 +378,12 @@ impl std::fmt::Debug for OpOut {
             OpOut::CanisterHttp(canister_http_reqeusts) => {
                 write!(f, "CanisterHttp({canister_http_reqeusts:?})")
             }
+            OpOut::CanisterSnapshotId(snapshot_id) => {
+                write!(f, "CanisterSnapshotId({})", hex::encode(snapshot_id))
+            }
         }
     }
 }
-
-pub type Computations = HashMap<OpId, (StateLabel, OpOut)>;
 
 /// The PocketIcApiState has a vector with elements of InstanceState.
 /// When an operation is bound to an instance, the corresponding element in the
@@ -478,7 +516,7 @@ impl ApiState {
     // or `None` if the auto progress mode received a stop signal.
     async fn execute_operation(
         instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
-        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+        graph: Arc<RwLock<Graph>>,
         instance_id: InstanceId,
         op: impl Operation + Send + Sync + 'static,
         rx: &mut Receiver<()>,
@@ -502,8 +540,11 @@ impl ApiState {
                     break loop {
                         sleep(READ_GRAPH_DELAY).await;
                         if let Some((_, op_out)) =
-                            Self::read_result(graph.clone(), &state_label, &op_id)
+                            Self::read_result(graph.clone(), state_label.clone(), op_id.clone())
+                                .await
                         {
+                            Self::prune_result(graph.clone(), state_label.clone(), op_id.clone())
+                                .await;
                             break Some(op_out);
                         }
                         if received_stop_signal(rx) {
@@ -520,28 +561,41 @@ impl ApiState {
         }
     }
 
+    async fn read_result(
+        graph: Arc<RwLock<Graph>>,
+        state_label: StateLabel,
+        op_id: OpId,
+    ) -> Option<(StateLabel, OpOut)> {
+        let graph_guard = graph.read().await;
+        graph_guard.read_result(state_label, op_id)
+    }
+
     /// For polling:
     /// The client lib dispatches a long running operation and gets a Started {state_label, op_id}.
     /// It then polls on that via this state tree api function.
-    fn read_result(
-        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
-        state_label: &StateLabel,
-        op_id: &OpId,
+    pub async fn read_graph(
+        &self,
+        state_label: StateLabel,
+        op_id: OpId,
     ) -> Option<(StateLabel, OpOut)> {
-        if let Some((new_state_label, op_out)) = graph.try_read().ok()?.get(state_label)?.get(op_id)
-        {
-            Some((new_state_label.clone(), op_out.clone()))
-        } else {
-            None
-        }
+        Self::read_result(self.graph.clone(), state_label, op_id).await
     }
 
-    pub fn read_graph(
-        &self,
-        state_label: &StateLabel,
-        op_id: &OpId,
-    ) -> Option<(StateLabel, OpOut)> {
-        Self::read_result(self.graph.clone(), state_label, op_id)
+    async fn prune_result(
+        graph: Arc<RwLock<Graph>>,
+        state_label: StateLabel,
+        op_id: OpId,
+    ) -> Option<()> {
+        let mut graph_guard = graph.write().await;
+        graph_guard.prune_result(state_label, op_id)
+    }
+
+    /// After polling:
+    /// The client lib dispatches a long running operation and gets a Started {state_label, op_id}.
+    /// It then polls on that via this state tree api function.
+    /// Finally, it prunes the result to release memory on the server.
+    pub async fn prune_graph(&self, state_label: StateLabel, op_id: OpId) -> Option<()> {
+        Self::prune_result(self.graph.clone(), state_label, op_id).await
     }
 
     pub async fn add_instance<F>(
@@ -611,7 +665,28 @@ impl ApiState {
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
+        // stop all HTTP gateways for the instance
+        // to release their resources
+        // (since such HTTP gateways won't work once the instance is deleted)
+        let mut http_gateways = self.http_gateways.write().await;
+        for maybe_http_gateway in http_gateways.iter_mut() {
+            if let Some(http_gateway) = maybe_http_gateway
+                && http_gateway.details.forward_to
+                    == HttpGatewayBackend::PocketIcInstance(instance_id)
+            {
+                *maybe_http_gateway = None;
+            }
+        }
+        // release the lock on HTTP gateways before acquiring a lock on instances
+        // to prevent deadlocks
+        drop(http_gateways);
+
+        // stop progress on the instance
+        // so that the instance is not permanently busy
+        // and can be actually deleted
         self.stop_progress(instance_id).await;
+
+        // finally, delete the instance
         loop {
             let instances = self.instances.read().await;
             let mut instance = instances[instance_id].lock().await;
@@ -625,6 +700,8 @@ impl ApiState {
                 }
                 InstanceState::Busy { .. } => {}
             }
+            // release locks before sleeping so that the instance can actually finish
+            // its computation while we're sleeping
             drop(instance);
             drop(instances);
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -702,9 +779,9 @@ impl ApiState {
             .with_url(replica_url.clone())
             .build()
             .unwrap();
-        time::timeout(DEFAULT_SYNC_WAIT_DURATION, agent.fetch_root_key())
+        agent
+            .fetch_root_key()
             .await
-            .map_err(|_| format!("{UPSTREAM_ERROR} (timeout)"))?
             .map_err(|e| format!("{UPSTREAM_ERROR} ({e})"))?;
 
         let handle = Handle::new();
@@ -732,26 +809,42 @@ impl ApiState {
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
-                let http_client_opts: ic_gateway::ic_bn_lib::http::client::Options<
-                    ic_gateway::ic_bn_lib::http::dns::Resolver,
-                > = (&cli.http_client).into();
+                let resolver = Resolver::default();
+
+                let http_client_opts: ClientOptions = (&cli.http_client).into();
                 let http_client = Arc::new(
-                    ic_gateway::ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone())
-                        .unwrap(),
+                    ic_gateway::ic_bn_lib::http::ReqwestClient::new(
+                        http_client_opts.clone(),
+                        Some(resolver.clone()),
+                    )
+                    .unwrap(),
                 );
+                let http_client_hyper = Arc::new(ic_gateway::ic_bn_lib::http::HyperClient::new(
+                    http_client_opts,
+                    resolver,
+                ));
 
                 let route_provider =
                     RoundRobinRouteProvider::new(vec![replica_url.clone()]).unwrap();
 
                 let mut tasks = ic_gateway::ic_bn_lib::tasks::TaskManager::new();
 
+                let (_, reload_handle) = reload::Layer::new(LevelFilter::WARN);
+                let health_manager = Arc::new(HealthManager::default());
                 let ic_gateway_router = setup_router(
                     &cli,
                     vec![],
+                    reload_handle,
                     &mut tasks,
+                    health_manager,
                     http_client,
+                    http_client_hyper,
                     Arc::new(route_provider),
                     &ic_gateway::ic_bn_lib::prometheus::Registry::new(),
+                    CancellationToken::new(),
+                    None,
+                    None,
+                    None,
                 )
                 .await
                 .unwrap();
@@ -998,7 +1091,7 @@ impl ApiState {
     /// cases when clients want to enforce a long-running blocking call.
     async fn update_instances_with_timeout<O>(
         instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
-        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+        graph: Arc<RwLock<Graph>>,
         op: Arc<O>,
         instance_id: InstanceId,
         sync_wait_time: Option<Duration>,
@@ -1006,15 +1099,14 @@ impl ApiState {
     where
         O: Operation + Send + Sync + 'static,
     {
-        let op_id = op.id().0;
+        let op_id = op.id();
         trace!(
             "update_with_timeout::start instance_id={} op_id={}",
             instance_id, op_id,
         );
         let instances_cloned = instances.clone();
         let instances_locked = instances_cloned.read().await;
-        let (bg_task, started_outcome) = if let Some(instance_mutex) =
-            instances_locked.get(instance_id)
+        let (bg_task, state_label) = if let Some(instance_mutex) = instances_locked.get(instance_id)
         {
             let mut instance = instance_mutex.lock().await;
             // If this instance is busy, return the running op and initial state
@@ -1035,7 +1127,6 @@ impl ApiState {
                     // move pocket_ic out
 
                     let state_label = pocket_ic.get_state_label();
-                    let op_id = op.id();
                     let busy = InstanceState::Busy {
                         state_label: state_label.clone(),
                         op_id: op_id.clone(),
@@ -1053,18 +1144,20 @@ impl ApiState {
                         move || {
                             trace!(
                                 "bg_task::start instance_id={} state_label={:?} op_id={}",
-                                instance_id, old_state_label, op_id.0,
+                                instance_id, old_state_label, op_id,
                             );
                             let result = op.compute(&mut pocket_ic);
+                            pocket_ic.sync_registry_from_canister();
                             pocket_ic.bump_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
                             let instances = instances.blocking_read();
                             let mut graph_guard = graph.blocking_write();
-                            let cached_computations =
-                                graph_guard.entry(old_state_label.clone()).or_default();
-                            cached_computations
-                                .insert(op_id.clone(), (new_state_label, result.clone()));
+                            graph_guard.store_result(
+                                old_state_label,
+                                op_id.clone(),
+                                (new_state_label, result.clone()),
+                            );
                             drop(graph_guard);
                             let mut instance = instances[instance_id].blocking_lock();
                             if let InstanceState::Deleted = &instance.state {
@@ -1075,12 +1168,12 @@ impl ApiState {
                             } else {
                                 instance.state = InstanceState::Available(pocket_ic);
                             }
-                            trace!("bg_task::end instance_id={} op_id={}", instance_id, op_id.0);
+                            trace!("bg_task::end instance_id={} op_id={}", instance_id, op_id);
                             result
                         }
                     };
 
-                    (bg_task, UpdateReply::Started { state_label, op_id })
+                    (bg_task, state_label)
                 }
             }
         } else {
@@ -1108,27 +1201,26 @@ impl ApiState {
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Some(sync_wait_time) = sync_wait_time {
-            if let Ok(res) = time::timeout(sync_wait_time, bg_handle).await {
-                trace!(
-                    "update_with_timeout::synchronous instance_id={} op_id={}",
-                    instance_id, op_id,
-                );
-                return Ok(UpdateReply::Output(res.unwrap()));
-            }
+        let maybe_sync_result = if let Some(sync_wait_time) = sync_wait_time {
+            time::timeout(sync_wait_time, bg_handle).await.ok()
         } else {
-            let res = bg_handle.await;
+            Some(bg_handle.await)
+        };
+        if let Some(sync_result) = maybe_sync_result {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id, op_id,
             );
-            return Ok(UpdateReply::Output(res.unwrap()));
+            let mut graph_guard = graph.write().await;
+            graph_guard.prune_result(state_label, op_id);
+            drop(graph_guard);
+            return Ok(UpdateReply::Output(sync_result.unwrap()));
         }
 
         trace!(
             "update_with_timeout::timeout instance_id={} op_id={}",
             instance_id, op_id,
         );
-        Ok(started_outcome)
+        Ok(UpdateReply::Started { state_label, op_id })
     }
 }

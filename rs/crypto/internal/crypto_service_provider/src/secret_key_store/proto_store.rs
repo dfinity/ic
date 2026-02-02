@@ -9,9 +9,7 @@ use hex::{FromHex, ToHex};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::{ReplicaLogger, debug, info, replica_logger::no_op_logger, warn};
-use parking_lot::RwLock;
 use prost::Message;
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{ErrorKind, Write};
@@ -42,7 +40,7 @@ type SecretKeys = HashMap<KeyId, (CspSecretKey, Option<Scope>)>;
 pub struct ProtoSecretKeyStore {
     proto_file: PathBuf,
     old_proto_file_to_zeroize: PathBuf,
-    keys: Arc<RwLock<SecretKeys>>,
+    keys: SecretKeys,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
 }
@@ -133,7 +131,7 @@ impl ProtoSecretKeyStore {
         let sks = ProtoSecretKeyStore {
             proto_file,
             old_proto_file_to_zeroize,
-            keys: Arc::new(RwLock::new(secret_keys)),
+            keys: secret_keys,
             logger,
             metrics,
         };
@@ -423,19 +421,14 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         key: CspSecretKey,
         scope: Option<Scope>,
     ) -> Result<(), SecretKeyStoreInsertionError> {
-        let inserted = with_write_lock(&self.keys, |keys| match keys.get(&id) {
-            Some(_) => Ok(false),
+        match self.keys.get(&id) {
+            Some(_) => Err(SecretKeyStoreInsertionError::DuplicateKeyId(id)),
             None => {
-                keys.insert(id, (key, scope));
-                self.write_secret_keys_to_disk_and_cleanup_old_file(keys)?;
+                self.keys.insert(id, (key, scope));
+                self.write_secret_keys_to_disk_and_cleanup_old_file(&self.keys)?;
                 debug!(self.logger, "Inserted new secret key {}", id);
-                Ok(true)
+                Ok(())
             }
-        })?;
-        if inserted {
-            Ok(())
-        } else {
-            Err(SecretKeyStoreInsertionError::DuplicateKeyId(id))
         }
     }
 
@@ -445,21 +438,17 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         key: CspSecretKey,
         scope: Option<Scope>,
     ) -> Result<(), SecretKeyStoreWriteError> {
-        with_write_lock(&self.keys, |keys| {
-            let previous_key = keys.insert(id, (key, scope));
-            self.write_secret_keys_to_disk_and_cleanup_old_file(keys)?;
-            match previous_key {
-                None => debug!(self.logger, "Inserted new secret key {}", id),
-                Some(_) => debug!(self.logger, "Replaced existing secret key {}", id),
-            };
-            Ok(())
-        })
+        let previous_key = self.keys.insert(id, (key, scope));
+        self.write_secret_keys_to_disk_and_cleanup_old_file(&self.keys)?;
+        match previous_key {
+            None => debug!(self.logger, "Inserted new secret key {}", id),
+            Some(_) => debug!(self.logger, "Replaced existing secret key {}", id),
+        };
+        Ok(())
     }
 
     fn get(&self, id: &KeyId) -> Option<CspSecretKey> {
-        with_read_lock(&self.keys, |keys| {
-            keys.get(id).map(|(csp_key, _)| csp_key.to_owned())
-        })
+        self.keys.get(id).map(|(csp_key, _)| csp_key.to_owned())
     }
 
     fn contains(&self, id: &KeyId) -> bool {
@@ -467,47 +456,45 @@ impl SecretKeyStore for ProtoSecretKeyStore {
     }
 
     fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStoreWriteError> {
-        with_write_lock(&self.keys, |keys| match keys.get(id) {
+        match self.keys.get(id) {
             Some(_) => {
-                keys.remove(id);
-                self.write_secret_keys_to_disk_and_cleanup_old_file(keys)?;
+                self.keys.remove(id);
+                self.write_secret_keys_to_disk_and_cleanup_old_file(&self.keys)?;
                 debug!(self.logger, "Removed secret key {}", id);
                 Ok(true)
             }
             None => Ok(false),
-        })
+        }
     }
 
     fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStoreWriteError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {
-        with_write_lock(&self.keys, |keys| {
-            let mut all_keys = SecretKeys::new();
-            core::mem::swap(&mut all_keys, keys);
-            let orig_keys_count = all_keys.len();
-            for (key_id, (csp_key, maybe_scope)) in all_keys.drain() {
-                if maybe_scope != Some(scope) || filter(&key_id, &csp_key) {
-                    keys.insert(key_id, (csp_key, maybe_scope));
-                } else {
-                    info!(
-                        self.logger,
-                        "Deleting key with ID {} with scope {}", key_id, scope
-                    );
-                }
+        let mut all_keys = SecretKeys::new();
+        core::mem::swap(&mut all_keys, &mut self.keys);
+        let orig_keys_count = all_keys.len();
+        for (key_id, (csp_key, maybe_scope)) in all_keys.drain() {
+            if maybe_scope != Some(scope) || filter(&key_id, &csp_key) {
+                self.keys.insert(key_id, (csp_key, maybe_scope));
+            } else {
+                info!(
+                    self.logger,
+                    "Deleting key with ID {} with scope {}", key_id, scope
+                );
             }
-            if keys.len() < orig_keys_count {
-                self.write_secret_keys_to_disk_and_cleanup_old_file(keys)?;
-            }
-            Ok(())
-        })
+        }
+        if self.keys.len() < orig_keys_count {
+            self.write_secret_keys_to_disk_and_cleanup_old_file(&self.keys)?;
+        }
+        Ok(())
     }
 
     fn retain_would_modify_keystore<F>(&self, filter: F, scope: Scope) -> bool
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
     {
-        for (key_id, (csp_key, maybe_scope)) in self.keys.read().iter() {
+        for (key_id, (csp_key, maybe_scope)) in self.keys.iter() {
             if maybe_scope == &Some(scope) && !filter(key_id, csp_key) {
                 // Key is to be deleted, i.e., the keystore will be modified.
                 return true;
@@ -559,24 +546,6 @@ fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
         );
     }
     result
-}
-
-fn with_write_lock<T, I, R, F>(v: T, f: F) -> Result<R, SecretKeyStoreWriteError>
-where
-    T: AsRef<RwLock<I>>,
-    F: FnOnce(&mut I) -> Result<R, SecretKeyStoreWriteError>,
-{
-    let mut lock_result = v.as_ref().write();
-    f(lock_result.borrow_mut())
-}
-
-fn with_read_lock<T, I, R, F>(v: T, f: F) -> Option<R>
-where
-    T: AsRef<RwLock<I>>,
-    F: FnOnce(&I) -> Option<R>,
-{
-    let lock_result = v.as_ref().read();
-    f(&lock_result)
 }
 
 fn combine_cleanup_results(

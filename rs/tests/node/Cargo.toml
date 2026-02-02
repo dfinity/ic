@@ -17,6 +17,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-system-test-driver = { path = "../driver" }
 indoc = "1.0.9"
+nested = { path = "../nested" }
 k256 = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 slog = { workspace = true }
@@ -41,3 +42,7 @@ path = "launch_single_guest.rs"
 [[bin]]
 name = "launch_single_host"
 path = "launch_single_host.rs"
+
+[[bin]]
+name = "ic-systest-kill-start"
+path = "kill_start_test.rs"

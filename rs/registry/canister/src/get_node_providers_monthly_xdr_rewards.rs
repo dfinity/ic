@@ -132,15 +132,6 @@ mod tests {
         let mut registry = Registry::new();
         registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
 
-        // Assert get_node_providers_monthly_xdr_rewards fails because no rewards table
-        // exists in the Registry
-        let err = registry
-            .get_node_providers_monthly_xdr_rewards(GetNodeProvidersMonthlyXdrRewardsRequest {
-                registry_version: None,
-            })
-            .unwrap_err();
-        assert_eq!(&err, "Node Rewards Table was not found in the Registry");
-
         // Add empty Node Rewards table to test failure cases
         let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::default();
         registry.do_update_node_rewards_table(node_rewards_payload);

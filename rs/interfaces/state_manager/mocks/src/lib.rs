@@ -20,6 +20,8 @@ mock! {
 
         fn get_latest_state(&self) -> Labeled<Arc<ReplicatedState>>;
 
+        fn get_latest_certified_state(&self) -> Option<Labeled<Arc<ReplicatedState>>>;
+
         fn latest_state_height(&self) -> Height;
 
         fn latest_certified_height(&self) -> Height;
@@ -54,6 +56,8 @@ mock! {
         fn remove_states_below(&self, height: Height);
 
         fn remove_inmemory_states_below(&self, height: Height, extra_heights_to_keep: &std::collections::BTreeSet<Height>);
+
+        fn update_fast_forward_height(&self, height: Height);
 
         fn commit_and_certify(
             &self,

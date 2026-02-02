@@ -63,7 +63,7 @@ pub mod page_map;
 pub mod replicated_state;
 pub use canister_state::{
     CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, NumWasmPages,
-    SchedulerState,
+    RefundPool, SchedulerState,
     execution_state::Memory,
     num_bytes_try_from,
     system_state::{
@@ -75,9 +75,7 @@ pub use metadata_state::{
     IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
 };
 pub use page_map::{PageIndex, PageMap};
-pub use replicated_state::{
-    InputQueueType, InputSource, MessageMemoryUsage, ReplicatedState, StateError,
-};
+pub use replicated_state::{InputQueueType, InputSource, ReplicatedState, StateError};
 
 /// Encapsulates metrics related to errors that can occur on checkpoint loading.
 /// The intention is to pass an implementation of this trait along with the actual
@@ -111,6 +109,7 @@ pub trait DroppedMessageMetrics {
 pub mod testing {
     pub use super::canister_state::system_state::testing::SystemStateTesting;
     pub use super::canister_state::testing::CanisterQueuesTesting;
+    pub use super::metadata_state::testing::StreamTesting;
     pub use super::replicated_state::testing::ReplicatedStateTesting;
 
     use super::DroppedMessageMetrics;

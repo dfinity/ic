@@ -189,6 +189,7 @@ impl From<UpgradeError> for OrchestratorError {
             UpgradeError::FileDownloadError(e) => OrchestratorError::FileDownloadError(e),
             UpgradeError::GenericError(s) => OrchestratorError::UpgradeError(s),
             UpgradeError::RebootTimeError(s) => OrchestratorError::RebootTimeError(s),
+            UpgradeError::DiskEncryptionKeyExchangeError(s) => OrchestratorError::UpgradeError(s),
         }
     }
 }

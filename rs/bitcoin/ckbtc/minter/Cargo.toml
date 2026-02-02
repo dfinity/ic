@@ -16,12 +16,13 @@ bech32 = "0.9.0"
 bs58 = "0.5.0"
 canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
+canlog = { path = "../../../../packages/canlog" }
+canlog_derive = { path = "../../../../packages/canlog_derive" }
 ciborium = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-btc-checker = { path = "../../checker" }
-ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-dummy-getrandom-for-wasm = { path = "../../../../packages/ic-dummy-getrandom-for-wasm" }
@@ -56,6 +57,7 @@ flate2 = { workspace = true }
 ic-agent = { workspace = true }
 ic-bitcoin-canister-mock = { path = "../../mock" }
 ic-config = { path = "../../../config" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-metrics-assert = { path = "../../../../packages/ic-metrics-assert" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
@@ -65,6 +67,7 @@ maplit = "1.0.2"
 mockall = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
+rand = { workspace = true }
 simple_asn1 = { workspace = true }
 tokio = { workspace = true }
 

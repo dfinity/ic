@@ -1,7 +1,7 @@
-use crate::Network;
 use crate::lifecycle::upgrade::UpgradeArgs;
 pub use crate::state::Mode;
 use crate::state::{CkBtcMinterState, replace_state};
+use crate::{CanisterRuntime, Network};
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
 use serde::Serialize;
@@ -23,6 +23,9 @@ pub struct InitArgs {
     /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
     /// a testing key for testnet and mainnet
     pub ecdsa_key_name: String,
+
+    /// Minimum amount of bitcoin that can be deposited
+    pub deposit_btc_min_amount: Option<u64>,
 
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
@@ -68,10 +71,25 @@ pub struct InitArgs {
     /// the get_utxos cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_utxos_cache_expiration_seconds: Option<u64>,
+
+    /// The minimum number of available UTXOs required to trigger a consolidation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utxo_consolidation_threshold: Option<u64>,
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_num_inputs_in_transaction: Option<u64>,
 }
 
-pub fn init(args: InitArgs) {
+pub fn init<R: CanisterRuntime>(args: InitArgs, runtime: &R) {
+    use crate::logs::Priority;
+    use canlog::log;
+
+    log!(
+        Priority::Info,
+        "[init]: Initializing canister with args {args:?}"
+    );
     let state: CkBtcMinterState = CkBtcMinterState::from(args);
-    state.validate_config();
+    runtime.validate_config(&state);
     replace_state(state);
 }

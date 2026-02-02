@@ -122,5 +122,7 @@ try_from_u8!(
         CallDataAppendCyclesAddMax = 93,
         RootKey = 94,
         SetOnLowWasmMemoryMethod = 95,
+        WasmMemoryGrow = 96,
+        CostHttpRequestV2 = 97,
     }
 );

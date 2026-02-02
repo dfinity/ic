@@ -1,9 +1,9 @@
-use crate::logs::{P0, P1};
+use crate::Priority;
 use crate::memo::MintMemo;
 use crate::state::LedgerMintIndex;
 use crate::{CanisterRuntime, state};
 use candid::{CandidType, Deserialize};
-use ic_canister_log::log;
+use canlog::log;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::Serialize;
@@ -82,7 +82,7 @@ pub async fn reimburse_withdrawals<R: CanisterRuntime>(runtime: &R) {
         {
             Ok(mint_index) => {
                 log!(
-                    P1,
+                    Priority::Debug,
                     "[reimburse_withdrawals]: Successfully reimbursed {:?} at mint block index {}",
                     reimbursement,
                     mint_index
@@ -93,7 +93,7 @@ pub async fn reimburse_withdrawals<R: CanisterRuntime>(runtime: &R) {
             }
             Err(err) => {
                 log!(
-                    P0,
+                    Priority::Info,
                     "[reimburse_withdrawals]: Failed to reimburse {:?}: {:?}. Will retry later",
                     reimbursement,
                     err
@@ -109,7 +109,7 @@ pub async fn reimburse_withdrawals<R: CanisterRuntime>(runtime: &R) {
 
     if error_count > 0 {
         log!(
-            P0,
+            Priority::Info,
             "[reimburse_withdrawals] Failed to reimburse {error_count} withdrawal requests, retrying later."
         );
     }

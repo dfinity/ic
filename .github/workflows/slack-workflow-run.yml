@@ -23,8 +23,10 @@ on:
       - Container IC Base Images
       - PocketIC Windows
       - Sync IC private from IC public
-      - Update IC versions file
+      - Update mainnet ICOS versions file
+      - Update mainnet canister versions file
       - CI Main
+      - Bazel Dependency Submission
 
 jobs:
   slack-workflow-run:
@@ -66,8 +68,10 @@ jobs:
           # Non-IDX alerts
           if [[ "$TRIGGERING_WORKFLOW_NAME" == "Schedule Rust Benchmarks" ]]; then
             CHANNEL="eng-crypto-alerts"
-          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update IC versions file" ]]; then
+          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update mainnet ICOS versions file" ]]; then
             CHANNEL="eng-consensus-alerts"
+          elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update mainnet canister versions file" ]]; then
+            CHANNEL="eng-nns"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "CI Main" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-mainnet-revisions" ]]; then
             CHANNEL="eng-consensus-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "CI Main" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-nervous-system-wasms" ]]; then

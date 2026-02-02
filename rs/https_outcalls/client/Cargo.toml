@@ -13,16 +13,15 @@ futures = { workspace = true }
 hyper-util = { workspace = true }
 ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
 ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
-ic-nns-delegation-manager = { path = "../../http_endpoints/nns_delegation_manager" }
 ic-config = { path = "../../config" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-https-outcalls-service = { path = "../service" }
+ic-https-outcalls-pricing = { path = "../pricing" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 slog = { workspace = true }

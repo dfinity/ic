@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-canister-client = { path = "../../../../canister_client" }
 ic-ledger-core = { path = "../../../../ledger_suite/common/ledger_core" }
 icp-ledger = { path = "../../../../ledger_suite/icp" }
 ic-icrc1-test-utils = { path = "../../../../ledger_suite/icrc1/test_utils" }
@@ -26,21 +25,17 @@ ic-system-test-driver = { path = "../../../driver" }
 ic-base-types = { path = "../../../../types/base_types" }
 ic-types = { path = "../../../../types/types" }
 ic-canister-client-sender = { path = "../../../../canister_client/sender" }
-ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../../../../rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils" }
-anyhow = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-prost = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
+serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-lazy_static = { workspace = true }
-assert-json-diff = "2.0.1"
 
 [lib]
 name = "rosetta_test_lib"

@@ -37,6 +37,8 @@ rocksdb = { version = "0.22.0", default-features = false }
 criterion = { workspace = true }
 ic-limits = { path = "../limits" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
+ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }

@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 package(default_visibility = ["//visibility:public"])
 
 DEV_DATA = [
-    "@mainnet_nns_registry_canister//file",
+    "@mainnet_canisters//:registry.wasm.gz",
     "//rs/registry/canister:registry-canister",
     "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/boundary_node/salt_sharing:salt_sharing_canister",
@@ -12,7 +12,7 @@ DEV_DATA = [
 DEV_ENV = {
     "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-    "MAINNET_REGISTRY_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_registry_canister//file)",
+    "MAINNET_REGISTRY_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:registry.wasm.gz)",
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "SALT_SHARING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/salt_sharing:salt_sharing_canister)",
 }

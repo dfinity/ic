@@ -1,43 +1,84 @@
 #!/bin/bash
 
-# Initialize configuration in /run/config from bootstrap package.
+# Initialize configuration in /run/config from config partition.
 
 set -eo pipefail
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
-SCRIPT="$(basename $0)[$$]"
+function mount_config_device() {
+    MAX_TRIES=10
+    CONFIG_DEVICE="/dev/disk/by-label/CONFIG"
 
-# Process config.json from bootstrap package
-# Arguments:
-# - $1: path to the bootstrap package (typically /mnt/config/ic-bootstrap.tar)
-# - $2: path to config space (typically /run/config)
-function process_config_json() {
-    local BOOTSTRAP_TAR="$1"
-    local CONFIG_ROOT="$2"
+    while [ $MAX_TRIES -gt 0 ]; do
+        echo "Waiting for a ${CONFIG_DEVICE} device for mounting"
 
-    local TMPDIR=$(mktemp -d)
-    tar xf "${BOOTSTRAP_TAR}" -C "${TMPDIR}"
+        # Check if device exists & is a symlink to the real one
+        if [ -L "${CONFIG_DEVICE}" ]; then
+            echo "Found ${CONFIG_DEVICE} device, mounting at /mnt/config"
 
-    # Create config directory if it doesn't exist
-    mkdir -p "${CONFIG_ROOT}"
+            # Ensure that the config device is vfat. If we ever change to another filesystem type, we should ensure
+            # that it only contains regular files and directories (not symlinks, devices, etc.).
+            if mount -t vfat -o ro ${CONFIG_DEVICE} /mnt/config; then
+                echo "Successfully mounted ${CONFIG_DEVICE} device at /mnt/config"
+                return 0
+            else
+                echo "Failed to mount ${CONFIG_DEVICE} device at /mnt/config"
+            fi
+        fi
 
-    if [ -e "${TMPDIR}/config.json" ]; then
-        echo "Setting up config.json"
-        cp "${TMPDIR}/config.json" "${CONFIG_ROOT}/config.json"
-        chown ic-replica:nogroup "${CONFIG_ROOT}/config.json"
-    fi
-
-    rm -rf "${TMPDIR}"
+        MAX_TRIES=$(($MAX_TRIES - 1))
+        if [ $MAX_TRIES == 0 ]; then
+            echo "No ${CONFIG_DEVICE} device found for mounting"
+            return 1
+        else
+            echo "Retrying to find CONFIG device"
+            sleep 1
+        fi
+    done
 }
 
-# Check if CONFIG device is mounted and has bootstrap config
-if [ -e /mnt/config/ic-bootstrap.tar ]; then
-    echo "Processing config initialization from /mnt/config/ic-bootstrap.tar"
-    process_config_json /mnt/config/ic-bootstrap.tar /run/config
-    echo "Successfully processed config initialization"
-else
-    echo "No bootstrap config available at /mnt/config/ic-bootstrap.tar"
+if ! mount_config_device; then
     exit 1
 fi
+
+trap "umount /mnt/config" EXIT
+
+mkdir /run/config
+mkdir /run/config/bootstrap
+
+# Check if ic-bootstrap.tar exists (backward compatibility with older HostOS versions)
+# TODO(NODE-1821): Remove this check once all nodes have HostOS that supports tarless configuration.
+if [ -f /mnt/config/ic-bootstrap.tar ]; then
+    echo "Found ic-bootstrap.tar, using legacy tar-based configuration"
+
+    # Verify that ic-bootstrap.tar contains only regular files (-) and directories (d)
+    if tar -tvf /mnt/config/ic-bootstrap.tar | cut -c 1 | grep -E -q '[^-d]'; then
+        echo "ic-bootstrap.tar contains non-regular files, aborting"
+        exit 1
+    fi
+
+    tar xf /mnt/config/ic-bootstrap.tar -C /run/config/bootstrap
+else
+    echo "Using direct file-based configuration"
+    cp -r /mnt/config/* /run/config/bootstrap/
+fi
+
+if [ -f /run/config/bootstrap/config.json ]; then
+    cp /run/config/bootstrap/config.json /run/config/config.json
+    chown ic-replica:nogroup /run/config/config.json
+else
+    echo "config.json not found in config partition"
+    exit 1
+fi
+
+/opt/ic/bin/config_tool populate-nns-public-key
+
+# Create file under /run/config/guest_vm_type, this can be used to add ConditionPathExists conditions to systemd units
+guest_vm_type="$(jq -r ".guest_vm_type" /run/config/config.json)"
+if [[ "$guest_vm_type" = null ]]; then
+    guest_vm_type=default
+fi
+mkdir -p "/run/config/guest_vm_type"
+touch "/run/config/guest_vm_type/$guest_vm_type"

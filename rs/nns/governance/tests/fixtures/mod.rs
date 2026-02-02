@@ -33,9 +33,12 @@ use ic_nns_governance::{
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
         proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
     storage::reset_stable_memory,
 };
-use ic_nns_governance_api::{self as api, ManageNeuronResponse, manage_neuron_response};
+use ic_nns_governance_api::{
+    self as api, ManageNeuronResponse, Visibility, manage_neuron_response,
+};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use rand::{RngCore, SeedableRng, prelude::StdRng};
@@ -390,6 +393,7 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds: self.joined_community_fund,
             spawn_at_timestamp_seconds: self.spawn_at_timestamp_seconds,
             neuron_type: self.neuron_type,
+            visibility: Some(Visibility::Public as i32),
             ..api::Neuron::default()
         }
     }
@@ -579,7 +583,7 @@ impl Environment for NNSFixture {
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         self.nns_state
             .try_lock()
@@ -993,7 +997,7 @@ impl Environment for NNS {
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         self.fixture.execute_nns_function(proposal_id, update)
     }

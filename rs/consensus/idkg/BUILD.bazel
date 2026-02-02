@@ -13,7 +13,6 @@ DEPENDENCIES = [
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/registry/subnet_features",
@@ -30,7 +29,9 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/registry/fake",
     "//rs/test_utilities",

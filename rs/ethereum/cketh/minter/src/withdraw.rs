@@ -1,27 +1,40 @@
-use crate::eth_logs::LedgerSubaccount;
-use crate::eth_rpc_client::EthRpcClient;
-use crate::eth_rpc_client::MultiCallError;
-use crate::guard::TimerGuard;
-use crate::logs::{DEBUG, INFO};
-use crate::numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount};
-use crate::state::audit::{EventType, process_event};
-use crate::state::transactions::{
-    CreateTransactionError, Reimbursed, ReimbursementIndex, ReimbursementRequest,
-    WithdrawalRequest, create_transaction,
+use crate::{
+    eth_logs::LedgerSubaccount,
+    eth_rpc_client::{
+        AnyOf, MIN_ATTACHED_CYCLES, MinByKey, MultiCallError, NoReduction, ToReducedWithStrategy,
+        rpc_client,
+    },
+    guard::TimerGuard,
+    logs::{DEBUG, INFO},
+    numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount},
+    state::{
+        State, TaskType,
+        audit::{EventType, process_event},
+        minter_address, mutate_state, read_state,
+        transactions::{
+            CreateTransactionError, Reimbursed, ReimbursementIndex, ReimbursementRequest,
+            WithdrawalRequest, create_transaction,
+        },
+    },
+    tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate},
 };
-use crate::state::{State, TaskType, mutate_state, read_state};
-use crate::tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate};
 use candid::Nat;
-use evm_rpc_client::{SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt};
+use evm_rpc_types::{
+    BlockTag, SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt,
+};
 use futures::future::join_all;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
-use icrc_ledger_types::icrc1::transfer::Memo;
-use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::{Memo, TransferArg},
+};
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
-use std::collections::{BTreeMap, BTreeSet};
-use std::iter::zip;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    iter::zip,
+};
 
 const WITHDRAWAL_REQUESTS_BATCH_SIZE: usize = 5;
 const TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
@@ -171,15 +184,19 @@ pub async fn process_retrieve_eth_requests() {
     if read_state(|s| s.eth_transactions.has_pending_requests()) {
         ic_cdk_timers::set_timer(
             crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
-            || ic_cdk::futures::spawn_017_compat(process_retrieve_eth_requests()),
+            async { process_retrieve_eth_requests().await },
         );
     }
 }
 
 async fn latest_transaction_count() -> Option<TransactionCount> {
-    match read_state(EthRpcClient::from_state)
-        .eth_get_latest_transaction_count(crate::state::minter_address().await)
+    match read_state(rpc_client)
+        .get_transaction_count((minter_address().await.into_bytes(), BlockTag::Latest))
+        .with_cycles(MIN_ATTACHED_CYCLES)
+        .send()
         .await
+        .map(TransactionCount::from)
+        .reduce_with_strategy(MinByKey::new(|count: &TransactionCount| *count))
     {
         Ok(transaction_count) => Some(transaction_count),
         Err(e) => {
@@ -332,12 +349,15 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
             .transactions_to_send_batch(latest_transaction_count, TRANSACTIONS_TO_SEND_BATCH_SIZE)
     });
 
-    let rpc_client = read_state(EthRpcClient::from_state);
-    let results = join_all(
-        transactions_to_send
-            .iter()
-            .map(|tx| rpc_client.eth_send_raw_transaction(tx.raw_transaction_hex())),
-    )
+    let rpc_client = read_state(rpc_client);
+    let results = join_all(transactions_to_send.iter().map(async |tx| {
+        rpc_client
+            .send_raw_transaction(tx.raw_transaction_hex())
+            .with_cycles(MIN_ATTACHED_CYCLES)
+            .send()
+            .await
+            .reduce_with_strategy(AnyOf)
+    }))
     .await;
 
     for (signed_tx, result) in zip(transactions_to_send, results) {
@@ -376,12 +396,15 @@ async fn finalize_transactions_batch() {
             });
             let expected_finalized_withdrawal_ids: BTreeSet<_> =
                 txs_to_finalize.values().cloned().collect();
-            let rpc_client = read_state(EthRpcClient::from_state);
-            let results = join_all(
-                txs_to_finalize
-                    .keys()
-                    .map(|hash| rpc_client.eth_get_transaction_receipt(*hash)),
-            )
+            let rpc_client = read_state(rpc_client);
+            let results = join_all(txs_to_finalize.keys().map(async |hash| {
+                rpc_client
+                    .get_transaction_receipt(*hash)
+                    .with_cycles(MIN_ATTACHED_CYCLES)
+                    .send()
+                    .await
+                    .reduce_with_strategy(NoReduction)
+            }))
             .await;
             let mut receipts: BTreeMap<LedgerBurnIndex, EvmTransactionReceipt> = BTreeMap::new();
             for ((hash, withdrawal_id), result) in zip(txs_to_finalize, results) {
@@ -446,7 +469,11 @@ async fn finalize_transactions_batch() {
 
 async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>>
 {
-    read_state(EthRpcClient::from_state)
-        .eth_get_finalized_transaction_count(crate::state::minter_address().await)
+    read_state(rpc_client)
+        .get_transaction_count((minter_address().await.into_bytes(), BlockTag::Finalized))
+        .with_cycles(MIN_ATTACHED_CYCLES)
+        .send()
         .await
+        .map(TransactionCount::from)
+        .reduce_with_strategy(NoReduction)
 }

@@ -1,8 +1,6 @@
 use ic_crypto_internal_basic_sig_cose::*;
-use ic_crypto_internal_basic_sig_ecdsa_secp256r1::*;
 use ic_crypto_internal_test_vectors::*;
-use ic_crypto_sha2::Sha256;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+use ic_types::crypto::{AlgorithmId, CryptoError};
 
 // A COSE-encoded ECDSA-P256 public key, with a signature over an example
 // message.
@@ -36,7 +34,7 @@ fn should_reject_cose_encoded_rsa256_pk_with_unknown_alg() {
     assert_eq!(
         result,
         Err(CryptoError::AlgorithmNotSupported {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             reason: "Algorithm not supported in COSE parser".to_string()
         })
     );
@@ -82,7 +80,7 @@ fn should_correctly_verify_der_signature() {
         ECDSA_P256_PK_2_COSE_HEX,
         MSG_2_HEX,
     );
-    assert!(result.is_ok());
+    assert!(result);
 }
 
 #[test]
@@ -94,8 +92,7 @@ fn should_fail_to_verify_on_wrong_message() {
         ECDSA_P256_PK_2_COSE_HEX,
         &wrong_msg_hex,
     );
-    assert!(result.is_err());
-    assert!(result.unwrap_err().is_signature_verification_error());
+    assert!(!result);
 }
 
 #[test]
@@ -112,8 +109,7 @@ fn should_fail_to_verify_corrupted_signature() {
         ECDSA_P256_PK_2_COSE_HEX,
         MSG_2_HEX,
     );
-    assert!(result.is_err());
-    assert!(result.unwrap_err().is_signature_verification_error());
+    assert!(!result);
 }
 
 #[test]
@@ -123,29 +119,28 @@ fn should_correctly_verify_webauthn_signatures() {
         test_data::ECDSA_P256_PK_1_COSE_HEX,
         test_data::WEBAUTHN_MSG_1_HEX,
     );
-    assert!(result.is_ok());
+    assert!(result);
 
     let result = get_der_cose_verification_result(
         test_data::ECDSA_P256_SIG_2_DER_HEX,
         test_data::ECDSA_P256_PK_2_COSE_HEX,
         test_data::WEBAUTHN_MSG_2_HEX,
     );
-    assert!(result.is_ok());
+    assert!(result);
 }
 
 // Given a DER-encoded signature, a COSE-encoded ECDSA-P256 public key,
 // and a message, computes and returns a signature verification result.
-fn get_der_cose_verification_result(
-    sig_der_hex: &str,
-    pk_cose_hex: &str,
-    msg_hex: &str,
-) -> CryptoResult<()> {
+fn get_der_cose_verification_result(sig_der_hex: &str, pk_cose_hex: &str, msg_hex: &str) -> bool {
     let sig_der = hex::decode(sig_der_hex).unwrap();
-    let sig = signature_from_der(&sig_der).unwrap();
     let pk_cose = hex::decode(pk_cose_hex).unwrap();
     let (_alg_id, pk) = parse_cose_public_key(&pk_cose).unwrap();
-    let pk = public_key_from_der(&pk).unwrap();
+
     let msg = hex::decode(msg_hex).unwrap();
-    let msg_hash = Sha256::hash(&msg);
-    verify(&sig, &msg_hash, &pk)
+
+    if let Ok(pk) = ic_secp256r1::PublicKey::deserialize_der(&pk) {
+        pk.verify_signature_with_der_encoded_sig(&msg, &sig_der)
+    } else {
+        false
+    }
 }

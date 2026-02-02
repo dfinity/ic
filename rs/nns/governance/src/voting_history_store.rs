@@ -8,6 +8,8 @@ use std::borrow::Cow;
 
 type DefaultMemory = VirtualMemory<DefaultMemoryImpl>;
 
+const MAX_PAGINATION_LIMIT: u64 = 500;
+
 pub struct VotingHistoryStore {
     neuron_proposal_to_vote: StableBTreeMap<(NeuronId, ProposalId), Vote, DefaultMemory>,
 }
@@ -63,13 +65,25 @@ impl VotingHistoryStore {
             .insert((neuron_id, proposal_id), vote);
     }
 
-    #[allow(dead_code)]
-    pub fn list_neuron_votes(&self, neuron_id: NeuronId) -> Vec<(ProposalId, Vote)> {
+    pub fn list_neuron_votes(
+        &self,
+        neuron_id: NeuronId,
+        before_proposal: Option<ProposalId>,
+        limit: Option<u64>,
+    ) -> Vec<(ProposalId, Vote)> {
         let min_key = (neuron_id, ProposalId::MIN);
-        let max_key = (neuron_id, ProposalId::MAX);
+        let max_key = match before_proposal {
+            Some(proposal_id) => (neuron_id, proposal_id),
+            None => (neuron_id, ProposalId::MAX),
+        };
+        let limit = limit
+            .unwrap_or(MAX_PAGINATION_LIMIT)
+            .min(MAX_PAGINATION_LIMIT) as usize;
         self.neuron_proposal_to_vote
-            .range(min_key..=max_key)
+            .range(min_key..max_key)
+            .rev()
             .map(|((_neuron_id, proposal_id), vote)| (proposal_id, vote))
+            .take(limit)
             .collect()
     }
 }

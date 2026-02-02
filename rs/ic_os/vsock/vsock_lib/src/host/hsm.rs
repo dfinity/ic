@@ -114,7 +114,7 @@ fn get_hsm_xml_string(hsm_info: &HSMInfo) -> String {
 }
 
 fn write_to_temp_file(content: &str) -> Result<NamedTempFile, Error> {
-    let mut file: NamedTempFile = NamedTempFile::new()?;
+    let mut file: NamedTempFile = NamedTempFile::with_prefix("hsm")?;
     file.write_all(content.as_bytes())?;
     Ok(file)
 }

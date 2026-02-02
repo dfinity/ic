@@ -92,7 +92,7 @@ where
     values.sort_unstable();
     let mid = values.len() / 2;
 
-    if values.len() % 2 == 0 {
+    if values.len().is_multiple_of(2) {
         let left = values
             .get(mid.saturating_sub(1))
             .cloned()
@@ -137,7 +137,7 @@ fn apply_query_stats_to_canister(
     // Given that subnet topology changes are an infrequent event, we tolerate this occasional inaccuracy here.
     let num_nodes = num_nodes as u128;
     if let Some(canister_state) = state.canister_state_mut(&canister_id) {
-        let canister_query_stats = &mut canister_state.scheduler_state.total_query_stats;
+        let canister_query_stats = &mut canister_state.system_state.total_query_stats;
         canister_query_stats.num_calls += aggregated_stats.num_calls as u128 * num_nodes;
         canister_query_stats.num_instructions +=
             aggregated_stats.num_instructions as u128 * num_nodes;
@@ -584,6 +584,6 @@ mod tests {
     ) -> Option<TotalQueryStats> {
         state
             .canister_state(canister_id)
-            .map(|canister_state| canister_state.scheduler_state.total_query_stats.clone())
+            .map(|canister_state| canister_state.system_state.total_query_stats.clone())
     }
 }

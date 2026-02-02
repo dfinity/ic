@@ -1019,7 +1019,7 @@ mod tests {
 
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
-    use crate::consensus::ConsensusMessage;
+    use crate::{canister_http::CanisterHttpResponse, consensus::ConsensusMessage};
 
     use super::*;
 
@@ -1101,6 +1101,31 @@ mod tests {
             assert_eq!(
                 msg, &new_msg,
                 "deserialized consensus message is different from original"
+            );
+        }
+    }
+
+    #[test]
+    fn verify_exhaustive_canister_http_response() {
+        let set = CanisterHttpResponse::exhaustive_set(&mut reproducible_rng());
+        println!(
+            "Number of CanisterHttpResponse variants generated for exhaustive test: {}",
+            set.len()
+        );
+
+        for original_response in &set {
+            // --- Serialization (Rust -> Protobuf -> bytes) ---
+            let proto_response = pb::CanisterHttpResponse::from(original_response.clone());
+            let bytes = proto_response.encode_to_vec();
+
+            // --- Deserialization (bytes -> Protobuf -> Rust) ---
+            let decoded_proto = pb::CanisterHttpResponse::decode(bytes.as_slice()).unwrap();
+            let new_response = CanisterHttpResponse::try_from(decoded_proto).unwrap();
+
+            // --- Verification ---
+            assert_eq!(
+                original_response, &new_response,
+                "Deserialized CanisterHttpResponse is different from the original"
             );
         }
     }

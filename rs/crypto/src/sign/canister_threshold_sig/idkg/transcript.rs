@@ -3,10 +3,13 @@ use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
     index_and_batch_signed_dealing_of_dealer, index_and_dealing_of_dealer,
-    key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
+    retrieve_mega_public_key_from_registry,
 };
 use ic_crypto_internal_csp::api::CspSigner;
-use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
+use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_internal_csp::vault::api::{
+    CspVault, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
+};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, create_transcript as idkg_create_transcript,
@@ -169,12 +172,16 @@ pub fn load_transcript(
         transcript.registry_version,
     )?;
 
+    let internal_dealings_bytes = cloned_internal_dealings_bytes_from_verified_dealings(
+        transcript.verified_dealings.as_ref(),
+    );
+
     let internal_complaints = vault.idkg_load_transcript(
         transcript.algorithm_id,
-        transcript.verified_dealings.as_ref().clone(),
+        internal_dealings_bytes,
         transcript.context_data(),
         self_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
+        KeyId::from(&self_mega_pubkey),
         IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )?;
     let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
@@ -240,7 +247,7 @@ pub fn load_transcript_with_openings(
         internal_openings,
         transcript.context_data(),
         self_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
+        KeyId::from(&self_mega_pubkey),
         IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )
 }
@@ -286,7 +293,7 @@ pub fn open_transcript(
         dealer_index,
         context_data,
         opener_index,
-        key_id_from_mega_public_key_or_panic(&opener_public_key),
+        KeyId::from(&opener_public_key),
     )?;
     let internal_opening_raw =
         internal_opening
@@ -436,6 +443,20 @@ fn internal_dealings_from_verified_dealings(
                 }
             })?;
             Ok((*index, dealing))
+        })
+        .collect()
+}
+
+fn cloned_internal_dealings_bytes_from_verified_dealings(
+    verified_dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+) -> BTreeMap<NodeIndex, IDkgDealingInternalBytes> {
+    verified_dealings
+        .iter()
+        .map(|(index, signed_dealing)| {
+            let dealing = IDkgDealingInternalBytes::from(
+                signed_dealing.idkg_dealing().internal_dealing_raw.clone(),
+            );
+            (*index, dealing)
         })
         .collect()
 }

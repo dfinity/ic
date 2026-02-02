@@ -10,8 +10,9 @@ Before=var-lib-ic-crypto.mount
 # lvcreate command has finished. This results in filesystem setup racing with
 # lvcreate performing a "wipe" of the LV, resulting in a destroyed filesystem
 # in turn.
-After=setup-lvs.service
+After=init-config.service setup-lvs.service
 Requires=setup-lvs.service
+ConditionPathExists=/run/config/guest_vm_type/default
 
 [Install]
 RequiredBy=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2dcrypto.service

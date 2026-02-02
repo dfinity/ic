@@ -118,7 +118,7 @@ pub const FILE_GROUP_CHUNK_ID_OFFSET: u32 = 1 << 30;
 // It is within the whole chunk id range (1 << 32) and can avoid collision with normal file chunks and file group chunks.
 // First, the length of the chunk table is smaller than 1_073_741_824 from the analysis for `FILE_GROUP_CHUNK_ID_OFFSET`. Second, each file group chunk contains multiple files.
 // Therefore the number of file groups is smaller than the length of chunk table, and thus much smaller than 1_073_741_824.
-// From another perspective, the number of file group chunks is smaller than 1/128 of the number of canisters because currently it only includes `canister.pbuf` files smaller than 8 KiB.
+// From another perspective, the number of file group chunks is smaller than the number of canisters because currently it only includes `canister.pbuf` files smaller than `MAX_FILE_SIZE_TO_GROUP`.
 // Therefore, the space between `FILE_GROUP_CHUNK_ID_OFFSET` and `MANIFEST_CHUNK_ID_OFFSET` is adequate for file group chunks.
 pub const MANIFEST_CHUNK_ID_OFFSET: u32 = 1 << 31;
 
@@ -129,7 +129,7 @@ const _: () = assert!(MANIFEST_CHUNK_ID_OFFSET > FILE_GROUP_CHUNK_ID_OFFSET);
 /// Maximum supported StateSync version.
 ///
 /// The replica will panic if trying to deal with a manifest with a version higher than this.
-pub const MAX_SUPPORTED_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V3;
+pub const MAX_SUPPORTED_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V4;
 
 /// The type and associated index (if applicable) of a chunk in state sync.
 #[derive(Eq, PartialEq, Debug)]
@@ -252,6 +252,12 @@ pub struct ManifestData {
     pub version: StateSyncVersion,
     pub file_table: Vec<FileInfo>,
     pub chunk_table: Vec<ChunkInfo>,
+}
+
+impl ManifestData {
+    pub fn state_size_bytes(&self) -> u64 {
+        self.file_table.iter().map(|f| f.size_bytes).sum()
+    }
 }
 
 /// MetaManifest describes how the manifest is encoded, split and hashed.

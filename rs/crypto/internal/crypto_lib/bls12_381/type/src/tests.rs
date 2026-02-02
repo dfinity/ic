@@ -5,7 +5,7 @@ use rand_chacha::ChaCha20Rng;
 macro_rules! window_extraction_works_correctly_init {
     ( $( $window_size:expr_2021 ),* ) => {
         #[test]
-        /// Tests the window extraction, i.e., extraciton of a bit substring, from a scalar.
+        /// Tests the window extraction, i.e., extraction of a bit substring, from a scalar.
         /// Exhaustively tests all possible values for 2 bytes.
         fn window_extraction_works_correctly() {
             const SCALAR_BIT_LEN: usize = 16;
@@ -71,7 +71,7 @@ fn random_bit_indices_works_correctly() {
 
             // check that all indices are unique
             random_indices.sort_unstable();
-            let all_unique = random_indices.windows(2).all(|x| (x[0] != x[1]));
+            let all_unique = random_indices.windows(2).all(|x| x[0] != x[1]);
             assert!(all_unique);
         }
     }

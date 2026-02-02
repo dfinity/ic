@@ -86,14 +86,8 @@ impl NiDkgCspClient for Csp {
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError> {
         debug!(self.logger; crypto.method_name => "create_dealing", crypto.dkg_epoch => epoch.get());
-        Ok(self.csp_vault.create_dealing(
-            algorithm_id,
-            dealer_index,
-            threshold,
-            epoch,
-            receiver_keys,
-            None,
-        )?)
+        self.csp_vault
+            .create_dealing(algorithm_id, dealer_index, threshold, epoch, receiver_keys)
     }
 
     /// Creates a CSP dealing by resharing a previous secret key
@@ -114,13 +108,13 @@ impl NiDkgCspClient for Csp {
                 )
             }
         })?;
-        self.csp_vault.create_dealing(
+        self.csp_vault.create_resharing_dealing(
             algorithm_id,
             dealer_resharing_index,
             threshold,
             epoch,
             receiver_keys,
-            Some(key_id),
+            key_id,
         )
     }
 
@@ -521,7 +515,7 @@ pub mod specialise {
         } else {
             let unexpected_type_name: &'static str = secret_key.into();
             Err(ni_dkg_errors::MalformedSecretKeyError {
-                algorithm: AlgorithmId::Placeholder, // There is no on expected algorithm ID.
+                algorithm: AlgorithmId::Unspecified,
                 internal_error: format!("Unexpected variant: {unexpected_type_name}"),
             })
         }

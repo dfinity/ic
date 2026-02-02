@@ -28,6 +28,7 @@ async fn nns_init(args: NnsInitArgs) {
         sns: Some(IcpFeaturesConfig::DefaultConfig),
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
     };
     // We set the time of the PocketIC instance to the current time so that
     // neurons are not too old when we make the instance "live" later.

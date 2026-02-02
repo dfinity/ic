@@ -1,47 +1,46 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::wasmtime_embedder::system_api::{
-    ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, ModificationTracking,
-    SystemApiImpl,
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+use ic_config::flag_status::FlagStatus;
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, InstanceStats, MessageMemoryUsage, OutOfInstructionsHandler,
+    SubnetAvailableMemory, SystemApi, SystemApiCallCounters, WasmExecutionOutput,
 };
+use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::Global;
+use ic_metrics::MetricsRegistry;
+use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
+use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_replicated_state::{
     ExportedFunctions, Memory, NumWasmPages, PageMap, canister_state::execution_state::WasmBinary,
     canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
 };
+use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, page_bytes_from_ptr};
+use ic_types::ExecutionRound;
 use ic_types::NumOsPages;
 use ic_types::methods::{FuncRef, WasmMethod};
+use ic_types::{CanisterId, NumBytes, NumInstructions};
+use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
-use crate::OnDiskSerializedModule;
-use crate::wasmtime_embedder::CanisterMemoryType;
 use crate::{
-    CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
+    CompilationCache, CompilationResult, MAX_WASM_MEMORY_IN_BYTES, OnDiskSerializedModule,
+    WASM_PAGE_SIZE, WasmExecutionInput, WasmtimeEmbedder,
     wasm_utils::{Segments, WasmImportsDetails, compile, decoding::decode_wasm},
-    wasmtime_embedder::WasmtimeInstance,
+    wasmtime_embedder::{
+        CanisterMemoryType, WasmtimeInstance,
+        system_api::{
+            ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, ModificationTracking,
+            SystemApiImpl,
+            sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
+        },
+    },
 };
-use ic_config::flag_status::FlagStatus;
-use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
-    SubnetAvailableMemory, SystemApi, SystemApiCallCounters, WasmExecutionOutput,
-};
-use ic_logger::{ReplicaLogger, warn};
-use ic_metrics::MetricsRegistry;
-use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
-use ic_replicated_state::{EmbedderCache, ExecutionState, MessageMemoryUsage};
-use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, page_bytes_from_ptr};
-use ic_types::ExecutionRound;
-use ic_types::{CanisterId, NumBytes, NumInstructions};
-use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 // Please enable only for debugging.
 // If enabled, will collect and log checksums of execution results.
@@ -478,6 +477,8 @@ pub fn wasm_execution_error(
             num_instructions_left,
             allocated_bytes: NumBytes::new(0),
             allocated_guaranteed_response_message_bytes: NumBytes::new(0),
+            new_memory_usage: None,
+            new_message_memory_usage: None,
             instance_stats: InstanceStats::default(),
             system_api_call_counters: SystemApiCallCounters::default(),
         },
@@ -645,6 +646,8 @@ pub fn process(
                     num_instructions_left: message_instruction_limit,
                     allocated_bytes: NumBytes::new(0),
                     allocated_guaranteed_response_message_bytes: NumBytes::new(0),
+                    new_memory_usage: None,
+                    new_message_memory_usage: None,
                     instance_stats: InstanceStats::default(),
                     system_api_call_counters: SystemApiCallCounters::default(),
                 },
@@ -702,6 +705,8 @@ pub fn process(
                         num_instructions_left: message_instructions_left,
                         allocated_bytes: NumBytes::new(0),
                         allocated_guaranteed_response_message_bytes: NumBytes::new(0),
+                        new_memory_usage: None,
+                        new_message_memory_usage: None,
                         instance_stats,
                         system_api_call_counters,
                     },
@@ -730,9 +735,8 @@ pub fn process(
     // The error below can only happen for Wasm32.
     if instance.is_wasm32() {
         let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
-        let wasm32_max_pages = NumWasmPages::from(
-            wasmtime_environ::WASM32_MAX_SIZE as usize / WASM_PAGE_SIZE as usize,
-        );
+        let wasm32_max_pages =
+            NumWasmPages::from(MAX_WASM_MEMORY_IN_BYTES as usize / WASM_PAGE_SIZE as usize);
         let wasm_heap_limit = wasm32_max_pages - wasm_reserved_pages;
 
         if wasm_heap_size_after > wasm_heap_limit {
@@ -742,6 +746,8 @@ pub fn process(
 
     let mut allocated_bytes = NumBytes::new(0);
     let mut allocated_guaranteed_response_message_bytes = NumBytes::new(0);
+    let mut new_memory_usage = None;
+    let mut new_message_memory_usage = None;
 
     let wasm_state_changes = match run_result {
         Ok(run_result) => {
@@ -767,6 +773,8 @@ pub fn process(
                     allocated_bytes = sys_api.get_allocated_bytes();
                     allocated_guaranteed_response_message_bytes =
                         sys_api.get_allocated_guaranteed_response_message_bytes();
+                    new_memory_usage = Some(sys_api.get_current_memory_usage());
+                    new_message_memory_usage = Some(sys_api.get_current_message_memory_usage());
 
                     Some(WasmStateChanges::new(
                         wasm_memory_delta,
@@ -799,6 +807,8 @@ pub fn process(
             num_instructions_left: message_instructions_left,
             allocated_bytes,
             allocated_guaranteed_response_message_bytes,
+            new_memory_usage,
+            new_message_memory_usage,
             instance_stats,
             system_api_call_counters,
         },

@@ -41,12 +41,13 @@ pub mod pocket_ic;
 pub mod state_api;
 
 use crate::state_api::state::OpOut;
-use ::pocket_ic::common::rest::{BinaryBlob, BlobId, RawSubnetBlockmaker};
+use ::pocket_ic::common::rest::{BinaryBlob, BlobId, RawSubnetBlockmakers};
 use async_trait::async_trait;
 use candid::Principal;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use pocket_ic::PocketIc;
 use serde::Deserialize;
+use std::fmt::Display;
 
 /// Represents an identifiable operation on PocketIC.
 pub trait Operation {
@@ -68,6 +69,12 @@ pub trait Operation {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize)]
 pub struct OpId(pub String);
 
+impl Display for OpId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 // Index into a vector of PocketIc instances
 pub type InstanceId = usize;
 
@@ -81,14 +88,14 @@ pub trait BlobStore: Send + Sync {
 // Helpers
 
 #[derive(Clone, Debug)]
-pub struct SubnetBlockmaker {
+pub struct SubnetBlockmakers {
     pub subnet: SubnetId,
     pub blockmaker: NodeId,
     pub failed_blockmakers: Vec<NodeId>,
 }
 
-impl From<RawSubnetBlockmaker> for SubnetBlockmaker {
-    fn from(raw: RawSubnetBlockmaker) -> Self {
+impl From<RawSubnetBlockmakers> for SubnetBlockmakers {
+    fn from(raw: RawSubnetBlockmakers) -> Self {
         let subnet = SubnetId::from(PrincipalId::from(Principal::from(raw.subnet)));
         let blockmaker = NodeId::from(PrincipalId::from(Principal::from(raw.blockmaker)));
         let failed_blockmakers: Vec<NodeId> = raw
@@ -97,7 +104,7 @@ impl From<RawSubnetBlockmaker> for SubnetBlockmaker {
             .map(|node_id| NodeId::from(PrincipalId::from(Principal::from(node_id))))
             .collect();
 
-        SubnetBlockmaker {
+        SubnetBlockmakers {
             subnet,
             blockmaker,
             failed_blockmakers,

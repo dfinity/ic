@@ -31,7 +31,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
-use ic_types::time::CoarseTime;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CountBytes, Cycles, Time};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
@@ -49,6 +49,7 @@ fn default_input_request(deadline: CoarseTime) -> RequestOrResponse {
         .sender(OTHER_CANISTER_ID)
         .receiver(CANISTER_ID)
         .deadline(deadline)
+        .payment(Cycles::new(2))
         .build()
         .into()
 }
@@ -59,6 +60,7 @@ fn default_input_response(callback_id: CallbackId, deadline: CoarseTime) -> Resp
         .respondent(OTHER_CANISTER_ID)
         .originator_reply_callback(callback_id)
         .deadline(deadline)
+        .refund(Cycles::new(1))
         .build()
 }
 
@@ -67,6 +69,7 @@ fn default_output_request() -> Arc<Request> {
         RequestBuilder::default()
             .sender(CANISTER_ID)
             .receiver(OTHER_CANISTER_ID)
+            .payment(Cycles::new(3))
             .build(),
     )
 }
@@ -103,7 +106,12 @@ impl CanisterStateFixture {
             .canister_state
             .system_state
             .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
+                CallOrigin::CanisterUpdate(
+                    CANISTER_ID,
+                    CallbackId::from(1),
+                    NO_DEADLINE,
+                    String::from(""),
+                ),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 Default::default(),
@@ -473,12 +481,14 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
         .receiver(CANISTER_ID)
         .sender_reply_callback(callback_id)
         .deadline(deadline)
+        .payment(Cycles::new(2))
         .build();
     let response = ResponseBuilder::default()
         .originator(CANISTER_ID)
         .respondent(CANISTER_ID)
         .originator_reply_callback(callback_id)
         .deadline(deadline)
+        .refund(Cycles::new(1))
         .build();
 
     // Make an input queue slot reservation.
@@ -670,7 +680,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     let input_queue_type = InputQueueType::RemoteSubnet;
 
     // Tiny explicit allocation, not enough for a request.
-    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::new(13));
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::new(13));
     // And an execution state with non-zero size.
     canister_state.execution_state = Some(ExecutionState::new(
         Default::default(),
@@ -844,13 +854,13 @@ fn canister_state_ingress_induction_cycles_debit() {
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
+        system_state.canister_metrics().consumed_cycles(),
         ingress_induction_debit.into()
     );
     assert_eq!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
         ingress_induction_debit.into()
@@ -861,15 +871,26 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 #[test]
 fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-    let initial_consumed_cycles = NominalCycles::from(1000);
-    system_state.canister_metrics.consumed_cycles = initial_consumed_cycles;
+    let initial_consumed_cycles = Cycles::new(1000);
+    system_state.remove_cycles(initial_consumed_cycles, CyclesUseCase::Memory);
+    assert_eq!(
+        system_state.balance(),
+        INITIAL_CYCLES - initial_consumed_cycles
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::from(initial_consumed_cycles)
+    );
 
     let cycles = Cycles::new(100);
     system_state.add_cycles(cycles, CyclesUseCase::Memory);
-    assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
-        initial_consumed_cycles - NominalCycles::from(cycles)
+        system_state.balance(),
+        INITIAL_CYCLES - initial_consumed_cycles + cycles
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::from(initial_consumed_cycles - cycles)
     );
 }
 
@@ -887,8 +908,8 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     );
     assert_eq!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)
             .unwrap(),
         NominalCycles::from(cycles_to_consume - cycles_to_add)
@@ -938,7 +959,7 @@ fn canister_state_callback_round_trip() {
 
     for callback in [minimal_callback, maximal_callback, u64_callback] {
         let pb_callback = pb::Callback::from(&callback);
-        let round_trip = Callback::try_from(pb_callback).unwrap();
+        let round_trip = Callback::try_from((pb_callback, CANISTER_ID)).unwrap();
 
         assert_eq!(callback, round_trip);
     }
@@ -1257,7 +1278,7 @@ fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
     let mut call_context_manager = CallContextManager::default();
     call_context_manager.with_call_context(CallContext::new(
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
         false,
         Cycles::from(0u128),

@@ -87,12 +87,12 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
         ),
         common::Benchmark(
             "wasm32/ic0_accept_message()*".into(),
-            Module::InspectMessage.from_sections(("", ""), Wasm64::Disabled), // inspect_message accepts by default
+            Module::InspectMessage.from_sections(("", "", ""), Wasm64::Disabled), // inspect_message accepts by default
             506,
         ),
         common::Benchmark(
             "wasm64/ic0_accept_message()*".into(),
-            Module::InspectMessage.from_sections(("", ""), Wasm64::Enabled), // inspect_message accepts by default
+            Module::InspectMessage.from_sections(("", "", ""), Wasm64::Enabled), // inspect_message accepts by default
             506,
         ),
     ];

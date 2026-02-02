@@ -11,25 +11,27 @@ use ic_management_canister_types_private::{
 };
 use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_test_utils::common::build_registry_wasm;
+use ic_nns_test_utils::common::{build_registry_wasm, build_test_registry_wasm};
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
 };
 use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord, SubnetRecord,
+    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+    SubnetListRecord, SubnetRecord,
 };
+use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
+use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use pocket_ic::nonblocking::PocketIc;
-use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
@@ -60,23 +62,19 @@ pub fn get_subnet_holding_chain_keys(
         node_ids,
         ..Default::default()
     });
-    subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
+    subnet_record.chain_key_config = Some(ChainKeyConfigPb {
         key_configs: key_ids
             .into_iter()
-            .map(|key_id| KeyConfig {
-                key_id: key_id.clone(),
-                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
-                    1
-                } else {
-                    0
-                },
-                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            .map(|key_id| KeyConfigPb {
+                key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
+                pre_signatures_to_create_in_advance: key_id.requires_pre_signatures().then_some(1),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             })
             .collect(),
         signature_request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
         max_parallel_pre_signature_transcripts_in_creation: None,
-    }));
+    });
 
     subnet_record
 }
@@ -411,25 +409,38 @@ pub async fn check_subnet_for_canisters(
 }
 
 pub async fn install_registry_canister(pocket_ic: &PocketIc) {
-    install_registry_canister_with_mutations(pocket_ic, vec![]).await;
+    install_registry_canister_with_payload_builder(
+        pocket_ic,
+        RegistryCanisterInitPayloadBuilder::new().build(),
+        false,
+    )
+    .await;
 }
 
-pub async fn install_registry_canister_with_mutations(
-    pocket_ic: &PocketIc,
-    requests: Vec<RegistryAtomicMutateRequest>,
-) {
-    let mut payload = RegistryCanisterInitPayloadBuilder::new();
-    for request in requests {
-        payload.push_init_mutate_request(request);
-    }
+pub async fn install_test_registry_canister(pocket_ic: &PocketIc) {
+    install_registry_canister_with_payload_builder(
+        pocket_ic,
+        RegistryCanisterInitPayloadBuilder::new().build(),
+        true,
+    )
+    .await;
+}
 
-    let payload = payload.build();
+pub async fn install_registry_canister_with_payload_builder(
+    pocket_ic: &PocketIc,
+    payload: RegistryCanisterInitPayload,
+    test_configuration: bool,
+) {
     install_canister(
         pocket_ic,
         "Registry",
         REGISTRY_CANISTER_ID,
         Encode!(&payload).unwrap(),
-        build_registry_wasm(),
+        if test_configuration {
+            build_test_registry_wasm()
+        } else {
+            build_registry_wasm()
+        },
         Some(ROOT_CANISTER_ID.get()),
     )
     .await;

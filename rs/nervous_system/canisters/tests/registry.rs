@@ -88,7 +88,9 @@ async fn test_registry_get_changes_since() {
 
     // Step 1.4: Install a canister that calls registry_changes_since (the code
     // under test).
-    let fetch_large_record_test_canister_id = CanisterId::from(670_767_024);
+    // The following canister ID must belong to the canister ranges
+    // of a subnet on the ICP mainnet.
+    let fetch_large_record_test_canister_id = CanisterId::from(29_767_024);
     install_canister(
         &pocket_ic,
         "fetch_large_record_test_canister_id",

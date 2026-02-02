@@ -17,9 +17,9 @@ def get_ic_repo_for_rust() -> Repository:
                 name="ic",
                 path=repo_name,
                 owner_by_path={
-                    f"{repo_name}/rs/crypto": [Team.CRYPTO_TEAM],
-                    f"{repo_name}/rs/validator": [Team.CRYPTO_TEAM],
-                    f"{repo_name}/rs/canonical_state": [Team.CRYPTO_TEAM],
+                    f"{repo_name}/rs/crypto": [Team.CONSENSUS_TEAM],
+                    f"{repo_name}/rs/validator": [Team.CONSENSUS_TEAM],
+                    f"{repo_name}/rs/canonical_state": [Team.CONSENSUS_TEAM],
                 },
             )
         ],

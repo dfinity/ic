@@ -46,7 +46,7 @@ use std::{
 // aggregate random tape shares.
 pub(crate) const RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE: u64 = 16;
 
-pub struct RandomTapeMaker {
+pub(crate) struct RandomTapeMaker {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,

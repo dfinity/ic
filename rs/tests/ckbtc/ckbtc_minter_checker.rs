@@ -328,7 +328,10 @@ pub fn test_btc_checker(env: TestEnv) {
         let _mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         // We can compute the minter's fee
-        let minters_fee: u64 = ic_ckbtc_minter::evaluate_minter_fee(1, 2);
+        let fee = minter_agent
+            .estimate_withdrawal_fee(retrieve_amount)
+            .await
+            .unwrap();
         // Use the following estimator : https://btc.network/estimate
         // 1 input and 2 outputs => 141 vbyte
         // The regtest network fee defined in ckbtc/minter/src/lib.rs is 5 sat/vbyte.
@@ -337,7 +340,7 @@ pub fn test_btc_checker(env: TestEnv) {
         wait_for_bitcoin_balance(
             &universal_canister,
             &logger,
-            retrieve_amount - minters_fee - bitcoin_network_fee,
+            retrieve_amount - fee.minter_fee - bitcoin_network_fee,
             &btc_address2,
         )
         .await;

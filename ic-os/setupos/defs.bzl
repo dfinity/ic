@@ -31,7 +31,7 @@ def image_deps(mode, _malicious = False):
         "bootfs": {},
         "rootfs": {
             "//rs/ic_os/release:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
-            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+            "//rs/ic_os/release:config_tool": "/opt/ic/bin/config_tool:0755",
         },
 
         # Set various configuration values
@@ -67,8 +67,8 @@ def image_deps(mode, _malicious = False):
 
     # Update dev rootfs
     if "dev" in mode:
-        deps["rootfs"].pop("//rs/ic_os/release:config", None)
-        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+        deps["rootfs"].pop("//rs/ic_os/release:config_tool", None)
+        deps["rootfs"].update({"//rs/ic_os/release:config_tool_dev": "/opt/ic/bin/config_tool:0755"})
 
     return deps
 
@@ -193,9 +193,11 @@ def create_test_img(name, source, **kwargs):
         srcs = [source],
         outs = [name + ".tar.zst"],
         cmd = """
-            tar -xf $<
-            $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
-            tar --zstd -Scf $@ disk.img
+            tmpdir="$$(mktemp -d)"
+            trap "rm -rf $$tmpdir" EXIT
+            tar -xf $< -C $$tmpdir
+            $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path $$tmpdir/disk.img
+            tar --zstd -Scf $@ -C $$tmpdir disk.img
         """,
         target_compatible_with = ["@platforms//os:linux"],
         tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],

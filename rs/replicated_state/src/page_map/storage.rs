@@ -821,7 +821,7 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
         - num_pages(mapping) * PAGE_SIZE
         - VERSION_NUM_BYTES
         - SIZE_NUM_BYTES;
-    if index_length % PAGE_INDEX_RANGE_NUM_BYTES != 0 {
+    if !index_length.is_multiple_of(PAGE_INDEX_RANGE_NUM_BYTES) {
         return Err(PersistenceError::InvalidOverlay {
             path: path.display().to_string(),
             message: "Invalid index length".to_string(),
@@ -1085,7 +1085,7 @@ pub struct MergeCandidate {
 /// Number of shards to serialize `num_pages` worth of data.
 fn num_shards(num_pages: u64, lsmt_config: &LsmtConfig) -> u64 {
     num_pages / lsmt_config.shard_num_pages
-        + if num_pages % lsmt_config.shard_num_pages == 0 {
+        + if num_pages.is_multiple_of(lsmt_config.shard_num_pages) {
             0
         } else {
             1

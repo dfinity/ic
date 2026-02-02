@@ -2,17 +2,18 @@ use regex::Regex;
 /// Utilities to manipulate a kernel command line reliably.
 use std::error::Error as StdError;
 use std::fmt;
+use std::fmt::{Display, Write};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-#[derive(Debug)]
 /// A kernel command line with improperly-quoted argument values.
+#[derive(Debug)]
 pub struct ImproperlyQuotedValue {
     val: String,
 }
 impl StdError for ImproperlyQuotedValue {}
 
-impl fmt::Display for ImproperlyQuotedValue {
+impl Display for ImproperlyQuotedValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -22,8 +23,8 @@ impl fmt::Display for ImproperlyQuotedValue {
     }
 }
 
-#[derive(Debug)]
 /// A value unrepresentable as a kernel command line argument value.
+#[derive(Debug)]
 pub struct UnrepresentableValue(String);
 
 impl StdError for UnrepresentableValue {}
@@ -34,8 +35,8 @@ impl fmt::Display for UnrepresentableValue {
     }
 }
 
-#[derive(Debug, Default)]
 /// Represents a correctly-parsed kernel command line.
+#[derive(Debug, Default)]
 pub struct KernelCommandLine {
     tokenized_arguments: Vec<String>,
 }
@@ -46,14 +47,15 @@ impl KernelCommandLine {
         value: Option<&str>,
     ) -> Result<String, UnrepresentableValue> {
         fn escape_value(val: &str) -> Result<String, UnrepresentableValue> {
-            Ok(if val.contains("\"") || val.contains("\n") {
-                return Err(UnrepresentableValue(val.to_string()));
+            if val.contains("\"") || val.contains("\n") {
+                Err(UnrepresentableValue(val.to_string()))
             } else if val.contains(" ") {
-                format!("\"{val}\"")
+                Ok(format!("\"{val}\""))
             } else {
-                val.to_string()
-            })
+                Ok(val.to_string())
+            }
         }
+
         if let Some(val) = value {
             Ok(format!("{}={}", argument, escape_value(val)?))
         } else {
@@ -64,22 +66,23 @@ impl KernelCommandLine {
     /// Remove an argument from a kernel command line, however many times it appears.
     /// Returns the position of the first removed argument.
     pub fn remove_argument(&mut self, argument: &str) -> Option<usize> {
-        let mut firstpos: Option<usize> = None;
-        self.tokenized_arguments = self
-            .tokenized_arguments
-            .clone()
-            .into_iter()
-            .enumerate()
-            .filter(|(pos, arg)| {
-                let res =
-                    *arg != argument && !arg.starts_with((argument.to_owned() + "=").as_str());
-                if !res && firstpos.is_none() {
-                    firstpos.replace(*pos);
-                }
-                res
-            })
-            .map(|(_, x)| x)
-            .collect();
+        let starts_with_argument = |haystack: &str| {
+            // haystack must be exactly argument or have argument=... format
+            haystack
+                .strip_prefix(argument)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('='))
+        };
+
+        let mut firstpos = None;
+        let mut pos = 0;
+        self.tokenized_arguments.retain(|arg| {
+            let should_remove = starts_with_argument(arg);
+            if should_remove && firstpos.is_none() {
+                firstpos = Some(pos);
+            }
+            pos += 1;
+            !should_remove
+        });
         firstpos
     }
 
@@ -112,9 +115,8 @@ impl KernelCommandLine {
         argument: &str,
         value: Option<&str>,
     ) -> Result<(), UnrepresentableValue> {
-        let formatted_argument = Self::format_argument(argument, value)?;
-        let to_add = formatted_argument;
-        self.tokenized_arguments.push(to_add);
+        self.tokenized_arguments
+            .push(Self::format_argument(argument, value)?);
         Ok(())
     }
 
@@ -128,7 +130,7 @@ impl KernelCommandLine {
         });
 
         self.tokenized_arguments.iter().find_map(|arg| {
-            if *arg == argument_name {
+            if arg == argument_name {
                 Some(String::new())
             } else {
                 REGEX.captures(arg).and_then(|caps| {
@@ -148,9 +150,15 @@ impl KernelCommandLine {
     }
 }
 
-impl From<KernelCommandLine> for String {
-    fn from(val: KernelCommandLine) -> Self {
-        val.tokenized_arguments.join(" ")
+impl Display for KernelCommandLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (i, arg) in self.tokenized_arguments.iter().enumerate() {
+            if i > 0 {
+                f.write_char(' ')?;
+            }
+            f.write_str(arg)?;
+        }
+        Ok(())
     }
 }
 
@@ -158,43 +166,43 @@ impl FromStr for KernelCommandLine {
     type Err = ImproperlyQuotedValue;
 
     fn from_str(cmdline: &str) -> Result<Self, ImproperlyQuotedValue> {
-        let mut res: Vec<String> = vec![];
-        let mut curr: String = "".into();
-        let mut is_quoted = false;
+        let mut tokenized_arguments = vec![];
+        let mut current_token = String::new();
+        let mut inside_quote = false;
+
         for ch in cmdline.chars() {
-            match ch {
-                '"' => {
-                    if is_quoted {
-                        curr.push(ch);
-                        res.push(curr.clone());
-                        curr = "".into();
-                        is_quoted = false;
-                    } else {
-                        curr.push(ch);
-                        is_quoted = true;
+            match (ch, inside_quote) {
+                // starting quoted string
+                ('"', false) => {
+                    current_token.push(ch);
+                    inside_quote = true;
+                }
+                // ending quoted string
+                ('"', true) => {
+                    current_token.push(ch);
+                    tokenized_arguments.push(std::mem::take(&mut current_token));
+                    inside_quote = false;
+                }
+                // space outside quoted string
+                (c, false) if c.is_ascii_whitespace() => {
+                    if !current_token.is_empty() {
+                        tokenized_arguments.push(std::mem::take(&mut current_token));
                     }
                 }
-                ' ' => {
-                    if is_quoted {
-                        curr.push(ch);
-                    } else if !curr.is_empty() {
-                        res.push(curr.clone());
-                        curr = "".into();
-                    }
-                }
-                _ => {
-                    curr.push(ch);
-                }
+                _ => current_token.push(ch),
             }
         }
-        if curr.is_empty() {
-        } else if is_quoted {
-            return Err(ImproperlyQuotedValue { val: curr });
-        } else {
-            res.push(curr);
+
+        if inside_quote {
+            return Err(ImproperlyQuotedValue { val: current_token });
         }
+
+        if !current_token.is_empty() {
+            tokenized_arguments.push(current_token);
+        }
+
         Ok(Self {
-            tokenized_arguments: res,
+            tokenized_arguments,
         })
     }
 }
@@ -277,7 +285,7 @@ mod tests {
         for (name, input, argument_to_remove, expected) in table.iter() {
             let mut cmdline = KernelCommandLine::from_str(input).unwrap();
             cmdline.remove_argument(argument_to_remove);
-            let result: String = cmdline.into();
+            let result = cmdline.to_string();
             if result != *expected {
                 panic!(
                     "During test {name}:
@@ -364,7 +372,7 @@ actual:   {result:?}",
         for (test_name, input, argument, value, expected) in table.into_iter() {
             let mut cmdline = KernelCommandLine::from_str(input).unwrap();
             cmdline.ensure_single_argument(argument, value).unwrap();
-            let result: String = cmdline.into();
+            let result = cmdline.to_string();
             if result != *expected {
                 panic!(
                     "During test {test_name}:
@@ -390,6 +398,14 @@ Actual:
                 "rd.debug rd.initrd=/bin/bash",
                 "rd.debug",
                 Some(String::new()),
+            ),
+            (
+                "full kernel cmdline with newline",
+                "BOOT_IMAGE=/vmlinuz root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A security=selinux selinux=1 enforcing=1 root_hash=79d5a042bc6dcf1e5953abae8d2a6a77d10a35cc8ea29c2b2f58094388f8534b\n",
+                "root_hash",
+                Some(
+                    "79d5a042bc6dcf1e5953abae8d2a6a77d10a35cc8ea29c2b2f58094388f8534b".to_string(),
+                ),
             ),
             (
                 "get existing argument with value",

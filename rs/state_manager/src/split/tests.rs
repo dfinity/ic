@@ -18,10 +18,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, ReplicatedState, SystemMetadata,
     canister_snapshots::CanisterSnapshot, page_map::TestPageAllocatorFileDescriptorImpl,
+    testing::ReplicatedStateTesting,
 };
 use ic_state_layout::{
     CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, INGRESS_HISTORY_FILE, ProtoFileWith,
-    SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE, StateLayout,
+    REFUNDS_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE, StateLayout,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::new_canister_state_with_execution;
@@ -91,6 +92,7 @@ fn subnet_a_files() -> &'static [&'static str] {
         "canister_states/00000000000000030101/canister.pbuf",
         "canister_states/00000000000000030101/software.wasm",
         INGRESS_HISTORY_FILE,
+        REFUNDS_FILE,
         "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
         "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
         SUBNET_QUEUES_FILE,
@@ -106,6 +108,7 @@ fn subnet_a_prime_files() -> &'static [&'static str] {
         "canister_states/00000000000000030101/canister.pbuf",
         "canister_states/00000000000000030101/software.wasm",
         INGRESS_HISTORY_FILE,
+        REFUNDS_FILE,
         "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
         "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
         SPLIT_MARKER_FILE,
@@ -138,7 +141,7 @@ fn read_write_roundtrip() {
         let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
         let mut thread_pool = Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
         // Sanity check: ensure that we have a single checkpoint.
-        assert_eq!(1, layout.checkpoint_heights().unwrap().len());
+        assert_eq!(1, layout.verified_checkpoint_heights().unwrap().len());
 
         // Compute the manifest of the original checkpoint.
         let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
@@ -166,7 +169,7 @@ fn read_write_roundtrip() {
         )
         .expect("failed to write checkpoint");
         // Sanity check: ensure that we now have exactly two checkpoints.
-        assert_eq!(2, layout.checkpoint_heights().unwrap().len());
+        assert_eq!(2, layout.verified_checkpoint_heights().unwrap().len());
 
         // Compute the manifest of the newly written checkpoint.
         let (manifest_after, height_after) = compute_manifest(&layout, manifest_metrics, &log);
@@ -379,8 +382,10 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         },
         UNIX_EPOCH,
         (1u64 << 30).into(),
+        |_| {},
     );
     state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();
+    state.add_refund(CANISTER_0, Cycles::new(1 << 20));
 
     let snapshot_id = SnapshotId::from((CANISTER_1, 0));
     let snapshot =
@@ -423,7 +428,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     .unwrap();
 
     // Sanity checks.
-    assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
+    assert_eq!(layout.verified_checkpoint_heights().unwrap(), vec![HEIGHT]);
     let checkpoint = layout.checkpoint_verified(HEIGHT).unwrap();
     assert_eq!(
         checkpoint.canister_ids().unwrap(),
@@ -506,7 +511,11 @@ fn compute_manifest(
     manifest_metrics: &ManifestMetrics,
     log: &ReplicaLogger,
 ) -> (Manifest, Height) {
-    let last_checkpoint_height = state_layout.checkpoint_heights().unwrap().pop().unwrap();
+    let last_checkpoint_height = state_layout
+        .verified_checkpoint_heights()
+        .unwrap()
+        .pop()
+        .unwrap();
     let last_checkpoint_layout = state_layout
         .checkpoint_verified(last_checkpoint_height)
         .unwrap();
