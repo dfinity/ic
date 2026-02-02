@@ -76,46 +76,49 @@ dfx canister --network ic call ledger icrc1_transfer "(record { from_subaccount 
 
 === Withdrawal: ckDOGE to Dogecoin
 ```
- ┌────┐                   ┌────────────┐                             ┌──────┐                  ┌───────────────┐
- │User│                   │ckDOGE Ledger│                             │Minter│                  │Dogecoin Network│
- └─┬──┘                   └─────┬──────┘                             └──┬───┘                  └───────┬───────┘
-   │                            │                                       │                              │
-   │icrc2_approve(minter,amount)│                                       │                              │
-   │───────────────────────────>│                                       │                              │
-   │                            │                                       │                              │
-   │        retrieve_btc_with_approval(address,amount)                  │                              │
-   │───────────────────────────────────────────────────────────────────>│                              │
-   │                            │                                       │                              │
-   │                            │icrc2_transfer_from(user,minter,amount)│                              │
-   │                            │<──────────────────────────────────────│                              │
-   │                            │                                       │                              │
+ ┌────┐                   ┌─────────────┐                            ┌──────┐                  ┌────────────────┐
+ │User│                   │ckDOGE Ledger│                            │Minter│                  │Dogecoin Network│
+ └─┬──┘                   └─────┬───────┘                            └──┬───┘                  └────────┬───────┘
+   │                            │                                       │                               │
+   │icrc2_approve(minter,amount)│                                       │                               │
+   │───────────────────────────>│                                       │                               │
+   │                            │                                       │                               │
+   │        retrieve_doge_with_approval(address,amount)                 │                               │
+   │───────────────────────────────────────────────────────────────────>│                               │
+   │                            │                                       │                               │
+   │                            │icrc2_transfer_from(user,minter,amount)│                               │
+   │                            │<──────────────────────────────────────│                               │
+   │                            │                                       │                               │
    │                            │                                       │Send DOGE to withdrawal address│
-   │                            │                                       │─────────────────────────────>│
- ┌─┴──┐                   ┌─────┴──────┐                             ┌──┴───┐                  ┌───────┴───────┐
- │User│                   │ckDOGE Ledger│                             │Minter│                  │Dogecoin Network│
- └────┘                   └────────────┘                             └──────┘                  └───────────────┘
+   │                            │                                       │──────────────────────────────>│
+ ┌─┴──┐                   ┌─────┴───────┐                            ┌──┴───┐                  ┌────────┴───────┐
+ │User│                   │ckDOGE Ledger│                            │Minter│                  │Dogecoin Network│
+ └────┘                   └─────────────┘                            └──────┘                  └────────────────┘
 ```
 1. Approve the minter's principal:
 +
+[source,shell]
 ----
-dfx canister --network ic call ledger icrc2_approve "(record {spender=record{owner=principal \"mqygn-kiaaa-aaaar-qaadq-cai\"}; amount=AMOUNT})"
+dfx canister --network ic call ledger icrc2_approve "(record {spender=record{owner=principal \"eqltq-xqaaa-aaaar-qb3vq-cai\"}; amount=AMOUNT})"
 ----
 +
-2. Call the `retrieve_btc_with_approval` endpoint with the desired DOGE destination address where you want to receive your Dogecoin.
-   Replace DOGE_ADDRESS with your DOGE address (the minter supports all address formats).
-   Replace AMOUNT with the amount that you transferred minus the transfer fee of 0.0000001 ckDOGE (the equivalent of 10 Satoshi).
+2. Call the `retrieve_doge_with_approval` endpoint with the desired DOGE destination address where you want to receive your Dogecoin.
+   Replace DOGE_ADDRESS with your DOGE address (the minter supports all address formats) and AMOUNT with the desired amount to withdraw.
 +
+[source,shell]
 ----
-dfx canister --network ic call minter retrieve_btc_with_approval "(record {address=\"DOGE_ADDRESS\"; amount=AMOUNT;})"
+dfx canister --network ic call minter retrieve_doge_with_approval "(record {address=\"DOGE_ADDRESS\"; amount=AMOUNT;})"
 ----
 +
 You now have your DOGE back on the Dogecoin network (caution: transaction finalization may take a while).
 
-[NOTE]
+[TIP]
+.Status of Withdrawal
 ====
-You can query the status of your `retrieve_btc_with_approval` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling retrieve_btc):
+You can query the status of your `retrieve_doge_with_approval` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling `retrieve_doge_with_approval`):
+[source,shell]
 ----
-dfx canister --network ic call minter retrieve_btc_status "(record { block_index = BLOCK_INDEX; })"
+dfx canister --network ic call minter retrieve_doge_status "(record { block_index = BLOCK_INDEX; })"
 ----
 ====
 
@@ -126,13 +129,13 @@ All ckDOGE transactions issued by the ckDOGE minter and recorded on the ledger u
 . minting ckDOGE after a deposit of DOGE,
 . burning ckDOGE after a withdrawal request to DOGE,
 
-=== Design
-The general idea is to encode the memo as a https://cbor.io/[CBOR] message and use the transaction type to select the message type. The messages will follow the compact encoding described in the https://twittner.gitlab.io/minicbor/minicbor_derive/index.html[minicbor] package documentation with the following https://datatracker.ietf.org/doc/html/rfc8610[CDDL] schema:
+==== Design
+The general idea is to encode the memo as a https://cbor.io/[CBOR] message and use the transaction type to select the message type. The messages will follow the compact encoding described in the https://twittner.gitlab.io/minicbor/minicbor_derive/index.html[minicbor] package documentation.
 
 .Example Implementation in Typescript
 ====
-There is an example implementation of how to decode the ckDOGE ledger memos in Typescript in the https://github.com/dfinity/oisy-wallet/tree/main[Oisy Wallet] repository:
+The ckDOGE ledger memos use the same syntax as the https://github.com/dfinity/ic/blob/c8237d1822d9c6ede27c1b89621c05dfe2e33f35/rs/ethereum/cketh/minter/src/memo.rs#L25[ckBTC ledger memos] and there is an example implementation of how to decode the ckBTC ledger memos in Typescript in the https://github.com/dfinity/oisy-wallet/tree/main[Oisy Wallet] repository:
 
-* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/icp/utils/ckbtc-memo.utils.ts[Decode ckDOGE ledger burn and mint memo]
-* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/tests/icp/utils/ckbtc-memo.utils.spec.ts[Tests to decode ckDOGE ledger memo]
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/icp/utils/ckbtc-memo.utils.ts[Decode ckBTC ledger burn and mint memo]
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/tests/icp/utils/ckbtc-memo.utils.spec.ts[Tests to decode ckBTC ledger memo]
 ====
