@@ -100,17 +100,16 @@ pub(super) fn get_dealers_from_chain(
 /// Starts with the given block and creates a nested mapping from the DKG Id to
 /// the node Id to the dealing. This function panics if multiple dealings
 /// from one dealer are discovered, hence, we assume a valid block chain.
-/// It also excludes dealings for ni_dkg ids, which already have a transcript in the
+/// It also excludes dealings for ni_dkg ids which already have a transcript in the
 /// blockchain, and returns these exlcuded ni_dkg ids.
 pub(super) fn get_dkg_dealings(
     pool_reader: &PoolReader<'_>,
     block: &Block,
-    exclude_used: bool,
 ) -> (
     BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>>,
     BTreeSet<NiDkgId>,
 ) {
-    extract_from_dkg_dealing_messages(pool_reader, block, exclude_used, |message| {
+    extract_from_dkg_dealing_messages(pool_reader, block, true, |message| {
         message.content.dealing.clone()
     })
 }
@@ -197,7 +196,12 @@ pub(crate) fn tags_iter(
 
 #[cfg(test)]
 mod tests {
+    use super::get_dkg_dealings;
+    use crate::test_utils::create_dealing;
     use crate::utils::vetkd_key_ids_for_subnet;
+    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_consensus_utils::pool_reader::PoolReader;
+    use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_interfaces_registry::RegistryValue;
     use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_management_canister_types_private::{
@@ -205,8 +209,17 @@ mod tests {
     };
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{RegistryVersion, crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::{
+        Height, RegistryVersion,
+        batch::BatchPayload,
+        consensus::{Block, BlockPayload, DataPayload, Payload, Rank, dkg::DkgDataPayload, idkg},
+        crypto::{
+            crypto_hash,
+            threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet},
+        },
+        messages::CallbackId,
+    };
 
     /// Test that `get_enabled_vet_keys` correctly extracts the vet keys that are in the [`SubnetRecord`] of the
     /// subnet.
@@ -266,6 +279,93 @@ mod tests {
         assert!(
             matches!(&vetkeys[1], NiDkgMasterPublicKeyId::VetKd(key) if key.name == "second_vet_kd_key")
         );
+    }
+
+    fn dkg_id(subnet_id: ic_types::SubnetId, tag: NiDkgTag) -> NiDkgId {
+        NiDkgId {
+            start_block_height: Height::from(0),
+            dealer_subnet: subnet_id,
+            target_subnet: NiDkgTargetSubnet::Local,
+            dkg_tag: tag,
+        }
+    }
+
+    #[test]
+    fn test_get_dkg_dealings_included_and_excluded_by_transcript() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_id = subnet_test_id(1);
+            let nodes: Vec<_> = (0..3).map(node_test_id).collect();
+            let dkg_interval_len = 10;
+            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&nodes)
+                        .with_dkg_interval_length(dkg_interval_len)
+                        .build(),
+                )],
+            );
+
+            pool.advance_round_normal_operation_n(dkg_interval_len);
+            let pool_reader = PoolReader::new(&pool);
+            let tip = pool_reader.get_finalized_tip();
+
+            // DKG id that has a transcript in this block -> its dealings should be excluded.
+            let dkg_id_with_transcript = dkg_id(subnet_id, NiDkgTag::HighThreshold);
+            // DKG id with no transcript -> its dealings should be included.
+            let dkg_id_without_transcript = dkg_id(subnet_id, NiDkgTag::LowThreshold);
+
+            // Dealings for the transcript DKG id (excluded) and for another DKG id (included).
+            let msg_excluded_1 = create_dealing(0, dkg_id_with_transcript.clone());
+            let msg_excluded_2 = create_dealing(1, dkg_id_with_transcript.clone());
+            let msg_included_1 = create_dealing(0, dkg_id_without_transcript.clone());
+            let msg_included_2 = create_dealing(1, dkg_id_without_transcript.clone());
+
+            let dkg_payload = DkgDataPayload {
+                start_height: tip.payload.as_ref().as_data().dkg.start_height,
+                messages: vec![
+                    msg_excluded_1.clone(),
+                    msg_excluded_2.clone(),
+                    msg_included_1.clone(),
+                    msg_included_2.clone(),
+                ],
+                transcripts_for_remote_subnets: vec![(
+                    dkg_id_with_transcript.clone(),
+                    CallbackId::from(0),
+                    Ok(dummy_transcript_for_tests()),
+                )],
+            };
+
+            let child_block = Block::new(
+                crypto_hash(&tip),
+                Payload::new(crypto_hash, {
+                    BlockPayload::Data(DataPayload {
+                        batch: BatchPayload::default(),
+                        dkg: dkg_payload,
+                        idkg: idkg::Payload::default(),
+                    })
+                }),
+                tip.height.increment(),
+                Rank(0),
+                tip.context.clone(),
+            );
+
+            let (dealings, excluded) = get_dkg_dealings(&pool_reader, &child_block);
+
+            // Excluded: only the DKG id that has a transcript.
+            assert_eq!(excluded.len(), 1);
+            assert!(excluded.contains(&dkg_id_with_transcript));
+
+            // Dealings for the transcript DKG id must not appear in the result.
+            assert!(!dealings.contains_key(&dkg_id_with_transcript));
+
+            // Dealings for the other DKG id must be included with both dealers.
+            let included = dealings.get(&dkg_id_without_transcript).unwrap();
+            assert_eq!(included.len(), 2);
+            assert!(included.contains_key(&node_test_id(0)));
+            assert!(included.contains_key(&node_test_id(1)));
+        });
     }
 
     // TODO: Unit test for `get_vetkey_public_keys`. (Currently its covered through a system test)

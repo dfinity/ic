@@ -172,23 +172,29 @@ pub(crate) fn create_early_remote_transcripts(
     }
 
     // Get all dealings that have not been used in a transcript already
-    let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent, true);
+    let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent);
 
     // Collect map of remote target_ids to dkg configs
-    let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<&NiDkgConfig>> = BTreeMap::new();
+    let mut remote_configs: BTreeMap<NiDkgTargetId, Vec<&NiDkgConfig>> = BTreeMap::new();
     for config in last_dkg_summary.configs.values() {
         let dkg_id = config.dkg_id();
         if completed.contains(dkg_id) {
             continue;
         }
         if let NiDkgTargetSubnet::Remote(target_id) = dkg_id.target_subnet {
-            remote_contexts.entry(target_id).or_default().push(config);
+            remote_configs.entry(target_id).or_default().push(config);
         }
     }
 
     let state_ref = state.get_ref();
+    let callback_id_map = build_target_id_callback_map(state_ref);
     let mut selected_transcripts = vec![];
-    for (_target_id, configs) in remote_contexts {
+    for (target_id, configs) in remote_configs {
+        // Lookup the callback id
+        let Some(callback_id) = callback_id_map.get(&target_id) else {
+            continue;
+        };
+
         // If any of the configs has less dealings than the threshold, we skip this target_id
         if configs.iter().any(|config| {
             let dealings_count = all_dealings
@@ -202,10 +208,6 @@ pub(crate) fn create_early_remote_transcripts(
         // For each config, try to build the necessary (dkg_id, callback_id, transcript) triple
         let mut transcripts = vec![];
         for config in configs.iter() {
-            // Lookup the callback id
-            let Some(callback_id) = get_callback_id_from_id(state_ref, config.dkg_id()) else {
-                continue;
-            };
             // Generate the transcript. We just skip reproducible errors, they will
             // be handled in the summary block, if we fail to create an early transcript
             let transcript = match create_transcript(crypto, config, &all_dealings, &logger) {
@@ -227,7 +229,7 @@ pub(crate) fn create_early_remote_transcripts(
             };
             transcripts.push((
                 config.dkg_id().clone(),
-                callback_id,
+                *callback_id,
                 Ok::<_, String>(transcript),
             ));
         }
@@ -308,7 +310,7 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
-    let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent, true);
+    let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
@@ -995,79 +997,46 @@ fn eq_sans_height(dkg_id1: &NiDkgId, dkg_id2: &NiDkgId) -> bool {
         && dkg_id1.target_subnet == dkg_id2.target_subnet
 }
 
+fn build_target_id_callback_map(state: &ReplicatedState) -> BTreeMap<NiDkgTargetId, CallbackId> {
+    let call_contexts = &state.metadata.subnet_call_context_manager;
+    call_contexts
+        .setup_initial_dkg_contexts
+        .iter()
+        .map(|(&callback_id, context)| (context.target_id, callback_id))
+        .chain(
+            call_contexts
+                .reshare_chain_key_contexts
+                .iter()
+                .map(|(&callback_id, context)| (context.target_id, callback_id)),
+        )
+        .collect::<BTreeMap<NiDkgTargetId, CallbackId>>()
+}
+
 fn add_callback_ids_to_transcript_results(
     new_transcripts: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
     state: &ReplicatedState,
     log: &ReplicaLogger,
 ) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
+    // Build a map from target id to callback id
+    let callback_id_map = build_target_id_callback_map(state);
     new_transcripts
         .into_iter()
-        .filter_map(|(id, result)| {
-            let triple = get_callback_id_from_id(state, &id).map(|callback_id| (id.clone(), callback_id, result));
-            if triple.is_none() {
-                error!(
-                    log,
-                    "Unable to find callback id associated with remote dkg id {}, this should not happen",
-                    id
-                );
-            }
-            triple
+        .filter_map(|(id, result)| match id.target_subnet {
+            NiDkgTargetSubnet::Local => None,
+            NiDkgTargetSubnet::Remote(target_id) => match callback_id_map.get(&target_id) {
+                Some(&callback_id) => Some((id, callback_id, result)),
+                None => {
+                    error!(
+                        log,
+                        "Unable to find callback id associated with remote dkg id {},\
+                            this should not happen",
+                        id
+                    );
+                    None
+                }
+            },
         })
         .collect()
-}
-
-fn get_callback_id_from_id(state: &ReplicatedState, id: &NiDkgId) -> Option<CallbackId> {
-    // First check setup_initial_dkg_contexts
-    let setup_initial_dkg_contexts = &state
-        .metadata
-        .subnet_call_context_manager
-        .setup_initial_dkg_contexts;
-
-    if let Some(callback_id) = setup_initial_dkg_contexts
-        .iter()
-        .filter_map(|(callback_id, context)| {
-            (NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet)
-                .then_some(*callback_id)
-        })
-        .next_back()
-    {
-        return Some(callback_id);
-    }
-
-    // Then check reshare_chain_key_contexts (for VetKD)
-    // For VetKD, we need to match both target_id and key_id
-    let reshare_chain_key_contexts = &state
-        .metadata
-        .subnet_call_context_manager
-        .reshare_chain_key_contexts;
-
-    reshare_chain_key_contexts
-        .iter()
-        .filter_map(|(callback_id, context)| {
-            // Match target_subnet
-            if NiDkgTargetSubnet::Remote(context.target_id) != id.target_subnet {
-                return None;
-            }
-            // For VetKD, also match the key_id from the dkg_tag
-            match &id.dkg_tag {
-                NiDkgTag::HighThresholdForKey(dkg_key_id) => {
-                    // Try to convert context.key_id to NiDkgMasterPublicKeyId and compare
-                    if let Ok(context_key_id) =
-                        NiDkgMasterPublicKeyId::try_from(context.key_id.clone())
-                    {
-                        if context_key_id == *dkg_key_id {
-                            Some(*callback_id)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            }
-        })
-        .next_back()
 }
 
 fn number_of_contexts(state: &ReplicatedState) -> usize {

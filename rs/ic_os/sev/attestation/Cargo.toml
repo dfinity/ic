@@ -9,18 +9,22 @@ hex = { workspace = true }
 itertools = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
-ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sev = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-types = { path = "../../../types/types" }
+ic-utils = { path = "../../../utils" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
 attestation_testing = { path = "testing" }
-
-[build-dependencies]
+ic-utils-rustfmt = { path = "../../../utils/rustfmt" }
 prost-build = { workspace = true }
+tempfile = { workspace = true }

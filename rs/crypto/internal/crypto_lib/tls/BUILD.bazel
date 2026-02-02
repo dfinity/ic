@@ -5,6 +5,7 @@ package(default_visibility = ["//rs/crypto:__subpackages__"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
+    "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/secrets_containers",
     "//rs/types/types",
     "@crate_index//:rand",

@@ -42,7 +42,7 @@ fn create_neuron_1_pem_file() -> NamedTempFile {
 async fn test_propose_to_rent_subnet_can_read_pem_file() {
     let (_pocket_ic, url) = setup().await;
 
-    let ic_admin_path = env::var("IC_ADMIN_BIN").expect("IC_ADMIN_BIN not set");
+    let ic_admin_path = env::var("IC_ADMIN_PATH").expect("IC_ADMIN_PATH not set");
     let pem_file = create_neuron_1_pem_file();
     let pem_file_path = pem_file
         .path()
@@ -122,7 +122,7 @@ async fn test_update_registry_local_store_handles_chunked_records() {
 
     // Step 2: Call code under test: `ic-admin update-registry-local-store`.
     let endpoint = pocket_ic.make_live(None).await; // Make PocketIc callable by ic-admin.
-    let ic_admin_path = env::var("IC_ADMIN_BIN").expect("IC_ADMIN_BIN not set");
+    let ic_admin_path = env::var("IC_ADMIN_PATH").expect("IC_ADMIN_PATH not set");
     let output = Command::new(ic_admin_path)
         .args([
             "--nns-urls",

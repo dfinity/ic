@@ -1,3 +1,4 @@
+use ic_crypto_test_utils_ni_dkg::dummy_dealing;
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces_state_manager::Labeled;
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
@@ -6,19 +7,15 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 };
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
+use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
 use ic_types::{
-    Height, RegistryVersion, ReplicaVersion,
-    consensus::dkg::{DealingContent, DealingMessages},
-    crypto::{
-        BasicSig,
-        threshold_sig::ni_dkg::{
-            NiDkgDealing, NiDkgId, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
-            config::NiDkgConfig,
-        },
+    Height, RegistryVersion,
+    consensus::dkg::{DealingContent, DealingMessages, Message},
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgId, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript, config::NiDkgConfig,
     },
     messages::CallbackId,
-    signature::{BasicSignature, BasicSigned},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -126,23 +123,6 @@ pub(super) fn complement_state_manager_with_remote_dkg_requests(
     }
 }
 
-/// Create a dealing from the node `node_idx`
-pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> BasicSigned<DealingContent> {
-    BasicSigned {
-        content: DealingContent {
-            version: ReplicaVersion::default(),
-            dealing: NiDkgDealing {
-                internal_dealing: ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(node_idx as u8),
-            },
-            dkg_id,
-        },
-        signature: BasicSignature {
-            signature: BasicSig(vec![]).into(),
-            signer: node_test_id(node_idx),
-        },
-    }
-}
-
 /// Extract the remote dkg transcripts from the current highest validated block
 pub(super) fn extract_remote_dkgs_from_highest_block(
     pool: &TestConsensusPool,
@@ -220,4 +200,10 @@ pub(super) fn extract_dkg_configs_from_highest_block(
     } else {
         BTreeMap::new()
     }
+}
+
+/// Create a dealing from the node `node_idx`
+pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> Message {
+    let content = DealingContent::new(dummy_dealing(node_idx as u8), dkg_id);
+    Message::fake(content, node_test_id(node_idx))
 }
