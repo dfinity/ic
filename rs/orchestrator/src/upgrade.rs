@@ -2877,7 +2877,6 @@ mod tests {
                     || !matches!(flow_result, Ok(OrchestratorControlFlow::Stop))
             );
             // - If the upgrade version was recalled, then we should never be rebooting
-            println!("Flow result: {:?}", flow_result);
             assert!(
                 !test_scenario
                     .upgrade_to
