@@ -749,9 +749,9 @@ impl ValidNnsFunction {
             }
             ValidNnsFunction::DeployGuestosToAllSubnetNodes => {
                 "Deploy a GuestOS version to a given subnet. The proposal changes the GuestOS \
-                version that is used on the specified subnet. The version must be contained in \
-                the list of elected GuestOS versions. The upgrade is completed when the subnet \
-                creates the next regular CUP."
+                version that is used on the specified subnet.\n\
+                The version must be contained in the list of elected GuestOS versions.\n\
+                The upgrade is completed when the subnet creates the next regular CUP."
             }
             ValidNnsFunction::ClearProvisionalWhitelist => {
                 "Clear the provisional whitelist, which allows the listed principals to create \
@@ -785,8 +785,9 @@ impl ValidNnsFunction {
             }
             ValidNnsFunction::RerouteCanisterRanges => {
                 "Reroute canister ID ranges from one subnet to a different subnet in the routing \
-                table in the registry. The steps of canister migration are: (1) Prepare Canister \
-                Migration, (2) Reroute Canister Ranges, (3) Complete Canister Migration."
+                table in the registry.\n\
+                The steps of canister migration are: (1) Prepare Canister Migration, \
+                (2) Reroute Canister Ranges, (3) Complete Canister Migration."
             }
             ValidNnsFunction::AddFirewallRules => {
                 "Add firewall rules in the registry. Nodes use a firewall to protect \
@@ -802,15 +803,15 @@ impl ValidNnsFunction {
             }
             ValidNnsFunction::PrepareCanisterMigration => {
                 "Insert or update canister migrations entries. Such entries specify that a \
-                migration of canister ID ranges is currently ongoing. The steps of canister \
-                migration are: (1) Prepare Canister Migration, (2) Reroute Canister Ranges, \
-                (3) Complete Canister Migration."
+                migration of canister ID ranges is currently ongoing.\n\
+                The steps of canister migration are: (1) Prepare Canister Migration, \
+                (2) Reroute Canister Ranges, (3) Complete Canister Migration."
             }
             ValidNnsFunction::CompleteCanisterMigration => {
                 "Remove canister migrations entries. Such entries specify that a migration of \
-                canister ID ranges is currently ongoing. The steps of canister migration are: \
-                (1) Prepare Canister Migration, (2) Reroute Canister Ranges, (3) Complete \
-                Canister Migration."
+                canister ID ranges is currently ongoing.\n\
+                The steps of canister migration are: (1) Prepare Canister Migration, \
+                (2) Reroute Canister Ranges, (3) Complete Canister Migration."
             }
             ValidNnsFunction::AddSnsWasm => "Add a new SNS canister WASM.",
             ValidNnsFunction::ChangeSubnetMembership => {
@@ -848,11 +849,12 @@ impl ValidNnsFunction {
                 an SNS specified by its governance canister ID."
             }
             ValidNnsFunction::ReviseElectedGuestosVersions => {
-                "Change the set of elected GuestOS versions. The version to elect (identified by \
-                the hash of the installation image) is added to the registry. Besides creating a \
-                record for that version, the proposal also appends that version to the list of \
-                elected versions that can be installed on nodes of a subnet. Only elected GuestOS \
-                versions can be deployed."
+                "Change the set of elected GuestOS versions.\n\
+                The version to elect (identified by the hash of the installation image) is added \
+                to the registry. Besides creating a record for that version, the proposal also \
+                appends that version to the list of elected versions that can be installed on \
+                nodes of a subnet.\n\
+                Only elected GuestOS versions can be deployed."
             }
             ValidNnsFunction::BitcoinSetConfig => {
                 "Set the configuration of the underlying Bitcoin Canister that powers the Bitcoin \
@@ -881,24 +883,25 @@ impl ValidNnsFunction {
             }
             ValidNnsFunction::ReviseElectedHostosVersions => {
                 "Change the set of currently elected HostOS versions, by electing a new version, \
-                and/or unelecting some priorly elected versions. HostOS versions are identified \
-                by the hash of the installation image. The version to elect is added to the \
-                Registry, and the versions to unelect are removed from the Registry, ensuring \
-                that HostOS cannot upgrade to these versions anymore. This proposal does not \
-                actually perform the upgrade; for deployment of an elected version, please refer \
-                to \"Deploy HostOS To Some Nodes\"."
+                and/or unelecting some priorly elected versions.\n\
+                HostOS versions are identified by the hash of the installation image.\n\
+                The version to elect is added to the Registry, and the versions to unelect are \
+                removed from the Registry, ensuring that HostOS cannot upgrade to these versions \
+                anymore.\n\
+                This proposal does not actually perform the upgrade; for deployment of an elected \
+                version, please refer to \"Deploy HostOS To Some Nodes\"."
             }
             ValidNnsFunction::DeployHostosToSomeNodes => {
                 "Deploy a HostOS version to a given set of nodes. The proposal \
                 changes the HostOS version that is used on the specified nodes."
             }
             ValidNnsFunction::SubnetRentalRequest => {
-                "Rent a subnet on the Internet Computer. The Subnet Rental Canister is called \
-                when this proposal is executed, and the rental request is stored there. The user \
-                specified in the proposal needs to make a sufficient upfront payment in ICP in \
-                order for the proposal to be valid, and the subnet must be available for rent. \
-                The available rental conditions can be checked by calling the Subnet Rental \
-                Canister."
+                "Rent a subnet on the Internet Computer.\n\
+                The Subnet Rental Canister is called when this proposal is executed, and the \
+                rental request is stored there. The user specified in the proposal needs to make \
+                a sufficient upfront payment in ICP in order for the proposal to be valid, and \
+                the subnet must be available for rent. The available rental conditions can be \
+                checked by calling the Subnet Rental Canister."
             }
             ValidNnsFunction::PauseCanisterMigrations => {
                 "Instruct the migration canister to not accept any more migration requests."
