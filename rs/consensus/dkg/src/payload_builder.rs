@@ -282,7 +282,7 @@ pub(super) fn create_summary_payload(
         next_interval_length,
         height,
         initial_dkg_attempts,
-        // TODO(kpop): start populating this
+        // TODO(CON-1565): start populating this
         /*subnet_splitting_status=*/ None,
     ))
 }

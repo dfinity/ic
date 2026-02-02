@@ -189,7 +189,7 @@ pub struct DkgSummary {
     pub initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
 }
 
-// TODO: remove this explicit implementation once it's safe.
+// TODO(CON-1565): remove this explicit implementation once it's safe.
 impl Hash for DkgSummary {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let Self {
