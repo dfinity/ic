@@ -10,7 +10,7 @@ use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyE
 use ic_ledger_core::{
     approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
-    block::{BlockType, EncodedBlock, FeeCollector},
+    block::{BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::TokensType,
 };
@@ -673,20 +673,11 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         transaction: Self::Transaction,
         timestamp: TimeStamp,
         effective_fee: Tokens,
-        fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self {
         let effective_fee = match &transaction.operation {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
             _ => None,
-        };
-        let (fee_collector, fee_collector_block_index) = match fee_collector {
-            Some(FeeCollector {
-                fee_collector,
-                block_index: None,
-            }) => (Some(fee_collector), None),
-            Some(FeeCollector { block_index, .. }) => (None, block_index),
-            None => (None, None),
         };
         let btype = match &transaction.operation {
             Operation::FeeCollector {
@@ -701,8 +692,8 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             transaction,
             effective_fee,
             timestamp: timestamp.as_nanos_since_unix_epoch(),
-            fee_collector,
-            fee_collector_block_index,
+            fee_collector: None,
+            fee_collector_block_index: None,
             btype,
         }
     }

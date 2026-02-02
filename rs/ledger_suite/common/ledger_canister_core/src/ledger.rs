@@ -278,7 +278,6 @@ where
         transaction,
         now,
         effective_fee,
-        None,
     );
     let block_timestamp = block.timestamp();
 
