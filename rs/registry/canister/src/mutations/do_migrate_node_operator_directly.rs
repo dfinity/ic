@@ -828,12 +828,14 @@ mod tests {
 
         // Ensure that the nodes owned by the old operator show the new operator now
         let nodes = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
+        assert_eq!(nodes.len(), 3, "{nodes:?}");
         for node in nodes {
             assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
         }
 
         // Ensure that the extra nodes weren't touched
         let nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
+        assert_eq!(nodes.len(), 5, "{nodes:?}");
         for (new_node_record, extra_node_record) in nodes
             .into_iter()
             .sorted_by_key(|n| n.http.clone().unwrap().ip_addr)
@@ -854,6 +856,8 @@ mod tests {
         assert_eq!(changes.len(), 5);
 
         // Node changes
+        // NOTE: Content verification was done earlier so having weak checks
+        // for length and `is_present()` just ensure that mutations were there
         let node_deltas = filter_changes_for_key_prefix(NODE_RECORD_KEY_PREFIX, &changes);
         assert_eq!(node_deltas.len(), 3);
         assert!(
@@ -944,7 +948,7 @@ mod tests {
             setup.add_node(new_node_operator_id);
         }
 
-        // Add 3 nodes owned by a random operator that shouldn't be
+        // Add 4 nodes owned by a random operator that shouldn't be
         // changed
         let extra_node_operator = PrincipalId::new_user_test_id(333);
         for _ in 0..5 {
@@ -1012,6 +1016,7 @@ mod tests {
 
         // Ensure that the nodes owned by the old operator show the new operator now
         let nodes = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
+        assert_eq!(nodes.len(), 3, "{nodes:?}");
         for (new_node_record, old_node_record) in nodes
             .into_iter()
             .sorted_by_key(|n| n.http.clone().unwrap().ip_addr)
@@ -1032,6 +1037,7 @@ mod tests {
         // Ensure that the nodes owned by the new operator still are owned by the
         // same node operator
         let nodes = setup.fetch_nodes_originally_for_node_operator(new_node_operator_id);
+        assert_eq!(nodes.len(), 4, "{nodes:?}");
         for (new_node_record, old_node_record) in nodes
             .into_iter()
             .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr)
@@ -1046,6 +1052,7 @@ mod tests {
 
         // Ensure that the extra nodes weren't touched
         let nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
+        assert_eq!(nodes.len(), 5, "{nodes:?}");
         for (new_node_record, old_node_record) in nodes
             .into_iter()
             .sorted_by_key(|n| n.xnet.clone().unwrap().ip_addr)
@@ -1066,6 +1073,8 @@ mod tests {
         assert_eq!(changes.len(), 5);
 
         // Node changes
+        // NOTE: Content verification was done earlier so having weak checks
+        // for length and `is_present()` just ensure that mutations were there
         let node_deltas = filter_changes_for_key_prefix(NODE_RECORD_KEY_PREFIX, &changes);
         assert_eq!(node_deltas.len(), 3);
         assert!(
