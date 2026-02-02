@@ -752,7 +752,7 @@ mod tests {
         let old_node_operator_id = PrincipalId::new_user_test_id(1);
         let new_node_operator_id = PrincipalId::new_user_test_id(2);
 
-        let caller = PrincipalId::new_user_test_id(999);
+        let node_provider_id = PrincipalId::new_user_test_id(999);
 
         // Operator spec variables
         let rewardable_nodes = vec![
@@ -764,7 +764,7 @@ mod tests {
 
         setup.add_node_operator(
             old_node_operator_id,
-            caller,
+            node_provider_id,
             node_allowance,
             dc,
             rewardable_nodes.clone(),
@@ -790,7 +790,7 @@ mod tests {
 
         setup
             .registry
-            .migrate_node_operator_inner(payload, caller, now_plus_13_hours())
+            .migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours())
             .unwrap();
 
         // Ensure that the new operator is there
@@ -801,7 +801,7 @@ mod tests {
         // Ensure that the values are inherited from the old record
         assert_eq!(
             new_node_operator_record.node_provider_principal_id,
-            caller.to_vec()
+            node_provider_id.to_vec()
         );
         assert_eq!(new_node_operator_record.node_allowance, node_allowance);
         assert_eq!(
@@ -890,7 +890,7 @@ mod tests {
         let old_node_operator_id = PrincipalId::new_user_test_id(1);
         let new_node_operator_id = PrincipalId::new_user_test_id(2);
 
-        let caller = PrincipalId::new_user_test_id(999);
+        let node_provider_id = PrincipalId::new_user_test_id(999);
 
         // Old Operator spec variables
         let rewardable_nodes = vec![
@@ -902,7 +902,7 @@ mod tests {
 
         setup.add_node_operator(
             old_node_operator_id,
-            caller,
+            node_provider_id,
             node_allowance,
             dc,
             rewardable_nodes.clone(),
@@ -919,7 +919,7 @@ mod tests {
 
         setup.add_node_operator(
             new_node_operator_id,
-            caller,
+            node_provider_id,
             new_node_allowance,
             dc,
             new_rewardable_nodes.clone(),
@@ -944,7 +944,7 @@ mod tests {
 
         setup
             .registry
-            .migrate_node_operator_inner(payload, caller, now_plus_13_hours())
+            .migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours())
             .unwrap();
 
         // Ensure that the new operator is there
@@ -955,7 +955,7 @@ mod tests {
         // Ensure that the values are inherited from the old record
         assert_eq!(
             new_node_operator_record.node_provider_principal_id,
-            caller.to_vec()
+            node_provider_id.to_vec()
         );
         assert_eq!(
             new_node_operator_record.node_allowance,
@@ -1075,12 +1075,12 @@ mod tests {
         let old_node_operator_id = PrincipalId::new_user_test_id(1);
         let new_node_operator_id = PrincipalId::new_user_test_id(2);
 
-        let caller = PrincipalId::new_user_test_id(999);
+        let node_provider_id = PrincipalId::new_user_test_id(999);
         registry.maybe_apply_mutation_internal(vec![upsert(
             make_node_operator_record_key(old_node_operator_id).as_bytes(),
             NodeOperatorRecord {
                 node_operator_principal_id: old_node_operator_id.to_vec(),
-                node_provider_principal_id: caller.to_vec(),
+                node_provider_principal_id: node_provider_id.to_vec(),
                 dc_id: "dc".to_string(),
                 ..Default::default()
             }
@@ -1093,7 +1093,11 @@ mod tests {
         };
 
         let original_registry = registry.clone();
-        let resp = registry.migrate_node_operator_inner(payload.clone(), caller, now_system_time());
+        let resp = registry.migrate_node_operator_inner(
+            payload.clone(),
+            node_provider_id,
+            now_system_time(),
+        );
         assert_eq!(original_registry, registry);
 
         let expected_err = Err(MigrateError::OldOperatorRateLimit {
@@ -1101,7 +1105,8 @@ mod tests {
         });
         assert_eq!(resp, expected_err);
 
-        let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+        let resp =
+            registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
 
         assert!(resp.is_ok());
     }
@@ -1114,12 +1119,12 @@ mod tests {
         let old_node_operator_id = PrincipalId::new_user_test_id(1);
         let new_node_operator_id = PrincipalId::new_user_test_id(2);
 
-        let caller = PrincipalId::new_user_test_id(999);
+        let node_provider_id = PrincipalId::new_user_test_id(999);
         registry.maybe_apply_mutation_internal(vec![upsert(
             make_node_operator_record_key(old_node_operator_id).as_bytes(),
             NodeOperatorRecord {
                 node_operator_principal_id: old_node_operator_id.to_vec(),
-                node_provider_principal_id: caller.to_vec(),
+                node_provider_principal_id: node_provider_id.to_vec(),
                 dc_id: "dc".to_string(),
                 ..Default::default()
             }
@@ -1135,7 +1140,7 @@ mod tests {
         let past = now - Duration::from_secs(4 * 60 * 60);
 
         let original_registry = registry.clone();
-        let resp = registry.migrate_node_operator_inner(payload.clone(), caller, past);
+        let resp = registry.migrate_node_operator_inner(payload.clone(), node_provider_id, past);
         assert_eq!(original_registry, registry);
 
         let expected_err = Err(MigrateError::OldOperatorRateLimit {
@@ -1143,7 +1148,8 @@ mod tests {
         });
         assert_eq!(resp, expected_err);
 
-        let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+        let resp =
+            registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
 
         assert!(resp.is_ok());
     }
@@ -1152,7 +1158,7 @@ mod tests {
     fn migrate_whole_data_center_to_one_node_operator() {
         let mut setup = TestSetup::new();
 
-        let caller = PrincipalId::new_user_test_id(999);
+        let node_provider_id = PrincipalId::new_user_test_id(999);
         let dc = "dc";
 
         let old_node_operators: Vec<_> = (1..=3).map(PrincipalId::new_user_test_id).collect();
@@ -1167,7 +1173,7 @@ mod tests {
         for node_operator in &old_node_operators {
             setup.add_node_operator(
                 *node_operator,
-                caller,
+                node_provider_id,
                 node_allowance_per_node_operator,
                 dc,
                 rewardable_nodes_per_node_operator.clone(),
@@ -1187,10 +1193,11 @@ mod tests {
                 new_node_operator_id: Some(destination_node_operator),
             };
 
-            let resp =
-                setup
-                    .registry
-                    .migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+            let resp = setup.registry.migrate_node_operator_inner(
+                payload,
+                node_provider_id,
+                now_plus_13_hours(),
+            );
             assert!(resp.is_ok());
         }
 
@@ -1238,7 +1245,7 @@ mod tests {
             .registry
             .get_node_operator_or_panic(destination_node_operator);
 
-        assert_eq!(record.node_provider_principal_id, caller.to_vec());
+        assert_eq!(record.node_provider_principal_id, node_provider_id.to_vec());
         assert_eq!(
             record.node_allowance,
             node_allowance_per_node_operator * old_node_operators.len() as u64
