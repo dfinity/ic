@@ -1720,7 +1720,7 @@ impl ProposalAction for ProposeToBlessAlternativeGuestOsVersionCmd {
             if !node_ids.is_empty() {
                 let registry_canister = RegistryCanister::new_with_agent(agent.clone());
                 let chip_ids_from_node_ids =
-                    get_chip_ids_from_subnet_nodes(&registry_canister, &node_ids).await;
+                    get_chip_ids_from_subnet_nodes(&registry_canister, node_ids).await;
                 if chip_ids_from_node_ids.len() != node_ids.len() {
                     panic!("Not all node IDs provided have a chip ID in the registry.");
                 }
