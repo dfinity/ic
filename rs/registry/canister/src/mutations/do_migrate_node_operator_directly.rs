@@ -789,6 +789,10 @@ mod tests {
             new_node_operator_id: Some(new_node_operator_id),
         };
 
+        let old_node_operator_record = setup
+            .registry
+            .get_node_operator_or_panic(old_node_operator_id);
+
         // Step 2: Run the code under test.
         setup
             .registry
@@ -804,19 +808,12 @@ mod tests {
 
         // Ensure that the values are inherited from the old record
         assert_eq!(
-            new_node_operator_record.node_provider_principal_id,
-            node_provider_id.to_vec()
+            new_node_operator_record,
+            NodeOperatorRecord {
+                node_operator_principal_id: new_node_operator_id.to_vec(),
+                ..old_node_operator_record
+            }
         );
-        assert_eq!(new_node_operator_record.node_allowance, node_allowance);
-        assert_eq!(
-            new_node_operator_record.rewardable_nodes,
-            rewardable_nodes.clone().into_iter().collect()
-        );
-        assert_eq!(
-            new_node_operator_record.max_rewardable_nodes,
-            rewardable_nodes.into_iter().collect()
-        );
-        assert_eq!(new_node_operator_record.dc_id, dc.to_string());
 
         // Ensure that the old operator isn't there
         let old_node_operator_record = setup.registry.get(
@@ -947,6 +944,10 @@ mod tests {
             new_node_operator_id: Some(new_node_operator_id),
         };
 
+        let old_node_operator_record = setup
+            .registry
+            .get_node_operator_or_panic(old_node_operator_id);
+
         // Step 2: Run the code under test.
         setup
             .registry
@@ -962,12 +963,16 @@ mod tests {
 
         // Ensure that the values are inherited from the old record
         assert_eq!(
-            new_node_operator_record.node_provider_principal_id,
-            node_provider_id.to_vec()
-        );
-        assert_eq!(
-            new_node_operator_record.node_allowance,
-            node_allowance + new_node_allowance
+            new_node_operator_record,
+            NodeOperatorRecord {
+                node_operator_principal_id: new_node_operator_id.to_vec(),
+                node_allowance: node_allowance + new_node_allowance,
+                // Rewardable nodes are checked later due to complex
+                // migration logic.
+                rewardable_nodes: new_node_operator_record.rewardable_nodes.clone(),
+                max_rewardable_nodes: new_node_operator_record.max_rewardable_nodes.clone(),
+                ..old_node_operator_record
+            }
         );
         let rewardable_nodes: BTreeMap<_, _> = rewardable_nodes.into_iter().collect();
         let new_rewardable_nodes: BTreeMap<_, _> = new_rewardable_nodes.into_iter().collect();
@@ -981,7 +986,6 @@ mod tests {
             rewardable_nodes.clone(),
             new_rewardable_nodes.clone(),
         );
-        assert_eq!(new_node_operator_record.dc_id, dc.to_string());
 
         // Ensure that the old operator isn't there
         let old_node_operator_record = setup.registry.get(
