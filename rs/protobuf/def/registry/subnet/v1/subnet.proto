@@ -1,7 +1,6 @@
 syntax = "proto3";
 package registry.subnet.v1;
 
-import "google/protobuf/empty.proto";
 import "registry/crypto/v1/crypto.proto";
 import "types/v1/types.proto";
 
@@ -129,27 +128,6 @@ message CatchUpPackageContents {
 
   /// The initial IDkg dealings for boot strapping target chain key subnets.
   repeated ChainKeyInitialization chain_key_initializations = 8;
-
-  oneof cup_type {
-    google.protobuf.Empty genesis = 9;
-    SubnetRecoveryParams subnet_recovery = 10;
-    SubnetSplittingParams subnet_splitting = 11;
-  }
-}
-
-message SubnetRecoveryParams {
-  // The blockchain height that the CUP should have
-  uint64 height = 1;
-
-  // Block time for the CUP's block
-  uint64 time = 2;
-
-  // The hash of the state that the subnet should use
-  bytes state_hash = 3;
-}
-
-message SubnetSplittingParams {
-  types.v1.SubnetId destination_subnet_id = 1;
 }
 
 message RegistryStoreUri {
