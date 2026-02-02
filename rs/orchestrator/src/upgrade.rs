@@ -693,7 +693,7 @@ impl Upgrade {
             .registry
             .get_recalled_replica_versions(subnet_id, latest_registry_version)?;
 
-        if recalled_versions.contains(&new_replica_version) {
+        if recalled_versions.contains(new_replica_version) {
             // The new replica version has been recalled. Do not upgrade. The only way to leave
             // this branch is via subnet recovery.
             self.metrics
