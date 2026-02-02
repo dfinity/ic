@@ -154,10 +154,10 @@ runs:
         # The goal is to have as few non-reproducible bazel targets as possible.
         # So we forbid all of them except for the following known ones:
         excludes=(
-          ^@@rules_rust..crate.crate_index__cranelift-assembler-x64   # has a non reproducible generated-files.rs in its OUT_DIR.
-          ^@@rules_rust..crate.crate_index__cranelift-isle            # has a non reproducible isle_tests.rs in its OUT_DIR.
-          ^@@rules_rust..crate.crate_index__secp256k1-sys             # has non reproducible object files, like lax_der_parsing.o, in it OUT_DIR.
-          ^@@rules_rust..crate.crate_index__sev                       # build.rs depends on the presence of /dev/sev and /dev/sev-guest. See: https://github.com/virtee/sev/issues/315
+          ^@@rules_rust~~crate~crate_index__cranelift-assembler-x64   # has a non reproducible generated-files.rs in its OUT_DIR.
+          ^@@rules_rust~~crate~crate_index__cranelift-isle            # has a non reproducible isle_tests.rs in its OUT_DIR.
+          ^@@rules_rust~~crate~crate_index__secp256k1-sys             # has non reproducible object files, like lax_der_parsing.o, in it OUT_DIR.
+          ^@@rules_rust~~crate~crate_index__sev                       # build.rs depends on the presence of /dev/sev and /dev/sev-guest. See: https://github.com/virtee/sev/issues/315
         )
         for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog_zst" -o "$execlog"
