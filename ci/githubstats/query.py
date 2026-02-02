@@ -146,6 +146,7 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
+    df["impact"] = df["impact"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
 
     # Find the CODEOWNERS for each test target:
@@ -171,13 +172,14 @@ def top(args):
         "left",  # label
         "decimal",  # total
         "decimal",  # non_success
-        "decimal",  # non_success%
         "decimal",  # flaky
-        "decimal",  # flaky%
         "decimal",  # timeout
-        "decimal",  # timeout%
         "decimal",  # fail
-        "decimal",  #  fail%
+        "decimal",  # non_success%
+        "decimal",  # flaky%
+        "decimal",  # timeout%
+        "decimal",  # fail%
+        "right",  # impact
         "right",  # duration_p90
         "left",  # owners
     ]
@@ -264,6 +266,11 @@ def last(args):
     print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
 
 
+# argparse formatter to allow newlines in --help.
+class RawDefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
+    pass
+
+
 def main():
     parser = argparse.ArgumentParser(prog="bazel run //ci/githubstats:query --")
 
@@ -304,8 +311,19 @@ def main():
     top_parser = subparsers.add_parser(
         "top",
         parents=[common_parser, filter_parser],
+        formatter_class=RawDefaultsFormatter,
         help="Get the top non-successful / flaky / failed / timed-out tests in the last period",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog="""
+Examples:
+  # Show the top 10 most flaky tests in the last week
+  bazel run //ci/githubstats:query -- top 10 flaky% --week
+
+  # Show the top 5 tests on PRs where failures had the highest impact in the last week
+  bazel run //ci/githubstats:query -- top 5 impact --prs --week
+
+  # Show the 100 slowest tests in the last month
+  bazel run //ci/githubstats:query -- top 100 duration_p90 --month
+""",
     )
     top_parser.add_argument(
         "N", type=int, nargs="?", default=10, help="If specified, limits the number of tests to show"
@@ -317,16 +335,29 @@ def main():
         choices=[
             "total",
             "non_success",
-            "non_success%",
             "flaky",
-            "flaky%",
             "timeout",
-            "timeout%",
             "fail",
+            "non_success%",
+            "flaky%",
+            "timeout%",
             "fail%",
+            "impact",
             "duration_p90",
         ],
-        help="COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to",
+        help="""COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to.
+
+total:\t\tTotal runs in the specified period
+non_success:\tNumber of non-successful runs in the specified period
+flaky:\t\tNumber of flaky runs in the specified period
+timeout:\tNumber of timed-out runs in the specified period
+fail:\t\tNumber of failed runs in the specified period
+non_success%%:\tPercentage of non-successful runs in the specified period
+flaky%%:\t\tPercentage of flaky runs in the specified period
+timeout%%:\tPercentage of timed-out runs in the specified period
+fail%%:\t\tPercentage of failed runs in the specified period
+impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures
+duration_p90:\t90th percentile duration of all runs in the specified period""",
     )
 
     condition_group = top_parser.add_mutually_exclusive_group()
@@ -349,8 +380,13 @@ def main():
     last_runs_parser = subparsers.add_parser(
         "last",
         parents=[common_parser, filter_parser],
+        formatter_class=RawDefaultsFormatter,
         help="Get the last runs of the specified test in the given period",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog="""
+Examples:
+  # Show the last flaky runs of the rent_subnet_test in the last week
+  bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
+""",
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
