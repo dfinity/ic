@@ -733,7 +733,7 @@ mod tests {
             )]);
         }
 
-        fn fetch_nodes_added_for_node_operator(
+        fn fetch_nodes_originally_for_node_operator(
             &self,
             node_operator_id: PrincipalId,
         ) -> Vec<NodeRecord> {
@@ -823,13 +823,13 @@ mod tests {
         assert!(old_node_operator_record.is_none());
 
         // Ensure that the nodes owned by the old operator show the new operator now
-        let nodes = setup.fetch_nodes_added_for_node_operator(old_node_operator_id);
+        let nodes = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
         for node in nodes {
             assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
         }
 
         // Ensure that the extra nodes weren't touched
-        let nodes = setup.fetch_nodes_added_for_node_operator(extra_node_operator);
+        let nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
         for node in nodes {
             assert_eq!(node.node_operator_id, extra_node_operator.to_vec());
         }
@@ -995,19 +995,19 @@ mod tests {
         assert!(old_node_operator_record.is_none());
 
         // Ensure that the nodes owned by the old operator show the new operator now
-        let nodes = setup.fetch_nodes_added_for_node_operator(old_node_operator_id);
+        let nodes = setup.fetch_nodes_originally_for_node_operator(old_node_operator_id);
         for node in nodes {
             assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
         }
         // Ensure that the nodes owned by the new operator still are owned by the
         // same node operator
-        let nodes = setup.fetch_nodes_added_for_node_operator(new_node_operator_id);
+        let nodes = setup.fetch_nodes_originally_for_node_operator(new_node_operator_id);
         for node in nodes {
             assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
         }
 
         // Ensure that the extra nodes weren't touched
-        let nodes = setup.fetch_nodes_added_for_node_operator(extra_node_operator);
+        let nodes = setup.fetch_nodes_originally_for_node_operator(extra_node_operator);
         for node in nodes {
             assert_eq!(node.node_operator_id, extra_node_operator.to_vec());
         }
@@ -1251,7 +1251,7 @@ mod tests {
             assert!(maybe_record.is_none());
 
             // Validate that all of the nodes have been moved to the new node operator
-            for node in setup.fetch_nodes_added_for_node_operator(*old_node_operator) {
+            for node in setup.fetch_nodes_originally_for_node_operator(*old_node_operator) {
                 assert_eq!(node.node_operator_id, destination_node_operator.to_vec());
             }
         }
