@@ -1,5 +1,5 @@
 [package]
-name = "testing-verification-tests"
+name = "idx-tests"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -18,6 +18,7 @@ ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-prep = { path = "../../prep" }
 ic-regedit = { path = "../../registry/regedit" }
+reqwest = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 ssh2 = { workspace = true }
@@ -38,14 +39,6 @@ path = "ii_delegation_test.rs"
 [[bin]]
 name = "mainnet_test"
 path = "mainnet_test.rs"
-
-[[bin]]
-name = "remote_replicable_mock_test"
-path = "remote_replicable_mock_test.rs"
-
-[[bin]]
-name = "replicable_mock_test"
-path = "replicable_mock_test.rs"
 
 [[bin]]
 name = "test_driver_e2e_scenarios"

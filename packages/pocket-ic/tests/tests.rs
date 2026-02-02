@@ -30,8 +30,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
-#[cfg(windows)]
-use wslpath::windows_to_wsl;
 
 mod common;
 
@@ -2734,14 +2732,23 @@ fn stack_overflow() {
 }
 
 fn test_specified_id(pic: &PocketIc) {
-    // We define a "specified" canister ID that exists on the IC mainnet,
+    // We define a "specified" canister ID that belongs to the canister ranges of a mainnet subnet,
     // but belongs to the canister ranges of no subnet on the PocketIC instance.
-    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+    // Its hexadecimal representation is `0000000001CFFFFF0101` and thus
+    // this is the last canister ID in the default canister ranges of the `0x1C`-th subnet.
+    let specified_id = Principal::from_text("jujpo-eqaaa-aaaao-p777q-cai").unwrap();
 
     let canister_id = pic
         .create_canister_with_id(None, None, specified_id)
         .unwrap();
     assert_eq!(canister_id, specified_id);
+
+    let subnet_id = pic.get_subnet(canister_id).unwrap();
+    assert_eq!(
+        subnet_id,
+        Principal::from_text("o3ow2-2ipam-6fcjo-3j5vt-fzbge-2g7my-5fz2m-p4o2t-dwlc4-gt2q7-5ae")
+            .unwrap()
+    );
 }
 
 #[test]
@@ -2774,12 +2781,7 @@ fn test_specified_id_on_resumed_state() {
 #[should_panic(expected = "is not a (subnet state) directory")]
 fn with_subnet_state_file() {
     let state_file = NamedTempFile::new().unwrap();
-    #[cfg(not(windows))]
     let state_file_path_buf = state_file.path().to_path_buf();
-    #[cfg(windows)]
-    let state_file_path_buf = windows_to_wsl(state_file.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let _pic = PocketIcBuilder::new()
         .with_subnet_state(SubnetKind::Application, state_file_path_buf)
@@ -2790,12 +2792,7 @@ fn with_subnet_state_file() {
 #[should_panic(expected = "Provided an empty state directory at path")]
 fn with_empty_subnet_state() {
     let state_dir = TempDir::new().unwrap();
-    #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();
-    #[cfg(windows)]
-    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let _pic = PocketIcBuilder::new()
         .with_subnet_state(SubnetKind::Application, state_dir_path_buf)
@@ -2998,6 +2995,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+        mainnet_nns_subnet_id: None,
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
 
@@ -3062,6 +3060,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+        mainnet_nns_subnet_id: None,
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
 
@@ -3113,6 +3112,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+        mainnet_nns_subnet_id: None,
     };
     assert_create_instance_failure(
         &server_url,
@@ -3218,17 +3218,58 @@ fn deterministic_registry() {
         let state_dir = TempDir::new().unwrap();
         let state_dir_path_buf = state_dir.path().to_path_buf();
 
-        let _pocket_ic = PocketIcBuilder::new()
+        let pocket_ic = PocketIcBuilder::new()
             .with_state_dir(state_dir_path_buf.clone())
             .with_nns_subnet()
             .with_ii_subnet()
             .with_fiduciary_subnet()
             .with_application_subnet()
             .build();
+        // On WSL, the registry file is only available after the PocketIC instance is dropped.
+        drop(pocket_ic);
 
         let registry_proto_path = state_dir_path_buf.join("registry.proto");
         std::fs::read(registry_proto_path).unwrap()
     };
 
     assert_eq!(registry_bytes(), registry_bytes());
+}
+
+#[test]
+fn fiduciary_subnet_id() {
+    let pic = PocketIcBuilder::new().with_fiduciary_subnet().build();
+
+    let subnet_id = pic.topology().get_fiduciary().unwrap();
+    assert_eq!(
+        subnet_id,
+        Principal::from_text("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
+            .unwrap()
+    );
+}
+
+#[test]
+fn default_nns_subnet_id() {
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
+
+    let subnet_id = pic.topology().get_nns().unwrap();
+    assert_ne!(
+        subnet_id,
+        Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap()
+    );
+}
+
+#[test]
+fn mainnet_nns_subnet_id() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_mainnet_nns_subnet_id()
+        .build();
+
+    let subnet_id = pic.topology().get_nns().unwrap();
+    assert_eq!(
+        subnet_id,
+        Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap()
+    );
 }

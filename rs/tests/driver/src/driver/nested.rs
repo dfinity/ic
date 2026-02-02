@@ -11,7 +11,7 @@ use crate::driver::{
     test_env::TestEnvAttribute,
     test_setup::GroupSetup,
 };
-use crate::util::{block_on, create_agent};
+use crate::util::create_agent;
 use ic_agent::{Agent, AgentError};
 
 use std::fs;
@@ -75,7 +75,7 @@ impl NestedNodes {
     }
 
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
-        let farm = block_on(Farm::from_test_env(env, "Internet Computer"));
+        let farm = Farm::from_test_env(env, "Internet Computer");
 
         let group_setup = GroupSetup::read_attribute(env);
         let group_name: String = group_setup.infra_group_name;

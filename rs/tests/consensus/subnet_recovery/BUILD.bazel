@@ -1,20 +1,14 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "MESSAGE_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-SUBNET_RECOVERY_DATA = [
-    # Keep sorted.
-    "//rs/tests:recovery/binaries",
-]
+IC_ADMIN_RUNTIME_DEPS = {
+    "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
+}
 
-ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = [":orchestrator_universal_vm_activation.sh"]
-
-STATIC_FILE_SERVER_IMAGE_DATA = [
-    # Keep sorted.
-    "//rs/tests:static-file-server.tar",
-]
+RECOVERY_TOOLS_RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | IC_ADMIN_RUNTIME_DEPS
 
 rust_library(
     name = "lib",
@@ -48,7 +42,6 @@ rust_library(
 
 system_test_nns(
     name = "sr_app_same_nodes_test",
-    data = SUBNET_RECOVERY_DATA,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -56,7 +49,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -66,7 +59,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_enable_chain_keys_test",
-    data = SUBNET_RECOVERY_DATA,
     flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
     tags = [
@@ -75,7 +67,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -85,7 +77,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_with_chain_keys_test",
-    data = SUBNET_RECOVERY_DATA,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -93,7 +84,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -103,7 +94,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_test",
-    data = SUBNET_RECOVERY_DATA,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -111,7 +101,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -121,7 +111,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_enable_chain_keys_test",
-    data = SUBNET_RECOVERY_DATA,
     flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
     tags = [
@@ -130,7 +119,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -140,7 +129,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_with_chain_keys_test",
-    data = SUBNET_RECOVERY_DATA,
     flaky = True,  # flakiness rate of 3.33% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
     tags = [
@@ -149,7 +137,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -159,7 +147,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_test",
-    data = SUBNET_RECOVERY_DATA,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -167,7 +154,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -177,9 +164,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_local_test",
-    data = [
-        "//rs/registry/admin:ic-admin",
-    ],
     guestos_update = "test",
     tags = [
         "colocate",
@@ -187,9 +171,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | {
-        "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
-    },
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -199,7 +181,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_enable_chain_keys_test",
-    data = SUBNET_RECOVERY_DATA,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -207,7 +188,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -217,7 +198,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_with_chain_keys_test",
-    data = SUBNET_RECOVERY_DATA,
     flaky = True,  # flakiness rate of over 6% over the month from 2025-02-11 till 2025-03-11 (only for //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_chain_keys_test_head_nns_colocate).
     guestos_update = "test",
     tags = [
@@ -226,7 +206,7 @@ system_test_nns(
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -236,7 +216,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_large_with_chain_keys_test",
-    data = SUBNET_RECOVERY_DATA,
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
@@ -246,7 +225,7 @@ system_test_nns(
         "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         ":lib",
         "//rs/tests/driver:ic-system-test-driver",
@@ -256,15 +235,16 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_nns_failover_nodes_test",
-    data =
-        SUBNET_RECOVERY_DATA + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_DATA,
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS | {
+        "ORCHESTRATOR_UVM_ACTIVATION_SCRIPT": ":orchestrator_universal_vm_activation.sh",
+        "STATIC_FILE_SERVER_IMAGE": "//rs/tests:static-file-server.tar",
+    },
     deps = [
         # Keep sorted.
         ":lib",
