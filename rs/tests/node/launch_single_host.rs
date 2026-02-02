@@ -18,7 +18,7 @@ fn main() -> Result<()> {
 }
 
 fn setup(env: TestEnv) {
-    NestedNodes::new(&["Host"])
+    NestedNodes::new(["Host"])
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 }

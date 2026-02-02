@@ -13,8 +13,6 @@ use nix::sys::signal::Signal;
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use slog::info;
-use std::thread::sleep;
-use std::time::Duration;
 
 pub mod util;
 use util::{NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};

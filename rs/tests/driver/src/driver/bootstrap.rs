@@ -1,12 +1,11 @@
 use crate::driver::ic_gateway_vm::HasIcGatewayVm;
 use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
-use crate::driver::ic_images::{try_get_hostos_img_version, try_get_setupos_img_version};
+use crate::driver::ic_images::try_get_setupos_img_version;
 use crate::driver::nested::NestedVm;
-use crate::driver::test_env_api::get_guestos_launch_measurements;
 use crate::driver::test_env_api::{
-    SshSession, get_guestos_img_url, get_hostos_initial_update_img_url,
+    SshSession, get_guestos_img_url, get_guestos_launch_measurements,
+    get_hostos_initial_update_img_url,
 };
-use crate::driver::test_env_api::get_guestos_launch_measurements;
 use crate::driver::{
     config::NODES_INFO,
     constants::SSH_USERNAME,
