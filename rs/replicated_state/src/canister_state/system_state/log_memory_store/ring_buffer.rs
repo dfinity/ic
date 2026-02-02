@@ -4,19 +4,20 @@ use crate::canister_state::system_state::log_memory_store::{
     memory::{MemoryAddress, MemorySize},
     struct_io::StructIO,
 };
-use crate::page_map::{PAGE_SIZE, PageMap};
+use crate::page_map::PageMap;
 use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
 use more_asserts::assert_le;
 
 // PageMap file layout.
+pub(crate) const VIRTUAL_PAGE_SIZE: usize = 4_096;
 // Header layout constants.
 pub(crate) const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
-pub(crate) const HEADER_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
+pub(crate) const HEADER_SIZE: MemorySize = MemorySize::new(VIRTUAL_PAGE_SIZE as u64);
 // Index table layout constants.
 pub(crate) const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
 pub(crate) const INDEX_TABLE_PAGES: usize = 1;
 pub(crate) const INDEX_TABLE_SIZE: MemorySize =
-    MemorySize::new((INDEX_TABLE_PAGES * PAGE_SIZE) as u64);
+    MemorySize::new((INDEX_TABLE_PAGES * VIRTUAL_PAGE_SIZE) as u64);
 pub(crate) const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
 pub(crate) const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE.get();
 // Data region layout constants.
@@ -38,8 +39,8 @@ const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_M
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 
-pub(crate) const DATA_CAPACITY_MIN: usize = PAGE_SIZE;
-const _: () = assert!(PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
+pub(crate) const DATA_CAPACITY_MIN: usize = VIRTUAL_PAGE_SIZE;
+const _: () = assert!(VIRTUAL_PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
 
 pub(super) struct RingBuffer {
     io: StructIO,
