@@ -4473,6 +4473,7 @@ fn send_tx_and_verify_fee_collection(
     canister_id: CanisterId,
     active_fc: Option<Account>,
     inactive_fcs: Vec<Account>,
+    legacy_fc: bool,
 ) {
     let from = Account::from(PrincipalId::new_user_test_id(1001).0);
     let spender = Account::from(PrincipalId::new_user_test_id(1002).0);
@@ -4496,7 +4497,8 @@ fn send_tx_and_verify_fee_collection(
     }
     let tot_supply = total_supply(env, canister_id);
 
-    const NUM_FEE_COLLECTED: u64 = 3;
+    const NUM_FEE_DEDUCTED: u64 = 3;
+    let num_fee_collected = if legacy_fc { 2u64 } else { 3u64 };
     const MINT_AMOUNT: u64 = 1_000_000;
     const BURN_AMOUNT: u64 = 12_000;
 
@@ -4511,21 +4513,22 @@ fn send_tx_and_verify_fee_collection(
 
     assert_eq!(
         balance_of(env, canister_id, from),
-        from_balance + MINT_AMOUNT - BURN_AMOUNT - 2 - NUM_FEE_COLLECTED * FEE
+        from_balance + MINT_AMOUNT - BURN_AMOUNT - 2 - NUM_FEE_DEDUCTED * FEE
     );
     if let Some(active_fc) = active_fc {
         assert_eq!(
             balance_of(env, canister_id, active_fc),
-            active_fc_balance.unwrap() + NUM_FEE_COLLECTED * FEE
+            active_fc_balance.unwrap() + num_fee_collected * FEE
         );
         assert_eq!(
             total_supply(env, canister_id),
-            tot_supply + MINT_AMOUNT - BURN_AMOUNT
+            tot_supply + MINT_AMOUNT - BURN_AMOUNT - NUM_FEE_DEDUCTED * FEE
+                + num_fee_collected * FEE
         );
     } else {
         assert_eq!(
             total_supply(env, canister_id),
-            tot_supply + MINT_AMOUNT - BURN_AMOUNT - NUM_FEE_COLLECTED * FEE
+            tot_supply + MINT_AMOUNT - BURN_AMOUNT - NUM_FEE_DEDUCTED * FEE
         );
     }
 
@@ -4569,6 +4572,7 @@ where
         canister_id,
         None,
         vec![fee_collector_1, fee_collector_2],
+        false,
     );
 
     set_fc_107_by_controller(&env, canister_id, Some(fee_collector_1));
@@ -4578,6 +4582,7 @@ where
         canister_id,
         Some(fee_collector_1),
         vec![fee_collector_2],
+        false,
     );
 
     set_fc_107_by_controller(&env, canister_id, Some(fee_collector_2));
@@ -4587,6 +4592,7 @@ where
         canister_id,
         Some(fee_collector_2),
         vec![fee_collector_1],
+        false,
     );
 
     set_fc_107_by_controller(&env, canister_id, None);
@@ -4596,6 +4602,7 @@ where
         canister_id,
         None,
         vec![fee_collector_1, fee_collector_2],
+        false,
     );
 }
 
@@ -4673,7 +4680,7 @@ where
 
     let fee_collector_1 = Account::from(PrincipalId::new_user_test_id(1).0);
 
-    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector_1]);
+    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector_1], false);
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
     env.upgrade_canister(
@@ -4683,7 +4690,7 @@ where
     )
     .expect("failed to upgrade the ledger");
 
-    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector_1]);
+    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector_1], false);
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
         change_fee_collector: Some(ChangeFeeCollector::SetTo(fee_collector_1)),
@@ -4696,7 +4703,7 @@ where
     )
     .expect("failed to upgrade the ledger");
 
-    send_tx_and_verify_fee_collection(&env, canister_id, Some(fee_collector_1), vec![]);
+    send_tx_and_verify_fee_collection(&env, canister_id, Some(fee_collector_1), vec![], false);
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
     env.upgrade_canister(
@@ -4706,7 +4713,7 @@ where
     )
     .expect("failed to upgrade the ledger");
 
-    send_tx_and_verify_fee_collection(&env, canister_id, Some(fee_collector_1), vec![]);
+    send_tx_and_verify_fee_collection(&env, canister_id, Some(fee_collector_1), vec![], false);
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
         change_fee_collector: Some(ChangeFeeCollector::Unset),
@@ -4715,7 +4722,7 @@ where
     env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
         .expect("failed to upgrade the ledger");
 
-    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector_1]);
+    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector_1], false);
 }
 
 pub fn test_fee_collector_107_init<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -4736,16 +4743,17 @@ where
             .install_canister(ledger_wasm.clone(), args, None)
             .unwrap();
 
-        send_tx_and_verify_fee_collection(&env, canister_id, fee_collector_account, vec![]);
+        send_tx_and_verify_fee_collection(&env, canister_id, fee_collector_account, vec![], false);
     }
 }
 
-pub fn test_fee_collector_107_upgrade_legacy<T>(
+pub fn test_fee_collector_107_upgrade_legacy<T, Tokens>(
     ledger_wasm_legacy_fc: Vec<u8>,
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
+    Tokens: TokensType + Default + std::fmt::Display,
 {
     let fee_col_legacy = Account::from(PrincipalId::new_user_test_id(1).0);
     let fee_col_107 = Account::from(PrincipalId::new_user_test_id(2).0);
@@ -4768,6 +4776,8 @@ pub fn test_fee_collector_107_upgrade_legacy<T>(
             let canister_id = env
                 .install_canister(ledger_wasm_legacy_fc.clone(), args, None)
                 .unwrap();
+
+            send_tx_and_verify_fee_collection(&env, canister_id, init_fee_collector, vec![], true);
 
             let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
                 change_fee_collector: upgrade_fee_collector.clone(),
@@ -4793,7 +4803,9 @@ pub fn test_fee_collector_107_upgrade_legacy<T>(
                 inactive_fcs.push(fee_col_107);
             }
 
-            send_tx_and_verify_fee_collection(&env, canister_id, active_fc, inactive_fcs);
+            send_tx_and_verify_fee_collection(&env, canister_id, active_fc, inactive_fcs, false);
+
+            verify_ledger_state::<Tokens>(&env, canister_id, None, AllowancesRecentlyPurged::Yes);
         }
     }
 }
