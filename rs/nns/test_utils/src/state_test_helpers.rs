@@ -1135,7 +1135,7 @@ pub fn nns_create_neuron(
     sender: PrincipalId,
     amount_e8s: u64,
 ) -> Result<NeuronId, String> {
-    let result: Result<Result<CreateNeuronResponse, GovernanceError>, String> = update_with_sender(
+    let result: Result<CreateNeuronResponse, String> = update_with_sender(
         state_machine,
         GOVERNANCE_CANISTER_ID,
         "create_neuron",

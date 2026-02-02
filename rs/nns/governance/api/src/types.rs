@@ -4552,6 +4552,8 @@ pub struct CreateNeuronRequest {
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
-pub struct CreateNeuronResponse {
+pub struct CreatedNeuron {
     pub neuron_id: Option<NeuronId>,
 }
+
+pub type CreateNeuronResponse = Result<CreatedNeuron, GovernanceError>;
