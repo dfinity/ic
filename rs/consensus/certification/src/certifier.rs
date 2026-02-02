@@ -621,7 +621,7 @@ mod tests {
     use super::*;
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
     use ic_consensus_mocks::{Dependencies, dependencies};
-    use ic_crypto_tree_hash::Witness;
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_interfaces::{
         certification::CertificationPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -721,6 +721,47 @@ mod tests {
                     })
                     .collect::<Vec<(Height, CryptoHashOfPartialState, Witness)>>(),
             );
+    }
+
+    fn test_certification_validation<F>(height: Height, f: F)
+    where
+        F: FnOnce(&CertifierImpl, &mut Certification),
+    {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    ..
+                } = dependencies(pool_config.clone(), 1);
+
+                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
+
+                let certifier = CertifierImpl::new(
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    pool.get_cache(),
+                    MetricsRegistry::new(),
+                    log,
+                    max_certified_height_tx,
+                );
+
+                let mut cert = if let CertificationMessage::Certification(cert) =
+                    fake_cert_default(height).message
+                {
+                    cert
+                } else {
+                    unreachable!("only full certifications are expected")
+                };
+
+                f(&certifier, &mut cert);
+            })
+        })
     }
 
     #[test]
@@ -1233,59 +1274,78 @@ mod tests {
         })
     }
 
-    /// Test that an unexpected hash leads to marking the certification as invalid.
+    /// Test that certification validation fails if the certification hash does not match the witness digest.
     #[test]
     fn test_invalidate_certificate_with_incorrect_state() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    registry,
-                    crypto,
-                    state_manager,
-                    ..
-                } = dependencies(pool_config.clone(), 1);
+        let height = Height::from(5);
+        let test = |certifier: &CertifierImpl, cert: &mut Certification| {
+            let fake_hash = CryptoHashOfPartialState::from(CryptoHash(vec![88, 99, 00]));
+            cert.signed.content.hash = fake_hash.clone();
 
-                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
+            let witness_hash = gen_content(height).hash;
 
-                let certifier = CertifierImpl::new(
-                    replica_config,
-                    registry,
-                    crypto,
-                    state_manager,
-                    pool.get_cache(),
-                    MetricsRegistry::new(),
-                    log,
-                    max_certified_height_tx,
-                );
+            assert_eq!(
+                certifier.validate_certification(cert),
+                Some(ChangeAction::HandleInvalid(
+                    CertificationMessage::Certification(cert.clone()),
+                    format!(
+                        "Unexpected witness digest (expected: {:?}, actual: {:?})",
+                        fake_hash, witness_hash
+                    )
+                ))
+            );
+        };
+        test_certification_validation(height, test);
+    }
 
-                let height = Height::from(5);
-                let mut cert = if let CertificationMessage::Certification(cert) =
-                    fake_cert_default(height).message
-                {
-                    cert
-                } else {
-                    unreachable!("only full certifications are expected")
-                };
+    /// Test that certification validation fails for a malformed witness (pruned too aggressively).
+    #[test]
+    fn test_invalidate_certificate_with_invalid_witness() {
+        let height = Height::from(5);
+        let test = |certifier: &CertifierImpl, cert: &mut Certification| {
+            let witness_hash = gen_content(height).hash;
 
-                let hash = CryptoHashOfPartialState::from(CryptoHash(vec![88, 99, 00]));
-                cert.signed.content.hash = hash.clone();
+            // a witness consisting only of the (correct) root hash,
+            // i.e., pruned too aggressively
+            cert.witness =
+                Witness::new_for_testing(Digest(witness_hash.get().0.try_into().unwrap()));
 
-                let witness_hash = gen_content(height).hash;
+            assert_eq!(
+                certifier.validate_certification(cert),
+                Some(ChangeAction::HandleInvalid(
+                    CertificationMessage::Certification(cert.clone()),
+                    format!(
+                        "Invalid witness @{}: InconsistentPartialTree {{ offending_path: [] }}",
+                        height
+                    )
+                ))
+            );
+        };
+        test_certification_validation(height, test);
+    }
 
-                assert_eq!(
-                    certifier.validate_certification(&cert),
-                    Some(ChangeAction::HandleInvalid(
-                        CertificationMessage::Certification(cert.clone()),
-                        format!(
-                            "Unexpected witness digest (expected: {:?}, actual: {:?})",
-                            hash, witness_hash
-                        )
-                    ))
-                );
-            })
-        })
+    /// Test that certification validation fails if the witness is for a different height.
+    #[test]
+    fn test_invalidate_certificate_with_witness_for_different_height() {
+        let height = Height::from(5);
+        let test = |certifier: &CertifierImpl, cert: &mut Certification| {
+            let expected_hash = cert.signed.content.hash.clone();
+
+            cert.height += Height::from(1);
+            let actual_hash = gen_content(cert.height).hash;
+
+            assert_eq!(
+                certifier.validate_certification(cert),
+                Some(ChangeAction::HandleInvalid(
+                    CertificationMessage::Certification(cert.clone()),
+                    format!(
+                        "Unexpected witness digest (expected: {:?}, actual: {:?})",
+                        expected_hash, actual_hash
+                    )
+                ))
+            );
+        };
+        test_certification_validation(height, test);
     }
 
     /// Here we insert certification shares for 3 different contents, so that we can
