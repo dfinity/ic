@@ -23,7 +23,7 @@ use std::{convert::TryFrom, net::IpAddr, sync::Arc};
 #[derive(Clone)]
 pub(crate) struct RegistryHelper {
     node_id: NodeId,
-    pub(crate) registry_client: Arc<dyn RegistryClient>,
+    registry_client: Arc<dyn RegistryClient>,
     logger: ReplicaLogger,
 }
 
@@ -57,6 +57,11 @@ impl RegistryHelper {
     /// Return the latest version that is locally available
     pub(crate) fn get_latest_version(&self) -> RegistryVersion {
         self.registry_client.get_latest_version()
+    }
+
+    /// Return the underlying `RegistryClient`
+    pub(crate) fn get_registry_client(&self) -> &dyn RegistryClient {
+        self.registry_client.as_ref()
     }
 
     /// Return the `SubnetId` this node belongs to (i.e. the Subnet that
@@ -191,10 +196,6 @@ impl RegistryHelper {
         self.registry_client
             .get_subnet_id_from_node_id(node_id, version)
             .map_err(OrchestratorError::RegistryClientError)
-    }
-
-    pub(crate) fn get_registry_client(&self) -> Arc<dyn RegistryClient> {
-        Arc::clone(&self.registry_client)
     }
 
     /// Get the replica version of the given subnet in the given registry

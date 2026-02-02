@@ -209,7 +209,7 @@ impl Upgrade {
         // Determine the subnet_id using the local CUP.
         let subnet_id = match (&maybe_local_cup, &maybe_local_cup_proto) {
             (Some(cup), _) => {
-                get_subnet_id(self.registry.registry_client.as_ref(), cup).map_err(|err| {
+                get_subnet_id(self.registry.get_registry_client(), cup).map_err(|err| {
                     OrchestratorError::UpgradeError(format!(
                         "Couldn't determine the subnet id: {err:?}"
                     ))
@@ -331,7 +331,7 @@ impl Upgrade {
         // Now when we have the most recent CUP, we check if we're still assigned.
         // If not, go into unassigned state.
         let flow = match should_node_become_unassigned(
-            self.registry.registry_client.as_ref(),
+            self.registry.get_registry_client(),
             latest_registry_version,
             self.node_id,
             subnet_id,
@@ -440,7 +440,7 @@ impl Upgrade {
     ) -> OrchestratorResult<()> {
         let Some(registry_store_uri) = self
             .registry
-            .registry_client
+            .get_registry_client()
             .get_cup_contents(subnet_id, registry_version)
             .ok()
             .and_then(|record| record.value)

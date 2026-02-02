@@ -203,14 +203,14 @@ impl Orchestrator {
         ));
 
         let c_log = logger.clone();
-        let c_registry = registry.clone();
+        let c_registry_client = registry_client.clone();
         let crypto_config = config.crypto.clone();
         let c_metrics = metrics_registry.clone();
         let crypto = tokio::task::spawn_blocking(move || {
             Arc::new(CryptoComponent::new(
                 &crypto_config,
                 Some(tokio::runtime::Handle::current()),
-                c_registry.get_registry_client(),
+                c_registry_client,
                 c_log.clone(),
                 Some(&c_metrics),
             ))
@@ -269,7 +269,7 @@ impl Orchestrator {
 
         let upgrade = Some(
             Upgrade::new(
-                Arc::clone(&registry),
+                Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
                 Arc::clone(&replica_process),
                 cup_provider,
