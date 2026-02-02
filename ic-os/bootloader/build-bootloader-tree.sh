@@ -50,13 +50,16 @@ podman build --no-cache --iidfile "${TMP_DIR}/iidfile" - <<<"
         test keystatus gfxmenu regexp probe \
         efi_gop efi_uga all_video gfxterm font \
         echo read ls cat png jpeg halt reboot loadenv lvm
-    CMD tar cf - --sort=name --owner=root:0 --group=root:0  '--mtime=UTC 1970-01-01 00:00:00' -C /build boot
 "
 
 IMAGE_ID=$(cut -d':' -f2 <"${TMP_DIR}/iidfile")
 
 echo >&2 "exporting container /build/boot"
-CONTAINER_NAME=$(uuidgen) # track name in case we need to `podman rm -f` it
+# track container with unique name in case  `podman rm -f` is needed
+# (we use TMP_DIR to avoid a dependency on uuidgen & co)
+CONTAINER_NAME=$(md5sum <<<"$TMP_DIR" | cut -d' ' -f1)
 # run the container which will print a deterministic tarball of /build/boot to stdout
-podman run --rm --name "$CONTAINER_NAME" "${IMAGE_ID}" >"${OUT_FILE:?out file missing}"
+podman run --rm --name "$CONTAINER_NAME" "${IMAGE_ID}" \
+    tar cf - --sort=name --owner=root:0 --group=root:0 '--mtime=UTC 1970-01-01 00:00:00' -C /build boot \
+    >"${OUT_FILE:?out file missing}"
 CONTAINER_NAME= # unset CONTAINER_NAME so that cleanup() doesn't try to rm it
