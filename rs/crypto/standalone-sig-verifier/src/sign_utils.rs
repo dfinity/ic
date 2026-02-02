@@ -137,7 +137,6 @@ pub fn ed25519_public_key_to_der(raw_key: Vec<u8>) -> CryptoResult<Vec<u8>> {
 /// # Errors
 /// * `CryptoError::MalformedSignature`: if the signature cannot be DER decoded.
 pub fn ecdsa_p256_signature_from_der_bytes(sig_der: &[u8]) -> CryptoResult<BasicSig> {
-
     let sig = ic_secp256r1::Signature::from_der(sig_der).map_err(|e| {
         CryptoError::MalformedSignature {
             algorithm: AlgorithmId::EcdsaP256,
