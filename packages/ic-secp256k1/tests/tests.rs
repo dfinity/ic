@@ -934,14 +934,14 @@ fn non_canonical_encodings_are_rejected() {
     ];
 
     for nce_hex in non_canonical_encodings {
-        let nce = hex::decode(&nce_hex).unwrap();
+        let nce = hex::decode(nce_hex).unwrap();
         // These are non-canonical due to being compressed, which is accepted by deserialize_der
         assert!(PublicKey::deserialize_der(&nce).is_ok());
         assert!(PublicKey::deserialize_canonical_der(&nce).is_err());
     }
 
     for nce_hex in non_canonical_ber_encodings {
-        let nce = hex::decode(&nce_hex).unwrap();
+        let nce = hex::decode(nce_hex).unwrap();
         // These are non-canonical due to BER, which is also rejected by deserialize_der
         assert!(PublicKey::deserialize_der(&nce).is_err());
         assert!(PublicKey::deserialize_canonical_der(&nce).is_err());
