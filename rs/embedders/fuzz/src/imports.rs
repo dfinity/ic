@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::wasm_executor::{
-    MAX_SUBNET_AVAILABLE_MEMORY, get_execution_parameters, get_system_state,
+    MAX_SUBNET_AVAILABLE_MEMORY, get_execution_parameters, get_sandbox_safe_system_state,
 };
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
@@ -39,7 +39,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStor
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let system_api = SystemApiImpl::new(
         api_type.clone(),
-        get_system_state(&system_state, api_type),
+        get_sandbox_safe_system_state(&system_state, api_type),
         canister_current_memory_usage,
         canister_current_message_memory_usage,
         get_execution_parameters(),

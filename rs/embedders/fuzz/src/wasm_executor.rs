@@ -119,7 +119,7 @@ fn setup_wasm_execution_input(
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     WasmExecutionInput {
         api_type: api_type.clone(),
-        sandbox_safe_system_state: get_system_state(system_state, api_type),
+        sandbox_safe_system_state: get_sandbox_safe_system_state(system_state, api_type),
         canister_current_memory_usage,
         canister_current_message_memory_usage,
         execution_parameters: get_execution_parameters(),
@@ -129,7 +129,7 @@ fn setup_wasm_execution_input(
     }
 }
 
-pub(crate) fn get_system_state(
+pub(crate) fn get_sandbox_safe_system_state(
     system_state: &SystemState,
     api_type: ApiType,
 ) -> SandboxSafeSystemState {
