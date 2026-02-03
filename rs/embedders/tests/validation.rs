@@ -1431,7 +1431,7 @@ fn wasm_with_funcref_table_section_is_valid() {
 }
 
 #[test]
-fn wasm_with_externref_table_section_is_valid() {
+fn wasm_with_externref_table_section_is_invalid() {
     let wasm = wat2wasm(r#"(module (table 1 externref))"#).unwrap();
     assert_matches!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
