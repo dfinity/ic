@@ -10176,7 +10176,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc-rosetta"
-version = "1.2.8"
+version = "1.2.9"
 dependencies = [
  "anyhow",
  "axum 0.8.4",
@@ -11117,7 +11117,7 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics-assert"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -13453,7 +13453,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "2.1.8"
+version = "2.1.9"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -16295,6 +16295,7 @@ dependencies = [
  "ic-types",
  "ic-universal-canister",
  "itertools 0.12.1",
+ "reqwest",
  "serde_json",
  "slog",
  "ssh2",
@@ -18671,6 +18672,37 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "open_rootfs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "attestation",
+ "candid",
+ "command_runner",
+ "config_tool",
+ "config_types",
+ "hex",
+ "ic-agent 0.40.1",
+ "ic-certification 3.0.3",
+ "ic-certification-test-utils",
+ "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic_device",
+ "linux_kernel_command_line",
+ "mockall",
+ "pem 3.0.6",
+ "rand 0.8.5",
+ "serde_cbor",
+ "sev",
+ "sev_guest",
+ "sev_guest_testing",
+ "tempfile",
+ "uuid",
 ]
 
 [[package]]
