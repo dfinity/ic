@@ -6,7 +6,7 @@ use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize;
 use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
     Label, LabeledTree, LookupStatus, MatchPattern, MixedHashTree, Path as LabelPath, flatmap,
-    recompute_digest, sparse_labeled_tree_from_paths,
+    recompute_digest, sparse_labeled_tree_from_paths, Witness,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
@@ -8962,6 +8962,7 @@ fn fake_certification_for_height(height: Height) -> Certification {
 fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> Certification {
     Certification {
         height,
+        witness: Witness::new_for_testing_with_height(),
         signed: Signed {
             content: CertificationContent::new(CryptoHashOfPartialState::from(hash)),
             signature: ThresholdSignature::fake(),
@@ -9166,9 +9167,9 @@ fn take_tip_does_not_hash_with_optimization() {
             vec![opt_height]
         );
 
-        // update `latest_subnet_certified_height` to enable optimization
+        // update `fast_forward_height` to enable optimization
         sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -9445,24 +9446,24 @@ fn list_state_heights_to_certify() {
         let no_opt_height = Height::new(10);
         sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
 
-        // `latest_subnet_certified_height` is less than `tip_height`
+        // `fast_forward_height` is less than `tip_height`
         // and thus `list_state_heights_to_certify` does not return any height
         assert!(sm.list_state_heights_to_certify().is_empty());
 
-        // advance `latest_subnet_certified_height` to 13
+        // advance `fast_forward_height` to 13
         sm.remove_inmemory_states_below(Height::new(13), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 13);
+        assert_eq!(sm.fast_forward_height(), 13);
 
         // now `list_state_heights_to_certify` returns all heights starting at `tip_height`
-        // and up until `latest_subnet_certified_height`
+        // and up until `fast_forward_height`
         assert_eq!(
             sm.list_state_heights_to_certify(),
             (10..13).map(Height::new).collect::<Vec<_>>()
         );
 
-        // advance `latest_subnet_certified_height` further to 42
+        // advance `fast_forward_height` further to 42
         sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // now `list_state_heights_to_certify` returns 20 heights starting at `tip_height`
         let mut state_heights_to_certify: Vec<_> = (10..30).map(Height::new).collect();
@@ -9507,7 +9508,7 @@ fn commit_and_certify_reuses_certification() {
         assert!(
             !sm.list_state_hashes_to_certify()
                 .into_iter()
-                .any(|(height, _)| height == no_opt_height)
+                .any(|(height, _, _)| height == no_opt_height)
         );
     });
 }

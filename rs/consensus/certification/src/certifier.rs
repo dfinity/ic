@@ -140,6 +140,32 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
         let _timer = self.metrics.execution_time.start_timer();
         let start = Instant::now();
 
+        let deliver_state_certification = |height| {
+            match certification_pool.certification_at_height(height) {
+                // if we have a valid certification, deliver it to the state manager
+                Some(certification) => {
+                    // TODO[NET-1711]: Remove deliver_state_certification(), and include them in the
+                    // change set for the artifact processor to handle.
+                    self.state_manager
+                        .deliver_state_certification(certification);
+                    self.metrics.last_certified_height.set(height.get() as i64);
+                    debug!(&self.log, "Delivered certification for height {}", height);
+
+                    self.max_certified_height_tx.send_if_modified(|h| {
+                        if height > *h {
+                            *h = height;
+                            true
+                        } else {
+                            false
+                        }
+                    });
+
+                    true
+                }
+                None => false,
+            }
+        };
+
         // First, we iterate over requested heights and deliver certifications to the
         // state manager, if they're available or return those hashes which do not have
         // certifications and for which we did not issue a share yet.
@@ -148,29 +174,12 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             .list_state_hashes_to_certify()
             .into_iter()
             .filter_map(|(height, hash, witness)| {
-                match certification_pool.certification_at_height(height) {
-                    // if we have a valid certification, deliver it to the state manager and skip
-                    // the pair
-                    Some(certification) => {
-                        // TODO[NET-1711]: Remove deliver_state_certification(), and include them in the
-                        // change set for the artifact processor to handle.
-                        self.state_manager
-                            .deliver_state_certification(certification);
-                        self.metrics.last_certified_height.set(height.get() as i64);
-                        debug!(&self.log, "Delivered certification for height {}", height);
-
-                        self.max_certified_height_tx.send_if_modified(|h| {
-                            if height > *h {
-                                *h = height;
-                                true
-                            } else {
-                                false
-                            }
-                        });
-                        None
-                    }
-                    // return this pair to be signed by the current replica
-                    _ => Some((height, hash, witness)),
+                if deliver_state_certification(height) {
+                    // if we delivered a valid certification, we skip the pair
+                    None
+                } else {
+                    // return this tuple to be signed by the current replica
+                    Some((height, hash, witness))
                 }
             })
             .collect();
@@ -180,6 +189,12 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             state_hashes_to_certify.len(),
             start.elapsed()
         );
+        let mut state_heights_to_certify: Vec<_> = self
+            .state_manager
+            .list_state_heights_to_certify()
+            .into_iter()
+            .filter(|height| !deliver_state_certification(*height))
+            .collect();
 
         // Next we try to execute 4 steps: signing, purging, aggregating and validating
         // sequentially and stop whenever any of these steps produces a non empty
@@ -216,12 +231,15 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
         }
 
         let start = Instant::now();
-
-        let certifications = state_hashes_to_certify
+        let mut state_heights_to_aggregate_and_validate: Vec<_> = state_hashes_to_certify
+            .into_iter()
+            .map(|(height, _, _)| height)
+            .collect();
+        state_heights_to_aggregate_and_validate.append(&mut state_heights_to_certify);
+        let certifications = state_heights_to_aggregate_and_validate
             .iter()
-            .flat_map(|(height, _, _)| self.aggregate(certification_pool, *height))
+            .flat_map(|height| self.aggregate(certification_pool, *height))
             .collect::<Vec<_>>();
-
         if !certifications.is_empty() {
             self.metrics
                 .certifications_aggregated
@@ -239,11 +257,8 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
         }
 
         let start = Instant::now();
-        let state_heights_to_validate: Vec<_> = state_hashes_to_certify
-            .iter()
-            .map(|(height, _, _)| *height)
-            .collect();
-        let change_set = self.validate(certification_pool, &state_heights_to_validate);
+        let change_set =
+            self.validate(certification_pool, &state_heights_to_aggregate_and_validate);
         if change_set.is_empty() {
             trace!(
                 &self.log,
@@ -1576,6 +1591,11 @@ mod tests {
                     .expect_list_state_hashes_to_certify()
                     .times(1)
                     .return_const(state_hashes(vec![1, 2, 3]));
+                state_manager
+                    .get_mut()
+                    .expect_list_state_heights_to_certify()
+                    .times(1)
+                    .return_const(vec![]);
 
                 certifier.on_state_change(&cert_pool);
                 assert_eq!(
@@ -1589,6 +1609,11 @@ mod tests {
                     .expect_list_state_hashes_to_certify()
                     .times(1)
                     .return_const(state_hashes(vec![4]));
+                state_manager
+                    .get_mut()
+                    .expect_list_state_heights_to_certify()
+                    .times(1)
+                    .return_const(vec![]);
                 certifier.on_state_change(&cert_pool);
                 assert_eq!(
                     *max_certified_height_rx.borrow_and_update(),
@@ -1602,11 +1627,106 @@ mod tests {
                     .expect_list_state_hashes_to_certify()
                     .times(1)
                     .return_const(state_hashes(vec![4, 3, 2, 1]));
+                state_manager
+                    .get_mut()
+                    .expect_list_state_heights_to_certify()
+                    .times(1)
+                    .return_const(vec![]);
                 certifier.on_state_change(&cert_pool);
                 assert!(
                     !max_certified_height_rx.has_changed().unwrap(),
                     "No new height should be sent if they are lower than a previously sent height."
                 );
+            })
+        })
+    }
+
+    /// Test that the certifier delivers certification requested by the state manager
+    /// via the function `StateManager::list_state_heights_to_certify`.
+    /// Test scenario:
+    /// 1. Certifier receives certifications for heights 1, 2, 3. 4.
+    /// 2. State manager asks for height 1 using `StateManager::list_state_hashes_to_certify`
+    ///    and for heights 2, 4, 5 using `StateManager::list_state_heights_to_certify`.
+    /// 3. Certifier delivers certifications for heights 1, 2, 4.
+    #[test]
+    fn test_list_state_heights_to_certify() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    ..
+                } = dependencies(pool_config.clone(), 4);
+
+                let metrics_registry = MetricsRegistry::new();
+                let (max_certified_height_tx, _max_certified_height_rx) =
+                    watch::channel(Height::from(0));
+                let cert_pool = CertificationPoolImpl::new(
+                    replica_config.node_id,
+                    pool_config,
+                    ic_logger::replica_logger::no_op_logger(),
+                    metrics_registry.clone(),
+                );
+
+                for height in 1..=4 {
+                    cert_pool
+                        .validated
+                        .insert(CertificationMessage::Certification(Certification {
+                            height: Height::from(height),
+                            witness: Witness::new_for_testing_with_height(),
+                            signed: Signed {
+                                content: gen_content(Height::from(height)),
+                                signature: ThresholdSignature::fake(),
+                            },
+                        }));
+                }
+
+                let certifier = CertifierImpl::new(
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager.clone(),
+                    pool.get_cache(),
+                    metrics_registry,
+                    log,
+                    max_certified_height_tx,
+                );
+
+                // We expect deliver_state_certification() to be called 3 times for heights 1, 2, and 4.
+                state_manager
+                    .get_mut()
+                    .expect_deliver_state_certification()
+                    .times(3)
+                    .withf(|cert| matches!(cert.height.get(), 1 | 2 | 4))
+                    .return_const(());
+
+                let state_hashes = |heights: Vec<u64>| {
+                    heights
+                        .into_iter()
+                        .map(|h| {
+                            (
+                                Height::from(h),
+                                CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
+                                Witness::new_for_testing_with_height(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                };
+                state_manager
+                    .get_mut()
+                    .expect_list_state_hashes_to_certify()
+                    .times(1)
+                    .return_const(state_hashes(vec![1]));
+                state_manager
+                    .get_mut()
+                    .expect_list_state_heights_to_certify()
+                    .times(1)
+                    .return_const(vec![Height::new(2), Height::new(4), Height::new(5)]);
+
+                certifier.on_state_change(&cert_pool);
             })
         })
     }

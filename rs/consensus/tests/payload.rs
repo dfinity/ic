@@ -74,6 +74,9 @@ fn consensus_produces_expected_batches() {
             .expect_list_state_hashes_to_certify()
             .return_const(vec![]);
         state_manager
+            .expect_list_state_heights_to_certify()
+            .return_const(vec![]);
+        state_manager
             .expect_latest_certified_height()
             .return_const(Height::new(0));
         state_manager

@@ -3043,12 +3043,12 @@ impl StateManager for StateManagerImpl {
             states.certifications.keys().cloned().collect();
         drop(states);
 
-        let latest_subnet_certified_height =
-            self.latest_subnet_certified_height.load(Ordering::Relaxed);
+        let fast_forward_height =
+            self.fast_forward_height.load(Ordering::Relaxed);
         let state_heights = tip_height
             ..min(
                 tip_height + MAX_FUTURE_HEIGHTS_TO_CERTIFY,
-                latest_subnet_certified_height,
+                fast_forward_height,
             );
         state_heights
             .into_iter()
@@ -3381,7 +3381,7 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        let certification_metadata =
+        let mut certification_metadata =
             Self::compute_certification_metadata(&state, height, &self.metrics, &self.log)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
