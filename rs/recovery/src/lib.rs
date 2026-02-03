@@ -16,6 +16,7 @@ use file_sync_helper::{create_dir, download_binary, read_dir};
 use futures::future::join_all;
 use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
+use ic_protobuf::registry::replica_version::v1::{GuestLaunchMeasurements, ReplicaVersionRecord};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
     cmd::{AddRegistryContentCmd, SubCommand, UpgradeSubnetToReplicaVersionCmd},
@@ -182,26 +183,41 @@ impl Recovery {
             wait_for_confirmation(&logger);
         }
 
-        if !args.use_local_binaries && !binary_dir.join("ic-admin").exists() {
-            if let Some(version) = args.replica_version {
-                block_on(download_binary(
-                    &logger,
-                    &version,
-                    String::from("ic-admin"),
-                    &binary_dir,
-                ))?;
-            } else {
-                info!(logger, "No ic-admin version provided, skipping download.");
-            }
-        } else {
-            info!(logger, "ic-admin exists, skipping download.");
-        }
+        let ic_admin = match env::var("IC_ADMIN_PATH") {
+            // if IC_ADMIN_PATH is set, use that
+            Ok(ic_admin_path) => PathBuf::from(ic_admin_path),
+            // Otherwise, either download ic-admin or use the one from 'binary_dir'
+            Err(std::env::VarError::NotPresent) => {
+                let local_ic_admin_path = binary_dir.join("ic-admin");
 
-        let ic_admin = if args.use_local_binaries {
-            PathBuf::from(env::var("IC_ADMIN_BIN").unwrap_or("ic-admin".to_string()))
-        } else {
-            binary_dir.join("ic-admin")
+                if local_ic_admin_path.exists() {
+                    // env var not set, but local ic admin was found, so use that
+                    local_ic_admin_path
+                } else if let Some(version) = args.replica_version {
+                    block_on(download_binary(
+                        &logger,
+                        &version,
+                        String::from("ic-admin"),
+                        &binary_dir,
+                    ))?;
+
+                    // we expect 'download_binary' to download the binary to
+                    // <binary_dir>/ic-admin
+                    local_ic_admin_path
+                } else {
+                    // the env var is not set, the binary does not exist locally and we have no version
+                    // to download.
+                    info!(
+                        logger,
+                        "No ic-admin version provided, file may not exist: '{:?}'",
+                        local_ic_admin_path
+                    );
+                    local_ic_admin_path
+                }
+            }
+            Err(e) => panic!("Could not read IC_ADMIN_PATH: {:?}", e),
         };
+
         let admin_helper = AdminHelper::new(ic_admin, args.nns_url, neuron_args);
 
         Ok(Self {
@@ -469,31 +485,37 @@ impl Recovery {
     pub fn get_replay_with_upgrade_step(
         &self,
         subnet_id: SubnetId,
-        upgrade_version: ReplicaVersion,
+        upgrade_version: &ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        guest_launch_measurements: GuestLaunchMeasurements,
         add_and_bless_replica_version: bool,
         replay_until_height: Option<u64>,
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
-        let version_record = format!(
-            r#"{{ "release_package_sha256_hex": "{sha256}", "release_package_urls": ["{upgrade_url}"] }}"#
-        );
+        let version_record = ReplicaVersionRecord {
+            release_package_sha256_hex: sha256,
+            release_package_urls: vec![upgrade_url.to_string()],
+            guest_launch_measurements: Some(guest_launch_measurements),
+        };
+
         Ok(self.get_replay_step(
             subnet_id,
             Some(ReplaySubCmd {
                 cmd: SubCommand::UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd {
                     replica_version_id: upgrade_version.to_string(),
-                    replica_version_value: version_record.clone(),
+                    replica_version_record: version_record.clone(),
                     add_and_bless_replica_version,
                 }),
                 descr: format!(
-                    r#" upgrade-subnet-to-replica-version{} "{upgrade_version}" {version_record}"#,
+                    r#" upgrade-subnet-to-replica-version{} "{}" "{}""#,
                     if add_and_bless_replica_version {
                         " --add-and-bless-replica-version"
                     } else {
                         ""
                     },
+                    upgrade_version,
+                    serde_json::to_string(&version_record).unwrap()
                 ),
             }),
             None,
@@ -625,22 +647,37 @@ impl Recovery {
         }
     }
 
-    /// Lookup the image [Url] and sha hash of the given [ReplicaVersion]
-    pub fn get_img_url_and_sha(version: &ReplicaVersion) -> RecoveryResult<(Url, String)> {
+    /// Lookup the image [Url], and sha256 hash and guest launch measurements of the
+    /// given [ReplicaVersion].
+    pub fn get_img_url_sha_and_measurements(
+        version: &ReplicaVersion,
+    ) -> RecoveryResult<(Url, String, GuestLaunchMeasurements)> {
         let version_string = version.to_string();
         let url_base =
             format!("https://download.dfinity.systems/ic/{version_string}/guest-os/update-img/");
-
         let image_name = "update-img.tar.zst";
-        let upgrade_url_string = format!("{url_base}{image_name}");
         let invalid_url =
             |url, e| RecoveryError::invalid_output_error(format!("Invalid Url string: {url}, {e}"));
+
+        let upgrade_url_string = format!("{url_base}{image_name}");
         let upgrade_url =
             Url::parse(&upgrade_url_string).map_err(|e| invalid_url(upgrade_url_string, e))?;
 
         let sha_url_string = format!("{url_base}SHA256SUMS");
         let sha_url = Url::parse(&sha_url_string).map_err(|e| invalid_url(sha_url_string, e))?;
 
+        let sha256 = Self::get_img_sha256(&sha_url, image_name)?;
+
+        let measurements_url_string = format!("{url_base}launch-measurements.json");
+        let measurements_url = Url::parse(&measurements_url_string)
+            .map_err(|e| invalid_url(measurements_url_string, e))?;
+
+        let guest_launch_measurements = Self::get_img_measurements(&measurements_url)?;
+
+        Ok((upgrade_url, sha256, guest_launch_measurements))
+    }
+
+    fn get_img_sha256(sha_url: &Url, image_name: &str) -> RecoveryResult<String> {
         // fetch the `SHA256SUMS` file
         let mut curl = Command::new("curl");
         curl.arg(sha_url.to_string());
@@ -656,7 +693,7 @@ impl Recovery {
         for pair in hashes.iter() {
             match pair.as_slice() {
                 &[sha256, name] if name == image_name => {
-                    return Ok((upgrade_url, sha256.to_string()));
+                    return Ok(sha256.to_string());
                 }
                 _ => {}
             }
@@ -667,6 +704,18 @@ impl Recovery {
         )))
     }
 
+    fn get_img_measurements(measurements_url: &Url) -> RecoveryResult<GuestLaunchMeasurements> {
+        // fetch the `launch-measurements.json` file
+        let mut curl = Command::new("curl");
+        curl.arg(measurements_url.to_string());
+        let output = exec_cmd(&mut curl)?.unwrap_or_default();
+
+        let guest_launch_measurements = serde_json::from_str::<GuestLaunchMeasurements>(&output)
+            .map_err(RecoveryError::parsing_error)?;
+
+        Ok(guest_launch_measurements)
+    }
+
     /// Return an [AdminStep] step electing the given [ReplicaVersion].
     /// Existence of artifacts for the given version is checked beforehand, thus
     /// generation of this step may fail if the version is invalid.
@@ -675,6 +724,7 @@ impl Recovery {
         upgrade_version: &ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        guest_launch_measurements_path: &Path,
     ) -> RecoveryResult<impl Step + use<>> {
         Ok(AdminStep {
             logger: self.logger.clone(),
@@ -683,7 +733,8 @@ impl Recovery {
                 .get_propose_to_update_elected_replica_versions_command(
                     upgrade_version,
                     &upgrade_url,
-                    sha256,
+                    &sha256,
+                    guest_launch_measurements_path,
                 ),
         })
     }

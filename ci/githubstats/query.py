@@ -25,6 +25,11 @@ ORG = "dfinity"
 REPO = "ic"
 
 
+def die(*args):
+    print(*args, file=sys.stderr)
+    sys.exit(1)
+
+
 @contextlib.contextmanager
 def githubstats_db_cursor(conninfo: str, timeout: int):
     """Context manager that yields a cursor connected to the github PostgreSQL database."""
@@ -120,11 +125,23 @@ def top(args):
         if args.eq is not None
         else (None, None)
     )
+    if value is not None:
+        if args.order_by in ("impact", "duration_p90"):
+            try:
+                value = pd.Timedelta(value).to_pytimedelta()
+            except ValueError as e:
+                die(f"Can't parse '{value}' to an interval because: {e}!")
+        else:
+            try:
+                value = float(value)
+            except ValueError:
+                die(f"Can't parse '{value}' to a number!")
 
     order_by = sql.Identifier(args.order_by)
 
     query = sql.SQL((THIS_SCRIPT_DIR / "top.sql").read_text()).format(
-        hide=sql.Literal(args.hide if args.hide else ""),
+        exclude=sql.Literal(args.exclude if args.exclude else ""),
+        include=sql.Literal(args.include if args.include else ""),
         period=sql.SQL(period(args)),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
@@ -146,6 +163,7 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
+    df["impact"] = df["impact"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
 
     # Find the CODEOWNERS for each test target:
@@ -171,13 +189,14 @@ def top(args):
         "left",  # label
         "decimal",  # total
         "decimal",  # non_success
-        "decimal",  # non_success%
         "decimal",  # flaky
-        "decimal",  # flaky%
         "decimal",  # timeout
-        "decimal",  # timeout%
         "decimal",  # fail
-        "decimal",  #  fail%
+        "decimal",  # non_success%
+        "decimal",  # flaky%
+        "decimal",  # timeout%
+        "decimal",  # fail%
+        "right",  # impact
         "right",  # duration_p90
         "left",  # owners
     ]
@@ -264,6 +283,11 @@ def last(args):
     print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
 
 
+# argparse formatter to allow newlines in --help.
+class RawDefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
+    pass
+
+
 def main():
     parser = argparse.ArgumentParser(prog="bazel run //ci/githubstats:query --")
 
@@ -304,8 +328,19 @@ def main():
     top_parser = subparsers.add_parser(
         "top",
         parents=[common_parser, filter_parser],
+        formatter_class=RawDefaultsFormatter,
         help="Get the top non-successful / flaky / failed / timed-out tests in the last period",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog="""
+Examples:
+  # Show the top 10 most flaky tests in the last week
+  bazel run //ci/githubstats:query -- top 10 flaky% --week
+
+  # Show the top 5 tests on PRs where failures had the highest impact in the last week
+  bazel run //ci/githubstats:query -- top 5 impact --prs --week
+
+  # Show the 100 slowest tests in the last month that took at least 30 minutes
+  bazel run //ci/githubstats:query -- top 100 duration_p90 --ge '30 minutes' --month
+""",
     )
     top_parser.add_argument(
         "N", type=int, nargs="?", default=10, help="If specified, limits the number of tests to show"
@@ -317,30 +352,46 @@ def main():
         choices=[
             "total",
             "non_success",
-            "non_success%",
             "flaky",
-            "flaky%",
             "timeout",
-            "timeout%",
             "fail",
+            "non_success%",
+            "flaky%",
+            "timeout%",
             "fail%",
+            "impact",
             "duration_p90",
         ],
-        help="COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to",
+        help="""COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to.
+
+total:\t\tTotal runs in the specified period
+non_success:\tNumber of non-successful runs in the specified period
+flaky:\t\tNumber of flaky runs in the specified period
+timeout:\tNumber of timed-out runs in the specified period
+fail:\t\tNumber of failed runs in the specified period
+non_success%%:\tPercentage of non-successful runs in the specified period
+flaky%%:\t\tPercentage of flaky runs in the specified period
+timeout%%:\tPercentage of timed-out runs in the specified period
+fail%%:\t\tPercentage of failed runs in the specified period
+impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures
+duration_p90:\t90th percentile duration of all runs in the specified period""",
     )
 
     condition_group = top_parser.add_mutually_exclusive_group()
-    condition_group.add_argument("--gt", metavar="F", type=float, help="Only show tests where COLUMN > F")
-    condition_group.add_argument("--ge", metavar="F", type=float, help="Only show tests where COLUMN >= F")
-    condition_group.add_argument("--lt", metavar="F", type=float, help="Only show tests where COLUMN < F")
-    condition_group.add_argument("--le", metavar="F", type=float, help="Only show tests where COLUMN <= F")
-    condition_group.add_argument("--eq", metavar="F", type=float, help="Only show tests where COLUMN = F")
+    condition_group.add_argument("--gt", metavar="F", type=str, help="Only show tests where COLUMN > F")
+    condition_group.add_argument("--ge", metavar="F", type=str, help="Only show tests where COLUMN >= F")
+    condition_group.add_argument("--lt", metavar="F", type=str, help="Only show tests where COLUMN < F")
+    condition_group.add_argument("--le", metavar="F", type=str, help="Only show tests where COLUMN <= F")
+    condition_group.add_argument("--eq", metavar="F", type=str, help="Only show tests where COLUMN = F")
 
     top_parser.add_argument(
         "--owner", metavar="TEAM", type=str, help="Filter tests by owner (a regex for the GitHub username or team)"
     )
 
-    top_parser.add_argument("--hide", metavar="TEST", type=str, help="Hide tests matching this SQL LIKE pattern")
+    top_parser.add_argument("--exclude", metavar="TEST", type=str, help="Exclude tests matching this SQL LIKE pattern")
+    top_parser.add_argument(
+        "--include", metavar="TEST", type=str, help="Include only tests matching this SQL LIKE pattern"
+    )
 
     top_parser.set_defaults(func=top)
 
@@ -349,8 +400,13 @@ def main():
     last_runs_parser = subparsers.add_parser(
         "last",
         parents=[common_parser, filter_parser],
+        formatter_class=RawDefaultsFormatter,
         help="Get the last runs of the specified test in the given period",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog="""
+Examples:
+  # Show the last flaky runs of the rent_subnet_test in the last week
+  bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
+""",
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")

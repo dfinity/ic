@@ -195,7 +195,6 @@ use std::{
     cmp::max,
     collections::{HashMap, HashSet},
     convert::TryFrom,
-    ffi::OsStr,
     fs,
     future::Future,
     io::{Read, Write},
@@ -209,6 +208,7 @@ use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
 pub use super::ic_images::*;
+pub use tempfile::tempdir;
 
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
@@ -1352,19 +1352,19 @@ impl HasGroupSetup for TestEnv {
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
-                    let farm = block_on(Farm::new(farm_base_url.into(), self.logger()));
+                    let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
                         vm_allocation: None,
                         required_host_features: vec![],
                         preferred_network: None,
                         metadata: None,
                     };
-                    block_on(farm.create_group(
+                    farm.create_group(
                         &group_setup.group_base_name,
                         &group_setup.infra_group_name,
                         group_setup.group_timeout,
                         group_spec,
-                    ))
+                    )
                     .unwrap();
                 }
             };
@@ -1433,9 +1433,7 @@ impl HasIcName for IcNodeSnapshot {
 }
 
 pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
-    let runfiles =
-        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
-    Path::new(&runfiles).join(p)
+    p.as_ref().to_path_buf()
 }
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
@@ -1492,6 +1490,26 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
+fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
+    let mut channel = session.channel_session()?;
+    channel.exec("bash").map_err(|e| {
+        anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
+    })?;
+
+    channel.write_all(script.as_bytes())?;
+    channel.flush()?;
+    channel.send_eof()?;
+    let mut out = String::new();
+    channel.read_to_string(&mut out)?;
+    let mut err = String::new();
+    channel.stderr().read_to_string(&mut err)?;
+    let exit_status = channel.exit_status()?;
+    if exit_status != 0 {
+        bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
+    }
+    Ok(out)
+}
+
 #[async_trait]
 pub trait SshSession: HasTestEnv {
     /// Return the address of the SSH server to connect to.
@@ -1499,8 +1517,23 @@ pub trait SshSession: HasTestEnv {
 
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
     fn get_ssh_session(&self) -> Result<Session> {
-        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
-            .context("Failed to get SSH session")
+        let env = self.test_env();
+        let ip = self.get_host_ip()?;
+
+        get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
+    }
+
+    /// Return an SSH session to the machine referenced from self authenticating with the given user.
+    /// This is the async version of `get_ssh_session`.
+    async fn get_ssh_session_async(&self) -> Result<Session> {
+        let env = self.test_env();
+        let ip = self.get_host_ip()?;
+
+        tokio::task::spawn_blocking(move || {
+            get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
+        })
+        .await
+        .expect("Getting SSH session task panicked")
     }
 
     /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
@@ -1529,39 +1562,26 @@ pub trait SshSession: HasTestEnv {
             &self.test_env().logger(),
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
-            || async { self.get_ssh_session() }
+            || self.get_ssh_session_async()
         )
         .await
     }
 
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
-        self.block_on_bash_script_from_session(&session, script)
+        execute_bash_script_from_session(&session, script)
     }
 
     async fn block_on_bash_script_async(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session_async().await?;
-        self.block_on_bash_script_from_session(&session, script)
+        let script = script.to_string();
+        tokio::task::spawn_blocking(move || execute_bash_script_from_session(&session, &script))
+            .await
+            .expect("Executing bash script task panicked")
     }
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
-        let mut channel = session.channel_session()?;
-        channel.exec("bash").map_err(|e| {
-            anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
-        })?;
-
-        channel.write_all(script.as_bytes())?;
-        channel.flush()?;
-        channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let mut err = String::new();
-        channel.stderr().read_to_string(&mut err)?;
-        let exit_status = channel.exit_status()?;
-        if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
-        }
-        Ok(out)
+        execute_bash_script_from_session(session, script)
     }
 
     /// Is it accessible via ssh with the `admin` user.
@@ -1967,18 +1987,6 @@ impl NnsInstallationBuilder {
     }
 }
 
-/// Set environment variable `env_name` to `file_path`
-/// or to wherever `file_path` points to in case it's a symlink.
-pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
-    let path = if file_path.is_symlink() {
-        std::fs::read_link(file_path).unwrap()
-    } else {
-        file_path
-    };
-    // TODO: Audit that the environment access only happens in single-threaded code.
-    unsafe { std::env::set_var(env_name, path) };
-}
-
 pub trait HasRegistryVersion {
     fn get_registry_version(&self) -> RegistryVersion;
 }
@@ -2050,11 +2058,10 @@ impl IcNodeContainer for SubnetSnapshot {
 
 /* ### VM Control ### */
 
-#[async_trait]
 pub trait VmControl {
-    async fn kill(&self);
-    async fn reboot(&self);
-    async fn start(&self);
+    fn kill(&self);
+    fn reboot(&self);
+    fn start(&self);
 }
 
 pub struct HostedVm {
@@ -2066,47 +2073,41 @@ pub struct HostedVm {
 /// VmControl enables a user to interact with VMs, i.e. change their state.
 /// All functions belonging to this trait crash if a respective operation is for any reason
 /// unsuccessful.
-#[async_trait]
 impl VmControl for HostedVm {
-    async fn kill(&self) {
+    fn kill(&self) {
         self.farm
             .destroy_vm(&self.group_name, &self.vm_name)
-            .await
             .expect("could not kill VM");
     }
 
-    async fn reboot(&self) {
+    fn reboot(&self) {
         self.farm
             .reboot_vm(&self.group_name, &self.vm_name)
-            .await
             .expect("could not reboot VM");
     }
 
-    async fn start(&self) {
+    fn start(&self) {
         self.farm
             .start_vm(&self.group_name, &self.vm_name)
-            .await
             .expect("could not start VM");
     }
 }
 
-#[async_trait]
 pub trait HasVm {
     /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
-    async fn vm(&self) -> Box<dyn VmControl>;
+    fn vm(&self) -> Box<dyn VmControl>;
 }
 
-#[async_trait]
 impl<T> HasVm for T
 where
-    T: HasTestEnv + HasVmName + Sync,
+    T: HasTestEnv + HasVmName,
 {
     /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
-    async fn vm(&self) -> Box<dyn VmControl> {
+    fn vm(&self) -> Box<dyn VmControl> {
         let env = self.test_env();
         let pot_setup = GroupSetup::read_attribute(&env);
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, env.logger()).await;
+        let farm = Farm::new(farm_base_url, env.logger());
 
         let vm_name = self.vm_name();
         Box::new(HostedVm {
@@ -2500,38 +2501,35 @@ where
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = block_on(Farm::new(farm_base_url, log));
+        let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
-        block_on(farm.create_dns_records(&group_name, dns_records))
+        farm.create_dns_records(&group_name, dns_records)
             .expect("Failed to create DNS records")
     }
 }
 
-#[async_trait]
 pub trait CreatePlaynetDnsRecords {
     /// Creates DNS records under the suffix: `.ic{ix}.farm.dfinity.systems`
     /// where `ix` is the index of the acquired playnet.
     ///
     /// The records will be garbage collected some time after the group has expired.
     /// The suffix will be returned from this function such that the FQDNs can be constructed.
-    async fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
+    fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
 }
 
-#[async_trait]
 impl<T> CreatePlaynetDnsRecords for T
 where
-    T: HasTestEnv + std::marker::Sync,
+    T: HasTestEnv,
 {
-    async fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
+    fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, log).await;
+        let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
         farm.create_playnet_dns_records(&group_name, dns_records)
-            .await
             .expect("Failed to create playnet DNS records")
     }
 }
@@ -2550,10 +2548,10 @@ where
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = block_on(Farm::new(farm_base_url, log));
+        let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
-        block_on(farm.acquire_playnet_certificate(&group_name))
+        farm.acquire_playnet_certificate(&group_name)
             .expect("Failed to acquire a certificate for a playnet")
     }
 }

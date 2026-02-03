@@ -49,7 +49,7 @@ pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> Replica
     // Bless target version
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     block_on(bless_replica_version(
         nns_node,
         &target_version,
@@ -300,9 +300,7 @@ async fn upgrade_to(
     // root hash from logs of each node
     let graceful_stops_handle = try_join_all(healthy_nodes.iter().map(|node| {
         let node_cl = node.clone();
-        tokio::spawn(async move {
-            assert_orchestrator_stopped_gracefully(&node_cl).await;
-        })
+        tokio::task::spawn_blocking(move || assert_orchestrator_stopped_gracefully(&node_cl))
     }));
     let fetch_hashes_handle = {
         let logger_cl = logger.clone();
@@ -362,7 +360,7 @@ pub fn stop_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_healthy()
         .expect("Node not healthy");
     info!(logger, "Kill node: {}", app_node.get_ip_addr());
-    block_on(async { app_node.vm().await.kill().await });
+    app_node.vm().kill();
     app_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -375,7 +373,7 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_unavailable()
         .expect("Node still healthy");
     info!(logger, "Starting node: {}", app_node.get_ip_addr());
-    block_on(async { app_node.vm().await.start().await });
+    app_node.vm().start();
     app_node
         .await_status_is_healthy()
         .expect("Node not healthy");
@@ -432,12 +430,11 @@ async fn fetch_latest_computed_root_hashes_from_logs(
 /// chance to read the relevant log entry. In constrast, the SSH connection remains open longer.
 ///
 /// This function will never return if an upgrade is not scheduled.
-async fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
+fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
     const MESSAGE: &str = r"Orchestrator shut down gracefully";
 
     let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
 
-    node.block_on_bash_script_async(&script)
-        .await
+    node.block_on_bash_script(&script)
         .expect("Orchestrator did not shut down gracefully");
 }
