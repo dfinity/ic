@@ -8,7 +8,9 @@ use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
 use ic_base_types::PrincipalId;
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
-use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self, GetBlocksMode, RecurrencyMode};
+use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{
+    self, GetBlocksMode, RecurrencyMode,
+};
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::InitArgsBuilder;
 use ic_icrc1_ledger::Tokens;
