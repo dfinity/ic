@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added support for legacy `SignedTransaction` format from pre-v2.1.0 for the `construction/submit` endpoint. ([#7416](https://github.com/dfinity/ic/pull/7416))
 - Added new `self_describing_action` field in the `Proposal` struct, returned e.g, by the `get_pending_proposals` endpoint. ([#7643](https://github.com/dfinity/ic/pull/7643))
-- Use tokio-rusqlite for database operations ([#8109](https://github.com/dfinity/ic/pull/8109)).
 - Return errors immediately during initial sync ([#7203](https://github.com/dfinity/ic/pull/7203)).
 - Display DB index optimizations status ([#8196](https://github.com/dfinity/ic/pull/8196)).
 - Display progress bar during ICP block syncing ([#8195](https://github.com/dfinity/ic/pull/8195)).
