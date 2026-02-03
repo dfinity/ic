@@ -56,14 +56,6 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
     echo "98a45fcc651424551f56b8bc4f697ae7ae66930da59b1ef9dfeeaa4da64cb2c6  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
-# Add IC SDK (dfx)
-ARG sdk_version=0.25.1
-ARG sdk_sha=1e2118e0463aa44fed3a5dee8d638144c67e7b6ee8e0beaf75cfd56687bdb7e7
-RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
-    echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
-    tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/dfx
-
 # Add motoko compiler
 ARG motoko_version=0.14.7
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
