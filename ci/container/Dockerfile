@@ -56,6 +56,10 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
     echo "98a45fcc651424551f56b8bc4f697ae7ae66930da59b1ef9dfeeaa4da64cb2c6  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
+# Add motoko compiler
+ARG motoko_version=0.14.7
+RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+
 # Create user groups needed for github actions runner
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # CI before script requires sudo \
