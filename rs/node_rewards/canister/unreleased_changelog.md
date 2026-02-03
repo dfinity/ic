@@ -6,9 +6,6 @@ on the process that this file is part of, see
 
 # Next Upgrade Proposal
 
-* Add performance-based-rewards feature to be able to test Governance behavior
-  with performance-based rewards enabled.
-
 ## Added
 
 * Enabling direct node swapping feature on all subnets for all node operators.

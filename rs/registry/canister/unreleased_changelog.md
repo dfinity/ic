@@ -9,6 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
+* Add performance-based-rewards feature to be able to test Governance behavior
+  with performance-based rewards enabled.
+
 ## Changed
 
 ## Deprecated
