@@ -3179,7 +3179,7 @@ impl StateManager for StateManagerImpl {
                 .expect("Failed to send `Wait` to hash channel");
             recv.recv().expect("Failed to wait for hash channel");
             let prev_height = height.decrement();
-            // At height 0, we don't have a hash yet, so we have to compute it.
+            // At prev_height 0, we don't have a hash yet, so we have to compute it.
             if prev_height.get() == 0 {
                 println!("prev height == 0");
                 let states = self.states.read();
@@ -3399,6 +3399,8 @@ impl StateManager for StateManagerImpl {
         //     }
         // }
 
+        // TODO: if certscope full: wait for hash thread to ensure old timing.
+
         if let Some((state_metadata, compute_manifest_request)) =
             state_metadata_and_compute_manifest_request
         {
@@ -3533,7 +3535,33 @@ fn spawn_hash_thread(
                                     certification_metadata.certified_state_hash
                                 );
                             }
+
+                            // TODO: is this check still relevant? 
+                            // onlky way: state sync
+
+                            // It's possible that we already computed this state before. We
+                            // validate that hashes agree to spot bugs causing non-determinism as
+                            // early as possible. 
+                            let states_read = states.read();
+                            if let Some(prev_metadata) = states_read.certifications_metadata.get(&height) {
+                                let prev_hash = &prev_metadata.certified_state_hash;
+                                let hash = &certification_metadata.certified_state_hash;
+                                if prev_hash != hash {
+                                    // if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
+                                    //     error!(
+                                    //         log,
+                                    //         "Failed to mark state @{} diverged: {}", height, err
+                                    //     );
+                                    // }
+                                    panic!(
+                                        "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
+                                    );
+                                }
+                            }
+                            drop(states_read);
+
                             // add state and hash to snapshots and certification_metadata
+                            println!("HashThread: write hash/snapshot at height {}", height);
                             let mut states = states.write();
 
                             if !states
@@ -3581,6 +3609,11 @@ fn spawn_hash_thread(
 }
 
 impl StateManagerImpl {
+    /// After this method terminates, both `SharedState.snapshots` and `SharedState.certification_metadata`
+    /// at the height from the previous `commit_and_certify` are populated.
+    ///
+    /// This used to happen synchronously inside `commit_and_certify`, but now happens in the hash thread
+    /// at an unpredictable time.  
     pub fn flush_hash_channel(&self) {
         let (sender, recv) = bounded(1);
         self.hash_channel

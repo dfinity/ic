@@ -3051,6 +3051,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
         self.set_time(time.into());
         *self.time_of_last_round.write().unwrap() = time;
     }
@@ -3254,6 +3255,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
     }
 
     /// Enables checkpoints and makes a tick to write a checkpoint.
@@ -3293,6 +3295,7 @@ impl StateMachine {
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
         self.state_manager
             .commit_and_certify(state, h.increment(), CertificationScope::Full, None);
+        self.state_manager.flush_hash_channel();
         self.state_manager.remove_states_below(h.increment());
     }
 
@@ -3322,6 +3325,7 @@ impl StateMachine {
                 CertificationScope::Full,
                 None,
             );
+            self.state_manager.flush_hash_channel();
             self.state_manager.flush_tip_channel();
 
             other_env.import_canister_state(
@@ -3554,6 +3558,7 @@ impl StateMachine {
             CertificationScope::Full,
             None,
         );
+        self.state_manager.flush_hash_channel();
 
         Ok(env)
     }
@@ -4795,6 +4800,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the query stats of the specified canister.
@@ -4831,6 +4837,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the cycle balance of the specified canister.
@@ -4868,6 +4875,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
         balance
     }
 
