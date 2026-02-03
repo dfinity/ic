@@ -1313,10 +1313,10 @@ mod tests {
         }
     }
 
-    // // TODO(NODE-1754): Remove this mock implementation after registry changes concerning recalled
-    // // replica verisons are merged. This temporary implementation is to test the code behaviour
-    // // even though the registry does not yet support recalled replica versions.
-    // // Once the changes are merged, we can use actual registry mutations instead of this mock.
+    /// TODO(NODE-1754): Remove this mock implementation after registry changes concerning recalled
+    /// replica verisons are merged. This temporary implementation is to test the code behaviour
+    /// even though the registry does not yet support recalled replica versions.
+    /// Once the changes are merged, we can use actual registry mutations instead of this mock.
     struct MockRegistryHelper {
         pub inner: Arc<RegistryHelper>,
         mock: MockRegistryHelperWithRecalledReplicaVersions,
