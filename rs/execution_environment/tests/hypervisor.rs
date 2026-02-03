@@ -8382,7 +8382,7 @@ fn yield_for_dirty_page_copy_does_not_trigger_dts_slice_without_enough_dirty_pag
 
 #[test]
 fn declaring_too_many_tables_fails() {
-    let wat = format!("(module {})", "(table 0 externref)".repeat(100));
+    let wat = format!("(module {})", "(table 0 funcref)".repeat(100));
     let mut test = ExecutionTestBuilder::new().build();
     let err = test.canister_from_wat(wat).unwrap_err();
     assert_eq!(ErrorCode::CanisterWasmEngineError, err.code());
