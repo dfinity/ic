@@ -60,8 +60,14 @@ pub enum RecurrencyMode {
     Recurrent(RecurrencyConfig),
 }
 
-// Re-export GetBlocksMode from config module for convenience
-pub use crate::config::GetBlocksMode;
+/// Specifies which endpoint to use for fetching blocks from the ledger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GetBlocksMode {
+    /// Use the legacy `get_blocks` endpoint (default).
+    Legacy,
+    /// Use the standard ICRC-3 `icrc3_get_blocks` endpoint.
+    Icrc3,
+}
 
 async fn verify_and_fix_gaps(
     agent: Arc<Icrc1Agent>,

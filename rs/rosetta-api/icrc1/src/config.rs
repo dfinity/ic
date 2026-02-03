@@ -6,16 +6,6 @@ use std::str::FromStr;
 use tracing::Level;
 use url::Url;
 
-/// Specifies which endpoint to use for fetching blocks from the ledger.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Used via re-export from blocks_synchronizer in the library
-pub enum GetBlocksMode {
-    /// Use the legacy `get_blocks` endpoint (default).
-    Legacy,
-    /// Use the standard ICRC-3 `icrc3_get_blocks` endpoint.
-    Icrc3,
-}
-
 const MAINNET_DEFAULT_URL: &str = "https://ic0.app";
 const TESTNET_DEFAULT_URL: &str = "https://exchanges.testnet.dfinity.network";
 

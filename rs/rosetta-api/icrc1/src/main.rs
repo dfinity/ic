@@ -15,11 +15,10 @@ use ic_icrc_rosetta::{
     AppState, Metadata, MultiTokenAppState,
     common::constants::{BLOCK_SYNC_WAIT_SECS, MAX_BLOCK_SYNC_WAIT_SECS},
     common::storage::{storage_client::StorageClient, types::MetadataEntry},
-    config::GetBlocksMode,
     construction_api::endpoints::*,
     data_api::endpoints::*,
     ledger_blocks_synchronization::blocks_synchronizer::{
-        RecurrencyConfig, RecurrencyMode, start_synching_blocks,
+        GetBlocksMode, RecurrencyConfig, RecurrencyMode, start_synching_blocks,
     },
 };
 use ic_sys::fs::write_string_using_tmp_file;
