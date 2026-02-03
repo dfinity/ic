@@ -591,6 +591,7 @@ pub type QueryExecutionService =
 pub struct TransformExecutionInput {
     pub query: Query,
     pub instruction_observation: Arc<AtomicU64>,
+    pub max_instructions: NumInstructions,
 }
 
 /// Interface for the component to execute canister http transform.

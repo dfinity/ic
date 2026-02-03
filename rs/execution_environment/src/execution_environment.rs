@@ -39,17 +39,17 @@ use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterMetadataRequest, CanisterStatusType, ClearChunkStoreArgs,
     CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, FetchCanisterLogsRequest, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method,
-    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
-    RenameCanisterArgs, ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs,
-    SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
-    VetKdPublicKeyArgs, VetKdPublicKeyResult,
+    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
+    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
+    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1001,6 +1001,27 @@ impl ExecutionEnvironment {
                     refund: msg.take_cycles(),
                 },
                 Ok(args) => self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state),
+            },
+
+            Ok(Ic00Method::FlexibleHttpRequest) => match &msg {
+                CanisterCall::Request(_) => {
+                    match FlexibleCanisterHttpRequestArgs::decode(payload) {
+                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(err),
+                            refund: msg.take_cycles(),
+                        },
+                        Ok(_) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                "FlexibleHttpRequest is not yet implemented".to_string(),
+                            )),
+                            refund: msg.take_cycles(),
+                        },
+                    }
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
+                }
             },
 
             Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {

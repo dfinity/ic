@@ -1,10 +1,7 @@
 use crate::{
     canister_agent::CanisterAgent,
     canister_api::GenericRequest,
-    driver::{
-        group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS},
-        test_env_api::*,
-    },
+    driver::{group::MAX_RUNTIME_THREADS, test_env_api::*},
     generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics},
     retry_with_msg, retry_with_msg_async,
     types::*,
@@ -1315,10 +1312,8 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
             let rt = {
                 let cpus = num_cpus::get();
                 let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
-                let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
                 Builder::new_multi_thread()
                     .worker_threads(workers)
-                    .max_blocking_threads(blocking_threads)
                     .enable_all()
                     .build()
             }

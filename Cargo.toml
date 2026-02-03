@@ -133,6 +133,7 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
+    "rs/dogecoin/ckdoge/agent",
     "rs/dogecoin/ckdoge/minter",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
@@ -176,6 +177,7 @@ members = [
     "rs/ic_os/networking/deterministic_ips",
     "rs/ic_os/networking/network",
     "rs/ic_os/networking/nss_icos",
+    "rs/ic_os/open_rootfs",
     "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics/fstrim_tool",
     "rs/ic_os/metrics/metrics_tool",
@@ -723,10 +725,11 @@ libc = "0.2.158"
 libcryptsetup-rs = "0.13"
 libflate = "2.1.0"
 libnss = "0.5.0"
-lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
-lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "64eb770caa940f215190d86d61e4c132511be5e2" }
+lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "64eb770caa940f215190d86d61e4c132511be5e2" }
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
+lzma-sys = { version = "0.1.20", features = ["static"] }
 macaddr = "1.0"
 memchr = "2.7"
 memmap2 = "0.9.5"
@@ -903,8 +906,10 @@ wasmparser = "0.243.0"
 wasmprinter = "0.243.0"
 wast = "243.0.0"
 wat = "1.243.0"
+wsl = "0.1.0"
 which = "6.0.3"
 wirm = { version = "2.1.0", features = ["parallel"] }
+xz2 = { version = "0.1.7", features = ["static"] }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }

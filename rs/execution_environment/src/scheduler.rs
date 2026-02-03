@@ -2284,6 +2284,7 @@ fn get_instructions_limits_for_subnet_message(
             | ECDSAPublicKey
             | RawRand
             | HttpRequest
+            | FlexibleHttpRequest
             | SetupInitialDKG
             | SignWithECDSA
             | ReshareChainKey
