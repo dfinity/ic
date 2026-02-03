@@ -45,7 +45,7 @@ pub use payload_builder::{create_payload, get_dkg_summary_from_cup_contents};
 /// The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
 
-/// The maximum number of early remote transcript responses we want to include in a data payload.
+/// The maximum number of early remote DKG responses we want to include in a data payload.
 /// Note that responses for `SetupInitialDKG` requests contain two transcripts.
 const MAX_EARLY_REMOTE_TRANSCRIPT_RESPONSES: usize = 1;
 

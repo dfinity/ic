@@ -143,7 +143,7 @@ fn create_data_payload(
         );
     }
 
-    // Try to include remote transcripts
+    // Include any early remote transcripts
     Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
         last_summary_block.height,
         new_validated_dealings,
