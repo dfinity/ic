@@ -116,10 +116,9 @@ else
     DEVENV=false
 fi
 
-# only support podman
-if [[ ! " ${CONTAINER_CMD[*]} " =~ " podman " ]]; then
-    echo "${CONTAINER_CMD[*]}"
-    eprintln "Only podman is supported as container runtime."
+# if CONTAINER_CMD exists, check that it contains "podman"
+if [ -n "${CONTAINER_CMD[*]:-}" ] && [[ ! " ${CONTAINER_CMD[*]} " =~ " podman " ]]; then
+    eprintln "Error: --container-cmd must specify a podman-based command."
     exit 1
 fi
 
