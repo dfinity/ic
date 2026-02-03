@@ -541,6 +541,7 @@ type StableLedgerBalances = Balances<StableBalances>;
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Ledger {
+    #[serde(default)]
     balances: LedgerBalances<Tokens>,
     #[serde(default)]
     stable_balances: StableLedgerBalances,
@@ -551,6 +552,7 @@ pub struct Ledger {
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm, StableBlockDataContainer>,
 
     minting_account: Account,
+    #[serde(default)]
     fee_collector: Option<FeeCollector<Account>>,
 
     transactions_by_hash: BTreeMap<HashOf<Transaction<Tokens>>, BlockIndex>,
