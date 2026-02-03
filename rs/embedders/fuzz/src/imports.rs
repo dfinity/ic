@@ -14,6 +14,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{Memory, NumWasmPages};
+use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{NumBytes, time::UNIX_EPOCH};
 use std::collections::{BTreeMap, HashMap};
@@ -33,12 +34,12 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStor
     let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(&config))
         .expect("Failed to initialize Wasmtime engine");
     let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
-
+    let system_state = SystemStateBuilder::default().build();
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let system_api = SystemApiImpl::new(
         api_type.clone(),
-        get_system_state(api_type),
+        get_system_state(&system_state, api_type),
         canister_current_memory_usage,
         canister_current_message_memory_usage,
         get_execution_parameters(),

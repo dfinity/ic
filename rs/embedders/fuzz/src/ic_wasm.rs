@@ -6,7 +6,6 @@ use ic_embedders::wasm_utils::validation::{
     RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT, WASM_VALID_SYSTEM_FUNCTIONS,
 };
 use ic_embedders::wasmtime_embedder::system_api::ApiType;
-use ic_management_canister_types_private::Global;
 use ic_types::methods::WasmMethod;
 use lazy_static::lazy_static;
 use std::collections::BTreeSet;
@@ -46,8 +45,6 @@ pub struct ICWasmModule {
     // for clippy to not complain.
     #[allow(dead_code)]
     pub config: Config,
-    #[allow(dead_code)]
-    pub exported_globals: Vec<Global>,
     #[allow(dead_code)]
     pub exported_functions: BTreeSet<WasmMethod>,
 }
@@ -170,9 +167,6 @@ impl ICWasmModule {
     fn new(config: Config, module: Module) -> Self {
         let module_bytes = module.to_bytes();
         let mut wasm_methods: BTreeSet<WasmMethod> = BTreeSet::new();
-        let mut exported_globals_index: Vec<u32> = vec![];
-        let mut global_section: Vec<wasmparser::Global> = vec![];
-        let mut persisted_globals: Vec<Global> = vec![];
 
         for payload in wasmparser::Parser::new(0).parse_all(&module_bytes) {
             match payload.expect("Failed to parse wasm-smith generated module") {
@@ -187,61 +181,17 @@ impl ICWasmModule {
                                     wasm_methods.insert(wasm_method);
                                 }
                             }
-                            ExternalKind::Global => {
-                                exported_globals_index.push(export.index);
-                            }
                             _ => (),
                         }
-                    }
-                }
-                wasmparser::Payload::GlobalSection(global_reader) => {
-                    for global in global_reader.into_iter() {
-                        // Temporarily collect globals since we need the exported
-                        // index of globals to construct the persisted globals
-                        global_section.push(global.expect("Failed to read global"));
                     }
                 }
                 _ => (),
             }
         }
-        for index in &exported_globals_index {
-            if let Some(global) =
-                get_persisted_global(global_section.get(*index as usize).unwrap().clone())
-            {
-                persisted_globals.push(global);
-            }
-        }
-
-        persisted_globals.extend(
-            global_section
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| !exported_globals_index.contains(&(*i as u32)))
-                .filter(|(_, global)| global.ty.mutable)
-                .filter_map(|(_, global)| get_persisted_global(global.clone()))
-                .collect::<Vec<Global>>(),
-        );
-
-        // An extra global is added for instruction counter.
-        // On the exporting logic, two other globals must be exported
-        // but they are not persisted across ExecutionState.
-        // const TO_IGNORE: &[&str] = &[
-        //     DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-        //     ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
-        // ];
-        //
-        // Instruction counter shouldn't be persisted as well since
-        // it's overwritten with instruction limit every round.
-        // However, this is currently not done in the embedders library
-        // and we have to persist it to pass a validation check.
-        // It can be removed once instruction counter isn't persisted
-        // in our library.
-        persisted_globals.push(Global::I64(i64::MAX));
 
         Self {
             config,
             module,
-            exported_globals: persisted_globals,
             exported_functions: wasm_methods,
         }
     }
@@ -277,29 +227,6 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig, is_wasm64: bool) -> Conf
             SYSTEM_API_IMPORTS_WASM32.module.to_vec()
         }),
         ..Default::default()
-    }
-}
-
-fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {
-    match (
-        g.ty.content_type,
-        g.init_expr
-            .get_operators_reader()
-            .read()
-            .expect("Unable to read operator for ConstExpr"),
-    ) {
-        (ValType::I32, Operator::I32Const { value }) => Some(Global::I32(value)),
-        (ValType::I64, Operator::I64Const { value }) => Some(Global::I64(value)),
-        (ValType::F32, Operator::F32Const { value }) => {
-            Some(Global::F32(f32::from_bits(value.bits())))
-        }
-        (ValType::F64, Operator::F64Const { value }) => {
-            Some(Global::F64(f64::from_bits(value.bits())))
-        }
-        (ValType::V128, Operator::V128Const { value }) => {
-            Some(Global::V128(u128::from_le_bytes(*value.bytes())))
-        }
-        (_, _) => None,
     }
 }
 
