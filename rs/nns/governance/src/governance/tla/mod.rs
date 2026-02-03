@@ -247,15 +247,6 @@ fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
     }
 }
 
-// Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
-fn set_java_path() {
-    let current_path = std::env::var("PATH").expect("PATH is not set");
-    let bazel_java = std::env::var("JAVABASE")
-        .expect("JAVABASE is not set; have you added the bazel tools toolchain?");
-    // TODO: Audit that the environment access only happens in single-threaded code.
-    unsafe { std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin")) };
-}
-
 /// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`)
 /// TLA modules are read from $TLA_MODULES (space-separated list)
 /// NOTE: this assumes unique basenames amongst the modules
@@ -349,8 +340,6 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
     });
 
     all_pairs.truncate(STATE_PAIR_COUNT_LIMIT);
-
-    set_java_path();
 
     let apalache = std::env::var("TLA_APALACHE_BIN")
         .expect("environment variable 'TLA_APALACHE_BIN' should point to the apalache binary");
