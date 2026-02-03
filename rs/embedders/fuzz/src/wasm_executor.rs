@@ -91,7 +91,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
 #[inline(always)]
 fn setup_wasm_execution_input(wasm_method: &WasmMethod) -> WasmExecutionInput {
     let func_ref = FuncRef::Method(wasm_method.clone());
-    let api_type = get_system_api_type_for_wasm_method(*wasm_method);
+    let api_type = get_system_api_type_for_wasm_method(wasm_method.clone());
     let canister_current_memory_usage = NumBytes::new(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let compilation_cache = Arc::new(CompilationCacheBuilder::new().build());

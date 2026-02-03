@@ -41,7 +41,7 @@ pub fn run_fuzzer(module: ICWasmModule) -> Corpus {
     for wasm_method in wasm_methods.iter() {
         let func_ref = FuncRef::Method(wasm_method.clone());
         let system_api = instance.store_data_mut().system_api_mut().unwrap();
-        system_api.set_api_type(get_system_api_type_for_wasm_method(*wasm_method));
+        system_api.set_api_type(get_system_api_type_for_wasm_method(wasm_method.clone()));
         let _ = instance.run(func_ref);
     }
     Corpus::Keep
