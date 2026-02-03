@@ -3043,8 +3043,7 @@ impl StateManager for StateManagerImpl {
             states.certifications.keys().cloned().collect();
         drop(states);
 
-        let fast_forward_height =
-            self.fast_forward_height.load(Ordering::Relaxed);
+        let fast_forward_height = self.fast_forward_height.load(Ordering::Relaxed);
         let state_heights = tip_height
             ..min(
                 tip_height + MAX_FUTURE_HEIGHTS_TO_CERTIFY,

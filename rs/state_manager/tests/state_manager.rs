@@ -5,8 +5,8 @@ use ic_canonical_state::lazy_tree_conversion::state_height_as_tree;
 use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize;
 use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, LookupStatus, MatchPattern, MixedHashTree, Path as LabelPath, flatmap,
-    recompute_digest, sparse_labeled_tree_from_paths, Witness,
+    Label, LabeledTree, LookupStatus, MatchPattern, MixedHashTree, Path as LabelPath, Witness,
+    flatmap, recompute_digest, sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
