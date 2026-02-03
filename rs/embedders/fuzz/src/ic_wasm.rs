@@ -169,23 +169,18 @@ impl ICWasmModule {
         let mut wasm_methods: BTreeSet<WasmMethod> = BTreeSet::new();
 
         for payload in wasmparser::Parser::new(0).parse_all(&module_bytes) {
-            match payload.expect("Failed to parse wasm-smith generated module") {
-                wasmparser::Payload::ExportSection(export_reader) => {
-                    for export in export_reader.into_iter() {
-                        let export = export.expect("Failed to read export");
-                        match export.kind {
-                            ExternalKind::Func => {
-                                let func_name = export.name;
-                                if let Ok(wasm_method) = WasmMethod::try_from(func_name.to_string())
-                                {
-                                    wasm_methods.insert(wasm_method);
-                                }
-                            }
-                            _ => (),
+            if let wasmparser::Payload::ExportSection(export_reader) =
+                payload.expect("Failed to parse wasm-smith generated module")
+            {
+                for export in export_reader.into_iter() {
+                    let export = export.expect("Failed to read export");
+                    if export.kind == ExternalKind::Func {
+                        let func_name = export.name;
+                        if let Ok(wasm_method) = WasmMethod::try_from(func_name.to_string()) {
+                            wasm_methods.insert(wasm_method);
                         }
                     }
                 }
-                _ => (),
             }
         }
 
@@ -365,7 +360,7 @@ fn limited_str<'a>(max_size: usize, u: &mut Unstructured<'a>) -> Result<&'a str>
 }
 
 pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
-    let api_type = match wasm_method {
+    match wasm_method {
         // System methods are temporarily used under Update
         WasmMethod::Update(_) | WasmMethod::System(_) => ApiType::update(
             UNIX_EPOCH,
@@ -389,6 +384,5 @@ pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
             None,
             CallContextId::from(0),
         ),
-    };
-    api_type
+    }
 }
