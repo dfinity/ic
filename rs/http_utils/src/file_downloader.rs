@@ -33,6 +33,8 @@ macro_rules! maybe_log {
     ($logger:expr, $level:expr, $($arg:tt)+) => {
         if let Some(logger) = $logger.as_ref() {
             log!(logger, $level, $($arg)+);
+        } else {
+            println!($($arg)+);
         }
     };
 }
@@ -41,6 +43,8 @@ macro_rules! maybe_info {
     (every_n_seconds => $seconds:expr, $logger:expr, $($arg:tt)+) => {
         if let Some(logger) = $logger.as_ref() {
             info!(every_n_seconds => $seconds, logger, $($arg)+);
+        } else {
+            println!($($arg)+);
         }
     };
     ($logger:expr, $($arg:tt)+) => {
@@ -52,6 +56,8 @@ macro_rules! maybe_warn {
     (every_n_seconds => $seconds:expr, $logger:expr, $($arg:tt)+) => {
         if let Some(logger) = $logger.as_ref() {
             warn!(every_n_seconds => $seconds, logger, $($arg)+);
+        } else {
+            eprintln!($($arg)+);
         }
     };
     ($logger:expr, $($arg:tt)+) => {
