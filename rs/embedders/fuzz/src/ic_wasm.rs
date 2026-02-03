@@ -5,6 +5,7 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_utils::validation::{
     RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT, WASM_VALID_SYSTEM_FUNCTIONS,
 };
+use ic_embedders::wasmtime_embedder::system_api::ApiType;
 use ic_management_canister_types_private::Global;
 use ic_types::methods::WasmMethod;
 use lazy_static::lazy_static;
@@ -428,4 +429,33 @@ fn limited_str<'a>(max_size: usize, u: &mut Unstructured<'a>) -> Result<&'a str>
             Ok(s)
         }
     }
+}
+
+pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
+    let api_type = match wasm_method {
+        // System methods are temporarily used under Update
+        WasmMethod::Update(_) | WasmMethod::System(_) => ApiType::update(
+            UNIX_EPOCH,
+            vec![1_u8; 10],
+            Cycles::new(10_000_000_000),
+            user_test_id(24).get(),
+            CallContextId::from(0),
+        ),
+        WasmMethod::Query(_) => ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(24).get(),
+            subnet_test_id(1),
+            vec![1_u8; 10],
+            None,
+        ),
+        WasmMethod::CompositeQuery(_) => ApiType::composite_query(
+            UNIX_EPOCH,
+            user_test_id(24).get(),
+            subnet_test_id(1),
+            vec![1_u8; 10],
+            None,
+            CallContextId::from(0),
+        ),
+    };
+    api_type
 }

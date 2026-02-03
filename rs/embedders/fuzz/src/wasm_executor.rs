@@ -1,4 +1,4 @@
-use crate::ic_wasm::ICWasmModule;
+use crate::ic_wasm::{ICWasmModule, get_system_api_type_for_wasm_method};
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
     subnet_config::SchedulerConfig,
@@ -91,31 +91,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
 #[inline(always)]
 fn setup_wasm_execution_input(wasm_method: &WasmMethod) -> WasmExecutionInput {
     let func_ref = FuncRef::Method(wasm_method.clone());
-    let api_type = match wasm_method {
-        // System methods are temporarily used under Update
-        WasmMethod::Update(_) | WasmMethod::System(_) => ApiType::update(
-            UNIX_EPOCH,
-            vec![1_u8; 10],
-            Cycles::new(10_000_000_000),
-            user_test_id(24).get(),
-            CallContextId::from(0),
-        ),
-        WasmMethod::Query(_) => ApiType::non_replicated_query(
-            UNIX_EPOCH,
-            user_test_id(24).get(),
-            subnet_test_id(1),
-            vec![1_u8; 10],
-            None,
-        ),
-        WasmMethod::CompositeQuery(_) => ApiType::composite_query(
-            UNIX_EPOCH,
-            user_test_id(24).get(),
-            subnet_test_id(1),
-            vec![1_u8; 10],
-            None,
-            CallContextId::from(0),
-        ),
-    };
+    let api_type = get_system_api_type_for_wasm_method(*wasm_method);
     let canister_current_memory_usage = NumBytes::new(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
     let compilation_cache = Arc::new(CompilationCacheBuilder::new().build());

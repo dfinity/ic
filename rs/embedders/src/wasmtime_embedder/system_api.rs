@@ -1245,6 +1245,12 @@ impl SystemApiImpl {
         self.sandbox_safe_system_state.cost_schedule
     }
 
+    /// Note that this function is made public only for the tests
+    #[doc(hidden)]
+    pub fn set_api_type(&mut self, api_type: ApiType) {
+        self.api_type = api_type;
+    }
+
     /// Refunds any cycles used for an outgoing request that doesn't get sent
     /// and returns the result of execution.
     pub fn take_execution_result(
