@@ -2,9 +2,10 @@ use crate::benches::{
     MAX_LIST_ALLOWANCES, NUM_GET_BLOCKS, NUM_OPERATIONS, assert_has_num_balances,
     emulate_archive_blocks, icrc_transfer, mint_tokens, test_account, test_account_offset, upgrade,
 };
+#[cfg(not(feature = "get-blocks-disabled"))]
+use crate::get_blocks;
 use crate::{
-    Access, LOG, get_blocks, icrc2_approve_not_async, icrc3_get_blocks, icrc103_get_allowances,
-    init_state,
+    Access, LOG, icrc2_approve_not_async, icrc3_get_blocks, icrc103_get_allowances, init_state,
 };
 use assert_matches::assert_matches;
 use canbench_rs::{BenchResult, bench};
@@ -116,6 +117,7 @@ fn bench_icrc1_transfers() -> BenchResult {
             let blocks_res = icrc3_get_blocks(vec![req]);
             assert_eq!(blocks_res.blocks.len(), NUM_GET_BLOCKS as usize);
         }
+        #[cfg(not(feature = "get-blocks-disabled"))]
         {
             let req = GetBlocksRequest {
                 start: Nat::from(3 * NUM_OPERATIONS),
