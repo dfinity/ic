@@ -118,6 +118,7 @@ fi
 
 # only support podman
 if [[ ! " ${CONTAINER_CMD[*]} " =~ " podman " ]]; then
+    echo ${CONTAINER_CMD[*]
     eprintln "Only podman is supported as container runtime."
     exit 1
 fi
