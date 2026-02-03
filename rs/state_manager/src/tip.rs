@@ -1679,6 +1679,7 @@ mod test {
 
             let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {
                 certifications_metadata: Default::default(),
+                certifications: Default::default(),
                 states_metadata: Default::default(),
                 snapshots: Default::default(),
                 last_advertised: Height::new(0),

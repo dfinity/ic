@@ -201,6 +201,10 @@ impl StateManager for FakeStateManager {
             .collect()
     }
 
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        vec![]
+    }
+
     fn deliver_state_certification(&self, certification: Certification) {
         let mut snapshots = self.states.write().unwrap();
         if let Some(snapshot) = snapshots
@@ -701,6 +705,10 @@ impl StateManager for RefMockStateManager {
 
     fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)> {
         self.mock.read().unwrap().list_state_hashes_to_certify()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        self.mock.read().unwrap().list_state_heights_to_certify()
     }
 
     fn deliver_state_certification(&self, certification: Certification) {
