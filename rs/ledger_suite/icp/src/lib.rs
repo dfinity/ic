@@ -8,7 +8,7 @@ use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyE
 use ic_ledger_core::{
     approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
-    block::{BlockType, EncodedBlock, FeeCollector},
+    block::{BlockType, EncodedBlock},
     tokens::CheckedAdd,
 };
 use ic_ledger_hash_of::HASH_LENGTH;
