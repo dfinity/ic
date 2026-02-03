@@ -235,7 +235,7 @@ impl MountedPartition for TempDeviceMount {
 
 /// Production filesystem mounter using real system mounts
 #[cfg(target_os = "linux")]
-struct LoopDeviceMounter;
+pub struct LoopDeviceMounter;
 
 #[cfg(target_os = "linux")]
 impl Mounter for LoopDeviceMounter {
