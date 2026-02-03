@@ -140,7 +140,7 @@ proptest! {
                 current_balances.insert(account,Nat(BigUint::zero()));
             }
 
-            blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10,Arc::new(AsyncMutex::new(vec![])), RecurrencyMode::OneShot, Box::new(|| {})).await.unwrap();
+            blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10,Arc::new(AsyncMutex::new(vec![])), RecurrencyMode::OneShot, Box::new(|| {}), false).await.unwrap();
             storage_client.update_account_balances().await.unwrap();
 
             let mut block_indices_iter = block_indices.into_iter().collect::<Vec<u64>>();
@@ -199,6 +199,7 @@ fn test_self_transfer() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
+            false,
         )
         .await
         .unwrap();
@@ -235,6 +236,7 @@ fn test_self_transfer() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
+            false,
         )
         .await
         .unwrap();
@@ -320,6 +322,7 @@ fn test_burn_and_mint_fee() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
+            false,
         )
         .await
         .unwrap();
@@ -366,6 +369,7 @@ fn test_burn_and_mint_fee() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
+            false,
         )
         .await
         .unwrap();

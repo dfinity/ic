@@ -316,6 +316,7 @@ async fn main() -> Result<()> {
         }
 
         info!("Starting to sync blocks");
+        let use_icrc3 = config.icrc3;
         let futures = token_app_states
             .token_states
             .values()
@@ -327,6 +328,7 @@ async fn main() -> Result<()> {
                     shared_state.archive_canister_ids.clone(),
                     RecurrencyMode::OneShot,
                     Box::new(|| {}), // <-- no-op heartbeat
+                    use_icrc3,
                 )
                 .await
             });
@@ -400,6 +402,7 @@ async fn main() -> Result<()> {
         )?;
     }
 
+    let use_icrc3 = config.icrc3;
     if !config.offline {
         // For each token state, spawn a watchdog thread that repeatedly syncs blocks.
         for shared_state in token_app_states.token_states.values() {
@@ -450,6 +453,7 @@ async fn main() -> Result<()> {
                                         backoff_factor: 2,
                                     }),
                                     Box::new(heartbeat),
+                                    use_icrc3,
                                 )
                                 .await
                                 {
