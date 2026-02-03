@@ -57,7 +57,7 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
 # Add motoko compiler
-ARG motoko_version=0.14.7
+ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 # Create user groups needed for github actions runner
