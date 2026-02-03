@@ -1,10 +1,7 @@
 use crate::ic_wasm::{ICWasmModule, get_system_api_type_for_wasm_method};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::wasmtime_embedder::system_api::ApiType;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
-use ic_test_utilities_types::ids::user_test_id;
 use ic_types::methods::{FuncRef, WasmMethod};
-use ic_types::{Cycles, messages::CallContextId, time::UNIX_EPOCH};
 use libfuzzer_sys::Corpus;
 use std::collections::BTreeSet;
 
@@ -18,13 +15,6 @@ pub fn run_fuzzer(module: ICWasmModule) -> Corpus {
     let instance_result = WasmtimeInstanceBuilder::new()
         .with_wasm(wasm)
         .with_config(config)
-        .with_api_type(ApiType::update(
-            UNIX_EPOCH,
-            vec![1_u8; 10],
-            Cycles::new(10_000_000_000),
-            user_test_id(24).get(),
-            CallContextId::from(0),
-        ))
         .try_build();
     let mut instance = match instance_result {
         Ok(instance) => instance,

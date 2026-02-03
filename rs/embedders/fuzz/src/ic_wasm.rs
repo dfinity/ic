@@ -177,7 +177,14 @@ impl ICWasmModule {
                     if export.kind == ExternalKind::Func {
                         let func_name = export.name;
                         if let Ok(wasm_method) = WasmMethod::try_from(func_name.to_string()) {
-                            wasm_methods.insert(wasm_method);
+                            match wasm_method {
+                                WasmMethod::Query(_)
+                                | WasmMethod::CompositeQuery(_)
+                                | WasmMethod::Update(_) => {
+                                    wasm_methods.insert(wasm_method);
+                                }
+                                _ => (),
+                            }
                         }
                     }
                 }
@@ -362,7 +369,7 @@ fn limited_str<'a>(max_size: usize, u: &mut Unstructured<'a>) -> Result<&'a str>
 pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
     match wasm_method {
         // System methods are temporarily used under Update
-        WasmMethod::Update(_) | WasmMethod::System(_) => ApiType::update(
+        WasmMethod::Update(_) => ApiType::update(
             UNIX_EPOCH,
             vec![1_u8; 10],
             Cycles::new(10_000_000_000),
@@ -384,5 +391,6 @@ pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
             None,
             CallContextId::from(0),
         ),
+        WasmMethod::System(_) => unimplemented!(),
     }
 }
