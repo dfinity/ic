@@ -746,18 +746,18 @@ fn test_icrc3_vs_legacy_callback_method_names() {
         // - Legacy response has `first_index` field
         // - ICRC-3 response has `log_length` field and blocks contain `id` (BlockWithId)
         assert!(
-            legacy_response.first_index >= Nat::from(0u64),
+            legacy_response.first_index >= 0u64,
             "Legacy response should have first_index"
         );
         assert!(
-            icrc3_response.log_length > Nat::from(0u64),
+            icrc3_response.log_length > 0u64,
             "ICRC-3 response should have log_length"
         );
 
         // Verify ICRC-3 blocks have IDs
         for block_with_id in &icrc3_response.blocks {
             assert!(
-                block_with_id.id >= Nat::from(0u64),
+                block_with_id.id >= 0u64,
                 "ICRC-3 blocks should have id field"
             );
         }
