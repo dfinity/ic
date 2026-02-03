@@ -761,7 +761,7 @@ fn test_cycles_for_archive_creation_default_spawns_archive() {
 
 #[test]
 fn test_fee_collector_107_access_denied() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_access_denied(
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_access_denied(
         ledger_wasm(),
         encode_init_args,
     );
@@ -769,7 +769,7 @@ fn test_fee_collector_107_access_denied() {
 
 #[test]
 fn test_fee_collector_107_smoke() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_smoke(
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_smoke(
         ledger_wasm(),
         encode_init_args,
     );
@@ -782,16 +782,14 @@ fn test_fee_collector_107_with_proptest() {
         .with_minting_account(minter.sender().unwrap())
         .with_transfer_fee(FEE);
     let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_with_proptest::<Tokens>(
-        ledger_wasm(),
-        init_args,
-        minter,
-    );
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_with_proptest::<
+        Tokens,
+    >(ledger_wasm(), init_args, minter);
 }
 
 #[test]
 fn test_fee_collector_107_upgrade() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade(
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_upgrade(
         ledger_wasm(),
         encode_init_args,
     );
@@ -799,7 +797,7 @@ fn test_fee_collector_107_upgrade() {
 
 #[test]
 fn test_fee_collector_107_init() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_init(
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_init(
         ledger_wasm(),
         encode_init_args,
     );
@@ -807,7 +805,7 @@ fn test_fee_collector_107_init() {
 
 #[test]
 fn test_fee_collector_107_upgrade_legacy() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy::<
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_upgrade_legacy::<
         LedgerArgument,
         Tokens,
     >(ledger_mainnet_v5_wasm(), ledger_wasm(), encode_init_args);
