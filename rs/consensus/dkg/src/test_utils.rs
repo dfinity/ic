@@ -17,10 +17,7 @@ use ic_types::{
     },
     messages::CallbackId,
 };
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
     state_manager: Arc<RefMockStateManager>,
@@ -85,39 +82,6 @@ pub(super) fn complement_state_manager_with_reshare_chain_key_request(
     let expectation = mock
         .expect_get_state_at()
         .return_const(Ok(Labeled::new(Height::new(0), Arc::new(state))));
-    if let Some(times) = times {
-        expectation.times(times);
-    }
-}
-
-pub(super) fn complement_state_manager_with_remote_dkg_requests(
-    state_manager: Arc<RefMockStateManager>,
-    registry_version: RegistryVersion,
-    node_ids: Vec<u64>,
-    times: Option<usize>,
-    target_id: NiDkgTargetId,
-) {
-    // Add the context into state_manager.
-    let nodes_in_target_subnet: BTreeSet<_> = node_ids.into_iter().map(node_test_id).collect();
-    let mut state = ic_test_utilities_state::get_initial_state(0, 0);
-    state
-        .metadata
-        .subnet_call_context_manager
-        .push_context(SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
-            request: RequestBuilder::new().build(),
-            nodes_in_target_subnet: nodes_in_target_subnet.clone(),
-            target_id,
-            registry_version,
-            time: state.time(),
-        }));
-
-    let mut mock = state_manager.get_mut();
-    let expectation =
-        mock.expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(state),
-            )));
     if let Some(times) = times {
         expectation.times(times);
     }

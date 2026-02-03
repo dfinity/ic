@@ -482,8 +482,8 @@ mod tests {
     }
 
     #[test]
-    fn validate_dealings_payload_when_remote_transcripts_present_fails_test() {
-        // Data payloads with early/remote transcripts are rejected for now.
+    fn validate_dealings_payload_when_invalid_early_remote_transcripts_present_fails_test() {
+        // Data payloads with invalid early/remote transcripts are rejected.
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let registry_version = 1;
             let committee = [NODE_1, NODE_2, NODE_3];
