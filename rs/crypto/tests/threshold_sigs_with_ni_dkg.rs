@@ -1100,14 +1100,8 @@ mod verification_failures {
         assert_matches!(result, Err(CryptoError::ThresholdSigDataNotFound { .. }));
     }
 
-    // This test documents a bug: corrupting signature bytes can cause a panic instead of
-    // returning a proper error. The production code has an `unreachable!` that assumes
-    // MalformedSignature errors can't occur for threshold signatures, but corrupted bytes
-    // can produce invalid curve point encodings that trigger this path.
-    //
-    // When this bug is fixed, this test should be updated to expect an error instead of panic.
     #[test]
-    fn should_not_panic_on_corrupted_signature_bytes_but_currently_does() {
+    fn should_signature_verification_reject_invalid_point_as_signature() {
         let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(1..7);
         let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
@@ -1130,14 +1124,14 @@ mod verification_failures {
 
         let verifier = random_node_in(config.receivers().get(), rng);
 
-        // BUG: This panics with "This case cannot occur" instead of returning
-        // Err(CryptoError::MalformedSignature { .. })
-        let _result = crypto_for(verifier, &crypto_components).verify_threshold_sig_share(
+        let result = crypto_for(verifier, &crypto_components).verify_threshold_sig_share(
             &corrupted_sig_share,
             &msg,
             &dkg_id,
             signer,
         );
+
+        assert_matches!(result, Err(CryptoError::MalformedSignature { .. }));
     }
 
     #[test]
