@@ -11,7 +11,6 @@ use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version_with_retries,
     rw_message::store_message,
-    set_sandbox_env_vars,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
@@ -45,7 +44,7 @@ use slog::{Logger, info};
 use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(8)),
+    vcpus: Some(NrOfVCPUs::new(16)),
     memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
     boot_image_minimal_size_gibibytes: None,
 };
@@ -252,8 +251,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             vec![upgrade_image_url.to_string()],
         ));
     }
-
-    set_sandbox_env_vars();
 
     let output_dir = env.get_path("recovery_output");
 

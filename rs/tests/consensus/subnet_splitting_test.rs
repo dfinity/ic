@@ -26,14 +26,11 @@ Success::
 end::catalog[] */
 
 use ic_base_types::SubnetId;
-use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
-use ic_consensus_system_test_utils::{
-    rw_message::{
-        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-        store_message,
-    },
-    set_sandbox_env_vars,
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+    store_message,
 };
+use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
 use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -93,13 +90,6 @@ fn setup(env: TestEnv) {
 }
 
 fn subnet_splitting_test(env: TestEnv) {
-    // System tests receive paths relative to the RUNFILES. These need to be translated to absolute
-    // paths for the underlying tools (and the environment variable name needs to be adapted).
-    set_var_to_path(
-        "IC_ADMIN_BIN",
-        get_dependency_path_from_env("IC_ADMIN_PATH"),
-    );
-
     //
     // 1. Prepare for subnet splitting
     //
@@ -124,7 +114,6 @@ fn subnet_splitting_test(env: TestEnv) {
     let upload_node_destination = prepare_destination_subnet(&destination_subnet, &logger);
 
     let recovery_dir = tempdir().unwrap().path().to_path_buf();
-    set_sandbox_env_vars();
 
     //
     // 2. Do subnet splitting
@@ -428,6 +417,7 @@ fn canister_id_from_principal(principal: Principal) -> CanisterId {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        .without_assert_no_replica_restarts()
         .add_test(systest!(subnet_splitting_test))
         .execute_from_args()
 }
