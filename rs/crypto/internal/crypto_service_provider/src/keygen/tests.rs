@@ -27,13 +27,13 @@ mod gen_node_siging_key_pair_tests {
         assert_eq!(
             key_id,
             KeyId::from(hex_to_32_bytes(
-                "be652632635fa33651721671afa29c576396beaec8af0d8ba819605fc7dea8e4"
+                "d8a7982f97cd4a0ada45c79097539369e9889fcc3f1e67980f8b3bfa5da727ee"
             )),
         );
         assert_eq!(
             public_key,
             CspPublicKey::ed25519_from_hex(
-                "78eda21ba04a15e2000fe8810fe3e56741d23bb9ae44aa9d5bb21b76675ff34b"
+                "1f0abb7f886948b128d9df507865f295c913c11bac99b401be4095bfc6870807"
             )
         );
         assert_eq!(
@@ -289,7 +289,7 @@ mod tls {
         assert_eq!(
             key_id,
             KeyId::from(hex_to_32_bytes(
-                "3315cdead5f0368cfff6cb9c4c162ec49c14f1e912d4887271fba940a46efa68"
+                "d4e30d68abf2c67d5e37390a1331fc67e84cdd00a34df5daa6723d1ca18df8f9"
             )),
         );
         assert_eq!(

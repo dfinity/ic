@@ -367,17 +367,12 @@ impl From<Principal> for RawNodeId {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
-pub struct TickConfigs {
-    pub blockmakers: Option<BlockmakerConfigs>,
+pub struct RawTickConfigs {
+    pub blockmakers: Option<Vec<RawSubnetBlockmakers>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct BlockmakerConfigs {
-    pub blockmakers_per_subnet: Vec<RawSubnetBlockmaker>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct RawSubnetBlockmaker {
+pub struct RawSubnetBlockmakers {
     pub subnet: RawSubnetId,
     pub blockmaker: RawNodeId,
     pub failed_blockmakers: Vec<RawNodeId>,
@@ -557,8 +552,6 @@ pub enum IcpConfigFlag {
 pub struct IcpConfig {
     /// Beta features (disabled on the ICP mainnet).
     pub beta_features: Option<IcpConfigFlag>,
-    /// Canister backtraces (enabled on the ICP mainnet).
-    pub canister_backtrace: Option<IcpConfigFlag>,
     /// Limits on function name length in canister WASM (enabled on the ICP mainnet).
     pub function_name_length_limits: Option<IcpConfigFlag>,
     /// Rate-limiting of canister execution (enabled on the ICP mainnet).
@@ -611,9 +604,12 @@ pub struct IcpFeatures {
     /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
     /// Subnets: NNS.
     pub nns_ui: Option<IcpFeaturesConfig>,
-    /// Deploys the bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
+    /// Deploys the Bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
     /// Subnets: Bitcoin.
     pub bitcoin: Option<IcpFeaturesConfig>,
+    /// Deploys the Dogecoin canister under the mainnet canister ID `gordg-fyaaa-aaaan-aaadq-cai` and configured for the regtest network.
+    /// Subnets: Bitcoin.
+    pub dogecoin: Option<IcpFeaturesConfig>,
     /// Deploys the canister migration orchestrator canister.
     /// Subnets: NNS.
     pub canister_migration: Option<IcpFeaturesConfig>,
@@ -646,9 +642,11 @@ pub struct InstanceConfig {
     pub icp_config: Option<IcpConfig>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
+    pub dogecoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
     pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
+    pub mainnet_nns_subnet_id: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -801,6 +799,7 @@ impl ExtendedSubnetConfigSet {
             ii,
             nns_ui,
             bitcoin,
+            dogecoin,
             canister_migration,
         } = icp_features;
         // NNS canisters
@@ -833,7 +832,7 @@ impl ExtendedSubnetConfigSet {
             }
         }
         // canisters on the Bitcoin subnet
-        for (flag, icp_feature_str) in [(bitcoin, "bitcoin")] {
+        for (flag, icp_feature_str) in [(bitcoin, "bitcoin"), (dogecoin, "dogecoin")] {
             if flag.is_some() {
                 check_empty_subnet(&self.bitcoin, "Bitcoin", icp_feature_str)?;
                 self.bitcoin = Some(self.bitcoin.unwrap_or_default());
@@ -1092,4 +1091,29 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
             additional_responses: mock_canister_http_response.additional_responses,
         }
     }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotDownload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotUpload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    pub replace_snapshot: Option<RawCanisterSnapshotId>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
 }

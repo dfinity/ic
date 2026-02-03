@@ -6,7 +6,7 @@ Runbook::
 . setup the testnet of 3f + 1 nodes
 . pick a random node and install the universal canister through it
 . install some state sync test canisters through it
-. expand the heap of all canisters to `size_level` * 128 MiB
+. expand the heap of all canisters to `canister_size_gib` * 1 GiB
 . pick another random node rejoin_node and wait for it creating a checkpoint
 . kill the rejoined node and wait for the subnet producing a new CUP
 . kill f random nodes
@@ -27,13 +27,11 @@ use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::block_on;
 use ic_types::Height;
 use rejoin_test_lib::rejoin_test_large_state;
 use std::time::Duration;
@@ -41,11 +39,14 @@ use std::time::Duration;
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
 const NUM_NODES: usize = 4;
-const SIZE_LEVEL: usize = 8;
+
+// Increasing the total size of all canisters results in a more rigorous test, but will also increase state sync completion time.
+// When adjusting canister size in manual test runs, it is recommended to also increase retry timeout and backoff values accordingly.
+const CANISTER_SIZE_GIB: u64 = 2;
 const NUM_CANISTERS: usize = 8;
 
 fn main() -> Result<()> {
-    let config = Config::new(NUM_NODES, SIZE_LEVEL, NUM_CANISTERS);
+    let config = Config::new(NUM_NODES, CANISTER_SIZE_GIB, NUM_CANISTERS);
     let test = config.clone().test();
     SystemTestGroup::new()
         .with_setup(config.build())
@@ -61,15 +62,15 @@ const DKG_INTERVAL: u64 = 99;
 #[derive(Clone, Debug)]
 pub struct Config {
     nodes_count: usize,
-    size_level: usize,
+    canister_size_gib: u64,
     num_canisters: usize,
 }
 
 impl Config {
-    pub fn new(nodes_count: usize, size_level: usize, num_canisters: usize) -> Config {
+    pub fn new(nodes_count: usize, canister_size_gib: u64, num_canisters: usize) -> Config {
         Config {
             nodes_count,
-            size_level,
+            canister_size_gib,
             num_canisters,
         }
     }
@@ -91,24 +92,16 @@ fn setup(env: TestEnv, config: Config) {
         config.nodes_count >= 4,
         "at least 4 nodes are required for state sync"
     );
-    assert!(
-        config.size_level >= 1 && config.size_level <= 8,
-        "the size level should be between 1 and 8"
-    );
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_default_vm_resources(VmResources {
                     vcpus: None,
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(
-                        (24 + 2 * config.num_canisters as u64) * 1024 * 1024,
+                        (24 + config.canister_size_gib * config.num_canisters as u64) * 1024 * 1024,
                     )),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
-                        100 + 2 * config.num_canisters as u64,
+                        100 + 2 * config.canister_size_gib * config.num_canisters as u64,
                     )),
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -124,15 +117,9 @@ fn setup(env: TestEnv, config: Config) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-
-    env.sync_with_prometheus();
 }
 
 fn test(env: TestEnv, config: Config) {
-    block_on(test_async(env, config));
-}
-
-async fn test_async(env: TestEnv, config: Config) {
     let mut nodes = env.topology_snapshot().root_subnet().nodes();
     let agent_node = nodes.next().unwrap();
     let rejoin_node = nodes.next().unwrap();
@@ -140,12 +127,11 @@ async fn test_async(env: TestEnv, config: Config) {
     rejoin_test_large_state(
         env,
         allowed_failures,
-        config.size_level,
+        config.canister_size_gib,
         config.num_canisters,
         DKG_INTERVAL,
         rejoin_node.clone(),
         agent_node.clone(),
         nodes.take(allowed_failures),
     )
-    .await;
 }

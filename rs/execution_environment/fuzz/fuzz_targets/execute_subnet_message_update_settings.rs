@@ -30,7 +30,7 @@ fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
             let controllers = &test.canister_state(canister_id).system_state.controllers;
             let compute_allocation = test
                 .canister_state(canister_id)
-                .scheduler_state
+                .system_state
                 .compute_allocation
                 .as_percent();
             let memory_allocation = test

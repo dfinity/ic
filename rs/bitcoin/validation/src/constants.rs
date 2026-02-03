@@ -126,7 +126,6 @@ pub fn max_target(network: &Network) -> Target {
         Network::Testnet4 => Target::MAX_ATTAINABLE_TESTNET,
         Network::Regtest => Target::MAX_ATTAINABLE_REGTEST,
         Network::Signet => Target::MAX_ATTAINABLE_SIGNET,
-        &other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 
@@ -136,7 +135,6 @@ pub fn no_pow_retargeting(network: &Network) -> bool {
     match network {
         Network::Bitcoin | Network::Testnet | Network::Signet | Network::Testnet4 => false,
         Network::Regtest => true,
-        &other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 
@@ -148,7 +146,6 @@ pub fn pow_limit_bits(network: &Network) -> CompactTarget {
         Network::Testnet4 => 0x1d00ffff,
         Network::Regtest => 0x207fffff,
         Network::Signet => 0x1e0377ae,
-        &other => unreachable!("Unsupported network: {:?}", other),
     })
 }
 
@@ -160,7 +157,6 @@ pub fn checkpoints(network: &Network) -> HashMap<BlockHeight, BlockHash> {
         Network::Testnet4 => BITCOIN_TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
-        _ => &[],
     };
     points
         .iter()
@@ -180,7 +176,6 @@ pub fn latest_checkpoint_height(network: &Network, current_height: BlockHeight) 
         Network::Testnet4 => BITCOIN_TESTNET4,
         Network::Signet => &[],
         Network::Regtest => &[],
-        _ => &[],
     };
 
     points

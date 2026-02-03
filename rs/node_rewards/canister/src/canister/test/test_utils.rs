@@ -2,7 +2,6 @@
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::MetricsManager;
 use crate::storage::{METRICS_MANAGER, NaiveDateStorable};
-use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::NodeMetricsHistoryRecord;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_registry_canister_client::RegistryDataStableMemory;
@@ -45,7 +44,7 @@ pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Rc<M
     let fake_registry = Arc::new(FakeRegistry::new());
     let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
     mock.expect_node_metrics_history()
-        .return_const(CallResult::Ok(vec![NodeMetricsHistoryRecord {
+        .return_const(Ok(vec![NodeMetricsHistoryRecord {
             timestamp_nanos: 0,
             node_metrics: vec![],
         }]));

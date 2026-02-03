@@ -5,7 +5,7 @@ use rand::Rng;
 
 // Returns a random element of Gt
 fn gt_rand<R: Rng>(rng: &mut R) -> Gt {
-    let g1 = G1Affine::hash(b"ic-crypto-test-gt-random", &rng.r#gen::<[u8; 32]>());
+    let g1 = G1Affine::hash("ic-crypto-test-gt-random", &rng.r#gen::<[u8; 32]>());
     let g2 = G2Affine::generator();
     Gt::pairing(&g1, g2)
 }

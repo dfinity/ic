@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, CountBytes, Cycles, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
@@ -54,7 +54,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
-    CanisterHttpRequestArgs, DataSize, HttpHeader, HttpMethod, TransformContext,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, CanisterHttpRequestArgs,
+    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, DataSize, HttpHeader, HttpMethod,
+    PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, TransformContext,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -68,6 +70,7 @@ use std::{
     mem::size_of,
     time::Duration,
 };
+use strum::FromRepr;
 use strum_macros::EnumIter;
 
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
@@ -130,6 +133,33 @@ pub struct CanisterHttpRequestContext {
     pub time: Time,
     /// The replication strategy for this request.
     pub replication: Replication,
+    pub pricing_version: PricingVersion,
+    pub refund_status: RefundStatus,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct RefundStatus {
+    /// The amount of cycles that are available to be refunded for this request.
+    /// The amount is calculated based to the payment of the request.
+    pub refundable_cycles: Cycles,
+    /// The amount of cycles that are allowed to be refunded for this request.
+    /// The allowance is calculated based on the subnet size: per_replica_allowance = refundable_cycles / subnet_size.
+    pub per_replica_allowance: Cycles,
+    /// The amount of cycles that have already been refunded for this request.
+    /// Invariant: refunded_cycles <= refundable_cycles
+    pub refunded_cycles: Cycles,
+    pub refunding_nodes: BTreeSet<NodeId>,
+}
+
+impl Default for RefundStatus {
+    fn default() -> Self {
+        Self {
+            refundable_cycles: Cycles::new(0),
+            per_replica_allowance: Cycles::new(0),
+            refunded_cycles: Cycles::new(0),
+            refunding_nodes: BTreeSet::new(),
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -138,6 +168,13 @@ pub enum Replication {
     FullyReplicated,
     /// The request is not replicated, i.e. only the node with the given `NodeId` will attempt the http request.
     NonReplicated(NodeId),
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
+#[repr(u32)]
+pub enum PricingVersion {
+    Legacy = PRICING_VERSION_LEGACY,
+    PayAsYouGo = PRICING_VERSION_PAY_AS_YOU_GO,
 }
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
@@ -155,6 +192,28 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
 
         let replication_message = pb_metadata::Replication {
             replication_type: Some(replication_type),
+        };
+
+        let pricing_version = match context.pricing_version {
+            PricingVersion::Legacy => pb_metadata::pricing_version::Version::Legacy(()),
+            PricingVersion::PayAsYouGo => pb_metadata::pricing_version::Version::PayAsYouGo(()),
+        };
+
+        let pricing_message = pb_metadata::PricingVersion {
+            version: Some(pricing_version),
+        };
+
+        let refund_status = pb_metadata::RefundStatus {
+            refundable_cycles: Some(context.refund_status.refundable_cycles.into()),
+            per_replica_allowance: Some(context.refund_status.per_replica_allowance.into()),
+            refunded_cycles: Some(context.refund_status.refunded_cycles.into()),
+            refunding_nodes: context
+                .refund_status
+                .refunding_nodes
+                .iter()
+                .copied()
+                .map(node_id_into_protobuf)
+                .collect(),
         };
 
         pb_metadata::CanisterHttpRequestContext {
@@ -184,8 +243,15 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
             http_method: pb_metadata::HttpMethod::from(&context.http_method).into(),
             time: context.time.as_nanos_since_unix_epoch(),
             replication: Some(replication_message),
+            pricing_version: Some(pricing_message),
+            refund_status: Some(refund_status),
         }
     }
+}
+
+pub fn default_pricing_version() -> PricingVersion {
+    PricingVersion::from_repr(DEFAULT_HTTP_OUTCALLS_PRICING_VERSION)
+        .unwrap_or(PricingVersion::Legacy)
 }
 
 impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestContext {
@@ -206,6 +272,40 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 None => Replication::FullyReplicated,
             },
             None => Replication::FullyReplicated,
+        };
+
+        let pricing_version = match context.pricing_version {
+            Some(pricing_version) => match pricing_version.version {
+                Some(pb_metadata::pricing_version::Version::Legacy(_)) => PricingVersion::Legacy,
+                Some(pb_metadata::pricing_version::Version::PayAsYouGo(_)) => {
+                    PricingVersion::PayAsYouGo
+                }
+                None => default_pricing_version(),
+            },
+            None => default_pricing_version(),
+        };
+
+        let refund_status = match context.refund_status {
+            Some(refund_status) => RefundStatus {
+                refundable_cycles: refund_status
+                    .refundable_cycles
+                    .map(Into::into)
+                    .unwrap_or_default(),
+                per_replica_allowance: refund_status
+                    .per_replica_allowance
+                    .map(Into::into)
+                    .unwrap_or_default(),
+                refunded_cycles: refund_status
+                    .refunded_cycles
+                    .map(Into::into)
+                    .unwrap_or_default(),
+                refunding_nodes: refund_status
+                    .refunding_nodes
+                    .into_iter()
+                    .map(node_id_try_from_protobuf)
+                    .collect::<Result<BTreeSet<NodeId>, ProxyDecodeError>>()?,
+            },
+            None => RefundStatus::default(),
         };
 
         let transform_method_name = context.transform_method_name;
@@ -256,6 +356,8 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             transform,
             time: Time::from_nanos_since_unix_epoch(context.time),
             replication,
+            pricing_version,
+            refund_status,
         })
     }
 }
@@ -333,6 +435,7 @@ impl CanisterHttpRequestContext {
         request: &Request,
         args: CanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
+        subnet_size: usize,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         if let Some(transform_principal_id) = args.transform_principal()
@@ -415,6 +518,20 @@ impl CanisterHttpRequestContext {
             transform: args.transform.map(From::from),
             time,
             replication,
+            pricing_version: {
+                let final_version_u32 = args
+                    .pricing_version
+                    .filter(|v| ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS.contains(v))
+                    .unwrap_or(DEFAULT_HTTP_OUTCALLS_PRICING_VERSION);
+                PricingVersion::from_repr(final_version_u32).unwrap_or(PricingVersion::Legacy)
+            },
+            refund_status: RefundStatus {
+                //TODO(IC-1937): subtract the base fee from the refundable amount.
+                refundable_cycles: request.payment,
+                per_replica_allowance: request.payment / subnet_size.max(1),
+                refunded_cycles: Cycles::new(0),
+                refunding_nodes: BTreeSet::new(),
+            },
         })
     }
 }
@@ -448,7 +565,6 @@ pub enum CanisterHttpRequestContextError {
     TooLongHeaderValue(usize),
     TooLargeHeaders(usize),
     TooLargeRequest(usize),
-    NonReplicatedNotSupported,
     NoNodesAvailableForDelegation,
 }
 
@@ -502,10 +618,6 @@ impl From<CanisterHttpRequestContextError> for UserError {
                 format!(
                     "total number of bytes to represent all http header names and values and http body {total_request_size} exceeds {MAX_CANISTER_HTTP_REQUEST_BYTES}"
                 ),
-            ),
-            CanisterHttpRequestContextError::NonReplicatedNotSupported => UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "Canister HTTP requests with is_replicated=false are not supported".to_string(),
             ),
             CanisterHttpRequestContextError::NoNodesAvailableForDelegation => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
@@ -755,6 +867,7 @@ mod tests {
 
     use super::*;
 
+    use ic_types_test_utils::ids::node_test_id;
     use strum::IntoEnumIterator;
 
     #[test]
@@ -784,6 +897,8 @@ mod tests {
             },
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
+            pricing_version: PricingVersion::Legacy,
+            refund_status: RefundStatus::default(),
         };
 
         let expected_size = context.url.len()
@@ -827,6 +942,8 @@ mod tests {
             },
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
+            pricing_version: PricingVersion::Legacy,
+            refund_status: RefundStatus::default(),
         };
 
         let expected_size = context.url.len()
@@ -859,6 +976,47 @@ mod tests {
                 .collect::<Vec<i32>>(),
             [1, 2, 3]
         );
+    }
+
+    #[test]
+    fn canister_http_request_context_proto_round_trip() {
+        let initial = CanisterHttpRequestContext {
+            url: "https://example.com".to_string(),
+            headers: vec![CanisterHttpHeader {
+                name: "Content-Type".to_string(),
+                value: "application/json".to_string(),
+            }],
+            body: Some(b"{\"hello\":\"world\"}".to_vec()),
+            max_response_bytes: Some(NumBytes::from(1234)),
+            http_method: CanisterHttpMethod::POST,
+            transform: Some(Transform {
+                method_name: "transform_response".to_string(),
+                context: vec![1, 2, 3],
+            }),
+            request: Request {
+                receiver: CanisterId::ic_00(),
+                sender: CanisterId::ic_00(),
+                sender_reply_callback: CallbackId::from(3),
+                payment: Cycles::new(10),
+                method_name: "transform".to_string(),
+                method_payload: Vec::new(),
+                metadata: Default::default(),
+                deadline: NO_DEADLINE,
+            },
+            time: UNIX_EPOCH,
+            replication: Replication::NonReplicated(node_test_id(42)),
+            pricing_version: PricingVersion::PayAsYouGo,
+            refund_status: RefundStatus {
+                refundable_cycles: Cycles::new(13_000_000),
+                per_replica_allowance: Cycles::new(1_000_000),
+                refunded_cycles: Cycles::new(123),
+                refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
+            },
+        };
+
+        let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
+        let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
+        assert_eq!(initial, round_trip);
     }
 }
 

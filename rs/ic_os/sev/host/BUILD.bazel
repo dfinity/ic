@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+rust_library(
+    name = "host",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = [
+        "fixtures/mock_amd_key_server_response.crt",
+    ],
+    crate_name = "sev_host",
+    deps = [
+        "@crate_index//:anyhow",
+        "@crate_index//:der",
+        "@crate_index//:mockall",
+        "@crate_index//:reqwest",
+        "@crate_index//:sev",
+        "@crate_index//:tempfile",
+    ],
+)
+
+rust_test(
+    name = "host_test",
+    crate = ":host",
+    tags = ["requires-network"],
+    deps = [
+        "@crate_index//:pem",
+        "@crate_index//:rcgen",
+        "@crate_index//:tokio",
+    ],
+)

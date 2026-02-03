@@ -120,3 +120,5 @@ ic-nervous-system-integration-tests = { path = "../../nervous_system/integration
 ic-nns-test-utils-golden-nns-state = { path = "../test_utils/golden_nns_state" }
 ic-registry-canister-api = { path = "../../registry/canister/api" }
 pretty_assertions = { workspace = true }
+rewards-calculation = { path = "../../node_rewards/rewards_calculation" }
+chrono = { workspace = true }

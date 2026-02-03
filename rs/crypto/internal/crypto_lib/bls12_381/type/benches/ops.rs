@@ -8,7 +8,7 @@ use std::sync::Arc;
 const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(100);
 
 fn random_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Projective {
-    G1Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
+    G1Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
@@ -20,7 +20,7 @@ fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
 }
 
 fn random_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Projective {
-    G2Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
+    G2Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g2<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G2Projective> {
@@ -91,6 +91,15 @@ fn g1_muln_instance<R: Rng + CryptoRng>(
     (points, scalars)
 }
 
+fn g1_muln_affine_instance<R: Rng + CryptoRng>(
+    terms: usize,
+    rng: &mut R,
+) -> (Vec<G1Affine>, Vec<Scalar>) {
+    let (points, scalars) = g1_muln_instance(terms, rng);
+    let points = G1Projective::batch_normalize(&points);
+    (points, scalars)
+}
+
 fn g1_sparse_muln_instance<R: Rng + CryptoRng>(
     terms: usize,
     num_bits: u8,
@@ -116,6 +125,15 @@ fn g2_muln_instance<R: Rng + CryptoRng>(
         points.push(random_g2(rng));
         scalars.push(random_scalar(rng));
     }
+    (points, scalars)
+}
+
+fn g2_muln_affine_instance<R: Rng + CryptoRng>(
+    terms: usize,
+    rng: &mut R,
+) -> (Vec<G2Affine>, Vec<Scalar>) {
+    let (points, scalars) = g2_muln_instance(terms, rng);
+    let points = G2Projective::batch_normalize(&points);
     (points, scalars)
 }
 
@@ -188,7 +206,7 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
             || random_scalar(rng),
-            |pt| pt.serialize(),
+            |s| s.serialize(),
             BatchSize::SmallInput,
         )
     });
@@ -257,7 +275,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
-            || random_g1(rng),
+            || random_g1(rng).to_affine(),
             |pt| pt.serialize(),
             BatchSize::SmallInput,
         )
@@ -265,16 +283,16 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
-            || random_g1(rng).serialize(),
-            |bytes| G1Projective::deserialize(bytes),
+            || random_g1(rng).to_affine().serialize(),
+            |bytes| G1Affine::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
-            || random_g1(rng).serialize(),
-            |bytes| G1Projective::deserialize_unchecked(bytes),
+            || random_g1(rng).to_affine().serialize(),
+            |bytes| G1Affine::deserialize_unchecked(bytes),
             BatchSize::SmallInput,
         )
     });
@@ -282,7 +300,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
             || rng.r#gen::<[u8; 32]>(),
-            |bytes| G1Projective::hash(b"dst", bytes.as_slice()),
+            |bytes| G1Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
     });
@@ -311,6 +329,14 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || (random_g1(rng), random_scalar(rng)),
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply_vartime", |b| {
+        b.iter_batched_ref(
+            || (random_g1(rng).to_affine(), random_scalar(rng)),
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -344,6 +370,23 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
                 )
             },
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g1(rng).to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(rng),
+                )
+            },
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -402,6 +445,13 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
                 BatchSize::SmallInput,
             )
         });
+        group.bench_function(format!("multiexp_muln_affine_{n}"), |b| {
+            b.iter_batched_ref(
+                || g1_muln_affine_instance(n, rng),
+                |(points, scalars)| G1Projective::muln_affine_vartime(&points[..], &scalars[..]),
+                BatchSize::SmallInput,
+            )
+        });
     }
 
     group.bench_function("multiexp_muln_sparse_32_inputs_16_bits", |b| {
@@ -425,7 +475,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
-            || random_g2(rng),
+            || random_g2(rng).to_affine(),
             |pt| pt.serialize(),
             BatchSize::SmallInput,
         )
@@ -433,16 +483,36 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
-            |bytes| G2Projective::deserialize(bytes),
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
-            |bytes| G2Projective::deserialize_unchecked(bytes),
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize_unchecked(bytes),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("deserialize_cached", |b| {
+        b.iter_batched_ref(
+            || {
+                (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100))
+                    .to_affine()
+                    .serialize()
+            },
+            |bytes| G2Affine::deserialize_cached(bytes),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("deserialize_cached_miss", |b| {
+        b.iter_batched_ref(
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
     });
@@ -450,7 +520,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
             || rng.r#gen::<[u8; 32]>(),
-            |bytes| G2Projective::hash(b"dst", bytes.as_slice()),
+            |bytes| G2Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
     });
@@ -479,6 +549,14 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || (random_g2(rng), random_scalar(rng)),
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime", |b| {
+        b.iter_batched_ref(
+            || (random_g2(rng).to_affine(), random_scalar(rng)),
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -512,6 +590,23 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
                 )
             },
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g2(rng).to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(rng),
+                )
+            },
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -576,6 +671,13 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
             b.iter_batched_ref(
                 || g2_muln_instance(n, rng),
                 |(points, scalars)| G2Projective::muln_vartime(&points[..], &scalars[..]),
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(format!("multiexp_muln_affine_{n}"), |b| {
+            b.iter_batched_ref(
+                || g2_muln_affine_instance(n, rng),
+                |(points, scalars)| G2Projective::muln_affine_vartime(&points[..], &scalars[..]),
                 BatchSize::SmallInput,
             )
         });

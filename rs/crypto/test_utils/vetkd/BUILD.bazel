@@ -11,6 +11,8 @@ rust_library(
     deps = [
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
+        "//rs/types/base_types",
+        "//rs/types/types",
         "@crate_index//:rand_chacha",
     ],
 )

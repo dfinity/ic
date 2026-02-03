@@ -189,13 +189,14 @@ impl HasLabel for UnvalidatedArtifact<dkg::Message> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use ic_crypto_test_utils_ni_dkg::dummy_dealing;
     use ic_interfaces::dkg::DkgPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         NodeId,
-        crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         signature::BasicSignature,
         time::UNIX_EPOCH,
     };
@@ -208,7 +209,7 @@ mod test {
             target_subnet: NiDkgTargetSubnet::Local,
         };
         dkg::Message {
-            content: dkg::DealingContent::new(NiDkgDealing::dummy_dealing_for_tests(0), dkg_id),
+            content: dkg::DealingContent::new(dummy_dealing(0), dkg_id),
             signature: BasicSignature::fake(node_id),
         }
     }

@@ -13,7 +13,11 @@ use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
 mod filters {
-    pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
+    #[askama::filter_fn]
+    pub fn timestamp_to_datetime<T: std::fmt::Display>(
+        timestamp: T,
+        _env: &dyn askama::Values,
+    ) -> askama::Result<String> {
         let input = timestamp.to_string();
         let ts: i128 = input
             .parse()
@@ -26,16 +30,22 @@ mod filters {
         Ok(dt_offset.format(&format).unwrap())
     }
 
+    #[askama::filter_fn]
     pub fn opt_timestamp_to_datetime<T: std::fmt::Display>(
         timestamp: &Option<T>,
+        env: &dyn askama::Values,
     ) -> askama::Result<String> {
         timestamp
             .as_ref()
-            .map(timestamp_to_datetime)
+            .map(|t| timestamp_to_datetime::default().execute(t, env))
             .unwrap_or(Ok("None".to_string()))
     }
 
-    pub fn unwrap_or_none<T: std::fmt::Display>(value: &Option<T>) -> askama::Result<String> {
+    #[askama::filter_fn]
+    pub fn unwrap_or_none<T: std::fmt::Display>(
+        value: &Option<T>,
+        _env: &dyn askama::Values,
+    ) -> askama::Result<String> {
         value
             .as_ref()
             .map(|s| Ok(s.to_string()))

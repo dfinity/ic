@@ -14,17 +14,22 @@ use crate::driver::{
     log_events::LogEvent,
     nested::HasNestedVms,
     test_env::TestEnvAttribute,
-    test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession, scp_send_to},
+    test_env_api::{
+        HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo, SshSession, scp_send_to,
+    },
     test_setup::GroupSetup,
     universal_vm::UniversalVms,
 };
 
 use super::{
+    config::NODES_INFO,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
     test_env::TestEnv,
-    test_env_api::get_dependency_path,
+    test_env_api::get_dependency_path_from_env,
     universal_vm::UniversalVm,
 };
+
+use ic_types::NodeId;
 
 // Default labels
 const IC_NODE: &str = "ic_node";
@@ -61,9 +66,7 @@ impl VectorVm {
     pub fn new() -> Self {
         Self {
             universal_vm: UniversalVm::new("vector".to_string())
-                .with_config_img(get_dependency_path(
-                    std::env::var("VECTOR_VM_PATH").expect("VECTOR_VM_PATH not set"),
-                ))
+                .with_config_img(get_dependency_path_from_env("VECTOR_VM_PATH"))
                 .with_vm_resources(VmResources {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
@@ -129,6 +132,11 @@ impl VectorVm {
         let log = env.logger();
         info!(log, "Syncing vector targets.");
 
+        let testnet_nodes = env
+            .read_json_object::<NodesInfo, _>(NODES_INFO)
+            .expect("Couldn't read info of the nodes from file")
+            .into_keys()
+            .collect::<Vec<NodeId>>();
         match env.safe_topology_snapshot() {
             Err(e) => warn!(
                 log,
@@ -142,7 +150,14 @@ impl VectorVm {
                     .chain(snapshot.api_boundary_nodes());
 
                 for node in nodes {
-                    let node_id = node.node_id.get();
+                    let node_id = node.node_id;
+                    // Only consider nodes that are part of the testnet to make up for system tests
+                    // that use mainnet state, where the registry could contain nodes that are not
+                    // part of the testnet.
+                    if !testnet_nodes.contains(&node_id) {
+                        continue;
+                    }
+
                     let ip = node.get_ip_addr();
 
                     let labels = [

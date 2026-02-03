@@ -141,7 +141,7 @@ use crate::wasmtime_embedder::{
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use crate::WASM_PAGE_SIZE;
 
 #[derive(Clone, Copy, Debug)]
 pub enum WasmMemoryType {

@@ -80,17 +80,11 @@ function update_tee_metrics() {
         "gauge"
     append_metric "$metric_family" "guestos_tee_configured" "" "${tee_configured}"
 
-    if /opt/ic/bin/sev_active; then
-        tee_active=1
-    else
-        tee_active=0
-    fi
-
     write_metric_header "$metric_family" \
         "guestos_tee_active" \
         "Indicates whether the virtual machine is running in a Trusted Execution Environment (1 = TEE enabled, 0 = not in TEE)" \
         "gauge"
-    append_metric "$metric_family" "guestos_tee_active" "" "${tee_active}"
+    append_metric "$metric_family" "guestos_tee_active" "" "$SEV_ACTIVE"
 }
 
 function main() {

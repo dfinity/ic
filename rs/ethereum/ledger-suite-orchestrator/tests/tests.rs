@@ -15,6 +15,7 @@ use ic_ledger_suite_orchestrator_test_utils::{
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;
 
@@ -57,39 +58,39 @@ fn should_spawn_ledger_with_correct_init_args() {
         })
         .assert_ledger_icrc1_metadata(vec![
             (
-                "icrc1:logo".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_LOGO).unwrap(),
                 LedgerMetadataValue::from(CKETH_TOKEN_LOGO),
             ),
             (
-                "icrc1:decimals".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_DECIMALS).unwrap(),
                 LedgerMetadataValue::from(6_u64),
             ),
             (
-                "icrc1:name".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_NAME).unwrap(),
                 LedgerMetadataValue::from("USD Coin"),
             ),
             (
-                "icrc1:symbol".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_SYMBOL).unwrap(),
                 LedgerMetadataValue::from("USDC"),
             ),
             (
-                "icrc1:fee".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_FEE).unwrap(),
                 LedgerMetadataValue::from(2_000_000_000_000_u64),
             ),
             (
-                "icrc1:max_memo_length".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_MAX_MEMO_LENGTH).unwrap(),
                 LedgerMetadataValue::from(80_u64),
             ),
             (
-                "icrc103:public_allowances".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC103_PUBLIC_ALLOWANCES).unwrap(),
                 LedgerMetadataValue::from("true"),
             ),
             (
-                "icrc103:max_take_value".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC103_MAX_TAKE_VALUE).unwrap(),
                 LedgerMetadataValue::from(500u64),
             ),
             (
-                "icrc106:index_principal".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC106_INDEX_PRINCIPAL).unwrap(),
                 LedgerMetadataValue::from("ryjl3-tyaaa-aaaaa-aaaba-cai"),
             ),
         ]);
@@ -705,7 +706,7 @@ mod upgrade {
                     mode: CodeDeploymentMode::Upgrade,
                     module_hash: wasm_hash.clone().as_ref().to_vec(),
                 });
-                changes.last() == Some(&expected_change)
+                changes.last() == Some(&Some(expected_change))
             };
 
         let orchestrator = orchestrator
@@ -774,14 +775,14 @@ mod upgrade {
                 .into_iter()
                 .map(|c| c.details.clone())
                 .collect();
-            matches!(changes.first(), Some(ChangeDetails::Creation(_)))
-                && matches!(changes.get(1), Some(x) if x == &ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+            matches!(changes.first(), Some(Some(ChangeDetails::Creation(_))))
+                && matches!(changes.get(1), Some(Some(x)) if x == &ChangeDetails::CodeDeployment(CodeDeploymentRecord {
                     mode: CodeDeploymentMode::Install,
                     module_hash: wasm_hash.clone().as_ref().to_vec(),
                 }))
                 && matches!(
                     changes.get(2), //ledger will change controller of spawned off archive
-                    None | Some(ChangeDetails::ControllersChange(_))
+                    None | Some(Some(ChangeDetails::ControllersChange(_)))
                 )
                 && changes.len() <= 3
         };
@@ -797,8 +798,8 @@ mod upgrade {
                 mode: CodeDeploymentMode::Upgrade,
                 module_hash: wasm_hash.clone().as_ref().to_vec(),
             });
-            (matches!(changes.get(2), Some(c) if c == &expected_change)
-                || matches!(changes.get(3), Some(c) if c == &expected_change))
+            (matches!(changes.get(2), Some(Some(c)) if c == &expected_change)
+                || matches!(changes.get(3), Some(Some(c)) if c == &expected_change))
                 && changes.len() <= 4
         };
 
@@ -1001,8 +1002,8 @@ mod upgrade {
                 mode: CodeDeploymentMode::Upgrade,
                 module_hash: wasm_hash.clone().as_ref().to_vec(),
             });
-            (matches!(changes.get(2), Some(c) if c == &expected_change)
-                || matches!(changes.get(3), Some(c) if c == &expected_change))
+            (matches!(changes.get(2), Some(Some(c)) if c == &expected_change)
+                || matches!(changes.get(3), Some(Some(c)) if c == &expected_change))
                 && changes.len() <= 4
         };
 

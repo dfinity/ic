@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests;
 use crate::reimbursement::reimburse_withdrawals;
-use crate::{CanisterRuntime, estimate_fee_per_vbyte, finalize_requests, submit_pending_requests};
+use crate::{
+    CanisterRuntime, consolidate_utxos, estimate_fee_per_vbyte, finalize_requests,
+    submit_pending_requests,
+};
 use scopeguard::guard;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,8 +17,9 @@ thread_local! {
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub enum TaskType {
-    ProcessLogic(bool),
+    ProcessLogic,
     RefreshFeePercentiles,
+    ConsolidateUtxos,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -101,7 +105,7 @@ impl TaskQueue {
 /// Schedules a task for execution after the given delay.
 pub fn schedule_after<R: CanisterRuntime>(delay: Duration, work: TaskType, runtime: &R) {
     let now_nanos = runtime.time();
-    let execute_at_ns = now_nanos.saturating_add(delay.as_secs().saturating_mul(crate::SEC_NANOS));
+    let execute_at_ns = now_nanos.saturating_add(delay.as_nanos() as u64);
 
     let execution_time = TASKS.with(|t| t.borrow_mut().schedule_at(execute_at_ns, work));
     set_global_timer(execution_time, runtime);
@@ -129,11 +133,11 @@ pub fn global_timer() -> u64 {
 
 pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
     match task.task_type {
-        TaskType::ProcessLogic(force_resubmit_stuck_transactions) => {
+        TaskType::ProcessLogic => {
             const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
 
             let _enqueue_followup_guard = guard((), |_| {
-                schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic(false), &runtime)
+                schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic, &runtime)
             });
 
             let _guard = match crate::guard::TimerLogicGuard::new() {
@@ -142,7 +146,7 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
             };
 
             submit_pending_requests(&runtime).await;
-            finalize_requests(&runtime, force_resubmit_stuck_transactions).await;
+            finalize_requests(&runtime).await;
             reimburse_withdrawals(&runtime).await;
         }
         TaskType::RefreshFeePercentiles => {
@@ -159,6 +163,29 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 None => return,
             };
             let _ = estimate_fee_per_vbyte(&runtime).await;
+        }
+        TaskType::ConsolidateUtxos => {
+            const CONSOLIDATION_TASK_INTERVAL: Duration = Duration::from_secs(3600);
+
+            let _enqueue_followup_guard = guard((), |_| {
+                schedule_after(
+                    CONSOLIDATION_TASK_INTERVAL,
+                    TaskType::ConsolidateUtxos,
+                    &runtime,
+                )
+            });
+
+            let _guard = match crate::guard::TimerLogicGuard::new() {
+                Some(guard) => guard,
+                None => return,
+            };
+            let result = consolidate_utxos(&runtime).await;
+            // This is a low frequency log
+            canlog::log!(
+                crate::logs::Priority::Info,
+                "[run_task] consolidate_utxos returns {:?}",
+                result
+            );
         }
     }
 }

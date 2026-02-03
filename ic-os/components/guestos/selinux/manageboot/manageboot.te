@@ -104,6 +104,16 @@ read_files_pattern(ic_manageboot_t, proc_t, init_t)
 read_files_pattern(ic_manageboot_t, proc_t, proc_t)
 read_files_pattern(ic_manageboot_t, sysctl_t, sysctl_kernel_t)
 
+# Allow systemd-logind to send D-Bus messages to ic_manageboot_t.
+# This is needed when ic_manageboot_t calls reboot and systemd-logind
+# tries to send a method_return message. Without this, there's a 25 second
+# timeout delay during reboot operations.
+require {
+    type systemd_logind_t;
+    class dbus send_msg;
+}
+allow systemd_logind_t ic_manageboot_t : dbus send_msg;
+
 ### Miscellaneous operational requirements
 
 # Allow using locales.

@@ -4,7 +4,8 @@ use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
-use ic_replicated_state::{ReplicatedState, Stream, testing::ReplicatedStateTesting};
+use ic_replicated_state::testing::{ReplicatedStateTesting, StreamTesting};
+use ic_replicated_state::{ReplicatedState, Stream};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{

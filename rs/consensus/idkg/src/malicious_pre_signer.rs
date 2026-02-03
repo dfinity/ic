@@ -9,7 +9,6 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet},
 };
 use ic_logger::{ReplicaLogger, warn};
-use ic_registry_client_helpers::node::RegistryVersion;
 use ic_types::{
     NodeId,
     consensus::idkg::{IDkgBlockReader, IDkgMessage},
@@ -36,13 +35,8 @@ use std::collections::BTreeSet;
 // As workaround a trivial implementation of BasicSigner<IDkgDealing> is provided by delegating to
 // self.crypto.
 impl BasicSigner<IDkgDealing> for IDkgPreSignerImpl {
-    fn sign_basic(
-        &self,
-        message: &IDkgDealing,
-        signer: NodeId,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<IDkgDealing>> {
-        self.crypto.sign_basic(message, signer, registry_version)
+    fn sign_basic(&self, message: &IDkgDealing) -> CryptoResult<BasicSigOf<IDkgDealing>> {
+        self.crypto.sign_basic(message)
     }
 }
 

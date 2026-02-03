@@ -6,6 +6,10 @@ type DateUtc = record {
   year: opt nat32;
 };
 
+type RewardsCalculationVersion = record {
+  version: nat32;
+};
+
 type NodeMetricsDaily = record {
   subnet_assigned: opt principal;
   subnet_assigned_failure_rate: opt float64;
@@ -28,13 +32,13 @@ type DailyNodeRewards = record {
   daily_node_failure_rate: opt DailyNodeFailureRate;
   performance_multiplier: opt float64;
   rewards_reduction: opt float64;
-  base_rewards_xdr_permyriad: opt nat64;
-  adjusted_rewards_xdr_permyriad: opt nat64;
+  base_rewards_xdr_permyriad: opt float64;
+  adjusted_rewards_xdr_permyriad: opt float64;
 };
 
 type NodeTypeRegionBaseRewards = record {
-  monthly_xdr_permyriad: opt nat64;
-  daily_xdr_permyriad: opt nat64;
+  monthly_xdr_permyriad: opt float64;
+  daily_xdr_permyriad: opt float64;
   node_reward_type: opt text;
   region: opt text;
 };
@@ -42,13 +46,14 @@ type NodeTypeRegionBaseRewards = record {
 type Type3BaseRewards = record {
   region: opt text;
   nodes_count: opt nat64;
-  avg_rewards_xdr_permyriad: opt nat64;
+  avg_rewards_xdr_permyriad: opt float64;
   avg_coefficient: opt float64;
-  daily_xdr_permyriad: opt nat64;
+  daily_xdr_permyriad: opt float64;
 };
 
 type DailyNodeProviderRewards = record {
-  rewards_total_xdr_permyriad: opt nat64;
+  total_base_rewards_xdr_permyriad: opt nat64;
+  total_adjusted_rewards_xdr_permyriad: opt nat64;
   base_rewards: vec NodeTypeRegionBaseRewards;
   base_rewards_type3: vec Type3BaseRewards;
   daily_nodes_rewards: vec DailyNodeRewards;
@@ -63,6 +68,7 @@ type GetNodeProvidersRewardsCalculationResponse = variant { Ok: DailyResults; Er
 
 type GetNodeProvidersRewardsCalculationRequest = record {
   day: DateUtc;
+  algorithm_version: opt RewardsCalculationVersion;
 };
 
 // get_node_providers_rewards
@@ -72,11 +78,13 @@ type NodeProvidersRewards = record {
     principal;
     nat64;
   };
+  algorithm_version: RewardsCalculationVersion;
 };
 
 type GetNodeProvidersRewardsRequest = record {
   from_day: DateUtc;
   to_day: DateUtc;
+  algorithm_version: opt RewardsCalculationVersion;
 };
 
 type GetNodeProvidersRewardsResponse = variant { Ok: NodeProvidersRewards; Err: text };

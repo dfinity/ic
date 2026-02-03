@@ -63,6 +63,7 @@ fn test_wasmtime_system_api() {
         canister_id,
         canister_id.get(),
         Cycles::zero(),
+        UNIX_EPOCH,
         NumSeconds::from(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl),
     );
@@ -112,7 +113,6 @@ fn test_wasmtime_system_api() {
             num_instructions_global: None,
             log: no_op_logger(),
             limits: StoreLimits::default(),
-            canister_backtrace: config.feature_flags.canister_backtrace,
         },
     );
 

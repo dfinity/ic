@@ -132,11 +132,11 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
     repository = Repository(
         "ic",
         "https://github.com/dfinity/ic",
-        [Project(name="ic", path=__test_get_ic_path(), owner=Team.EXECUTION_TEAM)],
+        [Project(name="ic", path=__test_get_ic_path(), owner=Team.DSM_TEAM)],
     )
     finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     finding.risk_assessor = [User("mickey", "Mickey Mouse")]
-    finding.owning_teams = [Team.EXECUTION_TEAM]
+    finding.owning_teams = [Team.DSM_TEAM]
 
     scanner_job.do_periodic_scan([repository])
 
@@ -167,7 +167,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
         projects=["foo", "bar", "bear"],
         risk_assessor=[User("mickey", "Mickey Mouse")],
         risk=SecurityRisk.INFORMATIONAL,
-        owning_teams=[Team.GIX_TEAM],
+        owning_teams=[Team.OISY_TEAM],
         patch_responsible=[],
         due_date=100,
         score=100,
@@ -194,7 +194,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     assert jira_finding.first_level_dependencies == finding.first_level_dependencies
     assert jira_finding.projects == finding.projects
     assert jira_finding.risk is None
-    assert jira_finding.owning_teams == [Team.NODE_TEAM, Team.GIX_TEAM]
+    assert jira_finding.owning_teams == [Team.NODE_TEAM, Team.OISY_TEAM]
     assert jira_finding.score == finding.score
 
     jira_lib_mock.get_open_findings_for_repo_and_scanner.assert_called_once()
@@ -224,7 +224,7 @@ def test_on_periodic_job_one_finding_in_jira_transition_to_failover(jira_lib_moc
         projects=["foo", "bar", "bear"],
         risk_assessor=[User("mickey", "Mickey Mouse")],
         risk=SecurityRisk.INFORMATIONAL,
-        owning_teams=[Team.GIX_TEAM],
+        owning_teams=[Team.OISY_TEAM],
         patch_responsible=[],
         due_date=100,
         score=100,

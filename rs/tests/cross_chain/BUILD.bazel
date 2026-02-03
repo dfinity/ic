@@ -1,18 +1,13 @@
-load("//rs/tests:common.bzl", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "oci_tar", "system_test_nns", "uvm_config_image")
+load("//rs/tests:common.bzl", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "oci_tar", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-CANISTER_RUNTIME_DEPS = [
-    # Keep sorted.
-    "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
-]
-
 system_test_nns(
     name = "ic_xc_ledger_suite_orchestrator_test",
-    runtime_deps =
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        CANISTER_RUNTIME_DEPS,
+    runtime_deps = {
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+    },
     deps = [
         # Keep sorted.
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
@@ -40,22 +35,13 @@ system_test_nns(
 
 system_test_nns(
     name = "ic_xc_cketh_test",
-    env = MESSAGE_CANISTER_ENV | {
-        "CKETH_UVM_CONFIG_PATH": "$(rootpath :cketh_uvm_config_image)",
-        "CKETH_MINTER_WASM_PATH": "$(rootpath //rs/ethereum/cketh/minter:cketh_minter.wasm.gz)",
-        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
-        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
-    },
     tags = ["long_test"],
-    runtime_deps =
-        MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            # Keep sorted.
-            ":cketh_uvm_config_image",
-            "//rs/ethereum/cketh/minter:cketh_minter.wasm.gz",
-            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
-            "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
-        ],
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | {
+        "CKETH_UVM_CONFIG_PATH": ":cketh_uvm_config_image",
+        "CKETH_MINTER_WASM_PATH": "//rs/ethereum/cketh/minter:cketh_minter.wasm.gz",
+        "LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+    },
     deps = [
         # Keep sorted.
         "//packages/ic-ethereum-types",
@@ -104,3 +90,80 @@ uvm_config_image(
     ],
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
+
+exports_files([
+    "btc_integration/bitcoin.conf",
+    "btc_integration/btc_activate.sh",
+])
+
+uvm_config_image(
+    name = "btc_uvm_config_image",
+    srcs = [
+        ":bitcoind.tar",
+        ":btc_integration/bitcoin.conf",
+        ":btc_integration/btc_activate.sh",
+    ],
+    remap_paths = {
+        "btc_activate.sh": "activate",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+oci_tar(
+    name = "bitcoind.tar",
+    image = "@bitcoind",
+    repo_tags = ["bitcoind:pinned"],
+)
+
+system_test_nns(
+    name = "btc_get_balance_test",
+    flaky = True,  # flakiness rate of over 3% over the month from 2025-02-11 till 2025-03-11 only for the btc_get_balance_test_head_nns variant.
+    tags = [
+        "colocate",
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
+        "BTC_WASM_PATH": "@btc_canister//file",
+        "BTC_UVM_CONFIG_IMAGE_PATH": ":btc_uvm_config_image",
+    },
+    deps = [
+        "//rs/bitcoin/adapter/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/tests/ckbtc",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
+)
+
+[
+    system_test(
+        name = "adapter_basics_test",
+        enable_metrics = True,
+        env = {
+            "ADAPTER_TO_TEST": adapter,
+        },
+        tags = [
+            "long_test",  # this test has a P90 duration of over 6 minutes for the week starting on 2025-08-21.
+        ],
+        test_name = adapter + "_adapter_basics_test",
+        runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | {
+            "CKBTC_UVM_CONFIG_PATH": "//rs/tests:ckbtc_uvm_config_image",
+            "UNIVERSAL_CANISTER_WASM_PATH": "//rs/universal_canister/impl:universal_canister.wasm.gz",
+        },
+        deps = [
+            "//rs/bitcoin/adapter/test_utils",
+            "//rs/tests/ckbtc",
+            "//rs/tests/driver:ic-system-test-driver",
+            "@crate_index//:anyhow",
+            "@crate_index//:bitcoin_dogecoin",
+            "@crate_index//:slog",
+        ],
+    )
+    for adapter in [
+        "btc",
+        "doge",
+    ]
+]

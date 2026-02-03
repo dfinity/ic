@@ -4,13 +4,13 @@ use prometheus::{Histogram, IntCounterVec, IntGauge};
 pub const PROMETHEUS_HTTP_PORT: u16 = 9092;
 
 #[derive(Clone)]
-pub struct RegistryreplicatorMetrics {
+pub struct RegistryReplicatorMetrics {
     pub poll_duration: Histogram,
     pub poll_count: IntCounterVec,
     pub registry_version: IntGauge,
 }
 
-impl RegistryreplicatorMetrics {
+impl RegistryReplicatorMetrics {
     pub fn new(metrics_registry: &ic_metrics::MetricsRegistry) -> Self {
         Self {
             poll_duration: metrics_registry.histogram(

@@ -11,8 +11,8 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{
         Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
-        KnownNeuron, ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
-        install_code::CanisterInstallMode, proposal::Action,
+        NnsFunction, Proposal, ProposalData, Topic, Vote, install_code::CanisterInstallMode,
+        proposal::Action,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -72,6 +72,7 @@ fn set_up<R: Rng>(
                 action: Some(Action::Motion(Motion {
                     motion_text: "Motion".to_string(),
                 })),
+                self_describing_action: None,
             }),
             ..Default::default()
         },
@@ -465,14 +466,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 
     let bench_result = bench_fn(|| {
         governance
-            .compute_ballots_for_new_proposal(
-                &Action::RegisterKnownNeuron(KnownNeuron {
-                    id: None,
-                    known_neuron_data: None,
-                }),
-                &NeuronIdProto { id: 1 },
-                123_456_789,
-            )
+            .compute_ballots_for_standard_proposal(123_456_789)
             .expect("Failed!");
     });
 
@@ -535,6 +529,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
                     action: Some(api::proposal::Action::Motion(api::Motion {
                         motion_text: "Motion".to_string(),
                     })),
+                    self_describing_action: None,
                 }),
                 ..Default::default()
             }
@@ -684,7 +679,7 @@ fn list_proposals_benchmark() -> BenchResult {
             .unwrap();
     }
 
-    let request = ListProposalInfo {
+    let request = api::ListProposalInfoRequest {
         limit: 100,
         omit_large_fields: Some(true),
         ..Default::default()
@@ -719,6 +714,7 @@ fn list_proposals_benchmark() -> BenchResult {
                     url: "".to_string(),
                     title: Some("Title".to_string()),
                     action: Some(proposal_action),
+                    self_describing_action: None,
                 },
             )
             .now_or_never()
@@ -727,7 +723,7 @@ fn list_proposals_benchmark() -> BenchResult {
     }
 
     bench_fn(|| {
-        let _ = governance.list_proposals(&PrincipalId::new_anonymous(), &request);
+        let _ = governance.list_proposals(&PrincipalId::new_anonymous(), request);
     })
 }
 

@@ -215,11 +215,11 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         );
         let start_time = self.metrics.now();
         let result = dealing::create_dealing(
-            &self.csp,
-            &self.vault,
+            self.vault.as_ref(),
             &self.node_id,
             self.registry_client.as_ref(),
             params,
+            &self.metrics,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,

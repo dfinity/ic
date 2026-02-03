@@ -1561,16 +1561,16 @@ mod tests {
                 prometheus::default_registry()
                 .gather()
                 .iter()
-                .find(|m| m.get_name() == "artifact_pool_consensus_count_per_height")
+                .find(|m| m.name() == "artifact_pool_consensus_count_per_height")
                 .expect("articact_pool_consensus_count_per_heigfht metric not registered")
                 .get_metric()
                 .iter()
                 .find(|m|
                     m.get_label().iter().any(|label| {
-                        label.get_name() == "pool_type" && label.get_value() == "validated"
+                        label.name() == "pool_type" && label.value() == "validated"
                     }) &&
                     m.get_label().iter().any(|label| {
-                        label.get_name() == "type" && label.get_value() == "notarization"
+                        label.name() == "type" && label.value() == "notarization"
                     }))
                 .expect(
                     "metric with pool_type = unvalidated and type = notarization not registered",

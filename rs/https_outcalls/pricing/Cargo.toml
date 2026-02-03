@@ -1,0 +1,11 @@
+[package]
+name = "ic-https-outcalls-pricing"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-config = { path = "../../config" }
+ic-types = { path = "../../types/types" }

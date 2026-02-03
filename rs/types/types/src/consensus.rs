@@ -890,7 +890,7 @@ impl TryFrom<pb::EquivocationProof> for EquivocationProof {
             signer: node_id_try_from_option(proof.signer)?,
             version: ReplicaVersion::try_from(proof.version)?,
             height: Height::new(proof.height),
-            subnet_id: subnet_id_try_from_option(proof.subnet_id)?,
+            subnet_id: subnet_id_try_from_option(proof.subnet_id, "EquivocationProof::subnet_id")?,
             hash1: CryptoHashOf::new(CryptoHash(proof.hash1)),
             signature1: BasicSigOf::new(BasicSig(proof.signature1)),
             hash2: CryptoHashOf::new(CryptoHash(proof.hash2)),

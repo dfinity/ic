@@ -4,7 +4,7 @@ use crate::memo::{BurnMemo, Status};
 use crate::tasks::{TaskType, schedule_now};
 use crate::{
     CanisterRuntime, IC_CANISTER_RUNTIME,
-    address::{BitcoinAddress, ParseAddressError, account_to_bitcoin_address},
+    address::{BitcoinAddress, ParseAddressError},
     guard::{GuardError, retrieve_btc_guard},
     state::{self, RetrieveBtcRequest, mutate_state, read_state},
 };
@@ -152,14 +152,8 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcError::TemporarilyUnavailable)?;
 
-    let ecdsa_public_key = init_ecdsa_public_key().await;
-    let main_address = account_to_bitcoin_address(
-        &ecdsa_public_key,
-        &Account {
-            owner: ic_cdk::api::canister_self(),
-            subaccount: None,
-        },
-    );
+    let _ecdsa_public_key = init_ecdsa_public_key().await;
+    let main_address = state::read_state(|s| runtime.derive_minter_address(s));
 
     if args.address == main_address.display(state::read_state(|s| s.btc_network)) {
         ic_cdk::trap("illegal retrieve_btc target");
@@ -242,7 +236,7 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic(false), &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
 
     Ok(RetrieveBtcOk { block_index })
 }
@@ -256,14 +250,8 @@ pub async fn retrieve_btc_with_approval<R: CanisterRuntime>(
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcWithApprovalError::TemporarilyUnavailable)?;
 
-    let ecdsa_public_key = init_ecdsa_public_key().await;
-    let main_address = account_to_bitcoin_address(
-        &ecdsa_public_key,
-        &Account {
-            owner: ic_cdk::api::canister_self(),
-            subaccount: None,
-        },
-    );
+    let _ecdsa_public_key = init_ecdsa_public_key().await;
+    let main_address = state::read_state(|s| runtime.derive_minter_address(s));
 
     if args.address == main_address.display(state::read_state(|s| s.btc_network)) {
         ic_cdk::trap("illegal retrieve_btc target");
@@ -342,14 +330,14 @@ pub async fn retrieve_btc_with_approval<R: CanisterRuntime>(
         }),
     };
 
-    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, runtime));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic(false), runtime);
+    schedule_now(TaskType::ProcessLogic, runtime);
 
     Ok(RetrieveBtcOk { block_index })
 }
@@ -377,13 +365,20 @@ async fn balance_of(user: Principal) -> Result<u64, RetrieveBtcError> {
 
 async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, RetrieveBtcError> {
     debug_assert!(memo.0.len() <= crate::CKBTC_LEDGER_MEMO_SIZE as usize);
+    let from_subaccount = compute_subaccount(PrincipalId(user), 0);
+    burn_ckbtcs_from_subaccount(from_subaccount, amount, memo).await
+}
 
+pub async fn burn_ckbtcs_from_subaccount(
+    from_subaccount: Subaccount,
+    amount: u64,
+    memo: Memo,
+) -> Result<u64, RetrieveBtcError> {
     let client = ICRC1Client {
         runtime: CdkRuntime,
         ledger_canister_id: read_state(|s| s.ledger_id.get().into()),
     };
     let minter = ic_cdk::api::canister_self();
-    let from_subaccount = compute_subaccount(PrincipalId(user), 0);
     let result = client
         .transfer(TransferArg {
             from_subaccount: Some(from_subaccount),

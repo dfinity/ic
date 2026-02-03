@@ -15,7 +15,7 @@ Network configuration details for each IC-OS:
 
 Each IC-OS node must have a unique but deterministic MAC address derived from its BMC MAC address, deployment environment (mainnet vs testnet), and variant type (SetupOS, HostOS, GuestOS). This MAC address is then utilized to generate the node's network configuration.
 
-For details, see the link:../../rs/ic_os/deterministic_ips/README.md[mac_address README].
+For details, see the link:../../rs/ic_os/networking/deterministic_ips/README.md[deterministic_ips README].
 
 == Hostname
 

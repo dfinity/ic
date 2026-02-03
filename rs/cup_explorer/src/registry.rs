@@ -1,4 +1,4 @@
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::{
     RegistryClient, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
@@ -33,7 +33,7 @@ impl RegistryCanisterClient {
         let content = std::fs::read_to_string(nns_pem_path.as_path()).unwrap();
         println!("NNS public key being used: \n{content}");
 
-        let nns_public_key = parse_threshold_sig_key(nns_pem_path.as_path()).unwrap();
+        let nns_public_key = parse_threshold_sig_key_from_pem_file(nns_pem_path.as_path()).unwrap();
 
         RegistryCanisterClient(Arc::new(RegistryCanister::new_with_agent_transformer(
             vec![nns_url],

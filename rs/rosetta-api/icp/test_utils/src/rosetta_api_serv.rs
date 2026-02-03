@@ -61,7 +61,7 @@ impl RosettaApiHandle {
         port: u16,
         ledger_can_id: CanisterId,
         governance_can_id: CanisterId,
-        workspace_path: String,
+        workspace_path: &Path,
         root_key_blob: Option<&Blob>,
     ) -> Self {
         let workspace = tempfile::Builder::new()

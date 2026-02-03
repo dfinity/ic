@@ -7,11 +7,12 @@ pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
     HttpError, IngressFilterService,
-    common::{build_validator, validation_error_to_http_error},
+    common::{build_validator, certified_state_unavailable_error, validation_error_to_http_error},
 };
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
+use ic_interfaces::execution_environment::IngressFilterError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
@@ -43,7 +44,7 @@ pub struct IngressValidatorBuilder {
     subnet_id: SubnetId,
     malicious_flags: Option<MaliciousFlags>,
     time_source: Option<Arc<dyn TimeSource>>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_verifier: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
@@ -56,7 +57,7 @@ impl IngressValidatorBuilder {
         node_id: NodeId,
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_verifier: Arc<dyn IngressSigVerifier>,
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
         ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
@@ -286,8 +287,11 @@ impl IngressValidator {
         match ingress_filter
             .oneshot((provisional_whitelist, msg.clone()))
             .await
+            .expect("Can't panic on Infallible")
         {
-            Err(_) => panic!("Can't panic on Infallible"),
+            Err(IngressFilterError::CertifiedStateUnavailable) => {
+                return Err(certified_state_unavailable_error().into());
+            }
             Ok(Err(user_error)) => {
                 Err(user_error)?;
             }

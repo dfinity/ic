@@ -175,7 +175,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     // When running in a dev environment we expect `cargo` to be in our path and
     // we should be able to find the `canister_sandbox` or `sandbox_launcher`
     // cargo manifest so this should succeed.
-    match (which::which("cargo"), cargo_manifest_for_testing(&krate)) {
+    match (which::which("cargo"), cargo_manifest_for_testing()) {
         (Ok(path), Some(manifest_path)) => {
             println!(
                 "Building {executable_name} with cargo {path:?} and manifest {manifest_path:?}"
@@ -205,7 +205,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
 /// Only for testing purposes.
 /// Finds the cargo manifest of the `canister_sandbox` or `sandbox_launcher`
 /// crate in the directory path of the current manifest.
-fn cargo_manifest_for_testing(krate: &SandboxCrate) -> Option<PathBuf> {
+fn cargo_manifest_for_testing() -> Option<PathBuf> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").ok();
     let mut next_parent = manifest_dir.as_ref().map(Path::new);
     let mut current_manifest = None;
@@ -225,13 +225,8 @@ fn cargo_manifest_for_testing(krate: &SandboxCrate) -> Option<PathBuf> {
     // which causes rebuilding of all dependencies that have already been
     // built by `cargo test`.
     let canister_sandbox: PathBuf = [
-        current_manifest.as_ref()?.parent()?,
-        &match krate {
-            SandboxCrate::SandboxLauncher => Path::new("canister_sandbox").join("sandbox_launcher"),
-            SandboxCrate::CanisterSandbox => PathBuf::from("canister_sandbox"),
-            SandboxCrate::CompilerSandbox => PathBuf::from("compiler_sandbox"),
-        },
-        Path::new("Cargo.toml"),
+        current_manifest?.parent()?,
+        Path::new("rs/canister_sandbox/Cargo.toml"),
     ]
     .iter()
     .collect();

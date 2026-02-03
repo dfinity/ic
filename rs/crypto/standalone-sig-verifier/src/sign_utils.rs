@@ -1,10 +1,15 @@
 //! Signature utilities
+use crate::algorithm_identifiers::{
+    cose_algorithm_identifier, ecdsa_p256_algorithm_identifier,
+    ecdsa_secp256k1_algorithm_identifier, ed25519_algorithm_identifier, iccsa_algorithm_identifier,
+    rsa_algorithm_identifier,
+};
+use ic_crypto_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_cose as cose;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
-use ic_crypto_internal_basic_sig_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_types::crypto::{AlgorithmId, BasicSig, CryptoError, CryptoResult, UserPublicKey};
 
@@ -37,31 +42,30 @@ pub fn user_public_key_from_bytes(
 ) -> CryptoResult<(UserPublicKey, KeyBytesContentType)> {
     let (pkix_algo_id, pk_bytes) = der_utils::algo_id_and_public_key_bytes_from_der(bytes)
         .map_err(|e| CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_bytes: Some(bytes.to_vec()),
             internal_error: e.internal_error,
         })?;
 
-    let (key, algorithm_id, content_type) = if pkix_algo_id == ed25519::api::algorithm_identifier()
-    {
+    let (key, algorithm_id, content_type) = if pkix_algo_id == ed25519_algorithm_identifier() {
         (
             ed25519::api::public_key_from_der(bytes)?.0.to_vec(),
             AlgorithmId::Ed25519,
             KeyBytesContentType::Ed25519PublicKeyDer,
         )
-    } else if pkix_algo_id == ecdsa_secp256k1::algorithm_identifier() {
+    } else if pkix_algo_id == ecdsa_secp256k1_algorithm_identifier() {
         (
             ecdsa_secp256k1::api::public_key_from_der(bytes)?.0,
             AlgorithmId::EcdsaSecp256k1,
             KeyBytesContentType::EcdsaSecp256k1PublicKeyDer,
         )
-    } else if pkix_algo_id == ecdsa_secp256r1::algorithm_identifier() {
+    } else if pkix_algo_id == ecdsa_p256_algorithm_identifier() {
         (
             ecdsa_secp256r1::public_key_from_der(bytes)?.0,
             AlgorithmId::EcdsaP256,
             KeyBytesContentType::EcdsaP256PublicKeyDer,
         )
-    } else if pkix_algo_id == cose::algorithm_identifier() {
+    } else if pkix_algo_id == cose_algorithm_identifier() {
         let (alg_id, bytes) = cose::parse_cose_public_key(&pk_bytes)?;
         let key_bytes = user_public_key_from_bytes(&bytes)?;
         let key_contents_type = cose_key_bytes_content_type(alg_id).ok_or_else(|| {
@@ -72,13 +76,13 @@ pub fn user_public_key_from_bytes(
             }
         })?;
         (key_bytes.0.key, alg_id, key_contents_type)
-    } else if pkix_algo_id == iccsa::algorithm_identifier() {
+    } else if pkix_algo_id == iccsa_algorithm_identifier() {
         (
             iccsa::public_key_bytes_from_der(bytes)?.0,
             AlgorithmId::IcCanisterSignature,
             KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer,
         )
-    } else if pkix_algo_id == rsa::algorithm_identifier() {
+    } else if pkix_algo_id == rsa_algorithm_identifier() {
         (
             rsa::RsaPublicKey::from_der_spki(bytes)?.as_der().to_vec(),
             AlgorithmId::RsaSha256,
@@ -86,7 +90,7 @@ pub fn user_public_key_from_bytes(
         )
     } else {
         return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_bytes: Some(bytes.to_vec()),
             internal_error: "Unsupported or unparsable public key".to_string(),
         });
@@ -118,11 +122,19 @@ pub fn ed25519_public_key_to_der(raw_key: Vec<u8>) -> CryptoResult<Vec<u8>> {
 
 /// Decodes an ECDSA P-256 signature from DER.
 ///
+/// # Arguments
+/// `sig_der` the DER encoded signature, as a pair of integers (r,s)
 /// # Errors
 /// * `CryptoError::MalformedSignature`: if the signature cannot be DER decoded.
-pub fn ecdsa_p256_signature_from_der_bytes(bytes: &[u8]) -> CryptoResult<BasicSig> {
-    let ecdsa_sig = ecdsa_secp256r1::signature_from_der(bytes)?;
-    Ok(BasicSig(ecdsa_sig.0.to_vec()))
+pub fn ecdsa_p256_signature_from_der_bytes(sig_der: &[u8]) -> CryptoResult<BasicSig> {
+    let sig =
+        p256::ecdsa::Signature::from_der(sig_der).map_err(|e| CryptoError::MalformedSignature {
+            algorithm: AlgorithmId::EcdsaP256,
+            sig_bytes: sig_der.to_vec(),
+            internal_error: format!("Error parsing DER signature: {e}"),
+        })?;
+
+    Ok(BasicSig(sig.to_bytes().to_vec()))
 }
 
 /// Decodes an RSA signature from binary data.

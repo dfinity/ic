@@ -1578,7 +1578,7 @@ fn test_disburse_maturity() {
         for _ in 0..10 {
             // We have to tick a few more times so that inter canister calls get completed.
             env.pocket_ic
-                .advance_time(std::time::Duration::from_secs(1))
+                .advance_time(std::time::Duration::from_secs(60))
                 .await;
             env.pocket_ic.tick().await;
         }

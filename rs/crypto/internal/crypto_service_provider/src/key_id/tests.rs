@@ -4,15 +4,6 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPublicKey;
 
-#[test]
-fn should_fail_to_create_key_id_from_mega_key_with_unsupported_curve() {
-    let mega_public_key = MEGaPublicKey::new(EccPoint::identity(EccCurveType::P256));
-    assert_eq!(
-        KeyId::try_from(&mega_public_key),
-        Err("unsupported curve: P256".to_string())
-    );
-}
-
 mod stability_tests {
     use super::*;
     use crate::CspPublicKey;
@@ -85,7 +76,7 @@ mod stability_tests {
         let bytes = b"The quick brown fox jumps over the lazy dog";
         let tests = vec![
             ParameterizedTest {
-                input: (AlgorithmId::Placeholder, bytes),
+                input: (AlgorithmId::Unspecified, bytes),
                 expected: "ffa2bc682bd09b967beeb044e28d2ed70c0ebae08992b345d7e86a4430e86d2a",
             },
             ParameterizedTest {
@@ -216,10 +207,26 @@ mod stability_tests {
                 input: MEGaPublicKey::new(EccPoint::generator_h(EccCurveType::K256)),
                 expected: "502da182fa4451163418bb07073182ca280aa4fb1f652b70f5b3b8f1642579cb",
             },
+            ParameterizedTest {
+                input: MEGaPublicKey::new(EccPoint::generator_g(EccCurveType::P256)),
+                expected: "2b0a2fc94df2c28de159aeaf65a8d37b4825d17ea9cefad30a7b0db0b99f9e3f",
+            },
+            ParameterizedTest {
+                input: MEGaPublicKey::new(EccPoint::generator_h(EccCurveType::P256)),
+                expected: "4cbcdf951ded1c9f8c8fa726677f9f8099f77813e7d6203ae63e1f3934833e52",
+            },
+            ParameterizedTest {
+                input: MEGaPublicKey::new(EccPoint::generator_g(EccCurveType::Ed25519)),
+                expected: "2ea594538d5f66037df2ad82f13678f6c09e4d7f1111696f954c8d3eb73bb08a",
+            },
+            ParameterizedTest {
+                input: MEGaPublicKey::new(EccPoint::generator_h(EccCurveType::Ed25519)),
+                expected: "1e4d044d7648d96ee5daea1464a0fa07c79b6d32d7d4e392d4c3bdafc5494b26",
+            },
         ];
         for test in &tests {
             assert_eq!(
-                KeyId::try_from(&test.input).expect("invalid KeyId"),
+                KeyId::from(&test.input),
                 test.expected_key_id(),
                 "Parameterized test {:?} failed",
                 &test

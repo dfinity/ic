@@ -32,11 +32,11 @@ enum ConnectionType {
 pub struct TlsConnector {
     connection_type: ConnectionType,
     http: HttpConnector,
-    tls: Arc<dyn TlsConfig + Send + Sync>,
+    tls: Arc<dyn TlsConfig>,
 }
 
 impl TlsConnector {
-    pub fn new(tls: Arc<dyn TlsConfig + Send + Sync>) -> Self {
+    pub fn new(tls: Arc<dyn TlsConfig>) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         Self {
@@ -48,7 +48,7 @@ impl TlsConnector {
 
     /// Like [TlsConnector::new], but connects over unencrypted channel.
     /// This function should be used only in tests.
-    pub fn new_for_tests(tls: Arc<dyn TlsConfig + Send + Sync>) -> Self {
+    pub fn new_for_tests(tls: Arc<dyn TlsConfig>) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         Self {

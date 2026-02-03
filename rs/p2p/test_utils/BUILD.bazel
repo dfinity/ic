@@ -28,7 +28,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/types",
-    "//rs/types/types_test_utils",
     "@crate_index//:axum",
     "@crate_index//:bytes",
     "@crate_index//:futures",
@@ -42,7 +41,6 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-stream",
     "@crate_index//:turmoil",
 ]
 

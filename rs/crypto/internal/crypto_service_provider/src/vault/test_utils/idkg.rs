@@ -23,7 +23,7 @@ pub fn should_generate_and_store_dealing_encryption_key_pair_multiple_times(
                 .expect("missing IDKG public key"),
             idkg_dealing_encryption_pk_to_proto(public_key.clone())
         );
-        let key_id = KeyId::try_from(&public_key).expect("invalid key ID");
+        let key_id = KeyId::from(&public_key);
         assert!(csp_vault.sks_contains(key_id).expect("error reading SKS"));
 
         assert!(key_ids.insert(key_id));

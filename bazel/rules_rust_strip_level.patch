@@ -1,0 +1,17 @@
+# support for per-platform strip levels: https://github.com/bazelbuild/rules_rust/issues/3730
+diff --git a/rust/extensions.bzl b/rust/extensions.bzl
+index 99868b0df..5932b0760 100644
+--- a/rust/extensions.bzl
++++ b/rust/extensions.bzl
+@@ -122,6 +122,11 @@ def _rust_impl(module_ctx):
+                 toolchain_triples = toolchain_triples,
+                 target_settings = [str(v) for v in toolchain.target_settings],
+                 extra_toolchain_infos = extra_toolchain_infos,
++                strip_level = {"x86_64-unknown-linux-gnu": {
++                    "dbg": "none",
++                    "fastbuild": "none",
++                    "opt": "none",
++                }},
+             )
+     metadata_kwargs = {}
+     if bazel_features.external_deps.extension_metadata_has_reproducible:

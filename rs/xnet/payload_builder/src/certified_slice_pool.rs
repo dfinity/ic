@@ -1456,13 +1456,16 @@ fn witness_count_bytes(
     // byte length plus 1 byte for the combined tag and type for every struct /
     // enum.
 
-    // Size of a `Pruned` node: 2 bytes enum, 1 byte length, digest.
-    const PRUNED_NODE_BYTES: usize = 3 + std::mem::size_of::<ic_crypto_tree_hash::Digest>();
+    // Size of a `Pruned` node: 2 bytes enum, 2 bytes `digest` field, digest.
+    const PRUNED_NODE_BYTES: usize = 4 + std::mem::size_of::<ic_crypto_tree_hash::Digest>();
     // Size of a `Known` node under a `Node` with a `u64` label: 2 bytes `Node`
     // enum, 2 each for `label` and `sub_witness`, 8 for label, 2 for `Known` enum.
     const KNOWN_NODE_BYTES: usize = 16;
-    // Size of a `Fork` node: 2 bytes `Fork` enum, 2 bytes each for left and right.
-    const FORK_NODE_BYTES: usize = 6;
+    // Size of a `Fork` node: 2-3 bytes `Fork` enum, 2-3 bytes each for left and
+    // right.
+    const FORK_NODE_BYTES: usize = 7;
+    // Size of the `messages` label: 2 bytes field and length, 8 bytes string.
+    const MESSAGES_LABEL_BYTES: usize = 10;
 
     assert_eq!(slice_begin.is_none(), slice_end.is_none());
     if stream_begin == stream_end || slice_begin == slice_end {
@@ -1478,8 +1481,8 @@ fn witness_count_bytes(
     assert!(slice_end <= stream_end);
 
     let total_leaves = (stream_end - stream_begin).get();
-    let begin_pruned_leaves = (slice_begin - stream_begin).get();
-    let end_pruned_leaves = (stream_end - slice_end).get();
+    let left_pruned_leaves = (slice_begin - stream_begin).get();
+    let right_pruned_leaves = (stream_end - slice_end).get();
 
     // `Pruned` nodes from beginning of stream are all left children.
     //
@@ -1487,7 +1490,7 @@ fn witness_count_bytes(
     // at 0. Every `1` bit in `begin_pruned_leaves` is equivalent to following the
     // right child and pruning the left. Thus, there is one `Pruned` node for every
     // `1` bit in `begin_pruned_leaves`.
-    let begin_pruned_nodes = begin_pruned_leaves.count_ones();
+    let left_pruned_nodes = left_pruned_leaves.count_ones();
 
     // The minimal subtree containing all nodes pruned from stream end is not
     // usually complete. We calculate the size of the complete tree of same height;
@@ -1512,14 +1515,14 @@ fn witness_count_bytes(
     // right subtree (of size 5) leaving it with 1 leaf; this is equivalent to
     // having pruned 7 nodes (i.e. 3 subtrees, or 3 `Pruned` nodes) from a complete
     // tree with 8 leaves.
-    let end_equivalent_pruned_leaves = if total_leaves.trailing_zeros()
-        + end_pruned_leaves.leading_zeros()
+    let right_equivalent_pruned_leaves = if total_leaves.trailing_zeros()
+        + right_pruned_leaves.leading_zeros()
         >= std::mem::size_of_val(&total_leaves) as u32 * 8
     {
         // Complete subtree.
-        end_pruned_leaves
+        right_pruned_leaves
     } else {
-        let remaining_leaves = total_leaves - end_pruned_leaves;
+        let remaining_leaves = total_leaves - right_pruned_leaves;
         let min_complete_subtree_leaves =
             1u64.rotate_right((total_leaves ^ remaining_leaves).leading_zeros());
         let complete_subtree_remaining_leaves =
@@ -1528,16 +1531,20 @@ fn witness_count_bytes(
     };
     // Same as at stream begin, the number of `Pruned` nodes is the number of `1`
     // bits in the adjusted offset.
-    let end_pruned_nodes = end_equivalent_pruned_leaves.count_ones();
+    let right_pruned_nodes = right_equivalent_pruned_leaves.count_ones();
 
-    let pruned_nodes = (begin_pruned_nodes + end_pruned_nodes) as usize;
+    let pruned_nodes = (left_pruned_nodes + right_pruned_nodes) as usize;
     let slice_len = (slice_end - slice_begin).get() as usize;
 
     let pruned_nodes_bytes = pruned_nodes * PRUNED_NODE_BYTES;
     let known_nodes_bytes = slice_len * KNOWN_NODE_BYTES;
     let fork_nodes_bytes = (pruned_nodes + slice_len - 1) * FORK_NODE_BYTES;
 
-    NO_MESSAGES_WITNESS_BYTES + pruned_nodes_bytes + known_nodes_bytes + fork_nodes_bytes
+    NO_MESSAGES_WITNESS_BYTES
+        // Replaced the `Pruned` node for `messages`, with the `messages` label.
+        - PRUNED_NODE_BYTES + MESSAGES_LABEL_BYTES
+        // And added all the pruned, known and fork nodes.
+        + pruned_nodes_bytes + known_nodes_bytes + fork_nodes_bytes
 }
 
 /// Decodes the certified stream slice coming from `subnet_id` and validates

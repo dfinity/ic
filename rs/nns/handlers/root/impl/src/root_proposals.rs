@@ -11,7 +11,6 @@ use ic_nervous_system_root::{
     LOG_PREFIX,
     change_canister::{ChangeCanisterRequest, change_canister},
 };
-use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::registry::get_value;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_protobuf::registry::{
@@ -419,7 +418,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
             println!("{message}");
             return Err(message);
         }
-        let _ = change_canister::<CdkRuntime>(payload).await;
+        let _ = change_canister(payload).await;
         Ok(())
     } else if proposal.is_byzantine_majority_no() {
         PROPOSALS.with(|proposals| proposals.borrow_mut().remove(&proposer));

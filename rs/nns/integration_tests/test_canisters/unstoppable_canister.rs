@@ -5,7 +5,7 @@ use std::time::Duration;
 #[unsafe(export_name = "canister_init")]
 fn canister_init() {
     println!("Unstoppable Canister Init!");
-    ic_cdk_timers::set_timer(Duration::from_millis(10), || {
+    ic_cdk_timers::set_timer(Duration::from_millis(10), async {
         let future = async {
             println!("Unstoppable canister loop is starting...");
 

@@ -17,6 +17,7 @@ ic-types = { path = "../types/types" }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true }
+phantom_newtype = { path = "../phantom_newtype" }
 slog = { workspace = true }
 
 [features]
@@ -28,6 +29,7 @@ criterion = { workspace = true }
 memmap2 = { workspace = true }
 proptest = { workspace = true }
 rayon = { workspace = true }
+rstest = { workspace = true }
 tempfile = { workspace = true }
 
 [[bench]]

@@ -1,6 +1,6 @@
+use candid::{CandidType, DecoderConfig, decode_one_with_config};
 use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
 use ic_config::embedders::{Config as EmbeddersConfig, StableMemoryPageLimit};
-use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -34,6 +34,7 @@ use request_in_prep::{RequestInPrep, into_request};
 use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
+use std::time::Duration;
 use std::{
     collections::BTreeMap,
     convert::{From, TryFrom},
@@ -408,6 +409,7 @@ pub enum ApiType {
     Cleanup {
         caller: PrincipalId,
         time: Time,
+        reject_code: i32,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
     },
@@ -1151,11 +1153,6 @@ pub struct SystemApiImpl {
 
     execution_parameters: ExecutionParameters,
 
-    /// Canister backtraces are enabled. This means we should attempt to collect
-    /// a backtrace if the canister calls the trap API.
-    #[allow(unused)]
-    canister_backtrace: FlagStatus,
-
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     max_sum_exported_function_name_lengths: usize,
@@ -1232,7 +1229,6 @@ impl SystemApiImpl {
             api_type,
             memory_usage,
             execution_parameters,
-            canister_backtrace: embedders_config.feature_flags.canister_backtrace,
             max_sum_exported_function_name_lengths: embedders_config
                 .max_sum_exported_function_name_lengths,
             stable_memory,
@@ -1443,7 +1439,6 @@ impl SystemApiImpl {
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::SystemTask { .. }
-            | ApiType::Cleanup { .. }
             | ApiType::CompositeCleanup { .. }
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
@@ -1456,6 +1451,7 @@ impl SystemApiImpl {
             | ApiType::CompositeRejectCallback { reject_context, .. } => {
                 Some(reject_context.code() as i32)
             }
+            ApiType::Cleanup { reject_code, .. } => Some(*reject_code),
         }
     }
 
@@ -1675,7 +1671,7 @@ impl SystemApiImpl {
                     request_slots_used: BTreeMap::new(),
                     requests: vec![],
                     new_global_timer: None,
-                    canister_log: Default::default(),
+                    canister_log: CanisterLog::default_delta(),
                     on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: false,
                 }
@@ -1698,7 +1694,7 @@ impl SystemApiImpl {
                     request_slots_used: BTreeMap::new(),
                     requests: vec![],
                     new_global_timer: None,
-                    canister_log: Default::default(),
+                    canister_log: CanisterLog::default_delta(),
                     on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: false,
                 },
@@ -1712,7 +1708,7 @@ impl SystemApiImpl {
                     request_slots_used: system_state_modifications.request_slots_used,
                     requests: system_state_modifications.requests,
                     new_global_timer: None,
-                    canister_log: Default::default(),
+                    canister_log: CanisterLog::default_delta(),
                     on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: false,
                 },
@@ -4216,6 +4212,59 @@ impl SystemApi for SystemApiImpl {
             );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
+        Ok(())
+    }
+
+    fn ic0_cost_http_request_v2(
+        &self,
+        params_src: usize,
+        params_size: usize,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        #[derive(CandidType, Deserialize)]
+        struct CostHttpRequestV2Params {
+            request_bytes: u64,
+            http_roundtrip_time_ms: u64,
+            raw_response_bytes: u64,
+            transformed_response_bytes: u64,
+            transform_instructions: u64,
+        }
+
+        let params_bytes = valid_subslice(
+            "ic0.cost_http_request_v2 heap",
+            InternalAddress::new(params_src),
+            InternalAddress::new(params_size),
+            heap,
+        )?;
+        let mut decoder_config = DecoderConfig::new();
+        decoder_config.set_skipping_quota(0);
+
+        let cost_params_v2: CostHttpRequestV2Params =
+            decode_one_with_config(params_bytes, &decoder_config).map_err(|e| {
+                HypervisorError::ToolchainContractViolation {
+                    error: format!(
+                        "Failed to decode HttpRequestV2CostParams from Candid: {}",
+                        e
+                    ),
+                }
+            })?;
+
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .http_request_fee_v2(
+                cost_params_v2.request_bytes.into(),
+                Duration::from_millis(cost_params_v2.http_roundtrip_time_ms),
+                cost_params_v2.raw_response_bytes.into(),
+                cost_params_v2.transform_instructions.into(),
+                cost_params_v2.transformed_response_bytes.into(),
+                subnet_size,
+                self.get_cost_schedule(),
+            );
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request_v2")?;
+        trace_syscall!(self, CostHttpRequestV2, cost);
         Ok(())
     }
 

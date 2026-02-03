@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "MAINNET_ENV", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,14 +6,11 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "xnet_slo_120_subnets_staging_test",
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     tags = [
         "system_test_large",
     ],
     test_timeout = "eternal",
-    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -24,13 +21,10 @@ system_test_nns(
 system_test_nns(
     name = "xnet_slo_3_subnets_hotfix_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     tags = [
         "system_test_large",
     ],
-    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -41,13 +35,10 @@ system_test_nns(
 system_test_nns(
     name = "xnet_slo_3_subnets_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     tags = [
         "system_test_large",
     ],
-    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -58,14 +49,11 @@ system_test_nns(
 system_test_nns(
     name = "xnet_slo_29_subnets_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     tags = [
         "system_test_large",
     ],
     test_timeout = "eternal",
-    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -75,12 +63,8 @@ system_test_nns(
 
 system_test(
     name = "xnet_malicious_slices",
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    runtime_deps = GRAFANA_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
+    guestos = "malicious",
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
@@ -96,18 +80,13 @@ system_test(
 system_test_nns(
     name = "xnet_compatibility",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    } | MAINNET_ENV,
+    env = MAINNET_ENV,
+    guestos = "mainnet_nns",
+    guestos_update = True,
     tags = [
         "long_test",
     ],
-    uses_guestos_img = False,
-    uses_guestos_mainnet_nns_img = True,
-    uses_guestos_update = True,
-    runtime_deps =
-        XNET_TEST_CANISTER_RUNTIME_DEPS +
-        GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",

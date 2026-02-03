@@ -619,13 +619,10 @@ mod test {
     use crate::ExecutionResponse;
     use ic_base_types::{CanisterId, NumSeconds};
     use ic_error_types::UserError;
-    use ic_logger::LoggerImpl;
-    use ic_logger::ReplicaLogger;
+    use ic_logger::{LoggerImpl, ReplicaLogger};
     use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
-    use ic_types::Cycles;
-    use ic_types::Time;
-    use ic_types::messages::CallbackId;
-    use ic_types::messages::NO_DEADLINE;
+    use ic_types::messages::{CallbackId, NO_DEADLINE};
+    use ic_types::{Cycles, Time};
 
     #[test]
     fn test_wasm_result_to_query_response_refunds_correctly() {

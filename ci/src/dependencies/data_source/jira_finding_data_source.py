@@ -24,7 +24,7 @@ from notification.console_logger_app_owner_msg_subscriber import ConsoleLoggerAp
 JIRA_SERVER = "https://dfinity.atlassian.net"
 JIRA_USER = "vuln-mgmt@dfinity.org"
 JIRA_BOARD_KEY = "SCAVM"
-JIRA_INCIDENT_RESPONDER_EPIC = "PSEC-885"
+JIRA_INCIDENT_RESPONDER_EPIC = "PSEC-2821"
 JIRA_DEFAULT_RISK_ASSESSORS = [
     User(id="62c2a69a7273faf658f02412", name="Thomas Müller", email="thomas.mueller@dfinity.org"),
     User(id="6151750907ac3c00689d2802", name="Venkkatesh Sekar", email="venkkatesh.sekar@dfinity.org"),
@@ -62,17 +62,16 @@ JIRA_OWNER_GROUP_BY_TEAM = {
     Team.NODE_TEAM: {"name": "dept-Node"},
     Team.BOUNDARY_NODE_TEAM: {"name": "dept-Boundary Nodes"},
     Team.TRUST_TEAM: {"name": "dept-Trust"},
-    Team.GIX_TEAM: {"name": "dept-GIX"},
+    Team.OISY_TEAM: {"name": "dept-Oisy"},
     Team.SDK_TEAM: {"name": "dept-SDK"},
-    Team.FINANCIAL_INTEGRATIONS_TEAM: {"name": "dept-Financial Integrations"},
-    Team.EXECUTION_TEAM: {"name": "dept-Execution"},
-    Team.NNS_TEAM: {"name": "dept-NNS"},
-    Team.CRYPTO_TEAM: {"name": "dept-Crypto Library"},
+    Team.DEFI_TEAM: {"name": "dept-DeFi"},
+    Team.DSM_TEAM: {"name": "dept-Deterministic State Machine"},
+    Team.GOVERNANCE_TEAM: {"name": "dept-Governance"},
+    Team.CONSENSUS_TEAM: {"name": "dept-Consensus"},
     Team.IDENTITY_TEAM: {"name": "dept-Identity"},
     Team.INTEGRATIONS_TEAM: {"name": "dept-Integrations"},
     Team.PRODUCT_ENABLEMENT_TEAM: {"name": "dept-Product Enablement"},
     Team.UTOPIA_RND_TEAM: {"name": "div-Utopia R&D"},
-    Team.CROSS_CHAIN_TEAM: {"name": "dept-Cross-Chain"},
 }
 JIRA_LABEL_PATCH_VULNDEP_PUBLISHED = "patch_published_vulndep"
 JIRA_LABEL_PATCH_ALLDEP_PUBLISHED = "patch_published_alldep"

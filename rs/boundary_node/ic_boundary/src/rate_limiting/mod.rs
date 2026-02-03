@@ -4,7 +4,7 @@ use anyhow::bail;
 use axum::Router;
 use candid::Principal;
 use http::request::Request;
-use ic_bn_lib::http::ConnInfo;
+use ic_bn_lib_common::types::http::ConnInfo;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
 use tower::ServiceBuilder;
@@ -119,7 +119,7 @@ mod test {
         routing::method_routing::post,
     };
     use http::StatusCode;
-    use ic_bn_lib::{http::ConnInfo, principal};
+    use ic_bn_lib_common::{principal, types::http::ConnInfo};
     use ic_types::{
         CanisterId,
         messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},

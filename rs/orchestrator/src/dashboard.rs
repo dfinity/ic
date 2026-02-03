@@ -1,5 +1,5 @@
 use crate::{
-    catch_up_package_provider::CatchUpPackageProvider, orchestrator::SubnetAssignment,
+    catch_up_package_provider::LocalCUPReader, orchestrator::SubnetAssignment,
     process_manager::ProcessManager, registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessParameters, upgrade::ReplicaProcess,
 };
@@ -26,7 +26,7 @@ pub(crate) struct OrchestratorDashboard {
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
     hostos_version: Option<HostosVersion>,
-    cup_provider: Arc<CatchUpPackageProvider>,
+    local_cup_reader: LocalCUPReader,
     logger: ReplicaLogger,
 }
 
@@ -89,7 +89,7 @@ impl OrchestratorDashboard {
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
         hostos_version: Option<HostosVersion>,
-        cup_provider: Arc<CatchUpPackageProvider>,
+        local_cup_reader: LocalCUPReader,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -102,7 +102,7 @@ impl OrchestratorDashboard {
             subnet_assignment,
             replica_version,
             hostos_version,
-            cup_provider,
+            local_cup_reader,
             logger,
         }
     }
@@ -163,7 +163,7 @@ impl OrchestratorDashboard {
     }
 
     fn get_local_cup_info(&self) -> String {
-        let (height, signed, hash, timestamp) = match self.cup_provider.get_local_cup() {
+        let (height, signed, hash, timestamp) = match self.local_cup_reader.get_local_cup() {
             None => (
                 String::from("None"),
                 String::from("None"),

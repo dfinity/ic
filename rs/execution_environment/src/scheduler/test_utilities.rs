@@ -362,8 +362,9 @@ impl SchedulerTest {
         caller: CanisterId,
         input_type: InputQueueType,
     ) {
-        assert!(
-            method_name.to_string() != Method::InstallCode.to_string(),
+        assert_ne!(
+            method_name.to_string(),
+            Method::InstallCode.to_string(),
             "Use `inject_install_code_call_to_ic00()`."
         );
 
@@ -572,6 +573,7 @@ impl SchedulerTest {
                 .scaled_subnet_available_memory(&state),
             subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(&state),
             compute_allocation_used,
+            subnet_memory_reservation: self.scheduler.exec_env.scaled_subnet_memory_reservation(),
         };
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
         self.scheduler.drain_subnet_queues(
@@ -666,6 +668,16 @@ impl SchedulerTest {
         idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     ) {
         self.idkg_pre_signatures = idkg_pre_signatures;
+    }
+
+    pub fn online_split_state(&mut self, subnet_id: SubnetId, other_subnet_id: SubnetId) {
+        let mut state = self.state.take().unwrap();
+
+        // Reset the split marker, just in case.
+        state.metadata.subnet_split_from = None;
+
+        let state_after_split = state.online_split(subnet_id, other_subnet_id).unwrap();
+        self.state = Some(state_after_split);
     }
 }
 
@@ -867,7 +879,9 @@ impl SchedulerTestBuilder {
                 key_id.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
-                    pre_signatures_to_create_in_advance: 5,
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(5),
                 },
             );
         }

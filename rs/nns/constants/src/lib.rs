@@ -57,8 +57,9 @@ pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
 /// run when creating a new net (e.g. mainnet, or testnet). For whatever reason,
 /// that doesn't need ledger archive, nor ledger index. (I guess because those
 /// are spawned by ledger.) Thus, they are not included.
-pub const NNS_CANISTER_WASMS: [&str; 14] = [
+pub const NNS_CANISTER_WASMS: [&str; 15] = [
     "registry-canister",
+    "registry-canister_test",
     "governance-canister",
     "governance-canister_test",
     "ledger-canister",

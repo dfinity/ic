@@ -10,6 +10,25 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-11-28: Proposal 139578
+
+http://dashboard.internetcomputer.org/proposal/139578
+
+## Changed
+
+* Clean up if RegisterExtension fails.
+
+
+# 2025-11-07: Proposal 139316
+
+https://dashboard.internetcomputer.org/proposal/139316
+
+Just a "maintenance" release, i.e. no behavior changes, just making sure that we
+do not become too behind, and avoid too many changes piling up in for the next
+"real" upgrade.
+
+
 # 2025-09-19: Proposal 138584
 
 https://dashboard.internetcomputer.org/proposal/138584

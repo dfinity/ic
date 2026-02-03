@@ -18,12 +18,13 @@ path = "bin/principal_to_hex.rs"
 askama = { workspace = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
-evm-rpc-client = { path = "../../evm-rpc-client" }
+evm_rpc_client = { workspace = true }
 evm_rpc_types = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 hex-literal = "0.4.1"
 ic-canister-log = "0.2.0"
+ic-canister-runtime = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
@@ -38,7 +39,6 @@ icrc-cbor = { path = "../../../../packages/icrc-cbor", features = ["u256"] }
 icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 minicbor = { workspace = true }
-minicbor-derive = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 phantom_newtype = { path = "../../../phantom_newtype" }

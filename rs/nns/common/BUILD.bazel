@@ -10,25 +10,20 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha2",
     "//rs/nervous_system/canisters",
-    "//rs/nervous_system/common",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/registry/transport",
     "//rs/types/base_types",
-    "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:lazy_static",
     "@crate_index//:num-traits",
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
-    "@crate_index//:sha2",
 ]
 
 DEV_DEPENDENCIES = [

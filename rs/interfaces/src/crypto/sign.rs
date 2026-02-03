@@ -40,35 +40,23 @@ pub mod canister_threshold_sig;
 /// Although the exact underlying signature scheme is unspecified and
 /// potentially subject to change, it is guaranteed to be non-malleable,
 /// that is, strongly unforgeable under chosen-message attack.
-pub trait BasicSigner<T: Signable> {
+pub trait BasicSigner<T: Signable>: Send + Sync {
     /// Creates a (non-malleable) basic signature.
     ///
     /// # Errors
-    /// * `CryptoError::RegistryClient`: if the registry cannot be accessed at
-    ///   `registry_version`.
-    /// * `CryptoError::PublicKeyNotFound`: if the `signer`'s public key cannot
-    ///   be found at the given `registry_version`.
-    /// * `CryptoError::MalformedPublicKey`: if the `signer`'s public key
-    ///   obtained from the registry is malformed.
-    /// * `CryptoError::AlgorithmNotSupported`: if the `signer`'s public key
-    ///   obtained from the registry is for an unsupported algorithm.
-    /// * `CryptoError::SecretKeyNotFound`: if the `signer`'s secret key cannot
-    ///   be found in the secret key store.
-    /// * `CryptoError::MalformedSecretKey`: if the secret key is malformed.
-    /// * `CryptoError::InvalidArgument`: if the signature algorithm is not
-    ///   supported.
+    /// * `CryptoError::InternalError`: if the node signing public key in the
+    ///   node's public key store is not found or malformed, or the node
+    ///   signing secret key in the node's secret key store is not found or
+    ///   has the wrong type.
+    /// * `CryptoError::TransientInternalError`: if there is a transient internal
+    ///   error during signing (e.g. RPC error when calling the crypto vault).
     ///
     /// When called within a Tokio runtime the function should be wrapped inside
     /// 'tokio::task::spawn_blocking' when in async function or
     /// 'tokio::task::block_in_place' when in sync function (using 'block_in_place'
     /// should be very rare event). Otherwise the call panics because the
     /// implementation of 'sign_basic' calls 'tokio::runtime::Runtime.block_on'.
-    fn sign_basic(
-        &self,
-        message: &T,
-        signer: NodeId,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<T>>;
+    fn sign_basic(&self, message: &T) -> CryptoResult<BasicSigOf<T>>;
 }
 
 /// A Crypto Component interface to verify basic signatures.

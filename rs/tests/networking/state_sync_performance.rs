@@ -23,11 +23,11 @@ use ic_system_test_driver::{
         farm::HostFeature,
         group::SystemTestGroup,
         ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
         simulate_network::{FixedNetworkSimulation, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            SshSession,
         },
     },
     systest,
@@ -36,7 +36,8 @@ use ic_system_test_driver::{
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use rejoin_test_lib::{
-    assert_state_sync_has_happened, install_statesync_test_canisters, modify_canister_heap,
+    assert_state_sync_has_happened, install_statesync_test_canisters,
+    write_random_data_to_stable_memory,
 };
 use slog::info;
 use std::time::Duration;
@@ -47,8 +48,8 @@ const TOTAL_NODES: usize = 13;
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
 
-const SIZE_LEVEL: usize = 1;
-const NUM_CANISTERS: usize = 4;
+const CANISTER_SIZE_GIB: u64 = 1;
+const NUM_CANISTERS: usize = 1;
 
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
     "state_sync_duration_seconds_sum{status=\"ok\"}";
@@ -56,14 +57,10 @@ pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
     "state_sync_duration_seconds_count{status=\"ok\"}";
 
 fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     InternetComputer::new()
         .with_default_vm_resources(VmResources {
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
-                30 + 2 * NUM_CANISTERS as u64 * SIZE_LEVEL as u64,
+                30 + 2 * NUM_CANISTERS as u64 * CANISTER_SIZE_GIB,
             )),
             ..VmResources::default()
         })
@@ -98,7 +95,6 @@ fn setup(env: TestEnv) {
             .with_latency(LATENCY)
             .with_bandwidth(BANDWIDTH_MBITS),
     );
-    env.sync_with_prometheus();
 
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     NnsInstallationBuilder::new()
@@ -135,15 +131,15 @@ fn test(env: TestEnv) {
 
         info!(
             logger,
-            "Start expanding the canister heap. The total size of all canisters will be {} MiB.",
-            SIZE_LEVEL * NUM_CANISTERS * 128
+            "Start modifying canister stable memory by random data. The total size of all canisters will be about {} GiB.",
+            CANISTER_SIZE_GIB * NUM_CANISTERS as u64
         );
-        modify_canister_heap(
+        write_random_data_to_stable_memory(
             logger.clone(),
             canisters.clone(),
-            SIZE_LEVEL,
-            NUM_CANISTERS,
             false,
+            0,
+            CANISTER_SIZE_GIB,
             0,
         )
         .await;
@@ -175,7 +171,6 @@ fn test(env: TestEnv) {
             .block_for_newer_registry_version()
             .await
             .expect("Failed to wait for new topology version");
-        env.sync_with_prometheus();
 
         // Wait for the new nodes to report healthy
         for subnet in topology.subnets() {

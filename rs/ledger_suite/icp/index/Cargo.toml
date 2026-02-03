@@ -37,3 +37,4 @@ ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-ledger-test-utils = { path = "../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+proptest = { workspace = true }

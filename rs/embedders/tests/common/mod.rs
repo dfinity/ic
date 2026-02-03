@@ -14,6 +14,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     CallOrigin, Memory, NetworkTopology, NumWasmPages, SubnetTopology, SystemState,
 };
@@ -261,6 +262,6 @@ pub fn get_system_state() -> SystemState {
 
 pub fn get_cmc_system_state() -> SystemState {
     let mut system_state = get_system_state();
-    system_state.canister_id = CYCLES_MINTING_CANISTER_ID;
+    system_state.set_canister_id(CYCLES_MINTING_CANISTER_ID);
     system_state
 }

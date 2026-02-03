@@ -1,12 +1,20 @@
 use crate::{
     canister_id_record::CanisterIdRecord,
+    canister_metadata::canister_metadata,
     canister_status::{CanisterStatusResultFromManagementCanister, canister_status},
+    delete_canister::delete_canister,
+    load_canister_snapshot::load_canister_snapshot,
+    stop_canister::stop_canister,
+    take_canister_snapshot::take_canister_snapshot,
     update_settings::{UpdateSettings, update_settings},
 };
 use async_trait::async_trait;
 use candid::Encode;
+use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
-use ic_management_canister_types_private::IC_00;
+use ic_management_canister_types_private::{
+    CanisterSnapshotResponse, IC_00, LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs,
+};
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_runtime::Runtime;
 use std::{
@@ -32,7 +40,34 @@ pub trait ManagementCanisterClient {
     /// A call to the `update_settings` management canister endpoint.
     async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (i32, String)>;
 
+    /// A call to the `canister_metadata` management canister endpoint.
+    async fn canister_metadata(
+        &self,
+        canister_id: PrincipalId,
+        name: String,
+    ) -> Result<Vec<u8>, (i32, String)>;
+
     fn canister_version(&self) -> Option<u64>;
+
+    async fn stop_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)>;
+
+    async fn delete_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)>;
+
+    async fn take_canister_snapshot(
+        &self,
+        args: TakeCanisterSnapshotArgs,
+    ) -> Result<CanisterSnapshotResponse, (i32, String)>;
+
+    async fn load_canister_snapshot(
+        &self,
+        args: LoadCanisterSnapshotArgs,
+    ) -> Result<(), (i32, String)>;
 }
 
 /// An example implementation of the ManagementCanisterClient trait.
@@ -92,8 +127,99 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
         update_settings::<Rt>(settings).await
     }
 
+    async fn canister_metadata(
+        &self,
+        canister_id: PrincipalId,
+        name: String,
+    ) -> Result<Vec<u8>, (i32, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let args = Encode!(&(canister_id, &name)).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "canister_metadata",
+                &args,
+            )
+        });
+
+        canister_metadata::<Rt>(canister_id, name).await
+    }
+
     fn canister_version(&self) -> Option<u64> {
         Some(Rt::canister_version())
+    }
+
+    async fn stop_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let args = Encode!(&canister_id_record).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "stop_canister",
+                &args,
+            )
+        });
+
+        stop_canister::<Rt>(canister_id_record).await
+    }
+
+    async fn delete_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let args = Encode!(&canister_id_record).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "delete_canister",
+                &args,
+            )
+        });
+
+        delete_canister::<Rt>(canister_id_record).await
+    }
+
+    async fn take_canister_snapshot(
+        &self,
+        args: TakeCanisterSnapshotArgs,
+    ) -> Result<CanisterSnapshotResponse, (i32, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let encoded_args = Encode!(&args).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "take_canister_snapshot",
+                &encoded_args,
+            )
+        });
+
+        take_canister_snapshot::<Rt>(args).await
+    }
+
+    async fn load_canister_snapshot(
+        &self,
+        args: LoadCanisterSnapshotArgs,
+    ) -> Result<(), (i32, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let encoded_args = Encode!(&args).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "load_canister_snapshot",
+                &encoded_args,
+            )
+        });
+
+        load_canister_snapshot::<Rt>(args).await
     }
 }
 
@@ -179,6 +305,15 @@ where
         self.inner.update_settings(settings).await
     }
 
+    async fn canister_metadata(
+        &self,
+        canister_id: PrincipalId,
+        name: String,
+    ) -> Result<Vec<u8>, (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.canister_metadata(canister_id, name).await
+    }
+
     fn canister_version(&self) -> Option<u64> {
         // This does not actually call the management canister. This implies a few things:
         //
@@ -186,6 +321,38 @@ where
         //   2. It was a mistake for this method to be included in this trait.
         //   3. No need for this method to be async.
         self.inner.canister_version()
+    }
+
+    async fn stop_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.stop_canister(canister_id_record).await
+    }
+
+    async fn delete_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.delete_canister(canister_id_record).await
+    }
+
+    async fn take_canister_snapshot(
+        &self,
+        args: TakeCanisterSnapshotArgs,
+    ) -> Result<CanisterSnapshotResponse, (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.take_canister_snapshot(args).await
+    }
+
+    async fn load_canister_snapshot(
+        &self,
+        args: LoadCanisterSnapshotArgs,
+    ) -> Result<(), (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.load_canister_snapshot(args).await
     }
 }
 
@@ -237,6 +404,11 @@ impl MockManagementCanisterClient {
 pub enum MockManagementCanisterClientCall {
     CanisterStatus(CanisterIdRecord),
     UpdateSettings(UpdateSettings),
+    CanisterMetadata(PrincipalId, String),
+    StopCanister(CanisterIdRecord),
+    DeleteCanister(CanisterIdRecord),
+    TakeCanisterSnapshot(TakeCanisterSnapshotArgs),
+    LoadCanisterSnapshot(LoadCanisterSnapshotArgs),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -244,6 +416,11 @@ pub enum MockManagementCanisterClientCall {
 pub enum MockManagementCanisterClientReply {
     CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (i32, String)>),
     UpdateSettings(Result<(), (i32, String)>),
+    CanisterMetadata(Result<Vec<u8>, (i32, String)>),
+    StopCanister(Result<(), (i32, String)>),
+    DeleteCanister(Result<(), (i32, String)>),
+    TakeCanisterSnapshot(Result<CanisterSnapshotResponse, (i32, String)>),
+    LoadCanisterSnapshot(Result<(), (i32, String)>),
 }
 
 #[async_trait]
@@ -297,8 +474,146 @@ impl ManagementCanisterClient for MockManagementCanisterClient {
         }
     }
 
+    async fn canister_metadata(
+        &self,
+        canister_id: PrincipalId,
+        name: String,
+    ) -> Result<Vec<u8>, (i32, String)> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push_back(MockManagementCanisterClientCall::CanisterMetadata(
+                canister_id,
+                name,
+            ));
+
+        let reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("Expected a MockManagementCanisterClientCall to be on the queue.");
+
+        match reply {
+            MockManagementCanisterClientReply::CanisterMetadata(response) => response,
+            err => panic!(
+                "Expected MockManagementCanisterClientReply::CanisterMetadata to be at \
+                the front of the queue. Had {:?}",
+                err
+            ),
+        }
+    }
+
     fn canister_version(&self) -> Option<u64> {
         None
+    }
+
+    async fn stop_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push_back(MockManagementCanisterClientCall::StopCanister(
+                canister_id_record,
+            ));
+
+        let reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("Expected a MockManagementCanisterClientCall to be on the queue.");
+
+        match reply {
+            MockManagementCanisterClientReply::StopCanister(result) => result,
+            err => panic!(
+                "Expected MockManagementCanisterClientReply::StopCanister to be at \
+                the front of the queue. Had {:?}",
+                err
+            ),
+        }
+    }
+
+    async fn delete_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push_back(MockManagementCanisterClientCall::DeleteCanister(
+                canister_id_record,
+            ));
+
+        let reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("Expected a MockManagementCanisterClientCall to be on the queue.");
+
+        match reply {
+            MockManagementCanisterClientReply::DeleteCanister(result) => result,
+            err => panic!(
+                "Expected MockManagementCanisterClientReply::StopCanister to be at \
+                the front of the queue. Had {:?}",
+                err
+            ),
+        }
+    }
+
+    async fn take_canister_snapshot(
+        &self,
+        args: TakeCanisterSnapshotArgs,
+    ) -> Result<CanisterSnapshotResponse, (i32, String)> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push_back(MockManagementCanisterClientCall::TakeCanisterSnapshot(args));
+
+        let reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("Expected a MockManagementCanisterClientCall to be on the queue.");
+
+        match reply {
+            MockManagementCanisterClientReply::TakeCanisterSnapshot(result) => result,
+            err => panic!(
+                "Expected MockManagementCanisterClientReply::TakeCanisterSnapshot to be at \
+                the front of the queue. Had {:?}",
+                err
+            ),
+        }
+    }
+
+    async fn load_canister_snapshot(
+        &self,
+        args: LoadCanisterSnapshotArgs,
+    ) -> Result<(), (i32, String)> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push_back(MockManagementCanisterClientCall::LoadCanisterSnapshot(args));
+
+        let reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("Expected a MockManagementCanisterClientCall to be on the queue.");
+
+        match reply {
+            MockManagementCanisterClientReply::LoadCanisterSnapshot(result) => result,
+            err => panic!(
+                "Expected MockManagementCanisterClientReply::LoadCanisterSnapshot to be at \
+                the front of the queue. Had {:?}",
+                err
+            ),
+        }
     }
 }
 

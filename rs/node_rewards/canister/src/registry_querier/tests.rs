@@ -173,13 +173,13 @@ fn test_subnets_list_returns_expected_subnets() {
         "2025-07-13",
     );
 
-    let got = client.subnets_list(version.into());
+    let got = client.subnets_list(version.into()).unwrap();
 
     let expected: Vec<SubnetId> = vec![subnet_1, subnet_2];
 
     assert_eq!(got, expected);
 
-    let got = client.subnets_list(deleted_version.into());
+    let got = client.subnets_list(deleted_version.into()).unwrap();
 
     let expected: Vec<SubnetId> = vec![];
 

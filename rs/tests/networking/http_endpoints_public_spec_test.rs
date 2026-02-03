@@ -462,7 +462,7 @@ fn method_name_edge_cases(env: TestEnv) {
                 .build()
                 .unwrap();
             let agent = Agent::builder()
-                .with_url(url)
+                .with_url(url.clone())
                 .with_http_client(client)
                 .build()
                 .unwrap();
@@ -474,11 +474,6 @@ fn method_name_edge_cases(env: TestEnv) {
                 &'x'.to_string().repeat(10_000),
                 &'x'.to_string().repeat(20_000),
             ] {
-                // TODO(BOUN-1484): enable the rest of the tests also when using API BN
-                if is_api_bn && method_name.len() > 10_000 {
-                    continue;
-                }
-
                 // We start with the successful case of a canister
                 // actually exporting a method with the given name.
                 let wasm = wasm_with_exported_method_name(method_name.to_string());
@@ -503,74 +498,144 @@ fn method_name_edge_cases(env: TestEnv) {
                     deploy_wasm_to_fresh_canister(&agent, app_uc.into(), trivial_wasm.as_slice())
                         .await;
 
-                let err = agent
+                let short_method_name = &method_name[..std::cmp::min(method_name.len(), 50)];
+                let err: AgentError = agent
                     .update(&canister_id, method_name)
                     .call_and_wait()
                     .await
                     .unwrap_err();
-                assert!(matches!(err, AgentError::CertifiedReject { .. }));
+                assert!(
+                    matches!(err, AgentError::CertifiedReject { .. }),
+                    "update: {} ({}) got error: {}",
+                    short_method_name,
+                    method_name.len(),
+                    err
+                );
                 let err = agent
                     .query(&canister_id, method_name)
                     .call()
                     .await
                     .unwrap_err();
-                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+                assert!(
+                    matches!(err, AgentError::UncertifiedReject { .. }),
+                    "query: {} ({}) got error: {}",
+                    short_method_name,
+                    method_name.len(),
+                    err
+                );
+            }
 
-                // TODO(BOUN-1484): enable the rest of the tests also when using API BN
-                if is_api_bn {
-                    continue;
-                }
+            // For the failure cases, we just need a canister.
+            // The actual method name does not matter.
+            let trivial_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+            let canister_id =
+                deploy_wasm_to_fresh_canister(&agent, app_uc.into(), trivial_wasm.as_slice()).await;
+            let too_long_method_name = 'x'.to_string().repeat(1 << 20);
+            let err = agent
+                .update(&canister_id, &too_long_method_name)
+                .call_and_wait()
+                .await
+                .unwrap_err();
 
-                let too_long_method_name = 'x'.to_string().repeat(1 << 20);
-                let err = agent
-                    .update(&canister_id, &too_long_method_name)
-                    .call_and_wait()
-                    .await
-                    .unwrap_err();
-                assert!(matches!(err, AgentError::CertifiedReject { .. }));
-                let err = agent
-                    .query(&canister_id, &too_long_method_name)
-                    .call()
-                    .await
-                    .unwrap_err();
-                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+            if is_api_bn {
+                // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
+                assert!(
+                    matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
+                    "api bn update for 'x' * 2**20: got error {}",
+                    err
+                );
+            } else {
+                // When bypassing the API BN, the replica responds with a reject.
+                assert!(
+                    matches!(err, AgentError::CertifiedReject { .. }),
+                    "direct replica update for 'x' * 2**20: got error {}",
+                    err
+                );
+            }
+            let err = agent
+                .query(&canister_id, &too_long_method_name)
+                .call()
+                .await
+                .unwrap_err();
 
-                let too_long_method_name = 'x'.to_string().repeat(3 << 20);
-                let err = agent
-                    .update(&canister_id, &too_long_method_name)
-                    .call_and_wait()
-                    .await
-                    .unwrap_err();
-                let payload_too_large = |err: AgentError| {
-                    match err {
-                        AgentError::HttpError(payload) => {
-                            assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
-                        }
-                        _ => panic!("Unexpected error: {:?}", err),
-                    };
+            if is_api_bn {
+                // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
+                assert!(
+                    matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
+                    "api bn update for 'x' * 2**20: got error {}",
+                    err
+                );
+            } else {
+                // When bypassing the API BN, the replica responds with a reject.
+                assert!(
+                    matches!(err, AgentError::UncertifiedReject { .. }),
+                    "direct replica update for 'x' * 2**20: got error {}",
+                    err
+                );
+            }
+
+            let too_long_method_name = 'x'.to_string().repeat(3 << 20);
+            let err = agent
+                .update(&canister_id, &too_long_method_name)
+                .call_and_wait()
+                .await
+                .unwrap_err();
+
+            let payload_too_large = |err: AgentError| {
+                match err {
+                    AgentError::HttpError(payload) => {
+                        assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
+                    }
+                    _ => panic!("Unexpected error: {:?}", err),
                 };
-                payload_too_large(err);
-                let err = agent
-                    .query(&canister_id, &too_long_method_name)
-                    .call()
-                    .await
-                    .unwrap_err();
-                assert!(matches!(err, AgentError::UncertifiedReject { .. }));
+            };
 
-                let too_long_method_name = 'x'.to_string().repeat(5 << 20);
-                let err = agent
-                    .update(&canister_id, &too_long_method_name)
-                    .call_and_wait()
-                    .await
-                    .unwrap_err();
-                payload_too_large(err);
-                let err = agent
-                    .query(&canister_id, &too_long_method_name)
-                    .call()
-                    .await
-                    .unwrap_err();
+            if is_api_bn {
+                // The API BN has more generous limits, so it still responds with HTTP 400 Bad Request.
+                assert!(
+                    matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
+                    "api bn update for 'x' * 3**20: got error {}",
+                    err
+                );
+            } else {
                 payload_too_large(err);
             }
+
+            let err = agent
+                .query(&canister_id, &too_long_method_name)
+                .call()
+                .await
+                .unwrap_err();
+
+            if is_api_bn {
+                // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
+                assert!(
+                    matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
+                    "api bn update for 'x' * 3**20: got error {}",
+                    err
+                );
+            } else {
+                // When bypassing the API BN, the replica responds with a reject.
+                assert!(
+                    matches!(err, AgentError::UncertifiedReject { .. }),
+                    "direct replica update for 'x' * 3**20: got error {}",
+                    err
+                );
+            }
+
+            let too_long_method_name = 'x'.to_string().repeat(5 << 20);
+            let err = agent
+                .update(&canister_id, &too_long_method_name)
+                .call_and_wait()
+                .await
+                .unwrap_err();
+            payload_too_large(err);
+            let err = agent
+                .query(&canister_id, &too_long_method_name)
+                .call()
+                .await
+                .unwrap_err();
+            payload_too_large(err);
         }
     });
 }

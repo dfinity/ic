@@ -78,7 +78,7 @@ fn setup(env: TestEnv) {
                         .into_iter()
                         .map(|key_id| KeyConfig {
                             key_id,
-                            pre_signatures_to_create_in_advance: 5,
+                            pre_signatures_to_create_in_advance: Some(5),
                             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                         })
                         .collect(),

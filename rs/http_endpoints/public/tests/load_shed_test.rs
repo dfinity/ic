@@ -378,7 +378,7 @@ fn test_load_shedding_update_call() {
         let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
         ingress_filter_running.notify_one();
         load_shedder_returned.notified().await;
-        resp.send_response(Ok(()))
+        resp.send_response(Ok(Ok(())))
     });
 
     rt.block_on(async {
@@ -461,7 +461,7 @@ fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint:
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()));
+            resp.send_response(Ok(Ok(())));
         }
     });
 

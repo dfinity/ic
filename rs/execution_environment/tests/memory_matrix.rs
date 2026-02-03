@@ -12,19 +12,21 @@ The runs ensure the following properties for every scenario:
 - the execution fails if the reserved cycles limit would be exceeded;
 - the execution fails if the canister would become frozen;
 - the execution fails if the canister does not have sufficient balance to reserve storage cycles;
-- the execution does not allocate additional cycles for canisters with memory allocation.
+- the execution does not allocate additional memory for canisters with memory allocation.
 
 The scenarios cover the following:
 - growing WASM/stable memory in canister (update) entry point;
 - growing WASM/stable memory in canister reply/cleanup callback;
-- taking a canister snapshot;
+- taking a canister snapshot (both growing and shrinking canister memory usage);
 - replacing a canister snapshot by a snapshot of the same size;
-- loading a canister snapshot;
+- loading a canister snapshot (both growing and shrinking canister memory usage);
+- deleting a canister snapshot;
 - installing code;
 - upgrading code with growing/shrinking memory and temporary memory growth in pre-upgrade;
 - reinstalling code with growing/shrinking memory;
 - uploading new chunk and uploading the same chunk again;
-- creating a new canister snapshot by uploading its metadata;
+- clearing the chunk store;
+- creating a new canister snapshot by uploading its metadata (both growing and shrinking canister memory usage);
 - uploading canister WASM module to its snapshot;
 - uploading canister WASM chunk to its snapshot;
 - increasing/decreasing canister memory allocation;
@@ -35,10 +37,11 @@ The scenarios cover the following:
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SnapshotId};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
+use ic_execution_environment::units::{GIB, KIB};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
-    LoadCanisterSnapshotArgs, LogVisibilityV2, Method, Payload as _,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, LoadCanisterSnapshotArgs, LogVisibilityV2,
+    Method, Payload as _, ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
 };
@@ -48,13 +51,11 @@ use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilde
 use ic_types::Cycles;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{MessageId, Payload};
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use num_traits::ops::saturating::SaturatingSub;
 use std::cmp::max;
 
 const T: u128 = 1_000_000_000_000;
-
-const KIB: u64 = 1 << 10;
-const GIB: u64 = 1 << 30;
 
 /// High amount of cycles that a canister under test is created with
 /// to ensure that it has enough cycles for any setup.
@@ -210,15 +211,17 @@ where
             MemoryUsageChange::Increase => memory_usage_after_setup.get() + 512 * KIB,
             MemoryUsageChange::None => match scenario_params.scenario {
                 Scenario::IncreaseMemoryAllocation => {
-                    assert!(memory_usage_after_setup.get() >= GIB);
+                    assert_ge!(memory_usage_after_setup.get(), GIB);
                     memory_usage_after_setup.get() - GIB
                 }
                 Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
                 _ => memory_usage_after_setup.get(),
             },
             MemoryUsageChange::Decrease => {
-                assert!(memory_usage_after_setup.get() >= GIB);
-                memory_usage_after_setup.get() - GIB
+                // Clearing the chunk store decreases the memory usage by 1MiB
+                // and thus we cannot have a larger offset in general.
+                assert_ge!(memory_usage_after_setup.get(), 512 * KIB);
+                memory_usage_after_setup.get() - 512 * KIB
             }
         },
         MemoryAllocation::Large => 80 * GIB,
@@ -237,7 +240,7 @@ where
         }
         _ => Cycles::zero(),
     };
-    assert!(run_params.initial_cycles >= refund_for_response_transmission);
+    assert_ge!(run_params.initial_cycles, refund_for_response_transmission);
     let initial_cycles = run_params.initial_cycles - refund_for_response_transmission;
     let consume_cycles = test.canister_state(canister_id).system_state.balance() - initial_cycles;
     test.consume_cycles(canister_id, consume_cycles);
@@ -250,7 +253,10 @@ where
     let dummy_canister_initial_cycles: Cycles = DEFAULT_INITIAL_CYCLES.into();
     let memory_allocated_bytes_after_setup =
         test.canister_state(canister_id).memory_allocated_bytes();
-    assert!(memory_allocated_bytes_after_setup <= run_params.subnet_memory_usage);
+    assert_le!(
+        memory_allocated_bytes_after_setup,
+        run_params.subnet_memory_usage
+    );
     let dummy_canister_memory_allocation =
         run_params.subnet_memory_usage - memory_allocated_bytes_after_setup;
     let dummy_canister_settings = CanisterSettingsArgsBuilder::new()
@@ -282,23 +288,23 @@ where
     // (in particular, now before running the operation under test).
     if let MemoryAllocation::Large = run_params.memory_allocation {
         let memory_usage = test.canister_state(canister_id).memory_usage();
-        assert!(memory_usage.get() <= memory_allocation);
+        assert_le!(memory_usage.get(), memory_allocation);
     }
     // Ensure that memory allocation is "crossed" if applicable.
     if let MemoryAllocation::CrossedDuringTest = run_params.memory_allocation {
         let current_memory_usage = test.canister_state(canister_id).memory_usage().get();
         match scenario_params.memory_usage_change {
-            MemoryUsageChange::Increase => assert!(current_memory_usage < memory_allocation),
+            MemoryUsageChange::Increase => assert_lt!(current_memory_usage, memory_allocation),
             MemoryUsageChange::None => match scenario_params.scenario {
                 Scenario::IncreaseMemoryAllocation => {
-                    assert!(current_memory_usage > memory_allocation)
+                    assert_gt!(current_memory_usage, memory_allocation)
                 }
                 Scenario::DecreaseMemoryAllocation => {
-                    assert!(current_memory_usage < memory_allocation)
+                    assert_lt!(current_memory_usage, memory_allocation)
                 }
                 _ => assert_eq!(current_memory_usage, memory_allocation),
             },
-            MemoryUsageChange::Decrease => assert!(current_memory_usage > memory_allocation),
+            MemoryUsageChange::Decrease => assert_gt!(current_memory_usage, memory_allocation),
         }
     }
 
@@ -379,25 +385,25 @@ where
         assert_eq!(newly_reserved_cycles, expected_reserved_cycles);
         // The memory usage changed as expected.
         match scenario_params.memory_usage_change {
-            MemoryUsageChange::Increase => assert!(initial_memory_usage < final_memory_usage),
+            MemoryUsageChange::Increase => assert_lt!(initial_memory_usage, final_memory_usage),
             MemoryUsageChange::None => assert_eq!(initial_memory_usage, final_memory_usage),
-            MemoryUsageChange::Decrease => assert!(initial_memory_usage > final_memory_usage),
+            MemoryUsageChange::Decrease => assert_gt!(initial_memory_usage, final_memory_usage),
         };
         if newly_allocated_bytes.get() > 0 {
             // The freezing threshold has the property that either
             // freezing limit in cycles or reserved cycles dominate.
             match run_params.freezing_threshold {
                 FreezingThreshold::Long => {
-                    assert!(freezing_limit_cycles > newly_reserved_cycles);
+                    assert_gt!(freezing_limit_cycles, newly_reserved_cycles);
                 }
                 FreezingThreshold::Short => {
-                    assert!(newly_reserved_cycles > freezing_limit_cycles);
+                    assert_gt!(newly_reserved_cycles, freezing_limit_cycles);
                 }
             };
         }
         match scenario_params.memory_usage_change {
             MemoryUsageChange::Increase => {
-                assert!(initial_allocated_bytes <= final_allocated_bytes);
+                assert_le!(initial_allocated_bytes, final_allocated_bytes);
                 // New bytes are *allocated* if and only if the memory usage is not covered
                 // by memory allocation, i.e., if memory allocation is "large".
                 assert_eq!(
@@ -409,7 +415,7 @@ where
             // only change if memory allocation changes.
             MemoryUsageChange::None => match scenario_params.scenario {
                 Scenario::IncreaseMemoryAllocation => {
-                    assert!(initial_allocated_bytes < final_allocated_bytes)
+                    assert_lt!(initial_allocated_bytes, final_allocated_bytes)
                 }
                 Scenario::DecreaseMemoryAllocation => {
                     // If memory usage exceeds memory allocation, then
@@ -417,13 +423,13 @@ where
                     if initial_memory_usage.get() > memory_allocation {
                         assert_eq!(initial_allocated_bytes, final_allocated_bytes);
                     } else {
-                        assert!(initial_allocated_bytes > final_allocated_bytes);
+                        assert_gt!(initial_allocated_bytes, final_allocated_bytes);
                     }
                 }
                 _ => assert_eq!(initial_allocated_bytes, final_allocated_bytes),
             },
             MemoryUsageChange::Decrease => {
-                assert!(initial_allocated_bytes >= final_allocated_bytes)
+                assert_ge!(initial_allocated_bytes, final_allocated_bytes)
             }
         };
         // Ensure that memory allocation is "crossed" if applicable.
@@ -437,19 +443,29 @@ where
                 .get();
             match scenario_params.memory_usage_change {
                 MemoryUsageChange::Increase => {
-                    assert!(current_memory_usage > current_memory_allocation)
+                    assert_gt!(current_memory_usage, current_memory_allocation)
                 }
                 MemoryUsageChange::None => match scenario_params.scenario {
                     Scenario::IncreaseMemoryAllocation => {
-                        assert!(current_memory_usage < current_memory_allocation)
+                        assert_lt!(current_memory_usage, current_memory_allocation)
                     }
                     Scenario::DecreaseMemoryAllocation => {
-                        assert!(current_memory_usage > current_memory_allocation)
+                        assert_gt!(current_memory_usage, current_memory_allocation)
                     }
-                    _ => assert_eq!(current_memory_usage, current_memory_allocation),
+                    _ => {
+                        // Memory allocation is set to match the memory usage after setup,
+                        // but canister history memory usage can increase even in case of `MemoryUsageChange::None`.
+                        let canister_history_memory_usage_increase =
+                            final_history_memory_usage - initial_history_memory_usage;
+                        assert_eq!(
+                            current_memory_usage,
+                            current_memory_allocation
+                                + canister_history_memory_usage_increase.get()
+                        );
+                    }
                 },
                 MemoryUsageChange::Decrease => {
-                    assert!(current_memory_usage < current_memory_allocation)
+                    assert_lt!(current_memory_usage, current_memory_allocation)
                 }
             }
         }
@@ -463,7 +479,7 @@ where
     // (in particular, now after running the operation under test).
     if let MemoryAllocation::Large = run_params.memory_allocation {
         let memory_usage = test.canister_state(canister_id).memory_usage();
-        assert!(memory_usage.get() <= memory_allocation);
+        assert_le!(memory_usage.get(), memory_allocation);
     }
 
     // Check that subnet available memory has been updated properly
@@ -491,7 +507,10 @@ where
     // Check that the total amount of cycles did not increase.
     let total_cycles_balance =
         test.canister_state(canister_id).system_state.balance() + newly_reserved_cycles;
-    assert!(run_params.initial_cycles + refund_for_response_execution >= total_cycles_balance);
+    assert_ge!(
+        run_params.initial_cycles + refund_for_response_execution,
+        total_cycles_balance
+    );
 
     // Return result.
     let cycles_used = run_params.initial_cycles - total_cycles_balance;
@@ -774,6 +793,24 @@ fn setup_universal_canister_with_much_memory(test: &mut ExecutionTest, canister_
         .unwrap();
 }
 
+/// Setups a fixed memory canister with no custom sections.
+/// Custom section size matters in canister snapshot tests
+/// since it is accounted for in canister memory usage,
+/// but not in canister snapshot memory usage.
+fn setup_fixed_memory_canister(test: &mut ExecutionTest, canister_id: CanisterId) {
+    const FIXED_MEMORY_WAT: &str = r#"
+    (module
+        (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+        (func $init
+            (drop (call $stable64_grow (i64.const 1024))))
+        (memory $memory 1024)
+        (export "canister_init" (func $init))
+    )"#;
+    let fixed_memory_wasm = wat::parse_str(FIXED_MEMORY_WAT).unwrap();
+    test.install_canister(canister_id, fixed_memory_wasm)
+        .unwrap();
+}
+
 fn test_memory_suite_grow_memory_entry_point_(payload: Vec<u8>) {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
         let msg_id = test.ingress_raw(canister_id, "update", payload.clone()).0;
@@ -867,9 +904,10 @@ fn test_memory_suite_grow_memory_cleanup_callback() {
 }
 
 #[test]
-fn test_memory_suite_take_snapshot() {
+fn test_memory_suite_take_snapshot_growing_memory_usage() {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -886,10 +924,50 @@ fn test_memory_suite_take_snapshot() {
 }
 
 #[test]
+fn test_memory_suite_take_snapshot_shrinking_memory_usage() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister_with_much_memory(test, canister_id);
+        // Take a "large" canister snapshot.
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+        let res = test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        );
+        let snapshot_id = CanisterSnapshotResponse::decode(&get_reply(res))
+            .unwrap()
+            .id;
+        // Reinstall the canister so that its memory usage is small and
+        // taking a new ("small") snapshot while replacing the "large" snapshot
+        // decreases the canister memory usage overall.
+        test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
+        snapshot_id
+    };
+    let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), None, None);
+        test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
 fn test_memory_suite_replace_snapshot() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -900,7 +978,7 @@ fn test_memory_suite_replace_snapshot() {
     };
     let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
         let take_canister_snapshot_args =
-            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
+            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), None, None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -917,10 +995,42 @@ fn test_memory_suite_replace_snapshot() {
 }
 
 #[test]
-fn test_memory_suite_load_snapshot() {
+fn test_memory_suite_take_snapshot_and_uninstall_code() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_fixed_memory_canister(test, canister_id);
+        // We upload a chunk to test that its memory usage is accounted for
+        // after uninstalling the canister.
+        let upload_chunk_args = UploadChunkArgs {
+            canister_id: canister_id.get(),
+            chunk: vec![42; 1 << 20],
+        };
+        test.subnet_message(Method::UploadChunk, upload_chunk_args.encode())
+            .unwrap();
+    };
+    let op = |test: &mut ExecutionTest, canister_id, ()| {
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, Some(true), None);
+        test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::None,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_load_snapshot_growing_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -943,6 +1053,79 @@ fn test_memory_suite_load_snapshot() {
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
         memory_usage_change: MemoryUsageChange::Increase,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_load_snapshot_shrinking_memory_usage() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister(test, canister_id);
+        // Take a "small" snapshot.
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+        let res = test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        );
+        let snapshot_id = CanisterSnapshotResponse::decode(&get_reply(res))
+            .unwrap()
+            .id;
+        // Grow the memory usage of the canister so that loading the "small" snapshot later
+        // decreases the canister memory usage.
+        let grow_payload = memory_grow_payload(GIB >> 16, GIB >> 16, true);
+        let msg_id = test.ingress_raw(canister_id, "update", grow_payload).0;
+        test.execute_all();
+        // Ensure that the update call to grow memory succeeded.
+        test.ingress_result(&msg_id).unwrap();
+        snapshot_id
+    };
+    let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
+        let load_canister_snapshot_args =
+            LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+        test.subnet_message(
+            Method::LoadCanisterSnapshot,
+            load_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_delete_snapshot() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister_with_much_memory(test, canister_id);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+        let res = test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        );
+        CanisterSnapshotResponse::decode(&get_reply(res))
+            .unwrap()
+            .id
+    };
+    let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
+        let delete_canister_snapshot_args =
+            DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+        test.subnet_message(
+            Method::DeleteCanisterSnapshot,
+            delete_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
         setup,
         op,
     };
@@ -1116,11 +1299,37 @@ fn test_memory_suite_upload_chunk_idempotent() {
     test_memory_suite(params);
 }
 
+#[test]
+fn test_memory_suite_clear_chunk_store() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        let upload_chunk_args = UploadChunkArgs {
+            canister_id: canister_id.get(),
+            chunk: vec![42; 1 << 20],
+        };
+        test.subnet_message(Method::UploadChunk, upload_chunk_args.encode())
+            .unwrap();
+    };
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
+        let clear_chunk_store_args = ClearChunkStoreArgs {
+            canister_id: canister_id.get(),
+        };
+        test.subnet_message(Method::ClearChunkStore, clear_chunk_store_args.encode())
+            .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
 fn take_snapshot_and_read_metadata(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
-) -> ReadCanisterSnapshotMetadataResponse {
-    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+) -> (SnapshotId, ReadCanisterSnapshotMetadataResponse) {
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let res = test.subnet_message(
         Method::TakeCanisterSnapshot,
         take_canister_snapshot_args.encode(),
@@ -1136,16 +1345,19 @@ fn take_snapshot_and_read_metadata(
         Method::ReadCanisterSnapshotMetadata,
         snapshot_metadata_args.encode(),
     );
-    ReadCanisterSnapshotMetadataResponse::decode(&get_reply(res)).unwrap()
+    let bytes = get_reply(res);
+    let metadata = ReadCanisterSnapshotMetadataResponse::decode(&bytes).unwrap();
+    (snapshot_id, metadata)
 }
 
 fn metadata_upload_payload(
     canister_id: CanisterId,
     metadata: ReadCanisterSnapshotMetadataResponse,
+    replace_snapshot: Option<SnapshotId>,
 ) -> UploadCanisterSnapshotMetadataArgs {
     UploadCanisterSnapshotMetadataArgs {
         canister_id: canister_id.get(),
-        replace_snapshot: None,
+        replace_snapshot,
         wasm_module_size: metadata.wasm_module_size,
         globals: metadata.globals,
         wasm_memory_size: metadata.wasm_memory_size,
@@ -1157,17 +1369,17 @@ fn metadata_upload_payload(
 }
 
 #[test]
-fn test_memory_suite_upload_canister_snapshot_metadata() {
+fn test_memory_suite_upload_canister_snapshot_metadata_growing_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        take_snapshot_and_read_metadata(test, canister_id)
+        take_snapshot_and_read_metadata(test, canister_id).1
     };
     let op = |test: &mut ExecutionTest,
               canister_id: CanisterId,
               metadata: ReadCanisterSnapshotMetadataResponse| {
         test.subnet_message(
             Method::UploadCanisterSnapshotMetadata,
-            metadata_upload_payload(canister_id, metadata).encode(),
+            metadata_upload_payload(canister_id, metadata, None).encode(),
         )
         .err()
     };
@@ -1181,13 +1393,45 @@ fn test_memory_suite_upload_canister_snapshot_metadata() {
 }
 
 #[test]
+fn test_memory_suite_upload_canister_snapshot_metadata_shrinking_memory_usage() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister_with_much_memory(test, canister_id);
+        // Take a "large" snapshot and read its metadata.
+        let (snapshot_id, mut metadata) = take_snapshot_and_read_metadata(test, canister_id);
+        // Update the metadata to make the snapshot "small"
+        // so that uploading the metadata while replacing the "large" snapshot
+        // decreases the canister memory usage overall.
+        metadata.wasm_memory_size = 0;
+        metadata.stable_memory_size = 0;
+        (snapshot_id, metadata)
+    };
+    let op =
+        |test: &mut ExecutionTest,
+         canister_id: CanisterId,
+         (snapshot_id, metadata): (SnapshotId, ReadCanisterSnapshotMetadataResponse)| {
+            test.subnet_message(
+                Method::UploadCanisterSnapshotMetadata,
+                metadata_upload_payload(canister_id, metadata, Some(snapshot_id)).encode(),
+            )
+            .err()
+        };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
 fn test_memory_suite_upload_canister_snapshot_data_wasm_module() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        let metadata = take_snapshot_and_read_metadata(test, canister_id);
+        let metadata = take_snapshot_and_read_metadata(test, canister_id).1;
         let res = test.subnet_message(
             Method::UploadCanisterSnapshotMetadata,
-            metadata_upload_payload(canister_id, metadata).encode(),
+            metadata_upload_payload(canister_id, metadata, None).encode(),
         );
         UploadCanisterSnapshotMetadataResponse::decode(&get_reply(res))
             .unwrap()
@@ -1219,10 +1463,10 @@ fn test_memory_suite_upload_canister_snapshot_data_wasm_module() {
 fn test_memory_suite_upload_canister_snapshot_data_wasm_chunk() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        let metadata = take_snapshot_and_read_metadata(test, canister_id);
+        let metadata = take_snapshot_and_read_metadata(test, canister_id).1;
         let res = test.subnet_message(
             Method::UploadCanisterSnapshotMetadata,
-            metadata_upload_payload(canister_id, metadata).encode(),
+            metadata_upload_payload(canister_id, metadata, None).encode(),
         );
         UploadCanisterSnapshotMetadataResponse::decode(&get_reply(res))
             .unwrap()

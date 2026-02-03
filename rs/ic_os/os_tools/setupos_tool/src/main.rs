@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
 
-use config::{DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, deserialize_config};
+use config_tool::{DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{Ipv6Config, SetupOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};

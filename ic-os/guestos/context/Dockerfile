@@ -53,6 +53,7 @@ RUN apt-get clean && \
 COPY --chmod=644 etc/hosts /etc/hosts
 COPY --chmod=644 etc/hostname /etc/hostname
 COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
+COPY --chmod=755 opt/ic/bin/open_rootfs /opt/ic/bin/open_rootfs
 
 # Update POSIX permissions in /etc/
 # TODO: We overwrite all /etc files with 644 except for the specified.
@@ -60,6 +61,7 @@ COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
     chmod 0755 /etc/systemd/system-generators/* && \
+    chmod 0755 /etc/systemd/system-environment-generators/* && \
     chmod 0755 /etc/init.d/* && \
     chmod 0440 /etc/sudoers && \
     chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id && \
@@ -73,7 +75,7 @@ COPY prep /prep
 RUN cd /prep && ./prep.sh && cd / && rm -rf /prep
 
 # Activate the NSS IC OS Name Service Switch plugin.
-# See ../../../rs/ic_os/nss_icos/README.md for context.
+# See ../../../rs/ic_os/networking/nss_icos/README.md for context.
 RUN sed -r -e 's/hosts:( *)files/hosts:\1files icos/' -i /etc/nsswitch.conf
 
 # Prepare for bind mount of authorized_keys

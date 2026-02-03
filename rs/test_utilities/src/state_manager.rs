@@ -75,9 +75,10 @@ impl FakeStateManager {
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         let partial_hash = CryptoHashOf::from(fake_hash);
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
+        let state = initial_state().take();
         let snapshot = Snapshot {
             height,
-            state: initial_state().take(),
+            state: state.clone(),
             partial_hash,
             root_hash: CryptoHashOf::from(fake_hash),
             certification: None,
@@ -85,10 +86,7 @@ impl FakeStateManager {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         Self {
             states: Arc::new(RwLock::new(vec![snapshot])),
-            tip: Arc::new(RwLock::new(Some((
-                height,
-                ReplicatedState::new(subnet_test_id(169), SubnetType::Application),
-            )))),
+            tip: Arc::new(RwLock::new(Some((height, (*state).clone())))),
             tempdir: Arc::new(tmpdir),
             encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
             fd_factory: Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
@@ -109,7 +107,7 @@ fn initial_state() -> Labeled<Arc<ReplicatedState>> {
     Labeled::new(
         INITIAL_STATE_HEIGHT,
         Arc::new(ReplicatedState::new(
-            subnet_test_id(1),
+            subnet_test_id(169),
             SubnetType::Application,
         )),
     )
@@ -220,6 +218,10 @@ impl StateManager for FakeStateManager {
         // All heights are checkpoints
     }
 
+    fn update_fast_forward_height(&self, _height: Height) {
+        // `FakeStateManager` does not implement fast-forwarding.
+    }
+
     fn commit_and_certify(
         &self,
         state: ReplicatedState,
@@ -281,6 +283,11 @@ impl StateReader for FakeStateManager {
             .unwrap()
             .last()
             .map_or_else(initial_state, |snap| snap.make_labeled_state())
+    }
+
+    // No certification support in FakeStateManager
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        None
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
@@ -698,6 +705,10 @@ impl StateManager for RefMockStateManager {
         self.mock.read().unwrap().remove_states_below(height)
     }
 
+    fn update_fast_forward_height(&self, height: Height) {
+        self.mock.read().unwrap().update_fast_forward_height(height)
+    }
+
     fn remove_inmemory_states_below(
         &self,
         height: Height,
@@ -740,6 +751,10 @@ impl StateReader for RefMockStateManager {
 
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>> {
         self.mock.read().unwrap().get_latest_state()
+    }
+
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        self.mock.read().unwrap().get_latest_certified_state()
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {

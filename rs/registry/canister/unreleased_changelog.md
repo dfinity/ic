@@ -11,19 +11,12 @@ on the process that this file is part of, see
 
 ## Changed
 
-* Allow unassigned nodes to have nonempty ssh_node_state_write_access.
-
-  * Why: Previously, it was believed that there is no way that a nonempty
-    ssh_node_state_write_access could be used constructively, but after
-    consulting the Consensus team, we (the Governance team) learned that this is
-    not true. In particular, it could be useful during a subnet recovery, even
-    though this capability generally wouldn't be used during a "typical" subnet
-    recovery.
-
 ## Deprecated
 
 ## Removed
 
 ## Fixed
+
+* When performing `RemoveNodes`, generate 1 update mutation per node operator key. Before this change, a single node operator record would be changed multiple times in a single version if the remove nodes proposal removed multiple nodes from the same node operator, which caused confusion. This bug resulted in incorrect tracking of node operator allowance depending on how they are fetched from the registry (given the different implementations in the registry utility functions).
 
 ## Security

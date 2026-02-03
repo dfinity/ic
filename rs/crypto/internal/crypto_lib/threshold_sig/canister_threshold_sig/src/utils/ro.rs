@@ -188,18 +188,14 @@ impl RandomOracle {
         Ok(input)
     }
 
-    /// Consume the random oracle and generate a bytestring as output
-    ///
-    /// Due to limitations of XMD this can produce only a limited amount of data,
-    /// at most 8160 bytes.
-    pub fn output_bytestring(self, output_length: usize) -> CanisterThresholdResult<Vec<u8>> {
+    /// Consume the random oracle and generate 32 bytes as output
+    pub fn output_32_bytes(self) -> CanisterThresholdResult<[u8; 32]> {
         let ro_input = self.form_ro_input()?;
 
-        Ok(xmd::<ic_crypto_sha2::Sha256>(
+        Ok(xmd::<32, ic_crypto_sha2::Sha256>(
             &ro_input,
             self.domain_separator.as_bytes(),
-            output_length,
-        )?)
+        ))
     }
 
     /// Consume the random oracle and generate a point as output
@@ -213,25 +209,26 @@ impl RandomOracle {
         )
     }
 
-    /// Consume the random oracle and generate a scalar output
+    /// Consume the random oracle and generate a scalar
     pub fn output_scalar(self, curve_type: EccCurveType) -> CanisterThresholdResult<EccScalar> {
-        Ok(self.output_scalars(curve_type, 1)?[0].clone())
-    }
-
-    /// Consume the random oracle and generate several scalar outputs
-    ///
-    /// Due to limitations of XMD this can produce only a limited number of
-    /// outputs - 170 in the case of secp256k1.
-    pub fn output_scalars(
-        self,
-        curve_type: EccCurveType,
-        cnt: usize,
-    ) -> CanisterThresholdResult<Vec<EccScalar>> {
         let ro_input = self.form_ro_input()?;
 
-        EccScalar::hash_to_several_scalars(
+        EccScalar::hash_to_scalar(
             curve_type,
-            cnt,
+            &ro_input,
+            format!("{}-{}", self.domain_separator, curve_type).as_bytes(),
+        )
+    }
+
+    /// Consume the random oracle and generate a pair of scalar outputs
+    pub fn output_two_scalars(
+        self,
+        curve_type: EccCurveType,
+    ) -> CanisterThresholdResult<(EccScalar, EccScalar)> {
+        let ro_input = self.form_ro_input()?;
+
+        EccScalar::hash_to_two_scalars(
+            curve_type,
             &ro_input,
             format!("{}-{}", self.domain_separator, curve_type).as_bytes(),
         )

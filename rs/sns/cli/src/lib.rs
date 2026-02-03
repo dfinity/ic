@@ -13,8 +13,8 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance_api::{
-    ManageNeuron, ManageNeuronResponse, Proposal,
-    manage_neuron::{self, NeuronIdOrSubaccount},
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::{self, MakeProposalResponse},
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -571,21 +571,21 @@ impl NnsGovernanceCanister {
     pub(crate) fn make_proposal(
         &self,
         proposer: &NeuronIdOrSubaccount,
-        proposal: &Proposal,
+        proposal: &MakeProposalRequest,
     ) -> Result<MakeProposalResponse, anyhow::Error> {
         // TODO: Jira ticket NNS1-3555
         #[allow(non_local_definitions)]
-        impl Request for ManageNeuron {
+        impl Request for ManageNeuronRequest {
             type Response = ManageNeuronResponse;
             const METHOD_NAME: &'static str = "manage_neuron";
         }
 
         // Step 1: Construct request.
         let neuron_id_or_subaccount = Some(proposer.clone());
-        let manage_neuron_request = ManageNeuron {
+        let manage_neuron_request = ManageNeuronRequest {
             id: None,
             neuron_id_or_subaccount,
-            command: Some(manage_neuron::Command::MakeProposal(Box::new(
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
                 proposal.clone(),
             ))),
         };

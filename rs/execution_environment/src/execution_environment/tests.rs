@@ -1,3 +1,4 @@
+use crate::units::GIB as ONE_GIB;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
@@ -41,8 +42,9 @@ use ic_types::{
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
-use more_asserts::assert_gt;
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::mem::size_of;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod canister_task;
@@ -53,7 +55,6 @@ mod canister_snapshots;
 mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
-const ONE_GIB: u64 = 1 << 30;
 
 // A Wasm module calling call_perform
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -1049,6 +1050,8 @@ fn get_canister_status_memory_metrics_snapshots_size() {
         TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         }
         .encode(),
     )
@@ -1215,8 +1218,8 @@ fn deposit_cycles_to_non_existing_canister_fails() {
         result
     );
     let controller_balance = test.canister_state(controller).system_state.balance().get();
-    assert!(controller_balance <= 1_u128 << 62);
-    assert!(controller_balance >= (1_u128 << 62) - 100_000_000_000);
+    assert_le!(controller_balance, 1_u128 << 62);
+    assert_ge!(controller_balance, (1_u128 << 62) - 100_000_000_000);
 }
 
 #[test]
@@ -1564,6 +1567,166 @@ fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
     );
 }
 
+#[test]
+fn subnet_split_cleans_in_progress_stop_canister_calls() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create two canisters.
+    let canister_id_1 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let canister_id_2 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id_1, controllers.clone())
+        .unwrap();
+    test.canister_update_controller(canister_id_2, controllers)
+        .unwrap();
+
+    // SubnetCallContextManager does not contain any entries before executing the messages.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    //
+    // Test stop canister call with canister request origin.
+    //
+
+    // `stop_canister()` only puts the canister in state `Stopping`. The state gets
+    // changed from `Stopping` to `Stopped` (if there are no open call contexts) at
+    // the end of the round, but the test never executes a full round.
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id_1)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // Canister 1 is now in state `Stopping`.
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id_1).status()
+    );
+    // And `SubnetCallContextManager` contains one `StopCanisterCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    let other_subnet_id = subnet_test_id(13);
+    assert_ne!(own_subnet_id, other_subnet_id);
+
+    // A no-op subnet split (no canisters migrated).
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_1, own_subnet_id);
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_2, own_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Retains the `StopCanisterCall` and does not produce a response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // Simulate a subnet split that migrates canister 1 to another subnet.
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_1, other_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Should have removed the `StopCanisterCall` and produced a reject response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+    assert!(test.state().subnet_queues().has_output());
+
+    //
+    // Test stop canister call with ingress origin.
+    //
+    let ingress_id = test.stop_canister(canister_id_2);
+
+    // Canister 2 is now in state `Stopping`.
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id_2).status()
+    );
+    // And `SubnetCallContextManager` contains one `StopCanisterCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    // A no-op subnet split (no canisters migrated).
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Retains the `StopCanisterCall` and does not change the ingress state.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+    assert_eq!(
+        test.ingress_status(&ingress_id),
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        } // As opposed to `Known::Failed`.
+    );
+
+    // Simulate a subnet split that migrates canister 2 to another subnet.
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_2, other_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Should have removed the `StopCanisterCall` and set the ingress state to `Failed`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+    assert_eq!(
+        check_ingress_status(test.ingress_status(&ingress_id)),
+        Err(UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {canister_id_2} migrated during a subnet split"),
+        ))
+    );
+}
+
 /// Ensures that in-progress stop canister calls are left in a consistent state
 /// after a subnet split: i.e. there is no stop canister call that is tracked by
 /// a canister, but not by the subnet call context manager; or the other way
@@ -1699,7 +1862,8 @@ fn canister_snapshots_after_split() {
     );
 
     // Take canister snapshot for each canister.
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id_1, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         Encode!(&args).unwrap(),
@@ -1707,7 +1871,8 @@ fn canister_snapshots_after_split() {
     );
     test.execute_subnet_message();
 
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_2, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id_2, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         Encode!(&args).unwrap(),
@@ -1988,6 +2153,7 @@ fn http_request_bound_holds() {
             context: transform_context.clone(),
         }),
         is_replicated: None,
+        pricing_version: None,
     };
 
     // Create request to HTTP_REQUEST method.
@@ -2246,7 +2412,10 @@ fn ingress_deducts_execution_cost_from_canister_balance() {
     );
     // Ensure that we charged some cycles. The actual value is unknown to us at
     // this point but it is definitely larger that 1000.
-    assert!(execution_cost_after - execution_cost_before > Cycles::new(1_000));
+    assert_gt!(
+        execution_cost_after - execution_cost_before,
+        Cycles::new(1_000)
+    );
 }
 
 #[test]
@@ -2769,6 +2938,7 @@ fn execute_canister_http_request() {
             context: transform_context.clone(),
         }),
         is_replicated: None,
+        pricing_version: None,
     };
 
     // Create request to HTTP_REQUEST method.
@@ -2849,6 +3019,7 @@ fn execute_canister_http_request_disabled() {
             context: vec![0, 1, 2],
         }),
         is_replicated: None,
+        pricing_version: None,
     };
 
     // Create request to HTTP_REQUEST method.
@@ -3611,8 +3782,8 @@ fn replicated_query_can_burn_cycles() {
     let burned_cycles = *test
         .canister_state(canister_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn));
@@ -3651,8 +3822,8 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     assert!(
         test.canister_state(canister_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
@@ -3711,20 +3882,20 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
-    assert!(transmission_consumption_before_response.get() > 0);
-    assert!(instruction_consumption_before_response.get() > 0);
+    assert_gt!(transmission_consumption_before_response.get(), 0);
+    assert_gt!(instruction_consumption_before_response.get(), 0);
 
     // Check that canister A's balance is decremented for consumed cycles
     // plus transferred cycles to canister B.
@@ -3764,8 +3935,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     assert_eq!(
         test.canister_state(a_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .len(),
         2
     );
@@ -3773,15 +3944,15 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3798,8 +3969,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
     // Consumed cycles after the response should be smaller than before
     // the response because we expect a refund for prepaid cycles.
-    assert!(transmission_consumption_after_response < transmission_consumption_before_response);
-    assert!(instruction_consumption_after_response < instruction_consumption_before_response);
+    assert_lt!(
+        transmission_consumption_after_response,
+        transmission_consumption_before_response
+    );
+    assert_lt!(
+        instruction_consumption_after_response,
+        instruction_consumption_before_response
+    );
 
     // Check that canister B's balance is updated correctly.
     assert_eq!(
@@ -3811,8 +3988,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     assert_eq!(
         test.canister_state(b_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .len(),
         1
     );
@@ -3821,8 +3998,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         *test
             .canister_state(b_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
         NominalCycles::from(test.canister_execution_cost(b_id))

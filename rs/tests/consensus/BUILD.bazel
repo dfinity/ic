@@ -1,8 +1,30 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_ENV", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "node_registration_test_common",
+    testonly = True,
+    srcs = ["node_registration_test_common/src/lib.rs"],
+    crate_name = "ic_consensus_system_test_node_registration_test_common",
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
 
 rust_library(
     name = "catch_up_test_common",
@@ -22,14 +44,13 @@ rust_library(
 
 system_test(
     name = "catch_up_loop_prevention_test",
+    guestos = "malicious",
+    prometheus_vm_scrape_interval_secs = 5,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":catch_up_test_common",
@@ -42,14 +63,13 @@ system_test(
 
 system_test(
     name = "catch_up_possible_test",
+    guestos = "malicious",
+    prometheus_vm_scrape_interval_secs = 5,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":catch_up_test_common",
@@ -62,7 +82,6 @@ system_test(
 
 system_test(
     name = "dual_workload_test",
-    env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "colocate",
         "long_test",
@@ -102,10 +121,8 @@ rust_library(
 
 system_test(
     name = "liveness_with_equivocation_test",
-    env = UNIVERSAL_CANISTER_ENV,
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -119,7 +136,6 @@ system_test(
 
 system_test_nns(
     name = "max_ingress_payload_size_test",
-    env = UNIVERSAL_CANISTER_ENV,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -141,7 +157,6 @@ system_test_nns(
 
 system_test(
     name = "max_xnet_payload_size_test",
-    env = UNIVERSAL_CANISTER_ENV,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -159,7 +174,6 @@ system_test(
 
 system_test_nns(
     name = "node_graceful_leaving_test",
-    env = UNIVERSAL_CANISTER_ENV,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -202,18 +216,18 @@ system_test_nns(
     ],
 )
 
+RECOVERY_TOOLS_RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | {
+    "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
+}
+
 system_test_nns(
     name = "subnet_splitting_test",
-    env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_splitting",
     ],
-    runtime_deps =
-        MESSAGE_CANISTER_RUNTIME_DEPS + [
-            "//rs/tests:recovery/binaries",
-        ],
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/recovery",
         "//rs/recovery/subnet_splitting",
@@ -231,25 +245,17 @@ system_test_nns(
 
 system_test(
     name = "guestos_recovery_engine_smoke_test",
-    env = IMPERSONATE_UPSTREAMS_ENV | {
-        "RECOVERY_ARTIFACTS_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery.tar.zst)",
-        "RECOVERY_HASH_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256)",
-        "RECOVERY_CUP_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:cup.proto.b64)",
-        "RECOVERY_STORE_1_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64)",
-        "RECOVERY_STORE_2_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64)",
-    },
+    guestos = "recovery_dev",
     tags = [
         "long_test",  # the P90 duration of this test is over 6 minutes in the week starting on 2025-08-25.
     ],
-    uses_guestos_img = False,
-    uses_guestos_recovery_dev_img = True,
-    runtime_deps = IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + [
-        "//ic-os/guestos/envs/recovery-dev:cup.proto.b64",
-        "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64",
-        "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64",
-        "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst",
-        "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256",
-    ],
+    runtime_deps = IMPERSONATE_UPSTREAMS_RUNTIME_DEPS | {
+        "RECOVERY_ARTIFACTS_PATH": "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst",
+        "RECOVERY_HASH_PATH": "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256",
+        "RECOVERY_CUP_B64_PATH": "//ic-os/guestos/envs/recovery-dev:cup.proto.b64",
+        "RECOVERY_STORE_1_B64_PATH": "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64",
+        "RECOVERY_STORE_2_B64_PATH": "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64",
+    },
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -263,10 +269,8 @@ system_test(
 
 system_test(
     name = "replica_determinism_test",
-    env = UNIVERSAL_CANISTER_ENV,
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -282,10 +286,8 @@ system_test(
 
 system_test(
     name = "request_auth_malicious_replica_test",
-    env = UNIVERSAL_CANISTER_ENV,
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -308,10 +310,8 @@ system_test(
 
 system_test(
     name = "safety_test",
-    env = UNIVERSAL_CANISTER_ENV,
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -339,16 +339,17 @@ system_test_nns(
         "//conditions:default": [],
     }),
     enable_head_nns_variant = False,
-    env = {"ENV_DEPS__IC_VERSION_FILE": "$(rootpath //bazel:version.txt)"},
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
-        "//bazel:version.txt",
-        "//rs/tests:jaeger_uvm_config_image",
-    ],
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
+        "IC_VERSION_FILE": "//bazel:version.txt",
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
+    },
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -365,7 +366,6 @@ system_test_nns(
 
 system_test_nns(
     name = "adding_nodes_to_subnet_test",
-    env = MESSAGE_CANISTER_ENV,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

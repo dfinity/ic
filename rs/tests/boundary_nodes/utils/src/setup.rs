@@ -1,7 +1,9 @@
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder},
+    test_env_api::{
+        HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SshSession,
+    },
 };
 use std::str::FromStr;
 

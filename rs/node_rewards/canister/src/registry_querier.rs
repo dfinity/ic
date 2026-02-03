@@ -44,22 +44,27 @@ impl RegistryQuerier {
     }
 
     ///  Returns a list of all subnets present in the registry at the specified version.
-    pub fn subnets_list(&self, version: RegistryVersion) -> Vec<SubnetId> {
+    pub fn subnets_list(&self, version: RegistryVersion) -> Result<Vec<SubnetId>, String> {
         let key = make_subnet_list_record_key();
-        let record = self
+        let record_bytes = self
             .registry_client
             .get_value(key.as_str(), version)
-            .expect("Failed to get SubnetListRecord")
-            .map(|v| {
-                SubnetListRecord::decode(v.as_slice()).expect("Failed to decode SubnetListRecord")
-            })
-            .unwrap_or_default();
+            .map_err(|e| format!("Failed to get SubnetListRecord: {:?}", e))?;
+
+        let record = if let Some(bytes) = record_bytes {
+            SubnetListRecord::decode(bytes.as_slice())
+                .map_err(|e| format!("Failed to decode SubnetListRecord: {:?}", e))?
+        } else {
+            SubnetListRecord::default()
+        };
 
         record
             .subnets
             .into_iter()
             .map(|s| {
-                SubnetId::from(PrincipalId::try_from(s.as_slice()).expect("Invalid subnet ID"))
+                let principal = PrincipalId::try_from(s.as_slice())
+                    .map_err(|e| format!("Invalid subnet ID: {:?}", e))?;
+                Ok(SubnetId::from(principal))
             })
             .collect()
     }

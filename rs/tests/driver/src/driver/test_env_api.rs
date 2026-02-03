@@ -195,7 +195,6 @@ use std::{
     cmp::max,
     collections::{HashMap, HashSet},
     convert::TryFrom,
-    ffi::OsStr,
     fs,
     future::Future,
     io::{Read, Write},
@@ -209,6 +208,7 @@ use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
 pub use super::ic_images::*;
+pub use tempfile::tempdir;
 
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
@@ -467,6 +467,46 @@ impl TopologySnapshot {
         Box::new(
             self.local_registry
                 .get_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn system_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_system_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn app_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_app_api_boundary_node_ids(registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
@@ -868,21 +908,6 @@ impl IcNodeSnapshot {
         node_record.domain
     }
 
-    /// Is it accessible via ssh with the `admin` user.
-    /// Waits until connection is ready.
-    pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
-        let sess = self.block_on_ssh_session()?;
-        let mut channel = sess.channel_session()?;
-        channel.exec("echo ready")?;
-        let mut s = String::new();
-        channel.read_to_string(&mut s)?;
-        if s.trim() == "ready" {
-            Ok(())
-        } else {
-            bail!("Failed receive from ssh session")
-        }
-    }
-
     pub fn subnet_id(&self) -> Option<SubnetId> {
         let registry_version = self.registry_version;
         self.local_registry
@@ -1047,7 +1072,7 @@ impl IcNodeSnapshot {
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
             RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
-            
+
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
 
@@ -1267,11 +1292,11 @@ impl<T: HasTestEnv> HasFarmUrl for T {
     }
 }
 
-pub fn get_current_branch_version() -> ReplicaVersion {
-    ReplicaVersion::try_from(
-        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap(),
-    )
-    .expect("Invalid ReplicaVersion")
+/// Returns the build version specified by the build. May be an actual version or a
+/// placeholder version. See build files for exact semantics.
+pub fn get_ic_build_version() -> ReplicaVersion {
+    ReplicaVersion::try_from(read_dependency_from_env_to_string("IC_VERSION_FILE").unwrap())
+        .expect("Invalid ReplicaVersion")
 }
 
 pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
@@ -1313,7 +1338,7 @@ pub trait HasGroupSetup {
 impl HasGroupSetup for TestEnv {
     fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
-        if self.get_json_path(GroupSetup::attribute_name()).exists() {
+        if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
             info!(
                 log,
@@ -1408,9 +1433,7 @@ impl HasIcName for IcNodeSnapshot {
 }
 
 pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
-    let runfiles =
-        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
-    Path::new(&runfiles).join(p)
+    p.as_ref().to_path_buf()
 }
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
@@ -1467,6 +1490,26 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
+fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
+    let mut channel = session.channel_session()?;
+    channel.exec("bash").map_err(|e| {
+        anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
+    })?;
+
+    channel.write_all(script.as_bytes())?;
+    channel.flush()?;
+    channel.send_eof()?;
+    let mut out = String::new();
+    channel.read_to_string(&mut out)?;
+    let mut err = String::new();
+    channel.stderr().read_to_string(&mut err)?;
+    let exit_status = channel.exit_status()?;
+    if exit_status != 0 {
+        bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
+    }
+    Ok(out)
+}
+
 #[async_trait]
 pub trait SshSession: HasTestEnv {
     /// Return the address of the SSH server to connect to.
@@ -1474,17 +1517,37 @@ pub trait SshSession: HasTestEnv {
 
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
     fn get_ssh_session(&self) -> Result<Session> {
-        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
-            .context("Failed to get SSH session")
+        let env = self.test_env();
+        let ip = self.get_host_ip()?;
+
+        get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
+    }
+
+    /// Return an SSH session to the machine referenced from self authenticating with the given user.
+    /// This is the async version of `get_ssh_session`.
+    async fn get_ssh_session_async(&self) -> Result<Session> {
+        let env = self.test_env();
+        let ip = self.get_host_ip()?;
+
+        tokio::task::spawn_blocking(move || {
+            get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
+        })
+        .await
+        .expect("Getting SSH session task panicked")
+    }
+
+    /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
+    fn block_on_ssh_session(&self) -> Result<Session> {
+        self.block_on_ssh_session_with_timeout(SSH_RETRY_TIMEOUT)
     }
 
     /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
-    fn block_on_ssh_session(&self) -> Result<Session> {
+    fn block_on_ssh_session_with_timeout(&self, timeout: Duration) -> Result<Session> {
         let ip = self.get_host_ip()?;
         retry_with_msg!(
             format!("get_ssh_session to {ip}"),
             self.test_env().logger(),
-            SSH_RETRY_TIMEOUT,
+            timeout,
             RETRY_BACKOFF,
             || { self.get_ssh_session() }
         )
@@ -1499,39 +1562,41 @@ pub trait SshSession: HasTestEnv {
             &self.test_env().logger(),
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
-            || async { self.get_ssh_session() }
+            || self.get_ssh_session_async()
         )
         .await
     }
 
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
-        self.block_on_bash_script_from_session(&session, script)
+        execute_bash_script_from_session(&session, script)
     }
 
     async fn block_on_bash_script_async(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session_async().await?;
-        self.block_on_bash_script_from_session(&session, script)
+        let script = script.to_string();
+        tokio::task::spawn_blocking(move || execute_bash_script_from_session(&session, &script))
+            .await
+            .expect("Executing bash script task panicked")
     }
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
-        let mut channel = session.channel_session()?;
-        channel.exec("bash").map_err(|e| {
-            anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
-        })?;
+        execute_bash_script_from_session(session, script)
+    }
 
-        channel.write_all(script.as_bytes())?;
-        channel.flush()?;
-        channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let mut err = String::new();
-        channel.stderr().read_to_string(&mut err)?;
-        let exit_status = channel.exit_status()?;
-        if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
+    /// Is it accessible via ssh with the `admin` user.
+    /// Waits until connection is ready.
+    fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
+        let sess = self.block_on_ssh_session()?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("echo ready")?;
+        let mut s = String::new();
+        channel.read_to_string(&mut s)?;
+        if s.trim() == "ready" {
+            Ok(())
+        } else {
+            bail!("Failed receive from ssh session")
         }
-        Ok(out)
     }
 }
 
@@ -1920,18 +1985,6 @@ impl NnsInstallationBuilder {
         });
         Ok(())
     }
-}
-
-/// Set environment variable `env_name` to `file_path`
-/// or to wherever `file_path` points to in case it's a symlink.
-pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
-    let path = if file_path.is_symlink() {
-        std::fs::read_link(file_path).unwrap()
-    } else {
-        file_path
-    };
-    // TODO: Audit that the environment access only happens in single-threaded code.
-    unsafe { std::env::set_var(env_name, path) };
 }
 
 pub trait HasRegistryVersion {
@@ -2389,13 +2442,22 @@ pub async fn install_nns_canisters(
             builder.push_init_mutate_request(mutation);
         }
 
-        if registry_canister_init_payload.is_swapping_feature_enabled {
+        if registry_canister_init_payload
+            .is_swapping_feature_enabled
+            .unwrap_or_default()
+        {
             builder.enable_swapping_feature_globally();
         }
-        for caller in registry_canister_init_payload.swapping_whitelisted_callers {
+        for caller in registry_canister_init_payload
+            .swapping_whitelisted_callers
+            .unwrap_or_default()
+        {
             builder.whitelist_swapping_feature_caller(caller);
         }
-        for subnet in registry_canister_init_payload.swapping_enabled_subnets {
+        for subnet in registry_canister_init_payload
+            .swapping_enabled_subnets
+            .unwrap_or_default()
+        {
             builder.enable_swapping_feature_for_subnet(subnet);
         }
 

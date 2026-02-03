@@ -489,7 +489,7 @@ fn callback_stats() {
     let call_context_manager_proto: pb::CallContextManager = (&ccm).into();
     assert_eq!(
         ccm,
-        CallContextManager::try_from(call_context_manager_proto).unwrap(),
+        CallContextManager::try_from((call_context_manager_proto, originator)).unwrap(),
     );
 
     //
@@ -813,7 +813,7 @@ fn roundtrip_encode() {
     );
 
     let encoded: pb::CallContextManager = (&ccm).into();
-    let decoded = encoded.try_into().unwrap();
+    let decoded = (encoded, this).try_into().unwrap();
 
     assert_eq!(ccm, decoded);
 }

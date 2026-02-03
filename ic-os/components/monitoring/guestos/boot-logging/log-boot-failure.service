@@ -1,0 +1,16 @@
+[Unit]
+Description=GuestOS boot failure monitoring service
+DefaultDependencies=no
+# Only activate the failure if multi-user.target was reached (either successfully or with a failure)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Print error logs and failure to serial output which will be picked up by HostOS
+# The string is expected by guest_vm_runner (GUESTOS_BOOT_FAILURE_MARKER)
+ExecStart=bash -c 'systemctl status --failed --no-pager > /dev/ttyS0; echo "GUESTOS BOOT FAILURE" > /dev/ttyS0'
+
+[Install]
+# Only activate the failure if emergency.target or rescue.target was activated
+WantedBy=emergency.target rescue.target

@@ -3,6 +3,7 @@ use std::{default::Default, str::FromStr};
 use crate::{common::LOG_PREFIX, registry::Registry, storage::with_chunks};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::{
     node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
 };
@@ -76,6 +77,20 @@ pub fn get_node_operator_id_for_node(
                 })
             },
         )
+}
+
+pub fn get_node_reward_type_for_node(
+    registry: &Registry,
+    node_id: NodeId,
+) -> Result<NodeRewardType, String> {
+    let node_key = make_node_record_key(node_id);
+    let value = registry
+        .get(node_key.as_bytes(), registry.latest_version())
+        .ok_or(format!("Node Id {node_id:} not found in the registry"))?;
+
+    NodeRecord::decode(value.value.as_slice())
+        .map_err(|_| format!("Could not decode node_record for Node Id {node_id}"))
+        .map(|node_record| node_record.node_reward_type())
 }
 
 pub fn get_node_provider_id_for_operator_id(
@@ -230,6 +245,23 @@ pub fn scan_for_nodes_by_ip(registry: &Registry, ip_addr: &str) -> Vec<NodeId> {
                 (v.ip_addr == ip_addr).then(|| NodeId::from(PrincipalId::from_str(&k).unwrap()))
             })
         })
+        .collect()
+}
+
+/// Scan through the registry, returning a list of node records for the given node operator.
+pub fn get_node_operator_nodes(
+    registry: &Registry,
+    query_node_operator_id: PrincipalId,
+) -> Vec<NodeRecord> {
+    get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
+        .into_iter()
+        .filter(|(_, node_record)| {
+            let record_node_operator_id: PrincipalId =
+                PrincipalId::try_from(&node_record.node_operator_id).unwrap();
+
+            record_node_operator_id == query_node_operator_id
+        })
+        .map(|(_, node_record)| node_record)
         .collect()
 }
 

@@ -1,3 +1,4 @@
+use crate::AlgorithmVersion;
 use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::performance_based_algorithm::{
     PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInputProvider,
@@ -5,7 +6,6 @@ use crate::performance_based_algorithm::{
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-
 // ================================================================================================
 // VERSIONING SAFETY WARNING
 // ================================================================================================
@@ -33,6 +33,10 @@ impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
     const MAX_FAILURE_RATE: Decimal = dec!(0.6);
     const MIN_REWARDS_REDUCTION: Decimal = dec!(0);
     const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
+}
+
+impl AlgorithmVersion for RewardsCalculationV1 {
+    const VERSION: u32 = 1;
 }
 
 impl RewardsCalculationV1 {
@@ -166,6 +170,43 @@ mod tests {
         assert_eq!(subnets_fr.get(&subnet1), Some(&expected_subnet1_day2_fr));
         assert_eq!(original_nodes_fr.get(&s1_node1), Some(&dec!(0.01)));
         assert_eq!(relative_nodes_fr.get(&s1_node1), Some(&dec!(0.0))); // 0.01 - 0.01 = 0
+    }
+
+    #[test]
+    fn test_node_assigned_to_multiple_subnets_same_day_should_retain_only_the_one_with_more_total_blocks()
+     {
+        let subnet1 = test_subnet_id(1);
+        let subnet2 = test_subnet_id(2);
+
+        // Nodes for Subnet 1
+        let s1_node1 = test_node_id(11);
+
+        // --- Data Setup ---
+        let daily_metrics_by_subnet = BTreeMap::from_iter(vec![
+            build_daily_metrics(
+                subnet1,
+                &[
+                    (s1_node1, 75, 25), // FR = 0.25
+                ],
+            ),
+            build_daily_metrics(
+                subnet2,
+                &[
+                    // Node is assigned to both subnets, but only the one with more blocks should be used.
+                    (s1_node1, 800, 200), // FR = 0.20
+                ],
+            ),
+        ]);
+
+        // --- Execution ---
+        let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
+
+        assert!(!result.subnets_failure_rate.contains_key(&subnet1));
+        assert_eq!(result.subnets_failure_rate.get(&subnet2), Some(&dec!(0.20)));
+
+        let node_fr = result.nodes_metrics_daily.get(&s1_node1).unwrap();
+        assert_eq!(node_fr.original_failure_rate, dec!(0.2));
+        assert_eq!(node_fr.relative_failure_rate, dec!(0.0));
     }
 
     // ------------------------------------------------------------------------------------------------

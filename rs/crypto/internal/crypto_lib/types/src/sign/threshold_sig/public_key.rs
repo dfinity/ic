@@ -65,7 +65,7 @@ pub mod bls12_381 {
     use thiserror::Error;
 
     /// A BLS12-381 public key as bytes.
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Eq, PartialEq)]
     pub struct PublicKeyBytes(pub [u8; PublicKeyBytes::SIZE]);
     crate::derive_serde!(PublicKeyBytes, PublicKeyBytes::SIZE);
 
@@ -99,14 +99,6 @@ pub mod bls12_381 {
             write!(f, "0x{}", hex::encode(&self.0[..]))
         }
     }
-
-    impl PartialEq for PublicKeyBytes {
-        fn eq(&self, other: &Self) -> bool {
-            self.0[..] == other.0[..]
-        }
-    }
-
-    impl Eq for PublicKeyBytes {}
 
     impl Ord for PublicKeyBytes {
         fn cmp(&self, other: &Self) -> Ordering {

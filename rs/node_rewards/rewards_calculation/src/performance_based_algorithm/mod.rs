@@ -1,3 +1,5 @@
+use crate::AlgorithmVersion;
+use crate::REWARDS_TABLE_DAYS;
 use crate::performance_based_algorithm::results::{
     DailyNodeFailureRate, DailyNodeProviderRewards, DailyNodeRewards, DailyResults,
     NodeMetricsDaily, NodeTypeRegionBaseRewards, RewardsCalculatorResults, Type3RegionBaseRewards,
@@ -9,14 +11,15 @@ use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
 use rust_decimal::Decimal;
-use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive, Zero};
 use rust_decimal_macros::dec;
 use std::cmp::max;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub mod results;
 pub mod test_utils;
 pub mod v1;
+pub mod v2;
 
 // ================================================================================================
 // VERSIONING SAFETY WARNING
@@ -84,7 +87,7 @@ pub trait PerformanceBasedAlgorithmInputProvider {
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
 }
 
-trait PerformanceBasedAlgorithm {
+trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The percentile used to calculate the failure rate for a subnet.
     const SUBNET_FAILURE_RATE_PERCENTILE: f64;
 
@@ -102,12 +105,6 @@ trait PerformanceBasedAlgorithm {
     /// The maximum rewards reduction for a node.
     const MAX_REWARDS_REDUCTION: Decimal;
 
-    /// From constant [NODE_PROVIDER_REWARD_PERIOD_SECONDS]
-    /// const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
-    /// const SECONDS_IN_DAY: u64 = 86400;
-    /// 2629800 / 86400 = 30.4375 days of rewards
-    const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
-
     fn calculate_rewards(
         from_date: NaiveDate,
         to_date: NaiveDate,
@@ -118,7 +115,7 @@ trait PerformanceBasedAlgorithm {
         }
 
         let reward_period = from_date.iter_days().take_while(|d| *d <= to_date);
-        let mut total_rewards_per_provider = BTreeMap::new();
+        let mut total_rewards_xdr_permyriad = BTreeMap::new();
         let mut daily_results = BTreeMap::new();
 
         // Process each day in the reward period
@@ -127,20 +124,18 @@ trait PerformanceBasedAlgorithm {
 
             // Accumulate total rewards per provider across all days
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
-                total_rewards_per_provider
+                total_rewards_xdr_permyriad
                     .entry(*provider_id)
-                    .and_modify(|total| *total += provider_rewards.rewards_total_xdr_permyriad)
-                    .or_insert(provider_rewards.rewards_total_xdr_permyriad);
+                    .and_modify(|total| {
+                        *total += provider_rewards.total_adjusted_rewards_xdr_permyriad
+                    })
+                    .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
             }
             daily_results.insert(day, result_for_day);
         }
 
-        let total_rewards_xdr_permyriad = total_rewards_per_provider
-            .into_iter()
-            .map(|(provider_id, total)| (provider_id, total.trunc().to_u64().unwrap()))
-            .collect();
-
         Ok(RewardsCalculatorResults {
+            algorithm_version: Self::VERSION,
             total_rewards_xdr_permyriad,
             daily_results,
         })
@@ -249,78 +244,101 @@ trait PerformanceBasedAlgorithm {
     fn calculate_failure_rates(
         daily_metrics_by_subnet: BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>,
     ) -> FailureRateResults {
-        fn calculate_daily_node_failure_rate(
-            num_blocks_proposed: u64,
-            num_blocks_failed: u64,
-        ) -> Decimal {
-            let total_blocks = Decimal::from(num_blocks_proposed + num_blocks_failed);
-            if total_blocks == Decimal::ZERO {
+        fn calculate_daily_node_failure_rate(proposed: u64, failed: u64) -> Decimal {
+            let total = Decimal::from(proposed + failed);
+            if total.is_zero() {
                 Decimal::ZERO
             } else {
-                let num_blocks_failed = Decimal::from(num_blocks_failed);
-                num_blocks_failed / total_blocks
+                Decimal::from(failed) / total
             }
         }
 
         let mut result = FailureRateResults::default();
 
-        for (subnet_id, subnet_nodes_metrics) in daily_metrics_by_subnet {
-            let nodes_original_failure_rate = subnet_nodes_metrics
+        // Find the maximum number of blocks proposed and failed for each node across all subnets.
+        // This is used in case one node joins multiple subnets the same day. In this case, the algorithm
+        // will assign the node to the subnet with the highest number of blocks proposed and failed.
+        let mut max_blocks_by_node: HashMap<NodeId, (SubnetId, NodeMetricsDailyRaw)> =
+            HashMap::new();
+
+        for (subnet_id, metrics_list) in daily_metrics_by_subnet {
+            for metric in metrics_list {
+                let total_blocks = metric.num_blocks_proposed + metric.num_blocks_failed;
+                max_blocks_by_node
+                    .entry(metric.node_id)
+                    .and_modify(|(s, existing)| {
+                        let existing_total =
+                            existing.num_blocks_proposed + existing.num_blocks_failed;
+                        if total_blocks > existing_total {
+                            *s = subnet_id;
+                            *existing = metric.clone();
+                        }
+                    })
+                    .or_insert((subnet_id, metric));
+            }
+        }
+
+        // Group deduplicated metrics back by subnet.
+        let deduped_by_subnet: BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> = max_blocks_by_node
+            .into_values()
+            .fold(BTreeMap::new(), |mut acc, (subnet, metric)| {
+                acc.entry(subnet).or_default().push(metric);
+                acc
+            });
+
+        // Compute failure rates per subnet and per node.
+        for (subnet_id, metrics_list) in deduped_by_subnet {
+            // Precompute node failure rates for this subnet.
+            let nodes_failure_rate: BTreeMap<_, _> = metrics_list
                 .iter()
-                .map(|metrics| {
-                    let original_failure_rate = calculate_daily_node_failure_rate(
-                        metrics.num_blocks_proposed,
-                        metrics.num_blocks_failed,
+                .map(|m| {
+                    let rate = calculate_daily_node_failure_rate(
+                        m.num_blocks_proposed,
+                        m.num_blocks_failed,
                     );
-                    (metrics.node_id, original_failure_rate)
+                    (m.node_id, rate)
                 })
-                .collect::<BTreeMap<_, _>>();
-            let nodes_failure_rate = nodes_original_failure_rate
+                .collect();
+
+            // Sort to find the subnet percentile failure rate.
+            let rates: Vec<_> = nodes_failure_rate
                 .values()
                 .cloned()
+                .sorted()
                 .collect::<Vec<_>>();
-            let subnet_failure_rate = if nodes_failure_rate.is_empty() {
+
+            let subnet_rate = if rates.is_empty() {
                 Decimal::ZERO
             } else {
-                let failure_rates = nodes_failure_rate.iter().sorted().collect::<Vec<_>>();
-
-                // Calculate the failure rate for the subnet based on the SUBNET_FAILURE_RATE_PERCENTILE
-                // of the failure rates for the subnet's nodes.
-                //
-                // Percentile is calculated using the Nearest Rank method.
-                let index = ((nodes_failure_rate.len() as f64)
-                    * Self::SUBNET_FAILURE_RATE_PERCENTILE)
-                    .ceil() as usize
-                    - 1;
-                *failure_rates[index]
+                // Nearest-rank percentile method.
+                let idx = (((rates.len() as f64) * Self::SUBNET_FAILURE_RATE_PERCENTILE).ceil()
+                    as isize
+                    - 1)
+                .max(0) as usize;
+                rates[idx]
             };
-            result
-                .subnets_failure_rate
-                .insert(subnet_id, subnet_failure_rate);
 
-            for NodeMetricsDailyRaw {
-                node_id,
-                num_blocks_proposed,
-                num_blocks_failed,
-            } in subnet_nodes_metrics
-            {
-                let original_failure_rate = nodes_original_failure_rate[&node_id];
-                let relative_failure_rate =
-                    max(Decimal::ZERO, original_failure_rate - subnet_failure_rate);
+            result.subnets_failure_rate.insert(subnet_id, subnet_rate);
+
+            // Compute each node’s relative failure rate.
+            for metric in metrics_list {
+                let original = nodes_failure_rate[&metric.node_id];
+                let relative = max(Decimal::ZERO, original - subnet_rate);
 
                 result.nodes_metrics_daily.insert(
-                    node_id,
+                    metric.node_id,
                     NodeMetricsDaily {
                         subnet_assigned: subnet_id,
-                        subnet_assigned_failure_rate: subnet_failure_rate,
-                        num_blocks_proposed,
-                        num_blocks_failed,
-                        original_failure_rate,
-                        relative_failure_rate,
+                        subnet_assigned_failure_rate: subnet_rate,
+                        num_blocks_proposed: metric.num_blocks_proposed,
+                        num_blocks_failed: metric.num_blocks_failed,
+                        original_failure_rate: original,
+                        relative_failure_rate: relative,
                     },
                 );
             }
         }
+
         result
     }
 
@@ -410,7 +428,8 @@ trait PerformanceBasedAlgorithm {
         for node in rewardable_nodes {
             let (base_rewards_monthly, coefficient) =
                 get_monthly_rate(node_rewards_table, &node.region, &node.node_reward_type);
-            let base_rewards_daily = base_rewards_monthly / Self::REWARDS_TABLE_DAYS;
+            let base_rewards_daily =
+                base_rewards_monthly / Decimal::from_f64(REWARDS_TABLE_DAYS).unwrap();
 
             base_rewards
                 .entry((node.node_reward_type, node.region.clone()))
@@ -428,35 +447,63 @@ trait PerformanceBasedAlgorithm {
 
                 base_rewards_type3
                     .entry(region_key.clone())
-                    .and_modify(
-                        |(rates, coeffs): &mut (Vec<Decimal>, Vec<RewardsCoefficientPercent>)| {
-                            rates.push(base_rewards_daily);
-                            coeffs.push(coefficient);
-                        },
-                    )
-                    .or_insert((vec![base_rewards_daily], vec![coefficient]));
+                    .and_modify(|entries: &mut Vec<(Decimal, RewardsCoefficientPercent)>| {
+                        entries.push((base_rewards_daily, coefficient));
+                    })
+                    .or_insert(vec![(base_rewards_daily, coefficient)]);
             }
         }
 
         let base_rewards_type3 = base_rewards_type3
             .into_iter()
-            .map(|(region, (rates, coeff))| {
-                let nodes_count = rates.len();
-                let avg_rate = avg(rates.as_slice()).unwrap_or_default();
-                let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
+            .map(|(region, mut entries)| {
+                let nodes_count = entries.len();
 
-                let mut running_coefficient = dec!(1);
-                let mut region_rewards = Vec::new();
-                for _ in 0..nodes_count {
-                    region_rewards.push(avg_rate * running_coefficient);
-                    running_coefficient *= avg_coeff;
+                if Self::VERSION == 1 {
+                    let (rates, coeff): (Vec<Decimal>, Vec<RewardsCoefficientPercent>) =
+                        entries.into_iter().unzip();
+                    let avg_rate = avg(rates.as_slice()).unwrap_or_default();
+                    let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
+
+                    let mut running_coefficient = dec!(1);
+                    let mut region_rewards = Vec::new();
+                    for _ in 0..nodes_count {
+                        region_rewards.push(avg_rate * running_coefficient);
+                        running_coefficient *= avg_coeff;
+                    }
+                    let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
+
+                    (
+                        region,
+                        (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
+                    )
+                } else {
+                    // Sort entries first by Base Reward (Desc) then by Coefficient (Desc) to process high-value nodes first.
+                    entries.sort_by(|(r1, c1), (r2, c2)| r2.cmp(r1).then_with(|| c2.cmp(c1)));
+
+                    let mut total_rewards = Decimal::ZERO;
+                    let mut running_coeff = dec!(1);
+
+                    // We also need averages for the reporting/Result struct later.
+                    let mut total_rate_sum = Decimal::ZERO;
+                    let mut total_coeff_sum = Decimal::ZERO;
+
+                    for (rate, coeff) in &entries {
+                        total_rewards += rate * running_coeff;
+                        running_coeff *= coeff;
+
+                        total_rate_sum += rate;
+                        total_coeff_sum += coeff;
+                    }
+                    let avg_rate = total_rate_sum / Decimal::from(nodes_count);
+                    let avg_coeff = total_coeff_sum / Decimal::from(nodes_count);
+                    let region_rewards_avg = total_rewards / Decimal::from(nodes_count);
+
+                    (
+                        region,
+                        (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
+                    )
                 }
-                let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
-
-                (
-                    region,
-                    (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
-                )
             })
             .collect::<BTreeMap<_, _>>();
 
@@ -550,7 +597,8 @@ trait PerformanceBasedAlgorithm {
         base_rewards_type3: Vec<Type3RegionBaseRewards>,
     ) -> DailyNodeProviderRewards {
         let mut results_by_node = Vec::new();
-        let mut rewards_total_xdr_permyriad = Decimal::ZERO;
+        let mut total_adjusted_rewards_xdr_permyriad: Decimal = Decimal::zero();
+        let mut total_base_rewards_xdr_permyriad: Decimal = Decimal::zero();
 
         for node in rewardable_nodes {
             let node_status =
@@ -578,7 +626,9 @@ trait PerformanceBasedAlgorithm {
                 .remove(&node.node_id)
                 .expect("Adjusted rewards should be present in rewards");
 
-            rewards_total_xdr_permyriad += node_adjusted_rewards_xdr_permyriad;
+            total_base_rewards_xdr_permyriad += node_base_rewards_xdr_permyriad;
+
+            total_adjusted_rewards_xdr_permyriad += node_adjusted_rewards_xdr_permyriad;
 
             results_by_node.push(DailyNodeRewards {
                 node_id: node.node_id,
@@ -593,8 +643,19 @@ trait PerformanceBasedAlgorithm {
             });
         }
 
+        let total_base_rewards_xdr_permyriad = total_base_rewards_xdr_permyriad
+            .trunc()
+            .to_u64()
+            .expect("failed to truncate node_adjusted_rewards_xdr_permyriad");
+
+        let total_adjusted_rewards_xdr_permyriad = total_adjusted_rewards_xdr_permyriad
+            .trunc()
+            .to_u64()
+            .expect("failed to truncate node_adjusted_rewards_xdr_permyriad");
+
         DailyNodeProviderRewards {
-            rewards_total_xdr_permyriad,
+            total_base_rewards_xdr_permyriad,
+            total_adjusted_rewards_xdr_permyriad,
             base_rewards,
             type3_base_rewards: base_rewards_type3,
             daily_nodes_rewards: results_by_node,

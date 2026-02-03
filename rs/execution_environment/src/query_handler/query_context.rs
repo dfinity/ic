@@ -43,7 +43,7 @@ use ic_types::{
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::Arc,
+    sync::{Arc, atomic::AtomicU64},
     time::{Duration, Instant},
 };
 
@@ -96,7 +96,7 @@ pub(super) struct QueryContext<'a> {
     state: Labeled<Arc<ReplicatedState>>,
     network_topology: Arc<NetworkTopology>,
     // Certificate for certified queries + canister ID of the root query of this context
-    data_certificate: (Vec<u8>, CanisterId),
+    data_certificate: Option<(Vec<u8>, CanisterId)>,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
     instruction_overhead_per_query_call: RoundInstructions,
@@ -117,6 +117,9 @@ pub(super) struct QueryContext<'a> {
     /// The number of transient errors.
     transient_errors: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    /// An optional atomic to observe the number of instructions used in the query.
+    /// This should only be populated for http outcalls transformations.
+    instruction_observation: Option<Arc<AtomicU64>>,
 }
 
 impl<'a> QueryContext<'a> {
@@ -126,9 +129,10 @@ impl<'a> QueryContext<'a> {
         hypervisor: &'a Hypervisor,
         own_subnet_type: SubnetType,
         state: Labeled<Arc<ReplicatedState>>,
-        data_certificate: Vec<u8>,
+        data_certificate: Option<Vec<u8>>,
         subnet_available_memory: SubnetAvailableMemory,
         subnet_available_callbacks: i64,
+        subnet_memory_reservation: NumBytes,
         canister_guaranteed_callback_quota: u64,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
@@ -140,6 +144,7 @@ impl<'a> QueryContext<'a> {
         query_critical_error: &'a IntCounter,
         local_query_execution_stats: Option<&'a QueryStatsCollector>,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        instruction_observation: Option<Arc<AtomicU64>>,
     ) -> Self {
         let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
         let round_limits = RoundLimits {
@@ -148,6 +153,7 @@ impl<'a> QueryContext<'a> {
             subnet_available_callbacks,
             // Ignore compute allocation
             compute_allocation_used: 0,
+            subnet_memory_reservation,
         };
         Self {
             log,
@@ -155,7 +161,8 @@ impl<'a> QueryContext<'a> {
             own_subnet_type,
             state,
             network_topology,
-            data_certificate: (data_certificate, canister_id),
+            data_certificate: data_certificate
+                .map(|data_certificate| (data_certificate, canister_id)),
             max_instructions_per_query,
             max_query_call_graph_depth,
             instruction_overhead_per_query_call: as_round_instructions(
@@ -174,6 +181,7 @@ impl<'a> QueryContext<'a> {
             evaluated_canister_stats: BTreeMap::from([(canister_id, QueryStats::default())]),
             transient_errors: 0,
             cycles_account_manager,
+            instruction_observation,
         }
     }
 
@@ -395,7 +403,7 @@ impl<'a> QueryContext<'a> {
             canister.system_state.memory_allocation,
             canister.memory_usage(),
             canister.message_memory_usage(),
-            canister.scheduler_state.compute_allocation,
+            canister.compute_allocation(),
             subnet_size,
             self.get_cost_schedule(),
             canister.system_state.reserved_balance(),
@@ -447,6 +455,13 @@ impl<'a> QueryContext<'a> {
             },
             Err(_) => 0,
         };
+
+        if let Some(atomic) = self.instruction_observation.as_ref() {
+            atomic.fetch_add(
+                instructions_executed.get(),
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        }
 
         // Add query statistics to the query aggregator.
         let stats = QueryStats {
@@ -1086,11 +1101,15 @@ impl<'a> QueryContext<'a> {
     }
 
     fn get_data_certificate(&self, canister_id: &CanisterId) -> Option<Vec<u8>> {
-        if canister_id != &self.data_certificate.1 {
-            None
-        } else {
-            Some(self.data_certificate.0.clone())
-        }
+        self.data_certificate.as_ref().and_then(
+            |(data_certificate, data_certificate_canister_id)| {
+                if canister_id != data_certificate_canister_id {
+                    None
+                } else {
+                    Some(data_certificate.clone())
+                }
+            },
+        )
     }
 
     /// Returns how many times each tracked System API call was invoked.

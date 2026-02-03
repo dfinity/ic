@@ -46,7 +46,7 @@ pub fn fetch_histogram_vec_stats(
     let mut stats = MetricVec::new();
 
     for metric_family in registry.prometheus_registry().gather() {
-        if metric_family.get_name() == name {
+        if metric_family.name() == name {
             assert_eq!(MetricType::HISTOGRAM, metric_family.get_field_type());
             for metric in metric_family.get_metric() {
                 stats.insert(
@@ -169,10 +169,13 @@ pub fn fetch_counter_vec(registry: &MetricsRegistry, name: &str) -> MetricVec<f6
     let mut values = MetricVec::new();
 
     for metric_family in registry.prometheus_registry().gather() {
-        if metric_family.get_name() == name {
+        if metric_family.name() == name {
             assert_eq!(MetricType::COUNTER, metric_family.get_field_type());
             for metric in metric_family.get_metric() {
-                values.insert(to_labels(metric), metric.get_counter().get_value());
+                values.insert(
+                    to_labels(metric),
+                    metric.get_counter().get_or_default().value(),
+                );
             }
             break;
         }
@@ -245,10 +248,13 @@ pub fn fetch_gauge_vec(registry: &MetricsRegistry, name: &str) -> MetricVec<f64>
     let mut values = MetricVec::new();
 
     for metric_family in registry.prometheus_registry().gather() {
-        if metric_family.get_name() == name {
+        if metric_family.name() == name {
             assert_eq!(MetricType::GAUGE, metric_family.get_field_type());
             for metric in metric_family.get_metric() {
-                values.insert(to_labels(metric), metric.get_gauge().get_value());
+                values.insert(
+                    to_labels(metric),
+                    metric.get_gauge().get_or_default().value(),
+                );
             }
             break;
         }
@@ -306,8 +312,8 @@ fn to_labels(metric: &prometheus::proto::Metric) -> Labels {
         .iter()
         .map(|label_pair| {
             (
-                label_pair.get_name().to_string(),
-                label_pair.get_value().to_string(),
+                label_pair.name().to_string(),
+                label_pair.value().to_string(),
             )
         })
         .collect()

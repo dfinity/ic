@@ -45,8 +45,7 @@ pub struct SubnetRecord {
     pub features: ::core::option::Option<SubnetFeatures>,
     /// The maximum number of canisters that may be present on the subnet at any given time.
     ///
-    /// A value of 0 is equivalent to setting no limit. This also provides an easy way
-    /// to maintain compatibility of different versions of replica and registry.
+    /// A value of 0 means that the replica's default value will be used.
     #[prost(uint64, tag = "24")]
     pub max_number_of_canisters: u64,
     /// The list of public keys whose owners have "readonly" SSH access to all replicas on this subnet,

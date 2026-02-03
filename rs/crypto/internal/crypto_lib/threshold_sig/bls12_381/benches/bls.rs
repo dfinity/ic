@@ -5,12 +5,11 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::Public
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng, RngCore};
 
-const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &[u8; 43] =
-    b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
+const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &str = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
 
 /// Hashes `msg` to a point in `G1`.
 fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
-    G1Projective::hash(&DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG[..], msg)
+    G1Projective::hash(DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG, msg)
 }
 
 fn valid_bls_12_381_signature<R: RngCore + CryptoRng>(
@@ -22,8 +21,8 @@ fn valid_bls_12_381_signature<R: RngCore + CryptoRng>(
     let msg_hash = hash_message_to_g1(&msg);
     let signature = msg_hash * secret_key;
 
-    let signature = CombinedSignatureBytes(signature.serialize());
-    let public_key = PublicKeyBytes(public_key.serialize());
+    let signature = CombinedSignatureBytes(signature.to_affine().serialize());
+    let public_key = PublicKeyBytes(public_key.to_affine().serialize());
 
     (msg, signature, public_key)
 }

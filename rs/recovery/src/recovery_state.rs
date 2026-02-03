@@ -195,6 +195,7 @@ mod tests {
                 next_step: None,
                 upgrade_image_url: None,
                 upgrade_image_hash: None,
+                upgrade_image_launch_measurements_path: None,
                 skip: None,
             }),
             neuron_args: None,

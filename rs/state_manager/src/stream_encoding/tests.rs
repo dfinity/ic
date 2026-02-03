@@ -38,6 +38,7 @@ fn stream_encode_decode_roundtrip(
 
     let tree_encoding = encode_stream_slice(
         &state,
+        Height::new(0),
         subnet,
         stream_slice.header().begin(),
         stream_slice.header().end(),
@@ -74,6 +75,7 @@ fn stream_encode_with_size_limit(
 
     let tree_encoding = encode_stream_slice(
         &state,
+        Height::new(0),
         subnet,
         stream_slice.header().begin(),
         stream_slice.header().end(),

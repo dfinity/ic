@@ -7,6 +7,7 @@ use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::threshold::ni_dkg::NIDKG_THRESHOLD_SCOPE;
 use crate::vault::api::NiDkgCspVault;
+use crate::vault::api::PublicKeyStoreCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::local_csp_vault::ni_dkg::CspFsEncryptionKeySet;
 use crate::vault::local_csp_vault::ni_dkg::CspNiDkgTranscript;
@@ -29,8 +30,10 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_test_utils::set_of;
 use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::error::KeyNotFoundError;
+use ic_types::time::GENESIS;
 use ic_types_test_utils::ids::NODE_42;
 
 use crate::key_id::KeyId;
@@ -218,6 +221,30 @@ fn should_fail_with_internal_error_if_nidkg_secret_key_persistence_fails_due_to_
 }
 
 #[test]
+fn should_generate_dkg_dealing_encryption_public_key_with_timestamp() {
+    let time_source = FastForwardTimeSource::new();
+    time_source.set_time(GENESIS).expect("wrong time");
+    let vault = LocalCspVault::builder_for_test()
+        .with_time_source(time_source)
+        .build();
+
+    let _ = vault
+        .gen_dealing_encryption_key_pair(NODE_42)
+        .expect("failed to create keys");
+
+    assert_eq!(
+        vault
+            .current_node_public_keys_with_timestamps()
+            .expect("Failed to retrieve current public keys")
+            .dkg_dealing_encryption_public_key
+            .expect("missing DKG dealing encryption public key")
+            .timestamp
+            .expect("missing DKG dealing encryption key generation timestamp"),
+        GENESIS.as_millis_since_unix_epoch()
+    );
+}
+
+#[test]
 fn should_return_internal_error_from_load_threshold_signing_key_internal_if_nidkg_secret_key_persistence_fails_due_to_serialization_error()
  {
     const INTERNAL_ERROR: &str = "cannot serialize keys";
@@ -272,7 +299,7 @@ fn should_return_error_if_update_forward_secure_key_with_wrong_algorithm_id() {
     assert_matches!(
         result,
         Err(CspDkgUpdateFsEpochError::UnsupportedAlgorithmId(
-            AlgorithmId::Placeholder
+            AlgorithmId::Unspecified
         ))
     );
 }

@@ -191,7 +191,7 @@ mod tests {
                             algorithm: SchnorrAlgorithm::Ed25519,
                             name: String::from("schnorr_key_to_ignore"),
                         }),
-                        pre_signatures_to_create_in_advance: 50,
+                        pre_signatures_to_create_in_advance: Some(50),
                         max_queue_size: 50,
                     },
                     KeyConfig {
@@ -199,7 +199,7 @@ mod tests {
                             curve: VetKdCurve::Bls12_381_G2,
                             name: String::from("first_vet_kd_key"),
                         }),
-                        pre_signatures_to_create_in_advance: 0,
+                        pre_signatures_to_create_in_advance: None,
                         max_queue_size: 50,
                     },
                     KeyConfig {
@@ -207,7 +207,7 @@ mod tests {
                             curve: VetKdCurve::Bls12_381_G2,
                             name: String::from("second_vet_kd_key"),
                         }),
-                        pre_signatures_to_create_in_advance: 0,
+                        pre_signatures_to_create_in_advance: None,
                         max_queue_size: 50,
                     },
                 ],

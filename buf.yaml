@@ -19,6 +19,9 @@ build:
 lint:
   use:
     - DEFAULT
+  ignore_only:
+    RPC_RESPONSE_STANDARD_NAME:
+      - https_outcalls_service/v1/proto.proto
 breaking:
   ignore:
   use:

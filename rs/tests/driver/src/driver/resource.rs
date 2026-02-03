@@ -194,10 +194,12 @@ pub fn get_resource_request_for_nested_nodes(
 }
 
 /// The SHA-256 hash of the Universal VM disk image.
-/// The latest hash can be retrieved by downloading the SHA256SUMS file from:
-/// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
+/// The latest hash can be retrieved by checking the latest successful test of the farm repo on the master branch:
+/// https://github.com/dfinity-lab/farm/actions?query=branch%3Amaster+is%3Asuccess
+/// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
+/// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/universal-vm/<SHA256-HASH>/x86_64-linux/universal-vm.img.zst
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "36977fe6e829631376dd0bc4b1a8e05b53a7e3a0248a6373f1d7fbdae4bc00ed";
+    "c314e927f9ad976db110910cfef262eec2dddfff05ef3a84b0717a901630b367";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,

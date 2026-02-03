@@ -1,10 +1,14 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
-    pb::v1::{FulfillSubnetRentalRequest, GovernanceError, governance_error::ErrorType},
+    pb::v1::{
+        FulfillSubnetRentalRequest, GovernanceError, SelfDescribingValue,
+        governance_error::ErrorType,
+    },
+    proposals::self_describing::LocallyDescribableProposalAction,
 };
+
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-#[allow(unused)]
 use ic_cdk::println;
 use ic_limits::{
     DKG_DEALINGS_PER_BLOCK, DKG_INTERVAL_HEIGHT, INITIAL_NOTARY_DELAY, MAX_BLOCK_PAYLOAD_SIZE,
@@ -13,6 +17,7 @@ use ic_limits::{
 };
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
+use ic_nns_governance_derive_self_describing::SelfDescribing;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use registry_canister::mutations::do_create_subnet::{
@@ -23,34 +28,44 @@ use std::sync::Arc;
 
 const ABSURDLY_LARGE_NUMBER_OF_NODES_IN_A_SUBNET: usize = 1000;
 
-impl FulfillSubnetRentalRequest {
-    /// Enforces the following:
-    ///
-    /// * user - Must be Some.
-    ///
-    /// * node_ids - Must be nonempty.
-    ///
-    /// * replica_version_id - Must be a potential full git commit ID
-    ///   (hexidecimal strgint of length 40).
-    ///
-    /// Note that passing this validation does NOT mean that the proposal will
-    /// excute successfully. E.g. if replica_version_id is not a blessed replica
-    /// version, then the proposal will fail at execution. In principle, these
-    /// things could be checked at proposal creation time, but they are not
-    /// because that would require calling other canisters, which makes
-    /// validation code fraught with peril.
-    pub(crate) fn validate(&self) -> Result<(), GovernanceError> {
-        let Self {
+/// A validated FulfillSubnetRentalRequest proposal action.
+///
+/// Enforces the following:
+///
+/// * node_ids - Must be nonempty.
+///
+/// * replica_version_id - Must be a potential full git commit ID (hexidecimal string of length 40).
+///
+/// Note that `ValidFulfillSubnetRentalRequest::execute()` is not guaranteed to succeed. E.g. if
+/// replica_version_id is not a blessed replica version, then the proposal will fail at execution.
+/// In principle, these things could be checked at proposal creation time, but they are not because
+/// that would require calling other canisters, which makes validation code fraught with peril.
+#[derive(Debug, Clone, PartialEq, SelfDescribing)]
+pub(crate) struct ValidFulfillSubnetRentalRequest {
+    user: PrincipalId,
+    node_ids: Vec<PrincipalId>,
+    replica_version_id: String,
+}
+
+impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
+    type Error = GovernanceError;
+
+    fn try_from(value: FulfillSubnetRentalRequest) -> Result<Self, Self::Error> {
+        let FulfillSubnetRentalRequest {
             user,
             node_ids,
             replica_version_id,
-        } = self;
+        } = value;
 
         let mut defects = vec![];
 
-        if user.is_none() {
-            defects.push("The `user` field is null.".to_string());
-        }
+        let user = match user {
+            Some(user) => user,
+            None => {
+                defects.push("The `user` field is null.".to_string());
+                PrincipalId::default() // placeholder, will be discarded due to error
+            }
+        };
 
         if node_ids.is_empty() {
             defects.push("The `node_ids` field is empty.".to_string());
@@ -61,7 +76,7 @@ impl FulfillSubnetRentalRequest {
             ));
         }
 
-        if !is_potential_full_git_commit_id(replica_version_id) {
+        if !is_potential_full_git_commit_id(&replica_version_id) {
             defects.push(format!(
                 "The `replica_version_id` is not a 40 character hexidecimal string (it was {replica_version_id:?})",
             ));
@@ -77,9 +92,28 @@ impl FulfillSubnetRentalRequest {
             ));
         }
 
-        Ok(())
+        Ok(ValidFulfillSubnetRentalRequest {
+            user,
+            node_ids,
+            replica_version_id,
+        })
     }
+}
 
+impl LocallyDescribableProposalAction for ValidFulfillSubnetRentalRequest {
+    const TYPE_NAME: &'static str = "Subnet Rental Agreement";
+
+    const TYPE_DESCRIPTION: &'static str = "A proposal to create a rented subnet with a subnet rental \
+    agreement, based on a previously executed Subnet Rental Request proposal. The resulting subnet \
+    allows only the user of the rental agreement to create canisters, and canisters are not charged \
+    cycles for computation and storage.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        SelfDescribingValue::from(self.clone())
+    }
+}
+
+impl ValidFulfillSubnetRentalRequest {
     pub(crate) async fn execute(
         &self,
         proposal_id: ProposalId,
@@ -104,17 +138,7 @@ impl FulfillSubnetRentalRequest {
         &self,
         env: &Arc<dyn Environment>,
     ) -> Result<(), GovernanceError> {
-        let Some(user) = self.user else {
-            // I am pretty sure that this is unreachable, because of validation
-            // at proposal creation time, but if we do get to this point, it is
-            // not so bad; there is no indication that there is some "mess"
-            // needs to be "cleaned up" (other than fixing validation).
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "FulfillSubnetRentalRequest does not have a user, but user is required."
-                    .to_string(),
-            ));
-        };
+        let user = self.user;
 
         let rental_requests = env
             .call_canister_method(
@@ -304,15 +328,7 @@ impl FulfillSubnetRentalRequest {
         env: &Arc<dyn Environment>,
     ) -> Result<(), GovernanceError> {
         // Gather components of the request that will be made to the Subnet Rental canister.
-        let user = self.user.ok_or_else(|| {
-            // This is probably unreachable, because user is checked during
-            // proposal submission.
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "FulfillSubnetRentalRequest proposal lacks a value for `user`.".to_string(),
-            )
-        })?;
-        let user = Principal::from(user);
+        let user = Principal::from(self.user);
         let subnet_id = Principal::from(new_subnet_id.get());
         let proposal_id = proposal_id.id;
 

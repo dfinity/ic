@@ -9,3 +9,6 @@ edition.workspace = true
 [dependencies]
 ic-cdk-timers = { workspace = true }
 slotmap = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

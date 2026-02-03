@@ -7,7 +7,6 @@
 use core::fmt::{self, Debug};
 use rand::{CryptoRng, RngCore, SeedableRng};
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod xmd;
@@ -40,11 +39,8 @@ impl Debug for Seed {
 
 impl Seed {
     fn new(input: &[u8], domain_separator: &str) -> Self {
-        let derived = xmd::<ic_crypto_sha2::Sha256>(input, domain_separator.as_bytes(), SEED_LEN)
-            .expect("Unable to derive SEED_LEN bytes from XMD");
-        Self {
-            value: derived.try_into().expect("Unexpected size"),
-        }
+        let value = xmd::<SEED_LEN, ic_crypto_sha2::Sha256>(input, domain_separator.as_bytes());
+        Self { value }
     }
 
     /// Create a Seed from some input string

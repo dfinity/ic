@@ -87,13 +87,13 @@ impl TryFrom<native_types::DailyNodeRewards> for DailyNodeRewards {
             ),
             base_rewards_xdr_permyriad: Some(
                 src.base_rewards_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (base_rewards_xdr_permyriad)")?,
+                    .to_f64()
+                    .ok_or("Conversion to f64 failed (base_rewards_xdr_permyriad)")?,
             ),
             adjusted_rewards_xdr_permyriad: Some(
                 src.adjusted_rewards_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (adjusted_rewards_xdr_permyriad)")?,
+                    .to_f64()
+                    .ok_or("Conversion to f64 failed (adjusted_rewards_xdr_permyriad)")?,
             ),
         })
     }
@@ -107,12 +107,12 @@ impl TryFrom<native_types::NodeTypeRegionBaseRewards> for NodeTypeRegionBaseRewa
         Ok(Self {
             monthly_xdr_permyriad: Some(
                 src.monthly_xdr_permyriad
-                    .to_u64()
+                    .to_f64()
                     .ok_or("Conversion to f64 failed (monthly_xdr_permyriad)")?,
             ),
             daily_xdr_permyriad: Some(
                 src.daily_xdr_permyriad
-                    .to_u64()
+                    .to_f64()
                     .ok_or("Conversion to f64 failed (daily_xdr_permyriad)")?,
             ),
             node_reward_type: Some(src.node_reward_type.to_string()),
@@ -131,8 +131,8 @@ impl TryFrom<native_types::Type3RegionBaseRewards> for Type3RegionBaseRewards {
             nodes_count: Some(src.nodes_count as u64),
             avg_rewards_xdr_permyriad: Some(
                 src.avg_rewards_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (avg_rewards_xdr_permyriad)")?,
+                    .to_f64()
+                    .ok_or("Conversion to f64 failed (avg_rewards_xdr_permyriad)")?,
             ),
             avg_coefficient: Some(
                 src.avg_coefficient
@@ -141,8 +141,8 @@ impl TryFrom<native_types::Type3RegionBaseRewards> for Type3RegionBaseRewards {
             ),
             daily_xdr_permyriad: Some(
                 src.daily_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (daily_xdr_permyriad)")?,
+                    .to_f64()
+                    .ok_or("Conversion to f64 failed (daily_xdr_permyriad)")?,
             ),
         })
     }
@@ -154,11 +154,8 @@ impl TryFrom<native_types::DailyNodeProviderRewards> for DailyNodeProviderReward
 
     fn try_from(src: native_types::DailyNodeProviderRewards) -> Result<Self, Self::Error> {
         Ok(Self {
-            rewards_total_xdr_permyriad: Some(
-                src.rewards_total_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (rewards_total_xdr_permyriad)")?,
-            ),
+            total_base_rewards_xdr_permyriad: Some(src.total_base_rewards_xdr_permyriad),
+            total_adjusted_rewards_xdr_permyriad: Some(src.total_adjusted_rewards_xdr_permyriad),
             base_rewards: src
                 .base_rewards
                 .into_iter()

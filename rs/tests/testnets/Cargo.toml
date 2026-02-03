@@ -14,6 +14,7 @@ ic-limits = { path = "../../limits" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
+ic-testnet-mainnet-nns = { path = "./mainnet_nns" }
 ic-xrc-types = "1.0.0"
 ic_consensus_system_test_subnet_recovery = { path = "../consensus/subnet_recovery" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
@@ -88,3 +89,7 @@ path = "small_with_query_stats.rs"
 [[bin]]
 name = "nns_recovery"
 path = "nns_recovery.rs"
+
+[[bin]]
+name = "mainnet_nns"
+path = "mainnet_nns.rs"

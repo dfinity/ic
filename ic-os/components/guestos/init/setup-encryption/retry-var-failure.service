@@ -1,0 +1,13 @@
+[Unit]
+Description=Reboot on var failure
+After=sysinit.target
+Before=ic-replica.service
+ConditionPathExists=!/var/run
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/retry-var-failure.sh
+
+[Install]
+WantedBy=multi-user.target

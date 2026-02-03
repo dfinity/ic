@@ -218,6 +218,26 @@ type NotifyMintCyclesSuccess = record {
   balance : nat;
 };
 
+type SetAuthorizedSubnetworkListArgs = record {
+  who : opt principal;
+  subnets : vec principal;
+};
+
+type UpdateSubnetTypeArgs = variant {
+  Add : text;
+  Remove : text;
+};
+
+type SubnetListWithType = record {
+  subnets : vec principal;
+  subnet_type : text;
+};
+
+type ChangeSubnetTypeAssignmentArgs = variant {
+  Add : SubnetListWithType;
+  Remove : SubnetListWithType;
+};
+
 service : (opt CyclesCanisterInitPayload) -> {
   // Prompts the cycles minting canister to process a payment by converting ICP
   // into cycles and sending the cycles the specified canister.
@@ -245,4 +265,9 @@ service : (opt CyclesCanisterInitPayload) -> {
   get_default_subnets: () -> (vec principal) query;
 
   get_build_metadata : () -> (text) query;
+
+  // Below are methods that can only be called by other NNS canisters.
+  set_authorized_subnetwork_list : (SetAuthorizedSubnetworkListArgs) -> ();
+  update_subnet_type : (UpdateSubnetTypeArgs) -> ();
+  change_subnet_type_assignment : (ChangeSubnetTypeAssignmentArgs) -> ();
 };

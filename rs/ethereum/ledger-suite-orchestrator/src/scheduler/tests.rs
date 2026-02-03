@@ -1023,7 +1023,7 @@ mod upgrade_ledger_suite {
             s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
         });
 
-        for (task, canister_id) in vec![
+        for (task, canister_id) in [
             (update_index_task, INDEX_PRINCIPAL),
             (update_ledger_task, LEDGER_PRINCIPAL),
         ] {

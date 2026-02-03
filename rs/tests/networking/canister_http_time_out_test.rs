@@ -66,6 +66,7 @@ pub fn test(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: 500_000_000_000,
         };

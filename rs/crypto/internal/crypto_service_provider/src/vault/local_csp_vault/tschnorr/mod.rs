@@ -48,7 +48,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let presig_opening =
             self.combined_commitment_opening_from_sks(&presig_transcript.combined_commitment)?;
 
-        let derivation_path = DerivationPath::from(&extended_derivation_path);
+        let derivation_path = DerivationPath::from(extended_derivation_path);
 
         let result = match algorithm_id {
             AlgorithmId::ThresholdSchnorrBip340 => {

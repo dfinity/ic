@@ -11,6 +11,11 @@ pub struct InitArg {
     pub ledger_id: Principal,
 }
 
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct UpgradeArg {
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
+}
+
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct GetBlocksResponse {
     // The length of the chain indexed.

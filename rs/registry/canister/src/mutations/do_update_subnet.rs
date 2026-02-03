@@ -278,7 +278,7 @@ impl From<ChainKeyConfigInternal> for ChainKeyConfig {
                      max_queue_size,
                  }| KeyConfig {
                     key_id: Some(key_id),
-                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+                    pre_signatures_to_create_in_advance,
                     max_queue_size: Some(max_queue_size),
                 },
             )
@@ -349,7 +349,7 @@ impl From<KeyConfigInternal> for KeyConfig {
 
         Self {
             key_id: Some(key_id),
-            pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+            pre_signatures_to_create_in_advance,
             max_queue_size: Some(max_queue_size),
         }
     }
@@ -368,11 +368,21 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
         let Some(key_id) = key_id else {
             return Err("KeyConfig.key_id must be specified.".to_string());
         };
-        let Some(pre_signatures_to_create_in_advance) = pre_signatures_to_create_in_advance else {
-            return Err(
-                "KeyConfig.pre_signatures_to_create_in_advance must be specified.".to_string(),
-            );
+
+        // Ensure presence of `pre_signatures_to_create_in_advance` for keys that require pre-signatures.
+        // Note that an invariant ensures that this field is not zero for keys that require pre-signatures.
+        if key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_none() {
+            return Err(format!(
+                "KeyConfig.pre_signatures_to_create_in_advance must be specified for key {key_id}."
+            ));
         };
+        // Ensure absence of `pre_signatures_to_create_in_advance` for keys that do not require it.
+        if !key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_some() {
+            return Err(format!(
+                "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key {key_id} because it does not require pre-signatures."
+            ));
+        };
+
         let Some(max_queue_size) = max_queue_size else {
             return Err("KeyConfig.max_queue_size must be specified.".to_string());
         };
@@ -491,7 +501,7 @@ mod tests {
         prepare_registry_with_nodes,
     };
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
@@ -1308,5 +1318,64 @@ mod tests {
 
         // Should panic because we are trying to delete an existing key
         registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must be specified for key ecdsa:Secp256k1:some_key_name"
+    )]
+    fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let payload = update_subnet_payload_with_key_config(
+            subnet_id,
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "some_key_name".to_string(),
+            }),
+            None,
+        );
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
+    )]
+    fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let payload = update_subnet_payload_with_key_config(
+            subnet_id,
+            MasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: "some_key_name".to_string(),
+            }),
+            Some(99),
+        );
+
+        registry.do_update_subnet(payload);
+    }
+
+    fn update_subnet_payload_with_key_config(
+        subnet_id: SubnetId,
+        key_id: MasterPublicKeyId,
+        pre_signatures_to_create_in_advance: Option<u32>,
+    ) -> UpdateSubnetPayload {
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.chain_key_config = Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(key_id),
+                pre_signatures_to_create_in_advance,
+                max_queue_size: Some(155),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+        payload
     }
 }

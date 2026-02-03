@@ -42,7 +42,7 @@ use std::net::Ipv6Addr;
 use std::time::Duration;
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use slog::{Logger, info};
+use slog::{Logger, info, warn};
 
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
@@ -77,6 +77,7 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast
     install_nns_and_check_progress(env.topology_snapshot());
 
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .disable_ipv4()
         .start(env)
         .expect("failed to setup ic-gateway");
 }
@@ -334,4 +335,56 @@ pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
         .expect("Failed to retrieve boot ID")
         .trim()
         .to_string()
+}
+
+/// Execute a bash script on a node via SSH and log the output.
+pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: &str) {
+    match node.block_on_bash_script(cmd) {
+        Ok(out) => info!(log, "{cmd}:\n{out}"),
+        Err(err) => warn!(log, "Failed to execute '{cmd}': {:?}", err),
+    }
+}
+
+/// Logs guestos diagnostics, used in the event of test failure
+pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
+    info!(logger, "Logging GuestOS diagnostics...");
+
+    /// 10-second timeout prevents excessive logging when SSH is unavailable.
+    const SSH_TIMEOUT: Duration = Duration::from_secs(10);
+
+    let execute_and_log = |node: &dyn SshSession, cmd: &str| match node
+        .block_on_ssh_session_with_timeout(SSH_TIMEOUT)
+        .and_then(|session| node.block_on_bash_script_from_session(&session, cmd))
+    {
+        Ok(out) => info!(logger, "{cmd}:\n{out}"),
+        Err(err) => warn!(logger, "Failed to execute '{cmd}': {:?}", err),
+    };
+
+    info!(logger, "GuestOS console logs...");
+    execute_and_log(
+        host,
+        "sudo tail -n 200 /var/log/libvirt/qemu/guestos-serial.log",
+    );
+
+    match host.get_guest_ssh() {
+        Ok(guest) => {
+            let diagnostics = vec![
+                "systemctl --failed --no-pager || true",
+                "journalctl -b --no-pager -u systemd-remount-fs.service || true",
+                "mount | sort",
+                "journalctl -b --no-pager -p warning | tail -n 200",
+                "set -o pipefail; dmesg --color=never | grep -iE 'mount|ext4|xfs|btrfs|nvme|sda|i/o error|failed' | tail -n 200 || true",
+            ];
+
+            for cmd in diagnostics {
+                execute_and_log(&guest, cmd);
+            }
+        }
+        Err(err) => {
+            info!(
+                logger,
+                "Unable to establish GuestOS SSH session for diagnostics: {:?}", err
+            );
+        }
+    }
 }

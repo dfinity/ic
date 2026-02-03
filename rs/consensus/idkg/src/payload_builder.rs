@@ -1010,7 +1010,7 @@ mod tests {
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
                 key_id: key_id.clone().into(),
-                pre_signatures_to_create_in_advance: PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+                pre_signatures_to_create_in_advance: Some(PRE_SIGNATURES_TO_CREATE_IN_ADVANCE),
                 max_queue_size: 1,
             }],
             ..ChainKeyConfig::default()
@@ -2355,7 +2355,7 @@ mod tests {
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone().into(),
-                    pre_signatures_to_create_in_advance: 1,
+                    pre_signatures_to_create_in_advance: Some(1),
                     max_queue_size: 1,
                 }],
                 signature_request_timeout_ns: Some(100000),
@@ -2458,7 +2458,7 @@ mod tests {
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone().into(),
-                    pre_signatures_to_create_in_advance: 1,
+                    pre_signatures_to_create_in_advance: Some(1),
                     max_queue_size: 1,
                 }],
                 signature_request_timeout_ns: Some(100000),
@@ -2617,7 +2617,7 @@ mod tests {
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone().into(),
-                    pre_signatures_to_create_in_advance: 1,
+                    pre_signatures_to_create_in_advance: Some(1),
                     max_queue_size: 1,
                 }],
                 signature_request_timeout_ns: Some(100000),

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
@@ -10,6 +10,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/seed",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/secrets_containers",
         "//rs/crypto/sha2",
@@ -31,7 +32,24 @@ rust_test(
         # Keep sorted.
         "//rs/crypto/internal/test_vectors",
         "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:assert_matches",
         "@crate_index//:proptest",
         "@crate_index//:serde_cbor",
+    ],
+)
+
+rust_test_suite(
+    name = "multi_sig_bls12_381_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [
+        ":bls12_381",
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/seed",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:proptest",
+        "@crate_index//:rand",
     ],
 )

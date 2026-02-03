@@ -115,7 +115,7 @@ impl syn::parse::Parse for FieldElementConfig {
         let _comma: syn::token::Comma = input.parse()?;
 
         let params: syn::punctuated::Punctuated<NameAndValue, syn::token::Comma> =
-            input.parse_terminated(NameAndValue::parse)?;
+            syn::punctuated::Punctuated::parse_terminated(input)?;
 
         let modulus = parse_integer(&m_val.value());
 

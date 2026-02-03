@@ -53,20 +53,18 @@ fn process_err(
 }
 
 fn add_backtrace(e: &mut HypervisorError, store: impl AsContext<Data = StoreData>) {
-    if store.as_context().data().canister_backtrace == FlagStatus::Enabled {
-        match e {
-            HypervisorError::Trapped {
-                trap_code: _,
-                backtrace,
-            }
-            | HypervisorError::CalledTrap {
-                message: _,
-                backtrace,
-            } => {
-                *backtrace = convert_backtrace(&WasmBacktrace::capture(store));
-            }
-            _ => {}
+    match e {
+        HypervisorError::Trapped {
+            trap_code: _,
+            backtrace,
         }
+        | HypervisorError::CalledTrap {
+            message: _,
+            backtrace,
+        } => {
+            *backtrace = convert_backtrace(&WasmBacktrace::capture(store));
+        }
+        _ => {}
     }
 }
 
@@ -176,8 +174,13 @@ fn charge_direct_fee(
         instruction_counter = system_api.out_of_instructions(instruction_counter)?;
     }
 
+    // If the fee can't fit into an i64 without overflowing, we'll run out of instructions anyway (even with DTS) so just fail.
+    let fee = fee.get().try_into().map_err(|_| {
+        HypervisorError::InstructionLimitExceeded(NumInstructions::from(instruction_limit as u64))
+    })?;
+
     // Now we can subtract the fee and store the new instruction counter.
-    instruction_counter -= fee.get() as i64;
+    instruction_counter = instruction_counter.saturating_sub(fee);
     store_value(&num_instructions_global, instruction_counter, caller)?;
 
     // If the instruction counter became negative after subtracting the fee,
@@ -302,13 +305,13 @@ pub fn syscalls<
         caller: &mut Caller<'_, StoreData>,
         message_num_bytes: usize,
     ) -> Result<usize, anyhow::Error> {
-        let capacity = with_system_api(caller, |s| Ok(s.canister_log().capacity()))?;
-        let remaining_space = with_system_api(caller, |s| Ok(s.canister_log().remaining_space()))?;
-        let allocated_num_bytes = message_num_bytes.min(capacity);
-        let transmitted_num_bytes = message_num_bytes.min(remaining_space);
+        let byte_capacity = with_system_api(caller, |s| Ok(s.canister_log().byte_capacity()))?;
+        let remaining_bytes = with_system_api(caller, |s| Ok(s.canister_log().remaining_bytes()))?;
+        let allocated_num_bytes = message_num_bytes.min(byte_capacity);
+        let transmitted_num_bytes = message_num_bytes.min(remaining_bytes);
         // LINT.IfChange
         // The cost of logging is proportional to the size of the message, but is limited
-        // by the log capacity and the remaining space in the log.
+        // by the log byte capacity and the remaining bytes in the log.
         // The cost is calculated as follows:
         // - the allocated bytes (x2 to account for adding new message and removing the oldest one)
         //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types_private`
@@ -641,7 +644,7 @@ pub fn syscalls<
                 let mut num_bytes = logging_charge_bytes(&mut caller, length)?;
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, &feature_flags)?;
                 if debug_print_is_enabled {
-                    num_bytes += length;
+                    num_bytes = num_bytes.saturating_add(length);
                 }
                 charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes)?;
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
@@ -662,7 +665,7 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| -> Result<(), _> {
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let length: usize = length.try_into().expect("Failed to convert I to usize");
-                let num_bytes = length + logging_charge_bytes(&mut caller, length)?;
+                let num_bytes = length.saturating_add(logging_charge_bytes(&mut caller, length)?);
                 charge_for_cpu_and_mem(&mut caller, overhead::TRAP, num_bytes)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset, length, memory)
@@ -1225,6 +1228,24 @@ pub fn syscalls<
                     s.ic0_cost_http_request(request_size, max_res_bytes, dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request failed: {e}")))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_http_request_v2", {
+            move |mut caller: Caller<'_, StoreData>, params_src: I, params_size: I, dst: I| {
+                charge_for_cpu(&mut caller, overhead::COST_HTTP_REQUEST_V2)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let params_src: usize =
+                        params_src.try_into().expect("Failed to convert I to usize");
+                    let params_size: usize = params_size
+                        .try_into()
+                        .expect("Failed to convert I to usize");
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_http_request_v2(params_src, params_size, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request_v2 failed: {e}")))
             }
         })
         .unwrap();

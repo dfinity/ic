@@ -839,7 +839,8 @@ mod verify_complaint {
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         IDkgMode, IDkgModeTestContext, IDkgTestContextForComplaint, setup_masked_random_params,
-        to_corrupt_complaint,
+        setup_reshare_of_masked_params, setup_reshare_of_unmasked_params,
+        setup_unmasked_times_masked_params, to_corrupt_complaint,
     };
     use strum::IntoEnumIterator;
 
@@ -908,6 +909,94 @@ mod verify_complaint {
                     .any(|complaint| complaint.dealer_id == dealer_id);
                 assert!(dealer_for_index_exists_in_complaints);
             }
+        }
+    }
+
+    #[test]
+    fn should_return_valid_complaint_on_load_transcript_with_invalid_dealing_for_reshare_of_masked()
+    {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+
+        for alg in all_canister_threshold_algorithms() {
+            let params = setup_reshare_of_masked_params(&env, alg, &dealers, &receivers, rng);
+            let mut transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&params, rng);
+
+            let (complainer, complaint) =
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+
+            assert_eq!(complaint.transcript_id, transcript.transcript_id);
+            assert_eq!(
+                env.nodes
+                    .random_filtered_by_receivers(params.receivers(), rng)
+                    .verify_complaint(&transcript, complainer.id(), &complaint),
+                Ok(())
+            );
+        }
+    }
+
+    #[test]
+    fn should_return_valid_complaint_on_load_transcript_with_invalid_dealing_for_reshare_of_unmasked()
+     {
+        let rng = &mut reproducible_rng();
+        // Use at least 4 nodes to ensure reconstruction_threshold > 1.
+        // With smaller subnets (especially 1-2 nodes), the initial and reshared transcripts
+        // may have identical commitments (same KeyId), causing the complainer to skip loading
+        // if they were also a dealer who loaded the initial transcript.
+        let subnet_size = rng.gen_range(4..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+
+        for alg in all_canister_threshold_algorithms() {
+            let params = setup_reshare_of_unmasked_params(&env, alg, &dealers, &receivers, rng);
+            let mut transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&params, rng);
+
+            let (complainer, complaint) =
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+
+            assert_eq!(complaint.transcript_id, transcript.transcript_id);
+            assert_eq!(
+                env.nodes
+                    .random_filtered_by_receivers(params.receivers(), rng)
+                    .verify_complaint(&transcript, complainer.id(), &complaint),
+                Ok(())
+            );
+        }
+    }
+
+    #[test]
+    fn should_return_valid_complaint_on_load_transcript_with_invalid_dealing_for_unmasked_times_masked()
+     {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+
+        for alg in all_canister_threshold_algorithms() {
+            let params = setup_unmasked_times_masked_params(&env, alg, &dealers, &receivers, rng);
+            let mut transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&params, rng);
+
+            let (complainer, complaint) =
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+
+            assert_eq!(complaint.transcript_id, transcript.transcript_id);
+            assert_eq!(
+                env.nodes
+                    .random_filtered_by_receivers(params.receivers(), rng)
+                    .verify_complaint(&transcript, complainer.id(), &complaint),
+                Ok(())
+            );
         }
     }
 
@@ -1491,7 +1580,7 @@ mod verify_transcript {
                 .content
                 .into_builder()
                 .with_dealer_id(dealer1.id())
-                .build_with_signature(&params, dealer1, dealer1.id());
+                .build_with_signature(dealer1, dealer1.id());
 
             let dealing = env
                 .nodes
@@ -2568,7 +2657,7 @@ mod verify_dealing_private {
                 &signed_dealing
                     .into_builder()
                     .corrupt_transcript_id()
-                    .build_with_signature(&params, dealer, dealer.id()),
+                    .build_with_signature(dealer, dealer.id()),
             );
 
             assert_matches!( result, Err(IDkgVerifyDealingPrivateError::InvalidArgument(reason)) if reason.starts_with("mismatching transcript IDs"));
@@ -2595,7 +2684,7 @@ mod verify_dealing_private {
                 &signed_dealing
                     .into_builder()
                     .corrupt_internal_dealing_raw_by_flipping_bit()
-                    .build_with_signature(&params, dealer, dealer.id()),
+                    .build_with_signature(dealer, dealer.id()),
             );
 
             assert_matches!( result, Err(IDkgVerifyDealingPrivateError::InvalidArgument(reason)) if reason.starts_with("failed to deserialize internal dealing"));
@@ -2895,7 +2984,7 @@ mod verify_dealing_public {
                 .create_dealing_or_panic(&params)
                 .into_builder()
                 .corrupt_transcript_id()
-                .build_with_signature(&params, dealer, dealer.id());
+                .build_with_signature(dealer, dealer.id());
 
             let verifier_id = random_node_id_excluding(&env.nodes.ids(), rng);
             let verifier = TempCryptoComponent::builder()
@@ -2939,7 +3028,7 @@ mod verify_dealing_public {
                 .create_dealing_or_panic(&params)
                 .into_builder()
                 .with_dealer_id(other_dealer.id())
-                .build_with_signature(&params, other_dealer, other_dealer.id());
+                .build_with_signature(other_dealer, other_dealer.id());
 
             let verifier_id = random_node_id_excluding(&env.nodes.ids(), rng);
             let verifier = TempCryptoComponent::builder()
@@ -2980,7 +3069,7 @@ mod verify_dealing_public {
             let signed_dealing = dealer
                 .create_dealing_or_panic(&params)
                 .into_builder()
-                .build_with_signature(&params, dealer, dealer.id())
+                .build_with_signature(dealer, dealer.id())
                 .into_builder()
                 .with_dealer_id(not_a_dealer_node_id)
                 .build();
@@ -3014,7 +3103,7 @@ mod verify_dealing_public {
                 .create_dealing_or_panic(&params)
                 .into_builder()
                 .corrupt_internal_dealing_raw_by_flipping_bit()
-                .build_with_signature(&params, dealer, dealer.id());
+                .build_with_signature(dealer, dealer.id());
 
             let verifier_id = random_node_id_excluding(&env.nodes.ids(), rng);
             let verifier = TempCryptoComponent::builder()

@@ -14,15 +14,11 @@ cargo update --workspace
 git add Cargo.lock Cargo.Bazel.*.lock
 git status
 if ! git diff --cached --quiet; then
-    # If this is running from a pull request then update the Cargo.lock file in the PR
-    # automatically.
-    if [ "$CI_EVENT_NAME" = "pull_request" ]; then
-        # There are some changes staged
-        git config --global user.email "infra+github-automation@dfinity.org"
-        git config --global user.name "IDX GitHub Automation"
-        git commit -m "Automatically updated Cargo*.lock"
-        git push
-    fi
+    # There are some changes staged
+    git config --global user.email "infra+github-automation@dfinity.org"
+    git config --global user.name "IDX GitHub Automation"
+    git commit -m "Automatically updated Cargo*.lock"
+    git push
 
     # Because the lockfiles need updating, fail the PR
     EXIT_STATUS=1

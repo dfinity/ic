@@ -13,9 +13,7 @@ ic-config = { path = "../../config" }
 ic-metrics = { path = "../../monitoring/metrics" }
 prometheus = { workspace = true }
 slog = { workspace = true }
-thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-io-timeout = "1.2.0"
 tower = { workspace = true }
 
 [dev-dependencies]

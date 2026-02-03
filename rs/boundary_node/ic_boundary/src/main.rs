@@ -10,7 +10,6 @@ mod cli;
 mod core;
 mod dns;
 mod errors;
-mod firewall;
 mod http;
 mod log;
 mod metrics;
@@ -19,7 +18,7 @@ mod rate_limiting;
 mod routes;
 mod salt_fetcher;
 mod snapshot;
-#[cfg(any(test, feature = "bench"))]
+#[cfg(test)]
 pub mod test_utils;
 mod tls_verify;
 

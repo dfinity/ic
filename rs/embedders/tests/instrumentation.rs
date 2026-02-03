@@ -1354,8 +1354,15 @@ fn assert_memories_have_max_limit(wat: &str) {
     {
         let wasm = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
 
+        let config = EmbeddersConfig {
+            max_wasm_memory_size: NumBytes::new(heap_limit),
+            max_wasm64_memory_size: NumBytes::new(heap64_limit),
+            max_stable_memory_size: NumBytes::new(stable_limit),
+            ..EmbeddersConfig::default()
+        };
+
         let (_, instrumentation_details) = validate_and_instrument_for_testing(
-            &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
+            &WasmtimeEmbedder::new(config, no_op_logger()),
             &wasm,
         )
         .unwrap();
@@ -1368,26 +1375,31 @@ fn assert_memories_have_max_limit(wat: &str) {
         let mut memories = module.memories.iter();
         let heap_memory = memories.next().unwrap();
         let stable_memory = memories.next().unwrap();
+
+        let heap_memory_bytes = heap_memory.ty.maximum.unwrap() * WASM_PAGE_SIZE_IN_BYTES as u64;
+        let stable_memory_bytes =
+            stable_memory.ty.maximum.unwrap() * WASM_PAGE_SIZE_IN_BYTES as u64;
+
         if heap_memory.ty.memory64 {
             assert!(
-                heap_memory.ty.maximum.unwrap() < heap64_limit,
+                heap_memory_bytes <= heap64_limit,
                 "memory limit {} exceeds expected {}",
-                heap_memory.ty.maximum.unwrap(),
+                heap_memory_bytes,
                 heap64_limit
             );
         } else {
             assert!(
-                heap_memory.ty.maximum.unwrap() < heap_limit,
+                heap_memory_bytes <= heap_limit,
                 "memory limit {} exceeds expected {}",
-                heap_memory.ty.maximum.unwrap(),
+                heap_memory_bytes,
                 heap_limit
             );
         }
 
         assert!(
-            stable_memory.ty.maximum.unwrap() < stable_limit,
+            stable_memory_bytes <= stable_limit,
             "memory limit {} exceeds expected {}",
-            stable_memory.ty.maximum.unwrap(),
+            stable_memory_bytes,
             stable_limit
         );
     }

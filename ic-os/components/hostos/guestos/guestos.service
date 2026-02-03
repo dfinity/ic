@@ -2,8 +2,6 @@
 Description=Manage GuestOS virtual machine
 Requires=libvirtd.service
 After=libvirtd.service
-Requires=guestos-recovery-upgrader.service
-After=guestos-recovery-upgrader.service
 
 RequiresMountsFor=/var
 

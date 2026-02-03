@@ -70,7 +70,7 @@ RUN find /etc -type d -exec chmod 0755 {} \+ && \
 RUN RESUME=none update-initramfs -c -k all
 
 # Activate the NSS IC OS Name Service Switch plugin.
-# See ../../../rs/ic_os/nss_icos/README.md for context.
+# See ../../../rs/ic_os/networking/nss_icos/README.md for context.
 RUN sed -r -e 's/hosts:( *)files/hosts:\1files icos/' -i /etc/nsswitch.conf
 
 # Prepare for bind mount of authorized_keys
@@ -165,6 +165,11 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
+# The "limited-console" account for restricted console access
+RUN adduser --system --disabled-password --home /var/lib/limited-console --shell /sbin/nologin limited-console && \
+    chown limited-console:nogroup /var/lib/limited-console && \
+    adduser limited-console systemd-journal
+
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
@@ -194,7 +199,9 @@ RUN chown root:root /opt
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
+    chmod 0755 /opt/ic/bin/rbash/bash && \
     chmod 0644 /opt/ic/share/*
+
 
 # ------ DEV VARIANT ---------------------------------------------
 

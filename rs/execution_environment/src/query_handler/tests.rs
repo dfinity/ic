@@ -10,6 +10,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
+use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -63,7 +64,10 @@ fn query_metrics_are_reported() {
         1,
         query_handler.metrics.query.instructions.get_sample_count()
     );
-    assert!(0 < query_handler.metrics.query.instructions.get_sample_sum() as u64);
+    assert_lt!(
+        0,
+        query_handler.metrics.query.instructions.get_sample_sum() as u64
+    );
     assert_eq!(1, query_handler.metrics.query.messages.get_sample_count());
     // We expect four messages:
     // - canister_a.query()
@@ -81,8 +85,9 @@ fn query_metrics_are_reported() {
             .duration
             .get_sample_count()
     );
-    assert!(
-        0 < query_handler
+    assert_lt!(
+        0,
+        query_handler
             .metrics
             .query_initial_call
             .instructions
@@ -128,8 +133,9 @@ fn query_metrics_are_reported() {
             .instructions
             .get_sample_count()
     );
-    assert!(
-        0 < query_handler
+    assert_lt!(
+        0,
+        query_handler
             .metrics
             .query_spawned_calls
             .instructions
@@ -238,7 +244,8 @@ fn composite_query_callgraph_depth_is_enforced() {
         canisters: &[ic_types::CanisterId],
         canister_idx: usize,
     ) -> ic_universal_canister::PayloadBuilder {
-        assert!(canister_idx != 0 && canister_idx < canisters.len());
+        assert_ne!(canister_idx, 0);
+        assert_lt!(canister_idx, canisters.len());
         wasm().stable_grow(10).composite_query(
             canisters[canister_idx],
             call_args()
@@ -357,7 +364,7 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
         canisters: &[ic_types::CanisterId],
         canister_idx: usize,
     ) -> ic_universal_canister::PayloadBuilder {
-        assert!(canister_idx < canisters.len());
+        assert_lt!(canister_idx, canisters.len());
 
         let reply = if canister_idx <= 1 {
             wasm().stable_size().reply_int()
@@ -602,7 +609,7 @@ fn composite_query_fails_in_replicated_mode() {
         "Composite query cannot be called in replicated mode"
     );
     // Verify that we consume some cycles.
-    assert!(balance_before > balance_after);
+    assert_gt!(balance_before, balance_after);
 }
 
 #[test]
@@ -1088,7 +1095,10 @@ fn query_stats_are_collected() {
         // Depending on whether we are looking at the root canister, or one of the child canisters,
         // instructions and payload sizes differ. All child canisters have the same cost though.
         if idx == 0 {
-            assert!(canister_query_stats.num_instructions > child_canister_num_instructions);
+            assert_gt!(
+                canister_query_stats.num_instructions,
+                child_canister_num_instructions
+            );
             assert_eq!(canister_query_stats.ingress_payload_size, 284);
             assert_eq!(canister_query_stats.egress_payload_size, 0);
         } else {
@@ -1163,9 +1173,9 @@ fn test_call_context_performance_counter_correctly_reported_on_query() {
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect::<Vec<_>>();
 
-    assert!(counters[0] < counters[1]);
-    assert!(counters[1] < counters[2]);
-    assert!(counters[2] < counters[3]);
+    assert_lt!(counters[0], counters[1]);
+    assert_lt!(counters[1], counters[2]);
+    assert_lt!(counters[2], counters[3]);
 }
 
 #[test]
@@ -1215,16 +1225,16 @@ fn test_call_context_performance_counter_correctly_reported_on_composite_query()
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect::<Vec<_>>();
 
-    assert!(counters[0] < counters[1]);
-    assert!(counters[1] < counters[2]);
-    assert!(counters[2] < counters[3]);
+    assert_lt!(counters[0], counters[1]);
+    assert_lt!(counters[1], counters[2]);
+    assert_lt!(counters[2], counters[3]);
 }
 
 #[test]
 fn query_call_exceeds_instructions_limit() {
     let instructions_limit = 4;
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit_without_dts(instructions_limit)
+        .with_instruction_limit_per_query_message(instructions_limit)
         .build();
 
     let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();

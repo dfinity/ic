@@ -1,5 +1,7 @@
 //! Metrics exported by crypto
 
+mod bls12_381_g2_prep_cache;
+mod bls12_381_point_cache;
 mod bls12_381_sig_cache;
 
 use ic_metrics::MetricsRegistry;
@@ -8,8 +10,7 @@ use prometheus::{
 };
 use std::ops::Add;
 use std::time::Instant;
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use strum::{AsRefStr, EnumIter, IntoEnumIterator};
 #[cfg(test)]
 use strum_macros::IntoStaticStr;
 
@@ -239,15 +240,12 @@ impl CryptoMetrics {
         start_time: Option<Instant>,
     ) {
         if let Some(metrics) = &self.metrics {
-            let service_type_string = &format!("{service_type}");
-            let message_type_string = &format!("{message_type}");
-            let domain_string = &format!("{domain}");
             metrics
                 .crypto_vault_message_sizes
                 .with_label_values(&[
-                    service_type_string,
-                    message_type_string,
-                    domain_string,
+                    service_type.as_ref(),
+                    message_type.as_ref(),
+                    domain.as_ref(),
                     method_name,
                 ])
                 .observe(message_size as f64);
@@ -256,9 +254,9 @@ impl CryptoMetrics {
                 metrics
                     .crypto_vault_message_serialization_duration_seconds
                     .with_label_values(&[
-                        service_type_string,
-                        message_type_string,
-                        domain_string,
+                        service_type.as_ref(),
+                        message_type.as_ref(),
+                        domain.as_ref(),
                         method_name,
                     ])
                     .observe(start_time.elapsed().as_secs_f64());
@@ -273,12 +271,50 @@ impl CryptoMetrics {
             m.cache_size.set(size as i64);
 
             let prev_hits = m.cache_hits.get();
-            debug_assert!(prev_hits <= hits);
-            m.cache_hits.inc_by(hits - prev_hits);
+            if hits > prev_hits {
+                m.cache_hits.inc_by(hits - prev_hits);
+            }
 
             let prev_misses = m.cache_misses.get();
-            debug_assert!(prev_misses <= misses);
-            m.cache_misses.inc_by(misses - prev_misses);
+            if misses > prev_misses {
+                m.cache_misses.inc_by(misses - prev_misses);
+            }
+        }
+    }
+
+    /// Observes the cache statistics for parsing of BLS12-381 points
+    pub fn observe_bls12_381_point_cache_stats(&self, size: usize, hits: u64, misses: u64) {
+        if let Some(metrics) = &self.metrics {
+            let m = &metrics.crypto_bls12_381_point_cache_metrics;
+            m.cache_size.set(size as i64);
+
+            let prev_hits = m.cache_hits.get();
+            if hits > prev_hits {
+                m.cache_hits.inc_by(hits - prev_hits);
+            }
+
+            let prev_misses = m.cache_misses.get();
+            if misses > prev_misses {
+                m.cache_misses.inc_by(misses - prev_misses);
+            }
+        }
+    }
+
+    /// Observes the cache statistics for parsing of BLS12-381 G2Prepared
+    pub fn observe_bls12_381_g2_prep_cache_stats(&self, size: usize, hits: u64, misses: u64) {
+        if let Some(metrics) = &self.metrics {
+            let m = &metrics.crypto_bls12_381_g2_prep_cache_metrics;
+            m.cache_size.set(size as i64);
+
+            let prev_hits = m.cache_hits.get();
+            if hits > prev_hits {
+                m.cache_hits.inc_by(hits - prev_hits);
+            }
+
+            let prev_misses = m.cache_misses.get();
+            if misses > prev_misses {
+                m.cache_misses.inc_by(misses - prev_misses);
+            }
         }
     }
 
@@ -350,7 +386,9 @@ pub enum KeyType {
     IdkgDealingEncryptionLocal,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display, AsRefStr,
+)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsDomain {
@@ -408,7 +446,9 @@ pub enum KeyRotationResult {
     PublicKeyNotFound,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display, AsRefStr,
+)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum ServiceType {
@@ -416,7 +456,9 @@ pub enum ServiceType {
     Server,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display, AsRefStr,
+)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MessageType {
@@ -589,6 +631,12 @@ struct Metrics {
     /// Metrics for the cache of successfully verified BLS12-381 threshold signatures.
     pub crypto_bls12_381_sig_cache_metrics: bls12_381_sig_cache::Metrics,
 
+    /// Metrics for the cache of successfully decoded BLS12-381 points
+    pub crypto_bls12_381_point_cache_metrics: bls12_381_point_cache::Metrics,
+
+    /// Metrics for the cache of successfully created BLS12-381 G2Prepared
+    pub crypto_bls12_381_g2_prep_cache_metrics: bls12_381_g2_prep_cache::Metrics,
+
     /// Gauge for the minimum epoch in active NI-DKG transcripts.
     observe_minimum_epoch_in_active_nidkg_transcripts: Gauge,
 
@@ -741,6 +789,30 @@ impl Metrics {
                 cache_misses: r.int_counter(
                     "crypto_bls12_381_sig_cache_misses",
                 "Number of cache misses for successfully verified BLS12-381 threshold signatures"),
+            },
+            crypto_bls12_381_point_cache_metrics: bls12_381_point_cache::Metrics {
+                cache_size: r.int_gauge(
+                    "crypto_bls12_381_point_cache_size",
+                    "Size of cache for successfully decoded BLS12-381 points",
+                ),
+                cache_hits: r.int_counter(
+                    "crypto_bls12_381_point_cache_hits",
+                "Number of cache hits for successfully decoded BLS12-381 points"),
+                cache_misses: r.int_counter(
+                    "crypto_bls12_381_point_cache_misses",
+                "Number of cache misses for successfully decoded BLS12-381 points"),
+            },
+            crypto_bls12_381_g2_prep_cache_metrics: bls12_381_g2_prep_cache::Metrics {
+                cache_size: r.int_gauge(
+                    "crypto_bls12_381_g2_prep_cache_size",
+                    "Size of cache of BLS12-381 G2Prepared",
+                ),
+                cache_hits: r.int_counter(
+                    "crypto_bls12_381_g2_prep_cache_hits",
+                "Number of cache hits of BLS12-381 G2Prepared cache"),
+                cache_misses: r.int_counter(
+                    "crypto_bls12_381_g2_prep_cache_misses",
+                "Number of cache misses of BLS12-381 G2Prepared cache"),
             },
             observe_minimum_epoch_in_active_nidkg_transcripts: r.gauge(
                 "crypto_minimum_epoch_in_active_nidkg_transcripts",

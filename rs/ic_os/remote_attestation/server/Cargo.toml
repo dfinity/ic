@@ -8,11 +8,15 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+rand = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tonic = { workspace = true }
-attestation = { path = "../../attestation" }
+attestation = { path = "../../sev/attestation" }
 remote_attestation_shared = { path = "../shared" }
-config = { path = "../../config" }
-config_types = { path = "../../config_types" }
-ic_sev = { path = "../../sev" }
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
+sev_guest = { path = "../../sev/guest" }
 sev = { workspace = true }
+
+[dev-dependencies]
+sev_guest_testing = { path = "../../sev/guest/testing" }

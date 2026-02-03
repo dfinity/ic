@@ -1,6 +1,6 @@
 use crate::{
     agent_helper::{AgentHelper, StateTree},
-    state_tool_helper::StateToolHelper,
+    state_tool_helper,
     utils::get_cup,
 };
 
@@ -140,7 +140,7 @@ fn validate_manifest(
     state_hash_from_cup: &String,
     logger: &Logger,
 ) -> RecoveryResult<()> {
-    let state_hash = StateToolHelper::verify_manifest(state_manifest_path).map_err(|err| {
+    let state_hash = state_tool_helper::verify_manifest(state_manifest_path).map_err(|err| {
         RecoveryError::validation_failed("Failed to validate the state manifest", err)
     })?;
 

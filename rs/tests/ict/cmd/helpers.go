@@ -37,32 +37,71 @@ func find_matching_target(all_targets []string, target string, is_fuzzy_search b
 		} else {
 			return "", "", fmt.Errorf("\nMultiple fuzzy matches were found for `%s`:\n%s", target, strings.Join(closest_matches, "\n"))
 		}
-	} else {
-		substring_matches := find_substring_matches_in_array(all_targets, target)
-		if len(substring_matches) == 0 {
-			return "", "", fmt.Errorf("\nNone of the %d existing targets matches the substring `%s`.\nTry fuzzy match: 'ict test %s --fuzzy'", len(all_targets), target, target)
-		} else if len(substring_matches) == 1 {
-			msg := fmt.Sprintf("Target `%s` doesn't exist. However, a single substring match `%s` was found and will be used  ...\n", target, substring_matches[0])
-			return substring_matches[0], msg, nil
-		} else if len(substring_matches) == 2 {
-			// If there are two target matches and one of them is the colocate version of another,
-			// then we use a non-colocate one by default.
-			non_colocate_test := filter(substring_matches, func(s string) bool {
-				return !strings.Contains(s, COLOCATE_TEST_SUFFIX)
-			})
-			colocate_test := filter(substring_matches, func(s string) bool {
-				return !strings.Contains(s, COLOCATE_TEST_SUFFIX)
-			})
-			if len(colocate_test) == 1 && len(non_colocate_test) == 1 && strings.Contains(colocate_test[0], non_colocate_test[0]) {
-				msg := fmt.Sprintf("Target `%s` doesn't exist. However, a single substring match (for non-colocated test) `%s` was found and will be used  ...\n", target, non_colocate_test)
-				return non_colocate_test[0], msg, nil
-			} else {
-				return "", "", fmt.Errorf("\nTarget `%s` doesn't exist. However, the following substring matches found:\n%s", target, strings.Join(substring_matches, "\n"))
-			}
+	}
+
+	substring_matches := find_substring_matches_in_array(all_targets, target)
+	if len(substring_matches) == 0 {
+		return "", "", fmt.Errorf("\nNone of the %d existing targets matches the substring `%s`.\nTry fuzzy match: 'ict test %s --fuzzy'", len(all_targets), target, target)
+	}
+	if len(substring_matches) == 1 {
+		msg := fmt.Sprintf("Target `%s` doesn't exist. However, a single substring match `%s` was found and will be used  ...\n", target, substring_matches[0])
+		return substring_matches[0], msg, nil
+	}
+	if len(substring_matches) == 2 {
+		// If there are two target matches and one of them is the colocate version of another,
+		// then we use a non-colocate one by default.
+		non_colocate_test := filter(substring_matches, func(s string) bool {
+			return !strings.Contains(s, COLOCATE_TEST_SUFFIX)
+		})
+		colocate_test := filter(substring_matches, func(s string) bool {
+			return !strings.Contains(s, COLOCATE_TEST_SUFFIX)
+		})
+		if len(colocate_test) == 1 && len(non_colocate_test) == 1 && strings.Contains(colocate_test[0], non_colocate_test[0]) {
+			msg := fmt.Sprintf("Target `%s` doesn't exist. However, a single substring match (for non-colocated test) `%s` was found and will be used  ...\n", target, non_colocate_test)
+			return non_colocate_test[0], msg, nil
 		} else {
-			return "", "", fmt.Errorf("\nTarget `%s` doesn't exist. However, the following substring matches found:\n%s", target, strings.Join(substring_matches, "\n"))
+			return format_missing_target_err(target, substring_matches)
 		}
 	}
+
+	// This is a full target that doesn't exist.
+	// It is highly unlikely that this if will ever occur.
+	// Usually it will have 0 substring matches but
+	// this remains as a sanity check
+	if strings.Contains(target, ":") {
+		return format_missing_target_err(target, substring_matches)
+	}
+
+	var total_target_matches []string
+	for _, sm := range substring_matches {
+		split := strings.Split(sm, ":")
+
+		if len(split) < 2 {
+			continue
+		}
+
+		if split[1] == target {
+			total_target_matches = append(total_target_matches, sm)
+		}
+	}
+
+	// Just one target that exactly matches this name
+	// was found so we can use that.
+	if len(total_target_matches) == 1 {
+		test_target := total_target_matches[0]
+		msg := fmt.Sprintf("Target `%s` doesn't exist. However, a single substring match (for target name) `%s` was found and will be used  ...\n", target, test_target)
+		return test_target, msg, nil
+	}
+	if len(total_target_matches) > 1 {
+		_, _, err := format_missing_target_err(target, substring_matches)
+		return "", "", fmt.Errorf("%s\nAnd the following targets with exactly the same names were found:\n%s", err.Error(), strings.Join(total_target_matches, "\n"))
+	}
+
+	return format_missing_target_err(target, substring_matches)
+}
+
+func format_missing_target_err(target string, substring_matches []string) (string, string, error) {
+	return "", "", fmt.Errorf("\nTarget `%s` doesn't exist. However, the following substring matches found:\n%s", target, strings.Join(substring_matches, "\n"))
 }
 
 func filter(vs []string, f func(string) bool) []string {

@@ -57,8 +57,8 @@ function detect_hardware_generation() {
 
     local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
-    # All type1.* are considered gen1, all type3.* are gen2
-    if [[ $node_reward_type =~ ^type1(\.[0-9]+)?$ ]]; then
+    # All type0.* and type1.* are considered gen1, all type3.* are gen2
+    if [[ $node_reward_type =~ ^type(0|1)(\.[0-9]+)?$ ]]; then
         HARDWARE_GENERATION=1
     elif [[ $node_reward_type =~ ^type3(\.[0-9]+)?$ ]]; then
         HARDWARE_GENERATION=2
@@ -282,7 +282,7 @@ function verify_deployment_path() {
 }
 
 function verify_sev_snp() {
-    local enabled=$(get_config_value '.hostos_settings.enable_trusted_execution_environment')
+    local enabled=$(get_config_value '.icos_settings.enable_trusted_execution_environment')
     if [[ "${enabled}" == "true" ]]; then
         if [[ "${HARDWARE_GENERATION}" != "2" ]]; then
             log_and_halt_installation_on_error "1" "Trusted execution is enabled but hardware generation is not Gen2."
@@ -300,7 +300,7 @@ function verify_sev_snp() {
 
 main() {
     log_start "$(basename $0)"
-    if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
+    if check_cmdline_var ic.setupos.run_checks; then
         detect_hardware_generation
         verify_cpu
         verify_memory

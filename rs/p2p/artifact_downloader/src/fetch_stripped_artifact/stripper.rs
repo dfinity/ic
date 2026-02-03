@@ -1,7 +1,14 @@
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    artifact::IdentifiableArtifact, batch::IngressPayload, consensus::ConsensusMessage,
+    artifact::IdentifiableArtifact,
+    batch::{BatchPayload, IngressPayload},
+    consensus::{
+        ConsensusMessage, DataPayload,
+        idkg::{IDkgObject, IDkgPayload},
+    },
 };
+
+use crate::fetch_stripped_artifact::types::stripped::StrippedIDkgDealings;
 
 use super::types::{
     SignedIngressId,
@@ -32,18 +39,30 @@ impl Strippable for ConsensusMessage {
             {
                 let mut proto = pb::BlockProposal::from(block_proposal);
 
-                // Remove the ingress payload from the proto.
                 if let Some(block) = proto.value.as_mut() {
+                    // Remove the ingress payload from the proto.
                     block.ingress_payload = None;
+                    // Remove the IDKG dealings from the proto.
+                    if let Some(idkg) = block.idkg_payload.as_mut() {
+                        for transcript in &mut idkg.idkg_transcripts {
+                            for dealing in &mut transcript.verified_dealings {
+                                dealing.signed_dealing_tuple = None;
+                            }
+                        }
+                    }
                 }
 
-                let data_payload = block_proposal.content.as_ref().payload.as_ref().as_data();
-                let stripped_ingress_payload = data_payload.batch.ingress.strip();
+                let DataPayload {
+                    batch: BatchPayload { ingress, .. },
+                    idkg,
+                    ..
+                } = block_proposal.content.as_ref().payload.as_ref().as_data();
 
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
-                    block_proposal_without_ingresses_proto: proto,
-                    stripped_ingress_payload,
+                    pruned_block_proposal_proto: proto,
                     unstripped_consensus_message_id,
+                    stripped_ingress_payload: ingress.strip(),
+                    stripped_idkg_dealings: idkg.strip(),
                 })
             }
             msg => MaybeStrippedConsensusMessage::Unstripped(msg),
@@ -61,6 +80,29 @@ impl Strippable for &IngressPayload {
             .collect();
 
         StrippedIngressPayload { ingress_messages }
+    }
+}
+
+impl Strippable for &Option<IDkgPayload> {
+    type Output = StrippedIDkgDealings;
+
+    fn strip(self) -> Self::Output {
+        let stripped_dealings = if let Some(idkg) = self {
+            idkg.idkg_transcripts
+                .iter()
+                .flat_map(|(_id, transcript)| {
+                    transcript.verified_dealings.iter().map(
+                        |(dealer_index, batch_signed_dealing)| {
+                            (*dealer_index, batch_signed_dealing.content.message_id())
+                        },
+                    )
+                })
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+
+        StrippedIDkgDealings { stripped_dealings }
     }
 }
 

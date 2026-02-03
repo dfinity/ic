@@ -503,7 +503,6 @@ impl CyclesAccountManager {
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
-        canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
@@ -515,7 +514,7 @@ impl CyclesAccountManager {
             system_state.memory_allocation,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
-            canister_compute_allocation,
+            system_state.compute_allocation,
             subnet_size,
             cost_schedule,
             system_state.reserved_balance(),
@@ -543,14 +542,12 @@ impl CyclesAccountManager {
     ) -> Result<(), CanisterOutOfCyclesError> {
         let memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
-        let compute_allocation = canister.compute_allocation();
         let cycles = self.execution_cost(amount, subnet_size, cost_schedule, execution_mode);
         let reveal_top_up = canister.controllers().contains(sender);
         self.consume_cycles(
             &mut canister.system_state,
             memory_usage,
             message_memory,
-            compute_allocation,
             cycles,
             subnet_size,
             cost_schedule,
@@ -1024,7 +1021,6 @@ impl CyclesAccountManager {
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
-        canister_compute_allocation: ComputeAllocation,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         reveal_top_up: bool,
@@ -1034,7 +1030,7 @@ impl CyclesAccountManager {
             system_state.memory_allocation,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
-            canister_compute_allocation,
+            system_state.compute_allocation,
             subnet_size,
             cost_schedule,
             system_state.reserved_balance(),
@@ -1090,7 +1086,7 @@ impl CyclesAccountManager {
                 };
 
                 self.verify_cycles_balance_with_threshold(
-                    system_state.canister_id,
+                    system_state.canister_id(),
                     effective_cycles_balance,
                     cycles,
                     threshold,
@@ -1331,6 +1327,33 @@ impl CyclesAccountManager {
                     + self.config.http_request_per_byte_fee * request_size.get()
                     + self.config.http_response_per_byte_fee * response_size)
                     * (subnet_size as u64)
+            }
+        }
+    }
+
+    pub fn http_request_fee_v2(
+        &self,
+        request_size: NumBytes,
+        http_roundtrip_time: Duration,
+        raw_response_size: NumBytes,
+        transform: NumInstructions,
+        transformed_response_size: NumBytes,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => {
+                let n = subnet_size as u64;
+                (Cycles::new(1_000_000)
+                    + Cycles::new(50) * request_size.get()
+                    + Cycles::new(140_000) * n
+                    + Cycles::new(800) * n * n
+                    + Cycles::new(50) * raw_response_size.get()
+                    + Cycles::new(300) * http_roundtrip_time.as_millis() as u64
+                    + Cycles::new(transform.get() as u128 / 13)
+                    + (Cycles::new(10) * n + Cycles::new(650)) * transformed_response_size.get())
+                    * n
             }
         }
     }

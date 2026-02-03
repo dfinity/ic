@@ -19,6 +19,7 @@ use crate::{
         unique_sorted_buckets,
     },
     scheduler::threshold_signatures::THRESHOLD_SIGNATURE_SCHEME_MISMATCH,
+    units::{KIB, MIB},
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
@@ -137,9 +138,6 @@ pub(super) const MESSAGE_KIND_CANISTER: &str = "canister";
 /// Alert for call contexts older than this cutoff (one day).
 pub(super) const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 pub(super) const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
-
-const KIB: u64 = 1024;
-const MIB: u64 = 1024 * KIB;
 
 impl SchedulerMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {

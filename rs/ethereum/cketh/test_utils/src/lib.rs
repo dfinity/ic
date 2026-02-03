@@ -8,8 +8,9 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPriceArg, MinterInfo, RetrieveEthStatus, WithdrawalArg,
-    WithdrawalDetail, WithdrawalSearchParameter,
+    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, Eip1559TransactionPriceArg,
+    MemoType, MinterInfo, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
@@ -26,6 +27,7 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
+use ic_types::ingress::{IngressState, IngressStatus};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
@@ -82,6 +84,8 @@ pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH: &str =
 
 pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE: u64 = 2_145_241_036_770_000_u64;
 pub const USDC_ERC20_CONTRACT_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+pub const USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE: &str =
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 pub const MINTER_ADDRESS: &str = "0xfd644a761079369962386f8e4259217c2a10b8d0";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
@@ -495,6 +499,42 @@ impl CkEthSetup {
         self.start_minter();
     }
 
+    /// Try to stop the minter without first stopping the ongoing HTTPS outcalls. Assert that the
+    /// `IngressStatus` is `Processing`.
+    pub fn try_stop_minter_without_stopping_ongoing_https_outcalls(&self) {
+        const MAX_TICKS: u64 = 10;
+        let stop_msg_id = self.env.stop_canister_non_blocking(self.minter_id);
+        let mut ingress_status = self.env.ingress_status(&stop_msg_id);
+        for _ in 0..MAX_TICKS {
+            if let IngressStatus::Known { state, .. } = &ingress_status
+                && state == &IngressState::Processing
+            {
+                return;
+            }
+            self.env.tick();
+            ingress_status = self.env.ingress_status(&stop_msg_id);
+        }
+        panic!(
+            "expected minter ingress status to be `Processing`, ended up with {:?}",
+            ingress_status
+        );
+    }
+
+    pub fn tick_until_minter_canister_status(
+        &self,
+        expected_canister_status: CanisterStatusType,
+    ) -> CanisterStatusType {
+        const MAX_TICKS: u64 = 10;
+        let mut status = self.minter_status();
+        for _ in 0..MAX_TICKS {
+            if status == expected_canister_status {
+                break;
+            }
+            status = self.minter_status();
+        }
+        status
+    }
+
     pub fn stop_minter(&self) {
         let stop_msg_id = self.env.stop_canister_non_blocking(self.minter_id);
         self.stop_ongoing_https_outcalls();
@@ -631,6 +671,30 @@ impl CkEthSetup {
             initial_estimate << 9,
             2_000_000,
         ]
+    }
+
+    pub fn decode_ledger_memo(
+        &self,
+        memo_type: MemoType,
+        encoded_memo: Vec<u8>,
+    ) -> DecodeLedgerMemoResult {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "decode_ledger_memo",
+                        Encode!(&DecodeLedgerMemoArgs {
+                            memo_type,
+                            encoded_memo
+                        })
+                        .unwrap()
+                    )
+                    .expect("failed to call decode_ledger_memo")
+            ),
+            DecodeLedgerMemoResult
+        )
+        .unwrap()
     }
 }
 

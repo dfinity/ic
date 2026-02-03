@@ -102,16 +102,27 @@ fn create_and_verify_dealing(
         format!("ic-crypto-create-dealing-encryption-seed-{dealer_index}").as_bytes(),
     );
 
-    let dealing = create_dealing(
-        keygen_seed,
-        encryption_seed,
-        threshold,
-        receiver_keys,
-        epoch,
-        dealer_index,
-        resharing_secret,
-    )
-    .expect("Unable to create dealing");
+    let dealing = match resharing_secret {
+        Some(secret) => create_resharing_dealing(
+            keygen_seed,
+            encryption_seed,
+            threshold,
+            receiver_keys,
+            epoch,
+            dealer_index,
+            secret,
+        )
+        .expect("Unable to create resharing dealing"),
+        None => create_dealing(
+            keygen_seed,
+            encryption_seed,
+            threshold,
+            receiver_keys,
+            epoch,
+            dealer_index,
+        )
+        .expect("Unable to create dealing"),
+    };
 
     assert!(verify_dealing(dealer_index, threshold, epoch, receiver_keys, &dealing).is_ok());
 

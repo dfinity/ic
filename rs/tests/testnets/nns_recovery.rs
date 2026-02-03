@@ -10,7 +10,7 @@
 // The driver will print how to reboot the host-1 VM and how to get to its console such that you can interact with its grub:
 //
 // ```
-// $ ict testnet create nns_recovery --lifetime-mins 10 --verbose -- --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=499 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet
+// $ ict testnet create nns_recovery --verbose -- --test_env=SUBNET_SIZE=40 --test_env=DKG_INTERVAL=499 --test_env=NUM_NODES_TO_BREAK=14 --test_env=BREAK_AT_HEIGHT=2123 --test_tmpdir=./nns_recovery_testnet
 // ...
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:16:0] To reboot the host VM run the following command:
 // 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:17:0] curl -X PUT 'https://farm.dfinity.systems/group/nested--1756837630333/vm/host-1/reboot'
@@ -39,7 +39,6 @@ use ic_nested_nns_recovery_common::{
     SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
 };
 use ic_system_test_driver::driver::nested::HasNestedVms;
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
@@ -57,10 +56,6 @@ fn setup(env: TestEnv) {
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(DKG_INTERVAL_HEIGHT);
-
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
 
     ic_nested_nns_recovery_common::setup(
         env.clone(),
@@ -103,8 +98,6 @@ fn log_instructions(env: TestEnv) {
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
     grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
-
-    env.sync_with_prometheus();
 
     let upgrade_version = get_guestos_update_img_version();
     let upgrade_image_url = get_guestos_update_img_url();

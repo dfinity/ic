@@ -1,9 +1,13 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_bench", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
-load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
+
+UNIVERSAL_CANISTER_DATA = [v for _, v in UNIVERSAL_CANISTER_RUNTIME_DEPS.items()]
+
+UNIVERSAL_CANISTER_ENV = {key: "$(rootpath " + value + ")" for key, value in UNIVERSAL_CANISTER_RUNTIME_DEPS.items()}
 
 DATA = [
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
@@ -47,6 +51,7 @@ rust_library(
         "//rs/utils/lru_cache",
         "@crate_index//:anyhow",
         "@crate_index//:bincode",
+        "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:itertools",
         "@crate_index//:libc",
@@ -64,7 +69,6 @@ rust_library(
         "@crate_index//:wasmparser",
         "@crate_index//:wasmprinter",
         "@crate_index//:wasmtime",
-        "@crate_index//:wasmtime-environ",
         "@crate_index//:wirm",
     ],
 )
@@ -161,7 +165,6 @@ rust_ic_test_suite_with_extra_srcs(
     ] + glob([
         "tests/compressed/*",
         "tests/instrumentation-test-data/*",
-        "tests/round-trip-test-data/*",
     ]),
     env = dict(ENV.items() + [
         ("CARGO_MANIFEST_DIR", "rs/embedders"),
@@ -209,7 +212,6 @@ rust_ic_test_suite_with_extra_srcs(
         "@crate_index//:wasmparser",
         "@crate_index//:wasmprinter",
         "@crate_index//:wasmtime",
-        "@crate_index//:wasmtime-environ",
         "@crate_index//:wast",
         "@crate_index//:wat",
         "@crate_index//:wirm",
@@ -296,7 +298,7 @@ rust_library(
     ],
 )
 
-UNIVERSAL_CANISTER_TEST_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+UNIVERSAL_CANISTER_TEST_DATA = UNIVERSAL_CANISTER_DATA + [
     "//rs/universal_canister/impl:universal_canister.module",
 ]
 
@@ -309,7 +311,7 @@ rust_ic_bench(
     testonly = True,
     srcs = ["benches/compilation.rs"],
     compile_data = glob(["benches/test-data/*"]),
-    data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
+    data = DATA + UNIVERSAL_CANISTER_TEST_DATA,
     env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
     test_name = "compilation_bench_test",
     test_timeout = "long",
@@ -334,7 +336,7 @@ rust_ic_bench(
     name = "stable_memory_bench",
     testonly = True,
     srcs = ["benches/stable_memory.rs"],
-    data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
+    data = DATA + UNIVERSAL_CANISTER_TEST_DATA,
     env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
     deps = [
         # Keep sorted.
@@ -354,7 +356,7 @@ rust_ic_bench(
     testonly = True,
     srcs = ["benches/heap.rs"],
     compile_data = glob(["benches/test-data/*"]),
-    data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
+    data = DATA + UNIVERSAL_CANISTER_TEST_DATA,
     env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
     proc_macro_deps = [
         # Keep sorted.

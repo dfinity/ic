@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{ToTokens, quote};
-use syn::{ItemFn, Stmt, parse_macro_input};
+use syn::{ItemFn, Meta, Stmt, Token, parse::Parser, parse_macro_input, punctuated::Punctuated};
 
 /// This does almost the same thing as ic_cdk::update. There is just one
 /// difference: This adds a statement to the beginning of the function. It looks
@@ -16,11 +16,14 @@ use syn::{ItemFn, Stmt, parse_macro_input};
 /// needs to be called.
 #[proc_macro_attribute]
 pub fn update(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let attr = parse_macro_input!(attr as syn::AttributeArgs);
+    let attr = Punctuated::<Meta, Token![,]>::parse_terminated
+        .parse(attr)
+        .expect("Failed to parse attribute arguments");
     let update_attr = if attr.is_empty() {
         quote! { #[ic_cdk::update] }
     } else {
-        quote! { #[ic_cdk::update(#(#attr),*)] }
+        let attrs = attr.iter();
+        quote! { #[ic_cdk::update(#(#attrs),*)] }
     };
 
     let mut item_fn = parse_macro_input!(item as ItemFn);

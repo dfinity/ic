@@ -93,7 +93,7 @@ impl TryFrom<X509PublicKeyCert> for TlsPublicKeyCert {
 
 /// Implementors provide methods for generating rustls configurations that
 /// restrict the tls peers that are accepted.
-pub trait TlsConfig {
+pub trait TlsConfig: Send + Sync {
     /// Generates a rustls server config that only allows the specified clients to connect.
     ///
     /// The rustls server configuration is configured with the following values:

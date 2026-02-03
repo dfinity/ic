@@ -503,6 +503,12 @@ impl StreamHandlerImpl {
             stream.reject_signals(),
             StreamComponent::SignalsTo(remote_subnet),
         );
+        assert_valid_signals_begin(
+            stream.signals_begin(),
+            stream.signals_end(),
+            stream.reject_signals(),
+            StreamComponent::SignalsTo(remote_subnet),
+        );
         assert_valid_signals_for_messages(
             stream.signals_end(),
             stream_slice.header().begin(),
@@ -1246,6 +1252,25 @@ fn assert_valid_signals_for_messages(
         messages_begin <= signals_end && signals_end <= messages_end,
         "Invalid {stream_component}: signals_end {signals_end}, messages [{messages_begin}, {messages_end})",
     );
+}
+
+fn assert_valid_signals_begin(
+    signals_begin: StreamIndex,
+    signals_end: StreamIndex,
+    reject_signals: &VecDeque<RejectSignal>,
+    stream_component: StreamComponent,
+) {
+    assert!(
+        signals_begin <= signals_end,
+        "Invalid {stream_component}: signals_begin {signals_begin} after signals_end {signals_end}"
+    );
+    if let Some(first_reject_signal) = reject_signals.front() {
+        assert!(
+            signals_begin <= first_reject_signal.index,
+            "Invalid {stream_component}: first reject signal {} before signals_begin {signals_begin}",
+            first_reject_signal.index
+        );
+    }
 }
 
 /// Ensures that the given slice messages (if non-empty) begin where the reverse

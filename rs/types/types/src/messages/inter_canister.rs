@@ -805,7 +805,6 @@ impl From<&RequestMetadata> for pb_queues::RequestMetadata {
         Self {
             call_tree_depth: metadata.call_tree_depth,
             call_tree_start_time_nanos: metadata.call_tree_start_time.as_nanos_since_unix_epoch(),
-            call_subtree_deadline_nanos: None,
         }
     }
 }
