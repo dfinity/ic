@@ -20,12 +20,11 @@ use wasm_encoder::{
 use wasm_smith::{Config, Module};
 use wasmparser::*;
 
-
-use ic_types::time::UNIX_EPOCH;
-use ic_types::Cycles;
-use ic_test_utilities_types::ids::user_test_id;
-use ic_types::messages::CallContextId;
 use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::user_test_id;
+use ic_types::Cycles;
+use ic_types::messages::CallContextId;
+use ic_types::time::UNIX_EPOCH;
 
 lazy_static! {
     static ref SYSTEM_API_IMPORTS_WASM32: SystemApiImportStore =
