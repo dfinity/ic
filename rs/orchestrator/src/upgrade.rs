@@ -699,8 +699,7 @@ impl Upgrade {
             .get_recalled_replica_versions(subnet_id, latest_registry_version)?;
 
         if recalled_versions.contains(new_replica_version) {
-            // The new replica version has been recalled. Do not upgrade. The only way to leave
-            // this branch is via subnet recovery.
+            // The new replica version has been recalled. Do not upgrade.
             self.metrics
                 .replica_version_upgrade_prevented
                 .with_label_values(&[new_replica_version.as_ref(), "version_recalled"])
