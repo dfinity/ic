@@ -23,7 +23,7 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
-    last_poll_certified_time: Arc<RwLock<Option<Time>>>,
+    last_poll_certified_time: Arc<RwLock<Time>>,
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
@@ -89,7 +89,7 @@ impl OrchestratorDashboard {
         last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
-        last_poll_certified_time: Arc<RwLock<Option<Time>>>,
+        last_poll_certified_time: Arc<RwLock<Time>>,
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
@@ -193,10 +193,8 @@ impl OrchestratorDashboard {
     }
 
     fn get_last_poll_certified_time(&self) -> String {
-        match *self.last_poll_certified_time.read().unwrap() {
-            Some(time) => timestamp_to_string(time),
-            None => "Local store not yet up to date with registry canister".to_string(),
-        }
+        let time = *self.last_poll_certified_time.read().unwrap();
+        timestamp_to_string(time)
     }
 }
 

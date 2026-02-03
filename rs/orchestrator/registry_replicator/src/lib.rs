@@ -44,8 +44,10 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    NodeId, RegistryVersion, Time, crypto::threshold_sig::ThresholdSigPublicKey,
-    registry::RegistryClientError, time::current_time,
+    NodeId, RegistryVersion, Time,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError,
+    time::{UNIX_EPOCH, current_time},
 };
 use metrics::RegistryReplicatorMetrics;
 use std::{
@@ -87,7 +89,7 @@ pub struct RegistryReplicator {
     started: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
     init_time: Time,
-    latest_certified_time: Arc<RwLock<Option<Time>>>,
+    latest_certified_time: Arc<RwLock<Time>>,
     poll_delay: Duration,
     metrics: Arc<RegistryReplicatorMetrics>,
 }
@@ -145,7 +147,7 @@ impl RegistryReplicator {
             started: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),
             init_time,
-            latest_certified_time: Arc::new(RwLock::new(None)),
+            latest_certified_time: Arc::new(RwLock::new(UNIX_EPOCH)),
             poll_delay,
             metrics,
         }
@@ -362,7 +364,6 @@ impl RegistryReplicator {
             self.local_store.clone(),
             self.config_nns_urls.clone(),
             self.config_nns_pub_key,
-            self.init_time,
             self.poll_delay,
         );
 
@@ -389,11 +390,15 @@ impl RegistryReplicator {
                         debug!(logger, "Polling the NNS succeeded.");
                         metrics.poll_count.with_label_values(&["success"]).inc();
 
-                        *latest_certified_time.write().unwrap() = maybe_certified_time;
-                        if let Some(certified_time) = maybe_certified_time {
+                        let mut latest_certified_time_guard =
+                            latest_certified_time.write().unwrap();
+                        if let Some(new_certified_time) = maybe_certified_time
+                            && new_certified_time > *latest_certified_time_guard
+                        {
+                            *latest_certified_time_guard = new_certified_time;
                             metrics
                                 .latest_certified_time
-                                .set(certified_time.as_nanos_since_unix_epoch());
+                                .set(new_certified_time.as_nanos_since_unix_epoch());
                         }
                     }
                     Err(msg) => {
@@ -438,14 +443,19 @@ impl RegistryReplicator {
             self.local_store.clone(),
             self.config_nns_urls.clone(),
             self.config_nns_pub_key,
-            self.init_time,
             self.poll_delay,
         )
         .poll()
         .await;
 
-        if let Ok(maybe_latest_certified_time) = poll_result {
-            *self.latest_certified_time.write().unwrap() = maybe_latest_certified_time;
+        let mut latest_certified_time_guard = self.latest_certified_time.write().unwrap();
+        if let Ok(Some(new_certified_time)) = poll_result
+            && new_certified_time > *latest_certified_time_guard
+        {
+            *latest_certified_time_guard = new_certified_time;
+            self.metrics
+                .latest_certified_time
+                .set(new_certified_time.as_nanos_since_unix_epoch());
         }
 
         // Update the registry client with the latest changes, regardless of whether
@@ -487,18 +497,14 @@ impl RegistryReplicator {
         }
     }
 
-    // The field `self.latest_certified_time` keeps track of the certified time of
-    // the response containing the latest replicated registry version that was
-    // certified after the replicator was started.
-    // If `None`, then either the latest replicated version has not reached the latest
-    // version on the canister, or it has but we were unable to verify this because
-    // we have not yet received a response containing that version that was certified
-    // after the replicator was started.
-    // If `Some`, then we have replicated all versions that were certified before
-    // the replicator was started.
+    /// The field `self.latest_certified_time` keeps track of the highest certified time of the
+    /// responses received from the NNS registry canister for which we replicated until at least the
+    /// advertised latest version.
+    /// This function returns true if the replicator has replicated all versions that were certified
+    /// before the replicator was started.
     pub fn has_replicated_all_versions_certified_before_init(&self) -> bool {
         let latest_certified_time = *self.latest_certified_time.read().unwrap();
-        latest_certified_time.is_some()
+        latest_certified_time > self.init_time
     }
 
     /// Instruct the replicator to stop polling for registry updates.
@@ -522,7 +528,7 @@ impl RegistryReplicator {
         self.local_store.clone()
     }
 
-    pub fn get_latest_certified_time(&self) -> Arc<RwLock<Option<Time>>> {
+    pub fn get_latest_certified_time(&self) -> Arc<RwLock<Time>> {
         Arc::clone(&self.latest_certified_time)
     }
 

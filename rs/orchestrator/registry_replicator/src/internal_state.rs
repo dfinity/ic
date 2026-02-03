@@ -55,7 +55,6 @@ pub(crate) struct InternalState {
     nns_pub_key: Option<ThresholdSigPublicKey>,
     registry_canister: Option<Arc<RegistryCanister>>,
     registry_canister_fallback: Option<Arc<RegistryCanister>>,
-    replicator_init_time: Time,
     poll_delay: Duration,
     failed_poll_count: i64,
 }
@@ -68,7 +67,6 @@ impl InternalState {
         local_store: Arc<dyn LocalStore>,
         config_nns_urls: Vec<Url>,
         maybe_config_nns_pub_key: Option<ThresholdSigPublicKey>,
-        replicator_init_time: Time,
         poll_delay: Duration,
     ) -> Self {
         let registry_canister_fallback = if !config_nns_urls.is_empty() {
@@ -89,7 +87,6 @@ impl InternalState {
             nns_pub_key: maybe_config_nns_pub_key,
             registry_canister: None,
             registry_canister_fallback,
-            replicator_init_time,
             poll_delay,
             failed_poll_count: 0,
         }
@@ -97,9 +94,8 @@ impl InternalState {
 
     /// Requests latest version and certified changes from the
     /// [`RegistryCanister`], applies changes to [`LocalStore`] accordingly.
-    /// If the local store is up to date with the latest version of the registry canister
-    /// and the certified time of the response is later than the replicator's initialization
-    /// time, returns the certified time.
+    /// If the local store is up to date with the latest version of the registry canister, returns
+    /// the certified time of the response.
     /// Exits the process if this node appears on a subnet that is started as
     /// the new NNS after a version update.
     pub(crate) async fn poll(&mut self) -> Result<Option<Time>, String> {
@@ -176,11 +172,7 @@ impl InternalState {
                     );
                 }
 
-                if last_stored_version == last_available_version
-                    && certified_time > self.replicator_init_time
-                {
-                    // Entering this branch means that the local store now contains all versions
-                    // that were certified before the replicator was started.
+                if last_stored_version >= last_available_version {
                     Ok(Some(certified_time))
                 } else {
                     Ok(None)
@@ -570,7 +562,6 @@ mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::time::UNIX_EPOCH;
     use ic_types::{CanisterId, SubnetId};
     use ic_types_test_utils::ids::{NODE_1, SUBNET_1, SUBNET_2, SUBNET_3};
     use std::collections::BTreeMap;
@@ -727,7 +718,6 @@ mod test {
                 Arc::clone(&local_store) as Arc<dyn LocalStore>,
                 config_nns_urls.clone(),
                 Some(config_nns_pub_key),
-                UNIX_EPOCH,
                 TEST_POLL_DELAY,
             );
 
