@@ -116,6 +116,12 @@ else
     DEVENV=false
 fi
 
+# only support podman
+if [[ ! " ${CONTAINER_CMD[*]} " =~ " podman " ]]; then
+    eprintln "Only podman is supported as container runtime."
+    exit 1
+fi
+
 # If no container command specified, use based on environment
 if [ -z "${CONTAINER_CMD[*]:-}" ]; then
     if [ "$DEVENV" = true ]; then
