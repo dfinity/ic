@@ -639,7 +639,7 @@ jobs:
               - "**/*.toml"
               - "**/*.lock"
               - "ci/scripts/rust-lint.sh"
-              - "ci/container/**"
+              - "ci/container/TAG"
       - name: Run Cargo ${{ matrix.name }} Linux
         if: |
           steps.filter.outputs.cargo == 'true' ||
