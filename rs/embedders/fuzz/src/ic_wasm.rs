@@ -27,9 +27,9 @@ use ic_types::time::UNIX_EPOCH;
 
 lazy_static! {
     static ref SYSTEM_API_IMPORTS_WASM32: SystemApiImportStore =
-        system_api_imports(EmbeddersConfig::default());
+        system_api_imports(EmbeddersConfig::default(), false);
     static ref SYSTEM_API_IMPORTS_WASM64: SystemApiImportStore =
-        system_api_imports(EmbeddersConfig::default());
+        system_api_imports(EmbeddersConfig::default(), true);
 }
 
 const CANISTER_EXPORT_FUNCTION_PREFIX: &[&str] = &[
@@ -200,6 +200,51 @@ impl ICWasmModule {
 }
 
 pub fn ic_wasm_config(embedder_config: EmbeddersConfig, is_wasm64: bool) -> Config {
+    // Default values. If you are adding a new field here, make sure
+    // the default value will generate a ICP valid wasm module.
+    // else, define the value in Config below.
+    let Config {
+        exports,
+        module_shape,
+        allowed_instructions,
+        allow_floats,
+        disallow_traps,
+        custom_descriptors_enabled,
+        custom_page_sizes_enabled,
+        max_aliases,
+        max_components,
+        max_element_segments,
+        max_elements,
+        max_exports,
+        max_imports,
+        max_instances,
+        max_memories,
+        max_memory32_bytes,
+        max_memory64_bytes,
+        max_modules,
+        max_nesting_depth,
+        max_table_elements,
+        max_tables,
+        max_tags,
+        max_type_size,
+        max_types,
+        max_values,
+        memory_max_size_required,
+        memory_offset_choices,
+        min_element_segments,
+        min_elements,
+        min_globals,
+        min_imports,
+        min_memories,
+        min_tables,
+        min_tags,
+        min_types,
+        min_uleb_size,
+        table_max_size_required,
+        allow_invalid_funcs,
+        ..
+    } = Config::default();
+
     Config {
         min_funcs: 10,
         min_exports: 10,
@@ -216,19 +261,67 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig, is_wasm64: bool) -> Conf
         bulk_memory_enabled: true,
         reference_types_enabled: true,
         simd_enabled: true,
+        tail_call_enabled: true,
         memory64_enabled: is_wasm64,
 
-        threads_enabled: false,
-        relaxed_simd_enabled: false,
+        // Disabled by ICP
         canonicalize_nans: false,
         exceptions_enabled: false,
+        extended_const_enabled: false,
+        gc_enabled: false,
+        multi_value_enabled: false,
+        relaxed_simd_enabled: false,
+        saturating_float_to_int_enabled: false,
+        shared_everything_threads_enabled: false,
+        sign_extension_ops_enabled: false,
+        threads_enabled: false,
+        wide_arithmetic_enabled: false,
 
         available_imports: Some(if is_wasm64 {
             SYSTEM_API_IMPORTS_WASM64.module.to_vec()
         } else {
             SYSTEM_API_IMPORTS_WASM32.module.to_vec()
         }),
-        ..Default::default()
+
+        // Defaults (compiler-enforced)
+        exports,
+        module_shape,
+        allowed_instructions,
+        allow_floats,
+        disallow_traps,
+        custom_descriptors_enabled,
+        custom_page_sizes_enabled,
+        max_aliases,
+        max_components,
+        max_element_segments,
+        max_elements,
+        max_exports,
+        max_imports,
+        max_instances,
+        max_memories,
+        max_memory32_bytes,
+        max_memory64_bytes,
+        max_modules,
+        max_nesting_depth,
+        max_table_elements,
+        max_tables,
+        max_tags,
+        max_type_size,
+        max_types,
+        max_values,
+        memory_max_size_required,
+        memory_offset_choices,
+        min_element_segments,
+        min_elements,
+        min_globals,
+        min_imports,
+        min_memories,
+        min_tables,
+        min_tags,
+        min_types,
+        min_uleb_size,
+        table_max_size_required,
+        allow_invalid_funcs,
     }
 }
 

@@ -30,7 +30,7 @@ pub struct SystemApiImportStore {
     pub import_mapping: BTreeMap<usize, FuncType>,
 }
 
-pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStore {
+pub(crate) fn system_api_imports(config: EmbeddersConfig, is_wasm64: bool) -> SystemApiImportStore {
     let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(&config))
         .expect("Failed to initialize Wasmtime engine");
     let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
@@ -62,13 +62,23 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStor
     );
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);
 
-    linker::syscalls::<u64>(
-        &mut linker,
-        config.feature_flags,
-        config.stable_memory_dirty_page_limit,
-        config.stable_memory_accessed_page_limit,
-        WasmMemoryType::Wasm64,
-    );
+    if is_wasm64 {
+        linker::syscalls::<u64>(
+            &mut linker,
+            config.feature_flags,
+            config.stable_memory_dirty_page_limit,
+            config.stable_memory_accessed_page_limit,
+            WasmMemoryType::Wasm64,
+        );
+    } else {
+        linker::syscalls::<u32>(
+            &mut linker,
+            config.feature_flags,
+            config.stable_memory_dirty_page_limit,
+            config.stable_memory_accessed_page_limit,
+            WasmMemoryType::Wasm32,
+        );
+    }
 
     // to avoid store move
     let mut system_api_imports: Vec<(&str, &str, wasmtime::Func)> = linker
