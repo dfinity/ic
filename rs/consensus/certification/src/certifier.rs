@@ -1347,8 +1347,8 @@ mod tests {
     fn test_invalidate_certificate_with_unpruned_witness() {
         let height = Height::from(5);
         let test = |certifier: &CertifierImpl, cert: &mut Certification| {
-            // a witness consisting only of the (correct) root hash,
-            // i.e., pruned too aggressively
+            // a witness consisting of the full state tree,
+            // i.e., not pruned enough
             let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
             let (witness, hash) = unpruned_witness(&state, height);
             cert.witness = witness;
