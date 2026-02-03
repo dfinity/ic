@@ -11,6 +11,31 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-01-23: Proposal 140099
+
+http://dashboard.internetcomputer.org/proposal/140099
+
+## Added
+
+* Enabled BlessAlternativeGuestOsVersion, which would generally be used to
+  recover a subnet where a) orchestrator is not working for whatever reason, and
+  b) SEV is enabled and/or there is no DFINITY node in the subnet.
+
+* Proposal types for taking and loading a snapshot of a canister controlled by the NNS Root canister.
+
+## Changed
+
+* Allow creating a service nervous system with up to 100 dapp canisters, instead of just 25.
+
+
+# 2026-01-16: Proposal 140012
+
+http://dashboard.internetcomputer.org/proposal/140012
+
+A "maintenance" release. That is, new code for upcoming features, but no new
+(enabled) behaviors.
+
+
 # 2026-01-05: Proposal 139940
 
 http://dashboard.internetcomputer.org/proposal/139940

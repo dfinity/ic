@@ -9,9 +9,7 @@ use ic_btc_checker::{
     BtcNetwork as CheckerBtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg,
     UpgradeArg as CheckerUpgradeArg,
 };
-use ic_btc_interface::{
-    GetCurrentFeePercentilesRequest, MillisatoshiPerByte, NetworkInRequest, Txid,
-};
+use ic_btc_interface::{GetCurrentFeePercentilesRequest, NetworkInRequest, Txid};
 use ic_ckbtc_minter::fees::{BitcoinFeeEstimator, FeeEstimator};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
@@ -23,6 +21,7 @@ use ic_ckbtc_minter::queries::{
 use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
 use ic_ckbtc_minter::state::eventlog::{CkBtcMinterEvent, EventType};
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
+use ic_ckbtc_minter::tx::FeeRate;
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
     ErrorCode, RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
@@ -64,6 +63,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         btc_network: Network::Regtest,
         ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 2000,
+        deposit_btc_min_amount: None,
         ledger_id: CanisterId::from(0),
         max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
         min_confirmations: Some(MIN_CONFIRMATIONS),
@@ -173,7 +173,7 @@ fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Tra
 
     let new_out_value = new.output.iter().map(|out| out.value).sum::<u64>();
     let prev_out_value = old.output.iter().map(|out| out.value).sum::<u64>();
-    let relay_cost = new.vsize() as u64 * BitcoinFeeEstimator::MIN_RELAY_FEE_RATE_INCREASE / 1000;
+    let relay_cost = BitcoinFeeEstimator::MIN_RELAY_FEE_RATE_INCREASE.fee_ceil(new.vsize() as u64);
 
     assert!(
         new_out_value + relay_cost <= prev_out_value,
@@ -777,8 +777,8 @@ impl CkBtcSetup {
         }
     }
 
-    pub fn bitcoin_get_current_fee_percentiles(&self) -> Vec<MillisatoshiPerByte> {
-        Decode!(
+    pub fn bitcoin_get_current_fee_percentiles(&self) -> Vec<FeeRate> {
+        let rates = Decode!(
             &assert_reply(
                 self.env
                     .execute_ingress(
@@ -791,17 +791,22 @@ impl CkBtcSetup {
                     )
                     .expect("failed to get fee percentiles")
             ),
-            Vec<MillisatoshiPerByte>
+            Vec<u64>
         )
-        .expect("Failed to call bitcoin_get_current_fee_percentiles")
+        .expect("Failed to call bitcoin_get_current_fee_percentiles");
+        rates
+            .into_iter()
+            .map(FeeRate::from_millis_per_byte)
+            .collect()
     }
 
-    pub fn set_fee_percentiles(&self, fees: &Vec<MillisatoshiPerByte>) {
+    pub fn set_fee_percentiles(&self, fees: &[FeeRate]) {
+        let rates: Vec<_> = fees.iter().map(|r| r.millis()).collect();
         self.env
             .execute_ingress(
                 self.bitcoin_id,
                 "set_fee_percentiles",
-                Encode!(fees).unwrap(),
+                Encode!(&rates).unwrap(),
             )
             .expect("failed to set fee percentiles");
     }
@@ -1623,6 +1628,30 @@ fn test_transaction_finalization() {
 }
 
 #[test]
+fn test_min_deposit_amount() {
+    let ckbtc = CkBtcSetup::new();
+
+    let deposit_btc_min_amount = ckbtc.get_minter_info().deposit_btc_min_amount;
+    assert_eq!(deposit_btc_min_amount, Some(CHECK_FEE + 1));
+
+    ckbtc.upgrade_with(Some(UpgradeArgs {
+        deposit_btc_min_amount: Some(CHECK_FEE),
+        ..Default::default()
+    }));
+
+    let deposit_btc_min_amount = ckbtc.get_minter_info().deposit_btc_min_amount;
+    assert_eq!(deposit_btc_min_amount, Some(CHECK_FEE + 1));
+
+    ckbtc.upgrade_with(Some(UpgradeArgs {
+        check_fee: Some(CHECK_FEE - 2),
+        ..Default::default()
+    }));
+
+    let deposit_btc_min_amount = ckbtc.get_minter_info().deposit_btc_min_amount;
+    assert_eq!(deposit_btc_min_amount, Some(CHECK_FEE));
+}
+
+#[test]
 fn test_min_retrieval_amount_default() {
     let ckbtc = CkBtcSetup::new();
 
@@ -1631,22 +1660,22 @@ fn test_min_retrieval_amount_default() {
     assert_eq!(retrieve_btc_min_amount, 100_000);
 
     // The numbers used in this test have been re-computed using a python script using integers.
-    ckbtc.set_fee_percentiles(&vec![0; 100]);
+    ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(0); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 100_000);
 
-    ckbtc.set_fee_percentiles(&vec![116_000; 100]);
+    ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(116_000); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 150_000);
 
-    ckbtc.set_fee_percentiles(&vec![342_000; 100]);
+    ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(342_000); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 150_000);
 
-    ckbtc.set_fee_percentiles(&vec![343_000; 100]);
+    ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(343_000); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 200_000);
@@ -1662,28 +1691,28 @@ fn test_min_retrieval_amount_custom() {
     assert_eq!(retrieve_btc_min_amount, min_amount);
 
     // The numbers used in this test have been re-computed using a python script using integers.
-    ckbtc.set_fee_percentiles(&vec![0; 100]);
+    ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(0); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, min_amount);
 
-    ckbtc.set_fee_percentiles(&vec![116_000; 100]);
+    ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(116_000); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 50_000 + min_amount);
 
-    ckbtc.set_fee_percentiles(&vec![342_000; 100]);
+    ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(342_000); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 50_000 + min_amount);
 
-    ckbtc.set_fee_percentiles(&vec![343_000; 100]);
+    ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(343_000); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 100_000 + min_amount);
 
     // When fee becomes 0 again, it goes back to the initial setting
-    ckbtc.set_fee_percentiles(&vec![0; 100]);
+    ckbtc.set_fee_percentiles(&vec![FeeRate::from_millis_per_byte(0); 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, min_amount);
@@ -2091,8 +2120,9 @@ fn test_utxo_consolidation_multiple() {
 
     // Set fee percentiles so that the 25th percentile is 2000 and the median (50th) is 5000.
     // We set the first 40 percentiles to 2000 and the rest to 5000.
-    let fees: Vec<u64> = std::iter::repeat_n(2000, 40)
+    let fees: Vec<FeeRate> = std::iter::repeat_n(2000, 40)
         .chain(std::iter::repeat_n(5000, 60))
+        .map(FeeRate::from_millis_per_byte)
         .collect();
     ckbtc.set_fee_percentiles(&fees);
 
@@ -2576,9 +2606,9 @@ fn test_filter_logs() {
 #[test]
 fn test_retrieve_btc_with_approval() {
     fn test(
-        current_fee_percentiles: &Vec<MillisatoshiPerByte>,
-        actual_median_fee_per_vbyte: MillisatoshiPerByte,
-        expected_fee_per_vbyte: MillisatoshiPerByte,
+        current_fee_percentiles: &[FeeRate],
+        actual_median_fee_per_vbyte: FeeRate,
+        expected_fee_per_vbyte: FeeRate,
     ) {
         let ckbtc = CkBtcSetup::new();
         ckbtc.set_fee_percentiles(current_fee_percentiles);
@@ -2658,9 +2688,9 @@ fn test_retrieve_btc_with_approval() {
             ckbtc.get_events().pop().unwrap().payload,
             EventType::SentBtcTransaction {
                 txid: txid_event,
-                fee_per_vbyte,
+                effective_fee_per_vbyte,
                 ..
-            } if txid_event == txid && fee_per_vbyte == Some(expected_fee_per_vbyte)
+            } if txid_event == txid && effective_fee_per_vbyte.unwrap() >= expected_fee_per_vbyte.millis()
         );
 
         // Step 4: confirm the transaction
@@ -2680,12 +2710,18 @@ fn test_retrieve_btc_with_approval() {
 
     // regular fees, use median
     test(
-        &(1..=100).map(|i| i * 100).collect::<Vec<u64>>(),
-        5_100,
-        5_100,
+        &(1..=100)
+            .map(|i| FeeRate::from_millis_per_byte(i * 100))
+            .collect::<Vec<_>>(),
+        FeeRate::from_millis_per_byte(5_100),
+        FeeRate::from_millis_per_byte(5_100),
     );
     // unusually low fees, use hardcoded minimum value instead of median
-    test(&[142_u64; 100].to_vec(), 142, 1_500);
+    test(
+        &[FeeRate::from_millis_per_byte(142); 100],
+        FeeRate::from_millis_per_byte(142),
+        FeeRate::from_millis_per_byte(1_500),
+    );
 }
 
 #[test]

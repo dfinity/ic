@@ -211,15 +211,6 @@ pub fn encode_metrics(
             }) as f64,
         )?
         .value(
-            &[("status", "sending")],
-            state::read_state(|s| {
-                s.requests_in_flight
-                    .values()
-                    .filter(|v| matches!(*v, state::InFlightStatus::Sending { .. }))
-                    .count()
-            }) as f64,
-        )?
-        .value(
             &[("status", "submitted")],
             state::read_state(|s| {
                 s.submitted_transactions
@@ -355,7 +346,7 @@ pub fn encode_metrics(
 
     metrics.encode_gauge(
         "ckbtc_minter_median_fee_per_vbyte",
-        state::read_state(|s| s.last_fee_per_vbyte[50]) as f64,
+        state::read_state(|s| s.last_fee_per_vbyte[50].millis()) as f64,
         "Median Bitcoin transaction fee per vbyte in Satoshi.",
     )?;
 

@@ -4,7 +4,7 @@ package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/sha2",
+    "//rs/crypto/sha2",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -30,7 +30,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_hmac",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

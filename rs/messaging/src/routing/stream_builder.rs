@@ -17,7 +17,7 @@ use ic_types::{CountBytes, Cycles, SubnetId};
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
-use std::collections::{BTreeMap, btree_map};
+use std::collections::{BTreeMap, BTreeSet, btree_map};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -30,12 +30,16 @@ struct StreamBuilderMetrics {
     pub stream_bytes: IntGaugeVec,
     /// Stream begin, by remote subnet.
     pub stream_begin: IntGaugeVec,
+    /// Signals currently enqueued in streams, by remote subnet.
+    pub stream_signals: IntGaugeVec,
     /// Signals end, by remote subnet.
     pub signals_end: IntGaugeVec,
     /// Routed XNet messages, by type and status.
     pub routed_messages: IntCounterVec,
     /// Successfully routed XNet messages' total payload size.
     pub routed_payload_sizes: Histogram,
+    /// Misrouted messages currently in streams, by remote subnet.
+    pub stream_misrouted_messages: IntGaugeVec,
     /// Critical error counter for detected infinite loops while routing.
     pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
@@ -50,9 +54,11 @@ struct StreamBuilderMetrics {
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
+const METRIC_STREAM_SIGNALS: &str = "mr_stream_signals";
 const METRIC_SIGNALS_END: &str = "mr_signals_end";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
+const METRIC_STREAM_MISROUTED_MESSAGES: &str = "mr_stream_misrouted_messages";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -90,6 +96,11 @@ impl StreamBuilderMetrics {
             "Stream begin, by remote subnet",
             &[LABEL_REMOTE],
         );
+        let stream_signals = metrics_registry.int_gauge_vec(
+            METRIC_STREAM_SIGNALS,
+            "Signals currently enqueued in streams, by remote subnet.",
+            &[LABEL_REMOTE],
+        );
         let signals_end = metrics_registry.int_gauge_vec(
             METRIC_SIGNALS_END,
             "Signals end, by remote subnet",
@@ -105,6 +116,11 @@ impl StreamBuilderMetrics {
             "Successfully routed XNet messages' payload sizes.",
             // 10 B - 5 MB
             decimal_buckets(1, 6),
+        );
+        let stream_misrouted_messages= metrics_registry.int_gauge_vec(
+            METRIC_STREAM_MISROUTED_MESSAGES,
+            "Count of misrouted messages in streams, by remote subnet. Only populated for subnets currently involved in a canister migration.",
+            &[LABEL_REMOTE],
         );
         let critical_error_infinite_loops =
             metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
@@ -141,9 +157,11 @@ impl StreamBuilderMetrics {
             stream_messages,
             stream_bytes,
             stream_begin,
+            stream_signals,
             signals_end,
             routed_messages,
             routed_payload_sizes,
+            stream_misrouted_messages,
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
@@ -264,6 +282,94 @@ impl StreamBuilderImpl {
         self.metrics
             .routed_payload_sizes
             .observe(msg.payload_size_bytes().get() as f64);
+    }
+
+    /// Iterates over all messages in potentially relevant streams and counts how
+    /// many are misrouted (mismatched source or destination subnet according to the
+    /// current routing table).
+    ///
+    /// Only streams to or from subnets involved in migrations may enqueue misrouted
+    /// messages. If this subnet is involved in a migration, we scan all its
+    /// streams. Otherwise, we only scan streams to subnets involved in migrations.
+    fn observe_misrouted_messages(&self, state: &ReplicatedState) {
+        // Reset all gauges to zero before recounting.
+        //
+        // This may lead to a race condition where some keys are temporarily missing,
+        // but we already have a race condition between this metric and the registry
+        // version metric. We work around both by (1) aggregating over all replicas on
+        // the subnet and (2) requiring the condition (no misrouted messages) to hold
+        // for a while before acting on it.
+        self.metrics.stream_misrouted_messages.reset();
+
+        let canister_migrations = state.metadata.network_topology.canister_migrations.as_ref();
+        if canister_migrations.is_empty() {
+            return;
+        }
+
+        // Collect all subnets involved in migrations (source or destination).
+        //
+        // It may be sufficient to only look at "source" subnets of migrations because
+        // we are looking for messages stuck in streams to OLD host subnets. But, just
+        // to be safe, we collect all subnets appearing in migration traces.
+        let mut subnets_with_canister_migrations = BTreeSet::new();
+        for (_, trace) in canister_migrations.iter() {
+            for subnet in trace {
+                subnets_with_canister_migrations.insert(*subnet);
+            }
+        }
+        let relevant_subnets = if subnets_with_canister_migrations.contains(&self.subnet_id) {
+            // This subnet is the source or target of a migration, scan all its streams.
+            state
+                .metadata
+                .streams()
+                .keys()
+                .cloned()
+                .collect::<BTreeSet<_>>()
+        } else {
+            // This is a third-party subnet, only scan streams to subnets involved in
+            // canister migrations.
+            subnets_with_canister_migrations
+        };
+
+        for remote_subnet in &relevant_subnets {
+            let Some(stream) = state.metadata.streams().get(remote_subnet) else {
+                continue;
+            };
+
+            let mut misrouted_messages = 0;
+            // Iterate over all messages in the stream
+            for (_, msg) in stream.messages().iter() {
+                // Check for receiver subnet mismatch.
+                let receiver_host_subnet =
+                    state.metadata.network_topology.route(msg.receiver().get());
+                if receiver_host_subnet != Some(*remote_subnet) {
+                    misrouted_messages += 1;
+                    continue;
+                }
+
+                // Check for sender subnet mismatch.
+                let sender_host_subnet = match msg {
+                    StreamMessage::Request(req) => {
+                        state.metadata.network_topology.route(req.sender.get())
+                    }
+                    StreamMessage::Response(resp) => {
+                        state.metadata.network_topology.route(resp.originator.get())
+                    }
+                    StreamMessage::Refund(_) => {
+                        // Refunds don't have explicit senders. Always assume they are local.
+                        Some(self.subnet_id)
+                    }
+                };
+                if sender_host_subnet != Some(self.subnet_id) {
+                    misrouted_messages += 1;
+                }
+            }
+
+            self.metrics
+                .stream_misrouted_messages
+                .with_label_values(&[&remote_subnet.to_string()])
+                .set(misrouted_messages);
+        }
     }
 
     /// Implementation of `StreamBuilder::build_streams()`.
@@ -514,27 +620,35 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
+                    stream.signals_begin(),
                     stream.signals_end(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes, begin, signals_end)| {
-                self.metrics
-                    .stream_messages
-                    .with_label_values(&[&subnet])
-                    .set(len as i64);
-                self.metrics
-                    .stream_bytes
-                    .with_label_values(&[&subnet])
-                    .set(size_bytes as i64);
-                self.metrics
-                    .stream_begin
-                    .with_label_values(&[&subnet])
-                    .set(begin.get() as i64);
-                self.metrics
-                    .signals_end
-                    .with_label_values(&[&subnet])
-                    .set(signals_end.get() as i64);
-            });
+            .for_each(
+                |(subnet, len, size_bytes, begin, signals_begin, signals_end)| {
+                    self.metrics
+                        .stream_messages
+                        .with_label_values(&[&subnet])
+                        .set(len as i64);
+                    self.metrics
+                        .stream_bytes
+                        .with_label_values(&[&subnet])
+                        .set(size_bytes as i64);
+                    self.metrics
+                        .stream_begin
+                        .with_label_values(&[&subnet])
+                        .set(begin.get() as i64);
+                    self.metrics
+                        .stream_signals
+                        .with_label_values(&[&subnet])
+                        .set((signals_end - signals_begin).get() as i64);
+                    self.metrics
+                        .signals_end
+                        .with_label_values(&[&subnet])
+                        .set(signals_end.get() as i64);
+                },
+            );
+        self.observe_misrouted_messages(&state);
 
         {
             // Record the enqueuing time of any messages newly enqueued into `streams`.

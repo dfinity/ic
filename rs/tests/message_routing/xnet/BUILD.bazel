@@ -6,9 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "xnet_slo_120_subnets_staging_test",
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     tags = [
         "system_test_large",
     ],
@@ -24,9 +21,6 @@ system_test_nns(
 system_test_nns(
     name = "xnet_slo_3_subnets_hotfix_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     tags = [
         "system_test_large",
     ],
@@ -41,9 +35,6 @@ system_test_nns(
 system_test_nns(
     name = "xnet_slo_3_subnets_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     tags = [
         "system_test_large",
     ],
@@ -58,9 +49,6 @@ system_test_nns(
 system_test_nns(
     name = "xnet_slo_29_subnets_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     tags = [
         "system_test_large",
     ],
@@ -75,9 +63,6 @@ system_test_nns(
 
 system_test(
     name = "xnet_malicious_slices",
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    },
     guestos = "malicious",
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -95,9 +80,7 @@ system_test(
 system_test_nns(
     name = "xnet_compatibility",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    env = {
-        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
-    } | MAINNET_ENV,
+    env = MAINNET_ENV,
     guestos = "mainnet_nns",
     guestos_update = True,
     tags = [

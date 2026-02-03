@@ -101,75 +101,57 @@ def canister_runtime_deps_impl(canister_wasm_providers, qualifying_canisters):
         for cname, providers in canister_wasm_providers.items()
     }
 
-    runtime_deps = targets.keys()
-    env = {
-        "{}_WASM_PATH".format(cname.upper().replace("-", "_")): "$(rootpath {})".format(target)
+    runtime_deps = {
+        "{}_WASM_PATH".format(cname.upper().replace("-", "_")): target
         for target, cname in targets.items()
     }
-    return runtime_deps, env
+    return runtime_deps
 
-NNS_CANISTER_RUNTIME_DEPS, NNS_CANISTER_ENV = canister_runtime_deps_impl(
+NNS_CANISTER_RUNTIME_DEPS = canister_runtime_deps_impl(
     canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
     qualifying_canisters = NNS_CANISTER_WASM_PROVIDERS.keys(),
 )
 
-MAINNET_NNS_CANISTER_RUNTIME_DEPS, MAINNET_NNS_CANISTER_ENV = canister_runtime_deps_impl(
+MAINNET_NNS_CANISTER_RUNTIME_DEPS = canister_runtime_deps_impl(
     canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
     qualifying_canisters = [],
 )
 
-SNS_CANISTER_RUNTIME_DEPS, SNS_CANISTER_ENV = canister_runtime_deps_impl(
+SNS_CANISTER_RUNTIME_DEPS = canister_runtime_deps_impl(
     canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
     qualifying_canisters = SNS_CANISTER_WASM_PROVIDERS.keys(),
 )
 
-MAINNET_SNS_CANISTER_RUNTIME_DEPS, MAINNET_SNS_CANISTER_ENV = canister_runtime_deps_impl(
-    canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
-    qualifying_canisters = [],
-)
-
-IC_GATEWAY_RUNTIME_DEPS = [
-    "//rs/tests:ic_gateway_uvm_config_image",
-]
-
-COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:counter.wat"]
-
-CANISTER_HTTP_RUNTIME_DEPS = [
-    "//rs/tests/networking/canister_http:http_uvm_config_image",
-]
-
-XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
-
-STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync-test-canister"]
-
-UNIVERSAL_CANISTER_RUNTIME_DEPS = [
-    "//rs/universal_canister/impl:universal_canister.wasm.gz",
-]
-
-UNIVERSAL_CANISTER_ENV = {
-    "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+IC_GATEWAY_RUNTIME_DEPS = {
+    "IC_GATEWAY_UVM_CONFIG_IMAGE_PATH": "//rs/tests:ic_gateway_uvm_config_image",
 }
 
-MESSAGE_CANISTER_RUNTIME_DEPS = [
-    "//rs/tests/test_canisters/message:message.wasm.gz",
-]
-
-MESSAGE_CANISTER_ENV = {
-    "MESSAGE_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/message:message.wasm.gz)",
+COUNTER_CANISTER_RUNTIME_DEPS = {
+    "COUNTER_CANISTER_WAT_PATH": "//rs/tests:counter.wat",
 }
 
-SIGNER_CANISTER_RUNTIME_DEPS = [
-    "//rs/tests/test_canisters/signer:signer.wasm.gz",
-]
-
-SIGNER_CANISTER_ENV = {
-    "SIGNER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/signer:signer.wasm.gz)",
+XNET_TEST_CANISTER_RUNTIME_DEPS = {
+    "XNET_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/xnet_test:xnet-test-canister",
 }
 
-IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = [
-    "//rs/tests:impersonate_upstreams_uvm_config_image",
-]
+UNIVERSAL_CANISTER_RUNTIME_DEPS = {
+    "UNIVERSAL_CANISTER_WASM_PATH": "//rs/universal_canister/impl:universal_canister.wasm.gz",
+}
 
-IMPERSONATE_UPSTREAMS_ENV = {
-    "IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH": "$(rootpath //rs/tests:impersonate_upstreams_uvm_config_image)",
+MESSAGE_CANISTER_RUNTIME_DEPS = {
+    "MESSAGE_CANISTER_WASM_PATH": "//rs/tests/test_canisters/message:message.wasm.gz",
+}
+
+SIGNER_CANISTER_RUNTIME_DEPS = {
+    "SIGNER_CANISTER_WASM_PATH": "//rs/tests/test_canisters/signer:signer.wasm.gz",
+}
+
+IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = {
+    "IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH": "//rs/tests:impersonate_upstreams_uvm_config_image",
+}
+
+CANISTER_SANDBOX_RUNTIME_DEPS = {
+    "SANDBOX_BINARY": "//rs/canister_sandbox:canister_sandbox",
+    "LAUNCHER_BINARY": "//rs/canister_sandbox:sandbox_launcher",
+    "COMPILER_BINARY": "//rs/canister_sandbox:compiler_sandbox",
 }
