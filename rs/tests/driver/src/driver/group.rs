@@ -722,7 +722,7 @@ impl SystemTestGroup {
                 }
             };
             Some((
-                format!("{ASSERT_NO_CRITICAL_ERRORS_TASK_NAME}"),
+                ASSERT_NO_CRITICAL_ERRORS_TASK_NAME.to_string(),
                 Box::new(teardown_fn),
             ))
         } else {
@@ -752,7 +752,7 @@ impl SystemTestGroup {
                 }
             };
             Some((
-                format!("{ASSERT_NO_REPLICA_RESTARTS_TASK_NAME}"),
+                ASSERT_NO_REPLICA_RESTARTS_TASK_NAME.to_string(),
                 Box::new(teardown_fn),
             ))
         } else {
@@ -762,7 +762,7 @@ impl SystemTestGroup {
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardown
             .into_iter()
-            .map(|teardown| (format!("{TEARDOWN_TASK_NAME}"), teardown))
+            .map(|teardown| (TEARDOWN_TASK_NAME.to_string(), teardown))
             .chain(assert_no_critical_errors_fn)
             .chain(assert_no_replica_restarts_fn)
             .map(|(teardown_name, teardown_fn)| {
