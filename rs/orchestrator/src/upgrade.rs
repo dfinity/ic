@@ -683,6 +683,11 @@ impl Upgrade {
             .has_replicated_all_versions_certified_before_init()
             && self.init_time.elapsed() < TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR
         {
+            self.metrics
+                .replica_version_upgrade_prevented
+                .with_label_values(&[new_replica_version.as_ref(), "replicator_not_caught_up"])
+                .inc();
+
             return Err(OrchestratorError::UpgradeError(format!(
                 "Delaying upgrade to {} until registry data is recent enough. Latest registry version: {}",
                 new_replica_version, latest_registry_version
@@ -697,8 +702,8 @@ impl Upgrade {
             // The new replica version has been recalled. Do not upgrade. The only way to leave
             // this branch is via subnet recovery.
             self.metrics
-                .recalled_version_upgrade_blocks
-                .with_label_values(&[new_replica_version.as_ref()])
+                .replica_version_upgrade_prevented
+                .with_label_values(&[new_replica_version.as_ref(), "version_recalled"])
                 .inc();
 
             return Err(OrchestratorError::UpgradeError(format!(
