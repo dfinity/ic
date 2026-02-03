@@ -9168,7 +9168,7 @@ fn take_tip_does_not_hash_with_optimization() {
         );
 
         // update `fast_forward_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        sm.update_fast_forward_height(Height::new(42));
         assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
@@ -9238,7 +9238,7 @@ fn remove_inmemory_states_below_prunes_certification() {
         let cert_height = Height::new(10);
         // the state hash was derived from the panic message in `commit_and_certify`
         let state_hash = CryptoHash(
-            hex::decode("9ffd667c5d015bb61a684707cc44568097acd0b2879e88b26e3927fff3be2e90")
+            hex::decode("f070433622c142c99f007e4b300f8191ca6b02acf356645589b04bb4b5a2e833")
                 .unwrap(),
         );
         let certification = fake_certification_for_height_with_hash(cert_height, state_hash);
@@ -9451,7 +9451,7 @@ fn list_state_heights_to_certify() {
         assert!(sm.list_state_heights_to_certify().is_empty());
 
         // advance `fast_forward_height` to 13
-        sm.remove_inmemory_states_below(Height::new(13), &BTreeSet::new());
+        sm.update_fast_forward_height(Height::new(13));
         assert_eq!(sm.fast_forward_height(), 13);
 
         // now `list_state_heights_to_certify` returns all heights starting at `tip_height`
@@ -9462,7 +9462,7 @@ fn list_state_heights_to_certify() {
         );
 
         // advance `fast_forward_height` further to 42
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        sm.update_fast_forward_height(Height::new(42));
         assert_eq!(sm.fast_forward_height(), 42);
 
         // now `list_state_heights_to_certify` returns 20 heights starting at `tip_height`
@@ -9487,7 +9487,7 @@ fn commit_and_certify_reuses_certification() {
         let no_opt_height = Height::new(10);
         // the state hash was derived from the panic message in `commit_and_certify`
         let state_hash = CryptoHash(
-            hex::decode("9ffd667c5d015bb61a684707cc44568097acd0b2879e88b26e3927fff3be2e90")
+            hex::decode("f070433622c142c99f007e4b300f8191ca6b02acf356645589b04bb4b5a2e833")
                 .unwrap(),
         );
         let certification = fake_certification_for_height_with_hash(no_opt_height, state_hash);
@@ -9515,7 +9515,7 @@ fn commit_and_certify_reuses_certification() {
 
 #[test]
 #[should_panic(
-    expected = "Committed state @10 with hash CryptoHash(0x9ffd667c5d015bb61a684707cc44568097acd0b2879e88b26e3927fff3be2e90) which is different from previously computed or delivered hash CryptoHash(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a)"
+    expected = "Committed state @10 with hash CryptoHash(0xf070433622c142c99f007e4b300f8191ca6b02acf356645589b04bb4b5a2e833) which is different from previously computed or delivered hash CryptoHash(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a)"
 )]
 fn commit_and_certify_panic_on_delivered_fake_certification() {
     state_manager_test(|metrics, sm| {
