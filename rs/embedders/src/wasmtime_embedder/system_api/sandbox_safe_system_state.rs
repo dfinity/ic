@@ -226,7 +226,7 @@ impl SystemStateModifications {
             info!(
                 logger,
                 "Canister {} sent {} cycles to canister {}.",
-                system_state.canister_id,
+                system_state.canister_id(),
                 sent_cycles,
                 msg_receiver
             );
@@ -335,7 +335,7 @@ impl SystemStateModifications {
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Verify total cycle change is not positive and update cycles balance.
-        self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
+        self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
 
         if let Some(hook_condition_check_result) =
@@ -357,7 +357,7 @@ impl SystemStateModifications {
         if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken
             && call_context_balance_taken != Cycles::zero()
         {
-            let own_canister_id = system_state.canister_id;
+            let own_canister_id = system_state.canister_id();
 
             let call_context = system_state
                 .withdraw_cycles(context_id, call_context_balance_taken)
@@ -401,7 +401,8 @@ impl SystemStateModifications {
             network_topology.subnets.keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
             if msg.receiver == IC_00 {
-                match Self::validate_sender_canister_version(&msg, system_state.canister_version) {
+                match Self::validate_sender_canister_version(&msg, system_state.canister_version())
+                {
                     Ok(()) => {
                         // This is a request to ic:00. Update the receiver to be the appropriate
                         // subnet and also update the corresponding callback.
@@ -410,7 +411,7 @@ impl SystemStateModifications {
                             msg.method_name.as_str(),
                             msg.method_payload.as_slice(),
                             own_subnet_id,
-                            system_state.canister_id,
+                            system_state.canister_id(),
                             is_composite_query,
                             logger,
                         )
@@ -444,7 +445,8 @@ impl SystemStateModifications {
                     }
                 }
             } else if subnet_ids.contains(&msg.receiver.get()) {
-                match Self::validate_sender_canister_version(&msg, system_state.canister_version) {
+                match Self::validate_sender_canister_version(&msg, system_state.canister_version())
+                {
                     Ok(()) => {
                         if own_subnet_id != nns_subnet_id {
                             // This is a management canister call providing the target subnet ID
@@ -521,7 +523,7 @@ impl SystemStateModifications {
 
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {
-            system_state.canister_version += 1;
+            system_state.bump_canister_version();
         }
 
         Ok(request_stats)
@@ -808,7 +810,7 @@ impl SandboxSafeSystemState {
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
 
         Self::new_internal(
-            system_state.canister_id,
+            system_state.canister_id(),
             CanisterStatusView::from_canister_status_type(system_state.status()),
             system_state.freeze_threshold,
             system_state.memory_allocation,
@@ -833,7 +835,7 @@ impl SandboxSafeSystemState {
             cost_schedule,
             dirty_page_overhead,
             system_state.global_timer,
-            system_state.canister_version,
+            system_state.canister_version(),
             system_state.controllers.clone(),
             request_metadata,
             caller,

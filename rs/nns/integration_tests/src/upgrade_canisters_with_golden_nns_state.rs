@@ -404,6 +404,7 @@ mod sanity_check {
     use super::*;
     use ic_nervous_system_common::ONE_MONTH_SECONDS;
     use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
+    use ic_nns_governance_api::DateUtc;
 
     /// Metrics fetched from canisters either before or after testing.
     pub struct Metrics {
@@ -442,10 +443,11 @@ mod sanity_check {
     fn advance_time(state_machine: &StateMachine, before_timestamp: u64) {
         // Advance time in the state machine to just before the next node provider
         // rewards distribution time.
+        let seconds_to_node_provider_reward_distribution = before_timestamp
+            + NODE_PROVIDER_REWARD_PERIOD_SECONDS
+            - state_machine.get_time().as_secs_since_unix_epoch();
         state_machine.advance_time(std::time::Duration::from_secs(
-            before_timestamp + NODE_PROVIDER_REWARD_PERIOD_SECONDS
-                - state_machine.get_time().as_secs_since_unix_epoch()
-                - 1,
+            seconds_to_node_provider_reward_distribution - 1,
         ));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
@@ -454,7 +456,9 @@ mod sanity_check {
 
         // Advance time in the state machine by one month to ensure that voting rewards
         // are also distributed.
-        state_machine.advance_time(std::time::Duration::from_secs(ONE_MONTH_SECONDS));
+        state_machine.advance_time(std::time::Duration::from_secs(
+            ONE_MONTH_SECONDS - seconds_to_node_provider_reward_distribution,
+        ));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
@@ -545,6 +549,25 @@ mod sanity_check {
                 |before, after| {
                     assert_increased(before, after, "node provider rewards timestamp");
                 },
+            );
+
+            // Check node provider rewards cover contiguous periods.
+            let before_end_date = self
+                .before
+                .governance_most_recent_monthly_node_provider_rewards
+                .end_date
+                .clone()
+                .unwrap();
+            let expected_after_start_date = DateUtc {
+                year: before_end_date.year,
+                month: before_end_date.month,
+                day: before_end_date.day + 1,
+            };
+            assert_eq!(
+                self.after
+                    .governance_most_recent_monthly_node_provider_rewards
+                    .start_date,
+                Some(expected_after_start_date)
             );
         }
 

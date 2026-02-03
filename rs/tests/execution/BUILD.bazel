@@ -1,5 +1,5 @@
 load("//rs/tests:common.bzl", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "oci_tar", "system_test", "system_test_nns", "uvm_config_image")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -182,15 +182,15 @@ system_test(
 
 system_test(
     name = "fill_execution_rounds_workload",
-    data = [
-        "//rs/tests:jaeger_uvm_config_image",
-    ],
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
     test_timeout = "eternal",
+    runtime_deps = {
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
+    },
     deps = [
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
@@ -198,53 +198,6 @@ system_test(
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:futures",
-        "@crate_index//:slog",
-    ],
-)
-
-exports_files([
-    "btc_integration/bitcoin.conf",
-    "btc_integration/btc_activate.sh",
-])
-
-uvm_config_image(
-    name = "btc_uvm_config_image",
-    srcs = [
-        ":bitcoind.tar",
-        ":btc_integration/bitcoin.conf",
-        ":btc_integration/btc_activate.sh",
-    ],
-    remap_paths = {
-        "btc_activate.sh": "activate",
-    },
-    tags = ["manual"],  # this target will be built if required as a dependency of another target
-)
-
-oci_tar(
-    name = "bitcoind.tar",
-    image = "@bitcoind",
-    repo_tags = ["bitcoind:pinned"],
-)
-
-system_test_nns(
-    name = "btc_get_balance_test",
-    flaky = True,  # flakiness rate of over 3% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/execution:btc_get_balance_test_head_nns variant.
-    tags = [
-        "colocate",
-    ],
-    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
-        "BTC_WASM_PATH": "@btc_canister//file",
-        "BTC_UVM_CONFIG_IMAGE_PATH": ":btc_uvm_config_image",
-    },
-    deps = [
-        "//rs/bitcoin/adapter/test_utils",
-        "//rs/registry/subnet_type",
-        "//rs/tests/ckbtc",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "//rs/universal_canister/lib",
-        "@crate_index//:anyhow",
-        "@crate_index//:candid",
         "@crate_index//:slog",
     ],
 )

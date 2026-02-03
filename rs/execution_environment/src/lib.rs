@@ -13,6 +13,7 @@ mod metrics;
 mod query_handler;
 mod scheduler;
 mod types;
+pub mod units;
 pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;

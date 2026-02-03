@@ -1,17 +1,19 @@
 # https://hub.docker.com/_/ubuntu
 # ubuntu:noble-20250910
-FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d
+FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d as base
+
 ENV TZ=UTC
+RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # copy config files
 ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
-COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
+# marker for scripts to check if they are running in this container
+RUN touch /home/ubuntu/.ic-build-container
 
 # Todo: split out essential packages from application-level packages
-RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
@@ -138,3 +140,6 @@ WORKDIR /
 ARG CI_USER="root"
 USER $CI_USER
 CMD ["/bin/bash"]
+
+FROM base as build
+FROM base as dev

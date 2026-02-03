@@ -1,6 +1,6 @@
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "IC_GATEWAY_DATA")
+load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -31,15 +31,10 @@ rust_library(
     ],
 )
 
-RUNTIME_DEPS = [
-    "//:dfx",
-]
-
 system_test_nns(
     name = "dfx_smoke_test",
-    data = RUNTIME_DEPS + IC_GATEWAY_DATA,
-    env = {
-        "DFX_PATH": "$(rootpath //:dfx)",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "DFX_PATH": "//:dfx",
     },
     deps = [
         # Keep sorted.
@@ -54,12 +49,9 @@ system_test_nns(
 
 system_test(
     name = "dfx_check_old_wallet_version_test",
-    data = RUNTIME_DEPS + [
-        "@wallet_canister_0.7.2//file",
-    ],
-    env = {
-        "WALLET_CANISTER_0_7_2_WASM": "$(rootpath @wallet_canister_0.7.2//file)",
-        "DFX_PATH": "$(rootpath //:dfx)",
+    runtime_deps = {
+        "WALLET_CANISTER_0_7_2_WASM": "@wallet_canister_0.7.2//file",
+        "DFX_PATH": "//:dfx",
     },
     deps = [
         # Keep sorted.
