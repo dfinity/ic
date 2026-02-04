@@ -29,7 +29,7 @@ pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invar
 pub(crate) const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str =
     "scheduler_subnet_memory_usage_invariant_broken";
 
-pub(super) struct SchedulerMetrics {
+pub struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
     pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_balance: Histogram,
@@ -89,6 +89,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
     pub(super) round_inner_iteration_prep: Histogram,
+    pub(super) round_inner_iteration_prep_step: HistogramVec,
     pub(super) round_inner_iteration_exe: Histogram,
     pub(super) round_inner_iteration_thread: ScopedMetrics,
     pub(super) round_inner_iteration_thread_message: ScopedMetrics,
@@ -140,7 +141,7 @@ pub(super) const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs
 pub(super) const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
 
 impl SchedulerMetrics {
-    pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             canister_age: metrics_registry.histogram(
                 "scheduler_canister_age_rounds",
@@ -575,6 +576,12 @@ impl SchedulerMetrics {
                 "execution_round_inner_preparation_duration_seconds",
                 "The duration of inner execution round preparation in seconds.",
                 metrics_registry,
+            ),
+            round_inner_iteration_prep_step: metrics_registry.histogram_vec(
+                "execution_round_inner_preparation_step_duration_seconds",
+                "The duration of inner execution round preparation step in seconds.",
+                decimal_buckets_with_zero(-4, 1),
+                &["step"],
             ),
             round_inner_iteration_exe: duration_histogram(
                 "execution_round_inner_execution_duration_seconds",

@@ -529,6 +529,13 @@ impl ReplicatedState {
             .map(|canister| canister.as_ref())
     }
 
+    pub fn canister_state_mut_arc(
+        &mut self,
+        canister_id: &CanisterId,
+    ) -> Option<&mut Arc<CanisterState>> {
+        self.canister_states.get_mut(canister_id)
+    }
+
     // TODO: Check if all callers always need a mutable reference.
     // Better yet, return a `&mut Arc<_>` so the caller can bail out before cloning.
     pub fn canister_state_mut(&mut self, canister_id: &CanisterId) -> Option<&mut CanisterState> {
@@ -657,35 +664,20 @@ impl ReplicatedState {
         self.metadata.subnet_schedule.get(canister_id)
     }
 
-    pub fn canister_priorities_mut_(
-        &mut self,
-    ) -> impl Iterator<Item = (&CanisterState, &mut CanisterPriority)> {
-        // self.canister_states.values().map(|canister| {
-        //     (
-        //         canister.clone(),
-        //         self.metadata
-        //             .subnet_schedule
-        //             .get_mut(canister.canister_id()),
-        //     )
-        // })
-        self.metadata
-            .subnet_schedule
-            .iter_mut()
-            .map(|(canister_id, priority)| {
-                (
-                    self.canister_states.get(canister_id).unwrap().as_ref(),
-                    priority,
-                )
-            })
+    pub fn canister_priorities(&self) -> &SubnetSchedule {
+        &self.metadata.subnet_schedule
     }
 
     pub fn subnet_schedule_mut(
         &mut self,
     ) -> (
-        &BTreeMap<CanisterId, Arc<CanisterState>>,
+        &mut BTreeMap<CanisterId, Arc<CanisterState>>,
         &mut SubnetSchedule,
     ) {
-        (&self.canister_states, &mut self.metadata.subnet_schedule)
+        (
+            &mut self.canister_states,
+            &mut self.metadata.subnet_schedule,
+        )
     }
 
     /// Time complexity: `O(n)` in the number of active canisters.
@@ -859,6 +851,8 @@ impl ReplicatedState {
     }
 
     /// Computes the memory taken by different types of memory resources.
+    ///
+    /// Time complexity: `O(|canister_states|)`.
     pub fn memory_taken(&self) -> MemoryTaken {
         let (
             raw_memory_taken,
@@ -908,8 +902,10 @@ impl ReplicatedState {
 
     /// Computes the memory taken by guaranteed response messages.
     ///
-    /// This is a more efficient alternative to `memory_taken()` for cases when only
-    /// the message memory usage is necessary.
+    /// This is a more efficient alternative (by a constant factor) to
+    /// `memory_taken()` for cases when only the message memory usage is necessary.
+    ///
+    /// Time complexity: `O(|canister_states|)`.
     pub fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
             .canisters_iter()
@@ -926,6 +922,8 @@ impl ReplicatedState {
     }
 
     /// Computes the memory taken by best-effort response messages.
+    ///
+    /// Time complexity: `O(|canister_states|)`.
     pub fn best_effort_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
             .canisters_iter()
@@ -938,11 +936,15 @@ impl ReplicatedState {
     }
 
     /// Returns the total memory taken by the ingress history in bytes.
+    ///
+    /// Time complexity: `O(1)`.
     pub fn total_ingress_memory_taken(&self) -> NumBytes {
         self.metadata.ingress_history.memory_usage()
     }
 
-    /// Returns the total number of callbacks across all canisters.
+    /// Computes the total number of callbacks across all canisters.
+    ///
+    /// Time complexity: `O(|canister_states|)`.
     pub fn callback_count(&self) -> usize {
         self.canisters_iter()
             .map(|canister| {

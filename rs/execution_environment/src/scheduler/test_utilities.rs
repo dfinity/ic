@@ -122,7 +122,19 @@ pub(crate) struct SchedulerTest {
 
 impl std::fmt::Debug for SchedulerTest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SchedulerTest").finish()
+        f.debug_struct("SchedulerTest")
+            .field("scheduler_cores", &self.scheduler.config.scheduler_cores)
+            .field("canisters", &self.state().canister_states().len())
+            .field(
+                "compute_allocations",
+                &self
+                    .state()
+                    .canister_states()
+                    .values()
+                    .map(|state| state.compute_allocation().as_percent())
+                    .collect::<Vec<_>>(),
+            )
+            .finish()
     }
 }
 

@@ -235,7 +235,7 @@ pub struct ComputeAllocation(u64);
 
 impl ComputeAllocation {
     /// Returns the raw percent contained in this `ComputeAllocation`.
-    pub fn as_percent(self) -> u64 {
+    pub const fn as_percent(self) -> u64 {
         self.0
     }
 
