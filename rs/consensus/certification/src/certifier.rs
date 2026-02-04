@@ -419,44 +419,52 @@ impl CertifierImpl {
     fn validate(
         &self,
         certification_pool: &dyn CertificationPool,
-        state_hashes: &[(Height, CryptoHashOfPartialState)],
+        state_hashes: &[StateHashMetadata],
     ) -> Mutations {
         // Iterate over all state hashes, obtain list of corresponding unvalidated
         // artifacts by the height and try to verify their signatures.
 
         state_hashes
             .iter()
-            .flat_map(|(height, hash)| -> Box<dyn Iterator<Item = ChangeAction>> {
-                // First we check if we have any valid full certification available for the
-                // given height and if yes, our job is done for this height.
-                let mut cert_change_set = Vec::new();
-                for certification in
-                    certification_pool.unvalidated_certifications_at_height(*height)
-                {
-                    if let Some(val) = self.validate_certification(hash, certification) {
-                        match val {
-                            ChangeAction::MoveToValidated(_) => {
-                                cert_change_set.push(val);
-                                // We have found one valid certification for the given height, so
-                                // our job is done.
-                                return Box::new(cert_change_set.into_iter());
-                            }
-                            _ => {
-                                cert_change_set.push(val);
+            .flat_map(
+                |state_hash_metadata| -> Box<dyn Iterator<Item = ChangeAction>> {
+                    // First we check if we have any valid full certification available for the
+                    // given height and if yes, our job is done for this height.
+                    let mut cert_change_set = Vec::new();
+                    for certification in certification_pool
+                        .unvalidated_certifications_at_height(state_hash_metadata.height)
+                    {
+                        if let Some(val) =
+                            self.validate_certification(&state_hash_metadata.hash, certification)
+                        {
+                            match val {
+                                ChangeAction::MoveToValidated(_) => {
+                                    cert_change_set.push(val);
+                                    // We have found one valid certification for the given height, so
+                                    // our job is done.
+                                    return Box::new(cert_change_set.into_iter());
+                                }
+                                _ => {
+                                    cert_change_set.push(val);
+                                }
                             }
                         }
                     }
-                }
 
-                Box::new(
-                    certification_pool
-                        .unvalidated_shares_at_height(*height)
-                        .filter_map(move |share| {
-                            self.validate_share(certification_pool, hash, share)
-                        })
-                        .chain(cert_change_set),
-                )
-            })
+                    Box::new(
+                        certification_pool
+                            .unvalidated_shares_at_height(state_hash_metadata.height)
+                            .filter_map(move |share| {
+                                self.validate_share(
+                                    certification_pool,
+                                    &state_hash_metadata.hash,
+                                    share,
+                                )
+                            })
+                            .chain(cert_change_set),
+                    )
+                },
+            )
             .collect()
     }
 
@@ -684,7 +692,7 @@ mod tests {
                 (from..=to)
                     .map(move |h| StateHashMetadata {
                         height: Height::from(h),
-                        hash: gen_content(Height::from(h)).hash,
+                        hash: gen_content().hash,
                     })
                     .collect::<Vec<StateHashMetadata>>(),
             );

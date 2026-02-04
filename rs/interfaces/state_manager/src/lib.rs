@@ -1,6 +1,6 @@
 //! The state manager public interface.
 
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree, Witness};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
     consensus::certification::Certification, state_manager::StateManagerResult,
@@ -96,14 +96,12 @@ impl<State> Labeled<State> {
 }
 
 /// A state hash for a height to be signed and certified by consensus.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StateHashMetadata {
     /// The state height.
     pub height: Height,
     /// The state hash at the height.
     pub hash: CryptoHashOfPartialState,
-    /// The witness for the height.
-    pub height_witness: Witness,
 }
 
 /// APIs related to fetching and certifying the state.
