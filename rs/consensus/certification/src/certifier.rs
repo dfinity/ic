@@ -173,15 +173,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             .state_manager
             .list_state_hashes_to_certify()
             .into_iter()
-            .filter_map(|(height, hash, witness)| {
-                if deliver_state_certification(height) {
-                    // if we delivered a valid certification, we skip the pair
-                    None
-                } else {
-                    // return this tuple to be signed by the current replica
-                    Some((height, hash, witness))
-                }
-            })
+            .filter(|(height, _, _)| !deliver_state_certification(*height))
             .collect();
         trace!(
             &self.log,
