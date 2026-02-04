@@ -3037,6 +3037,12 @@ impl StateManager for StateManagerImpl {
     }
 
     fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["list_state_heights_to_certify"])
+            .start_timer();
+
         let states = self.states.read();
         let tip_height = states.tip_height.get();
         let heights_with_certification: HashSet<_> =
