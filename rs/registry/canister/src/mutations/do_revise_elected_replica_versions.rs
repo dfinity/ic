@@ -180,10 +180,10 @@ impl Registry {
         )
         .map(|reg_value| {
             BlessedReplicaVersions::decode(reg_value.value.as_slice())
-                .unwrap()
+                .expect("Failed to decode BlessedReplicaVersions")
                 .blessed_version_ids
         })
-        .unwrap_or_default()
+        .expect("BlessedReplicaVersions key not found in registry")
     }
 
     pub fn get_all_blessed_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
