@@ -129,6 +129,40 @@ pub struct CatchUpPackageContents {
     /// / The initial IDkg dealings for boot strapping target chain key subnets.
     #[prost(message, repeated, tag = "8")]
     pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
+    #[prost(oneof = "catch_up_package_contents::CupType", tags = "9, 10, 11")]
+    pub cup_type: ::core::option::Option<catch_up_package_contents::CupType>,
+}
+/// Nested message and enum types in `CatchUpPackageContents`.
+pub mod catch_up_package_contents {
+    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    pub enum CupType {
+        #[prost(message, tag = "9")]
+        Genesis(super::GenesisArgs),
+        #[prost(message, tag = "10")]
+        Recovery(super::RecoveryArgs),
+        #[prost(message, tag = "11")]
+        SubnetSplitting(super::SubnetSplittingArgs),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, ::prost::Message)]
+pub struct GenesisArgs {}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct RecoveryArgs {
+    /// The blockchain height that the CUP should have
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+    /// Block time for the CUP's block
+    #[prost(uint64, tag = "2")]
+    pub time: u64,
+    /// The hash of the state that the subnet should use
+    #[prost(bytes = "vec", tag = "3")]
+    pub state_hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct SubnetSplittingArgs {
+    /// / The id of subnet the subnet will be split into.
+    #[prost(message, optional, tag = "1")]
+    pub destination_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct RegistryStoreUri {
