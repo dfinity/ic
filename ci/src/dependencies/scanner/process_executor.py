@@ -24,7 +24,7 @@ class ProcessExecutor:
         if log_command:
             logging.info("Executing : " + command)
         command = shlex.split(command)
-        result = subprocess.run(command, cwd=cwd, encoding="utf-8", capture_output=True, text=True, env=environ)
+        result = subprocess.run(command, cwd=cwd, encoding="utf-8", env=environ)
 
         if result.returncode > 1 and not (ignore_return_code_if_stdout_is_set and len(result.stdout) > 0):
             if log_error_on_fail:
