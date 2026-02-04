@@ -7,7 +7,9 @@ use dfn_core::{
 use ic_base_types::{NodeId, PrincipalId};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nervous_system_string::clamp_debug_len;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node_operator::v1::NodeOperatorRecord,
@@ -65,6 +67,7 @@ use registry_canister::{
         },
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
+        do_update_subnet_admins::{UpdateSubnetAdminsPayload, UpdateSubnetAdminsResult},
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
         firewall::{
             AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
@@ -131,6 +134,16 @@ fn check_caller_is_canister_migration_orchestrator_and_log(method_name: &str) {
     assert_eq!(
         caller,
         MIGRATION_CANISTER_ID.into(),
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
+    );
+}
+
+fn check_caller_is_subnet_rental_canister_and_log(method_name: &str) {
+    let caller = dfn_core::api::caller();
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
+    assert_eq!(
+        caller,
+        SUBNET_RENTAL_CANISTER_ID.into(),
         "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
@@ -1228,6 +1241,21 @@ fn set_subnet_operational_level() {
 fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
     registry_mut().do_set_subnet_operational_level(payload);
     recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update update_subnet_admins")]
+fn update_subnet_admins() {
+    check_caller_is_subnet_rental_canister_and_log("update_subnet_admins");
+    over(candid_one, |payload: UpdateSubnetAdminsPayload| {
+        update_subnet_admins_(payload)
+    });
+}
+
+#[candid_method(update, rename = "update_subnet_admins")]
+fn update_subnet_admins_(payload: UpdateSubnetAdminsPayload) -> UpdateSubnetAdminsResult {
+    let result = registry_mut().do_update_subnet_admins(payload);
+    recertify_registry();
+    result
 }
 
 fn recertify_registry() {
