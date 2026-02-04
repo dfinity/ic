@@ -126,7 +126,9 @@ def get_time_filter(args) -> sql.Composable:
 
         if args.until:
             if not args.since:
-                die("Please specify --since when --until is specified to avoid unbounded queries that might put high load on the database.")
+                die(
+                    "Please specify --since when --until is specified to avoid unbounded queries that might put high load on the database."
+                )
             until_dt = parse_datetime(args.until)
             conditions.append(sql.SQL("bt.first_start_time < {until}").format(until=sql.Literal(until_dt)))
 
