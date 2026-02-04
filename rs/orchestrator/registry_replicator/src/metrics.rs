@@ -36,7 +36,7 @@ impl RegistryReplicatorMetrics {
             latest_certified_time: metrics_registry.register(
                 GenericGauge::new(
                     "replicator_latest_certified_time",
-                    "Certified time of the latest successfull poll whose certified time was larger than the replicator's initialization time",
+                    "Highest certified time of the responses received from the registry, measured after the replicator successfully replicated the advertised latest registry version",
                 )
                 .unwrap(),
             ),
