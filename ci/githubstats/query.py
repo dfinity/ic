@@ -187,14 +187,12 @@ def get_time_filter(args) -> sql.Composable:
             conditions.append(sql.SQL("bt.first_start_time >= {since}").format(since=sql.Literal(since_dt)))
 
         if args.until:
+            if not args.since:
+                die("Please specify --since when --until is specified to avoid unbounded queries that might put high load on the database.")
             until_dt = parse_datetime(args.until)
             conditions.append(sql.SQL("bt.first_start_time < {until}").format(until=sql.Literal(until_dt)))
 
-        if conditions:
-            return sql.SQL(" AND ").join(conditions)
-        else:
-            # Neither --since nor --until specified, but datetime mode was triggered somehow
-            return sql.Literal(True)
+        return sql.SQL(" AND ").join(conditions)
 
     # Period mode (default to week)
     p = "month" if args.month else "day" if args.day else "week"
