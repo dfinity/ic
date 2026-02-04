@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import os
 import re
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -96,13 +97,74 @@ def period(args) -> str:
     return "month" if args.month else "week" if args.week else "day" if args.day else "week"
 
 
+def is_git_commit_sha(s: str) -> bool:
+    """Check if a string looks like a git commit SHA (7-40 hex characters)."""
+    return bool(re.match(r"^[0-9a-fA-F]{7,40}$", s))
+
+
+def get_commit_timestamp(sha: str) -> datetime:
+    """Fetch a git commit and return its commit timestamp as a timezone-aware datetime object (UTC)."""
+    repo_root = THIS_SCRIPT_DIR.parent.parent
+
+    try:
+        # First, resolve the full commit SHA
+        result = subprocess.run(
+            ["git", "rev-parse", sha],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        full_sha = result.stdout.strip()
+
+        # Then, fetch the commit to ensure it's available locally
+        subprocess.run(
+            ["git", "fetch", "origin", full_sha],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        die(f"Failed to fetch git commit '{sha}': {e.stderr.strip()}\nMake sure the commit exists in the repository.")
+
+    try:
+        # Get the commit timestamp in ISO 8601 format
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cI", sha],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        timestamp_str = result.stdout.strip()
+
+        if not timestamp_str:
+            die(f"Could not get timestamp for git commit '{sha}'")
+
+        # Parse the ISO 8601 timestamp and convert to UTC
+        dt = pd.to_datetime(timestamp_str, utc=True)
+        return dt.to_pydatetime()
+    except subprocess.CalledProcessError as e:
+        die(f"Failed to get timestamp for git commit '{sha}': {e.stderr.strip()}")
+    except Exception as e:
+        die(f"Failed to parse timestamp for git commit '{sha}': {e}")
+
+
 def parse_datetime(dt_str: str) -> datetime:
-    """Parse datetime string accepting any panda's datetime string and return a timezone-aware datetime object (UTC)."""
+    """Parse datetime string or git commit SHA and return a timezone-aware datetime object (UTC)."""
+    # Check if it looks like a git commit SHA
+    if is_git_commit_sha(dt_str):
+        return get_commit_timestamp(dt_str)
+
+    # Otherwise, try to parse as a datetime string
     try:
         dt = pd.to_datetime(dt_str, utc=True)
         return dt.to_pydatetime()
     except Exception as e:
-        die(f"Invalid datetime format '{dt_str}': {e}\nExpected format like '2024-01-15' or '2024-01-15 14:30:00'")
+        die(
+            f"Invalid datetime format '{dt_str}': {e}\nExpected format like '2024-01-15', '2024-01-15 14:30:00', or a git commit SHA"
+        )
 
 
 def get_time_filter(args) -> sql.Composable:
@@ -364,15 +426,15 @@ def main():
 
     filter_parser.add_argument(
         "--since",
-        metavar="DATETIME",
+        metavar="DATETIME_OR_SHA",
         type=str,
-        help="Start of time range (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC). Mutually exclusive with --day/--week/--month",
+        help="Start of time range (inclusive). Can be a datetime (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC)\nor a git commit SHA (e.g., 'abc123def') from which the time is taken.\nMutually exclusive with --day/--week/--month",
     )
     filter_parser.add_argument(
         "--until",
-        metavar="DATETIME",
+        metavar="DATETIME_OR_SHA",
         type=str,
-        help="End of time range, exclusive (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC). Mutually exclusive with --day/--week/--month",
+        help="End of time range (exclusive). Can be a datetime (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC)\nor a git commit SHA (e.g., 'def456abc') from which the time is taken.\nMutually exclusive with --day/--week/--month",
     )
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
@@ -400,6 +462,9 @@ Examples:
 
   # Show tests in a specific date range
   bazel run //ci/githubstats:query -- top 20 fail% --since '2026-01-01' --until '2026-01-31'
+
+  # Show the top flaky tests that ran between the times of two git commits
+  bazel run //ci/githubstats:query -- top 20 fail% --since abc123def --until def456abc
 """,
     )
     top_parser.add_argument(
@@ -468,7 +533,10 @@ Examples:
   bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
 
   # Show all runs of a test in a specific date range
-  `bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'`
+  bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'
+
+  # Show all runs of a test since the time of a specific commit
+  bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since abc123def
 """,
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
