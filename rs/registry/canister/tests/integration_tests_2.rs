@@ -9,7 +9,7 @@ use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{UpgradeTestingScenario, local_test_on_nns_subnet, maybe_upgrade_to_self},
+    itest_helpers::{UpgradeTestingScenario, state_machine_test_on_nns_subnet, maybe_upgrade_to_self},
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;
@@ -149,7 +149,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
         lookup_path(tree, &[&b"delta"[..], &version.to_be_bytes()[..]]).is_some()
     }
 
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         const MAX_VERSIONS_PER_QUERY: u64 = 1000;
 
         let canister = install_registry_canister(&runtime, {
