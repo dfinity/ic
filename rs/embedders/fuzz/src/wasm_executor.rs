@@ -70,8 +70,10 @@ pub fn run_fuzzer(module: ICWasmModule) {
 
     let compilation_cache = Arc::new(CompilationCacheBuilder::new().build());
     let mut system_state = SystemStateBuilder::default()
-        .initial_cycles(Cycles::from(u128::MAX / 2))
+        .initial_cycles(Cycles::from(5_000_000_000_000_u64))
+        .canister_id(CanisterId::from_u64(1))
         .build();
+
     let result = wasm_executor.create_execution_state(
         canister_module,
         PathBuf::new(),
@@ -125,8 +127,7 @@ fn setup_wasm_execution_input(
     let api_type = get_system_api_type_for_wasm_method(wasm_method.clone());
     let canister_current_memory_usage = NumBytes::new(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
-
-    system_state.new_call_context(
+    let _call_context_id = system_state.new_call_context(
         get_call_orign_for_wasm_method(wasm_method.clone()),
         Cycles::new(1_000_000_000),
         UNIX_EPOCH,
