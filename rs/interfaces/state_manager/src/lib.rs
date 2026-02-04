@@ -1,6 +1,6 @@
 //! The state manager public interface.
 
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
     consensus::certification::Certification, state_manager::StateManagerResult,
