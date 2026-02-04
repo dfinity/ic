@@ -737,22 +737,20 @@ impl Ledger {
     }
 
     pub fn ledger_set_107_fee_collector(&mut self, fee_collector: Option<Account>) {
-        self.fee_collector_107 = fee_collector;
-        let op: Operation<Tokens> = Operation::FeeCollector {
-            fee_collector,
-            caller: None,
-            mthd: Some(BTYPE_107_LEDGER_SET.to_string()),
-        };
         let tx = Transaction {
-            operation: op,
+            operation: Operation::FeeCollector {
+                fee_collector,
+                caller: None,
+                mthd: Some(BTYPE_107_LEDGER_SET.to_string()),
+            },
             created_at_time: None,
             memo: None,
         };
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-        let block = Block::from_transaction(self.blockchain.last_hash, tx, now, Tokens::ZERO);
-        if let Err(e) = self.blockchain.add_block(block) {
+        if let Err(e) = apply_transaction(self, tx, now, Tokens::ZERO) {
             ic_cdk::trap(format!(
-                "failed to add fee collector block to the ledger: {e}"
+                "failed to add fee collector block to the ledger: {:?}",
+                e
             ));
         }
     }
