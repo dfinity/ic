@@ -1,5 +1,4 @@
 use crate::allowances::list_allowances;
-use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::CanisterId;
@@ -25,16 +24,14 @@ use ic_ledger_suite_state_machine_helpers::{
     AllowanceProvider, balance_of, fee, get_archive_blocks, get_archive_remaining_capacity,
     get_archive_transaction, get_archive_transactions, get_blocks, get_canister_info,
     get_transactions, icrc3_get_blocks, icrc21_consent_message, list_archives, metadata,
-    minting_account, parse_metric, retrieve_metrics, send_approval, send_transfer,
-    send_transfer_from, supported_block_types, supported_standards, total_supply, transfer,
-    wait_ledger_ready,
+    minting_account, parse_metric, send_approval, send_transfer, send_transfer_from,
+    supported_block_types, supported_standards, total_supply, transfer,
 };
 use ic_ledger_suite_state_machine_tests_constants::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
     INT_META_VALUE, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
     TEXT_META_VALUE, TEXT_META_VALUE_2, TOKEN_NAME, TOKEN_SYMBOL,
 };
-use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_management_canister_types_private::{self as ic00};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, WasmResult};
@@ -43,6 +40,7 @@ use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
@@ -366,10 +364,10 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
         token_symbol: TOKEN_SYMBOL.to_string(),
         decimals: Some(DECIMAL_PLACES),
         metadata: vec![
-            Value::entry(NAT_META_KEY, NAT_META_VALUE),
-            Value::entry(INT_META_KEY, INT_META_VALUE),
-            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+            (NAT_META_KEY.to_string(), NAT_META_VALUE.into()),
+            (INT_META_KEY.to_string(), INT_META_VALUE.into()),
+            (TEXT_META_KEY.to_string(), TEXT_META_VALUE.into()),
+            (BLOB_META_KEY.to_string(), BLOB_META_VALUE.into()),
         ],
         archive_options: ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
@@ -462,9 +460,10 @@ pub fn test_metadata_icp_ledger<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(In
 where
     T: CandidType,
 {
-    fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
+    fn lookup<'a>(metadata: &'a BTreeMap<MetadataKey, Value>, key: &str) -> &'a Value {
+        let key = MetadataKey::parse(key).unwrap();
         metadata
-            .get(key)
+            .get(&key)
             .unwrap_or_else(|| panic!("no metadata key {key} in map {metadata:?}"))
     }
 
@@ -493,13 +492,16 @@ where
     );
 
     let metadata = metadata(&env, canister_id);
-    assert_eq!(lookup(&metadata, "icrc1:name"), &Value::from(TOKEN_NAME));
     assert_eq!(
-        lookup(&metadata, "icrc1:symbol"),
+        lookup(&metadata, MetadataKey::ICRC1_NAME),
+        &Value::from(TOKEN_NAME)
+    );
+    assert_eq!(
+        lookup(&metadata, MetadataKey::ICRC1_SYMBOL),
         &Value::from(TOKEN_SYMBOL)
     );
     assert_eq!(
-        lookup(&metadata, "icrc1:decimals"),
+        lookup(&metadata, MetadataKey::ICRC1_DECIMALS),
         &Value::from(DECIMAL_PLACES as u64)
     );
 
@@ -514,9 +516,10 @@ pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> 
 where
     T: CandidType,
 {
-    fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
+    fn lookup<'a>(metadata: &'a BTreeMap<MetadataKey, Value>, key: &str) -> &'a Value {
+        let key = MetadataKey::parse(key).unwrap();
         metadata
-            .get(key)
+            .get(&key)
             .unwrap_or_else(|| panic!("no metadata key {key} in map {metadata:?}"))
     }
 
@@ -545,13 +548,16 @@ where
     );
 
     let metadata = metadata(&env, canister_id);
-    assert_eq!(lookup(&metadata, "icrc1:name"), &Value::from(TOKEN_NAME));
     assert_eq!(
-        lookup(&metadata, "icrc1:symbol"),
+        lookup(&metadata, MetadataKey::ICRC1_NAME),
+        &Value::from(TOKEN_NAME)
+    );
+    assert_eq!(
+        lookup(&metadata, MetadataKey::ICRC1_SYMBOL),
         &Value::from(TOKEN_SYMBOL)
     );
     assert_eq!(
-        lookup(&metadata, "icrc1:decimals"),
+        lookup(&metadata, MetadataKey::ICRC1_DECIMALS),
         &Value::from(DECIMAL_PLACES as u64)
     );
     // Not all ICRC-1 implementations have the same metadata entries. Thus only certain basic fields are shared by all ICRC-1 implementations.
@@ -1843,7 +1849,8 @@ where
     let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
 
     let metadata_res = metadata(&env, canister_id);
-    let metadata_value = metadata_res.get(TEXT_META_KEY).unwrap();
+    let text_meta_key = MetadataKey::parse(TEXT_META_KEY).unwrap();
+    let metadata_value = metadata_res.get(&text_meta_key).unwrap();
     assert_eq!(*metadata_value, Value::Text(TEXT_META_VALUE.to_string()));
 
     const OTHER_TOKEN_SYMBOL: &str = "NEWSYMBOL";
@@ -1866,7 +1873,7 @@ where
 
     let metadata_res_after_upgrade = metadata(&env, canister_id);
     assert_eq!(
-        *metadata_res_after_upgrade.get(TEXT_META_KEY).unwrap(),
+        *metadata_res_after_upgrade.get(&text_meta_key).unwrap(),
         Value::Text(TEXT_META_VALUE_2.to_string())
     );
 
@@ -2128,7 +2135,6 @@ pub fn test_upgrade_serialization<Tokens>(
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
     mainnet_on_prev_version: bool,
-    test_stable_migration: bool,
 ) where
     Tokens: TokensType + Default + std::fmt::Display + From<u64>,
 {
@@ -2176,27 +2182,11 @@ pub fn test_upgrade_serialization<Tokens>(
                 };
                 add_tx_and_verify();
 
-                let mut test_upgrade = |ledger_wasm: Vec<u8>, expected_migration_steps: u64| {
-                    env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
-                        .unwrap();
-                    wait_ledger_ready(&env, ledger_id, 10);
-                    if test_stable_migration {
-                        let stable_upgrade_migration_steps =
-                            parse_metric(&env, ledger_id, "ledger_stable_upgrade_migration_steps");
-                        assert_eq!(stable_upgrade_migration_steps, expected_migration_steps);
-                    } else {
-                        assert_eq!(0, expected_migration_steps);
-                    }
-                    add_tx_and_verify();
-                };
+                // Upgrade to current version
+                env.upgrade_canister(ledger_id, ledger_wasm_current.clone(), upgrade_args.clone())
+                    .unwrap();
+                add_tx_and_verify();
 
-                // Test if the old serialized approvals and balances are correctly deserialized
-                let expected_steps = if mainnet_on_prev_version { 1 } else { 0 };
-                test_upgrade(ledger_wasm_current.clone(), expected_steps);
-                // Test the new wasm serialization
-                test_upgrade(ledger_wasm_current.clone(), 0);
-                // Test deserializing from memory manager
-                test_upgrade(ledger_wasm_current.clone(), 0);
                 // Downgrade to mainnet if possible.
                 match env.upgrade_canister(
                     ledger_id,
@@ -2235,162 +2225,6 @@ pub fn test_upgrade_serialization<Tokens>(
             },
         )
         .unwrap();
-}
-
-pub fn icrc1_test_multi_step_migration<T>(
-    ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-    get_all_blocks: fn(&StateMachine, CanisterId) -> Vec<EncodedBlock>,
-) where
-    T: CandidType,
-{
-    let accounts = vec![
-        Account::from(PrincipalId::new_user_test_id(1).0),
-        Account {
-            owner: PrincipalId::new_user_test_id(2).0,
-            subaccount: Some([2; 32]),
-        },
-        Account::from(PrincipalId::new_user_test_id(3).0),
-        Account {
-            owner: PrincipalId::new_user_test_id(4).0,
-            subaccount: Some([4; 32]),
-        },
-    ];
-    let additional_accounts = vec![
-        Account::from(PrincipalId::new_user_test_id(5).0),
-        Account {
-            owner: PrincipalId::new_user_test_id(6).0,
-            subaccount: Some([6; 32]),
-        },
-    ];
-    let mut initial_balances = vec![];
-    let mut all_accounts = [accounts.clone(), additional_accounts.clone()].concat();
-    for (index, account) in all_accounts.iter().enumerate() {
-        initial_balances.push((*account, 10_000_000u64 + index as u64));
-    }
-
-    // Setup ledger as it is deployed on the mainnet.
-    let (env, canister_id) = setup(ledger_wasm_mainnet, encode_init_args, initial_balances);
-
-    const APPROVE_AMOUNT: u64 = 150_000;
-    let expiration =
-        system_time_to_nanos(env.time()) + Duration::from_secs(5000 * 3600).as_nanos() as u64;
-
-    let mut expected_allowances = vec![];
-
-    for i in 0..accounts.len() {
-        for j in i + 1..accounts.len() {
-            let mut approve_args = default_approve_args(accounts[j], APPROVE_AMOUNT);
-            approve_args.from_subaccount = accounts[i].subaccount;
-            send_approval(&env, canister_id, accounts[i].owner, &approve_args)
-                .expect("approval failed");
-            expected_allowances.push(Account::get_allowance(
-                &env,
-                canister_id,
-                accounts[i],
-                accounts[j],
-            ));
-
-            let mut approve_args = default_approve_args(accounts[i], APPROVE_AMOUNT);
-            approve_args.expires_at = Some(expiration);
-            approve_args.from_subaccount = accounts[j].subaccount;
-            send_approval(&env, canister_id, accounts[j].owner, &approve_args)
-                .expect("approval failed");
-            expected_allowances.push(Account::get_allowance(
-                &env,
-                canister_id,
-                accounts[j],
-                accounts[i],
-            ));
-        }
-    }
-    for i in 7..7 + 30 {
-        let to = Account::from(PrincipalId::new_user_test_id(i).0);
-        transfer(&env, canister_id, accounts[0], to, 100).expect("failed to transfer funds");
-        all_accounts.push(to);
-    }
-    let mut balances = BTreeMap::new();
-    for account in &all_accounts {
-        balances.insert(account, Nat::from(balance_of(&env, canister_id, *account)));
-    }
-
-    let test_upgrade = |ledger_wasm: Vec<u8>,
-                        balances: BTreeMap<&Account, Nat>,
-                        min_migration_steps: u64| {
-        let blocks_before = get_all_blocks(&env, canister_id);
-
-        env.upgrade_canister(
-            canister_id,
-            ledger_wasm,
-            Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-        )
-        .unwrap();
-
-        wait_ledger_ready(&env, canister_id, 20);
-
-        assert_eq!(blocks_before, get_all_blocks(&env, canister_id));
-
-        let stable_upgrade_migration_steps =
-            parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
-        assert!(stable_upgrade_migration_steps >= min_migration_steps);
-
-        let mut allowances = vec![];
-        for i in 0..accounts.len() {
-            for j in i + 1..accounts.len() {
-                let allowance = Account::get_allowance(&env, canister_id, accounts[i], accounts[j]);
-                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
-                allowances.push(allowance);
-                let allowance = Account::get_allowance(&env, canister_id, accounts[j], accounts[i]);
-                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
-                allowances.push(allowance);
-            }
-        }
-        assert_eq!(expected_allowances, allowances);
-
-        for account in &all_accounts {
-            assert_eq!(balance_of(&env, canister_id, *account), balances[account]);
-        }
-    };
-
-    // Test if the old serialized approvals and balances are correctly deserialized
-    test_upgrade(
-        ledger_wasm_current_lowinstructionlimits.clone(),
-        balances.clone(),
-        2,
-    );
-
-    // Add some more approvals
-    for a1 in &accounts {
-        for a2 in &additional_accounts {
-            let mut approve_args = default_approve_args(*a2, APPROVE_AMOUNT);
-            approve_args.from_subaccount = a1.subaccount;
-            send_approval(&env, canister_id, a1.owner, &approve_args).expect("approval failed");
-            balances.insert(a1, balances[a1].clone() - approve_args.fee.unwrap());
-
-            let mut approve_args = default_approve_args(*a1, APPROVE_AMOUNT);
-            approve_args.expires_at = Some(expiration);
-            approve_args.from_subaccount = a2.subaccount;
-            send_approval(&env, canister_id, a2.owner, &approve_args).expect("approval failed");
-            balances.insert(a2, balances[a2].clone() - approve_args.fee.unwrap());
-        }
-    }
-
-    // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current_lowinstructionlimits, balances, 0);
-
-    // See if the additional approvals are there
-    for a1 in &accounts {
-        for a2 in &additional_accounts {
-            let allowance = Account::get_allowance(&env, canister_id, *a1, *a2);
-            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
-            assert_eq!(allowance.expires_at, None);
-
-            let allowance = Account::get_allowance(&env, canister_id, *a2, *a1);
-            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
-            assert_eq!(allowance.expires_at, Some(expiration));
-        }
-    }
 }
 
 pub fn test_downgrade_from_incompatible_version<T>(
@@ -2476,527 +2310,6 @@ pub fn test_downgrade_from_incompatible_version<T>(
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .expect("failed to upgrade to next version");
-}
-
-pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
-    ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-    additional_endpoints: Vec<(&str, Vec<u8>)>,
-) where
-    T: CandidType,
-{
-    let account = Account::from(PrincipalId::new_user_test_id(1).0);
-    let initial_balances = vec![(account, 100_000_000u64)];
-
-    // Setup ledger as it is deployed on the mainnet.
-    let (env, canister_id) = setup(ledger_wasm_mainnet, encode_init_args, initial_balances);
-
-    const APPROVE_AMOUNT: u64 = 150_000;
-
-    for i in 2..60 {
-        let spender = Account::from(PrincipalId::new_user_test_id(i).0);
-        let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
-        send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
-    }
-
-    for i in 2..60 {
-        let to = Account::from(PrincipalId::new_user_test_id(i).0);
-        transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
-    }
-
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm_current_lowinstructionlimits,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .unwrap();
-
-    let transfer_args = TransferArg {
-        from_subaccount: None,
-        to: Account::from(PrincipalId::new_user_test_id(2).0),
-        fee: None,
-        created_at_time: None,
-        amount: Nat::from(1u64),
-        memo: None,
-    };
-    let approve_args = default_approve_args(
-        Account::from(PrincipalId::new_user_test_id(200).0),
-        APPROVE_AMOUNT,
-    );
-    let transfer_from_args = TransferFromArgs {
-        spender_subaccount: None,
-        from: account,
-        to: Account::from(PrincipalId::new_user_test_id(2).0),
-        amount: Nat::from(1u64),
-        fee: None,
-        memo: None,
-        created_at_time: None,
-    };
-    let allowance_args = AllowanceArgs {
-        account,
-        spender: account,
-    };
-
-    let test_endpoint = |endpoint_name: &str, args: Vec<u8>, expect_error: bool| {
-        println!("testing endpoint {endpoint_name}");
-        let result = env.execute_ingress_as(account.owner.into(), canister_id, endpoint_name, args);
-        if expect_error {
-            result
-                .unwrap_err()
-                .assert_contains(ErrorCode::CanisterCalledTrap, "The Ledger is not ready");
-        } else {
-            assert!(result.is_ok());
-        }
-    };
-
-    test_endpoint("icrc1_transfer", Encode!(&transfer_args).unwrap(), true);
-    test_endpoint("icrc2_approve", Encode!(&approve_args).unwrap(), true);
-    test_endpoint(
-        "icrc2_transfer_from",
-        Encode!(&transfer_from_args).unwrap(),
-        true,
-    );
-    test_endpoint("icrc2_allowance", Encode!(&allowance_args).unwrap(), true);
-    test_endpoint("icrc1_balance_of", Encode!(&account).unwrap(), true);
-    test_endpoint("icrc1_total_supply", Encode!().unwrap(), true);
-    for (endpoint_name, args) in additional_endpoints.clone() {
-        test_endpoint(endpoint_name, args, true);
-    }
-
-    wait_ledger_ready(&env, canister_id, 50);
-
-    test_endpoint("icrc1_transfer", Encode!(&transfer_args).unwrap(), false);
-    test_endpoint("icrc2_approve", Encode!(&approve_args).unwrap(), false);
-    test_endpoint(
-        "icrc2_transfer_from",
-        Encode!(&transfer_from_args).unwrap(),
-        false,
-    );
-    test_endpoint("icrc2_allowance", Encode!(&allowance_args).unwrap(), false);
-    test_endpoint("icrc1_balance_of", Encode!(&account).unwrap(), false);
-    test_endpoint("icrc1_total_supply", Encode!().unwrap(), false);
-    for (endpoint_name, args) in additional_endpoints {
-        test_endpoint(endpoint_name, args, false);
-    }
-}
-
-pub fn test_incomplete_migration<T>(
-    ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let account = Account::from(PrincipalId::new_user_test_id(1).0);
-    let initial_balances = vec![(account, 100_000_000u64)];
-
-    // Setup ledger as it is deployed on the mainnet.
-    let (env, canister_id) = setup(
-        ledger_wasm_mainnet.clone(),
-        encode_init_args,
-        initial_balances,
-    );
-
-    const APPROVE_AMOUNT: u64 = 150_000;
-    const TRANSFER_AMOUNT: u64 = 100;
-
-    const NUM_APPROVALS: u64 = 20;
-    const NUM_TRANSFERS: u64 = 30;
-
-    let send_approvals = || {
-        for i in 2..2 + NUM_APPROVALS {
-            let spender = Account::from(PrincipalId::new_user_test_id(i).0);
-            let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
-            send_approval(&env, canister_id, account.owner, &approve_args)
-                .expect("approval failed");
-        }
-    };
-
-    send_approvals();
-
-    for i in 2..2 + NUM_TRANSFERS {
-        let to = Account::from(PrincipalId::new_user_test_id(i).0);
-        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT + FEE)
-            .expect("failed to transfer funds");
-    }
-
-    let check_approvals = |non_zero_from: u64| {
-        for i in 2..2 + NUM_APPROVALS {
-            let allowance = Account::get_allowance(
-                &env,
-                canister_id,
-                account,
-                Account::from(PrincipalId::new_user_test_id(i).0),
-            );
-            let expected_allowance = if i < non_zero_from {
-                Nat::from(0u64)
-            } else {
-                Nat::from(APPROVE_AMOUNT)
-            };
-            assert_eq!(allowance.allowance, expected_allowance);
-        }
-    };
-    let check_balances = |non_zero_from: u64| {
-        for i in 2..2 + NUM_TRANSFERS {
-            let balance = balance_of(
-                &env,
-                canister_id,
-                Account::from(PrincipalId::new_user_test_id(i).0),
-            );
-            let expected_balance = if i < non_zero_from {
-                Nat::from(0u64)
-            } else {
-                Nat::from(TRANSFER_AMOUNT + FEE)
-            };
-            assert_eq!(balance, expected_balance);
-        }
-    };
-    check_approvals(2);
-    check_balances(2);
-
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm_current_lowinstructionlimits.clone(),
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .unwrap();
-
-    let is_ledger_ready = Decode!(
-        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
-            .expect("failed to call is_ledger_ready")
-            .bytes(),
-        bool
-    )
-    .expect("failed to decode is_ledger_ready response");
-    assert!(!is_ledger_ready);
-
-    // Downgrade to mainnet without waiting for the migration to complete.
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm_mainnet,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .unwrap();
-
-    // All approvals should still be in UPGRADES_MEMORY and downgrade should succeed.
-    check_approvals(2);
-
-    for i in 2..5 {
-        let spender = Account::from(PrincipalId::new_user_test_id(i).0);
-        let approve_args = default_approve_args(spender, 0);
-        send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
-        transfer(&env, canister_id, spender, account, TRANSFER_AMOUNT)
-            .expect("failed to transfer funds");
-    }
-
-    check_approvals(5);
-    check_balances(5);
-
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm_current_lowinstructionlimits,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .unwrap();
-    wait_ledger_ready(&env, canister_id, 20);
-
-    check_approvals(5);
-    check_balances(5);
-}
-
-pub fn test_incomplete_migration_to_current<T>(
-    ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let account = Account::from(PrincipalId::new_user_test_id(1).0);
-    let initial_balances = vec![(account, 100_000_000u64)];
-
-    // Setup ledger as it is deployed on the mainnet.
-    let (env, canister_id) = setup(
-        ledger_wasm_mainnet.clone(),
-        encode_init_args,
-        initial_balances,
-    );
-
-    const APPROVE_AMOUNT: u64 = 150_000;
-    const TRANSFER_AMOUNT: u64 = 100;
-
-    const NUM_APPROVALS: u64 = 20;
-    const NUM_TRANSFERS: u64 = 30;
-
-    let send_approvals = || {
-        for i in 2..2 + NUM_APPROVALS {
-            let spender = Account::from(PrincipalId::new_user_test_id(i).0);
-            let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
-            send_approval(&env, canister_id, account.owner, &approve_args)
-                .expect("approval failed");
-        }
-    };
-
-    send_approvals();
-
-    for i in 2..2 + NUM_TRANSFERS {
-        let to = Account::from(PrincipalId::new_user_test_id(i).0);
-        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT + i)
-            .expect("failed to transfer funds");
-    }
-
-    let check_approvals = || {
-        for i in 2..2 + NUM_APPROVALS {
-            let allowance = Account::get_allowance(
-                &env,
-                canister_id,
-                account,
-                Account::from(PrincipalId::new_user_test_id(i).0),
-            );
-            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
-        }
-    };
-    let check_balances = || {
-        for i in 2..2 + NUM_TRANSFERS {
-            let balance = balance_of(
-                &env,
-                canister_id,
-                Account::from(PrincipalId::new_user_test_id(i).0),
-            );
-            assert_eq!(balance, Nat::from(TRANSFER_AMOUNT + i));
-        }
-    };
-
-    check_approvals();
-    check_balances();
-
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm_current_lowinstructionlimits.clone(),
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .unwrap();
-
-    let is_ledger_ready = Decode!(
-        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
-            .expect("failed to call is_ledger_ready")
-            .bytes(),
-        bool
-    )
-    .expect("failed to decode is_ledger_ready response");
-    assert!(!is_ledger_ready);
-
-    // Upgrade to current without completing the migration.
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm_current_lowinstructionlimits,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .unwrap();
-
-    wait_ledger_ready(&env, canister_id, 20);
-    check_approvals();
-    check_balances();
-}
-
-pub fn test_migration_resumes_from_frozen<T>(
-    ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let account = Account::from(PrincipalId::new_user_test_id(1).0);
-    let initial_balances = vec![(account, 100_000_000u64)];
-
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        subnet_config.clone(),
-        HypervisorConfig::default(),
-    ));
-
-    let args = encode_init_args(init_args(initial_balances));
-    let args = Encode!(&args).unwrap();
-    let canister_id = env
-        .install_canister_with_cycles(
-            ledger_wasm_mainnet,
-            args,
-            None,
-            Cycles::new(1_000_000_000_000),
-        )
-        .unwrap();
-
-    const APPROVE_AMOUNT: u64 = 150_000;
-    const TRANSFER_AMOUNT: u64 = 100;
-
-    const NUM_APPROVALS: u64 = 40;
-    const NUM_TRANSFERS: u64 = 40;
-
-    let send_approvals = || {
-        for i in 2..2 + NUM_APPROVALS {
-            let spender = Account::from(PrincipalId::new_user_test_id(i).0);
-            let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
-            send_approval(&env, canister_id, account.owner, &approve_args)
-                .expect("approval failed");
-        }
-    };
-
-    send_approvals();
-
-    for i in 2..2 + NUM_TRANSFERS {
-        let to = Account::from(PrincipalId::new_user_test_id(i).0);
-        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT + i)
-            .expect("failed to transfer funds");
-    }
-
-    let check_approvals = || {
-        for i in 2..2 + NUM_APPROVALS {
-            let allowance = Account::get_allowance(
-                &env,
-                canister_id,
-                account,
-                Account::from(PrincipalId::new_user_test_id(i).0),
-            );
-            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
-        }
-    };
-    let check_balances = || {
-        for i in 2..2 + NUM_TRANSFERS {
-            let balance = balance_of(
-                &env,
-                canister_id,
-                Account::from(PrincipalId::new_user_test_id(i).0),
-            );
-            assert_eq!(balance, Nat::from(TRANSFER_AMOUNT + i));
-        }
-    };
-
-    check_approvals();
-    check_balances();
-
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm_current_lowinstructionlimits,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .unwrap();
-
-    let is_ledger_ready = || {
-        Decode!(
-            &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
-                .expect("failed to call is_ledger_ready")
-                .bytes(),
-            bool
-        )
-        .expect("failed to decode is_ledger_ready response")
-    };
-    assert!(!is_ledger_ready());
-
-    let freeze = |env: &StateMachine, canister_id: CanisterId| {
-        let args = CanisterSettingsArgsBuilder::new()
-            .with_freezing_threshold(1 << 62)
-            .build();
-        let result = env.update_settings(&canister_id, args);
-        assert_matches!(result, Ok(_));
-    };
-    let unfreeze = |env: &StateMachine, canister_id: CanisterId| {
-        let args = CanisterSettingsArgsBuilder::new()
-            .with_freezing_threshold(0)
-            .build();
-        let result = env.update_settings(&canister_id, args);
-        assert_matches!(result, Ok(_));
-    };
-
-    freeze(&env, canister_id);
-    env.advance_time(Duration::from_secs(1000));
-    // Make sure the timer was attempted to be scheduled.
-    for _ in 0..10 {
-        env.tick();
-    }
-    unfreeze(&env, canister_id);
-    // even though 1000s passed, the ledger did not migrate when it was frozen
-    assert!(!is_ledger_ready());
-    wait_ledger_ready(&env, canister_id, 30);
-    check_approvals();
-    check_balances();
-}
-
-pub fn test_metrics_while_migrating<T>(
-    ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let account = Account::from(PrincipalId::new_user_test_id(1).0);
-    let initial_balances = vec![(account, 100_000_000u64)];
-
-    // Setup ledger as it is deployed on the mainnet.
-    let (env, canister_id) = setup(
-        ledger_wasm_mainnet.clone(),
-        encode_init_args,
-        initial_balances,
-    );
-
-    for i in 2..22 {
-        let spender = Account::from(PrincipalId::new_user_test_id(i).0);
-        let approve_args = default_approve_args(spender, 150_000);
-        send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
-    }
-
-    for i in 2..31 {
-        let to = Account::from(PrincipalId::new_user_test_id(i).0);
-        transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
-    }
-
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm_current_lowinstructionlimits,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .unwrap();
-
-    // The migration should not yet have completed - if this happens (e.g., due to a bump of some
-    // dependency, leading to more blocks being migrated within the configured instruction limits),
-    // consider adjusting the number of blocks stored in the ledger before starting the migration.
-    let is_ledger_ready = Decode!(
-        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
-            .expect("failed to call is_ledger_ready")
-            .bytes(),
-        bool
-    )
-    .expect("failed to decode is_ledger_ready response");
-    assert!(!is_ledger_ready);
-
-    let metrics = retrieve_metrics(&env, canister_id);
-    assert!(
-        metrics
-            .iter()
-            .any(|line| line.contains("ledger_transactions")),
-        "Did not find ledger_transactions metric"
-    );
-    assert!(
-        !metrics
-            .iter()
-            .any(|line| line.contains("ledger_num_approvals")),
-        "ledger_num_approvals should not be in metrics"
-    );
-
-    wait_ledger_ready(&env, canister_id, 20);
-
-    let metrics = retrieve_metrics(&env, canister_id);
-    assert!(
-        metrics
-            .iter()
-            .any(|line| line.contains("ledger_transactions")),
-        "Did not find ledger_transactions metric"
-    );
-    assert!(
-        metrics
-            .iter()
-            .any(|line| line.contains("ledger_num_approvals")),
-        "Did not find ledger_num_approvals metric"
-    );
 }
 
 pub fn test_upgrade_not_possible<T>(
@@ -5063,84 +4376,6 @@ where
     }
 }
 
-pub fn test_cycles_for_archive_creation_no_overwrite_of_none_in_upgrade<T>(
-    ledger_wasm_pre_default_set: Vec<u8>,
-    ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let account = Account::from(PrincipalId::new_user_test_id(1).0);
-    let initial_balances = vec![(account, 100_000_000u64)];
-
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        subnet_config.clone(),
-        HypervisorConfig::default(),
-    ));
-
-    // Initialization arguments with cycles_for_archive_creation set to None in archive_options.
-    // The default in this older ledger version is 0.
-    let args_with_null_cycles = InitArgs {
-        archive_options: ArchiveOptions {
-            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
-            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            more_controller_ids: None,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        },
-        ..init_args(initial_balances)
-    };
-
-    let args = encode_init_args(args_with_null_cycles);
-    let args = Encode!(&args).unwrap();
-    let canister_id = env
-        .install_canister_with_cycles(
-            ledger_wasm_pre_default_set,
-            args,
-            None,
-            Cycles::new(100_000_000_000_000),
-        )
-        .unwrap();
-
-    const TRANSFER_AMOUNT: u64 = 100;
-
-    let send_transfers = || {
-        for i in 2..2 + ARCHIVE_TRIGGER_THRESHOLD {
-            let to = Account::from(PrincipalId::new_user_test_id(i).0);
-            transfer(&env, canister_id, account, to, TRANSFER_AMOUNT + i)
-                .expect("failed to transfer funds");
-        }
-    };
-
-    // Send enough transfers that should trigger an archive creation based on
-    // ARCHIVE_TRIGGER_THRESHOLD.
-    send_transfers();
-
-    // Verify that no archive was spawned since the value used for cycles_for_archive_creation is 0.
-    let archives = list_archives(&env, canister_id);
-    assert!(archives.is_empty());
-
-    // Upgrade the canister to the latest master version.
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .unwrap();
-
-    send_transfers();
-
-    // Verify that no archive was spawned, since even though the default for
-    // cycles_for_archive_creation is set to a non-zero value, it does not overwrite the initial
-    // default that was set to 0 on ledger creation.
-    let archives = list_archives(&env, canister_id);
-    assert!(archives.is_empty());
-}
-
 pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
@@ -5199,11 +4434,11 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
 pub mod metadata {
     use super::*;
 
-    const METADATA_DECIMALS: &str = "icrc1:decimals";
-    const METADATA_NAME: &str = "icrc1:name";
-    const METADATA_SYMBOL: &str = "icrc1:symbol";
-    const METADATA_FEE: &str = "icrc1:fee";
-    const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
+    const METADATA_DECIMALS: &str = MetadataKey::ICRC1_DECIMALS;
+    const METADATA_NAME: &str = MetadataKey::ICRC1_NAME;
+    const METADATA_SYMBOL: &str = MetadataKey::ICRC1_SYMBOL;
+    const METADATA_FEE: &str = MetadataKey::ICRC1_FEE;
+    const METADATA_MAX_MEMO_LENGTH: &str = MetadataKey::ICRC1_MAX_MEMO_LENGTH;
     const FORBIDDEN_METADATA: [&str; 5] = [
         METADATA_DECIMALS,
         METADATA_NAME,
@@ -5220,12 +4455,12 @@ pub mod metadata {
     {
         let env = StateMachine::new();
 
-        let forbidden_metadata = vec![
-            Value::entry(METADATA_DECIMALS, 8u64),
-            Value::entry(METADATA_NAME, "BogusName"),
-            Value::entry(METADATA_SYMBOL, "BN"),
-            Value::entry(METADATA_FEE, Nat::from(10_000u64)),
-            Value::entry(METADATA_MAX_MEMO_LENGTH, 8u64),
+        let forbidden_metadata: Vec<(String, Value)> = vec![
+            (METADATA_DECIMALS.to_string(), 8u64.into()),
+            (METADATA_NAME.to_string(), "BogusName".into()),
+            (METADATA_SYMBOL.to_string(), "BN".into()),
+            (METADATA_FEE.to_string(), Nat::from(10_000u64).into()),
+            (METADATA_MAX_MEMO_LENGTH.to_string(), 8u64.into()),
         ];
 
         let args = encode_init_args(InitArgs {
@@ -5289,7 +4524,7 @@ pub mod metadata {
         // Verify that specifying any of the forbidden metadata in the init args is not possible.
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let args = encode_init_args(InitArgs {
-                metadata: vec![Value::entry(*forbidden_metadata, 8u64)],
+                metadata: vec![(forbidden_metadata.to_string(), 8u64.into())],
                 ..init_args(vec![])
             });
             let args = Encode!(&args).unwrap();
@@ -5315,7 +4550,7 @@ pub mod metadata {
         // Verify that also upgrading does not accept the forbidden metadata
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
-                metadata: Some(vec![Value::entry(*forbidden_metadata, 8u64)]),
+                metadata: Some(vec![(forbidden_metadata.to_string(), 8u64.into())]),
                 ..UpgradeArgs::default()
             }));
             match env.upgrade_canister(
@@ -5342,6 +4577,86 @@ pub mod metadata {
             Encode!(&ledger_upgrade_arg).unwrap(),
         )
         .expect("should successfully upgrade the ledger");
+    }
+
+    /// Invalid metadata keys (not following namespace:key format) are rejected during init.
+    pub fn test_init_with_invalid_metadata_keys_fails<T>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+    ) where
+        T: CandidType,
+    {
+        let env = StateMachine::new();
+
+        const INVALID_KEYS: [&str; 3] = [
+            "invalid_no_colon",  // missing colon separator
+            ":key_no_namespace", // empty namespace
+            "namespace:",        // empty key
+        ];
+
+        for invalid_key in INVALID_KEYS.iter() {
+            let args = encode_init_args(InitArgs {
+                metadata: vec![(invalid_key.to_string(), "value".into())],
+                ..init_args(vec![])
+            });
+            let args = Encode!(&args).unwrap();
+            match env.install_canister(ledger_wasm.clone(), args, None) {
+                Ok(_) => {
+                    panic!(
+                        "should not be able to install ledger with invalid metadata key '{}'",
+                        invalid_key
+                    )
+                }
+                Err(err) => {
+                    err.assert_contains(ErrorCode::CanisterCalledTrap, "invalid metadata key");
+                }
+            }
+        }
+    }
+
+    /// Invalid metadata keys are rejected during upgrade when existing metadata is all valid.
+    pub fn test_upgrade_with_invalid_metadata_keys_fails_when_existing_valid<T>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+    ) where
+        T: CandidType,
+    {
+        let env = StateMachine::new();
+
+        // Install ledger with valid metadata
+        let args = encode_init_args(InitArgs {
+            metadata: vec![("custom:valid_key".to_string(), "value".into())],
+            ..init_args(vec![])
+        });
+        let args = Encode!(&args).unwrap();
+        let canister_id = env
+            .install_canister(ledger_wasm.clone(), args, None)
+            .expect("should successfully install ledger with valid metadata");
+
+        const INVALID_KEYS: [&str; 3] = ["invalid_no_colon", ":key_no_namespace", "namespace:"];
+
+        // Upgrading with invalid keys should fail when existing metadata is valid
+        for invalid_key in INVALID_KEYS.iter() {
+            let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
+                metadata: Some(vec![(invalid_key.to_string(), "new_value".into())]),
+                ..UpgradeArgs::default()
+            }));
+            match env.upgrade_canister(
+                canister_id,
+                ledger_wasm.clone(),
+                Encode!(&ledger_upgrade_arg).unwrap(),
+            ) {
+                Ok(_) => {
+                    panic!(
+                        "should not be able to upgrade ledger with invalid metadata key '{}' when existing metadata is valid",
+                        invalid_key
+                    )
+                }
+                Err(err) => {
+                    err.assert_contains(ErrorCode::CanisterCalledTrap, "invalid metadata key");
+                }
+            }
+        }
     }
 }
 

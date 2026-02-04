@@ -128,6 +128,10 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long)]
     pub upgrade_image_hash: Option<String>,
 
+    /// Path to the file containing the guest launch measurements for the upgrade image
+    #[clap(long)]
+    pub upgrade_image_launch_measurements_path: Option<PathBuf>,
+
     #[clap(long, num_args(1..), value_parser=crate::util::node_id_from_str)]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
@@ -449,16 +453,40 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             StepType::BlessVersion => {
                 if let Some(upgrade_version) = &self.params.upgrade_version {
                     let params = self.params.clone();
-                    let (url, hash) = params
-                        .upgrade_image_url
-                        .and_then(|url| params.upgrade_image_hash.map(|hash| (url, hash)))
-                        .or_else(|| Recovery::get_img_url_and_sha(upgrade_version).ok())
-                        .ok_or(RecoveryError::UnexpectedError(
-                            "couldn't retrieve the upgrade image params".into(),
-                        ))?;
-                    let step = self
-                        .recovery
-                        .elect_replica_version(upgrade_version, url, hash)?;
+                    let (url, hash, measurements_path) = match (
+                        params.upgrade_image_url,
+                        params.upgrade_image_hash,
+                        params.upgrade_image_launch_measurements_path,
+                    ) {
+                        (Some(url), Some(hash), Some(measurements_path)) => {
+                            (url, hash, measurements_path)
+                        }
+                        _ => {
+                            let (url, hash, measurements) =
+                                Recovery::get_img_url_sha_and_measurements(upgrade_version)?;
+
+                            let measurements_path = self
+                                .recovery
+                                .work_dir
+                                .join("guest_launch_measurements.json");
+
+                            std::fs::write(
+                                &measurements_path,
+                                serde_json::to_string_pretty(&measurements)
+                                    .map_err(RecoveryError::parsing_error)?,
+                            )
+                            .map_err(|e| RecoveryError::file_error(&measurements_path, e))?;
+
+                            (url, hash, measurements_path)
+                        }
+                    };
+
+                    let step = self.recovery.elect_replica_version(
+                        upgrade_version,
+                        url,
+                        hash,
+                        &measurements_path,
+                    )?;
                     Ok(Box::new(step))
                 } else {
                     Err(RecoveryError::StepSkipped)

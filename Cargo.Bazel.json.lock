@@ -1,5 +1,5 @@
 {
-  "checksum": "a394d87b25308b061ba86eb0000e832f59fa9845ecf27c0671375caac5d745e8",
+  "checksum": "fc89e5113627a65e58803dc619ae4405adfe4da5b47990a5691ca75c70916ea8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21905,6 +21905,10 @@
               "target": "lru"
             },
             {
+              "id": "lzma-sys 0.1.20",
+              "target": "lzma_sys"
+            },
+            {
               "id": "macaddr 1.0.1",
               "target": "macaddr"
             },
@@ -22206,7 +22210,7 @@
               "target": "rstest"
             },
             {
-              "id": "rusb 0.9.3",
+              "id": "rusb 0.9.4",
               "target": "rusb"
             },
             {
@@ -22657,6 +22661,10 @@
             {
               "id": "x509-parser 0.16.0",
               "target": "x509_parser"
+            },
+            {
+              "id": "xz2 0.1.7",
+              "target": "xz2"
             },
             {
               "id": "yansi 0.5.1",
@@ -45824,14 +45832,14 @@
       ],
       "license_file": null
     },
-    "libusb1-sys 0.6.4": {
+    "libusb1-sys 0.7.0": {
       "name": "libusb1-sys",
-      "version": "0.6.4",
+      "version": "0.7.0",
       "package_url": "https://github.com/a1ien/rusb.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/libusb1-sys/0.6.4/download",
-          "sha256": "f9d0e2afce4245f2c9a418511e5af8718bcaf2fa408aefb259504d1a9cb25f27"
+          "url": "https://static.crates.io/crates/libusb1-sys/0.7.0/download",
+          "sha256": "da050ade7ac4ff1ba5379af847a10a10a8e284181e060105bf8d86960ce9ce0f"
         }
       },
       "targets": [
@@ -45872,14 +45880,14 @@
               "target": "libc"
             },
             {
-              "id": "libusb1-sys 0.6.4",
+              "id": "libusb1-sys 0.7.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.6.4"
+        "version": "0.7.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -45903,7 +45911,7 @@
             }
           ],
           "selects": {
-            "cfg(target_env = \"msvc\")": [
+            "cfg(target_os = \"windows\")": [
               {
                 "id": "vcpkg 0.2.15",
                 "target": "vcpkg"
@@ -46329,7 +46337,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
+            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
           }
         }
       },
@@ -46396,7 +46404,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
+            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
           },
           "strip_prefix": "lmdb-sys",
           "patch_args": [
@@ -47394,6 +47402,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "static"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -68150,14 +68164,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rusb 0.9.3": {
+    "rusb 0.9.4": {
       "name": "rusb",
-      "version": "0.9.3",
+      "version": "0.9.4",
       "package_url": "https://github.com/a1ien/rusb.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rusb/0.9.3/download",
-          "sha256": "45fff149b6033f25e825cbb7b2c625a11ee8e6dac09264d49beb125e39aa97bf"
+          "url": "https://static.crates.io/crates/rusb/0.9.4/download",
+          "sha256": "ab9f9ff05b63a786553a4c02943b74b34a988448671001e9a27e2f0565cc05a4"
         }
       },
       "targets": [
@@ -68198,18 +68212,18 @@
               "target": "libc"
             },
             {
-              "id": "libusb1-sys 0.6.4",
+              "id": "libusb1-sys 0.7.0",
               "target": "libusb1_sys"
             },
             {
-              "id": "rusb 0.9.3",
+              "id": "rusb 0.9.4",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.3"
+        "version": "0.9.4"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -68224,7 +68238,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "libusb1-sys 0.6.4",
+              "id": "libusb1-sys 0.7.0",
               "target": "libusb1_sys"
             }
           ],
@@ -96772,6 +96786,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "static"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -98575,6 +98595,7 @@
     "local-ip-address 0.5.6",
     "loopdev-3 0.5.1",
     "lru 0.7.8",
+    "lzma-sys 0.1.20",
     "macaddr 1.0.1",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
@@ -98653,7 +98674,7 @@
     "rolling-file 0.2.0",
     "rsa 0.9.10",
     "rstest 0.19.0",
-    "rusb 0.9.3",
+    "rusb 0.9.4",
     "rusqlite 0.37.0",
     "rust-ini 0.21.2",
     "rust_decimal 1.36.0",
@@ -98770,6 +98791,7 @@
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
+    "xz2 0.1.7",
     "yansi 0.5.1",
     "zeroize 1.8.1",
     "zstd 0.13.2"

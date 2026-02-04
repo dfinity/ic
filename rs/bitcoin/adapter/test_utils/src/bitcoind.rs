@@ -421,9 +421,10 @@ impl<T: RpcClientType> Daemon<T> {
         });
 
         let timeout = Duration::from_secs(60);
+
         ready_rx
             .recv_timeout(timeout)
-            .expect("expected {cmd:?} to be done loading within {timeout:?}");
+            .unwrap_or_else(|_| panic!("expected {cmd:?} to be done loading within {timeout:?}"));
 
         let rpc_client = RpcClient::new(network, &rpc_url, auth.clone()).unwrap();
         let rpc_client = rpc_client.ensure_wallet().unwrap();

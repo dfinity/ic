@@ -1,7 +1,6 @@
 use anyhow::Result;
 use ic_base_types::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
-use ic_consensus_system_test_utils::set_sandbox_env_vars;
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
@@ -186,10 +185,6 @@ fn setup_recovered_nns(
     let recovered_nns_node = topology.unassigned_nodes().next().unwrap();
     fetch_ic_config(&env, &nns_node);
 
-    // The following ensures ic-replay and ic-recovery know where to get their required dependencies.
-    let recovery_dir = get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
-
     // Wait until we have fetched ic-replay before setting the test neuron (which needs ic-replay)
     fetch_mainnet_ic_replay_thread
         .join()
@@ -277,7 +272,7 @@ fn setup_recovered_nns(
 fn fetch_mainnet_ic_replay(env: &TestEnv) {
     // TODO (CON-1624): fetch the mainnet version of ic-replay
     std::fs::copy(
-        get_dependency_path(std::env::var("IC_REPLAY_PATH").unwrap()),
+        get_dependency_path_from_env("IC_REPLAY_PATH"),
         env.get_path(PATH_IC_REPLAY),
     )
     .unwrap();
@@ -286,7 +281,7 @@ fn fetch_mainnet_ic_replay(env: &TestEnv) {
 fn fetch_mainnet_ic_recovery(env: &TestEnv) {
     // TODO (CON-1624): fetch the mainnet version of ic-recovery
     std::fs::copy(
-        get_dependency_path(std::env::var("IC_RECOVERY_PATH").unwrap()),
+        get_dependency_path_from_env("IC_RECOVERY_PATH"),
         env.get_path(PATH_IC_RECOVERY),
     )
     .unwrap();
@@ -471,12 +466,6 @@ fn recover_nns_subnet(
     let _session = aux_node.block_on_ssh_session();
 
     info!(logger, "Starting ic-recovery ...");
-    let recovery_binaries_path =
-        std::fs::canonicalize(get_dependency_path("rs/tests/recovery/binaries")).unwrap();
-
-    let dir = env.base_path();
-    std::os::unix::fs::symlink(recovery_binaries_path, dir.join("recovery/binaries")).unwrap();
-
     let nns_url: Url = nns_node.get_public_url();
     let replica_version = get_guestos_img_version();
     let subnet_id = SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap());
@@ -487,11 +476,11 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    let ic_recovery_path = env.get_path(PATH_IC_RECOVERY);
-    let mut cmd = Command::new(ic_recovery_path);
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    let mut cmd = Command::new(get_dependency_path_from_env("IC_RECOVERY_PATH"));
     cmd.arg("--skip-prompts")
         .arg("--dir")
-        .arg(dir)
+        .arg(recovery_dir)
         .arg("--nns-url")
         .arg(nns_url.to_string())
         .arg("--replica-version")
@@ -714,8 +703,7 @@ fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
     let logger: slog::Logger = env.logger();
     let set_testnet_env_vars_sh_path = env.get_path(PATH_SET_TESTNET_ENV_VARS_SH);
     let set_testnet_env_vars_sh_str = set_testnet_env_vars_sh_path.display();
-    let ic_admin =
-        fs::canonicalize(get_dependency_path("rs/tests/recovery/binaries/ic-admin")).unwrap();
+    let ic_admin = fs::canonicalize(get_dependency_path_from_env("IC_ADMIN_PATH")).unwrap();
     let pem = env.get_path("neuron_secret_key.pem");
     let mut pem_file = File::create(&pem).unwrap();
     pem_file

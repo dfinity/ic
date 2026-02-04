@@ -282,7 +282,7 @@ function verify_deployment_path() {
 }
 
 function verify_sev_snp() {
-    local enabled=$(get_config_value '.hostos_settings.enable_trusted_execution_environment')
+    local enabled=$(get_config_value '.icos_settings.enable_trusted_execution_environment')
     if [[ "${enabled}" == "true" ]]; then
         if [[ "${HARDWARE_GENERATION}" != "2" ]]; then
             log_and_halt_installation_on_error "1" "Trusted execution is enabled but hardware generation is not Gen2."

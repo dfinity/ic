@@ -44,7 +44,7 @@ use ic_types::{
     messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
 };
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
-use more_asserts::{debug_assert_ge, debug_assert_le};
+use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
 use prometheus::Histogram;
 use std::{
@@ -512,7 +512,10 @@ impl SchedulerImpl {
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
                     if let Some(canister) = partition.first_mut() {
-                        canister.system_state.canister_metrics.scheduled_as_first += 1;
+                        canister
+                            .system_state
+                            .canister_metrics_mut()
+                            .observe_scheduled_as_first();
                     }
                 }
             }
@@ -627,13 +630,7 @@ impl SchedulerImpl {
                 self.metrics.canister_age.observe(canister_age as f64);
                 // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
                 // scheduled.
-                let allocation = Ratio::new(
-                    canister_state
-                        .scheduler_state
-                        .compute_allocation
-                        .as_percent(),
-                    100,
-                );
+                let allocation = Ratio::new(canister_state.compute_allocation().as_percent(), 100);
                 if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
                 {
                     self.metrics.canister_compute_allocation_violation.inc();
@@ -904,7 +901,7 @@ impl SchedulerImpl {
             }
 
             if state_time
-                < canister.scheduler_state.time_of_last_allocation_charge
+                < canister.system_state.time_of_last_allocation_charge
                     + self
                         .cycles_account_manager
                         .duration_between_allocation_charges()
@@ -916,7 +913,7 @@ impl SchedulerImpl {
                 self.observe_canister_metrics(canister);
                 let duration_since_last_charge =
                     canister.duration_since_last_allocation_charge(state_time);
-                canister.scheduler_state.time_of_last_allocation_charge = state_time;
+                canister.system_state.time_of_last_allocation_charge = state_time;
                 if self
                     .cycles_account_manager
                     .charge_canister_for_resource_allocation_and_usage(
@@ -936,7 +933,7 @@ impl SchedulerImpl {
                         state_time,
                         Arc::clone(&self.fd_factory),
                     ));
-                    canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
+                    canister.system_state.compute_allocation = ComputeAllocation::zero();
                     canister.system_state.memory_allocation = MemoryAllocation::default();
                     canister.system_state.clear_canister_history();
                     // Burn the remaining balance of the canister.
@@ -1432,7 +1429,7 @@ impl Scheduler for SchedulerImpl {
                 .raw_rand_contexts
                 .pop_front()
             {
-                debug_assert!(raw_rand_context.execution_round_id < current_round);
+                debug_assert_lt!(raw_rand_context.execution_round_id, current_round);
                 let (new_state, _) = self.execute_subnet_message(
                     CanisterMessage::Request(raw_rand_context.request.into()),
                     state,
@@ -1824,8 +1821,8 @@ fn execute_canisters_on_thread(
             if round_limits.instructions_reached() {
                 canister
                     .system_state
-                    .canister_metrics
-                    .interrupted_during_execution += 1;
+                    .canister_metrics_mut()
+                    .observe_interrupted_during_execution();
                 break;
             }
             let measurement_scope = MeasurementScope::nested(
@@ -1924,7 +1921,10 @@ fn execute_canisters_on_thread(
             is_first_iteration,
             rank,
         );
-        canister.system_state.canister_metrics.executed += 1;
+        canister
+            .system_state
+            .canister_metrics_mut()
+            .observe_executed();
         canisters.push(canister);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
@@ -2014,13 +2014,13 @@ fn observe_replicated_state_metrics(
             | Some(&ExecutionTask::OnLowWasmMemory)
             | None => {}
         }
-        consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
+        consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             canister
                 .system_state
-                .canister_metrics
-                .get_consumed_cycles_by_use_cases(),
+                .canister_metrics()
+                .consumed_cycles_by_use_cases(),
         );
         let queues = canister.system_state.queues();
         ingress_queue_message_count += queues.ingress_queue_message_count();
@@ -2274,6 +2274,7 @@ fn get_instructions_limits_for_subnet_message(
             | ECDSAPublicKey
             | RawRand
             | HttpRequest
+            | FlexibleHttpRequest
             | SetupInitialDKG
             | SignWithECDSA
             | ReshareChainKey
