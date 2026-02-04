@@ -2939,7 +2939,6 @@ impl StateMachine {
             .process_batch(batch)
             .expect("Could not process batch");
 
-        // Wait for the hashing thread so that the invariant below is upheld.
         self.state_manager.flush_hash_channel();
         if self.remove_old_states {
             self.state_manager.remove_states_below(batch_number);
@@ -5031,7 +5030,6 @@ pub fn certify_latest_state_helper(
             CertificationScope::Metadata,
             None,
         );
-        // Wait for hashing thread to finish.
         state_manager.flush_hash_channel();
     }
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
