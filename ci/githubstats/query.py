@@ -10,6 +10,7 @@ import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 
 import codeowners
@@ -95,6 +96,49 @@ def period(args) -> str:
     return "month" if args.month else "week" if args.week else "day" if args.day else "week"
 
 
+def parse_datetime(dt_str: str) -> datetime:
+    """Parse datetime string accepting any panda's datetime string and return a timezone-aware datetime object (UTC)."""
+    try:
+        dt = pd.to_datetime(dt_str, utc=True)
+        return dt.to_pydatetime()
+    except Exception as e:
+        die(f"Invalid datetime format '{dt_str}': {e}\nExpected format like '2024-01-15' or '2024-01-15 14:30:00'")
+
+
+def get_time_filter(args) -> sql.Composable:
+    """
+    Return an SQL WHERE clause fragment for time filtering.
+    Uses either period-based (--day/--week/--month) or explicit datetime (--since/--until) filtering.
+    """
+    # Check for mutual exclusivity
+    has_period = args.day or args.week or args.month
+    has_datetime = args.since or args.until
+
+    if has_period and has_datetime:
+        die("Cannot use both period flags (--day/--week/--month) and datetime flags (--since/--until)")
+
+    if has_datetime:
+        conditions = []
+
+        if args.since:
+            since_dt = parse_datetime(args.since)
+            conditions.append(sql.SQL("bt.first_start_time >= {since}").format(since=sql.Literal(since_dt)))
+
+        if args.until:
+            if not args.since:
+                die(
+                    "Please specify --since when --until is specified to avoid unbounded queries that might put high load on the database."
+                )
+            until_dt = parse_datetime(args.until)
+            conditions.append(sql.SQL("bt.first_start_time < {until}").format(until=sql.Literal(until_dt)))
+
+        return sql.SQL(" AND ").join(conditions)
+
+    # Period mode (default to week)
+    p = "month" if args.month else "day" if args.day else "week"
+    return sql.SQL("bt.first_start_time > now() - ('1 {period}'::interval)").format(period=sql.SQL(p))
+
+
 def normalize_duration(td: pd.Timedelta):
     c = td.components
     return (
@@ -142,7 +186,7 @@ def top(args):
     query = sql.SQL((THIS_SCRIPT_DIR / "top.sql").read_text()).format(
         exclude=sql.Literal(args.exclude if args.exclude else ""),
         include=sql.Literal(args.include if args.include else ""),
-        period=sql.SQL(period(args)),
+        time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
         order_by=order_by,
@@ -225,7 +269,7 @@ def last(args):
     query = sql.SQL((THIS_SCRIPT_DIR / "last.sql").read_text()).format(
         test_target=sql.Literal(args.test_target),
         overall_statuses=sql.SQL(",".join(map(str, overall_statuses))),
-        period=sql.SQL(period(args)),
+        time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
     )
@@ -318,6 +362,19 @@ def main():
     period_group.add_argument("--week", action="store_true", help="Limit to last week (default)")
     period_group.add_argument("--month", action="store_true", help="Limit to last month")
 
+    filter_parser.add_argument(
+        "--since",
+        metavar="DATETIME",
+        type=str,
+        help="Start of time range (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC). Mutually exclusive with --day/--week/--month",
+    )
+    filter_parser.add_argument(
+        "--until",
+        metavar="DATETIME",
+        type=str,
+        help="End of time range, exclusive (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC). Mutually exclusive with --day/--week/--month",
+    )
+
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
     filter_parser.add_argument("--branch", metavar="B", type=str, help="Filter by branch SQL LIKE pattern")
 
@@ -340,6 +397,9 @@ Examples:
 
   # Show the 100 slowest tests in the last month that took at least 30 minutes
   bazel run //ci/githubstats:query -- top 100 duration_p90 --ge '30 minutes' --month
+
+  # Show tests in a specific date range
+  bazel run //ci/githubstats:query -- top 20 fail% --since '2026-01-01' --until '2026-01-31'
 """,
     )
     top_parser.add_argument(
@@ -406,6 +466,9 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
 Examples:
   # Show the last flaky runs of the rent_subnet_test in the last week
   bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
+
+  # Show all runs of a test in a specific date range
+  `bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'`
 """,
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
