@@ -178,4 +178,5 @@ runs:
       shell: bash
       if: always()
       run: |
+        bazel clean --expunge
         rm -rf '${{ steps.metrics-tmpdir.outputs.dir }}'
