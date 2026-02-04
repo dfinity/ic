@@ -345,7 +345,10 @@ system_test_nns(
         "manual",
     ],
     test_driver_target = ":nns_recovery_testnet_bin",
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
+        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
+    },
 )
 
 system_test_nns(
@@ -364,7 +367,10 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
+        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
+    },
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",

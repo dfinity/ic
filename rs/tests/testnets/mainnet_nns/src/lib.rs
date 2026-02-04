@@ -273,92 +273,123 @@ fn setup_recovered_nns(
 }
 
 fn fetch_mainnet_ic_replay(env: &TestEnv) {
-    let logger = env.logger();
-    let version = get_mainnet_nns_revision();
-    let mainnet_ic_replica_url =
-        format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
-    let ic_replay_path = env.get_path(PATH_IC_REPLAY);
-    let ic_replay_gz_path = env.get_path("ic-replay.gz");
-    // let mut tmp_file = tempfile::tempfile().unwrap();
-    info!(
-        logger,
-        "Downloading {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?} ..."
-    );
-    let response = reqwest::blocking::get(mainnet_ic_replica_url.clone())
-        .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_replica_url:?} because {e:?}"));
-    if !response.status().is_success() {
-        panic!("Failed to download {mainnet_ic_replica_url}");
-    }
-    let bytes = response.bytes().unwrap();
-    let mut content = Cursor::new(bytes);
-    let mut ic_replay_gz_file = File::create(ic_replay_gz_path.clone()).unwrap();
-    std::io::copy(&mut content, &mut ic_replay_gz_file).unwrap_or_else(|e| {
-        panic!("Can't copy {mainnet_ic_replica_url} to {ic_replay_gz_path:?} because {e:?}")
-    });
-    info!(
-        logger,
-        "Downloaded {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?}. Uncompressing to {ic_replay_path:?} ..."
-    );
-    let ic_replay_gz_file = File::open(ic_replay_gz_path.clone()).unwrap();
-    let mut gz = GzDecoder::new(&ic_replay_gz_file);
-    let mut ic_replay_file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .mode(0o755)
-        .open(ic_replay_path.clone())
+    // In general, the flag below should be set to `false` to download the mainnet version of
+    // `ic-replay` and avoid compatibility bugs. Though, if some changes were made to `ic-replay`
+    // specifically to make this testnet work, then we should use the HEAD version and switch this
+    // flag to `true`. We must then hope that no incompatibles changes were also introduced. It is
+    // thus then advised to switch back this flag to `false` when the changes reach mainnet NNS.
+    // TODO: Switch to false when #(...) has reached mainnet NNS.
+    if true {
+        std::fs::copy(
+            get_dependency_path_from_env("IC_REPLAY_PATH"),
+            env.get_path(PATH_IC_REPLAY),
+        )
         .unwrap();
-    std::io::copy(&mut gz, &mut ic_replay_file).unwrap_or_else(|e| {
-        panic!("Can't uncompress {ic_replay_gz_path:?} to {ic_replay_path:?} because {e:?}")
-    });
-    info!(
-        logger,
-        "Uncompressed {ic_replay_gz_path:?} to {ic_replay_path:?}"
-    );
+    } else {
+        let logger = env.logger();
+        let version = get_mainnet_nns_revision();
+        let mainnet_ic_replica_url =
+            format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
+        let ic_replay_path = env.get_path(PATH_IC_REPLAY);
+        let ic_replay_gz_path = env.get_path("ic-replay.gz");
+        // let mut tmp_file = tempfile::tempfile().unwrap();
+        info!(
+            logger,
+            "Downloading {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?} ..."
+        );
+        let response = reqwest::blocking::get(mainnet_ic_replica_url.clone()).unwrap_or_else(|e| {
+            panic!("Failed to download {mainnet_ic_replica_url:?} because {e:?}")
+        });
+        if !response.status().is_success() {
+            panic!("Failed to download {mainnet_ic_replica_url}");
+        }
+        let bytes = response.bytes().unwrap();
+        let mut content = Cursor::new(bytes);
+        let mut ic_replay_gz_file = File::create(ic_replay_gz_path.clone()).unwrap();
+        std::io::copy(&mut content, &mut ic_replay_gz_file).unwrap_or_else(|e| {
+            panic!("Can't copy {mainnet_ic_replica_url} to {ic_replay_gz_path:?} because {e:?}")
+        });
+        info!(
+            logger,
+            "Downloaded {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?}. Uncompressing to {ic_replay_path:?} ..."
+        );
+        let ic_replay_gz_file = File::open(ic_replay_gz_path.clone()).unwrap();
+        let mut gz = GzDecoder::new(&ic_replay_gz_file);
+        let mut ic_replay_file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .mode(0o755)
+            .open(ic_replay_path.clone())
+            .unwrap();
+        std::io::copy(&mut gz, &mut ic_replay_file).unwrap_or_else(|e| {
+            panic!("Can't uncompress {ic_replay_gz_path:?} to {ic_replay_path:?} because {e:?}")
+        });
+        info!(
+            logger,
+            "Uncompressed {ic_replay_gz_path:?} to {ic_replay_path:?}"
+        );
+    }
 }
 
 fn fetch_mainnet_ic_recovery(env: &TestEnv) {
-    let logger = env.logger();
-    let version = get_mainnet_nns_revision();
-    let mainnet_ic_recovery_url =
-        format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
-    let ic_recovery_path = env.get_path(PATH_IC_RECOVERY);
-    let ic_recovery_gz_path = env.get_path("ic-recovery.gz");
-    info!(
-        logger,
-        "Downloading {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?} ..."
-    );
-    let response = reqwest::blocking::get(mainnet_ic_recovery_url.clone())
-        .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_recovery_url:?} because {e:?}"));
-    if !response.status().is_success() {
-        panic!("Failed to download {mainnet_ic_recovery_url}");
-    }
-    let bytes = response.bytes().unwrap();
-    let mut content = Cursor::new(bytes);
-    let mut ic_recovery_gz_file = File::create(ic_recovery_gz_path.clone()).unwrap();
-    std::io::copy(&mut content, &mut ic_recovery_gz_file).unwrap_or_else(|e| {
-        panic!("Can't copy {mainnet_ic_recovery_url} to {ic_recovery_gz_path:?} because {e:?}")
-    });
-    info!(
-        logger,
-        "Downloaded {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?}. Uncompressing to {ic_recovery_path:?} ..."
-    );
-    let ic_recovery_gz_file = File::open(ic_recovery_gz_path.clone()).unwrap();
-    let mut gz = GzDecoder::new(&ic_recovery_gz_file);
-    let mut ic_recovery_file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .mode(0o755)
-        .open(ic_recovery_path.clone())
+    // In general, the flag below should be set to `false` to download the mainnet version of
+    // `ic-replay` and avoid compatibility bugs. Though, if some changes were made to `ic-replay`
+    // specifically to make this testnet work, then we should use the HEAD version and switch this
+    // flag to `true`. We must then hope that no incompatibles changes were also introduced. It is
+    // thus then advised to switch back this flag to `false` when the changes reach mainnet NNS.
+    // TODO: Switch to false when #(...) has reached mainnet NNS.
+    if true {
+        std::fs::copy(
+            get_dependency_path_from_env("IC_RECOVERY_PATH"),
+            env.get_path(PATH_IC_RECOVERY),
+        )
         .unwrap();
-    std::io::copy(&mut gz, &mut ic_recovery_file).unwrap_or_else(|e| {
-        panic!("Can't uncompress {ic_recovery_gz_path:?} to {ic_recovery_path:?} because {e:?}")
-    });
-    info!(
-        logger,
-        "Uncompressed {ic_recovery_gz_path:?} to {ic_recovery_path:?}"
-    );
+    } else {
+        let logger = env.logger();
+        let version = get_mainnet_nns_revision();
+        let mainnet_ic_recovery_url =
+            format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
+        let ic_recovery_path = env.get_path(PATH_IC_RECOVERY);
+        let ic_recovery_gz_path = env.get_path("ic-recovery.gz");
+        info!(
+            logger,
+            "Downloading {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?} ..."
+        );
+        let response =
+            reqwest::blocking::get(mainnet_ic_recovery_url.clone()).unwrap_or_else(|e| {
+                panic!("Failed to download {mainnet_ic_recovery_url:?} because {e:?}")
+            });
+        if !response.status().is_success() {
+            panic!("Failed to download {mainnet_ic_recovery_url}");
+        }
+        let bytes = response.bytes().unwrap();
+        let mut content = Cursor::new(bytes);
+        let mut ic_recovery_gz_file = File::create(ic_recovery_gz_path.clone()).unwrap();
+        std::io::copy(&mut content, &mut ic_recovery_gz_file).unwrap_or_else(|e| {
+            panic!("Can't copy {mainnet_ic_recovery_url} to {ic_recovery_gz_path:?} because {e:?}")
+        });
+        info!(
+            logger,
+            "Downloaded {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?}. Uncompressing to {ic_recovery_path:?} ..."
+        );
+        let ic_recovery_gz_file = File::open(ic_recovery_gz_path.clone()).unwrap();
+        let mut gz = GzDecoder::new(&ic_recovery_gz_file);
+        let mut ic_recovery_file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .mode(0o755)
+            .open(ic_recovery_path.clone())
+            .unwrap();
+        std::io::copy(&mut gz, &mut ic_recovery_file).unwrap_or_else(|e| {
+            panic!("Can't uncompress {ic_recovery_gz_path:?} to {ic_recovery_path:?} because {e:?}")
+        });
+        info!(
+            logger,
+            "Uncompressed {ic_recovery_gz_path:?} to {ic_recovery_path:?}"
+        );
+    }
 }
 
 fn fetch_nns_state_from_backup_pod(env: &TestEnv) {
