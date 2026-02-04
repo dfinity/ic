@@ -1789,6 +1789,33 @@ mod tests {
         has_replicated_versions_before_init: bool,
     }
 
+    impl ReplicaUpgradeScenario {
+        // Returns the expected control flow of the upgrade loop when when the upgrade is about to
+        // be executed. We should indeed first check if the replica version was recalled.
+        fn should_be_executed(&self) -> OrchestratorResult<OrchestratorControlFlow> {
+            if !self.has_replicated_versions_before_init {
+                // The replicator has not yet replicated all registry versions that
+                // were certified before the replicator was started.
+                // Thus, we cannot be sure whether the replica version was recalled
+                // or not. We should thus wait until the replicator has caught up.
+                Err(OrchestratorError::UpgradeError(format!(
+                    "Delaying upgrade to {} until registry data is recent enough.",
+                    self.replica_version,
+                )))
+            } else if self.is_recalled {
+                // The replica version was recalled, so we should not upgrade
+                Err(OrchestratorError::UpgradeError(format!(
+                    "Not upgrading to recalled replica version {}",
+                    self.replica_version,
+                )))
+            } else {
+                // The replica version was not recalled, so we are expected to stop
+                // and reboot
+                Ok(OrchestratorControlFlow::Stop)
+            }
+        }
+    }
+
     #[derive(Clone, Debug)]
     struct UpgradeTestScenario {
         // Node id of the node under test
@@ -2271,34 +2298,18 @@ mod tests {
                         (None, Some(upgrade)) => {
                             // An upgrade is scheduled and the CUP's registry version has reached
                             // the upgrade registry version.
-                            // We should now first check if the replica version was recalled.
+                            let expected_flow = upgrade.should_be_executed();
 
-                            if !upgrade.has_replicated_versions_before_init {
-                                // The replicator has not yet replicated all registry versions that
-                                // were certified before the replicator was started.
-                                // Thus, we cannot be sure whether the replica version was recalled
-                                // or not. We should thus wait until the replicator has caught up.
-                                assert_has_not_prepared_upgrade();
-                                assert_has_not_cleared_version_and_image(upgrade);
-                                Err(OrchestratorError::UpgradeError(format!(
-                                    "Delaying upgrade to {} until registry data is recent enough.",
-                                    upgrade.replica_version,
-                                )))
-                            } else if upgrade.is_recalled {
-                                // The replica version was recalled, so we should not upgrade
-                                assert_has_not_prepared_upgrade();
-                                assert_has_not_cleared_version_and_image(upgrade);
-                                Err(OrchestratorError::UpgradeError(format!(
-                                    "Not upgrading to recalled replica version {}",
-                                    upgrade.replica_version,
-                                )))
-                            } else {
-                                // The replica version was not recalled, so we are expected to stop
-                                // and reboot
-                                assert_has_not_prepared_upgrade();
+                            assert_has_not_prepared_upgrade();
+                            if expected_flow.is_ok() {
+                                // The upgrade is going to be executed, so the prepared version and
+                                // image should be cleared
                                 assert_has_cleared_version_and_image();
-                                Ok(OrchestratorControlFlow::Stop)
+                            } else {
+                                assert_has_not_cleared_version_and_image(upgrade);
                             }
+
+                            expected_flow
                         }
                         (Some(leaving_registry_version), None)
                             if &highest_height_cup.registry_version < leaving_registry_version =>
@@ -2337,33 +2348,18 @@ mod tests {
                             // has only reached the upgrade registry version, not the leaving registry
                             // version.
                             // We should now first check if the replica version was recalled.
+                            let expected_flow = upgrade.should_be_executed();
 
-                            if !upgrade.has_replicated_versions_before_init {
-                                // The replicator has not yet replicated all registry versions that
-                                // were certified before the replicator was started.
-                                // Thus, we cannot be sure whether the replica version was recalled
-                                // or not. We should thus wait until the replicator has caught up.
-                                assert_has_not_prepared_upgrade();
-                                assert_has_not_cleared_version_and_image(upgrade);
-                                Err(OrchestratorError::UpgradeError(format!(
-                                    "Delaying upgrade to {} until registry data is recent enough.",
-                                    upgrade.replica_version,
-                                )))
-                            } else if upgrade.is_recalled {
-                                // The replica version was recalled, so we should not upgrade
-                                assert_has_not_prepared_upgrade();
-                                assert_has_not_cleared_version_and_image(upgrade);
-                                Err(OrchestratorError::UpgradeError(format!(
-                                    "Not upgrading to recalled replica version {}",
-                                    upgrade.replica_version,
-                                )))
-                            } else {
-                                // The replica version was not recalled, so we are expected to stop
-                                // and reboot
-                                assert_has_not_prepared_upgrade();
+                            assert_has_not_prepared_upgrade();
+                            if expected_flow.is_ok() {
+                                // The upgrade is going to be executed, so the prepared version and
+                                // image should be cleared
                                 assert_has_cleared_version_and_image();
-                                Ok(OrchestratorControlFlow::Stop)
+                            } else {
+                                assert_has_not_cleared_version_and_image(upgrade);
                             }
+
+                            expected_flow
                         }
                         (Some(_leaving_registry_version), Some(upgrade)) => {
                             // Both leaving and upgrade are scheduled, and the CUP's registry
@@ -2411,34 +2407,18 @@ mod tests {
                     (Some((_registry_cup, _)), Some(upgrade)) => {
                         // This scenario can be interpreted as the unassigned node having a
                         // different replica version than the subnet's
-                        // We should now first check if the replica version was recalled.
+                        let expected_flow = upgrade.should_be_executed();
 
-                        if !upgrade.has_replicated_versions_before_init {
-                            // The replicator has not yet replicated all registry versions that
-                            // were certified before the replicator was started.
-                            // Thus, we cannot be sure whether the replica version was recalled
-                            // or not. We should thus wait until the replicator has caught up.
-                            assert_has_not_prepared_upgrade();
-                            assert_has_not_cleared_version_and_image(upgrade);
-                            Err(OrchestratorError::UpgradeError(format!(
-                                "Delaying upgrade to {} until registry data is recent enough.",
-                                upgrade.replica_version,
-                            )))
-                        } else if upgrade.is_recalled {
-                            // The replica version was recalled, so we should not upgrade
-                            assert_has_not_prepared_upgrade();
-                            assert_has_not_cleared_version_and_image(upgrade);
-                            Err(OrchestratorError::UpgradeError(format!(
-                                "Not upgrading to recalled replica version {}",
-                                upgrade.replica_version,
-                            )))
-                        } else {
-                            // The replica version was not recalled, so we are expected to stop
-                            // and reboot
-                            assert_has_not_prepared_upgrade();
+                        assert_has_not_prepared_upgrade();
+                        if expected_flow.is_ok() {
+                            // The upgrade is going to be executed, so the prepared version and
+                            // image should be cleared
                             assert_has_cleared_version_and_image();
-                            Ok(OrchestratorControlFlow::Stop)
+                        } else {
+                            assert_has_not_cleared_version_and_image(upgrade);
                         }
+
+                        expected_flow
                     }
                 },
             }
