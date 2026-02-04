@@ -61,11 +61,11 @@ const DEFAULT_LOG_LEVELS: &str = "pocket_ic_server=info,tower_http=info,axum::re
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
-static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!(env!("MAINNET_ROUTING_TABLE"));
+static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!("mainnet-routing-table.json");
 
 #[derive(Parser)]
 #[clap(name = "pocket-ic-server")]
-#[clap(version = "11.0.0")]
+#[clap(version = "12.0.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]

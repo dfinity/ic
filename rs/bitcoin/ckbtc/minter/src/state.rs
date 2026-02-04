@@ -271,8 +271,6 @@ pub enum FinalizedStatus {
 pub enum InFlightStatus {
     /// Awaiting signatures for transaction inputs.
     Signing,
-    /// Awaiting the Bitcoin canister to accept the transaction.
-    Sending { txid: Txid },
 }
 
 /// The status of a retrieve_btc request.
@@ -449,6 +447,9 @@ pub struct CkBtcMinterState {
     /// Per-account lock for retrieve_btc
     pub retrieve_btc_accounts: BTreeSet<Account>,
 
+    /// Minimum amount of bitcoin that can be deposited
+    pub deposit_btc_min_amount: u64,
+
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
 
@@ -617,6 +618,7 @@ impl CkBtcMinterState {
         InitArgs {
             btc_network,
             ecdsa_key_name,
+            deposit_btc_min_amount,
             retrieve_btc_min_amount,
             ledger_id,
             max_time_in_queue_nanos,
@@ -633,6 +635,7 @@ impl CkBtcMinterState {
     ) {
         self.btc_network = btc_network;
         self.ecdsa_key_name = ecdsa_key_name;
+        self.deposit_btc_min_amount = deposit_btc_min_amount.unwrap_or_default();
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.ledger_id = ledger_id;
@@ -672,6 +675,7 @@ impl CkBtcMinterState {
     pub fn upgrade(
         &mut self,
         UpgradeArgs {
+            deposit_btc_min_amount,
             retrieve_btc_min_amount,
             max_time_in_queue_nanos,
             min_confirmations,
@@ -685,6 +689,9 @@ impl CkBtcMinterState {
             max_num_inputs_in_transaction,
         }: UpgradeArgs,
     ) {
+        if let Some(deposit_btc_min_amount) = deposit_btc_min_amount {
+            self.deposit_btc_min_amount = deposit_btc_min_amount;
+        }
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
             self.retrieve_btc_min_amount = retrieve_btc_min_amount;
             self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
@@ -860,7 +867,6 @@ impl CkBtcMinterState {
         if let Some(status) = self.requests_in_flight.get(&block_index).cloned() {
             return match status {
                 InFlightStatus::Signing => RetrieveBtcStatus::Signing,
-                InFlightStatus::Sending { txid } => RetrieveBtcStatus::Sending { txid },
             };
         }
 
@@ -1412,7 +1418,7 @@ impl CkBtcMinterState {
     fn ensure_reason_consistent_with_state(&self, utxo: &Utxo, reason: SuspendedReason) {
         match reason {
             SuspendedReason::ValueTooSmall => {
-                assert!(utxo.value <= self.check_fee);
+                assert!(utxo.value < self.deposit_btc_min_amount || utxo.value <= self.check_fee);
             }
             SuspendedReason::Quarantined => {}
         }
@@ -1580,6 +1586,16 @@ impl CkBtcMinterState {
             self.ecdsa_key_name,
             other.ecdsa_key_name,
             "ecdsa_key_name does not match"
+        );
+        ensure_eq!(
+            self.retrieve_btc_min_amount,
+            other.retrieve_btc_min_amount,
+            "retrieve_btc_min_amount does not match"
+        );
+        ensure_eq!(
+            self.deposit_btc_min_amount,
+            other.deposit_btc_min_amount,
+            "deposit_btc_min_amount does not match"
         );
         ensure_eq!(
             self.min_confirmations,
@@ -1797,6 +1813,13 @@ impl CkBtcMinterState {
         }
         accounts
     }
+
+    /// Compute the minimum BTC amount that can be deposited.
+    /// UTXOs with a lower value will be ignored.
+    pub fn effective_deposit_min_btc_amount(&self) -> u64 {
+        self.deposit_btc_min_amount
+            .max(self.check_fee.saturating_add(1))
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Default)]
@@ -1973,6 +1996,7 @@ impl From<InitArgs> for CkBtcMinterState {
             max_time_in_queue_nanos: args.max_time_in_queue_nanos,
             update_balance_accounts: Default::default(),
             retrieve_btc_accounts: Default::default(),
+            deposit_btc_min_amount: args.deposit_btc_min_amount.unwrap_or_default(),
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             fee_based_retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),

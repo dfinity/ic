@@ -6,6 +6,7 @@ use std::sync::Arc;
 use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use more_asserts::debug_assert_le;
 
 use ic_embedders::{
     wasm_executor::{
@@ -142,7 +143,7 @@ impl ResponseHelper {
         //
         // Therefore, the cycles in the response must not exceed the cycles in
         // the request. Otherwise, there might be potentially malicious faults.
-        debug_assert!(response.refund <= original.callback.cycles_sent);
+        debug_assert_le!(response.refund, original.callback.cycles_sent);
         let refund_for_sent_cycles = if response.refund > original.callback.cycles_sent {
             round.counters.response_cycles_refund_error.inc();
             error!(
@@ -238,7 +239,7 @@ impl ResponseHelper {
                 error!(
                     round.log,
                     "[EXC-BUG] Canister {} has a deleted context that has not responded",
-                    self.canister.system_state.canister_id,
+                    self.canister.canister_id(),
                 );
                 // Since this branch doesn't call `early_finish()`, it needs to manually
                 // revert the subnet memory reservation.
@@ -264,7 +265,7 @@ impl ResponseHelper {
             error!(
                 round.log,
                 "[EXC-BUG] Canister {} is attempting to execute a response, but the execution state does not exist.",
-                self.canister.system_state.canister_id,
+                self.canister.canister_id(),
             );
             let result = Err(HypervisorError::WasmModuleNotFound);
             return Err(self.early_finish(result, original, round, round_limits));
@@ -579,7 +580,7 @@ impl ResponseHelper {
             info!(
                 round.log,
                 "Canister {} received unaccepted {} cycles as refund from canister {}.",
-                self.canister.system_state.canister_id,
+                self.canister.canister_id(),
                 self.refund_for_sent_cycles,
                 self.response_sender,
             );

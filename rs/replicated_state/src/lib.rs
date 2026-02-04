@@ -109,6 +109,7 @@ pub trait DroppedMessageMetrics {
 pub mod testing {
     pub use super::canister_state::system_state::testing::SystemStateTesting;
     pub use super::canister_state::testing::CanisterQueuesTesting;
+    pub use super::metadata_state::testing::StreamTesting;
     pub use super::replicated_state::testing::ReplicatedStateTesting;
 
     use super::DroppedMessageMetrics;

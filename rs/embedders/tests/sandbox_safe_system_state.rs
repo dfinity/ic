@@ -515,11 +515,11 @@ fn call_increases_cycles_consumed_metric() {
             &no_op_logger(),
         )
         .unwrap();
-    assert!(system_state.canister_metrics.consumed_cycles.get() > 0);
+    assert!(system_state.canister_metrics().consumed_cycles().get() > 0);
     assert_ne!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap(),
         NominalCycles::from(0)
