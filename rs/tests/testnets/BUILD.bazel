@@ -317,7 +317,7 @@ system_test_nns(
         "USE_MAINNET_STATE": "false",
     },
     guestos_update = "test",
-    setupos = "mainnet_latest_dev",
+    setupos = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -334,7 +334,7 @@ system_test_nns(
         "USE_MAINNET_STATE": "true",
     },
     guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
-    setupos = "mainnet_latest_dev",
+    setupos = "mainnet_nns_dev",
     prometheus_vm_resources = {
         "vcpus": 32,
         "memory_kibibytes": 125000000,

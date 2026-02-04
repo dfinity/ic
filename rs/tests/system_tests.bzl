@@ -363,10 +363,10 @@ def _configure_icos(env, env_var_files, icos_images, runtime_deps, guestos, gues
     if setupos == True:
         setupos_local()
         setupos_dependencies()
-    elif setupos == "mainnet_latest":
+    elif setupos == "mainnet_latest" or setupos == "mainnet_nns" or setupos == "mainnet_app":
         setupos_mainnet()
         setupos_dependencies()
-    elif setupos == "mainnet_latest_dev":
+    elif setupos == "mainnet_latest_dev" or setupos == "mainnet_nns_dev":
         setupos_mainnet(dev = True)
         setupos_dependencies()
     elif setupos:

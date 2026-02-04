@@ -76,14 +76,13 @@ system_test_nns(
     flaky = True,
     guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
     guestos_update = "test",
-    setupos = "mainnet_latest_dev",
+    setupos = "mainnet_nns_dev",
     tags = [
         "manual", # to prevent the job to be ran twice.
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     test_timeout = "eternal", # "eternal" (1 hour) is not even enough for this test. Use `--test_timeout=10800` when running it.
-    uses_setupos_mainnet_latest_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
