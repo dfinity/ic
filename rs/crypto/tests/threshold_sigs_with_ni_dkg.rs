@@ -1101,7 +1101,7 @@ mod verification_failures {
     }
 
     #[test]
-    fn should_signature_verification_reject_invalid_point_as_signature() {
+    fn should_fail_to_verify_threshold_sig_share_with_invalid_point() {
         let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(1..7);
         let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
