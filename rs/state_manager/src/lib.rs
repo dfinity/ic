@@ -3181,7 +3181,6 @@ impl StateManager for StateManagerImpl {
             let prev_height = height.decrement();
             // At prev_height 0, we don't have a hash yet, so we have to compute it.
             if prev_height.get() == 0 {
-                println!("prev height == 0");
                 let states = self.states.read();
                 let initial_state = &states
                     .snapshots
@@ -3561,8 +3560,6 @@ fn spawn_hash_thread(
                             }
 
                             // add state and hash to snapshots and certification_metadata
-                            println!("HashThread: write hash/snapshot at height {}", height);
-
                             if !states
                                 .snapshots
                                 .iter()
