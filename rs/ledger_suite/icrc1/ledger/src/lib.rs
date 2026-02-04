@@ -37,7 +37,6 @@ use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc::metadata_key::MetadataKey,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
-    icrc107::schema::BTYPE_107,
 };
 use icrc_ledger_types::{
     icrc::generic_value::ICRC3Value,
@@ -749,15 +748,8 @@ impl Ledger {
             created_at_time: None,
             memo: None,
         };
-        let block = Block {
-            parent_hash: self.blockchain.last_hash,
-            transaction: tx,
-            effective_fee: None,
-            timestamp: ic_cdk::api::time(),
-            fee_collector: None,
-            fee_collector_block_index: None,
-            btype: Some(BTYPE_107.to_string()),
-        };
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let block = Block::from_transaction(self.blockchain.last_hash, tx, now, Tokens::ZERO);
         if let Err(e) = self.blockchain.add_block(block) {
             ic_cdk::trap(format!(
                 "failed to add fee collector block to the ledger: {e}"
