@@ -95,6 +95,17 @@ impl<State> Labeled<State> {
     }
 }
 
+/// A state hash for a height to be signed and certified by consensus.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StateHashMetadata {
+    /// The state height.
+    pub height: Height,
+    /// The state hash at the height.
+    pub hash: CryptoHashOfPartialState,
+    /// The witness for the height.
+    pub height_witness: Witness,
+}
+
 /// APIs related to fetching and certifying the state.
 // tag::state-manager-interface[]
 pub trait StateManager: StateReader {
@@ -150,7 +161,7 @@ pub trait StateManager: StateReader {
     ///   ```text
     ///   ∀ (h, H, W) ∈ state_manager.list_state_hashes_to_certify(): digest(/"metadata"/"height"/h, W) = H.
     ///   ```
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)>;
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
 
     /// Delivers a `certification` corresponding to some state hash / height
     /// pair.

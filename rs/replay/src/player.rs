@@ -589,15 +589,15 @@ impl Player {
 
         // Get heights and local state hashes without a full certification
         let mut missing_certifications = self.state_manager.list_state_hashes_to_certify();
-        missing_certifications.sort_by_key(|(height, _, _)| height.get());
+        missing_certifications.sort_by_key(|state_hash_metadata| state_hash_metadata.height.get());
         missing_certifications
             .into_iter()
-            .fold(false, |ret, (height, hash, _)| {
+            .fold(false, |ret, state_hash_metadata| {
                 ret | is_manual_share_investigation_required(
                     certification_pool,
                     &malicious_nodes,
-                    height,
-                    hash,
+                    state_hash_metadata.height,
+                    state_hash_metadata.hash,
                     f,
                 )
             })
@@ -846,11 +846,15 @@ impl Player {
     fn certify_state_with_dummy_certification(&self) {
         if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
             let state_hashes = self.state_manager.list_state_hashes_to_certify();
-            let (height, hash, _) = state_hashes
+            let state_hash_metadata = state_hashes
                 .last()
                 .expect("There should be at least one state hash to certify");
             self.state_manager
-                .deliver_state_certification(Self::certify_hash(self.subnet_id, height, hash));
+                .deliver_state_certification(Self::certify_hash(
+                    self.subnet_id,
+                    &state_hash_metadata.height,
+                    &state_hash_metadata.hash,
+                ));
         }
     }
 
