@@ -23,7 +23,6 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
-phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }

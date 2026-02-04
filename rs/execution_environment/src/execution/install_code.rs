@@ -161,7 +161,7 @@ impl InstallCodeHelper {
 
     pub fn bump_canister_version(&mut self) {
         self.steps.push(InstallCodeStep::BumpCanisterVersion);
-        self.canister.system_state.canister_version += 1;
+        self.canister.system_state.bump_canister_version();
     }
 
     pub fn add_canister_change(
@@ -487,7 +487,7 @@ impl InstallCodeHelper {
         self.steps.push(InstallCodeStep::ValidateInput);
 
         let config = &original.config;
-        let id = self.canister.system_state.canister_id;
+        let id = self.canister.canister_id();
 
         validate_controller(&self.canister, &original.sender)?;
 

@@ -8,7 +8,6 @@ use crate::driver::{
     test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
     test_setup::GroupSetup,
 };
-use crate::util::block_on;
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
@@ -234,7 +233,7 @@ impl InternetComputer {
         env: &TestEnv,
     ) -> Result<BTreeMap<String, AllocatedVm>> {
         // propagate required host features and resource settings to all vms
-        let farm = block_on(Farm::from_test_env(env, "Internet Computer"));
+        let farm = Farm::from_test_env(env, "Internet Computer");
         for node in self
             .subnets
             .iter_mut()

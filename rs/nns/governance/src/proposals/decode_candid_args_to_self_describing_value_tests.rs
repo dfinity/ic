@@ -48,8 +48,8 @@ fn test_decode_candid_args_to_self_describing_value_simple_record() {
         "my_method",
         &encoded,
         SelfDescribingValue::Map(hashmap! {
-            "name".to_string() => SelfDescribingValue::Text("Alice".to_string()),
-            "age".to_string() => SelfDescribingValue::Nat(Nat::from(30u64)),
+            "name".to_string() => SelfDescribingValue::from("Alice"),
+            "age".to_string() => SelfDescribingValue::from(30_u64),
         }),
     );
 }
@@ -69,7 +69,7 @@ fn test_decode_candid_args_to_self_describing_value_text() {
         schema,
         "greet",
         &encoded,
-        SelfDescribingValue::Text("Hello, World!".to_string()),
+        SelfDescribingValue::from("Hello, World!"),
     );
 }
 
@@ -88,7 +88,7 @@ fn test_decode_candid_args_to_self_describing_value_nat() {
         schema,
         "set_count",
         &encoded,
-        SelfDescribingValue::Nat(Nat::from(42u64)),
+        SelfDescribingValue::from(42_u64),
     );
 }
 
@@ -107,7 +107,7 @@ fn test_decode_candid_args_to_self_describing_value_principal() {
         schema,
         "set_owner",
         &encoded,
-        SelfDescribingValue::Text(principal.to_string()),
+        SelfDescribingValue::from(principal.to_string()),
     );
 }
 
@@ -126,7 +126,7 @@ fn test_decode_candid_args_to_self_describing_value_opt_some() {
         schema,
         "set_value",
         &encoded,
-        SelfDescribingValue::Array(vec![SelfDescribingValue::Nat(Nat::from(42u64))]),
+        SelfDescribingValue::from(42_u64),
     );
 }
 
@@ -141,12 +141,7 @@ fn test_decode_candid_args_to_self_describing_value_opt_none() {
     let arg: Option<Nat> = None;
     let encoded = Encode!(&arg).unwrap();
 
-    assert_candid_converts_to(
-        schema,
-        "set_value",
-        &encoded,
-        SelfDescribingValue::Array(vec![]),
-    );
+    assert_candid_converts_to(schema, "set_value", &encoded, SelfDescribingValue::Null);
 }
 
 #[test]
@@ -165,9 +160,9 @@ fn test_decode_candid_args_to_self_describing_value_vec() {
         "set_values",
         &encoded,
         SelfDescribingValue::Array(vec![
-            SelfDescribingValue::Nat(Nat::from(1u64)),
-            SelfDescribingValue::Nat(Nat::from(2u64)),
-            SelfDescribingValue::Nat(Nat::from(3u64)),
+            SelfDescribingValue::from(1_u64),
+            SelfDescribingValue::from(2_u64),
+            SelfDescribingValue::from(3_u64),
         ]),
     );
 }
@@ -197,7 +192,7 @@ fn test_decode_candid_args_to_self_describing_value_variant() {
         schema,
         "set_status",
         &encoded,
-        SelfDescribingValue::Text("Active".to_string()),
+        SelfDescribingValue::from("Active"),
     );
 
     // Test variant with value
@@ -208,7 +203,7 @@ fn test_decode_candid_args_to_self_describing_value_variant() {
         "set_status",
         &encoded,
         SelfDescribingValue::Map(hashmap! {
-            "Pending".to_string() => SelfDescribingValue::Nat(Nat::from(42u64)),
+            "Pending".to_string() => SelfDescribingValue::from(42_u64),
         }),
     );
 }
@@ -230,13 +225,13 @@ fn test_decode_candid_args_to_self_describing_value_blob() {
         schema,
         "set_data_vec_nat8",
         &encoded,
-        SelfDescribingValue::Blob(vec![1u8, 2u8, 3u8, 4u8]),
+        SelfDescribingValue::from(vec![1_u8, 2, 3, 4]),
     );
     assert_candid_converts_to(
         schema,
         "set_data_blob",
         &encoded,
-        SelfDescribingValue::Blob(vec![1u8, 2u8, 3u8, 4u8]),
+        SelfDescribingValue::from(vec![1_u8, 2, 3, 4]),
     );
 }
 
@@ -250,12 +245,7 @@ fn test_decode_candid_args_to_self_describing_value_empty_args() {
 
     let encoded = Encode!().unwrap();
 
-    assert_candid_converts_to(
-        schema,
-        "no_args",
-        &encoded,
-        SelfDescribingValue::Array(vec![]),
-    );
+    assert_candid_converts_to(schema, "no_args", &encoded, SelfDescribingValue::Null);
 }
 
 #[test]
@@ -287,8 +277,8 @@ fn test_decode_candid_args_to_self_describing_value_reserved() {
         "set_name",
         &encoded,
         SelfDescribingValue::Map(hashmap! {
-            "first".to_string() => SelfDescribingValue::Text("John".to_string()),
-            "last".to_string() => SelfDescribingValue::Array(vec![]),
+            "first".to_string() => SelfDescribingValue::from("John"),
+            "last".to_string() => SelfDescribingValue::Null,
         }),
     );
 }
@@ -409,10 +399,10 @@ fn test_decode_candid_args_to_self_describing_value_nested_record() {
         "set_person",
         &encoded,
         SelfDescribingValue::Map(hashmap! {
-            "name".to_string() => SelfDescribingValue::Text("Alice".to_string()),
+            "name".to_string() => SelfDescribingValue::from("Alice"),
             "address".to_string() => SelfDescribingValue::Map(hashmap! {
-                "street".to_string() => SelfDescribingValue::Text("123 Main St".to_string()),
-                "city".to_string() => SelfDescribingValue::Text("Wonderland".to_string()),
+                "street".to_string() => SelfDescribingValue::from("123 Main St"),
+                "city".to_string() => SelfDescribingValue::from("Wonderland"),
             }),
         }),
     );

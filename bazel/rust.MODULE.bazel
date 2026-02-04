@@ -881,13 +881,13 @@ crate.spec(
 crate.spec(
     git = "https://github.com/dfinity-lab/lmdb-rs",
     package = "lmdb-rkv",
-    rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+    rev = "64eb770caa940f215190d86d61e4c132511be5e2",
 )
 crate.spec(
     default_features = False,
     git = "https://github.com/dfinity-lab/lmdb-rs",
     package = "lmdb-rkv-sys",
-    rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+    rev = "64eb770caa940f215190d86d61e4c132511be5e2",
 )
 crate.spec(
     package = "local-ip-address",
@@ -901,6 +901,13 @@ crate.spec(
     default_features = False,
     package = "lru",
     version = "^0.7.8",
+)
+crate.spec(
+    features = [
+        "static",  # By using the `static` feature the lzma-sys crate uses its embedded liblzma C library
+    ],
+    package = "lzma-sys",
+    version = "^0.1.20",
 )
 crate.spec(
     package = "macaddr",
@@ -1312,7 +1319,7 @@ crate.spec(
         "getrandom",
     ],
     package = "rsa",
-    version = "^0.9.6",
+    version = "^0.9.10",
 )
 crate.spec(
     package = "rstest",
@@ -1870,7 +1877,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^40.0.0",
+    version = "^40.0.2",
 )
 crate.spec(
     package = "wast",
@@ -1916,6 +1923,17 @@ crate.spec(
 crate.spec(
     package = "x509-parser",
     version = "^0.16.0",
+)
+crate.spec(
+    features = [
+        # By using the `static` feature the x2 crate configures the lzma-sys crate to use its embedded liblzma C library
+        # instead of requiring liblzma to be installed in the environment.
+        # See: https://github.com/alexcrichton/xz2-rs/blob/main/Cargo.toml#L33
+        # See: https://github.com/alexcrichton/xz2-rs/blob/main/lzma-sys/build.rs
+        "static",
+    ],
+    package = "xz2",
+    version = "^0.1.7",
 )
 crate.spec(
     package = "yansi",

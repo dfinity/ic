@@ -34,8 +34,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             reserved_balance: Some(item.reserved_balance.into()),
             reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
             canister_status: Some((&item.status).into()),
+            rounds_scheduled: item.rounds_scheduled,
             scheduled_as_first: item.scheduled_as_first,
-            skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
             executed: item.executed,
             interrupted_during_execution: item.interrupted_during_execution,
             certified_data: item.certified_data.clone(),
@@ -78,10 +78,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     }
 }
 
-impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
+impl TryFrom<(pb_canister_state_bits::CanisterStateBits, CanisterId)> for CanisterStateBits {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_state_bits::CanisterStateBits) -> Result<Self, Self::Error> {
+    fn try_from(
+        (value, own_canister_id): (pb_canister_state_bits::CanisterStateBits, CanisterId),
+    ) -> Result<Self, Self::Error> {
         let execution_state_bits = value
             .execution_state_bits
             .map(|b| b.try_into())
@@ -127,9 +129,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let tasks: pb_canister_state_bits::TaskQueue =
             try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
 
-        let mut status: CanisterStatus =
-            try_from_option_field(value.canister_status, "CanisterStateBits::canister_status")?;
-        let mut task_queue = TaskQueue::try_from(tasks)?;
+        let mut status: CanisterStatus = try_from_option_field(
+            value.canister_status.map(|cs| (cs, own_canister_id)),
+            "CanisterStateBits::canister_status",
+        )?;
+        let mut task_queue = TaskQueue::try_from((tasks, own_canister_id))?;
 
         // Forward compatibility: convert any `NewResponse` aborted execution into a
         // `Response`, moving its callback into the call context manager.
@@ -188,8 +192,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
             status,
+            rounds_scheduled: value.rounds_scheduled,
             scheduled_as_first: value.scheduled_as_first,
-            skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
             executed: value.executed,
             interrupted_during_execution: value.interrupted_during_execution,
             certified_data: value.certified_data,

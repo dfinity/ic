@@ -258,6 +258,7 @@ impl Request {
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
+            | Ok(Method::FlexibleHttpRequest)
             | Ok(Method::RawRand)
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
