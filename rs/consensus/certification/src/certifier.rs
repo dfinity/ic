@@ -147,7 +147,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             .state_manager
             .list_state_hashes_to_certify()
             .into_iter()
-            .filter_map(|(height, hash, witness)| {
+            .filter_map(|(height, hash, height_witness)| {
                 match certification_pool.certification_at_height(height) {
                     // if we have a valid certification, deliver it to the state manager and skip
                     // the pair
@@ -170,7 +170,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                         None
                     }
                     // return this pair to be signed by the current replica
-                    _ => Some((height, hash, witness)),
+                    _ => Some((height, hash, height_witness)),
                 }
             })
             .collect();
@@ -345,7 +345,7 @@ impl CertifierImpl {
                     .all(|share| share.signed.signature.signer != self.replica_config.node_id)
             })
             .cloned()
-            .filter_map(|(height, hash, witness)| {
+            .filter_map(|(height, hash, height_witness)| {
                 let content = CertificationContent::new(hash);
                 let dkg_id =
                     active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), height)?;
@@ -355,7 +355,7 @@ impl CertifierImpl {
                 {
                     Ok(signature) => Some(CertificationShare {
                         height,
-                        witness,
+                        height_witness,
                         signed: Signed { content, signature },
                     }),
                     Err(err) => {
@@ -393,8 +393,8 @@ impl CertifierImpl {
         }
 
         let shares: Vec<_> = certification_pool.shares_at_height(height).collect();
-        let witness = if let Some(share) = shares.first() {
-            share.witness.clone()
+        let height_witness = if let Some(share) = shares.first() {
+            share.height_witness.clone()
         } else {
             debug!(
                 self.log,
@@ -419,7 +419,7 @@ impl CertifierImpl {
         .map(|signed_cert_tuple| {
             CertificationMessage::Certification(Certification {
                 height: signed_cert_tuple.content.0,
-                witness: witness.clone(),
+                height_witness: height_witness.clone(),
                 signed: Signed {
                     content: signed_cert_tuple.content.1,
                     signature: signed_cert_tuple.signature,
@@ -495,9 +495,9 @@ impl CertifierImpl {
 
         // check if the certification is indeed valid for the specified height. If
         // not, we consider the certification invalid.
-        if let Err(e) = validate_witness(
+        if let Err(e) = validate_height_witness(
             certification.height,
-            &certification.witness,
+            &certification.height_witness,
             &certification.signed.content.hash,
         ) {
             return Some(ChangeAction::HandleInvalid(msg, e));
@@ -533,7 +533,8 @@ impl CertifierImpl {
 
         // If the share has an invalid content or does not belong to the
         // committee
-        if let Err(e) = validate_witness(share.height, &share.witness, &content.hash) {
+        if let Err(e) = validate_height_witness(share.height, &share.height_witness, &content.hash)
+        {
             return Some(ChangeAction::HandleInvalid(msg, e));
         }
 
@@ -594,22 +595,22 @@ impl CertifierImpl {
     }
 }
 
-fn validate_witness(
+fn validate_height_witness(
     height: Height,
-    witness: &Witness,
+    height_witness: &Witness,
     hash: &CryptoHashOfPartialState,
 ) -> Result<(), String> {
     let labeled_tree = materialize(&state_height_as_tree(&height), None);
-    let witness_digest = match recompute_digest(&labeled_tree, witness) {
+    let height_witness_digest = match recompute_digest(&labeled_tree, height_witness) {
         Ok(digest) => CryptoHashOfPartialState::from(CryptoHash(digest.to_vec())),
         Err(e) => {
-            return Err(format!("Invalid witness @{}: {:?}", height, e));
+            return Err(format!("Invalid height witness @{}: {:?}", height, e));
         }
     };
-    if witness_digest != *hash {
+    if height_witness_digest != *hash {
         return Err(format!(
-            "Unexpected witness digest (expected: {:?}, actual: {:?})",
-            hash, witness_digest
+            "Unexpected height witness digest (expected: {:?}, actual: {:?})",
+            hash, height_witness_digest
         ));
     }
 
@@ -658,10 +659,10 @@ mod tests {
 
     fn gen_content(height: Height) -> CertificationContent {
         let labeled_tree = materialize(&state_height_as_tree(&height), None);
-        let witness_digest =
+        let height_witness_digest =
             recompute_digest(&labeled_tree, &Witness::new_for_testing_with_height()).unwrap();
         CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-            witness_digest.0.to_vec(),
+            height_witness_digest.0.to_vec(),
         )))
     }
 
@@ -670,7 +671,7 @@ mod tests {
         to_unvalidated(CertificationMessage::CertificationShare(
             CertificationShare {
                 height,
-                witness: Witness::new_for_testing_with_height(),
+                height_witness: Witness::new_for_testing_with_height(),
                 signed: Signed {
                     signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
                     content,
@@ -698,7 +699,7 @@ mod tests {
         signature.signer = dkg_id;
         to_unvalidated(CertificationMessage::Certification(Certification {
             height,
-            witness: Witness::new_for_testing_with_height(),
+            height_witness: Witness::new_for_testing_with_height(),
             signed: Signed { content, signature },
         }))
     }
@@ -727,7 +728,7 @@ mod tests {
             );
     }
 
-    fn unpruned_witness(
+    fn unpruned_height_witness(
         state: &ReplicatedState,
         height: Height,
     ) -> (Witness, CryptoHashOfPartialState) {
@@ -736,9 +737,9 @@ mod tests {
         let paths = vec![vec![].into()];
         let labeled_tree = sparse_labeled_tree_from_paths(&paths).unwrap();
         let partial_tree = materialize_partial(&lazy_tree, &labeled_tree, None);
-        let witness = hash_tree.witness::<Witness>(&partial_tree).unwrap();
+        let height_witness = hash_tree.witness::<Witness>(&partial_tree).unwrap();
         let hash = CryptoHashOfPartialState::from(CryptoHash(hash_tree.root_hash().0.to_vec()));
-        (witness, hash)
+        (height_witness, hash)
     }
 
     fn test_certification_validation<F>(height: Height, f: F)
@@ -1292,7 +1293,7 @@ mod tests {
         })
     }
 
-    /// Test that certification validation fails if the certification hash does not match the witness digest.
+    /// Test that certification validation fails if the certification hash does not match the height witness digest.
     #[test]
     fn test_invalidate_certificate_with_incorrect_state() {
         let height = Height::from(5);
@@ -1300,15 +1301,15 @@ mod tests {
             let fake_hash = CryptoHashOfPartialState::from(CryptoHash(vec![88, 99, 00]));
             cert.signed.content.hash = fake_hash.clone();
 
-            let witness_hash = gen_content(height).hash;
+            let height_witness_hash = gen_content(height).hash;
 
             assert_eq!(
                 certifier.validate_certification(cert),
                 Some(ChangeAction::HandleInvalid(
                     CertificationMessage::Certification(cert.clone()),
                     format!(
-                        "Unexpected witness digest (expected: {:?}, actual: {:?})",
-                        fake_hash, witness_hash
+                        "Unexpected height witness digest (expected: {:?}, actual: {:?})",
+                        fake_hash, height_witness_hash
                     )
                 ))
             );
@@ -1316,24 +1317,24 @@ mod tests {
         test_certification_validation(height, test);
     }
 
-    /// Test that certification validation fails for a malformed witness (pruned too aggressively).
+    /// Test that certification validation fails for a malformed height witness (pruned too aggressively).
     #[test]
-    fn test_invalidate_certificate_with_too_pruned_witness() {
+    fn test_invalidate_certificate_with_too_pruned_height_witness() {
         let height = Height::from(5);
         let test = |certifier: &CertifierImpl, cert: &mut Certification| {
-            let witness_hash = gen_content(height).hash;
+            let height_witness_hash = gen_content(height).hash;
 
-            // a witness consisting only of the (correct) root hash,
+            // a height witness consisting only of the (correct) root hash,
             // i.e., pruned too aggressively
-            cert.witness =
-                Witness::new_for_testing(Digest(witness_hash.get().0.try_into().unwrap()));
+            cert.height_witness =
+                Witness::new_for_testing(Digest(height_witness_hash.get().0.try_into().unwrap()));
 
             assert_eq!(
                 certifier.validate_certification(cert),
                 Some(ChangeAction::HandleInvalid(
                     CertificationMessage::Certification(cert.clone()),
                     format!(
-                        "Invalid witness @{}: InconsistentPartialTree {{ offending_path: [] }}",
+                        "Invalid height witness @{}: InconsistentPartialTree {{ offending_path: [] }}",
                         height
                     )
                 ))
@@ -1342,16 +1343,16 @@ mod tests {
         test_certification_validation(height, test);
     }
 
-    /// Test that certification validation fails for a malformed witness (not pruned enough).
+    /// Test that certification validation fails for a malformed height witness (not pruned enough).
     #[test]
-    fn test_invalidate_certificate_with_unpruned_witness() {
+    fn test_invalidate_certificate_with_unpruned_height_witness() {
         let height = Height::from(5);
         let test = |certifier: &CertifierImpl, cert: &mut Certification| {
-            // a witness consisting of the full state tree,
+            // a height witness consisting of the full state tree,
             // i.e., not pruned enough
             let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-            let (witness, hash) = unpruned_witness(&state, height);
-            cert.witness = witness;
+            let (height_witness, hash) = unpruned_height_witness(&state, height);
+            cert.height_witness = height_witness;
             cert.signed.content.hash = hash;
 
             assert_eq!(
@@ -1359,7 +1360,7 @@ mod tests {
                 Some(ChangeAction::HandleInvalid(
                     CertificationMessage::Certification(cert.clone()),
                     format!(
-                        "Invalid witness @{}: InconsistentPartialTree {{ offending_path: [api_boundary_nodes] }}",
+                        "Invalid height witness @{}: InconsistentPartialTree {{ offending_path: [api_boundary_nodes] }}",
                         height
                     )
                 ))
@@ -1368,9 +1369,9 @@ mod tests {
         test_certification_validation(height, test);
     }
 
-    /// Test that certification validation fails if the witness is for a different height.
+    /// Test that certification validation fails if the height witness is for a different height.
     #[test]
-    fn test_invalidate_certificate_with_witness_for_different_height() {
+    fn test_invalidate_certificate_with_height_witness_for_different_height() {
         let height = Height::from(5);
         let test = |certifier: &CertifierImpl, cert: &mut Certification| {
             let expected_hash = cert.signed.content.hash.clone();
@@ -1383,7 +1384,7 @@ mod tests {
                 Some(ChangeAction::HandleInvalid(
                     CertificationMessage::Certification(cert.clone()),
                     format!(
-                        "Unexpected witness digest (expected: {:?}, actual: {:?})",
+                        "Unexpected height witness digest (expected: {:?}, actual: {:?})",
                         expected_hash, actual_hash
                     )
                 ))
@@ -1524,7 +1525,7 @@ mod tests {
                         .validated
                         .insert(CertificationMessage::Certification(Certification {
                             height: Height::from(height),
-                            witness: Witness::new_for_testing_with_height(),
+                            height_witness: Witness::new_for_testing_with_height(),
                             signed: Signed {
                                 content: gen_content(Height::from(height)),
                                 signature: ThresholdSignature::fake(),

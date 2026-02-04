@@ -209,7 +209,7 @@ pub struct Certification {
     /// the height that the CertificationContent belongs to
     pub height: Height,
     /// the witness for the height
-    pub witness: Witness,
+    pub height_witness: Witness,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignature<CertificationContent>>,
 }
@@ -235,7 +235,7 @@ pub struct CertificationShare {
     /// the height that the CertificationContent belongs to
     pub height: Height,
     /// the witness for the height
-    pub witness: Witness,
+    pub height_witness: Witness,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignatureShare<CertificationContent>>,
 }

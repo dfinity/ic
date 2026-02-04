@@ -847,7 +847,7 @@ struct CertificationMetadata {
     certified_state_hash: CryptoHash,
     /// Witness for the state height. It's stored even if the hash tree is
     /// dropped.
-    witness: Witness,
+    height_witness: Witness,
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
@@ -1866,12 +1866,12 @@ impl StateManagerImpl {
 
         let certified_state_hash = crypto_hash_of_tree(&hash_tree);
 
-        let witness = state_height_witness(&lazy_tree, &hash_tree, metrics);
+        let height_witness = state_height_witness(&lazy_tree, &hash_tree, metrics);
 
         Ok(CertificationMetadata {
             hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certified_state_hash,
-            witness,
+            height_witness,
             certification: None,
         })
     }
@@ -2032,11 +2032,11 @@ impl StateManagerImpl {
         let hash_tree = hash_lazy_tree(&lazy_tree)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
         update_hash_tree_metrics(&hash_tree, &self.metrics);
-        let witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);
+        let height_witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);
         drop(lazy_tree);
         let certification_metadata = CertificationMetadata {
             certified_state_hash: crypto_hash_of_tree(&hash_tree),
-            witness,
+            height_witness,
             hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certification: None,
         };
@@ -2644,7 +2644,7 @@ fn state_height_witness(
     let partial_tree = materialize_partial(lazy_tree, &labeled_tree, None);
     hash_tree
         .witness::<Witness>(&partial_tree)
-        .expect("Failed to compute witness for height")
+        .expect("Failed to compute witness for state height")
 }
 
 fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
@@ -3014,7 +3014,7 @@ impl StateManager for StateManagerImpl {
                 (
                     *height,
                     CryptoHashOfPartialState::from(metadata.certified_state_hash.clone()),
-                    metadata.witness.clone(),
+                    metadata.height_witness.clone(),
                 )
             })
             .collect()

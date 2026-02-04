@@ -169,7 +169,7 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
 
     let certification = Certification {
         height: h,
-        witness: Witness::new_for_testing(Digest([0; 32])),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),

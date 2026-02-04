@@ -1180,7 +1180,7 @@ mod tests {
     fn make_certification(height: u64, hash: Vec<u8>) -> CertificationMessage {
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
-            witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignature::fake(),
@@ -1191,7 +1191,7 @@ mod tests {
     fn make_share(height: u64, hash: Vec<u8>, node_id: u64) -> CertificationMessage {
         CertificationMessage::CertificationShare(CertificationShare {
             height: Height::from(height),
-            witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
