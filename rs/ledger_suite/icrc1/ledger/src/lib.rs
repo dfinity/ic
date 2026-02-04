@@ -749,8 +749,7 @@ impl Ledger {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         if let Err(e) = apply_transaction(self, tx, now, Tokens::ZERO) {
             ic_cdk::trap(format!(
-                "failed to add fee collector block to the ledger: {:?}",
-                e
+                "failed to add fee collector block to the ledger: {e:?}"
             ));
         }
     }
