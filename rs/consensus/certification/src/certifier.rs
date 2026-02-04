@@ -692,7 +692,7 @@ mod tests {
                 (from..=to)
                     .map(move |h| StateHashMetadata {
                         height: Height::from(h),
-                        hash: gen_content().hash,
+                        hash: CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
                     })
                     .collect::<Vec<StateHashMetadata>>(),
             );
