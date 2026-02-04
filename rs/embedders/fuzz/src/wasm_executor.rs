@@ -19,14 +19,20 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    NetworkTopology, SystemState, page_map::TestPageAllocatorFileDescriptorImpl,
+    CallOrigin, NetworkTopology, SystemState, page_map::TestPageAllocatorFileDescriptorImpl,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;
 use ic_test_utilities_state::SystemStateBuilder;
-use ic_types::{CanisterId, batch::CanisterCyclesCostSchedule};
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
-    ComputeAllocation, MemoryAllocation, NumBytes,
+    CanisterId,
+    batch::CanisterCyclesCostSchedule,
+    messages::{CallbackId, NO_DEADLINE, RequestMetadata},
+    time::UNIX_EPOCH,
+};
+use ic_types::{
+    ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::CanisterModule;
@@ -63,11 +69,13 @@ pub fn run_fuzzer(module: ICWasmModule) {
     ));
 
     let compilation_cache = Arc::new(CompilationCacheBuilder::new().build());
-    let mut system_state = SystemStateBuilder::default().build();
+    let mut system_state = SystemStateBuilder::default()
+        .initial_cycles(Cycles::from(u128::MAX / 2))
+        .build();
     let result = wasm_executor.create_execution_state(
         canister_module,
         PathBuf::new(),
-        CanisterId::from_u64(10),
+        CanisterId::from_u64(1),
         compilation_cache.clone(),
     );
 
@@ -80,7 +88,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
     // For determinism, all methods are executed
     for wasm_method in wasm_methods.iter() {
         let wasm_execution_input =
-            setup_wasm_execution_input(wasm_method, &system_state, compilation_cache.clone());
+            setup_wasm_execution_input(wasm_method, &mut system_state, compilation_cache.clone());
         let (_compilation_result, execution_result) = &wasm_executor
             .clone()
             .execute(wasm_execution_input, &execution_state);
@@ -110,13 +118,21 @@ pub fn run_fuzzer(module: ICWasmModule) {
 #[inline(always)]
 fn setup_wasm_execution_input(
     wasm_method: &WasmMethod,
-    system_state: &SystemState,
+    system_state: &mut SystemState,
     compilation_cache: Arc<CompilationCache>,
 ) -> WasmExecutionInput {
     let func_ref = FuncRef::Method(wasm_method.clone());
     let api_type = get_system_api_type_for_wasm_method(wasm_method.clone());
     let canister_current_memory_usage = NumBytes::new(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
+
+    system_state.new_call_context(
+        get_call_orign_for_wasm_method(wasm_method.clone()),
+        Cycles::new(1_000_000_000),
+        UNIX_EPOCH,
+        RequestMetadata::default(),
+    );
+
     WasmExecutionInput {
         api_type: api_type.clone(),
         sandbox_safe_system_state: get_sandbox_safe_system_state(system_state, api_type),
@@ -165,6 +181,24 @@ pub(crate) fn get_execution_parameters() -> ExecutionParameters {
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
         subnet_memory_saturation: ResourceSaturation::default(),
+    }
+}
+
+pub fn get_call_orign_for_wasm_method(wasm_method: WasmMethod) -> CallOrigin {
+    match wasm_method {
+        WasmMethod::Update(_) => CallOrigin::CanisterUpdate(
+            CanisterId::from_u64(2),
+            CallbackId::from(5),
+            NO_DEADLINE,
+            String::from(""),
+        ),
+        WasmMethod::Query(_) => CallOrigin::Query(user_test_id(1), String::from("")),
+        WasmMethod::CompositeQuery(_) => CallOrigin::CanisterQuery(
+            CanisterId::from_u64(2),
+            CallbackId::from(5),
+            String::from(""),
+        ),
+        WasmMethod::System(_) => unimplemented!(),
     }
 }
 
