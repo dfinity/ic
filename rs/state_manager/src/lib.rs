@@ -3185,11 +3185,11 @@ impl StateManager for StateManagerImpl {
                 let states = self.states.read();
                 let initial_state = &states
                     .snapshots
-                    .get(0)
+                    .front()
                     .expect("Initial state should always be present in states.snapshots.")
                     .state;
                 let certification = StateManagerImpl::compute_certification_metadata(
-                    &initial_state,
+                    initial_state,
                     prev_height,
                     &self.metrics,
                     &self.log,
@@ -3362,6 +3362,7 @@ impl StateManager for StateManagerImpl {
                 height,
                 latest_height_update_time: Arc::clone(&self.latest_height_update_time),
                 scope: scope.clone(),
+                state_layout: Box::new(self.state_layout.clone()),
             };
             self.hash_channel.send(hash_req).unwrap();
         }
@@ -3493,6 +3494,8 @@ enum HashRequest {
         height: Height,
         latest_height_update_time: Arc<Mutex<Instant>>,
         scope: CertificationScope,
+        // Boxed so that variants have similar size and we don't waste space when sending `HashRequest::Wait`.
+        state_layout: Box<StateLayout>,
     },
     /// Wait for the message to be executed and notify back via sender.
     Wait { sender: Sender<()> },
@@ -3517,6 +3520,7 @@ fn spawn_hash_thread(
                             height,
                             latest_height_update_time,
                             scope,
+                            state_layout,
                         } => {
                             // TODO: check certifications via catch up first.
                             let certification_metadata =
@@ -3536,33 +3540,28 @@ fn spawn_hash_thread(
                                 );
                             }
 
-                            // TODO: is this check still relevant? 
-                            // onlky way: state sync
-
                             // It's possible that we already computed this state before. We
                             // validate that hashes agree to spot bugs causing non-determinism as
                             // early as possible. 
-                            let states_read = states.read();
-                            if let Some(prev_metadata) = states_read.certifications_metadata.get(&height) {
+                            let mut states = states.write();
+                            if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
                                 let prev_hash = &prev_metadata.certified_state_hash;
                                 let hash = &certification_metadata.certified_state_hash;
                                 if prev_hash != hash {
-                                    // if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
-                                    //     error!(
-                                    //         log,
-                                    //         "Failed to mark state @{} diverged: {}", height, err
-                                    //     );
-                                    // }
+                                    if let Err(err) = state_layout.create_diverged_state_marker(height) {
+                                        error!(
+                                            log,
+                                            "Failed to mark state @{} diverged: {}", height, err
+                                        );
+                                    }
                                     panic!(
                                         "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
                                     );
                                 }
                             }
-                            drop(states_read);
 
                             // add state and hash to snapshots and certification_metadata
                             println!("HashThread: write hash/snapshot at height {}", height);
-                            let mut states = states.write();
 
                             if !states
                                 .snapshots
