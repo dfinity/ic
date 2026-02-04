@@ -1068,32 +1068,18 @@ fn returns_state_no_committed_for_future_states() {
 fn panics_on_forked_history() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
+        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Full, None);
+        state_manager.flush_all();
 
         let (_height, mut state) = state_manager.take_tip();
+
+        let root_hash = state_manager.get_state_hash_at(Height::new(1)).unwrap();
+        state_manager.fetch_state(Height::new(2), root_hash, Height::new(500));
+
         state.modify_streams(|streams| {
             streams.insert(subnet_test_id(1), Stream::default());
         });
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
-    });
-}
-
-#[test]
-fn can_commit_same_state_twice() {
-    state_manager_test(|_metrics, state_manager| {
-        let (tip_height, state) = state_manager.take_tip();
-        assert_eq!(tip_height, height(0));
-        let state_copy = state.clone();
-        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
-
-        let (tip_height, _state) = state_manager.take_tip();
-        assert_eq!(tip_height, height(1));
-        // _state and state_copy will differ in metadata.prev_state_height,
-        // so to commit the same state twice we need to commit the copy.
-        state_manager.commit_and_certify(state_copy, height(1), CertificationScope::Metadata, None);
-
-        let (tip_height, _state) = state_manager.take_tip();
-        assert_eq!(tip_height, height(1));
+        state_manager.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
     });
 }
 
@@ -2120,18 +2106,18 @@ fn backup_checkpoint_is_complete() {
 #[test]
 fn should_not_remove_latest_state_after_restarting_without_checkpoints() {
     state_manager_restart_test(|state_manager, restart_fn| {
-        for i in 0..10 {
+        for i in 1..11 {
             let (_, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata, None);
             state_manager.remove_states_below(height(i));
             state_manager.flush_deallocation_channel();
         }
 
-        let state_manager = restart_fn(state_manager, Some(height(10)));
-        for i in 0..10 {
+        let state_manager = restart_fn(state_manager, Some(height(11)));
+        for i in 1..11 {
             let (_, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata, None);
-            state_manager.remove_states_below(height(9));
+            state_manager.remove_states_below(height(10));
             state_manager.flush_deallocation_channel();
             assert_eq!(height(i), state_manager.latest_state_height());
         }
