@@ -428,13 +428,18 @@ def main():
         "--since",
         metavar="DATETIME_OR_SHA",
         type=str,
-        help="Start of time range (inclusive). Can be a datetime (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC)\nor a git commit SHA (e.g., 'abc123def') from which the time is taken.\nMutually exclusive with --day/--week/--month",
+        help="""Start of time range (inclusive). Can be a datetime (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC)
+or a git commit SHA (e.g., 'abc123def') from which the time is taken.
+Mutually exclusive with --day/--week/--month""",
     )
     filter_parser.add_argument(
         "--until",
         metavar="DATETIME_OR_SHA",
         type=str,
-        help="End of time range (exclusive). Can be a datetime (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC)\nor a git commit SHA (e.g., 'def456abc') from which the time is taken.\nMutually exclusive with --day/--week/--month",
+        help="""End of time range (exclusive). Can be a datetime (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC)
+or a git commit SHA (e.g., 'def456abc') from which the time is taken.
+When --until is specified, --since must also be specified to avoid unbounded queries.
+Mutually exclusive with --day/--week/--month""",
     )
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
@@ -463,8 +468,8 @@ Examples:
   # Show tests in a specific date range
   bazel run //ci/githubstats:query -- top 20 fail% --since '2026-01-01' --until '2026-01-31'
 
-  # Show the top flaky tests that ran between the times of two git commits
-  bazel run //ci/githubstats:query -- top 20 fail% --since abc123def --until def456abc
+  # Show the top 10 most impactful tests that ran since the time of a specific commit
+  bazel run //ci/githubstats:query -- top 10 impact --since abc123def
 """,
     )
     top_parser.add_argument(
