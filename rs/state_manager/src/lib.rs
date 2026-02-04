@@ -3541,7 +3541,8 @@ fn spawn_hash_thread(
 
 impl StateManagerImpl {
     /// After this method terminates, both `SharedState.snapshots` and `SharedState.certification_metadata`
-    /// at the height from the previous `commit_and_certify` are populated. It also bumps `latest_state_height`.
+    /// at the height from the previous `commit_and_certify` are populated. It also updates `latest_state_height`
+    /// to the maximum of the value before and the height passed.
     ///
     /// This used to happen synchronously inside `commit_and_certify`, but now happens in the hash thread
     /// at an unpredictable time.  
