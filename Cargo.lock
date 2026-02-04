@@ -8997,6 +8997,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-bls12-381-vetkd",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "ic-vetkeys",
  "rand 0.8.5",
