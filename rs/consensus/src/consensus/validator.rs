@@ -3743,14 +3743,20 @@ pub mod test {
         })
     }
 
-    /// Returns a consensus pool and validator, along with a valid equivocation proof.
+    /// Returns a consensus pool, validator, membership, and a valid equivocation proof.
     fn setup_equivocation_proof_test(
         pool_config: ArtifactPoolConfig,
-    ) -> (TestConsensusPool, Validator, EquivocationProof) {
+    ) -> (
+        TestConsensusPool,
+        Validator,
+        Arc<Membership>,
+        EquivocationProof,
+    ) {
         let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
         let ValidatorAndDependencies {
             validator,
             mut pool,
+            membership,
             replica_config,
             ..
         } = setup_dependencies(pool_config, &subnet_members);
@@ -3798,6 +3804,7 @@ pub mod test {
         (
             pool,
             validator,
+            membership,
             EquivocationProof {
                 signer: correct_signer,
                 version: block.content.as_ref().version.clone(),
@@ -3814,7 +3821,7 @@ pub mod test {
     #[test]
     fn test_equivocation_invalid_for_identical_hashes() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, _, mut proof) = setup_equivocation_proof_test(pool_config);
             // Invalidate proof with identical hashes
             proof.hash2 = proof.hash1.clone();
             pool.insert_unvalidated(proof.clone());
@@ -3831,7 +3838,7 @@ pub mod test {
     #[test]
     fn test_equivocation_invalid_for_wrong_subnet_id() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, _, mut proof) = setup_equivocation_proof_test(pool_config);
             // Invalidate proof with incorrect subnet ID
             proof.subnet_id = subnet_test_id(1337);
             pool.insert_unvalidated(proof.clone());
@@ -3848,7 +3855,7 @@ pub mod test {
     #[test]
     fn test_equivocation_invalid_for_signer_not_in_subnet() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, _, mut proof) = setup_equivocation_proof_test(pool_config);
             // Don't validate if signer is not part of subnet
             proof.signer = node_test_id(10);
             pool.insert_unvalidated(proof.clone());
@@ -3865,9 +3872,21 @@ pub mod test {
     #[test]
     fn test_equivocation_invalid_for_signer_not_blockmaker() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
-            // Some test id that's different from the block maker, but still part of the subnet
-            let non_blockmaker_node = node_test_id(3);
+            let (mut pool, validator, membership, mut proof) =
+                setup_equivocation_proof_test(pool_config);
+            // Find a node that's not a blockmaker at this height
+            let pool_reader = PoolReader::new(&pool);
+            let prev_beacon = pool_reader
+                .get_random_beacon(proof.height.decrement())
+                .unwrap();
+            let non_blockmaker_node = membership
+                .get_nodes(proof.height)
+                .unwrap()
+                .into_iter()
+                .find(|node| {
+                    membership.get_block_maker_rank(proof.height, &prev_beacon, *node) == Ok(None)
+                })
+                .expect("Should find a non-blockmaker node");
             assert!(non_blockmaker_node != proof.signer);
 
             proof.signer = non_blockmaker_node;
@@ -3885,7 +3904,7 @@ pub mod test {
     #[test]
     fn test_equivocation_validates() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, _, proof) = setup_equivocation_proof_test(pool_config);
             // Validate a well-formed equivocation proof, with the correct subnet ID
             pool.insert_unvalidated(proof.clone());
             assert_matches!(
@@ -3900,7 +3919,7 @@ pub mod test {
     #[test]
     fn test_equivocation_ignored_if_below_finalized_height() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, _) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, _, _) = setup_equivocation_proof_test(pool_config);
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
@@ -3912,7 +3931,7 @@ pub mod test {
     #[test]
     fn test_equivocation_validate_only_one_per_height_and_signer() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, _, mut proof) = setup_equivocation_proof_test(pool_config);
             // Insert two different proofs for the same height and signer
             pool.insert_unvalidated(proof.clone());
             let mut hash = proof.hash1.clone().get();
@@ -3941,6 +3960,7 @@ pub mod test {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
+                membership,
                 mut pool,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
@@ -3948,6 +3968,20 @@ pub mod test {
             pool.advance_round_normal_operation_n(9);
 
             let mut block = pool.make_next_block();
+
+            // Find a node that is NOT a block maker at this height.
+            let pool_reader = PoolReader::new(&pool);
+            let prev_beacon = pool_reader
+                .get_random_beacon(block.height().decrement())
+                .unwrap();
+            let incorrect_signer = membership
+                .get_nodes(block.height())
+                .unwrap()
+                .into_iter()
+                .find(|node| {
+                    membership.get_block_maker_rank(block.height(), &prev_beacon, *node) == Ok(None)
+                })
+                .expect("Should find a non-blockmaker node");
 
             // Insert notarization into unvalidated pool, not the block
             let mut notarization = Notarization::fake(NotarizationContent::new(
@@ -3959,8 +3993,8 @@ pub mod test {
             pool.insert_unvalidated(notarization);
 
             // Insert tampered block into unvalidated pool
-            assert_ne!(block.signature.signer, node_test_id(100));
-            block.signature.signer = node_test_id(3);
+            assert_ne!(block.signature.signer, incorrect_signer);
+            block.signature.signer = incorrect_signer;
             pool.insert_unvalidated(block);
 
             // Incorrect block proposals should not get validated
