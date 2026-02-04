@@ -287,7 +287,7 @@ fn fetch_mainnet_ic_replay(env: &TestEnv) {
         .unwrap();
     } else {
         let logger = env.logger();
-        let version = get_mainnet_nns_revision();
+        let version = get_mainnet_nns_revision().unwrap();
         let mainnet_ic_replica_url =
             format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
         let ic_replay_path = env.get_path(PATH_IC_REPLAY);
@@ -347,7 +347,7 @@ fn fetch_mainnet_ic_recovery(env: &TestEnv) {
         .unwrap();
     } else {
         let logger = env.logger();
-        let version = get_mainnet_nns_revision();
+        let version = get_mainnet_nns_revision().unwrap();
         let mainnet_ic_recovery_url =
             format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
         let ic_recovery_path = env.get_path(PATH_IC_RECOVERY);
