@@ -178,5 +178,12 @@ runs:
       shell: bash
       if: always()
       run: |
-        bazel clean --expunge
+        # Try a graceful shutdown first to avoid "stale server process" kill errors.
+        bazel shutdown
+
+        # Run clean in batch mode to avoid starting a persistent Bazel server
+        # (which can leave stale PID files). Tolerate failures so cleanup
+        # doesn't fail the job if the server was already in a bad state.
+        bazel --batch clean --expunge
+
         rm -rf '${{ steps.metrics-tmpdir.outputs.dir }}'
