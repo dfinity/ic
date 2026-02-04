@@ -184,19 +184,23 @@ impl NodeRegistration {
             }
 
             if let Err(error_message) = self.do_register_node(&add_node_payload).await {
-                warn!(self.log, "{}", error_message);
+                // Log full payload for debugging
+                warn!(
+                    self.log,
+                    "{}. Used payload: {:?}", error_message, add_node_payload
+                );
                 // Send a length-capped summary to the host ensuring message is not dropped
                 const CONSOLE_ERR_MAX: usize = 1500;
-                let (summary, suffix) = if error_message.len() > CONSOLE_ERR_MAX {
-                    (
+                let trimmed_error = if error_message.len() > CONSOLE_ERR_MAX {
+                    format!(
+                        "{} (see replica logs for full error)",
                         &error_message[..CONSOLE_ERR_MAX],
-                        " (see replica logs for full error)",
                     )
                 } else {
-                    (error_message.as_str(), "")
+                    error_message
                 };
                 UtilityCommand::notify_host(
-                    format!("node-id {}: {}{}", self.node_id, summary, suffix).as_str(),
+                    format!("node-id {}: {}", self.node_id, trimmed_error).as_str(),
                     1,
                 );
             };

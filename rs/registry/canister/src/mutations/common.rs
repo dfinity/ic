@@ -38,9 +38,8 @@ pub(crate) fn check_api_boundary_nodes_exist(registry: &Registry, node_ids: &[No
 pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_version_id: &str) {
     let blessed_version_ids = registry.get_blessed_replica_version_ids();
     assert!(
-        blessed_version_ids.iter().any(|v| v == replica_version_id),
-        "Attempt to check if the replica version to '{}' is blessed was rejected, \
-        because that version is NOT blessed. The list of blessed replica versions is: {}.",
+        blessed_version_ids.contains(&replica_version_id.to_string()),
+        "Replica version '{}' is NOT blessed. The blessed versions are: {}.",
         replica_version_id,
         blessed_versions_to_string(&blessed_version_ids)
     );
