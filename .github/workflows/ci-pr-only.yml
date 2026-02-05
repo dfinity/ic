@@ -168,7 +168,32 @@ jobs:
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
-        run: ./ci/scripts/lock-generate.sh
+        run: |
+          set -eufo pipefail
+
+          EXIT_STATUS=0
+
+          # Update the cargo lockfile, if necessary
+          cargo update --workspace
+
+          # Repin the bazel crates, if necessary
+          ./bin/bazel-pin.sh
+
+          # Stage files and check if anything changed
+          git add Cargo.lock Cargo.Bazel.*.lock
+          git status
+          if ! git diff --cached --quiet; then
+              # There are some changes staged
+              git config --global user.email "infra+github-automation@dfinity.org"
+              git config --global user.name "IDX GitHub Automation"
+              git commit -m "Automatically updated Cargo*.lock"
+              git push origin HEAD:'${{ inputs.head-ref }}'
+
+              # Because the lockfiles need updating, fail the PR
+              EXIT_STATUS=1
+          fi
+
+          exit "${EXIT_STATUS}"
 
   generate-config-fixtures:
     name: Generate Config Fixtures
@@ -195,7 +220,29 @@ jobs:
       - name: Run Generate Config Fixtures
         id: generate-config-fixtures
         if: steps.filter.outputs.generate-config-fixtures == 'true'
-        run: ./ci/scripts/generate-config-fixtures.sh
+        run: |
+          set -eufo pipefail
+
+          EXIT_STATUS=0
+
+          # Generate config fixtures if config types have been updated
+          bazel run //rs/ic_os/config/types/compatibility_tests:generate_config_types_fixture
+
+          # Stage files and check if anything changed
+          git add rs/ic_os/config/types/compatibility_tests/fixtures
+          git status
+          if ! git diff --cached --quiet; then
+              # There are some changes staged
+              git config --global user.email "infra+github-automation@dfinity.org"
+              git config --global user.name "IDX GitHub Automation"
+              git commit -m "Automatically updated config type fixtures"
+              git push origin HEAD:'${{ inputs.head-ref }}'
+
+              # Because the fixtures need updating, fail the PR
+              EXIT_STATUS=1
+          fi
+
+          exit "${EXIT_STATUS}"
 
   # CI job is also executed in Schedule Hourly
   bazel-test-coverage:
