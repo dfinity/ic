@@ -168,6 +168,7 @@ jobs:
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
+        shell: bash
         run: |
           set -eufo pipefail
 
@@ -220,6 +221,7 @@ jobs:
       - name: Run Generate Config Fixtures
         id: generate-config-fixtures
         if: steps.filter.outputs.generate-config-fixtures == 'true'
+        shell: bash
         run: |
           set -eufo pipefail
 
