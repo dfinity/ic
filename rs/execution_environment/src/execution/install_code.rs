@@ -24,7 +24,7 @@ use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time, funds::Cycles,
+    CanisterLog, CanisterTimer, Cycles, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
 use ic_wasm_types::WasmHash;
