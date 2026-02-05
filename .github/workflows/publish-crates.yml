@@ -42,6 +42,6 @@ jobs:
           cargo build --package ${{ github.event.inputs.crate-name }}
           cargo test --package ${{ github.event.inputs.crate-name }}
 
-      # - run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty
-      #   env:
-      #     CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
