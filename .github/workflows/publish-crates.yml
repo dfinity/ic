@@ -10,6 +10,10 @@ on:
         description: 'The version of the crate to publish'
         required: true
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   publish-crates:
     name: Publish Crates
