@@ -23,11 +23,22 @@ jobs:
 
       - name: Check crate version
         run: |
-          actual_version=$(grep '^version =' crates/${{ github.event.inputs.crate-name }}/Cargo.toml | head -1 | cut -d '"' -f2)
-          if [ "$actual_version" != "${{ github.event.inputs.crate-version }}" ]; then
-            echo "Version mismatch: expected ${{ github.event.inputs.crate-version }}, found $actual_version"
+          crate_name="${{ github.event.inputs.crate-name }}"
+          crate_version="${{ github.event.inputs.crate-version }}"
+
+          if ! awk -v name="$crate_name" -v ver="$crate_version" '
+            /^\[\[package\]\]/ { match_name=0; match_ver=0; next }
+            match($0, /^name = "([^"]+)"/, a) { if (a[1]==name) match_name=1; next }
+            match($0, /^version = "([^"]+)"/, b) { if (b[1]==ver) match_ver=1; next }
+            (match_name && match_ver) { exit 0 }
+            END { exit 1 }
+          ' Cargo.lock; then
+            echo "Cargo.lock does not contain package '$crate_name' with version '$crate_version'"
             exit 1
           fi
+
+      - name: Test
+        run: exit 1
 
       - name: Build and Test Crate
         run: |
