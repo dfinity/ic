@@ -84,9 +84,7 @@ pub struct EcdsaInitialization {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChainKeyInitialization {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<
-        super::super::super::types::v1::MasterPublicKeyId,
-    >,
+    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
     #[prost(oneof = "chain_key_initialization::Initialization", tags = "2, 3")]
     pub initialization: ::core::option::Option<chain_key_initialization::Initialization>,
 }
@@ -107,14 +105,12 @@ pub mod chain_key_initialization {
 pub struct CatchUpPackageContents {
     /// Initial non-interactive low-threshold DKG transcript
     #[prost(message, optional, tag = "1")]
-    pub initial_ni_dkg_transcript_low_threshold: ::core::option::Option<
-        InitialNiDkgTranscriptRecord,
-    >,
+    pub initial_ni_dkg_transcript_low_threshold:
+        ::core::option::Option<InitialNiDkgTranscriptRecord>,
     /// Initial non-interactive high-threshold DKG transcript
     #[prost(message, optional, tag = "2")]
-    pub initial_ni_dkg_transcript_high_threshold: ::core::option::Option<
-        InitialNiDkgTranscriptRecord,
-    >,
+    pub initial_ni_dkg_transcript_high_threshold:
+        ::core::option::Option<InitialNiDkgTranscriptRecord>,
     /// The blockchain height that the CUP should have
     #[prost(uint64, tag = "3")]
     pub height: u64,
@@ -166,9 +162,7 @@ pub struct RecoveryArgs {
 pub struct SubnetSplittingArgs {
     /// / The id of subnet the subnet will be split into.
     #[prost(message, optional, tag = "1")]
-    pub destination_subnet_id: ::core::option::Option<
-        super::super::super::types::v1::SubnetId,
-    >,
+    pub destination_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryStoreUri {
@@ -345,9 +339,7 @@ pub struct SubnetFeatures {
 pub struct KeyConfig {
     /// The key's identifier.
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<
-        super::super::super::types::v1::MasterPublicKeyId,
-    >,
+    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
     /// The size of the pre-signature stash, i.e. the maximum number of
     /// pre-signatures that can be stored at once.
     #[prost(uint32, optional, tag = "3")]
@@ -395,9 +387,7 @@ impl IDkgTranscriptOperation {
             Self::Random => "I_DKG_TRANSCRIPT_OPERATION_RANDOM",
             Self::ReshareOfMasked => "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED",
             Self::ReshareOfUnmasked => "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED",
-            Self::UnmaskedTimesMasked => {
-                "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED"
-            }
+            Self::UnmaskedTimesMasked => "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED",
             Self::RandomUnmasked => "I_DKG_TRANSCRIPT_OPERATION_RANDOM_UNMASKED",
         }
     }
@@ -407,12 +397,8 @@ impl IDkgTranscriptOperation {
             "I_DKG_TRANSCRIPT_OPERATION_UNSPECIFIED" => Some(Self::Unspecified),
             "I_DKG_TRANSCRIPT_OPERATION_RANDOM" => Some(Self::Random),
             "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED" => Some(Self::ReshareOfMasked),
-            "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED" => {
-                Some(Self::ReshareOfUnmasked)
-            }
-            "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED" => {
-                Some(Self::UnmaskedTimesMasked)
-            }
+            "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED" => Some(Self::ReshareOfUnmasked),
+            "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED" => Some(Self::UnmaskedTimesMasked),
             "I_DKG_TRANSCRIPT_OPERATION_RANDOM_UNMASKED" => Some(Self::RandomUnmasked),
             _ => None,
         }
