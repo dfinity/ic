@@ -111,6 +111,61 @@ impl RingBuffer {
         self.append_log_iter(records);
     }
 
+    /// Returns an iterator over all records in the ring buffer.
+    pub fn iter(&self) -> RingBufferIterator<'_> {
+        let header = self.io.load_header();
+        RingBufferIterator {
+            io: &self.io,
+            pos: header.data_head,
+            remaining_size: header.data_size.get() as usize,
+            header,
+        }
+    }
+
+    /// Appends records from an iterator.
+    pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
+        let mut index_table = self.io.load_index_table();
+        for r in records {
+            let record = LogRecord::from(r);
+
+            // Check that records are added in order, otherwise it breaks the index.
+            let h = self.io.load_header();
+            if record.idx < h.next_idx {
+                debug_assert!(false, "Log record idx must be >= than next idx");
+                continue;
+            }
+            if record.timestamp < h.max_timestamp {
+                debug_assert!(false, "Log record timestamp must be >= than max timestamp");
+                continue;
+            }
+
+            let added_size = MemorySize::new(record.bytes_len() as u64);
+            let capacity = MemorySize::new(self.byte_capacity() as u64);
+            if added_size > capacity {
+                debug_assert!(false, "Log record size exceeds ring buffer capacity");
+                return;
+            }
+            self.make_free_space(added_size);
+
+            // Save the record at the tail position.
+            let mut h = self.io.load_header();
+            self.io.save_record(h.data_tail, &record);
+
+            // Update header with new tail position, size and next idx.
+            let position = h.data_tail;
+            h.data_tail = h.advance_position(position, added_size);
+            h.data_size = h.data_size.saturating_add(added_size);
+            h.next_idx = record.idx + 1;
+            h.max_timestamp = record.timestamp;
+            self.io.save_header(&h);
+
+            // Update the index table with the latest record position.
+            index_table.update(position, &record);
+        }
+        // It's fine to save the index table only once after saving all the records.
+        self.io.save_index_table(&index_table);
+    }
+
     fn make_free_space(&mut self, added_size: MemorySize) {
         let capacity = MemorySize::new(self.byte_capacity() as u64);
         while MemorySize::new(self.bytes_used() as u64) + added_size > capacity {
@@ -220,65 +275,6 @@ impl RingBuffer {
                 records
             }
         }
-    }
-
-    pub fn all_records(&self) -> Vec<CanisterLogRecord> {
-        self.iter().collect()
-    }
-
-    /// Returns an iterator over all records in the ring buffer.
-    pub fn iter(&self) -> RingBufferIterator<'_> {
-        let header = self.io.load_header();
-        RingBufferIterator {
-            io: &self.io,
-            pos: header.data_head,
-            remaining_size: header.data_size.get() as usize,
-            header,
-        }
-    }
-
-    /// Appends records from an iterator.
-    pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
-        let mut index_table = self.io.load_index_table();
-        for r in records {
-            let record = LogRecord::from(r);
-
-            // Check that records are added in order, otherwise it breaks the index.
-            let h = self.io.load_header();
-            if record.idx < h.next_idx {
-                debug_assert!(false, "Log record idx must be >= than next idx");
-                continue;
-            }
-            if record.timestamp < h.max_timestamp {
-                debug_assert!(false, "Log record timestamp must be >= than max timestamp");
-                continue;
-            }
-
-            let added_size = MemorySize::new(record.bytes_len() as u64);
-            let capacity = MemorySize::new(self.byte_capacity() as u64);
-            if added_size > capacity {
-                debug_assert!(false, "Log record size exceeds ring buffer capacity");
-                return;
-            }
-            self.make_free_space(added_size);
-
-            // Save the record at the tail position.
-            let mut h = self.io.load_header();
-            self.io.save_record(h.data_tail, &record);
-
-            // Update header with new tail position, size and next idx.
-            let position = h.data_tail;
-            h.data_tail = h.advance_position(position, added_size);
-            h.data_size = h.data_size.saturating_add(added_size);
-            h.next_idx = record.idx + 1;
-            h.max_timestamp = record.timestamp;
-            self.io.save_header(&h);
-
-            // Update the index table with the latest record position.
-            index_table.update(position, &record);
-        }
-        // It's fine to save the index table only once after saving all the records.
-        self.io.save_index_table(&index_table);
     }
 }
 
