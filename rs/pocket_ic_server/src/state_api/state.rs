@@ -21,7 +21,7 @@ use clap::Parser;
 use fqdn::fqdn;
 use futures::future::Shared;
 use http::{
-    Method, StatusCode,
+    Method, StatusCode, Uri,
     header::{
         ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
@@ -865,6 +865,15 @@ impl ApiState {
                     .fallback(|mut request: AxumRequest| async move {
                         let conn_info = ConnInfo::default();
                         request.extensions_mut().insert(Arc::new(conn_info));
+
+                        // Rewrite the authority to localhost to "unknown_domain" errors from the gateway
+                        let uri = request.uri().clone();
+                        let mut parts = uri.into_parts();
+                        parts.authority = Some("127.0.0.1".parse().unwrap());
+                        if let Ok(new_uri) = Uri::from_parts(parts) {
+                            *request.uri_mut() = new_uri;
+                        }
+
                         ic_gateway_router.oneshot(request).await
                     })
                     .into_make_service()
