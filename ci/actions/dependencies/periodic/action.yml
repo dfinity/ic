@@ -24,7 +24,7 @@ runs:
         export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
         cd ci/src/dependencies/
         cp -a $GITHUB_WORKSPACE/config/. config/
-        $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
+        $SHELL_WRAPPER python3 job/bazel_trivy_test.py
         df -h
       env:
         SHELL_WRAPPER: "/usr/bin/time"
