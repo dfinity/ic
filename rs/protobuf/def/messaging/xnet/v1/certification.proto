@@ -20,7 +20,7 @@ message Certification {
   uint64 height = 1;
   CertificationContent content = 2;
   types.v1.ThresholdSignature signature = 3;
-  messaging.xnet.v1.Witness witness = 4;
+  messaging.xnet.v1.Witness height_witness = 4;
 }
 
 // Certification signed by a single replica
@@ -28,5 +28,5 @@ message CertificationShare {
   uint64 height = 1;
   CertificationContent content = 2;
   types.v1.ThresholdSignatureShare signature = 3;
-  messaging.xnet.v1.Witness witness = 4;
+  messaging.xnet.v1.Witness height_witness = 4;
 }

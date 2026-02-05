@@ -220,6 +220,7 @@ pub(crate) mod test {
     use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_crypto_tree_hash::{Digest, Witness};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
+    use ic_interfaces::consensus::PayloadWithSizeEstimate;
     use ic_interfaces_mocks::messaging::MockXNetPayloadBuilder;
     use ic_interfaces_mocks::payload_builder::{
         MockIngressSelector, MockSelfValidatingPayloadBuilder,
@@ -237,7 +238,7 @@ pub(crate) mod test {
         messages::SignedIngressBuilder,
     };
     use ic_types::{
-        CountBytes, CryptoHashOfPartialState, RegistryVersion,
+        CryptoHashOfPartialState, RegistryVersion,
         batch::{IngressPayload, SelfValidatingPayload, XNetPayload},
         canister_http::CanisterHttpResponseWithConsensus,
         consensus::{
@@ -317,7 +318,7 @@ pub(crate) mod test {
             merkle_proof,
             certification: Certification {
                 height: Height::from(height),
-                witness: Witness::new_for_testing(Digest([0; 32])),
+                height_witness: Witness::new_for_testing(Digest([0; 32])),
                 signed: Signed {
                     signature: ThresholdSignature::fake(),
                     content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
@@ -435,29 +436,24 @@ pub(crate) mod test {
             const CANISTER_HTTP_PAYLOAD_SIZE: NumBytes = NumBytes::new(256 * KB);
             const VETKD_PAYLOAD_SIZE: NumBytes = NumBytes::new(512 * KB);
             const QUERY_STATS_PAYLOAD_SIZE: NumBytes = NumBytes::new(MB);
-            const INGRESS_MESSAGE_PAYLOAD_SIZE: NumBytes = NumBytes::new(2 * MB);
-
-            let ingress = SignedIngressBuilder::new()
-                .method_payload(vec![0; INGRESS_MESSAGE_PAYLOAD_SIZE.get() as usize])
-                .build();
-            let ingress_size = NumBytes::from(ingress.count_bytes() as u64);
+            const INGRESS_PAYLOAD_SIZE: NumBytes = NumBytes::new(2 * MB);
 
             let payload_builder = set_up_payload_builder(
                 registry,
                 MocksSettings {
                     vetkd_payload_to_return: vec![0; VETKD_PAYLOAD_SIZE.get() as usize],
                     expected_vetkd_payload_size_limit: MAX_BLOCK_SIZE,
-                    ingress_payload_to_return: IngressPayload::from(vec![ingress]),
+                    ingress_payload_size_to_return: INGRESS_PAYLOAD_SIZE,
                     expected_ingress_payload_size_limit: MAX_BLOCK_SIZE - VETKD_PAYLOAD_SIZE,
                     bitcoin_payload_size_to_return: BITCOIN_PAYLOAD_SIZE,
                     expected_bitcoin_payload_size_limit: MAX_BLOCK_SIZE
                         - VETKD_PAYLOAD_SIZE
-                        - ingress_size,
+                        - INGRESS_PAYLOAD_SIZE,
                     xnet_payload_size_to_return: XNET_PAYLOAD_SIZE,
                     expected_xnet_payload_size_limit: NumBytes::new(
                         95 * (MAX_BLOCK_SIZE
                             - VETKD_PAYLOAD_SIZE
-                            - ingress_size
+                            - INGRESS_PAYLOAD_SIZE
                             - BITCOIN_PAYLOAD_SIZE)
                             .get()
                             / 100,
@@ -468,13 +464,13 @@ pub(crate) mod test {
                     ],
                     expected_http_outcalls_size_limit: MAX_BLOCK_SIZE
                         - VETKD_PAYLOAD_SIZE
-                        - ingress_size
+                        - INGRESS_PAYLOAD_SIZE
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE,
                     query_stats_payload_to_return: vec![0; QUERY_STATS_PAYLOAD_SIZE.get() as usize],
                     expected_query_stats_size_limit: MAX_BLOCK_SIZE
                         - VETKD_PAYLOAD_SIZE
-                        - ingress_size
+                        - INGRESS_PAYLOAD_SIZE
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE
                         - CANISTER_HTTP_PAYLOAD_SIZE,
@@ -514,12 +510,8 @@ pub(crate) mod test {
 
             let Dependencies { registry, .. } = dependencies(pool_config, 1);
 
-            let ingress = SignedIngressBuilder::new()
-                .method_payload(vec![0; ingress_payload_size as usize])
-                .build();
-
             let settings = MocksSettings {
-                ingress_payload_to_return: IngressPayload::from(vec![ingress]),
+                ingress_payload_size_to_return: NumBytes::from(ingress_payload_size),
                 query_stats_payload_to_return: vec![0; MB as usize],
                 vetkd_payload_to_return: vec![0; 512 * KB as usize],
                 http_outcalls_payload_to_return: vec![0; 256 * KB as usize],
@@ -549,7 +541,7 @@ pub(crate) mod test {
                 crypto_hash,
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload {
-                        ingress: settings.ingress_payload_to_return,
+                        ingress: IngressPayload::default(),
                         xnet: XNetPayload::default(),
                         self_validating: SelfValidatingPayload::default(),
                         canister_http: settings.http_outcalls_payload_to_return,
@@ -578,7 +570,7 @@ pub(crate) mod test {
 
     #[derive(Clone)]
     struct MocksSettings {
-        ingress_payload_to_return: IngressPayload,
+        ingress_payload_size_to_return: NumBytes,
         expected_ingress_payload_size_limit: NumBytes,
         vetkd_payload_to_return: Vec<u8>,
         expected_vetkd_payload_size_limit: NumBytes,
@@ -607,7 +599,7 @@ pub(crate) mod test {
             .return_once(|_, _| IngressSets::new(vec![], UNIX_EPOCH));
         ingress_selector
             .expect_validate_ingress_payload()
-            .return_once(|_, _, _| Ok(()));
+            .return_once(move |_, _, _| Ok(settings.ingress_payload_size_to_return));
         ingress_selector
             .expect_get_ingress_payload()
             .with(
@@ -615,7 +607,11 @@ pub(crate) mod test {
                 predicate::always(),
                 predicate::eq(settings.expected_ingress_payload_size_limit),
             )
-            .return_once(move |_, _, _| settings.ingress_payload_to_return);
+            .return_once(move |_, _, _| PayloadWithSizeEstimate {
+                wire_size_estimate: settings.ingress_payload_size_to_return,
+                // irrelevant what we return here
+                payload: IngressPayload::default(),
+            });
 
         let mut self_validating_payload_builder = MockSelfValidatingPayloadBuilder::new();
         self_validating_payload_builder

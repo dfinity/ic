@@ -164,12 +164,18 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
     let hash = state_manager
         .list_state_hashes_to_certify()
         .into_iter()
-        .find_map(|(height, hash, _)| if height == h { Some(hash) } else { None })
+        .find_map(|state_hash_metadata| {
+            if state_hash_metadata.height == h {
+                Some(state_hash_metadata.hash)
+            } else {
+                None
+            }
+        })
         .expect("no hash to certify");
 
     let certification = Certification {
         height: h,
-        witness: Witness::new_for_testing(Digest([0; 32])),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),

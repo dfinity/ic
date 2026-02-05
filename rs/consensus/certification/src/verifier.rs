@@ -69,7 +69,7 @@ mod tests {
         signature.signer = signer;
         Certification {
             height,
-            witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 signature,
                 content: CertificationContent::new(hash),
