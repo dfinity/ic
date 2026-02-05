@@ -1295,6 +1295,7 @@ mod mainnet_compatibility_tests {
     #[cfg(test)]
     mod task_queue_compatibility_test {
         use ic_types::CanisterId;
+        use ic_types::messages::CallbackId;
 
         use super::super::*;
         use super::*;
@@ -1315,10 +1316,9 @@ mod mainnet_compatibility_tests {
                     deadline: NO_DEADLINE,
                 })
             };
-            let mut call_context_manager = CallContextManager::default();
 
+            let callback_id1 = CallbackId::new(1);
             let callback1 = make_callback(canister_test_id(1));
-            let callback_id1 = call_context_manager.with_callback(callback1.as_ref().clone());
             let response1 = Arc::new(
                 ResponseBuilder::new()
                     .respondent(canister_test_id(1))
@@ -1326,8 +1326,8 @@ mod mainnet_compatibility_tests {
                     .build(),
             );
 
+            let callback_id2 = CallbackId::new(3);
             let callback2 = make_callback(canister_test_id(3));
-            let _callback_id2 = call_context_manager.with_callback(callback2.as_ref().clone());
 
             // A task queue with a `Response` aborted execution bundling `response1` and
             // `callback1`.
@@ -1341,7 +1341,9 @@ mod mainnet_compatibility_tests {
             });
 
             // And a `CallContextManager` with the second callback only.
-            call_context_manager.unregister_callback(callback_id1);
+            let mut call_context_manager = CallContextManager::default();
+            call_context_manager.insert_callback(callback_id2, callback2.as_ref().clone());
+
             CanisterStateBits {
                 task_queue: task_queue.clone(),
                 status: CanisterStatus::Running {

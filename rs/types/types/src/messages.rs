@@ -20,7 +20,7 @@ pub use self::http::{
 use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{Cycles, Funds, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
+use crate::{Cycles, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
@@ -200,7 +200,6 @@ impl From<&StopCanisterContext> for pb::StopCanisterContext {
                         sender: Some(pb_types::CanisterId::from(*sender)),
                         reply_callback: reply_callback.get(),
                         call_id: call_id.map(|id| id.get()),
-                        funds: Some((&Funds::new(*cycles)).into()),
                         cycles: Some((*cycles).into()),
                         deadline_seconds: deadline.as_secs_since_unix_epoch(),
                     },
@@ -234,38 +233,16 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         sender,
                         reply_callback,
                         call_id,
-                        funds,
                         cycles,
                         deadline_seconds,
                     },
-                ) => {
-                    // To maintain backwards compatibility we fall back to reading from `funds` if
-                    // `cycles` is not set.
-                    let cycles = match try_from_option_field(
-                        cycles,
-                        "StopCanisterContext::Canister::cycles",
-                    ) {
-                        Ok(cycles) => cycles,
-                        Err(_) => {
-                            let mut funds: Funds = try_from_option_field(
-                                funds,
-                                "StopCanisterContext::Canister::funds",
-                            )?;
-                            funds.take_cycles()
-                        }
-                    };
-
-                    StopCanisterContext::Canister {
-                        sender: try_from_option_field(
-                            sender,
-                            "StopCanisterContext::Canister::sender",
-                        )?,
-                        reply_callback: CallbackId::from(reply_callback),
-                        call_id: call_id.map(StopCanisterCallId::from),
-                        cycles,
-                        deadline: CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
-                    }
-                }
+                ) => StopCanisterContext::Canister {
+                    sender: try_from_option_field(sender, "StopCanisterContext::Canister::sender")?,
+                    reply_callback: CallbackId::from(reply_callback),
+                    call_id: call_id.map(StopCanisterCallId::from),
+                    cycles: try_from_option_field(cycles, "StopCanisterContext::Canister::cycles")?,
+                    deadline: CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
+                },
             };
         Ok(stop_canister_context)
     }

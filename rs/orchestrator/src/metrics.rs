@@ -14,6 +14,7 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) key_rotation_status: IntGaugeVec,
     pub(crate) master_public_key_changed_errors: IntCounterVec,
     pub(crate) failed_consecutive_upgrade_checks: IntCounter,
+    pub(crate) replica_version_upgrade_prevented: IntCounterVec,
     pub(crate) critical_error_cup_deserialization_failed: IntCounter,
     pub(crate) critical_error_state_removal_failed: IntCounter,
     pub(crate) fstrim_duration: IntGauge,
@@ -81,6 +82,12 @@ impl OrchestratorMetrics {
             failed_consecutive_upgrade_checks: metrics_registry.int_counter(
                 "orchestrator_failed_consecutive_upgrade_checks_total",
                 "Number of times the upgrade check failed consecutively",
+            ),
+            replica_version_upgrade_prevented: metrics_registry.int_counter_vec(
+                "orchestrator_replica_version_upgrade_prevented_total",
+                "Number of times an upgrade to a replica version was prevented, \
+                grouped by the version and the reason for prevention",
+                &["version", "reason"],
             ),
             critical_error_cup_deserialization_failed: metrics_registry.int_counter(
                 "orchestrator_cup_deserialization_failed_total",

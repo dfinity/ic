@@ -4,7 +4,8 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
 use ic_nns_test_utils::{
-    itest_helpers::local_test_on_nns_subnet, registry::invariant_compliant_mutation_as_atomic_req,
+    itest_helpers::state_machine_test_on_nns_subnet,
+    registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_registry_transport::{
     insert,
@@ -51,7 +52,7 @@ fn get_value_request(key: impl AsRef<[u8]>, version: Option<u64>) -> RegistryGet
 
 #[test]
 fn test_canister_installation_traps_on_bad_init_payload() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         assert_matches!(
             Project::new()
             .cargo_bin("registry-canister", &[])
@@ -65,7 +66,7 @@ fn test_canister_installation_traps_on_bad_init_payload() {
 
 #[test]
 fn test_mutations_are_rejected_from_non_authorized_sources() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut canister = install_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -100,7 +101,7 @@ fn test_mutations_are_rejected_from_non_authorized_sources() {
 /// was set by the initial mutations, when they all succeed.
 #[test]
 fn test_initial_mutations_ok() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let init_payload = RegistryCanisterInitPayloadBuilder::new()
             .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .push_init_mutate_request(RegistryAtomicMutateRequest {
@@ -180,7 +181,7 @@ fn test_initial_mutations_ok() {
 /// if previous ones have succeeded
 #[test]
 fn test_that_init_traps_if_any_init_mutation_fails() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let init_payload = RegistryCanisterInitPayloadBuilder::new()
             .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .push_init_mutate_request(RegistryAtomicMutateRequest {
