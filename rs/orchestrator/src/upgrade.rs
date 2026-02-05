@@ -1867,16 +1867,16 @@ mod tests {
         // loop.
         fn was_replica_process_started_previously(&self) -> bool {
             matches!(
-            self.initial_subnet_assignment,
-            SubnetAssignment::Assigned(_)
-        )
-        && self.has_local_cup.is_some()
-        // TODO(CON-1630): After mocking the process management, we can remove the condition below.
-        // For now, we should not start the replica if a recovery CUP exists (with higher height)
-        // since that would try to stop the replica process, which fails in the test
-        // environment.
-        && self.has_registry_cup.as_ref().map(|(cup, _)| cup.height)
-        <= self.has_local_cup.as_ref().map(|cup| cup.height)
+                self.initial_subnet_assignment,
+                SubnetAssignment::Assigned(_)
+            )
+            && self.has_local_cup.is_some()
+            // TODO(CON-1630): After mocking the process management, we can remove the condition below.
+            // For now, we should not start the replica if a recovery CUP exists (with higher height)
+            // since that would try to stop the replica process, which fails in the test
+            // environment.
+            && self.has_registry_cup.as_ref().map(|(cup, _)| cup.height)
+            <= self.has_local_cup.as_ref().map(|cup| cup.height)
         }
 
         // Returns whether the upgrade loop should call
@@ -2821,38 +2821,38 @@ mod tests {
         #[values(NODE_1)] node_id: NodeId,
         #[values(ReplicaVersion::try_from("replica_version_0.1").unwrap())] current_replica_version: ReplicaVersion,
         #[values(
-        None,
-        Some(CUPScenario {
-            height: Height::from(100),
-            subnet_id: SUBNET_1,
-            registry_version: RegistryVersion::from(10),
-        }),
-        Some(CUPScenario {
-            height: Height::from(1000),
-            subnet_id: SUBNET_1,
-            registry_version: RegistryVersion::from(100),
-        }),
-    )]
-        has_local_cup: Option<CUPScenario>,
-        #[values(
-        None,
-        Some((
-            CUPScenario {
-                height: Height::from(101),
+            None,
+            Some(CUPScenario {
+                height: Height::from(100),
                 subnet_id: SUBNET_1,
-                registry_version: RegistryVersion::from(51),
-            },
-            RegistryVersion::from(52),
-        )),
-        Some((
-            CUPScenario {
-                height: Height::from(1001),
+                registry_version: RegistryVersion::from(10),
+            }),
+            Some(CUPScenario {
+                height: Height::from(1000),
                 subnet_id: SUBNET_1,
                 registry_version: RegistryVersion::from(100),
-            },
-            RegistryVersion::from(101),
-        )),
-    )]
+            }),
+        )]
+        has_local_cup: Option<CUPScenario>,
+            #[values(
+            None,
+            Some((
+                CUPScenario {
+                    height: Height::from(101),
+                    subnet_id: SUBNET_1,
+                    registry_version: RegistryVersion::from(51),
+                },
+                RegistryVersion::from(52),
+            )),
+            Some((
+                CUPScenario {
+                    height: Height::from(1001),
+                    subnet_id: SUBNET_1,
+                    registry_version: RegistryVersion::from(100),
+                },
+                RegistryVersion::from(101),
+            )),
+        )]
         has_registry_cup: Option<(CUPScenario, RegistryVersion)>,
         // Note: the initial subnet assignment should normally not be `Assigned` if the node has
         // no local CUP and vice versa. However, we still test these combinations to verify that
