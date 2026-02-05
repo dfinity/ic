@@ -23,22 +23,15 @@ jobs:
 
       - name: Check crate version
         run: |
+          set -euo pipefail
           crate_name="${{ github.event.inputs.crate-name }}"
           crate_version="${{ github.event.inputs.crate-version }}"
 
-          if ! awk -v name="$crate_name" -v ver="$crate_version" '
-            /^\[\[package\]\]/ { match_name=0; match_ver=0; next }
-            match($0, /^name = "([^"]+)"/, a) { if (a[1]==name) match_name=1; next }
-            match($0, /^version = "([^"]+)"/, b) { if (b[1]==ver) match_ver=1; next }
-            (match_name && match_ver) { exit 0 }
-            END { exit 1 }
-          ' Cargo.lock; then
-            echo "Cargo.lock does not contain package '$crate_name' with version '$crate_version'"
+          current_crate_version=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[] | select(.name==\"${crate_name}\") | .version")
+          if [ "$current_crate_version" != "$crate_version" ]; then
+            echo "Crate version mismatch: expected $crate_version, found $current_crate_version"
             exit 1
           fi
-
-      - name: Test
-        run: exit 1
 
       - name: Build and Test Crate
         run: |
