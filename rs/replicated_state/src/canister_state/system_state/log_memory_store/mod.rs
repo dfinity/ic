@@ -202,13 +202,6 @@ impl LogMemoryStore {
             .unwrap_or_default()
     }
 
-    /// Returns all canister log records.
-    pub fn all_records(&self) -> Vec<CanisterLogRecord> {
-        self.load_ring_buffer()
-            .map(|rb| rb.all_records())
-            .unwrap_or_default()
-    }
-
     /// Appends a delta log to the ring buffer if it exists.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         if delta_log.is_empty() {
