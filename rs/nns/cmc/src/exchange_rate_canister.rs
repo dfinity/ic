@@ -73,15 +73,13 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
         let result = result
             .candid::<GetExchangeRateResult>()
             // Handle decode fail.
-            .map_err(|candid_decode_failed| {
-                GetExchangeRateError::Call {
-                    code: -1,
-                    message: format!(
-                        "Got a reply from the Exchange Rate canister, \
+            .map_err(|candid_decode_failed| GetExchangeRateError::Call {
+                code: -1,
+                message: format!(
+                    "Got a reply from the Exchange Rate canister, \
                          but it was not decodable as a GetExchangeRateResult: \
                          {candid_decode_failed:?}",
-                    ),
-                }
+                ),
             })?;
 
         result.map_err(GetExchangeRateError::Xrc)
@@ -109,7 +107,10 @@ fn call_failed_to_get_exchange_rate_error(call_failed: CallFailed) -> GetExchang
 
         CallFailed::CallPerformFailed(_no_data) => {
             // This message is copied more or less verbatim from the ic_cdk documentation.
-            (-1, "The underlying ic0.call_perform operation returned a non-zero code.".to_string())
+            (
+                -1,
+                "The underlying ic0.call_perform operation returned a non-zero code.".to_string(),
+            )
         }
 
         CallFailed::CallRejected(err) => {
@@ -120,10 +121,7 @@ fn call_failed_to_get_exchange_rate_error(call_failed: CallFailed) -> GetExchang
         }
     };
 
-    GetExchangeRateError::Call {
-        code,
-        message,
-    }
+    GetExchangeRateError::Call { code, message }
 }
 
 #[repr(u8)]
