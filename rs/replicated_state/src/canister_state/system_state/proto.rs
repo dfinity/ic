@@ -75,17 +75,15 @@ impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     }
 }
 
-impl TryFrom<(pb::canister_state_bits::CanisterStatus, CanisterId)> for CanisterStatus {
+impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
     type Error = ProxyDecodeError;
-    fn try_from(
-        (value, own_canister_id): (pb::canister_state_bits::CanisterStatus, CanisterId),
-    ) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::canister_state_bits::CanisterStatus) -> Result<Self, Self::Error> {
         let canister_status = match value {
             pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {
                 call_context_manager,
             }) => Self::Running {
                 call_context_manager: try_from_option_field(
-                    call_context_manager.map(|ccm| (ccm, own_canister_id)),
+                    call_context_manager,
                     "CanisterStatus::Running::call_context_manager",
                 )?,
             },
@@ -102,7 +100,7 @@ impl TryFrom<(pb::canister_state_bits::CanisterStatus, CanisterId)> for Canister
                 }
                 Self::Stopping {
                     call_context_manager: try_from_option_field(
-                        call_context_manager.map(|ccm| (ccm, own_canister_id)),
+                        call_context_manager,
                         "CanisterStatus::Stopping::call_context_manager",
                     )?,
                     stop_contexts: contexts,
@@ -185,12 +183,10 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
     }
 }
 
-impl TryFrom<(pb::ExecutionTask, CanisterId)> for ExecutionTask {
+impl TryFrom<pb::ExecutionTask> for ExecutionTask {
     type Error = ProxyDecodeError;
 
-    fn try_from(
-        (value, own_canister_id): (pb::ExecutionTask, CanisterId),
-    ) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ExecutionTask) -> Result<Self, Self::Error> {
         let task = value
             .task
             .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
@@ -214,10 +210,10 @@ impl TryFrom<(pb::ExecutionTask, CanisterId)> for ExecutionTask {
                             .response
                             .ok_or(ProxyDecodeError::MissingField("AbortedResponse::response"))?
                             .try_into()?;
-                        let callback_proto = v
+                        let callback = v
                             .callback
-                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?;
-                        let callback = (callback_proto, own_canister_id).try_into()?;
+                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?
+                            .try_into()?;
                         CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
                             response: Arc::new(response),
                             callback: Arc::new(callback),
