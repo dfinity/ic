@@ -68,7 +68,6 @@ go.sum                    @dfinity/idx
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
-/ic-os/components/ic/share/ic-boundary.env                              @dfinity/node
 /toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
@@ -79,6 +78,7 @@ go.sum                    @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
 /.github/workflows/bazel-dependency-submission.yml                       @dfinity/idx @dfinity/product-security
 /.github/workflows/ledger-suite-release.yml                              @dfinity/defi @dfinity/idx
+/.github/workflows/repro-check.yml                                       @dfinity/dre @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/defi @dfinity/idx
 /.github/workflows/security-checks.yml                                   @dfinity/idx @dfinity/product-security
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
@@ -129,8 +129,8 @@ go.sum                    @dfinity/idx
 /rs/https_outcalls/                                     @dfinity/consensus
 /rs/https_outcalls/consensus/                           @dfinity/consensus
 /rs/ic_os/                                              @dfinity/node
-/rs/ic_os/fstrim_tool/                                  @dfinity/node @dfinity/consensus
-/rs/ic_os/nss_icos/                                     @dfinity/dre
+/rs/ic_os/metrics/fstrim_tool/                          @dfinity/node @dfinity/consensus
+/rs/ic_os/networking/nss_icos/                          @dfinity/dre
 /rs/ingress_manager/                                    @dfinity/consensus
 /rs/interfaces/                                         @dfinity/ic-interface-owners
 /rs/interfaces/adapter_client/                          @dfinity/consensus

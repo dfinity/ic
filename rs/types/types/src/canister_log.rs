@@ -212,6 +212,11 @@ impl CanisterLog {
         self.records.clear();
     }
 
+    /// Returns true if the canister log is empty.
+    pub fn is_empty(&self) -> bool {
+        self.records.records.is_empty()
+    }
+
     /// Returns the maximum allowed size of a canister log buffer.
     pub fn byte_capacity(&self) -> usize {
         self.records.byte_capacity
@@ -244,6 +249,9 @@ impl CanisterLog {
 
     /// Moves all the logs from `delta_log` to `self`.
     pub fn append_delta_log(&mut self, delta_log: &mut Self) {
+        if delta_log.is_empty() {
+            return; // Don't append if delta is empty.
+        }
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.records.bytes_used);
 
