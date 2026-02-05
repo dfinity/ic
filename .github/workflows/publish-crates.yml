@@ -13,6 +13,7 @@ on:
         description: 'If true, perform all steps except the actual publish'
         required: false
         default: 'false'
+        type: boolean
 
 permissions:
   contents: read
