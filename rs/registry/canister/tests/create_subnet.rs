@@ -17,8 +17,8 @@ use ic_management_canister_types_private::{
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, state_machine_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req},
 };

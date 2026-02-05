@@ -4,7 +4,8 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
 use ic_nns_test_utils::{
-    itest_helpers::state_machine_test_on_nns_subnet, registry::invariant_compliant_mutation_as_atomic_req,
+    itest_helpers::state_machine_test_on_nns_subnet,
+    registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_registry_transport::{
     insert,

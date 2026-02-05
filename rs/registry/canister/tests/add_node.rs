@@ -4,7 +4,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{state_machine_test_on_nns_subnet, set_up_registry_canister},
+    itest_helpers::{set_up_registry_canister, state_machine_test_on_nns_subnet},
     registry::{
         get_committee_signing_key, get_dkg_dealing_key, get_node_operator_record, get_node_record,
         get_node_signing_key, get_transport_tls_certificate,

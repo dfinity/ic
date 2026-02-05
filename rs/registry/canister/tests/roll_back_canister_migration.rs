@@ -1,7 +1,7 @@
 use candid::Encode;
 use ic_nns_test_utils::{
     itest_helpers::{
-        state_machine_test_on_nns_subnet, set_up_registry_canister, set_up_universal_canister,
+        set_up_registry_canister, set_up_universal_canister, state_machine_test_on_nns_subnet,
         try_call_via_universal_canister,
     },
     registry::{initial_routing_table_mutations, prepare_registry_with_two_node_sets},

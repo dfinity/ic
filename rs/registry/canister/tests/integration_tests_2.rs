@@ -9,7 +9,9 @@ use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{UpgradeTestingScenario, state_machine_test_on_nns_subnet, maybe_upgrade_to_self},
+    itest_helpers::{
+        UpgradeTestingScenario, maybe_upgrade_to_self, state_machine_test_on_nns_subnet,
+    },
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;

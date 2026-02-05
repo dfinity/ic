@@ -2,7 +2,7 @@ use candid::Encode;
 use ic_base_types::SubnetId;
 use ic_nns_test_utils::{
     itest_helpers::{
-        state_machine_test_on_nns_subnet, set_up_registry_canister, set_up_universal_canister,
+        set_up_registry_canister, set_up_universal_canister, state_machine_test_on_nns_subnet,
         try_call_via_universal_canister,
     },
     registry::{

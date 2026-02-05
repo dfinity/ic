@@ -3,8 +3,8 @@ use candid::Encode;
 use dfn_candid::candid_one;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, state_machine_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::invariant_compliant_mutation_as_atomic_req,
 };

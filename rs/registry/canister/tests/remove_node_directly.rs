@@ -10,7 +10,7 @@ use ic_nns_test_utils::registry::{
     get_transport_tls_certificate, new_node_keys_and_node_id,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{state_machine_test_on_nns_subnet, set_up_registry_canister},
+    itest_helpers::{set_up_registry_canister, state_machine_test_on_nns_subnet},
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
