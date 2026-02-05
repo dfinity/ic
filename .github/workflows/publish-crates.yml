@@ -48,7 +48,7 @@ jobs:
           cargo test --package ${{ github.event.inputs.crate-name }}
 
       - name: Publish Dry Run
-        if: ${{ github.event.inputs.dry-run. == 'true' }}
+        if: ${{ github.event.inputs.dry-run == 'true' }}
         run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty --dry-run
 
       - name: Publish Crate
