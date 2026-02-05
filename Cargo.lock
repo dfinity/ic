@@ -21000,6 +21000,7 @@ dependencies = [
  "ic-cdk",
  "ic-certified-map",
  "ic-config",
+ "ic-consensus-features",
  "ic-crypto-node-key-generation",
  "ic-crypto-node-key-validation",
  "ic-crypto-sha2",
