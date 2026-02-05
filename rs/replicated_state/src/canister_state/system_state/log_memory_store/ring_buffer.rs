@@ -501,4 +501,57 @@ mod tests {
         assert!(rb.pop_front().is_none());
         assert!(rb.records(None).is_empty());
     }
+
+    #[test]
+    fn test_iter() {
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), TEST_DATA_CAPACITY);
+
+        let r0 = log_record(0, 100, "a");
+        let r1 = log_record(1, 200, "bb");
+        let r2 = log_record(2, 300, "ccc");
+
+        rb.append(&r0);
+        rb.append(&r1);
+        rb.append(&r2);
+
+        let records: Vec<CanisterLogRecord> = rb.iter().collect();
+
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0], r0);
+        assert_eq!(records[1], r1);
+        assert_eq!(records[2], r2);
+    }
+
+    #[test]
+    fn test_iter_empty() {
+        let rb = RingBuffer::new(PageMap::new_for_testing(), TEST_DATA_CAPACITY);
+
+        let records: Vec<CanisterLogRecord> = rb.iter().collect();
+
+        assert!(records.is_empty());
+    }
+
+    #[test]
+    fn test_load_checked() {
+        let mut page_map = PageMap::new_for_testing();
+        let data_capacity = TEST_DATA_CAPACITY;
+
+        // Create a valid ring buffer and persist it.
+        {
+            let mut rb = RingBuffer::new(page_map, data_capacity);
+            rb.append(&log_record(0, 100, "test"));
+            page_map = rb.to_page_map();
+            // Make sure rb is dropped.
+        }
+
+        // Load it back successfully.
+        let rb =
+            RingBuffer::load_checked(page_map).expect("Should load valid existing ring buffer");
+        assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
+        assert_eq!(rb.records(None).len(), 1);
+
+        // Try to load from a fresh (empty/invalid) page map.
+        let empty_page_map = PageMap::new_for_testing();
+        assert!(RingBuffer::load_checked(empty_page_map).is_none());
+    }
 }
