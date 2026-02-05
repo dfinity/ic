@@ -9,6 +9,10 @@ on:
       crate-version:
         description: 'The version of the crate to publish'
         required: true
+      dry-run:
+        description: 'If true, perform all steps except the actual publish'
+        required: false
+        default: 'false'
 
 permissions:
   contents: read
@@ -42,6 +46,12 @@ jobs:
           cargo build --package ${{ github.event.inputs.crate-name }}
           cargo test --package ${{ github.event.inputs.crate-name }}
 
-      - run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty
+      - name: Publish Dry Run
+        if: ${{ github.event.inputs.dry-run. == 'true' }}
+        run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty --dry-run
+
+      - name: Publish Crate
+        if: ${{ github.event.inputs.dry-run != 'true' }}
+        run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
