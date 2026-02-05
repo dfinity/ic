@@ -1876,7 +1876,7 @@ mod tests {
             // since that would try to stop the replica process, which fails in the test
             // environment.
             && self.has_registry_cup.as_ref().map(|(cup, _)| cup.height)
-            <= self.has_local_cup.as_ref().map(|cup| cup.height)
+                <= self.has_local_cup.as_ref().map(|cup| cup.height)
         }
 
         // Returns whether the upgrade loop should call
@@ -2834,7 +2834,7 @@ mod tests {
             }),
         )]
         has_local_cup: Option<CUPScenario>,
-            #[values(
+        #[values(
             None,
             Some((
                 CUPScenario {
