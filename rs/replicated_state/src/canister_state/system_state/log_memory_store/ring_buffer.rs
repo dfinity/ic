@@ -39,6 +39,11 @@ const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_M
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 
+/// The minimum non-zero size of a ring-buffer.
+///
+/// Log memory limit can be zero to disable logging,
+/// but when it is non-zero it must be at least this value
+/// to properly account for the size of at least one OS page.
 pub(crate) const DATA_CAPACITY_MIN: usize = VIRTUAL_PAGE_SIZE;
 const _: () = assert!(VIRTUAL_PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
 
