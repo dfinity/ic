@@ -111,17 +111,6 @@ impl RingBuffer {
         self.append_log_iter(records);
     }
 
-    /// Returns an iterator over all records in the ring buffer.
-    pub fn iter(&self) -> RingBufferIterator<'_> {
-        let header = self.io.load_header();
-        RingBufferIterator {
-            io: &self.io,
-            pos: header.data_head,
-            remaining_size: header.data_size.get() as usize,
-            header,
-        }
-    }
-
     /// Appends records from an iterator.
     pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
         let mut index_table = self.io.load_index_table();
@@ -274,6 +263,17 @@ impl RingBuffer {
                 }
                 records
             }
+        }
+    }
+
+    /// Returns an iterator over all records in the ring buffer.
+    pub fn iter(&self) -> RingBufferIterator<'_> {
+        let header = self.io.load_header();
+        RingBufferIterator {
+            io: &self.io,
+            pos: header.data_head,
+            remaining_size: header.data_size.get() as usize,
+            header,
         }
     }
 }
