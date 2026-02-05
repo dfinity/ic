@@ -3736,8 +3736,7 @@ impl ExecutionEnvironment {
             ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
         };
 
-        let old_canister =
-            Arc::try_unwrap(old_canister).unwrap_or_else(|canister| (*canister).clone());
+        let old_canister = Arc::unwrap_or_clone(old_canister);
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
             msg,
