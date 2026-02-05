@@ -358,63 +358,6 @@ impl SchedulerImpl {
         (new_state, message_instructions)
     }
 
-    /// Invoked in the first iteration of the inner round to add the `Heartbeat`
-    /// and `GlobalTimer` tasks that are carried out prior to processing
-    /// any input messages.
-    fn initialize_inner_round(&self, state: &mut ReplicatedState) -> BTreeSet<CanisterId> {
-        let _timer = self
-            .metrics
-            .round_inner_heartbeat_overhead_duration
-            .start_timer();
-
-        let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
-
-        let now = state.time();
-        for canister in state.canisters_iter_mut() {
-            // Add `Heartbeat` or `GlobalTimer` for running canisters only.
-            match canister.system_state.status() {
-                CanisterStatusType::Running => {}
-                CanisterStatusType::Stopping | CanisterStatusType::Stopped => {
-                    continue;
-                }
-            }
-
-            let may_schedule_heartbeat = canister.exports_heartbeat_method();
-            let may_schedule_global_timer = canister.exports_global_timer_method()
-                && canister.system_state.global_timer.has_reached_deadline(now);
-
-            if !may_schedule_heartbeat && !may_schedule_global_timer {
-                // Canister has no heartbeat and no (schedulable) global timer.
-                continue;
-            }
-
-            match canister.next_execution() {
-                NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                    // Do not add a heartbeat task if a long execution
-                    // is pending.
-                }
-                NextExecution::None | NextExecution::StartNew => {
-                    let canister = Arc::make_mut(canister);
-                    for _ in 0..NextScheduledMethod::iter().count() {
-                        let method_chosen = is_next_method_chosen(
-                            canister,
-                            &mut heartbeat_and_timer_canister_ids,
-                            may_schedule_heartbeat,
-                            may_schedule_global_timer,
-                        );
-
-                        canister.inc_next_scheduled_method();
-
-                        if method_chosen {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        heartbeat_and_timer_canister_ids
-    }
-
     /// Performs multiple iterations of canister execution until the instruction
     /// limit per round is reached or the canisters become idle. The canisters
     /// are executed in parallel using the thread pool.
@@ -440,8 +383,6 @@ impl SchedulerImpl {
         let mut is_first_iteration = true;
 
         let mut total_heap_delta = NumBytes::from(0);
-
-        let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
 
         // Start iteration loop:
         //      - Execute subnet messages.
@@ -473,15 +414,17 @@ impl SchedulerImpl {
                 scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
             }
 
+            let mut round_limits = scheduler_round_limits.canister_round_limits();
+            if round_limits.instructions_reached() {
+                self.metrics
+                    .inner_round_loop_consumed_max_instructions
+                    .inc();
+                break state;
+            }
+
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
-            let mut round_limits = scheduler_round_limits.canister_round_limits();
             let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-
-            // Add `Heartbeat` and `GlobalTimer` tasks to be executed before input messages.
-            if is_first_iteration {
-                heartbeat_and_timer_canister_ids = self.initialize_inner_round(&mut state);
-            }
 
             // Update subnet available memory before taking out the canisters.
             let prep_step_timer = self
@@ -606,13 +549,6 @@ impl SchedulerImpl {
                     .inc();
             }
 
-            if round_limits.instructions_reached() {
-                self.metrics
-                    .inner_round_loop_consumed_max_instructions
-                    .inc();
-                break state;
-            }
-
             if total_heap_delta >= self.config.max_heap_delta_per_iteration {
                 break state;
             }
@@ -624,22 +560,6 @@ impl SchedulerImpl {
             is_first_iteration = false;
             drop(finalization_timer);
         }; // end iteration loop.
-
-        {
-            let _timer = self
-                .metrics
-                .round_inner_heartbeat_overhead_duration
-                .start_timer();
-            // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
-            // because they will be added again in the next round.
-            for canister_id in &heartbeat_and_timer_canister_ids {
-                let canister = state.canister_state_mut(canister_id).unwrap();
-                canister
-                    .system_state
-                    .task_queue
-                    .remove_heartbeat_and_global_timer();
-            }
-        }
 
         for canister_id in round_schedule.fully_executed_canisters().iter() {
             state
@@ -844,7 +764,6 @@ impl SchedulerImpl {
 
     fn purge_expired_ingress_messages(
         &self,
-        canisters_with_inputs: &BTreeSet<CanisterId>,
         state: &mut ReplicatedState,
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
     ) {
@@ -852,8 +771,7 @@ impl SchedulerImpl {
         let not_expired_yet = |ingress: &Ingress| ingress.expiry_time >= current_time;
         let mut expired_ingress_messages =
             state.filter_subnet_queues_ingress_messages(not_expired_yet);
-        for canister_id in canisters_with_inputs {
-            let canister = state.canister_state_mut_arc(canister_id).unwrap();
+        for canister in state.canisters_iter_mut() {
             if canister.system_state.any_ingress_messages(not_expired_yet) {
                 let canister = Arc::make_mut(canister);
                 expired_ingress_messages.extend(
@@ -1175,6 +1093,10 @@ impl SchedulerImpl {
 
                 // Abort all paused execution before the checkpoint.
                 self.exec_env.abort_all_paused_executions(state, &self.log);
+
+                for (_, priority) in state.metadata.subnet_schedule.iter_mut() {
+                    priority.priority_credit = Default::default();
+                }
             }
             ExecutionRoundType::OrdinaryRound => {
                 self.abort_paused_executions_above_limit(state);
@@ -1267,7 +1189,6 @@ impl Scheduler for SchedulerImpl {
             state.time(),
             self.metrics.canister_ingress_queue_latencies.clone(),
         );
-        let canisters_with_inputs: BTreeSet<CanisterId>;
 
         // Copy state of registry flag over to ReplicatedState
         state.set_own_cost_schedule(registry_settings.canister_cycles_cost_schedule);
@@ -1285,24 +1206,6 @@ impl Scheduler for SchedulerImpl {
                 state.metadata.heap_delta_estimate,
             );
             self.metrics.execute_round_called.inc();
-
-            canisters_with_inputs = state
-                .canister_states()
-                .iter()
-                .filter_map(|(canister_id, canister)| {
-                    // Filter for canisters that have a next execution...
-                    if canister.next_execution() != NextExecution::None
-                        // ... or have active heartbeats or global timers.
-                        || canister.system_state.status() == CanisterStatusType::Running
-                            && (canister.exports_heartbeat_method()
-                                || (canister.exports_global_timer_method() && canister.system_state.global_timer.has_reached_deadline(state.time())))
-                    {
-                        Some(*canister_id)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
 
             observe_replicated_state_metrics(
                 self.own_subnet_id,
@@ -1347,11 +1250,7 @@ impl Scheduler for SchedulerImpl {
 
             {
                 let _timer = self.metrics.round_preparation_ingress.start_timer();
-                self.purge_expired_ingress_messages(
-                    &canisters_with_inputs,
-                    &mut state,
-                    &mut canister_ingress_latencies,
-                );
+                self.purge_expired_ingress_messages(&mut state, &mut canister_ingress_latencies);
             }
 
             // In the future, subnet messages might be executed in threads. In
@@ -1924,12 +1823,12 @@ fn execute_canisters_on_thread(
                     .map(|n| if n.get() > 0 { 1 } else { 0 })
                     .unwrap_or(0),
             );
-            println!(
-                "canister {:?} executed {} instructions and {} messages",
-                new_canister.canister_id(),
-                round_instructions_executed.get(),
-                messages.get()
-            );
+            // println!(
+            //     "canister {:?} executed {} instructions and {} messages",
+            //     new_canister.canister_id(),
+            //     round_instructions_executed.get(),
+            //     messages.get()
+            // );
             measurement_scope.add(
                 round_instructions_executed,
                 NumSlices::from(messages.get()),
@@ -2376,6 +2275,28 @@ fn get_instructions_limits_for_subnet_message(
             ),
         },
         Err(_) => default_limits,
+    }
+}
+
+fn maybe_add_heartbeat_or_global_timer_tasks(
+    canister: &mut CanisterState,
+    may_schedule_heartbeat: bool,
+    may_schedule_global_timer: bool,
+    heartbeat_and_timer_canister_ids: &mut BTreeSet<CanisterId>,
+) {
+    for _ in 0..NextScheduledMethod::iter().count() {
+        let method_chosen = is_next_method_chosen(
+            canister,
+            heartbeat_and_timer_canister_ids,
+            may_schedule_heartbeat,
+            may_schedule_global_timer,
+        );
+
+        canister.inc_next_scheduled_method();
+
+        if method_chosen {
+            break;
+        }
     }
 }
 

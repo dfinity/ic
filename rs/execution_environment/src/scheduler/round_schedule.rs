@@ -6,6 +6,7 @@ use crate::util::debug_assert_or_critical_error;
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{ReplicaLogger, error};
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::{CanisterPriority, CanisterState, ReplicatedState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
@@ -132,9 +133,8 @@ pub struct RoundSchedule {
     fully_executed_canisters: BTreeSet<CanisterId>,
     /// Full round: canisters that were heap delta rate-limited.
     rate_limited_canisters: BTreeSet<CanisterId>,
-    // /// Full round: canisters that have heartbeat or expired global timer tasks.
-    // FIXME: Also consider heartbeat and global timer canisters as active.
-    // heartbeat_and_timer_canister_ids: BTreeSet<CanisterId>,
+    /// Full round: canisters that have heartbeat or expired global timer tasks.
+    heartbeat_and_timer_canister_ids: BTreeSet<CanisterId>,
 }
 
 impl RoundSchedule {
@@ -156,6 +156,7 @@ impl RoundSchedule {
             canisters_with_completed_messages: BTreeSet::new(),
             fully_executed_canisters: BTreeSet::new(),
             rate_limited_canisters: BTreeSet::new(),
+            heartbeat_and_timer_canister_ids: BTreeSet::new(),
         }
     }
 
@@ -212,6 +213,7 @@ impl RoundSchedule {
         logger: &ReplicaLogger,
     ) {
         let is_first_iteration = self.schedule.is_empty();
+        let now = state.time();
 
         self.total_compute_allocation = AccumulatedPriority::new(0);
         self.long_executions_count = 0;
@@ -230,9 +232,39 @@ impl RoundSchedule {
                     return None;
                 }
 
-                let canister_round_state = match canister.next_execution() {
+                let next_execution = canister.next_execution();
+                let had_long_execution = self.long_execution_canisters.contains(canister_id);
+                // If this is the first iteration, add `Heartbeat` or `GlobalTimer` tasks...
+                if is_first_iteration
+                    // ...to canisters with new or no execution...
+                    && (next_execution == NextExecution::StartNew || next_execution == NextExecution::None)
+                    // ... that did not already complete a long execution...
+                    && !had_long_execution
+                    // ... that are running...
+                    && canister.system_state.status() == CanisterStatusType::Running
+                {
+                    // ... and that have a heartbeat or an active global timer.
+                    let may_schedule_heartbeat = canister.exports_heartbeat_method();
+                    let may_schedule_global_timer = canister.exports_global_timer_method()
+                        && canister.system_state.global_timer.has_reached_deadline(now);
+
+                    if may_schedule_heartbeat || may_schedule_global_timer {
+                        super::maybe_add_heartbeat_or_global_timer_tasks(
+                            Arc::make_mut(canister),
+                            may_schedule_heartbeat,
+                            may_schedule_global_timer,
+                            &mut self.heartbeat_and_timer_canister_ids,
+                        );
+                        // FIXME
+                        self.heartbeat_and_timer_canister_ids.insert(*canister_id);
+                    }
+                }
+
+                // Check next execution again, we may have added a heartbeat or timer task.
+                let next_execution = canister.next_execution();
+                let canister_round_state = match next_execution {
                     NextExecution::StartNew => {
-                        if self.long_execution_canisters.contains(canister_id) {
+                        if had_long_execution {
                             // Don't schedule canisters that completed a long execution.
                             return None;
                         }
@@ -286,8 +318,12 @@ impl RoundSchedule {
                 });
         }
 
-        println!("is_first_iteration: {}", is_first_iteration);
-        println!("schedule: {:?}", self.schedule);
+        // println!("is_first_iteration: {}", is_first_iteration);
+        // println!("schedule: {:?}", self.schedule);
+        // println!(
+        //     "heartbeat_and_timer_canister_ids: {:?}",
+        //     self.heartbeat_and_timer_canister_ids
+        // );
 
         let compute_capacity_percent = Self::compute_capacity(self.scheduler_cores);
         debug_assert_or_critical_error!(
@@ -415,17 +451,39 @@ impl RoundSchedule {
                 canister_priority.priority_credit += ONE_HUNDRED_PERCENT;
             }
             canister_priority.last_full_execution_round = current_round;
+            #[cfg(debug_assertions)]
+            subnet_schedule
+                .fully_executed_canisters
+                .insert(*canister_id);
+        }
+
+        // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
+        // because they will be added again in the next round.
+        for canister_id in &self.heartbeat_and_timer_canister_ids {
+            let canister = canister_states.get_mut(canister_id).unwrap();
+            if canister
+                .system_state
+                .task_queue
+                .has_heartbeat_or_global_timer()
+            {
+                Arc::make_mut(canister)
+                    .system_state
+                    .task_queue
+                    .remove_heartbeat_and_global_timer();
+            }
         }
 
         // Add all canisters that we (tried to) schedule this round to the subnet
         // schedule; grant them their compute allocation; and calculate the subnet-wide
         // free allocation.
         let mut free_allocation = AccumulatedPriority::new(0);
-        for canister_id in self
+        let relevant_canister_ids = self
             .scheduled_canisters
             .iter()
             .chain(self.rate_limited_canisters.iter())
-        {
+            .chain(self.heartbeat_and_timer_canister_ids.iter())
+            .collect::<BTreeSet<_>>();
+        for canister_id in relevant_canister_ids {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
             if let Some(canister) = canister_states.get_mut(&canister_id) {
                 canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
@@ -444,7 +502,11 @@ impl RoundSchedule {
         if free_allocation.get() < 0 {
             free_allocation = AccumulatedPriority::new(0);
         }
-        println!("free_allocation: {}", free_allocation.get());
+        // println!(
+        //     "round {}, free_allocation: {}",
+        //     current_round.get(),
+        //     free_allocation.get()
+        // );
 
         // Fully divide the free allocation across all canisters.
         //
@@ -457,23 +519,44 @@ impl RoundSchedule {
             .collect::<Vec<_>>();
         sorted_canister_priorities.sort_by_key(|(c, p)| (std::cmp::Reverse(*p), *c));
         let mut remaining_canisters = subnet_schedule.len() as i64;
-        println!(
-            "sorted_canister_priorities: {:?}",
-            sorted_canister_priorities
-        );
+        // println!(
+        //     "sorted_canister_priorities: {:?}",
+        //     sorted_canister_priorities
+        // );
         for (canister_id, priority) in sorted_canister_priorities.into_iter() {
             let canister_free_allocation = free_allocation / remaining_canisters;
-            let next_execution = canister_states
-                .get(&canister_id)
-                .map(|c| c.next_execution())
-                .unwrap_or(NextExecution::None);
+            let canister_state = canister_states.get(&canister_id);
+            let next_execution = match canister_state.map(|c| c.next_execution()) {
+                Some(NextExecution::None)
+                    if self.heartbeat_and_timer_canister_ids.contains(&canister_id) =>
+                {
+                    NextExecution::StartNew
+                }
+                Some(other) => other,
+                None => NextExecution::None,
+            };
             if priority >= -canister_free_allocation && next_execution == NextExecution::None {
                 // Canister with no inputs that has just reached zero accumulated priority. Drop
                 // it from the subnet schedule.
                 subnet_schedule.remove(&canister_id);
                 free_allocation += priority;
+                // println!(
+                //     "Removed canister: {} with priority: {}",
+                //     canister_id, priority
+                // );
             } else {
                 // Canister with negative AP or inputs. Bump its AP and keep it in the schedule.
+                const AP_ROUNDS_MAX: i64 = 10;
+                let compute_allocation = from_ca(
+                    canister_state
+                        .map(|c| c.compute_allocation())
+                        .unwrap_or(ComputeAllocation::zero()),
+                );
+                let canister_free_allocation = std::cmp::min(
+                    canister_free_allocation,
+                    (ONE_HUNDRED_PERCENT - compute_allocation) * AP_ROUNDS_MAX,
+                );
+
                 let canister_priority = subnet_schedule.get_mut(canister_id);
                 canister_priority.accumulated_priority += canister_free_allocation;
                 free_allocation -= canister_free_allocation;
@@ -485,6 +568,11 @@ impl RoundSchedule {
                 {
                     RoundSchedule::apply_priority_credit(canister_priority);
                 }
+                // println!(
+                //     "Credited canister {} free_allocation {}",
+                //     canister_id,
+                //     canister_free_allocation.get()
+                // );
             }
             remaining_canisters -= 1;
         }
