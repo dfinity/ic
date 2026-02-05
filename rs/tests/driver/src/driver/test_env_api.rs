@@ -933,6 +933,56 @@ impl IcNodeSnapshot {
             .contains(&self.node_id)
     }
 
+    pub fn await_api_bn_healthy(&self) -> Result<()> {
+        block_on(self.await_api_bn_healthy_async())
+    }
+
+    pub async fn await_api_bn_healthy_async(&self) -> Result<()> {
+        let domain = self
+            .get_domain()
+            .ok_or_else(|| anyhow!("API BN has no domain configured"))?;
+        let api_bn_addr = SocketAddr::new(self.get_ip_addr(), 443);
+        let log = self.env.logger();
+
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .danger_accept_invalid_certs(true)
+            .resolve(&domain, api_bn_addr)
+            .build()
+            .map_err(|e| anyhow!("Failed to build HTTP client: {e}"))?;
+
+        retry_with_msg_async!(
+            format!("await_api_bn_healthy for {domain}"),
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let url = format!("https://{domain}/health");
+                info!(log, "Checking API BN health endpoint {url}");
+
+                let response = client.get(&url).send().await;
+
+                match response {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            info!(log, "API BN with domain {domain} is healthy");
+                            Ok(())
+                        } else {
+                            bail!(
+                                "API BN with domain {domain} returned non-success status: {}",
+                                resp.status()
+                            )
+                        }
+                    }
+                    Err(e) => {
+                        bail!("API BN with domain {domain} not reachable: {e}")
+                    }
+                }
+            }
+        )
+        .await
+    }
+
     pub fn effective_canister_id(&self) -> PrincipalId {
         match self.subnet_id() {
             Some(subnet_id) => {
