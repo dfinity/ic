@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_interfaces::consensus_pool::{
-    ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact,
+    ChangeAction, ConsensusPool, Mutations,
+    ValidatedConsensusArtifact,
 };
 use ic_interfaces::p2p::consensus::MutablePool;
 use ic_interfaces::time_source::SysTimeSource;
