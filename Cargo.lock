@@ -22505,7 +22505,13 @@ dependencies = [
  "config_tool",
  "config_types",
  "deterministic_ips",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-nns-data-provider",
  "network",
+ "prost 0.13.4",
+ "tokio",
+ "url",
  "utils",
 ]
 
