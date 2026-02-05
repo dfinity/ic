@@ -36,8 +36,6 @@ Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
     -r | --rebuild          Rebuild the container image
     -i | --image <image>    ic-build or ic-dev (default: ic-dev)
     -h | --help             Print help
-    --container-cmd <cmd>   Specify container run command (e.g., 'podman', or 'sudo podman';
-                                otherwise will choose based on detected environment)
 
 If USHELL is not set, the default shell (/usr/bin/bash) will be started inside the container.
 To run a different shell or command, pass it as arguments, e.g.:
@@ -68,17 +66,6 @@ while test $# -gt $CTR; do
                 exit 1
             fi
             IMAGE_NAME="$1"
-            shift
-            ;;
-        --container-cmd)
-            shift
-            if [ $# -eq 0 ]; then
-                echo "Error: --container-cmd requires an argument" >&2
-                usage >&2
-                exit 1
-            fi
-            # Split the argument into an array (supports "sudo podman")
-            read -ra CONTAINER_CMD <<<"$1"
             shift
             ;;
         -c | --cache-dir)
@@ -116,14 +103,11 @@ else
     DEVENV=false
 fi
 
-# If no container command specified, use based on environment
-if [ -z "${CONTAINER_CMD[*]:-}" ]; then
-    if [ "$DEVENV" = true ]; then
-        echo "Using hoststorage for podman root."
-        CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
-    else
-        CONTAINER_CMD=(sudo podman)
-    fi
+if [ "$DEVENV" = true ]; then
+    echo "Using hoststorage for podman root."
+    CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
+else
+    CONTAINER_CMD=(sudo podman)
 fi
 
 echo "Using container command: ${CONTAINER_CMD[*]}"

@@ -8,8 +8,10 @@ import argparse
 import contextlib
 import os
 import re
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 
 import codeowners
@@ -23,6 +25,11 @@ THIS_SCRIPT_DIR = Path(__file__).parent
 
 ORG = "dfinity"
 REPO = "ic"
+
+
+def die(*args):
+    print(*args, file=sys.stderr)
+    sys.exit(1)
 
 
 @contextlib.contextmanager
@@ -90,6 +97,110 @@ def period(args) -> str:
     return "month" if args.month else "week" if args.week else "day" if args.day else "week"
 
 
+def is_git_commit_sha(s: str) -> bool:
+    """Check if a string looks like a git commit SHA (7-40 hex characters)."""
+    return bool(re.match(r"^[0-9a-fA-F]{7,40}$", s))
+
+
+def get_commit_timestamp(sha: str) -> datetime:
+    """Fetch a git commit and return its commit timestamp as a timezone-aware datetime object (UTC)."""
+    repo_root = THIS_SCRIPT_DIR.parent.parent
+
+    try:
+        # First, resolve the full commit SHA
+        result = subprocess.run(
+            ["git", "rev-parse", sha],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        full_sha = result.stdout.strip()
+
+        # Then, fetch the commit to ensure it's available locally
+        subprocess.run(
+            ["git", "fetch", "origin", full_sha],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        die(f"Failed to fetch git commit '{sha}': {e.stderr.strip()}\nMake sure the commit exists in the repository.")
+
+    try:
+        # Get the commit timestamp in ISO 8601 format
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cI", sha],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        timestamp_str = result.stdout.strip()
+
+        if not timestamp_str:
+            die(f"Could not get timestamp for git commit '{sha}'")
+
+        # Parse the ISO 8601 timestamp and convert to UTC
+        dt = pd.to_datetime(timestamp_str, utc=True)
+        return dt.to_pydatetime()
+    except subprocess.CalledProcessError as e:
+        die(f"Failed to get timestamp for git commit '{sha}': {e.stderr.strip()}")
+    except Exception as e:
+        die(f"Failed to parse timestamp for git commit '{sha}': {e}")
+
+
+def parse_datetime(dt_str: str) -> datetime:
+    """Parse datetime string or git commit SHA and return a timezone-aware datetime object (UTC)."""
+    # Check if it looks like a git commit SHA
+    if is_git_commit_sha(dt_str):
+        return get_commit_timestamp(dt_str)
+
+    # Otherwise, try to parse as a datetime string
+    try:
+        dt = pd.to_datetime(dt_str, utc=True)
+        return dt.to_pydatetime()
+    except Exception as e:
+        die(
+            f"Invalid datetime format '{dt_str}': {e}\nExpected format like '2024-01-15', '2024-01-15 14:30:00', or a git commit SHA"
+        )
+
+
+def get_time_filter(args) -> sql.Composable:
+    """
+    Return an SQL WHERE clause fragment for time filtering.
+    Uses either period-based (--day/--week/--month) or explicit datetime (--since/--until) filtering.
+    """
+    # Check for mutual exclusivity
+    has_period = args.day or args.week or args.month
+    has_datetime = args.since or args.until
+
+    if has_period and has_datetime:
+        die("Cannot use both period flags (--day/--week/--month) and datetime flags (--since/--until)")
+
+    if has_datetime:
+        conditions = []
+
+        if args.since:
+            since_dt = parse_datetime(args.since)
+            conditions.append(sql.SQL("bt.first_start_time >= {since}").format(since=sql.Literal(since_dt)))
+
+        if args.until:
+            if not args.since:
+                die(
+                    "Please specify --since when --until is specified to avoid unbounded queries that might put high load on the database."
+                )
+            until_dt = parse_datetime(args.until)
+            conditions.append(sql.SQL("bt.first_start_time < {until}").format(until=sql.Literal(until_dt)))
+
+        return sql.SQL(" AND ").join(conditions)
+
+    # Period mode (default to week)
+    p = "month" if args.month else "day" if args.day else "week"
+    return sql.SQL("bt.first_start_time > now() - ('1 {period}'::interval)").format(period=sql.SQL(p))
+
+
 def normalize_duration(td: pd.Timedelta):
     c = td.components
     return (
@@ -120,12 +231,24 @@ def top(args):
         if args.eq is not None
         else (None, None)
     )
+    if value is not None:
+        if args.order_by in ("impact", "duration_p90"):
+            try:
+                value = pd.Timedelta(value).to_pytimedelta()
+            except ValueError as e:
+                die(f"Can't parse '{value}' to an interval because: {e}!")
+        else:
+            try:
+                value = float(value)
+            except ValueError:
+                die(f"Can't parse '{value}' to a number!")
 
     order_by = sql.Identifier(args.order_by)
 
     query = sql.SQL((THIS_SCRIPT_DIR / "top.sql").read_text()).format(
-        hide=sql.Literal(args.hide if args.hide else ""),
-        period=sql.SQL(period(args)),
+        exclude=sql.Literal(args.exclude if args.exclude else ""),
+        include=sql.Literal(args.include if args.include else ""),
+        time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
         order_by=order_by,
@@ -146,6 +269,7 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
+    df["impact"] = df["impact"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
 
     # Find the CODEOWNERS for each test target:
@@ -171,13 +295,14 @@ def top(args):
         "left",  # label
         "decimal",  # total
         "decimal",  # non_success
-        "decimal",  # non_success%
         "decimal",  # flaky
-        "decimal",  # flaky%
         "decimal",  # timeout
-        "decimal",  # timeout%
         "decimal",  # fail
-        "decimal",  #  fail%
+        "decimal",  # non_success%
+        "decimal",  # flaky%
+        "decimal",  # timeout%
+        "decimal",  # fail%
+        "right",  # impact
         "right",  # duration_p90
         "left",  # owners
     ]
@@ -206,7 +331,7 @@ def last(args):
     query = sql.SQL((THIS_SCRIPT_DIR / "last.sql").read_text()).format(
         test_target=sql.Literal(args.test_target),
         overall_statuses=sql.SQL(",".join(map(str, overall_statuses))),
-        period=sql.SQL(period(args)),
+        time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
     )
@@ -264,6 +389,11 @@ def last(args):
     print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
 
 
+# argparse formatter to allow newlines in --help.
+class RawDefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
+    pass
+
+
 def main():
     parser = argparse.ArgumentParser(prog="bazel run //ci/githubstats:query --")
 
@@ -294,6 +424,24 @@ def main():
     period_group.add_argument("--week", action="store_true", help="Limit to last week (default)")
     period_group.add_argument("--month", action="store_true", help="Limit to last month")
 
+    filter_parser.add_argument(
+        "--since",
+        metavar="DATETIME_OR_SHA",
+        type=str,
+        help="""Start of time range (inclusive). Can be a datetime (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC)
+or a git commit SHA (e.g., 'abc123def') from which the time is taken.
+Mutually exclusive with --day/--week/--month""",
+    )
+    filter_parser.add_argument(
+        "--until",
+        metavar="DATETIME_OR_SHA",
+        type=str,
+        help="""End of time range (exclusive). Can be a datetime (e.g., '2024-01-15' or '2024-01-15 14:30:00', assumed UTC)
+or a git commit SHA (e.g., 'def456abc') from which the time is taken.
+When --until is specified, --since must also be specified to avoid unbounded queries.
+Mutually exclusive with --day/--week/--month""",
+    )
+
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
     filter_parser.add_argument("--branch", metavar="B", type=str, help="Filter by branch SQL LIKE pattern")
 
@@ -304,8 +452,25 @@ def main():
     top_parser = subparsers.add_parser(
         "top",
         parents=[common_parser, filter_parser],
+        formatter_class=RawDefaultsFormatter,
         help="Get the top non-successful / flaky / failed / timed-out tests in the last period",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog="""
+Examples:
+  # Show the top 10 most flaky tests in the last week
+  bazel run //ci/githubstats:query -- top 10 flaky% --week
+
+  # Show the top 5 tests on PRs where failures had the highest impact in the last week
+  bazel run //ci/githubstats:query -- top 5 impact --prs --week
+
+  # Show the 100 slowest tests in the last month that took at least 30 minutes
+  bazel run //ci/githubstats:query -- top 100 duration_p90 --ge '30 minutes' --month
+
+  # Show tests in a specific date range
+  bazel run //ci/githubstats:query -- top 20 fail% --since '2026-01-01' --until '2026-01-31'
+
+  # Show the top 10 most impactful tests that ran since the time of a specific commit
+  bazel run //ci/githubstats:query -- top 10 impact --since abc123def
+""",
     )
     top_parser.add_argument(
         "N", type=int, nargs="?", default=10, help="If specified, limits the number of tests to show"
@@ -317,30 +482,46 @@ def main():
         choices=[
             "total",
             "non_success",
-            "non_success%",
             "flaky",
-            "flaky%",
             "timeout",
-            "timeout%",
             "fail",
+            "non_success%",
+            "flaky%",
+            "timeout%",
             "fail%",
+            "impact",
             "duration_p90",
         ],
-        help="COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to",
+        help="""COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to.
+
+total:\t\tTotal runs in the specified period
+non_success:\tNumber of non-successful runs in the specified period
+flaky:\t\tNumber of flaky runs in the specified period
+timeout:\tNumber of timed-out runs in the specified period
+fail:\t\tNumber of failed runs in the specified period
+non_success%%:\tPercentage of non-successful runs in the specified period
+flaky%%:\t\tPercentage of flaky runs in the specified period
+timeout%%:\tPercentage of timed-out runs in the specified period
+fail%%:\t\tPercentage of failed runs in the specified period
+impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures
+duration_p90:\t90th percentile duration of all runs in the specified period""",
     )
 
     condition_group = top_parser.add_mutually_exclusive_group()
-    condition_group.add_argument("--gt", metavar="F", type=float, help="Only show tests where COLUMN > F")
-    condition_group.add_argument("--ge", metavar="F", type=float, help="Only show tests where COLUMN >= F")
-    condition_group.add_argument("--lt", metavar="F", type=float, help="Only show tests where COLUMN < F")
-    condition_group.add_argument("--le", metavar="F", type=float, help="Only show tests where COLUMN <= F")
-    condition_group.add_argument("--eq", metavar="F", type=float, help="Only show tests where COLUMN = F")
+    condition_group.add_argument("--gt", metavar="F", type=str, help="Only show tests where COLUMN > F")
+    condition_group.add_argument("--ge", metavar="F", type=str, help="Only show tests where COLUMN >= F")
+    condition_group.add_argument("--lt", metavar="F", type=str, help="Only show tests where COLUMN < F")
+    condition_group.add_argument("--le", metavar="F", type=str, help="Only show tests where COLUMN <= F")
+    condition_group.add_argument("--eq", metavar="F", type=str, help="Only show tests where COLUMN = F")
 
     top_parser.add_argument(
         "--owner", metavar="TEAM", type=str, help="Filter tests by owner (a regex for the GitHub username or team)"
     )
 
-    top_parser.add_argument("--hide", metavar="TEST", type=str, help="Hide tests matching this SQL LIKE pattern")
+    top_parser.add_argument("--exclude", metavar="TEST", type=str, help="Exclude tests matching this SQL LIKE pattern")
+    top_parser.add_argument(
+        "--include", metavar="TEST", type=str, help="Include only tests matching this SQL LIKE pattern"
+    )
 
     top_parser.set_defaults(func=top)
 
@@ -349,8 +530,19 @@ def main():
     last_runs_parser = subparsers.add_parser(
         "last",
         parents=[common_parser, filter_parser],
+        formatter_class=RawDefaultsFormatter,
         help="Get the last runs of the specified test in the given period",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog="""
+Examples:
+  # Show the last flaky runs of the rent_subnet_test in the last week
+  bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
+
+  # Show all runs of a test in a specific date range
+  bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'
+
+  # Show all runs of a test since the time of a specific commit
+  bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since abc123def
+""",
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
