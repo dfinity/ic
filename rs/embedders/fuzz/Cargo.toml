@@ -29,20 +29,20 @@ ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-wasm-types = { path = "../../types/wasm_types" }
 lazy_static = { workspace = true }
-libfuzzer-sys = "0.4"
 num-traits = { workspace = true }
 tokio = { workspace = true }
 wasm-encoder = { workspace = true }
-wasm-smith = { version = "0.243.0", features = [ "wasmparser" ]}
 wasmparser = { workspace = true }
 wasmprinter = { workspace = true }
-wasmtime = { version = "40.0.0", default-features = false, features = [
+libfuzzer-sys = "0.4"
+wasm-smith = { version = "0.243.0", features = [ "wasmparser" ]}
+wasmtime = { version = "41.0.2", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',
     'parallel-compilation',
     'runtime',
-]}
+] }
 
 [features]
 fuzzing_code = []
