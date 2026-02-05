@@ -2493,7 +2493,6 @@ pub mod create_service_nervous_system {
         comparable::Comparable,
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
-        Copy,
         PartialEq,
         ::prost::Message,
     )]
@@ -2527,6 +2526,10 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "10")]
         pub voting_reward_parameters:
             ::core::option::Option<governance_parameters::VotingRewardParameters>,
+        /// Additional native function IDs that are considered critical. These functions require
+        /// a higher level of consensus to be modified or executed.
+        #[prost(uint64, repeated, tag = "11")]
+        pub additional_critical_native_function_ids: ::prost::alloc::vec::Vec<u64>,
     }
     /// Nested message and enum types in `GovernanceParameters`.
     pub mod governance_parameters {

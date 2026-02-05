@@ -38,6 +38,7 @@ use crate::{
         },
     },
     proposal::ValidGenericNervousSystemFunction,
+    topics::topic_descriptions,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -501,6 +502,7 @@ impl NervousSystemParameters {
             max_age_bonus_percentage: Some(25),
             maturity_modulation_disabled: Some(false),
             automatically_advance_target_version: Some(true),
+            additional_critical_native_function_ids: vec![],
         }
     }
 
@@ -571,6 +573,14 @@ impl NervousSystemParameters {
             automatically_advance_target_version: self
                 .automatically_advance_target_version
                 .or(base.automatically_advance_target_version),
+            additional_critical_native_function_ids: if self
+                .additional_critical_native_function_ids
+                .is_empty()
+            {
+                base.additional_critical_native_function_ids.clone()
+            } else {
+                self.additional_critical_native_function_ids.clone()
+            },
         }
     }
 
@@ -595,6 +605,7 @@ impl NervousSystemParameters {
         self.validate_voting_rewards_parameters()?;
         self.validate_max_dissolve_delay_bonus_percentage()?;
         self.validate_max_age_bonus_percentage()?;
+        self.validate_additional_critical_native_function_ids()?;
 
         Ok(())
     }
@@ -988,6 +999,54 @@ impl NervousSystemParameters {
             .as_ref()
             .ok_or("NervousSystemParameters.voting_rewards_parameters must be set")?;
         voting_rewards_parameters.validate()
+    }
+
+    /// Validates that additional_critical_native_function_ids only contains native function IDs
+    /// that are not already critical.
+    fn validate_additional_critical_native_function_ids(&self) -> Result<(), String> {
+        let mut already_critical_ids = Vec::new();
+        let mut unknown_ids = Vec::new();
+
+        for &function_id in &self.additional_critical_native_function_ids {
+            // Find if this function ID exists in any topic
+            let topic_info = topic_descriptions()
+                .into_iter()
+                .find(|topic_info| topic_info.functions.native_functions.contains(&function_id));
+
+            match topic_info {
+                None => {
+                    // Function ID doesn't exist in any topic
+                    unknown_ids.push(function_id);
+                }
+                Some(topic_info) if topic_info.is_critical => {
+                    // Function ID exists but is already in a critical topic
+                    already_critical_ids.push(function_id);
+                }
+                Some(_) => {
+                    // Function ID exists and is not critical - valid
+                }
+            }
+        }
+
+        if !already_critical_ids.is_empty() {
+            return Err(format!(
+                "NervousSystemParameters.additional_critical_native_function_ids \
+                 contains function IDs that are already critical: {:?}. \
+                 Only non-critical native function IDs can be added to this list.",
+                already_critical_ids
+            ));
+        }
+
+        if !unknown_ids.is_empty() {
+            return Err(format!(
+                "NervousSystemParameters.additional_critical_native_function_ids \
+                 contains unknown function IDs: {:?}. \
+                 All IDs must be valid native function IDs.",
+                unknown_ids
+            ));
+        }
+
+        Ok(())
     }
 }
 

@@ -1851,6 +1851,10 @@ message CreateServiceNervousSystem {
     }
 
     VotingRewardParameters voting_reward_parameters = 10;
+
+    // Additional native function IDs that are considered critical. These functions require
+    // a higher level of consensus to be modified or executed.
+    repeated uint64 additional_critical_native_function_ids = 11;
   }
 
   GovernanceParameters governance_parameters = 10;

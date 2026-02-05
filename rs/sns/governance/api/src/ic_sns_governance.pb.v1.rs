@@ -1271,6 +1271,9 @@ pub struct NervousSystemParameters {
     /// Whether to automatically advance the SNS target version after a new upgrade is published
     /// by the NNS. If not specified, defaults to false for backward compatibility.
     pub automatically_advance_target_version: Option<bool>,
+    /// Additional native function IDs that are considered critical. These functions require
+    /// a higher level of consensus to be modified or executed. If not specified, defaults to empty.
+    pub additional_critical_native_function_ids: Option<Vec<u64>>,
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct VotingRewardsParameters {

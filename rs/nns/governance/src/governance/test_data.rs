@@ -123,6 +123,8 @@ lazy_static! {
                     seconds: Some(378025),
                 }),
             }),
+
+            additional_critical_native_function_ids: vec![],
         }),
         dapp_canisters: vec![pb::Canister {
             id: Some(SPECIFIED_CANISTER_ID.get())

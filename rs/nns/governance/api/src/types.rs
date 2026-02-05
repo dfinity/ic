@@ -2448,6 +2448,7 @@ pub mod create_service_nervous_system {
         pub neuron_maximum_age_for_age_bonus: Option<::ic_nervous_system_proto::pb::v1::Duration>,
         pub neuron_maximum_age_bonus: Option<::ic_nervous_system_proto::pb::v1::Percentage>,
         pub voting_reward_parameters: Option<governance_parameters::VotingRewardParameters>,
+        pub additional_critical_native_function_ids: Option<Vec<u64>>,
     }
     /// Nested message and enum types in `GovernanceParameters`.
     pub mod governance_parameters {

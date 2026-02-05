@@ -403,6 +403,7 @@ type GovernanceParameters = record {
   proposal_initial_voting_period : opt Duration;
   proposal_rejection_fee : opt Tokens;
   voting_reward_parameters : opt VotingRewardParameters;
+  additional_critical_native_function_ids : opt vec nat64;
 };
 
 type IdealMatchedParticipationFunction = record {

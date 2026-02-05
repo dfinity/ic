@@ -1481,6 +1481,9 @@ impl From<pb::NervousSystemParameters> for pb_api::NervousSystemParameters {
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
             automatically_advance_target_version: item.automatically_advance_target_version,
+            additional_critical_native_function_ids: Some(
+                item.additional_critical_native_function_ids,
+            ),
         }
     }
 }
@@ -1509,6 +1512,9 @@ impl From<pb_api::NervousSystemParameters> for pb::NervousSystemParameters {
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
             automatically_advance_target_version: item.automatically_advance_target_version,
+            additional_critical_native_function_ids: item
+                .additional_critical_native_function_ids
+                .unwrap_or_default(),
         }
     }
 }

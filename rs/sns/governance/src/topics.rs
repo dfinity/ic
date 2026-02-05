@@ -258,8 +258,31 @@ impl Governance {
         &self,
         action: &pb::proposal::Action,
     ) -> Result<(Option<pb::Topic>, ProposalCriticality), String> {
+        let action_code = u64::from(action);
+
+        // Helper to check if the action should be upgraded to critical based on
+        // additional_critical_native_function_ids
+        let maybe_upgrade_criticality = |criticality: ProposalCriticality| -> ProposalCriticality {
+            let is_additional_critical = self
+                .proto
+                .parameters
+                .as_ref()
+                .map(|p| {
+                    p.additional_critical_native_function_ids
+                        .contains(&action_code)
+                })
+                .unwrap_or(false);
+
+            if is_additional_critical {
+                ProposalCriticality::Critical
+            } else {
+                criticality
+            }
+        };
+
         if let Some(topic) = pb::Topic::get_topic_for_native_action(action) {
-            return Ok((Some(topic), topic.proposal_criticality()));
+            let criticality = maybe_upgrade_criticality(topic.proposal_criticality());
+            return Ok((Some(topic), criticality));
         };
 
         // While these are "native actions", they should return an error if the name of the function
@@ -271,11 +294,9 @@ impl Governance {
             // will not be found.
             let spec = get_extension_operation_spec_from_cache(execute_extension_operation)?;
             let topic = spec.topic;
-            let criticality = topic.proposal_criticality();
+            let criticality = maybe_upgrade_criticality(topic.proposal_criticality());
             return Ok((Some(topic), criticality));
         }
-
-        let action_code = u64::from(action);
 
         let Some(function) = self.proto.id_to_nervous_system_functions.get(&action_code) else {
             return Err(format!("Invalid action with ID {action_code}."));
@@ -297,14 +318,16 @@ impl Governance {
 
         let Some(custom_proposal_topic_id) = custom_proposal_topic_id else {
             // Fall back to default proposal criticality (if a topic isn't defined).
-            return Ok((None, ProposalCriticality::default()));
+            let criticality = maybe_upgrade_criticality(ProposalCriticality::default());
+            return Ok((None, criticality));
         };
 
         let Ok(topic) = pb::Topic::try_from(custom_proposal_topic_id) else {
             return Err(format!("Invalid topic ID {custom_proposal_topic_id}."));
         };
 
-        Ok((Some(topic), topic.proposal_criticality()))
+        let criticality = maybe_upgrade_criticality(topic.proposal_criticality());
+        Ok((Some(topic), criticality))
     }
 }
 

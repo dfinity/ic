@@ -1247,6 +1247,10 @@ message NervousSystemParameters {
   // Whether to automatically advance the SNS target version after a new upgrade is published
   // by the NNS. If not specified, defaults to false for backward compatibility.
   optional bool automatically_advance_target_version = 23;
+
+  // Additional native function IDs that are considered critical. These functions require
+  // a higher level of consensus to be modified or executed. If not specified, defaults to empty.
+  repeated uint64 additional_critical_native_function_ids = 24;
 }
 
 message VotingRewardsParameters {

@@ -2446,6 +2446,9 @@ impl From<pb::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            additional_critical_native_function_ids: Some(
+                item.additional_critical_native_function_ids,
+            ),
         }
     }
 }
@@ -2465,6 +2468,9 @@ impl From<api::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            additional_critical_native_function_ids: item
+                .additional_critical_native_function_ids
+                .unwrap_or_default(),
         }
     }
 }

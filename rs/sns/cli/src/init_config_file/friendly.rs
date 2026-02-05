@@ -100,6 +100,9 @@ pub(crate) struct Proposals {
 
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration,
+
+    #[serde(default)]
+    additional_critical_native_function_ids: Vec<u64>,
 }
 
 #[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
@@ -659,6 +662,7 @@ fn convert_to_governance_parameters(
         rejection_fee,
         initial_voting_period,
         maximum_wait_for_quiet_deadline_extension,
+        additional_critical_native_function_ids,
     } = proposals;
     let Neurons {
         minimum_creation_stake,
@@ -710,6 +714,8 @@ fn convert_to_governance_parameters(
         neuron_maximum_age_bonus,
 
         voting_reward_parameters,
+
+        additional_critical_native_function_ids: additional_critical_native_function_ids.clone(),
     }
 }
 

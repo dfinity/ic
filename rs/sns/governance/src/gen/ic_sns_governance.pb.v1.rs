@@ -1782,6 +1782,10 @@ pub struct NervousSystemParameters {
     /// by the NNS. If not specified, defaults to false for backward compatibility.
     #[prost(bool, optional, tag = "23")]
     pub automatically_advance_target_version: ::core::option::Option<bool>,
+    /// Additional native function IDs that are considered critical. These functions require
+    /// a higher level of consensus to be modified or executed. If not specified, defaults to empty.
+    #[prost(uint64, repeated, tag = "24")]
+    pub additional_critical_native_function_ids: ::prost::alloc::vec::Vec<u64>,
 }
 #[derive(
     candid::CandidType,

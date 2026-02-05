@@ -1611,3 +1611,60 @@ fn test_from_manage_ledger_parameters_into_ledger_upgrade_args_no_logo() {
         }
     );
 }
+
+#[test]
+fn test_validate_additional_critical_native_function_ids() {
+    use crate::types::native_action_ids;
+
+    // Test 1: Empty list should be valid
+    let mut params = NervousSystemParameters::with_default_values();
+    assert!(params.validate().is_ok());
+
+    // Test 2: Non-critical native function (Motion) should be valid
+    params.additional_critical_native_function_ids = vec![native_action_ids::MOTION];
+    assert!(params.validate().is_ok());
+
+    // Test 3: Critical native function (ManageNervousSystemParameters) should be invalid
+    params.additional_critical_native_function_ids =
+        vec![native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS];
+    let result = params.validate();
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        error.contains("already critical"),
+        "Expected error about already critical functions, got: {}",
+        error
+    );
+
+    // Test 4: Mix of valid and invalid should be invalid
+    params.additional_critical_native_function_ids = vec![
+        native_action_ids::MOTION,
+        native_action_ids::TRANSFER_SNS_TREASURY_FUNDS, // Critical
+    ];
+    let result = params.validate();
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        error.contains("already critical"),
+        "Expected error about already critical functions, got: {}",
+        error
+    );
+
+    // Test 5: Unknown function ID should be invalid
+    params.additional_critical_native_function_ids = vec![999999];
+    let result = params.validate();
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        error.contains("unknown function IDs"),
+        "Expected error about unknown function IDs, got: {}",
+        error
+    );
+
+    // Test 6: Multiple non-critical functions should be valid
+    params.additional_critical_native_function_ids = vec![
+        native_action_ids::MOTION,
+        native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
+    ];
+    assert!(params.validate().is_ok());
+}

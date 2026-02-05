@@ -134,6 +134,7 @@ lazy_static! {
                     final_reward_rate: Some(Percentage::from_percentage(2.5)),
                     reward_rate_transition_duration: Some(Duration::from_secs(0)),
                 }),
+                additional_critical_native_function_ids: Some(vec![3]), // UpgradeSnsControlledCanister
             }),
         };
 }
