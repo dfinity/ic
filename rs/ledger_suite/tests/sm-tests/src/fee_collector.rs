@@ -4,6 +4,7 @@ use crate::{
     install_ledger, total_supply, transfer,
 };
 use candid::{CandidType, Encode};
+use ic_icrc1_ledger::GetFeeCollectorError;
 use ic_state_machine_tests::StateMachine;
 use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
@@ -146,6 +147,17 @@ pub fn test_fee_collector_107_access_denied<T>(
     assert_eq!(err, SetFeeCollectorError::AccessDenied("The `icrc107_set_fee_collector` endpoint can only be called by the canister controller".to_string()));
 }
 
+fn get_fc_107_from_ledger(env: &StateMachine, canister_id: CanisterId) -> Option<Account> {
+    Decode!(
+        &env.query(canister_id, "icrc107_get_fee_collector", Encode!().unwrap())
+            .expect("failed to query 107 fee collector")
+            .bytes(),
+        Result<Option<Account>, GetFeeCollectorError>
+    )
+    .expect("failed to decode icrc107_get_fee_collector response")
+    .expect("icrc107_get_fee_collector should not fail")
+}
+
 fn send_tx_and_verify_fee_collection(
     env: &StateMachine,
     canister_id: CanisterId,
@@ -153,6 +165,10 @@ fn send_tx_and_verify_fee_collection(
     inactive_fcs: Vec<Account>,
     legacy_fc: bool,
 ) {
+    if !legacy_fc {
+        assert_eq!(get_fc_107_from_ledger(env, canister_id), active_fc);
+    }
+
     let from = Account::from(PrincipalId::new_user_test_id(1001).0);
     let spender = Account::from(PrincipalId::new_user_test_id(1002).0);
     let to = Account::from(PrincipalId::new_user_test_id(1003).0);
