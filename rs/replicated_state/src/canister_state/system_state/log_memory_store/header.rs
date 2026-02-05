@@ -2,7 +2,7 @@ use crate::canister_state::system_state::log_memory_store::{
     memory::{MemoryAddress, MemoryPosition, MemorySize},
     ring_buffer::{DATA_REGION_OFFSET, INDEX_TABLE_PAGES},
 };
-use more_asserts::debug_assert_gt;
+use more_asserts::{debug_assert_gt, debug_assert_lt};
 
 /// Magic prefix that marks a properly initialized canister log buffer.
 pub(crate) const MAGIC: &[u8; 3] = b"CLB";
@@ -70,6 +70,7 @@ impl Header {
     ) -> MemoryPosition {
         debug_assert_gt!(self.data_capacity.get(), 0);
         debug_assert_gt!(distance.get(), 0);
+        debug_assert_lt!(position.get(), self.data_capacity.get());
         (position + distance) % self.data_capacity
     }
 

@@ -43,7 +43,11 @@ pub struct LogMemoryStore {
 }
 
 impl LogMemoryStore {
-    /// Creates a new store with an empty ring buffer.
+    /// Creates a new uninitialized store with an empty ring buffer.
+    ///
+    /// The store technically exists but has 0 capacity and is considered "uninitialized".
+    /// Any attempts to append logs will be silently ignored until the store is
+    /// explicitly resized to a non-zero capacity.
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         Self::new_inner(PageMap::new(fd_factory))
     }
@@ -167,7 +171,7 @@ impl LogMemoryStore {
 
         // Migrate records.
         if let Some(old_buffer) = self.load_ring_buffer() {
-            new_buffer.append_log(old_buffer.all_records()); // TODO: use iterators
+            new_buffer.append_log_iter(old_buffer.iter());
         }
 
         // Update of the state.

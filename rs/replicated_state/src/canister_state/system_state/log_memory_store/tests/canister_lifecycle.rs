@@ -1,3 +1,13 @@
+//! This file is not a 'source of truth' test.
+//!
+//! `LogMemoryStore` is supposed to be used as a field to the `SystemState` and
+//! properly incorporated into real canister lifecycle. But since this change
+//! touches many different places it's difficult to properly test it fast.
+//!
+//! So this file contains a simplified test that is supposed to mimic the
+//! expected behavior with a `MockCanister` and test how `LogMemoryStore` works
+//! on it.
+
 use super::super::*;
 use ic_management_canister_types_private::CanisterLogRecord;
 use ic_types::{CanisterLog, NumBytes};
