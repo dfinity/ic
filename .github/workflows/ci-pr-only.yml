@@ -13,6 +13,11 @@ on:
         required: false
         default: ${{ github.event.pull_request.base.ref }}
         type: string
+      head-ref:
+        description: The head branch of the PR
+        required: false
+        default: ${{ github.event.pull_request.head.ref }}
+        type: string
       pr-number:
         description: 'The PR number'
         required: false
@@ -94,7 +99,7 @@ jobs:
                 git config --global user.email "infra+github-automation@dfinity.org"
                 git config --global user.name "IDX GitHub Automation"
                 git commit -m "Automatically fixing code for linting and formatting issues"
-                git push
+                git push origin HEAD:'${{ inputs.head-ref }}'
 
                 # Because the buildifier made changes, fail the PR
                 EXIT_STATUS=1
