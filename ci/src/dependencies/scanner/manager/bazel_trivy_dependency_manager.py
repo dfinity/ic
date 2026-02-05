@@ -371,6 +371,7 @@ class BazelTrivyContainer(DependencyManager):
         trivy_data, file_to_hash = self.executor.run_trivy_and_parse_data(path)
         if "Results" not in trivy_data:
             return []
+        raise RuntimeError(f"trivy scan succeeded with {trivy_data}")
 
         findings = []
         for i in range(len(trivy_data["Results"])):
