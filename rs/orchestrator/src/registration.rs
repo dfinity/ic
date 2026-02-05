@@ -256,12 +256,6 @@ impl NodeRegistration {
             .call_and_wait()
             .await
             .map_err(|e| {
-                // Log full payload for debugging; do not include it in the returned string so
-                // the caller can send a console-safe summary to the host without string parsing.
-                warn!(
-                    self.log,
-                    "Registration failed. Used payload: {:?}", add_node_payload
-                );
                 format!(
                     "Node {} registration request failed with error: {}",
                     self.node_id, e
