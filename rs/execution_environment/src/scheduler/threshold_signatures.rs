@@ -160,7 +160,7 @@ fn match_context_with_pre_signature(
     height: Height,
     metrics: &SchedulerMetrics,
     logger: &ReplicaLogger,
-) -> bool {
+) {
     match (&mut context.args, pre_signature) {
         (ThresholdArguments::Ecdsa(args), PreSignature::Ecdsa(pre_signature)) => {
             args.pre_signature = Some(EcdsaMatchedPreSignature {
@@ -191,11 +191,9 @@ fn match_context_with_pre_signature(
             );
             metrics.threshold_signature_scheme_mismatch.inc();
             debug_unreachable!(message);
-            return false;
         }
     }
     let _ = context.matched_pre_signature.insert((pre_sig_id, height));
-    true
 }
 
 #[cfg(test)]
