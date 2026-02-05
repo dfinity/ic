@@ -11,6 +11,7 @@
 //! The "default" tag corresponds to the standard env variables (ENV_DEPS__GUESTOS_DISK_IMG, etc.).
 //! Other tags use uppercase suffixes (ENV_DEPS__GUESTOS_SEV_RECOVERY_DISK_IMG, etc.).
 
+use crate::driver::resource::{DiskImage, ImageType};
 use crate::driver::test_env_api::read_dependency_from_env_to_string;
 use anyhow::{Context, Result};
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
@@ -86,6 +87,24 @@ pub fn get_tagged_guestos_img_sha256(tag: &str) -> String {
     let env = format!("ENV_DEPS__GUESTOS{suffix}_DISK_IMG_HASH");
 
     std::env::var(&env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
+}
+
+/// Get the initial GuestOS disk image from the environment.
+pub fn get_guestos_disk_image() -> DiskImage {
+    DiskImage {
+        image_type: ImageType::IcOsImage,
+        url: get_guestos_img_url(),
+        sha256: get_guestos_img_sha256(),
+    }
+}
+
+/// Get a tagged GuestOS disk image from the environment.
+pub fn get_tagged_guestos_disk_image(tag: &str) -> DiskImage {
+    DiskImage {
+        image_type: ImageType::IcOsImage,
+        url: get_tagged_guestos_img_url(tag),
+        sha256: get_tagged_guestos_img_sha256(tag),
+    }
 }
 
 /// Pull the URL of the initial GuestOS update image from the environment.
