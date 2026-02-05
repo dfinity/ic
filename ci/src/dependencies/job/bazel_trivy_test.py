@@ -12,7 +12,14 @@ PROJECT_ROOT = pathlib.Path(
 
 def main():
     logging.basicConfig(level=logging.DEBUG)
-    path = PROJECT_ROOT.parent / "tmu-trivy-debug/ic-os/guestos/envs/prod"
+
+    command = f"git clone https://github.com/dfinity/ic"
+    logging.info(f"Performing git clone")
+    _ = ProcessExecutor.execute_command(command, PROJECT_ROOT.resolve(), {})
+    path = PROJECT_ROOT / "ic"
+    _ = ProcessExecutor.execute_command("git reset --hard dc2d53146c26eb41c8ae40ecc0c1d89f32072d14", path.resolve(), {})
+
+    path = PROJECT_ROOT / "ic/ic-os/guestos/envs/prod"
     if not path.is_dir():
         raise RuntimeError(f"path {path} is invalid")
     json_file_path = f"{path.resolve()}/findings.json"
