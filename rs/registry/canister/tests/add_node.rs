@@ -4,7 +4,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
+    itest_helpers::{set_up_registry_canister, state_machine_test_on_nns_subnet},
     registry::{
         get_committee_signing_key, get_dkg_dealing_key, get_node_operator_record, get_node_record,
         get_node_signing_key, get_transport_tls_certificate,
@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 
 #[test]
 fn node_is_created_on_receiving_the_request() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a Node Operator record and make it callable
         // by anyone
         let registry = set_up_registry_canister(
@@ -107,7 +107,7 @@ fn node_is_created_on_receiving_the_request() {
 
 #[test]
 fn node_is_not_created_with_invalid_type() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a Node Operator record and make it callable
         // by anyone
         let registry = set_up_registry_canister(
@@ -155,7 +155,7 @@ fn node_is_not_created_with_invalid_type() {
 
 #[test]
 fn node_is_not_created_on_wrong_principal() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a Node Operator record and make it callable
         // by anyone
         let registry = set_up_registry_canister(
@@ -197,7 +197,7 @@ fn node_is_not_created_on_wrong_principal() {
 
 #[test]
 fn node_is_not_created_when_above_capacity() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a DC record and make it callable by anyone
         let registry = set_up_registry_canister(
             &runtime,
@@ -257,7 +257,7 @@ fn node_is_not_created_when_above_capacity() {
 
 #[test]
 fn duplicated_nodes_are_removed_on_join() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a DC record.
         let registry = set_up_registry_canister(
             &runtime,
@@ -323,7 +323,7 @@ fn duplicated_nodes_are_removed_on_join() {
 
 #[test]
 fn join_with_duplicate_is_allowed_when_at_capacity() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a DC record.
         let registry = set_up_registry_canister(
             &runtime,
