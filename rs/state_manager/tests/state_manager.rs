@@ -8962,7 +8962,7 @@ fn fake_certification_for_height(height: Height) -> Certification {
 fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> Certification {
     Certification {
         height,
-        witness: Witness::new_for_testing_with_height(),
+        height_witness: Witness::new_for_testing_with_height(),
         signed: Signed {
             content: CertificationContent::new(CryptoHashOfPartialState::from(hash)),
             signature: ThresholdSignature::fake(),
@@ -9508,7 +9508,7 @@ fn commit_and_certify_reuses_certification() {
         assert!(
             !sm.list_state_hashes_to_certify()
                 .into_iter()
-                .any(|(height, _, _)| height == no_opt_height)
+                .any(|state_hash_metadata| state_hash_metadata.height == no_opt_height)
         );
     });
 }
