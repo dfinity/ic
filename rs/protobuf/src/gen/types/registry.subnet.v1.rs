@@ -129,17 +129,22 @@ pub struct CatchUpPackageContents {
     /// / The initial IDkg dealings for boot strapping target chain key subnets.
     #[prost(message, repeated, tag = "8")]
     pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
+    /// / The purpose of the CUP.
     #[prost(oneof = "catch_up_package_contents::CupType", tags = "9, 10, 11")]
     pub cup_type: ::core::option::Option<catch_up_package_contents::CupType>,
 }
 /// Nested message and enum types in `CatchUpPackageContents`.
 pub mod catch_up_package_contents {
+    /// / The purpose of the CUP.
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum CupType {
+        /// / Initial CUP used to bootstrap a subnet.
         #[prost(message, tag = "9")]
         Genesis(super::GenesisArgs),
+        /// / A CUP used to recover a subnet during a disaster.
         #[prost(message, tag = "10")]
         Recovery(super::RecoveryArgs),
+        /// / A CUP used to split a subnet into two.
         #[prost(message, tag = "11")]
         SubnetSplitting(super::SubnetSplittingArgs),
     }

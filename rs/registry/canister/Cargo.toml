@@ -23,6 +23,7 @@ hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
 ic-cdk = { workspace = true }
 ic-certified-map = "0.3.1"
+ic-consensus-features = { path = "../../consensus/features" }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }

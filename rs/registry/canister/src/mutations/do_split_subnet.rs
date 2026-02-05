@@ -32,7 +32,15 @@ enum PayloadValidationError {
     SimultaneousSubnetSplittingNotAllowed,
     EmptyDestinationCanisterIdRanges,
     EmptySourceCanisterIdRanges,
+    NotEnabled,
 }
+
+#[cfg(not(test))]
+/// Accept proposals only if the subnet splitting feature has been already enabled in the consensus.
+const ENABLED: bool = ic_consensus_features::SUBNET_SPLITTING_V2_ENABLED;
+#[cfg(test)]
+/// In the test cases assume the feature is enabled.
+const ENABLED: bool = true;
 
 /// For now we only support splitting application subnets. Splitting system subnets is not allowed.
 const SUPPORTED_SUBNET_TYPES: [SubnetType; 2] =
@@ -191,6 +199,10 @@ impl Registry {
         &self,
         payload: &SplitSubnetPayload,
     ) -> Result<SubnetRecord, PayloadValidationError> {
+        if !ENABLED {
+            return Err(PayloadValidationError::NotEnabled);
+        }
+
         let source_subnet_record = self
             .get_subnet(payload.source_subnet_id, self.latest_version())
             .map_err(PayloadValidationError::FailedToGetSourceSubnetRecord)?;
@@ -320,6 +332,9 @@ impl std::fmt::Display for PayloadValidationError {
                     f,
                     "We don't allow migrating all canisters from the source subnet"
                 )
+            }
+            PayloadValidationError::NotEnabled => {
+                write!(f, "Subnet Splitting is not yet enabled on the IC")
             }
         }
     }
