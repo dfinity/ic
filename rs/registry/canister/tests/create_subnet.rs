@@ -17,8 +17,8 @@ use ic_management_canister_types_private::{
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
-        state_machine_test_on_nns_subnet,
+        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        set_up_universal_canister, state_machine_test_on_nns_subnet,
     },
     registry::{INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req},
 };
@@ -144,7 +144,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_create_a_subnet() {
 
 #[test]
 fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
-    state_machine_test_on_nns_subnet(|runtime| async move {
+    local_test_on_nns_subnet(|runtime| async move {
         let (data_provider, fake_client) = match runtime {
             Runtime::Remote(_) | Runtime::StateMachine(_) => {
                 panic!(
