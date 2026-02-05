@@ -52,7 +52,7 @@ jobs:
         run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty --dry-run
 
       - name: Publish Crate
-        if: ${{ github.event.inputs.dry-run != 'true' }}
+        if: ${{ github.event.inputs.dry-run == 'false' }}
         run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
