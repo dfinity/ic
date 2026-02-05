@@ -60,8 +60,8 @@ impl GetSuccessorMetrics {
             response_build_duration: metrics_registry.histogram_vec(
                 "response_build_duration_seconds",
                 "Time spent building the GetSuccessors response.",
-                // 1ms, 10ms, 100ms, 1s, 10s
-                vec![0.001, 0.01, 0.1, 1.0, 10.0],
+                // 100µs, 200µs, 500µs, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms, 1s
+                decimal_buckets(-4, 0),
                 &["empty"],
             ),
             response_blocks_size: metrics_registry.histogram(
