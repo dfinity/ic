@@ -12359,6 +12359,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
+ "serde_json",
  "tempfile",
 ]
 
