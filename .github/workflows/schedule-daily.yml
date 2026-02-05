@@ -4,7 +4,7 @@ on:
   schedule:
     # Note that we would like there to be no overlap between the system-tests-benchmarks-nightly job below
     # and the Release Testing workflow triggered by the Schedule RC workflow.
-    - cron: "0 0 * * *"
+    - cron: "0 1 * * *"
   workflow_dispatch:
 
 env:
