@@ -96,7 +96,7 @@ impl<State> Labeled<State> {
 }
 
 /// A state hash for a height to be signed and certified by consensus.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StateHashMetadata {
     /// The state height.
     pub height: Height,
@@ -159,7 +159,7 @@ pub trait StateManager: StateReader {
     /// * The hash of the witness w.r.t. state height is equal to the hash of the state:
     ///
     ///   ```text
-    ///   ∀ (h, H, W) ∈ state_manager.list_state_hashes_to_certify(): digest(/"metadata"/"height"/h, W) = H.
+    ///   ∀ metadata ∈ state_manager.list_state_hashes_to_certify(): digest(/"metadata"/"height"/<metadata.height>, W) = metadata.hash.
     ///   ```
     fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
 

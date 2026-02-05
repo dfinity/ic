@@ -151,7 +151,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                 let height = state_hash_metadata.height;
                 match certification_pool.certification_at_height(height) {
                     // if we have a valid certification, deliver it to the state manager and skip
-                    // the pair
+                    // the metadata
                     Some(certification) => {
                         // TODO[NET-1711]: Remove deliver_state_certification(), and include them in the
                         // change set for the artifact processor to handle.
@@ -170,7 +170,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                         });
                         None
                     }
-                    // return this pair to be signed by the current replica
+                    // return the metadata to be signed by the current replica
                     _ => Some(state_hash_metadata),
                 }
             })
