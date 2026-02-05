@@ -51,6 +51,18 @@ impl Header {
         }
     }
 
+    /// Clears log records and index table, but keeps the data capacity.
+    pub fn clear(&mut self) {
+        // Clear index table.
+        self.index_entries_count = 0;
+        // Clear log entries, but keep data capacity unchanged.
+        self.data_head = MemoryPosition::new(0);
+        self.data_tail = MemoryPosition::new(0);
+        self.data_size = MemorySize::new(0);
+        self.next_idx = 0;
+        self.max_timestamp = 0;
+    }
+
     pub fn advance_position(
         &self,
         position: MemoryPosition,

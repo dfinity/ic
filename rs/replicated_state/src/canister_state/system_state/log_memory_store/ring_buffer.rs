@@ -89,6 +89,13 @@ impl RingBuffer {
         self.io.load_header().data_size.get() as usize
     }
 
+    /// Clears the ring buffer.
+    pub fn clear(&mut self) {
+        let mut h = self.io.load_header();
+        h.clear();
+        self.io.save_header(&h);
+    }
+
     /// Convenience method for adding a single log record in tests.
     #[cfg(test)]
     fn append(&mut self, record: &CanisterLogRecord) {
@@ -280,6 +287,7 @@ mod tests {
     use crate::canister_state::system_state::log_memory_store::memory::MemorySize;
     use crate::page_map::PageMap;
     use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsRange};
+    use more_asserts::assert_gt;
 
     const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(2_000_000); // 2 MB
 
@@ -445,5 +453,22 @@ mod tests {
             res,
             vec![log_record(1, 2000, "beta"), log_record(2, 3000, "gamma")]
         );
+    }
+
+    #[test]
+    fn test_clear() {
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = TEST_DATA_CAPACITY;
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+
+        rb.append(&log_record(0, 100, "12345"));
+        assert_gt!(rb.bytes_used(), 0);
+
+        rb.clear();
+
+        assert_eq!(rb.bytes_used(), 0);
+        assert_eq!(rb.byte_capacity(), TEST_DATA_CAPACITY.get() as usize);
+        assert!(rb.pop_front().is_none());
+        assert!(rb.records(None).is_empty());
     }
 }
