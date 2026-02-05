@@ -18,7 +18,6 @@ use ic_registry_keys::{
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error as RegistryTransportError;
-use ic_system_test_driver::driver::resource::BootImage;
 use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
