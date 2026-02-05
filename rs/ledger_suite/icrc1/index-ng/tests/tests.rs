@@ -1457,7 +1457,7 @@ fn test_fee_collector_ranges_107() {
 
 // This test uses the test ledger to test edge cases such as
 // specifying the legacy fee collector after the 107 fee collector block
-// was genereated, which could not be tested with the prod ledger.
+// was generated, which could not be tested with the prod ledger.
 #[test]
 fn test_fee_collector_107_edge_cases() {
     let env = &StateMachine::new();
