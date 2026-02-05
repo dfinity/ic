@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -345,10 +345,7 @@ system_test_nns(
         "manual",
     ],
     test_driver_target = ":nns_recovery_testnet_bin",
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
-        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
-        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
-    },
+    runtime_deps = MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -367,10 +364,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
-        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
-        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
-    },
+    runtime_deps = MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",

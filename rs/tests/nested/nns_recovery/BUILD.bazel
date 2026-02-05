@@ -6,6 +6,7 @@ load(
     "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS",
     "MAINNET_ENV",
     "MESSAGE_CANISTER_RUNTIME_DEPS",
+    "MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS",
 )
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
@@ -83,7 +84,7 @@ system_test_nns(
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     test_timeout = "eternal", # "eternal" (1 hour) is not even enough for this test. Use `--test_timeout=10800` when running it.
-    runtime_deps = RUNTIME_DEPS,
+    runtime_deps = RUNTIME_DEPS | MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
