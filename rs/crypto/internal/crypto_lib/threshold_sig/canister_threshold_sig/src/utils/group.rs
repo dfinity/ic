@@ -916,6 +916,54 @@ impl EccPoint {
         }
     }
 
+    pub fn mul_3_points(
+        pt1: &EccPoint,
+        scalar1: &EccScalar,
+        pt2: &EccPoint,
+        scalar2: &EccScalar,
+        pt3: &EccPoint,
+        scalar3: &EccScalar,
+    ) -> CanisterThresholdResult<Self> {
+        match (
+            &pt1.point, scalar1, &pt2.point, scalar2, &pt3.point, scalar3,
+        ) {
+            (
+                EccPointInternal::K256(pt1),
+                EccScalar::K256(s1),
+                EccPointInternal::K256(pt2),
+                EccScalar::K256(s2),
+                EccPointInternal::K256(pt3),
+                EccScalar::K256(s3),
+            ) => Ok(Self::from(secp256k1::Point::lincomb3(
+                pt1, s1, pt2, s2, pt3, s3,
+            ))),
+
+            (
+                EccPointInternal::P256(pt1),
+                EccScalar::P256(s1),
+                EccPointInternal::P256(pt2),
+                EccScalar::P256(s2),
+                EccPointInternal::P256(pt3),
+                EccScalar::P256(s3),
+            ) => Ok(Self::from(secp256r1::Point::lincomb3(
+                pt1, s1, pt2, s2, pt3, s3,
+            ))),
+
+            (
+                EccPointInternal::Ed25519(pt1),
+                EccScalar::Ed25519(s1),
+                EccPointInternal::Ed25519(pt2),
+                EccScalar::Ed25519(s2),
+                EccPointInternal::Ed25519(pt3),
+                EccScalar::Ed25519(s3),
+            ) => Ok(Self::from(ed25519::Point::lincomb3(
+                pt1, s1, pt2, s2, pt3, s3,
+            ))),
+
+            _ => Err(CanisterThresholdError::CurveMismatch),
+        }
+    }
+
     pub const MIN_LUT_WINDOW_SIZE: usize = NafLut::MIN_WINDOW_SIZE;
     pub const MAX_LUT_WINDOW_SIZE: usize = NafLut::MAX_WINDOW_SIZE;
     pub const DEFAULT_LUT_WINDOW_SIZE: usize = NafLut::DEFAULT_WINDOW_SIZE;

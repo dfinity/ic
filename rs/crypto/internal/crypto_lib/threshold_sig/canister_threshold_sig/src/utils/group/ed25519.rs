@@ -371,6 +371,24 @@ impl Point {
         ))
     }
 
+    /// Perform multi-exponentiation
+    ///
+    /// Equivalent to p1*s1 + p2*s2 + p3*s3
+    #[inline]
+    pub fn lincomb3(
+        p1: &Point,
+        s1: &Scalar,
+        p2: &Point,
+        s2: &Scalar,
+        p3: &Point,
+        s3: &Scalar,
+    ) -> Self {
+        Self::new(curve25519_dalek::EdwardsPoint::multiscalar_mul(
+            &[s1.s, s2.s, s3.s],
+            &[p1.p, p2.p, p3.p],
+        ))
+    }
+
     pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {
         let g = Self::generator();
         let h = Self::generator_h();

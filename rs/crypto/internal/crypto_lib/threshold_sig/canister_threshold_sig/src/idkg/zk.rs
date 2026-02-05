@@ -224,9 +224,14 @@ impl ProofOfProductInstance {
         let r1_com = EccPoint::mul_2_points(&self.g, &proof.response1, &self.lhs_com, &neg_c)?;
 
         // We could consider using something like NAF here:
-        let r2_com =
-            EccPoint::mul_2_points(&self.rhs_com, &proof.response1, &self.h, &proof.response2)?
-                .add_points(&self.product_com.scalar_mul(&neg_c)?)?;
+        let r2_com = EccPoint::mul_3_points(
+            &self.rhs_com,
+            &proof.response1,
+            &self.h,
+            &proof.response2,
+            &self.product_com,
+            &neg_c,
+        )?;
 
         Ok((r1_com, r2_com))
     }
