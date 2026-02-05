@@ -11,7 +11,7 @@ use ic_sns_governance::pb::v1::{
     proposal::Action,
 };
 use ic_sns_test_utils::{
-    itest_helpers::{SnsCanisters, SnsTestsInitPayloadBuilder, local_test_on_sns_subnet},
+    itest_helpers::{SnsCanisters, SnsTestsInitPayloadBuilder, state_machine_test_on_sns_subnet},
     now_seconds,
 };
 
@@ -19,7 +19,7 @@ use ic_sns_test_utils::{
 /// unspecified fields are populated by defaults.
 #[test]
 fn test_init_with_sys_params() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let system_params = NervousSystemParameters {
             transaction_fee_e8s: Some(100_000),
             reject_cost_e8s: Some(0),
@@ -45,7 +45,7 @@ fn test_init_with_sys_params() {
 
 #[test]
 fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // The `initial_voting_period_seconds` will change, so this is the `initial_initial_voting_period_seconds` :P
             let initial_initial_voting_period_seconds = ONE_DAY_SECONDS * 4;

@@ -3,8 +3,8 @@ use dfn_candid::candid;
 
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, prepare_registry, prepare_registry_with_two_node_sets},
 };
@@ -19,7 +19,7 @@ use assert_matches::assert_matches;
 
 #[test]
 fn test_the_anonymous_user_cannot_add_nodes_to_subnet() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let (init_mutate, subnet_id, unassigned_node_ids, _) =
@@ -97,7 +97,7 @@ fn test_the_anonymous_user_cannot_add_nodes_to_subnet() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_add_nodes_to_subnet() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             // An attacker got a canister that is trying to pass for the governance
             // canister...
@@ -161,7 +161,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_nodes_to_subnet
 
 #[test]
 fn test_add_nodes_to_subnet_succeeds() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let num_unassigned_nodes = 4_usize;
@@ -255,7 +255,7 @@ fn test_add_nodes_to_subnet_succeeds() {
 /// added to the other Subnet
 #[test]
 fn test_adding_nodes_to_another_subnet_fails() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 2_usize;
             let num_unassigned_nodes = 2_usize;

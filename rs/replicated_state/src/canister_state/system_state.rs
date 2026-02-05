@@ -1068,20 +1068,19 @@ impl SystemState {
         const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
         let call_context_manager = self.call_context_manager().unwrap();
-        let (originator, respondent, deadline) =
-            match call_context_manager.callbacks().get(&callback_id) {
-                // Populate reject responses from the callback.
-                Some(callback) => (callback.originator, callback.respondent, callback.deadline),
+        let (respondent, deadline) = match call_context_manager.callbacks().get(&callback_id) {
+            // Populate reject responses from the callback.
+            Some(callback) => (callback.respondent, callback.deadline),
 
-                // This should be unreachable, but if we somehow end up here, we can populate
-                // the reject response with arbitrary values, as trying to execute it it will
-                // fail anyway and produce a critical error. This is safer than panicking.
-                None => (UNKNOWN_CANISTER_ID, UNKNOWN_CANISTER_ID, SOME_DEADLINE),
-            };
+            // This should be unreachable, but if we somehow end up here, we can populate
+            // the reject response with arbitrary values, as trying to execute it will
+            // fail anyway and produce a critical error. This is safer than panicking.
+            None => (UNKNOWN_CANISTER_ID, SOME_DEADLINE),
+        };
 
         CanisterMessage::Response(
             Response {
-                originator,
+                originator: self.canister_id,
                 respondent,
                 originator_reply_callback: callback_id,
                 refund: Cycles::zero(),
@@ -1216,6 +1215,7 @@ impl SystemState {
                     && !has_callback(
                         response,
                         call_context_manager,
+                        &self.canister_id,
                         self.aborted_or_paused_response(),
                     )
                     .map_err(|err| (err, msg.clone()))?
@@ -1549,6 +1549,7 @@ impl SystemState {
                 match has_callback(
                     response,
                     call_context_manager,
+                    &self.canister_id,
                     self.aborted_or_paused_response(),
                 ) {
                     // Safe to induct.
@@ -1694,7 +1695,7 @@ impl SystemState {
                 .unwrap_or_else(|err_str| {
                     errors.push(StateError::NonMatchingResponse {
                         err_str,
-                        originator: callback.originator,
+                        originator: self.canister_id,
                         callback_id,
                         respondent: callback.respondent,
                         deadline: callback.deadline,
@@ -2130,6 +2131,7 @@ pub(crate) fn push_input(
 fn has_callback(
     response: &Response,
     call_context_manager: &CallContextManager,
+    own_canister_id: &CanisterId,
     aborted_or_paused_response: Option<&Response>,
 ) -> Result<bool, StateError> {
     let callback = match aborted_or_paused_response {
@@ -2147,13 +2149,13 @@ fn has_callback(
     match callback {
         Some(callback)
             if response.respondent != callback.respondent
-                || response.originator != callback.originator
+                || &response.originator != own_canister_id
                 || response.deadline != callback.deadline =>
         {
             Err(StateError::non_matching_response(
                 format!(
                     "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
-                    callback.originator,
+                    own_canister_id,
                     callback.respondent,
                     Time::from(callback.deadline)
                 ),
@@ -2276,7 +2278,6 @@ pub mod testing {
 
             call_context_manager.register_callback(Callback::new(
                 call_context_id,
-                self.canister_id,
                 respondent,
                 Cycles::zero(),
                 Cycles::new(42),
