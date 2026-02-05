@@ -159,8 +159,10 @@ fn run_apalache(
     // and then feed that to the JRE.
     // https://github.com/tlaplus/tlaplus/issues/688
     let tmp_subdir_str = unique_tmp_dir();
-    // Construct the JVM_ARGS value so that Apalache uses the new temporary subdirectory
-    let jvm_args = format!("-Djava.io.tmpdir={tmp_subdir_str}");
+    // Construct the JVM_ARGS value so that Apalache uses the new temporary subdirectory as well as
+    // some memory options from apalache-mc's bash wrapper
+    // https://github.com/apalache-mc/apalache/blob/18e8a0b748b913c7df66013226b15660ee670301/src/universal/bin/apalache-mc#L48-L48
+    let jvm_args = format!("-Djava.io.tmpdir={tmp_subdir_str} -Xmx4096m  -XX:+UseG1GC -XX:G1PeriodicGCInterval=600000 -XX:+G1PeriodicGCInvokesConcurrent");
 
     cmd.arg("check")
         .arg(format!("--init={init_predicate}"))
