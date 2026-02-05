@@ -530,7 +530,7 @@ mod tests {
         let content = gen_content();
         CertificationMessage::CertificationShare(CertificationShare {
             height: Height::from(height),
-            witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 signature: ThresholdSignatureShare::fake(node_test_id(node)),
                 content,
@@ -543,7 +543,7 @@ mod tests {
         let signature = ThresholdSignature::fake();
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
-            witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed { content, signature },
         })
     }

@@ -327,6 +327,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::InstallChunkedCode
                     | ic00::Method::StopCanister
                     | ic00::Method::HttpRequest
+                    | ic00::Method::FlexibleHttpRequest
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
                     | ic00::Method::VetKdDeriveKey

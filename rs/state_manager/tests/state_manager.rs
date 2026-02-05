@@ -1044,9 +1044,9 @@ fn populates_prev_state_hash() {
         let hashes = state_manager.list_state_hashes_to_certify();
 
         assert_eq!(2, hashes.len());
-        assert_ne!(hashes[0].1, hashes[1].1);
+        assert_ne!(hashes[0].hash, hashes[1].hash);
         assert_eq!(
-            Some(hashes[0].1.clone()),
+            Some(hashes[0].hash.clone()),
             state_2.system_metadata().prev_state_hash
         );
     });
@@ -2429,7 +2429,7 @@ fn recomputes_metadata_on_restart_if_missing() {
             .expect("Failed to remove states metadata");
         let cert_hashes = state_manager.list_state_hashes_to_certify();
         assert_eq!(1, cert_hashes.len());
-        assert_eq!(height(1), cert_hashes[0].0);
+        assert_eq!(height(1), cert_hashes[0].height);
 
         let state_manager = restart_fn(state_manager, None);
 
@@ -8962,7 +8962,7 @@ fn fake_certification_for_height(height: Height) -> Certification {
 fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> Certification {
     Certification {
         height,
-        witness: Witness::new_for_testing_with_height(),
+        height_witness: Witness::new_for_testing_with_height(),
         signed: Signed {
             content: CertificationContent::new(CryptoHashOfPartialState::from(hash)),
             signature: ThresholdSignature::fake(),
@@ -9428,8 +9428,8 @@ fn valid_witness_in_list_state_hashes_to_certify() {
 
         let state_hashes = sm.list_state_hashes_to_certify();
         assert_eq!(state_hashes.len(), 1);
-        let expected_digest = state_hashes[0].1.clone().get().0;
-        let witness = state_hashes[0].2.clone();
+        let expected_digest = state_hashes[0].hash.clone().get().0;
+        let witness = state_hashes[0].height_witness.clone();
 
         let labeled_tree = materialize(&state_height_as_tree(&height), None);
         let actual_digest = recompute_digest(&labeled_tree, &witness).unwrap().to_vec();
@@ -9508,7 +9508,7 @@ fn commit_and_certify_reuses_certification() {
         assert!(
             !sm.list_state_hashes_to_certify()
                 .into_iter()
-                .any(|(height, _, _)| height == no_opt_height)
+                .any(|state_hash_metadata| state_hash_metadata.height == no_opt_height)
         );
     });
 }

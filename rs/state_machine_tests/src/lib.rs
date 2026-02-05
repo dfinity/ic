@@ -52,7 +52,8 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{
-    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager, StateReader,
+    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateHashMetadata,
+    StateManager, StateReader,
 };
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::no_op_logger;
@@ -938,7 +939,7 @@ impl Deref for StateMachineStateManager {
 }
 
 impl StateManager for StateMachineStateManager {
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.deref().list_state_hashes_to_certify()
     }
 
@@ -5027,9 +5028,13 @@ pub fn certify_latest_state_helper(
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
         let state_hashes = state_manager.list_state_hashes_to_certify();
-        let (height, hash, _) = state_hashes.last().unwrap();
-        state_manager
-            .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
+        let state_hash_metadata = state_hashes.last().unwrap();
+        state_manager.deliver_state_certification(certify_hash(
+            secret_key,
+            subnet_id,
+            &state_hash_metadata.height,
+            &state_hash_metadata.hash,
+        ));
     }
     assert_eq!(
         state_manager.latest_certified_height(),
@@ -5053,7 +5058,7 @@ fn certify_hash(
         CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
     Certification {
         height: *height,
-        witness: Witness::new_for_testing(Digest([0; 32])),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent { hash: hash.clone() },
             signature: ThresholdSignature {

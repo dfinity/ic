@@ -60,7 +60,7 @@ pub struct Certification {
     #[prost(message, optional, tag = "3")]
     pub signature: ::core::option::Option<super::super::super::types::v1::ThresholdSignature>,
     #[prost(message, optional, tag = "4")]
-    pub witness: ::core::option::Option<Witness>,
+    pub height_witness: ::core::option::Option<Witness>,
 }
 /// Certification signed by a single replica
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -72,7 +72,7 @@ pub struct CertificationShare {
     #[prost(message, optional, tag = "3")]
     pub signature: ::core::option::Option<super::super::super::types::v1::ThresholdSignatureShare>,
     #[prost(message, optional, tag = "4")]
-    pub witness: ::core::option::Option<Witness>,
+    pub height_witness: ::core::option::Option<Witness>,
 }
 /// XNet stream slice with certification and matching Merkle proof.
 #[derive(Clone, PartialEq, ::prost::Message)]

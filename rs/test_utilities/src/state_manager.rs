@@ -5,7 +5,7 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateReader, TransientStateHashError::*,
+    StateHashError, StateHashMetadata, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
@@ -183,20 +183,18 @@ impl StateManager for FakeStateManager {
         });
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.states
             .read()
             .unwrap()
             .iter()
             .filter(|s| s.height > Height::from(0) && s.certification.is_none())
-            .map(|s| {
-                (
-                    s.height,
-                    s.partial_hash.clone(),
-                    Witness::new_for_testing(
-                        s.partial_hash.clone().get().0.to_vec().try_into().unwrap(),
-                    ),
-                )
+            .map(|s| StateHashMetadata {
+                height: s.height,
+                hash: s.partial_hash.clone(),
+                height_witness: Witness::new_for_testing(
+                    s.partial_hash.clone().get().0.to_vec().try_into().unwrap(),
+                ),
             })
             .collect()
     }
@@ -644,7 +642,7 @@ pub fn encode_certified_stream_slice(
         merkle_proof: vec![],
         certification: Certification {
             height: state_height,
-            witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 signature: ThresholdSignature {
                     signer: NiDkgId {
@@ -703,7 +701,7 @@ impl StateManager for RefMockStateManager {
             .fetch_state(height, root_hash, cup_interval_length)
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState, Witness)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.mock.read().unwrap().list_state_hashes_to_certify()
     }
 
