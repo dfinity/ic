@@ -132,7 +132,6 @@ where
         .unwrap();
     let callback = Callback::new(
         call_context_id,
-        canister_test_id(LOCAL_CANISTER_ID),
         canister_test_id(REMOTE_CANISTER_ID),
         Cycles::new(0),
         Cycles::new(0),
