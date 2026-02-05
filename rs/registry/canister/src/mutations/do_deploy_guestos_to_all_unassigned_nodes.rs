@@ -51,7 +51,7 @@ mod tests {
     use super::DeployGuestosToAllUnassignedNodesPayload;
 
     #[test]
-    #[should_panic(expected = "version is NOT blessed")]
+    #[should_panic(expected = "'version' is NOT blessed")]
     fn should_panic_if_version_not_blessed() {
         let mut registry = invariant_compliant_registry(0);
 
