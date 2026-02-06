@@ -93,9 +93,18 @@ pub async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    match args.vm_type {
-        GuestVMType::Default => println!("Starting GuestOS service"),
-        GuestVMType::Upgrade => println!("Starting Upgrade GuestOS service"),
+    let startup_message = match args.vm_type {
+        GuestVMType::Default => "Starting GuestOS service... (this may take several minutes)",
+        GuestVMType::Upgrade => {
+            "Starting Upgrade GuestOS service... (this may take several minutes)"
+        }
+    };
+    println!("{startup_message}");
+    for path in [CONSOLE_TTY1_PATH, CONSOLE_TTY_SERIAL_PATH] {
+        if let Ok(mut tty) = File::options().write(true).open(path) {
+            let _ = writeln!(tty, "\n{startup_message}\n");
+            let _ = tty.flush();
+        }
     }
 
     let termination_token = CancellationToken::new();
@@ -530,6 +539,20 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
+        let sev_note = if self
+            .hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment
+        {
+            " (SEV enabled, this may take several minutes)"
+        } else {
+            ""
+        };
+        self.write_to_console(&format!(
+            "\nPreparing GuestOS virtual machine...{sev_note}\n"
+        ));
+        println!("Preparing GuestOS virtual machine...{sev_note}");
+
         // Try to destroy any existing VM, if this fails, don't even try to create the configuration
         VirtualMachine::try_destroy_existing_vm(
             &self.libvirt_connection,
