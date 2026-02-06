@@ -1411,17 +1411,29 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, LEDGER_INDEX_CANISTER_ID);
 
             // Install the ICP index.
-            let icp_index_init_arg = IcpIndexArg::Init(IcpIndexInitArg {
-                ledger_id: LEDGER_CANISTER_ID.get().0,
-                retrieve_blocks_from_ledger_interval_seconds: None,
-            });
+            // Mainnet PocketIC embeds an older ICP Index WASM that expects the pre-DEFI-2617 init
+            // format (InitArg with ledger_id only). Head build uses the unified IndexArg::Init(InitArg) format.
+            let icp_index_init_payload: Vec<u8> =
+                if option_env!("POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS").unwrap_or("0") == "1" {
+                    let legacy_arg = IcpIndexInitArg {
+                        ledger_id: LEDGER_CANISTER_ID.get().0,
+                        retrieve_blocks_from_ledger_interval_seconds: None,
+                    };
+                    Encode!(&legacy_arg).unwrap()
+                } else {
+                    let arg = IcpIndexArg::Init(IcpIndexInitArg {
+                        ledger_id: LEDGER_CANISTER_ID.get().0,
+                        retrieve_blocks_from_ledger_interval_seconds: None,
+                    });
+                    Encode!(&arg).unwrap()
+                };
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
                     ICP_INDEX_CANISTER_WASM.to_vec(),
-                    Encode!(&icp_index_init_arg).unwrap(),
+                    icp_index_init_payload,
                 )
                 .unwrap();
         }
