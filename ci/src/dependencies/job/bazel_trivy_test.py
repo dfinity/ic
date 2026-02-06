@@ -13,19 +13,19 @@ PROJECT_ROOT = pathlib.Path(
 def main():
     logging.basicConfig(level=logging.DEBUG)
 
-    command = f"git clone https://github.com/dfinity/ic"
-    logging.info(f"Performing git clone")
-    _ = ProcessExecutor.execute_command(command, PROJECT_ROOT.resolve(), {})
-    path = PROJECT_ROOT / "ic"
-    _ = ProcessExecutor.execute_command("git reset --hard dc2d53146c26eb41c8ae40ecc0c1d89f32072d14", path.resolve(), {})
+    # command = f"git clone https://github.com/dfinity/ic"
+    # logging.info(f"Performing git clone")
+    # _ = ProcessExecutor.execute_command(command, PROJECT_ROOT.resolve(), {})
+    # path = PROJECT_ROOT / "ic"
+    # _ = ProcessExecutor.execute_command("git reset --hard dc2d53146c26eb41c8ae40ecc0c1d89f32072d14", path.resolve(), {})
 
-    path = PROJECT_ROOT / "ic/ic-os/guestos/envs/prod"
+    path = PROJECT_ROOT / "ic"
     if not path.is_dir():
         raise RuntimeError(f"path {path} is invalid")
-    json_file_path = f"{path.resolve()}/findings.json"
-    hash_file_path = f"{path.resolve()}/file-hashes.txt"
+    json_file_path = f"{path.resolve()}/ic-os/guestos/envs/prod/findings.json"
+    hash_file_path = f"{path.resolve()}/ic-os/guestos/envs/prod/file-hashes.txt"
     command = (
-        f"bazel run vuln-scan -- --output-path {json_file_path} --format json --hash-output-path {hash_file_path}"
+        f"ci/container/container-run.sh bazel run vuln-scan -- --output-path /ic/ic-os/guestos/envs/prod/findings.json --format json --hash-output-path /ic/ic-os/guestos/envs/prod/file-hashes.txt"
     )
     trivy_output = ProcessExecutor.execute_command(command, path.resolve(), {})
     if os.path.exists(json_file_path):
