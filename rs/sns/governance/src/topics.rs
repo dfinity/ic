@@ -247,34 +247,18 @@ impl Governance {
         }
     }
 
-    pub fn get_topic_and_criticality_for_action(
+    /// Returns the topic for the given action, or None if the action is not associated with a
+    /// topic. Note that the topic can be None if the action is a custom function that has not been
+    /// assigned a topic.
+    fn get_topic_for_action(
         &self,
         action: &pb::proposal::Action,
-    ) -> Result<(Option<pb::Topic>, ProposalCriticality), String> {
+    ) -> Result<Option<pb::Topic>, String> {
         let action_code = u64::from(action);
 
-        // Helper to check if the action should be upgraded to critical based on
-        // additional_critical_native_action_ids
-        let maybe_upgrade_criticality = |criticality: ProposalCriticality| -> ProposalCriticality {
-            let is_additional_critical = self
-                .proto
-                .parameters
-                .as_ref()
-                .and_then(|p| p.custom_proposal_criticality.as_ref())
-                .map(|c| c.critical_native_action_ids.contains(&action_code))
-                .unwrap_or(false);
-
-            if is_additional_critical {
-                ProposalCriticality::Critical
-            } else {
-                criticality
-            }
-        };
-
         if let Some(topic) = pb::Topic::get_topic_for_native_action(action) {
-            let criticality = maybe_upgrade_criticality(topic.proposal_criticality());
-            return Ok((Some(topic), criticality));
-        };
+            return Ok(Some(topic));
+        }
 
         // While these are "native actions", they should return an error if the name of the function
         // does not map to a known operation spec.
@@ -284,9 +268,7 @@ impl Governance {
             // also serves to populate the cache.  If the cache is unpopulated, then the action
             // will not be found.
             let spec = get_extension_operation_spec_from_cache(execute_extension_operation)?;
-            let topic = spec.topic;
-            let criticality = maybe_upgrade_criticality(topic.proposal_criticality());
-            return Ok((Some(topic), criticality));
+            return Ok(Some(spec.topic));
         }
 
         let Some(function) = self.proto.id_to_nervous_system_functions.get(&action_code) else {
@@ -308,17 +290,42 @@ impl Governance {
         };
 
         let Some(custom_proposal_topic_id) = custom_proposal_topic_id else {
-            // Fall back to default proposal criticality (if a topic isn't defined).
-            let criticality = maybe_upgrade_criticality(ProposalCriticality::default());
-            return Ok((None, criticality));
+            return Ok(None);
         };
 
         let Ok(topic) = pb::Topic::try_from(custom_proposal_topic_id) else {
+            // Fall back to default proposal criticality (if a topic isn't defined).
             return Err(format!("Invalid topic ID {custom_proposal_topic_id}."));
         };
 
-        let criticality = maybe_upgrade_criticality(topic.proposal_criticality());
-        Ok((Some(topic), criticality))
+        Ok(Some(topic))
+    }
+
+    pub fn get_topic_and_criticality_for_action(
+        &self,
+        action: &pb::proposal::Action,
+    ) -> Result<(Option<pb::Topic>, ProposalCriticality), String> {
+        let maybe_topic = self.get_topic_for_action(action)?;
+        let action_code = u64::from(action);
+
+        let is_critical_by_customization = self
+            .proto
+            .parameters
+            .as_ref()
+            .and_then(|p| p.custom_proposal_criticality.as_ref())
+            .map(|c| c.critical_native_action_ids.contains(&action_code))
+            .unwrap_or(false);
+
+        let criticality = if is_critical_by_customization {
+            ProposalCriticality::Critical
+        } else {
+            // Fall back to default proposal criticality (if a topic isn't defined).
+            maybe_topic
+                .map(|topic| topic.proposal_criticality())
+                .unwrap_or(ProposalCriticality::default())
+        };
+
+        Ok((maybe_topic, criticality))
     }
 }
 

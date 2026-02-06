@@ -83,8 +83,8 @@ pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
 /// and a few constant-size fields (e.g., compute and memory allocation).
 pub const MAX_INSTALL_CODE_WASM_AND_ARG_SIZE: usize = 2_000_000; // 2MB
 
-/// Native action types that can be performed via SNS governance proposals.
-/// Each variant is associated with its u64 identifier from the Governance spec.
+/// The Governance spec gives each Action a u64 equivalent identifier. This enum gives those u64
+/// values a human-readable name for use in the SNS.
 #[repr(u64)]
 #[derive(
     Debug,
