@@ -125,7 +125,6 @@ def setup_buildbuddy_protos():
         "ci/githubstats/buildbuddy_proto/package_load_metrics.proto",
         "ci/githubstats/buildbuddy_proto/option_filters.proto",
         "ci/githubstats/buildbuddy_proto/strategy_policy.proto",
-        "ci/githubstats/buildbuddy_proto/semver.proto",
     ]
 
     result = subprocess.run(
