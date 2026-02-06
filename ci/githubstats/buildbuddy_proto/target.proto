@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-import "ci/githubstats/buildbuddy_proto/api/v1/common.proto";
-import "ci/githubstats/buildbuddy_proto/context.proto";
-import "ci/githubstats/buildbuddy_proto/build_event_stream.proto";
+import "api/v1/common.proto";
+import "context.proto";
+import "build_event_stream.proto";
 import "google/protobuf/timestamp.proto";
 
 package target;

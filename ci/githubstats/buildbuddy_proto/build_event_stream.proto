@@ -21,11 +21,11 @@ package build_event_stream;
 import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
-import "ci/githubstats/buildbuddy_proto/action_cache.proto";
-import "ci/githubstats/buildbuddy_proto/command_line.proto";
-import "ci/githubstats/buildbuddy_proto/invocation_policy.proto";
-import "ci/githubstats/buildbuddy_proto/failure_details.proto";
-import "ci/githubstats/buildbuddy_proto/package_load_metrics.proto";
+import "action_cache.proto";
+import "command_line.proto";
+import "invocation_policy.proto";
+import "failure_details.proto";
+import "package_load_metrics.proto";
 
 option java_package = "com.google.devtools.build.lib.buildeventstream";
 option java_outer_classname = "BuildEventStreamProtos";

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "ci/githubstats/buildbuddy_proto/user_id.proto";
+import "user_id.proto";
 
 package context;
 

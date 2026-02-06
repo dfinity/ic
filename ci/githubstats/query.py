@@ -105,30 +105,27 @@ def setup_buildbuddy_protos():
     # Create a temporary directory for compiled protos
     temp_dir = tempfile.mkdtemp(prefix="buildbuddy_proto_")
 
-    # Workspace root is two levels up from script_dir (/ic)
-    workspace_root = script_dir.parent.parent
-
     # Only compile proto files needed for target.proto (excluding ones with external googleapis dependencies)
     # Determined by analyzing the import graph starting from target.proto
     proto_files_to_compile = [
         # target.proto and its direct imports
-        "ci/githubstats/buildbuddy_proto/target.proto",
-        "ci/githubstats/buildbuddy_proto/api/v1/common.proto",
-        "ci/githubstats/buildbuddy_proto/context.proto",
-        "ci/githubstats/buildbuddy_proto/build_event_stream.proto",
+        "target.proto",
+        "api/v1/common.proto",
+        "context.proto",
+        "build_event_stream.proto",
         # Transitive dependencies
-        "ci/githubstats/buildbuddy_proto/user_id.proto",
-        "ci/githubstats/buildbuddy_proto/action_cache.proto",
-        "ci/githubstats/buildbuddy_proto/command_line.proto",
-        "ci/githubstats/buildbuddy_proto/invocation_policy.proto",
-        "ci/githubstats/buildbuddy_proto/failure_details.proto",
-        "ci/githubstats/buildbuddy_proto/package_load_metrics.proto",
-        "ci/githubstats/buildbuddy_proto/option_filters.proto",
-        "ci/githubstats/buildbuddy_proto/strategy_policy.proto",
+        "user_id.proto",
+        "action_cache.proto",
+        "command_line.proto",
+        "invocation_policy.proto",
+        "failure_details.proto",
+        "package_load_metrics.proto",
+        "option_filters.proto",
+        "strategy_policy.proto",
     ]
 
     result = subprocess.run(
-        ["protoc", f"--python_out={temp_dir}", f"--proto_path={workspace_root}"] + proto_files_to_compile,
+        ["protoc", f"--python_out={temp_dir}", f"--proto_path={proto_dir}"] + proto_files_to_compile,
         capture_output=True,
         text=True
     )
@@ -139,14 +136,11 @@ def setup_buildbuddy_protos():
     # Create __init__.py files for Python package structure
     temp_path = Path(temp_dir)
     for package_dir in [
-        temp_path / "ci",
-        temp_path / "ci" / "githubstats",
-        temp_path / "ci" / "githubstats" / "buildbuddy_proto",
-        temp_path / "ci" / "githubstats" / "buildbuddy_proto" / "api",
-        temp_path / "ci" / "githubstats" / "buildbuddy_proto" / "api" / "v1",
+        temp_path / "api",
+        temp_path / "api" / "v1",
     ]:
-        if package_dir.exists():
-            (package_dir / "__init__.py").touch()
+        package_dir.mkdir(parents=True, exist_ok=True)
+        (package_dir / "__init__.py").touch()
 
     # Add temp directory to Python path so we can import the compiled modules
     sys.path.insert(0, temp_dir)
@@ -529,7 +523,7 @@ def last(args):
     target_pb2 = None
     try:
         setup_buildbuddy_protos()
-        from ci.githubstats.buildbuddy_proto import target_pb2
+        import target_pb2
     except Exception as e:
         if args.verbose:
             print(f"Failed to setup BuildBuddy protos: {e}", file=sys.stderr)

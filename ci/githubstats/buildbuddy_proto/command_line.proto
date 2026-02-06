@@ -16,7 +16,7 @@ syntax = "proto3";
 
 package command_line;
 
-import "ci/githubstats/buildbuddy_proto/option_filters.proto";
+import "option_filters.proto";
 
 // option java_api_version = 2;
 option java_package = "com.google.devtools.build.lib.runtime.proto";
