@@ -364,7 +364,7 @@ impl Point {
     ///
     /// Equivalent to p1*s1 + p2*s2
     #[inline]
-    pub fn lincomb(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
+    pub fn lincomb_vartime(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
         Self::new(curve25519_dalek::EdwardsPoint::multiscalar_mul(
             &[s1.s, s2.s],
             &[p1.p, p2.p],
@@ -375,7 +375,7 @@ impl Point {
     ///
     /// Equivalent to p1*s1 + p2*s2 + p3*s3
     #[inline]
-    pub fn lincomb3(
+    pub fn lincomb3_vartime(
         p1: &Point,
         s1: &Scalar,
         p2: &Point,

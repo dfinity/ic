@@ -523,7 +523,7 @@ fn test_mul_2_is_correct() -> CanisterThresholdResult<()> {
             let s_0 = EccScalar::random(curve_type, rng);
             let s_1 = EccScalar::random(curve_type, rng);
 
-            let computed_result = EccPoint::mul_2_points(&p_0, &s_0, &p_1, &s_1)?;
+            let computed_result = EccPoint::mul_2_points_vartime(&p_0, &s_0, &p_1, &s_1)?;
             let expected_result = p_0.scalar_mul(&s_0)?.add_points(&p_1.scalar_mul(&s_1)?)?;
             assert_eq!(computed_result, expected_result);
         }
