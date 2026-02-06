@@ -1413,6 +1413,7 @@ impl PocketIcSubnets {
             // Install the ICP index.
             // Mainnet PocketIC embeds an older ICP Index WASM that expects the pre-DEFI-2617 init
             // format (InitArg with ledger_id only). Head build uses the unified IndexArg::Init(InitArg) format.
+            // TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
             let icp_index_init_payload: Vec<u8> =
                 if option_env!("POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS").unwrap_or("0") == "1" {
                     let legacy_arg = IcpIndexInitArg {
