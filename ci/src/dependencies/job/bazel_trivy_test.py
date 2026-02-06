@@ -19,7 +19,7 @@ def main():
     # path = PROJECT_ROOT / "ic"
     # _ = ProcessExecutor.execute_command("git reset --hard dc2d53146c26eb41c8ae40ecc0c1d89f32072d14", path.resolve(), {})
 
-    path = PROJECT_ROOT / "ic"
+    path = PROJECT_ROOT
     if not path.is_dir():
         raise RuntimeError(f"path {path} is invalid")
     json_file_path = f"{path.resolve()}/ic-os/guestos/envs/prod/findings.json"
