@@ -20,7 +20,7 @@ import codeowners
 import pandas as pd
 import psycopg
 import requests
-import target_pb2
+from proto import target_pb2
 from psycopg import sql
 from tabulate import tabulate
 

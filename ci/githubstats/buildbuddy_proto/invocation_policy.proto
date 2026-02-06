@@ -16,7 +16,7 @@ syntax = "proto2";
 
 package blaze.invocation_policy;
 
-import "strategy_policy.proto";
+import "proto/strategy_policy.proto";
 
 option go_package = "invocation_policy";
 // option java_api_version = 2;
