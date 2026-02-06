@@ -205,6 +205,7 @@ fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
 fn get_minter_info() -> MinterInfo {
     ic_ckbtc_minter::state::read_state(|s| MinterInfo {
         min_confirmations: s.min_confirmations,
+        deposit_doge_min_amount: s.effective_deposit_min_btc_amount(),
         retrieve_doge_min_amount: s.fee_based_retrieve_btc_min_amount,
     })
 }

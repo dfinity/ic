@@ -1,7 +1,6 @@
 //! Tests for the CLib NiDKG forward secure encryption
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-pub use rand::{RngCore, SeedableRng};
-pub use rand_chacha::ChaChaRng;
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
+pub use rand::{Rng, SeedableRng};
 pub use std::collections::BTreeMap;
 
 mod internal_types {
@@ -41,15 +40,16 @@ fn constants_should_be_compatible() {
 /// Keygen should run without panicking.
 #[test]
 fn keygen_should_work() {
+    let rng = &mut ReproducibleRng::new();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 8u8, 1u8, 2u8];
-    create_forward_secure_key_pair(Seed::from_bytes(&[85u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+    create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
 }
 
 #[test]
 fn epoch_of_a_new_key_should_be_zero() {
+    let rng = &mut ReproducibleRng::new();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 3u8, 0u8, 6u8];
-    let key_set =
-        create_forward_secure_key_pair(Seed::from_bytes(&[12u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+    let key_set = create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
     let epoch = SecretKey::deserialize(&key_set.secret_key)
         .current_epoch()
         .unwrap();
@@ -58,18 +58,14 @@ fn epoch_of_a_new_key_should_be_zero() {
 
 #[test]
 fn single_stepping_a_key_should_increment_current_epoch() {
+    let rng = &mut ReproducibleRng::new();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 5u8, 0u8, 5u8];
 
-    let key_with_pop =
-        create_forward_secure_key_pair(Seed::from_bytes(&[89u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+    let key_with_pop = create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
     let mut secret_key = SecretKey::deserialize(&key_with_pop.secret_key);
     for epoch in 4..8 {
         let secret_key_epoch = Epoch::from(epoch);
-        update_key_inplace_to_epoch(
-            &mut secret_key,
-            secret_key_epoch,
-            Seed::from_bytes(&[9u8; 32]),
-        );
+        update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
         let key_epoch = secret_key.current_epoch().unwrap().get();
         assert_eq!(
             key_epoch, epoch,
@@ -81,8 +77,7 @@ fn single_stepping_a_key_should_increment_current_epoch() {
 #[test]
 fn should_not_update_key_on_current_or_past_epoch() {
     let rng = &mut reproducible_rng();
-    let mut associated_data = [0u8; 4];
-    rng.fill_bytes(&mut associated_data[..]);
+    let associated_data = rng.r#gen::<[u8; 4]>();
 
     let key_with_pop = create_forward_secure_key_pair(Seed::from_rng(rng), &associated_data);
     let mut secret_key = SecretKey::deserialize(&key_with_pop.secret_key);
@@ -103,9 +98,9 @@ fn should_not_update_key_on_current_or_past_epoch() {
 
 #[test]
 fn correct_keys_should_verify() {
+    let rng = &mut ReproducibleRng::new();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[11u8, 2u8, 19u8, 31u8];
-    let key_set =
-        create_forward_secure_key_pair(Seed::from_bytes(&[31u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+    let key_set = create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
     let verification =
         verify_forward_secure_key(&key_set.public_key, &key_set.pop, KEY_GEN_ASSOCIATED_DATA);
     assert_eq!(verification, Ok(()));
@@ -169,28 +164,21 @@ fn fs_key_message_pairs(
 #[test]
 fn encryption_should_work() {
     const NUM_RECEIVERS: u8 = 3;
-    let rng = &mut ChaChaRng::from_seed([17; 32]);
-    let mut associated_data = [0u8; 22];
-    rng.fill_bytes(&mut associated_data[..]);
+    let rng = &mut ReproducibleRng::new();
+    let associated_data = rng.r#gen::<[u8; 22]>();
     let threshold = NumberOfNodes::from(2);
 
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as u32,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
 
     encrypt_and_prove(
-        Seed::from_bytes(&[0x69; 32]),
+        Seed::from_rng(rng),
         &fs_key_message_pairs(&threshold_keys, &forward_secure_keys),
         Epoch::from(4),
         &public_coefficients,
@@ -208,30 +196,23 @@ fn encryption_should_work() {
 #[test]
 fn encrypted_messages_should_decrypt() {
     const NUM_RECEIVERS: u8 = 3;
-    let rng = &mut ChaChaRng::from_seed([11; 32]);
-    let mut associated_data = [0u8; 18];
-    rng.fill_bytes(&mut associated_data[..]);
+    let rng = &mut ReproducibleRng::new();
+    let associated_data = rng.r#gen::<[u8; 18]>();
     let threshold = NumberOfNodes::from(2);
 
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as u32,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
 
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
 
     let epoch = Epoch::from(5); // Small epoch as forward-stepping is slow
-    let seed = Seed::from_bytes(&[0x69; 32]);
+    let seed = Seed::from_rng(rng);
     let (ciphertext, ..) = encrypt_and_prove(
         seed,
         &key_message_pairs,
@@ -272,21 +253,14 @@ fn encrypted_messages_should_decrypt() {
 fn decryption_should_fail_below_epoch() {
     const NUM_RECEIVERS: u8 = 3;
     let threshold = NumberOfNodes::from(2);
-    let rng = &mut ChaChaRng::from_seed([0xbe; 32]);
-    let mut associated_data = [0u8; 10];
-    rng.fill_bytes(&mut associated_data[..]);
+    let rng = &mut ReproducibleRng::new();
+    let associated_data = rng.r#gen::<[u8; 10]>();
 
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as u32,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
@@ -356,29 +330,22 @@ fn decryption_should_fail_below_epoch() {
 #[test]
 fn zk_proofs_should_verify() {
     const NUM_RECEIVERS: u8 = 3;
-    let rng = &mut ChaChaRng::from_seed([33; 32]);
-    let mut associated_data = [0u8; 10];
-    rng.fill_bytes(&mut associated_data[..]);
+    let rng = &mut ReproducibleRng::new();
+    let associated_data = rng.r#gen::<[u8; 10]>();
     let threshold = NumberOfNodes::from(2);
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as u32,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
 
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
 
     let epoch = Epoch::from(5); // Small epoch as forward-stepping is slow
-    let seed = Seed::from_bytes(&[0x69; 32]);
+    let seed = Seed::from_rng(rng);
     let (ciphertext, chunking_proof, sharing_proof) = encrypt_and_prove(
         seed,
         &key_message_pairs,
@@ -408,30 +375,24 @@ fn zk_proofs_should_verify() {
 #[test]
 fn zk_proofs_should_not_verify_with_wrong_epoch() {
     const NUM_RECEIVERS: u8 = 3;
-    let rng = &mut ChaChaRng::from_seed([48; 32]);
+    let rng = &mut ReproducibleRng::new();
     let mut associated_data = [0u8; 100];
     rng.fill_bytes(&mut associated_data[..]);
     let threshold = NumberOfNodes::from(2);
 
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as u32,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
 
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
 
     let epoch = Epoch::from(5); // Small epoch as forward-stepping is slow
-    let seed = Seed::from_bytes(&[0x69; 32]);
+    let seed = Seed::from_rng(rng);
     let (ciphertext, chunking_proof, sharing_proof) = encrypt_and_prove(
         seed,
         &key_message_pairs,

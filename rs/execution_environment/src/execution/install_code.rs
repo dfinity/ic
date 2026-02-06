@@ -24,7 +24,7 @@ use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time, funds::Cycles,
+    CanisterLog, CanisterTimer, Cycles, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
 use ic_wasm_types::WasmHash;
@@ -161,7 +161,7 @@ impl InstallCodeHelper {
 
     pub fn bump_canister_version(&mut self) {
         self.steps.push(InstallCodeStep::BumpCanisterVersion);
-        self.canister.system_state.canister_version += 1;
+        self.canister.system_state.bump_canister_version();
     }
 
     pub fn add_canister_change(
@@ -487,7 +487,7 @@ impl InstallCodeHelper {
         self.steps.push(InstallCodeStep::ValidateInput);
 
         let config = &original.config;
-        let id = self.canister.system_state.canister_id;
+        let id = self.canister.canister_id();
 
         validate_controller(&self.canister, &original.sender)?;
 

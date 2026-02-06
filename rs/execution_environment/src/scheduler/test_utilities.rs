@@ -362,8 +362,9 @@ impl SchedulerTest {
         caller: CanisterId,
         input_type: InputQueueType,
     ) {
-        assert!(
-            method_name.to_string() != Method::InstallCode.to_string(),
+        assert_ne!(
+            method_name.to_string(),
+            Method::InstallCode.to_string(),
             "Use `inject_install_code_call_to_ic00()`."
         );
 
@@ -1361,7 +1362,6 @@ impl TestWasmExecutorCore {
         let callback = system_state
             .register_callback(Callback {
                 call_context_id,
-                originator: sender,
                 respondent: receiver,
                 cycles_sent: Cycles::zero(),
                 prepayment_for_response_execution,

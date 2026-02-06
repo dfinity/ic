@@ -31,7 +31,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
-use ic_types::time::CoarseTime;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CountBytes, Cycles, Time};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
@@ -121,7 +121,6 @@ impl CanisterStateFixture {
             .system_state
             .register_callback(Callback::new(
                 call_context_id,
-                CANISTER_ID,
                 respondent,
                 Cycles::zero(),
                 Cycles::new(42),
@@ -854,13 +853,13 @@ fn canister_state_ingress_induction_cycles_debit() {
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
+        system_state.canister_metrics().consumed_cycles(),
         ingress_induction_debit.into()
     );
     assert_eq!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
         ingress_induction_debit.into()
@@ -871,15 +870,26 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 #[test]
 fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-    let initial_consumed_cycles = NominalCycles::from(1000);
-    system_state.canister_metrics.consumed_cycles = initial_consumed_cycles;
+    let initial_consumed_cycles = Cycles::new(1000);
+    system_state.remove_cycles(initial_consumed_cycles, CyclesUseCase::Memory);
+    assert_eq!(
+        system_state.balance(),
+        INITIAL_CYCLES - initial_consumed_cycles
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::from(initial_consumed_cycles)
+    );
 
     let cycles = Cycles::new(100);
     system_state.add_cycles(cycles, CyclesUseCase::Memory);
-    assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
-        initial_consumed_cycles - NominalCycles::from(cycles)
+        system_state.balance(),
+        INITIAL_CYCLES - initial_consumed_cycles + cycles
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::from(initial_consumed_cycles - cycles)
     );
 }
 
@@ -897,8 +907,8 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     );
     assert_eq!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)
             .unwrap(),
         NominalCycles::from(cycles_to_consume - cycles_to_add)
@@ -911,7 +921,6 @@ fn canister_state_callback_round_trip() {
 
     let minimal_callback = Callback::new(
         CallContextId::new(1),
-        CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::zero(),
         Cycles::zero(),
@@ -923,7 +932,6 @@ fn canister_state_callback_round_trip() {
     );
     let maximal_callback = Callback::new(
         CallContextId::new(1),
-        CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::new(21),
         Cycles::new(42),
@@ -935,7 +943,6 @@ fn canister_state_callback_round_trip() {
     );
     let u64_callback = Callback::new(
         CallContextId::new(u64::MAX - 1),
-        CanisterId::from_u64(u64::MAX - 2),
         CanisterId::from_u64(u64::MAX - 3),
         Cycles::new(u128::MAX - 4),
         Cycles::new(u128::MAX - 5),
@@ -948,7 +955,7 @@ fn canister_state_callback_round_trip() {
 
     for callback in [minimal_callback, maximal_callback, u64_callback] {
         let pb_callback = pb::Callback::from(&callback);
-        let round_trip = Callback::try_from((pb_callback, CANISTER_ID)).unwrap();
+        let round_trip = Callback::try_from(pb_callback).unwrap();
 
         assert_eq!(callback, round_trip);
     }
