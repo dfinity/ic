@@ -9,8 +9,8 @@ REPOS_TO_SCAN = [
         [
             Project(
                 name="guestos",
-                path="tmu-trivy-debug/ic-os/guestos/envs/prod",  # TODO: change to master
-                link="https://github.com/dfinity/ic/tree/tmu-trivy-debug/ic-os/guestos/context",  # TODO: change to master
+                path="ic/ic-os/guestos/envs/prod",
+                link="https://github.com/dfinity/ic/tree/master/ic-os/guestos/context",
                 owner=Team.NODE_TEAM,
             ),
         ],

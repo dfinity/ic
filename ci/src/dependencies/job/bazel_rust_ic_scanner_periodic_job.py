@@ -1,5 +1,7 @@
 import logging
 
+logging.basicConfig(level=logging.DEBUG)
+
 from config.bazel_rust_periodic import REPOS_TO_SCAN
 from data_source.jira_finding_data_source import JiraFindingDataSource
 from integration.github.github_app import GithubApp
@@ -21,12 +23,12 @@ def main():
     scanner_job = ScannerJobType.PERIODIC_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
     for job_type in ScannerJobType:
-        notify_on_scan_job_succeeded[job_type] = job_type == scanner_job
-        notify_on_scan_job_failed[job_type] = job_type == scanner_job
+        notify_on_scan_job_succeeded[job_type] = False
+        notify_on_scan_job_failed[job_type] = False
 
-    notify_on_finding_risk_assessment_needed: bool = True
-    notify_on_finding_patch_version_available: bool = True
-    notify_on_finding_deleted: bool = True
+    notify_on_finding_risk_assessment_needed: bool = False
+    notify_on_finding_patch_version_available: bool = False
+    notify_on_finding_deleted: bool = False
 
     config = NotificationConfig(
         notify_on_finding_risk_assessment_needed=notify_on_finding_risk_assessment_needed,
