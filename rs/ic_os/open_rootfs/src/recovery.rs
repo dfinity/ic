@@ -90,9 +90,7 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         .verify_measurement(&guest_launch_measurements)
         .context("This node is not running a GuestOS with one of the base launch measurements")?;
 
-    Ok(proposal
-        .rootfs_hash
-        .context("Proposal missing rootfs_hash")?)
+    proposal.rootfs_hash.context("Proposal missing rootfs_hash")
 }
 
 #[cfg(any(feature = "dev", test))]
