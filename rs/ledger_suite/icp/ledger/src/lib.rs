@@ -156,13 +156,13 @@ thread_local! {
 
     static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 
-    static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
+    pub static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
         RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS));
-    static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData<7>> =
+    pub static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData<7>> =
         RefCell::new(HistogramData::new(&ARCHIVING_CHUNK_DURATION_BUCKETS));
-    static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData<7>> =
+    pub static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData<7>> =
         RefCell::new(HistogramData::new(&ARCHIVING_CHUNKS_BUCKETS));
-    static ARCHIVING_BLOCKS_HISTOGRAM: RefCell<HistogramData<6>> =
+    pub static ARCHIVING_BLOCKS_HISTOGRAM: RefCell<HistogramData<6>> =
         RefCell::new(HistogramData::new(&ARCHIVING_BLOCKS_BUCKETS));
 }
 
@@ -697,26 +697,6 @@ pub fn change_notification_state(
 
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
-}
-
-/// Returns the archiving duration histogram data.
-pub fn get_archiving_duration_histogram() -> HistogramData<8> {
-    ARCHIVING_DURATION_HISTOGRAM.with(|h| h.borrow().clone())
-}
-
-/// Returns the archiving chunk duration histogram data.
-pub fn get_archiving_chunk_duration_histogram() -> HistogramData<7> {
-    ARCHIVING_CHUNK_DURATION_HISTOGRAM.with(|h| h.borrow().clone())
-}
-
-/// Returns the archiving chunks count histogram data.
-pub fn get_archiving_chunks_histogram() -> HistogramData<7> {
-    ARCHIVING_CHUNKS_HISTOGRAM.with(|h| h.borrow().clone())
-}
-
-/// Returns the archiving blocks count histogram data.
-pub fn get_archiving_blocks_histogram() -> HistogramData<6> {
-    ARCHIVING_BLOCKS_HISTOGRAM.with(|h| h.borrow().clone())
 }
 
 pub fn get_allowances_list(

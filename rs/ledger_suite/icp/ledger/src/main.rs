@@ -72,9 +72,9 @@ use icrc_ledger_types::{
     },
 };
 use ledger_canister::{
-    LEDGER, LEDGER_VERSION, Ledger, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY, balances_len,
-    get_allowances_list, get_archiving_blocks_histogram, get_archiving_chunk_duration_histogram,
-    get_archiving_chunks_histogram, get_archiving_duration_histogram,
+    ARCHIVING_BLOCKS_HISTOGRAM, ARCHIVING_CHUNK_DURATION_HISTOGRAM, ARCHIVING_CHUNKS_HISTOGRAM,
+    ARCHIVING_DURATION_HISTOGRAM, LEDGER, LEDGER_VERSION, Ledger, MAX_MESSAGE_SIZE_BYTES,
+    UPGRADES_MEMORY, balances_len, get_allowances_list,
 };
 use num_traits::cast::ToPrimitive;
 use std::cell::RefCell;
@@ -1235,31 +1235,38 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Number of archiving failures since canister initialization.",
     )?;
 
-    // Encode archiving histogram metrics
-    encode_histogram(
-        w,
-        "ledger_archiving_duration_seconds",
-        "Duration of archiving operations in seconds.",
-        &get_archiving_duration_histogram(),
-    )?;
-    encode_histogram(
-        w,
-        "ledger_archiving_chunk_duration_seconds",
-        "Duration of individual archive chunk operations (append_blocks calls) in seconds.",
-        &get_archiving_chunk_duration_histogram(),
-    )?;
-    encode_histogram(
-        w,
-        "ledger_archiving_chunks",
-        "Number of chunks per archiving operation.",
-        &get_archiving_chunks_histogram(),
-    )?;
-    encode_histogram(
-        w,
-        "ledger_archiving_blocks",
-        "Number of blocks archived per operation.",
-        &get_archiving_blocks_histogram(),
-    )?;
+    ARCHIVING_DURATION_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_duration_seconds",
+            "Duration of archiving operations in seconds.",
+            h,
+        )
+    })?;
+    ARCHIVING_CHUNK_DURATION_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_chunk_duration_seconds",
+            "Duration of individual archive chunk operations (append_blocks calls) in seconds.",
+            h,
+        )
+    })?;
+    ARCHIVING_CHUNKS_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_chunks",
+            "Number of chunks per archiving operation.",
+            h,
+        )
+    })?;
+    ARCHIVING_BLOCKS_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_blocks",
+            "Number of blocks archived per operation.",
+            h,
+        )
+    })?;
 
     Ok(())
 }
