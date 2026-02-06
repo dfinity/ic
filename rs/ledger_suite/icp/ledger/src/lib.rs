@@ -43,6 +43,12 @@ lazy_static! {
     pub static ref MAX_MESSAGE_SIZE_BYTES: RwLock<usize> = RwLock::new(1024 * 1024);
 }
 
+/// Bucket boundaries for archiving histograms (const, like ckbtc minter metrics).
+pub const ARCHIVING_DURATION_BUCKETS: [f64; 8] = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]; // seconds
+pub const ARCHIVING_CHUNK_DURATION_BUCKETS: [f64; 7] = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0]; // seconds
+pub const ARCHIVING_CHUNKS_BUCKETS: [f64; 7] = [1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0]; // chunk count
+pub const ARCHIVING_BLOCKS_BUCKETS: [f64; 6] = [100.0, 500.0, 1000.0, 5000.0, 10000.0, 18000.0]; // block count
+
 // Wasm bytecode of an Archive Node.
 pub const ARCHIVE_NODE_BYTECODE: &[u8] =
     std::include_bytes!(std::env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
@@ -150,53 +156,35 @@ thread_local! {
 
     static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 
-    // Histogram data for archiving metrics
-    static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData> = const {
-        RefCell::new(HistogramData::new(&[1.0, 2.0, 5.0, 10.0, 20.0, 50.0])) // seconds
-    };
-    static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData> = const {
-        RefCell::new(HistogramData::new(&[1.0, 2.0, 5.0, 10.0, 20.0, 50.0])) // seconds
-    };
-    static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData> = const {
-        RefCell::new(HistogramData::new(&[1.0, 2.0, 4.0, 8.0, 16.0])) // chunk count
-    };
-    static ARCHIVING_BLOCKS_HISTOGRAM: RefCell<HistogramData> = const {
-        RefCell::new(HistogramData::new(&[1000.0, 2000.0, 5000.0, 10000.0, 20000.0])) // block count
-    };
+    static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
+        RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS));
+    static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData<7>> =
+        RefCell::new(HistogramData::new(&ARCHIVING_CHUNK_DURATION_BUCKETS));
+    static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData<7>> =
+        RefCell::new(HistogramData::new(&ARCHIVING_CHUNKS_BUCKETS));
+    static ARCHIVING_BLOCKS_HISTOGRAM: RefCell<HistogramData<6>> =
+        RefCell::new(HistogramData::new(&ARCHIVING_BLOCKS_BUCKETS));
 }
 
-/// A simple histogram data structure for collecting metrics.
-/// Each bucket stores the count of observations less than or equal to its upper bound.
 #[derive(Debug, Clone)]
-pub struct HistogramData {
-    /// Upper bounds for each bucket (in the same unit as observations)
-    buckets: Vec<f64>,
-    /// Count of observations in each bucket (cumulative)
-    counts: Vec<u64>,
+pub struct HistogramData<const N: usize> {
+    /// Upper bounds for each bucket
+    bucket_upper_bounds: &'static [f64; N],
+    /// Cumulative count of observations in each bucket
+    counts: [u64; N],
     /// Sum of all observations
     sum: f64,
     /// Total count of observations
     count: u64,
 }
 
-impl HistogramData {
-    pub const fn new(_buckets: &[f64]) -> Self {
-        // Since const fns are limited, we use a workaround
-        // Buckets are initialized lazily in ensure_initialized()
+impl<const N: usize> HistogramData<N> {
+    pub const fn new(bucket_upper_bounds: &'static [f64; N]) -> Self {
         Self {
-            buckets: Vec::new(),
-            counts: Vec::new(),
+            bucket_upper_bounds,
+            counts: [0; N],
             sum: 0.0,
             count: 0,
-        }
-    }
-
-    /// Initialize the histogram with bucket boundaries.
-    /// This should be called before using the histogram if created with `new`.
-    fn ensure_initialized(&mut self, default_buckets: &[f64]) {
-        if self.buckets.is_empty() {
-            self.buckets = default_buckets.to_vec();
-            self.counts = vec![0; default_buckets.len()];
         }
     }
 
@@ -204,8 +192,8 @@ impl HistogramData {
     pub fn observe(&mut self, value: f64) {
         self.sum += value;
         self.count += 1;
-        for (i, bucket) in self.buckets.iter().enumerate() {
-            if value <= *bucket {
+        for (i, &bound) in self.bucket_upper_bounds.iter().enumerate() {
+            if value <= bound {
                 self.counts[i] += 1;
             }
         }
@@ -213,7 +201,7 @@ impl HistogramData {
 
     /// Get the buckets and their cumulative counts.
     pub fn buckets(&self) -> impl Iterator<Item = (f64, u64)> + '_ {
-        self.buckets
+        self.bucket_upper_bounds
             .iter()
             .copied()
             .zip(self.counts.iter().copied())
@@ -415,23 +403,15 @@ impl LedgerData for Ledger {
     fn record_archiving_stats(&mut self, stats: ic_ledger_canister_core::archive::ArchivingStats) {
         const NANOS_PER_SECOND: f64 = 1_000_000_000.0;
 
-        // Default bucket boundaries for initialization
-        const DURATION_BUCKETS: &[f64] = &[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0];
-        const CHUNK_DURATION_BUCKETS: &[f64] = &[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0];
-        const CHUNKS_BUCKETS: &[f64] = &[1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0];
-        const BLOCKS_BUCKETS: &[f64] = &[100.0, 500.0, 1000.0, 5000.0, 10000.0, 18000.0];
-
         // Record total duration
         ARCHIVING_DURATION_HISTOGRAM.with(|h| {
-            let mut h = h.borrow_mut();
-            h.ensure_initialized(DURATION_BUCKETS);
-            h.observe(stats.duration_nanos as f64 / NANOS_PER_SECOND);
+            h.borrow_mut()
+                .observe(stats.duration_nanos as f64 / NANOS_PER_SECOND);
         });
 
         // Record per-chunk durations
         ARCHIVING_CHUNK_DURATION_HISTOGRAM.with(|h| {
             let mut h = h.borrow_mut();
-            h.ensure_initialized(CHUNK_DURATION_BUCKETS);
             for chunk_duration in &stats.chunk_durations_nanos {
                 h.observe(*chunk_duration as f64 / NANOS_PER_SECOND);
             }
@@ -439,16 +419,12 @@ impl LedgerData for Ledger {
 
         // Record number of chunks
         ARCHIVING_CHUNKS_HISTOGRAM.with(|h| {
-            let mut h = h.borrow_mut();
-            h.ensure_initialized(CHUNKS_BUCKETS);
-            h.observe(stats.num_chunks as f64);
+            h.borrow_mut().observe(stats.num_chunks as f64);
         });
 
         // Record number of blocks archived
         ARCHIVING_BLOCKS_HISTOGRAM.with(|h| {
-            let mut h = h.borrow_mut();
-            h.ensure_initialized(BLOCKS_BUCKETS);
-            h.observe(stats.blocks_archived as f64);
+            h.borrow_mut().observe(stats.blocks_archived as f64);
         });
     }
 }
@@ -724,22 +700,22 @@ pub fn balances_len() -> u64 {
 }
 
 /// Returns the archiving duration histogram data.
-pub fn get_archiving_duration_histogram() -> HistogramData {
+pub fn get_archiving_duration_histogram() -> HistogramData<8> {
     ARCHIVING_DURATION_HISTOGRAM.with(|h| h.borrow().clone())
 }
 
 /// Returns the archiving chunk duration histogram data.
-pub fn get_archiving_chunk_duration_histogram() -> HistogramData {
+pub fn get_archiving_chunk_duration_histogram() -> HistogramData<7> {
     ARCHIVING_CHUNK_DURATION_HISTOGRAM.with(|h| h.borrow().clone())
 }
 
 /// Returns the archiving chunks count histogram data.
-pub fn get_archiving_chunks_histogram() -> HistogramData {
+pub fn get_archiving_chunks_histogram() -> HistogramData<7> {
     ARCHIVING_CHUNKS_HISTOGRAM.with(|h| h.borrow().clone())
 }
 
 /// Returns the archiving blocks count histogram data.
-pub fn get_archiving_blocks_histogram() -> HistogramData {
+pub fn get_archiving_blocks_histogram() -> HistogramData<6> {
     ARCHIVING_BLOCKS_HISTOGRAM.with(|h| h.borrow().clone())
 }
 

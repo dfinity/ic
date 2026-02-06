@@ -1265,11 +1265,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 }
 
 /// Encodes a histogram in Prometheus format.
-fn encode_histogram(
+fn encode_histogram<const N: usize>(
     w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
     name: &str,
     help: &str,
-    histogram: &ledger_canister::HistogramData,
+    histogram: &ledger_canister::HistogramData<N>,
 ) -> std::io::Result<()> {
     // Only encode if the histogram has any data
     if histogram.count() == 0 {
