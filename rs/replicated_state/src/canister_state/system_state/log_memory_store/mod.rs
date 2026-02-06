@@ -8,9 +8,9 @@ mod struct_io;
 use crate::canister_state::system_state::log_memory_store::{
     header::Header,
     memory::MemorySize,
-    ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer},
+    ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
 };
-use crate::page_map::{PAGE_SIZE, PageAllocatorFileDescriptor, PageMap};
+use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
@@ -27,7 +27,7 @@ use std::sync::OnceLock;
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
-    page_map: PageMap,
+    maybe_page_map: Option<PageMap>,
 
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
@@ -43,48 +43,59 @@ pub struct LogMemoryStore {
 }
 
 impl LogMemoryStore {
-    /// Creates a new store with an empty ring buffer.
-    pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
-        Self::new_inner(PageMap::new(fd_factory))
-    }
-
-    /// Creates a new store that will use the temp file system for allocating new pages.
-    pub fn new_for_testing() -> Self {
-        Self::new_inner(PageMap::new_for_testing())
+    /// Creates a new uninitialized store with an empty ring buffer.
+    ///
+    /// The store technically exists but has 0 capacity and is considered "uninitialized".
+    /// Any attempts to append logs will be silently ignored until the store is
+    /// explicitly resized to a non-zero capacity.
+    pub fn new() -> Self {
+        Self::new_inner(None)
     }
 
     /// Creates a new store from a checkpoint.
     pub fn from_checkpoint(page_map: PageMap) -> Self {
-        Self::new_inner(page_map)
+        Self::new_inner(Some(page_map))
     }
 
-    fn new_inner(page_map: PageMap) -> Self {
+    fn new_inner(maybe_page_map: Option<PageMap>) -> Self {
         Self {
-            page_map,
+            maybe_page_map,
             delta_log_sizes: VecDeque::new(),
             header_cache: OnceLock::new(),
         }
     }
 
-    pub fn page_map(&self) -> &PageMap {
-        &self.page_map
+    pub fn maybe_page_map(&self) -> Option<&PageMap> {
+        self.maybe_page_map.as_ref()
     }
 
-    pub fn page_map_mut(&mut self) -> &mut PageMap {
+    pub fn maybe_page_map_mut(&mut self) -> Option<&mut PageMap> {
         self.header_cache = OnceLock::new();
-        &mut self.page_map
+        self.maybe_page_map.as_mut()
     }
 
-    /// Clears the canister log records.
-    pub fn clear(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
-        // This creates a new empty page map with invalid ring buffer header.
-        self.page_map = PageMap::new(fd_factory);
+    /// Clears the canister log records without deallocating the ring buffer.
+    pub fn clear(&mut self) {
+        if let Some(mut ring_buffer) = self.load_ring_buffer() {
+            ring_buffer.clear();
+            self.maybe_page_map = Some(ring_buffer.to_page_map());
+            self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
+        } else {
+            self.header_cache = OnceLock::new();
+        }
+    }
+
+    /// Deallocates underlying memory.
+    pub fn deallocate(&mut self) {
+        self.maybe_page_map = None;
         self.header_cache = OnceLock::new();
     }
 
     /// Loads the ring buffer from the page map.
     fn load_ring_buffer(&self) -> Option<RingBuffer> {
-        RingBuffer::load_checked(self.page_map.clone())
+        self.maybe_page_map
+            .clone()
+            .and_then(RingBuffer::load_checked)
     }
 
     /// Returns the ring buffer header.
@@ -94,14 +105,21 @@ impl LogMemoryStore {
             .get_or_init(|| self.load_ring_buffer().map(|rb| rb.get_header()))
     }
 
-    /// Returns the total allocated bytes for the ring buffer
-    /// including header, index table and data region.
-    pub fn total_allocated_bytes(&self) -> usize {
+    /// Returns actual memory usage of the ring buffer.
+    pub fn memory_usage(&self) -> usize {
+        self.total_virtual_memory_usage()
+    }
+
+    /// Returns the total virtual memory usage of the ring buffer.
+    ///
+    /// Includes header, index table and data region.
+    /// It is 'virtual' because it is not alligned to actual OS page size.
+    pub fn total_virtual_memory_usage(&self) -> usize {
         self.get_header()
             .map(|h| {
-                HEADER_SIZE.get() as usize
-                    + h.index_table_pages as usize * PAGE_SIZE
-                    + h.data_capacity.get() as usize
+                (HEADER_SIZE.get()
+                    + h.index_table_pages as u64 * VIRTUAL_PAGE_SIZE as u64
+                    + h.data_capacity.get()) as usize
             })
             .unwrap_or(0)
     }
@@ -113,44 +131,46 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
-    /// Returns the data size of the ring buffer.
-    pub fn bytes_used(&self) -> usize {
-        self.get_header()
-            .map(|h| h.data_size.get() as usize)
-            .unwrap_or(0)
-    }
-
-    /// Resizes or initializes the ring buffer to the specified limit, preserving existing records.
+    /// Resizes the ring buffer to the specified limit, preserving existing records.
     ///
     /// This method enforces a minimum safe capacity and performs no operation if the
     /// effective capacity has not changed.
-    pub fn resize(&mut self, limit: usize) {
-        // Enforce safe minimum for data capacity.
-        let target_limit = limit.max(DATA_CAPACITY_MIN);
-        // Only resize when the capacity actually changes.
-        if let Some(h) = self.get_header()
-            && h.data_capacity.get() as usize == target_limit
-        {
+    pub fn resize(&mut self, limit: usize, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
+        self.resize_impl(limit, || PageMap::new(fd_factory))
+    }
+
+    #[cfg(test)]
+    fn resize_for_testing(&mut self, limit: usize) {
+        self.resize_impl(limit, PageMap::new_for_testing)
+    }
+
+    fn resize_impl(&mut self, limit: usize, create_page_map: impl FnOnce() -> PageMap) {
+        if limit == 0 {
+            self.deallocate();
             return;
         }
-
-        let preserved_records = self.load_ring_buffer().map(|b| b.all_records());
-
-        // NOTE — PageMap cannot be shrunk today. Reducing capacity keeps
-        // allocated pages in place; in practice the ring buffer max is
-        // currently ~55 MB. Future improvement — allocate a new PageMap
-        // with the desired capacity, refeed records, then drop the old
-        // map or add a `PageMap::shrink` API to reclaim pages.
-        //
-        // Recreate a ring buffer with the new capacity and restore records.
-        let mut new_buffer =
-            RingBuffer::new(self.page_map.clone(), MemorySize::new(target_limit as u64));
-        // Restore records if they existed.
-        if let Some(records) = preserved_records {
-            new_buffer.append_log(records);
+        let target_limit = limit.max(DATA_CAPACITY_MIN);
+        let current_capacity = self.get_header().map(|h| h.data_capacity.get() as usize);
+        if current_capacity == Some(target_limit) {
+            return; // Only resize if the capacity actually changes.
         }
-        // Update the state.
-        self.page_map = new_buffer.to_page_map();
+
+        // Determine the PageMap strategy and create a new ring buffer.
+        let page_map = match current_capacity {
+            // Downsizing: New map to ensure we free old physical pages.
+            Some(curr) if target_limit < curr => create_page_map(),
+            // Upsizing or First-time init: Reuse existing or create new.
+            _ => self.maybe_page_map.clone().unwrap_or(create_page_map()),
+        };
+        let mut new_buffer = RingBuffer::new(page_map, MemorySize::new(target_limit as u64));
+
+        // Migrate records.
+        if let Some(old_buffer) = self.load_ring_buffer() {
+            new_buffer.append_log_iter(old_buffer.iter());
+        }
+
+        // Update of the state.
+        self.maybe_page_map = Some(new_buffer.to_page_map());
         self.header_cache = OnceLock::from(Some(new_buffer.get_header()));
     }
 
@@ -164,17 +184,16 @@ impl LogMemoryStore {
         self.bytes_used() == 0
     }
 
+    fn bytes_used(&self) -> usize {
+        self.get_header()
+            .map(|h| h.data_size.get() as usize)
+            .unwrap_or(0)
+    }
+
     /// Returns the canister log records, optionally filtered.
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         self.load_ring_buffer()
             .map(|rb| rb.records(filter))
-            .unwrap_or_default()
-    }
-
-    /// Returns all canister log records.
-    pub fn all_records(&self) -> Vec<CanisterLogRecord> {
-        self.load_ring_buffer()
-            .map(|rb| rb.all_records())
             .unwrap_or_default()
     }
 
@@ -190,7 +209,7 @@ impl LogMemoryStore {
         self.push_delta_log_size(delta_log.bytes_used());
         // Append the delta records and persist the ring buffer.
         ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
-        self.page_map = ring_buffer.to_page_map();
+        self.maybe_page_map = Some(ring_buffer.to_page_map());
         self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
     }
 
@@ -208,12 +227,18 @@ impl LogMemoryStore {
     }
 }
 
+impl Default for LogMemoryStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Clone for LogMemoryStore {
     fn clone(&self) -> Self {
         Self {
             // PageMap is a persistent data structure, so clone is cheap and creates
             // an independent snapshot.
-            page_map: self.page_map.clone(),
+            maybe_page_map: self.maybe_page_map.clone(),
             delta_log_sizes: self.delta_log_sizes.clone(),
             // OnceLock is not Clone, so we must manually clone the state.
             header_cache: match self.header_cache.get() {
@@ -227,544 +252,11 @@ impl Clone for LogMemoryStore {
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
         // header_cache is a transient cache and should not be compared.
-        self.page_map == other.page_map && self.delta_log_sizes == other.delta_log_sizes
+        self.maybe_page_map == other.maybe_page_map && self.delta_log_sizes == other.delta_log_sizes
     }
 }
 
 impl Eq for LogMemoryStore {}
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
-    use ic_management_canister_types_private::{DataSize, FetchCanisterLogsRange};
-    use more_asserts::{assert_gt, assert_le, assert_lt};
-
-    const DEFAULT_LOG_MEMORY_LIMIT: usize = 4096;
-
-    fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
-        CanisterLogRecord {
-            idx,
-            timestamp_nanos: ts,
-            content: message.as_bytes().to_vec(),
-        }
-    }
-
-    /// Creates a full delta log without exceeding the byte capacity.
-    fn make_full_delta(mut next_idx: u64, byte_capacity: usize, content_len: usize) -> CanisterLog {
-        let mut delta = CanisterLog::new_delta_with_next_index(next_idx, byte_capacity);
-        let fake_record = make_canister_record(0, 0, &"x".repeat(content_len));
-        let count = delta.byte_capacity() / fake_record.data_size();
-        for _ in 0..count {
-            delta.add_record(next_idx * 1_000, vec![b'x'; content_len]);
-            next_idx = delta.next_idx();
-        }
-        delta
-    }
-
-    fn append_deltas(
-        store: &mut LogMemoryStore,
-        start_idx: u64,
-        volume_bytes: usize,
-        delta_log_byte_capacity: usize,
-        content_len: usize,
-    ) {
-        let mut next_idx = start_idx;
-        let mut total = 0;
-        loop {
-            let mut delta = make_full_delta(next_idx, delta_log_byte_capacity, content_len);
-            total += delta.bytes_used();
-            if total > volume_bytes {
-                return;
-            }
-            store.append_delta_log(&mut delta);
-            next_idx = store.next_idx();
-        }
-    }
-
-    fn total_size(records: &[CanisterLogRecord]) -> usize {
-        records.iter().map(|r| r.data_size()).sum()
-    }
-
-    #[test]
-    fn initialization_defaults() {
-        let s = LogMemoryStore::new_for_testing();
-        assert_eq!(s.next_idx(), 0);
-        assert!(s.is_empty());
-        assert_eq!(s.bytes_used(), 0);
-        assert_eq!(s.byte_capacity(), 0);
-        assert_eq!(s.total_allocated_bytes(), 0);
-        assert_eq!(s.records(None).len(), 0);
-    }
-
-    #[test]
-    fn test_appending_to_uninitialized_store_is_no_op() {
-        let mut s = LogMemoryStore::new_for_testing();
-        let mut delta = CanisterLog::default_delta();
-        delta.add_record(1, b"data".to_vec());
-
-        // Append without setting limit
-        s.append_delta_log(&mut delta);
-
-        // Should still be empty
-        assert!(s.is_empty());
-        assert_eq!(s.total_allocated_bytes(), 0);
-    }
-
-    #[test]
-    fn test_memory_usage_after_appending_logs() {
-        let s = LogMemoryStore::new_for_testing();
-
-        // Canister created, but no wasm module uploaded, so no logs recorded.
-        assert_eq!(s.next_idx(), 0);
-        assert!(s.is_empty());
-        assert_eq!(s.bytes_used(), 0);
-        assert_eq!(s.byte_capacity(), 0);
-        assert_eq!(s.total_allocated_bytes(), 0);
-        assert_eq!(s.records(None).len(), 0);
-
-        // Append some logs.
-        let mut delta = CanisterLog::default_delta();
-        delta.add_record(100, b"a".to_vec());
-        delta.add_record(200, b"bb".to_vec());
-        delta.add_record(300, b"ccc".to_vec());
-
-        let mut s = LogMemoryStore::new_for_testing();
-        s.resize(1); // Set a small limit.
-        s.append_delta_log(&mut delta);
-
-        // Assert memory usage.
-        assert_eq!(s.next_idx(), 3);
-        assert!(!s.is_empty());
-        assert_gt!(s.bytes_used(), 0);
-        assert_lt!(s.bytes_used(), DEFAULT_LOG_MEMORY_LIMIT);
-        assert_eq!(s.byte_capacity(), DEFAULT_LOG_MEMORY_LIMIT);
-        assert_gt!(s.total_allocated_bytes(), DEFAULT_LOG_MEMORY_LIMIT);
-        assert_eq!(s.records(None).len(), 3);
-    }
-
-    #[test]
-    fn append_preserves_order_and_metadata() {
-        // Append a small delta and verify ordering + metadata.
-        let mut delta = CanisterLog::default_delta();
-        delta.add_record(100, b"a".to_vec());
-        delta.add_record(200, b"bb".to_vec());
-        delta.add_record(300, b"ccc".to_vec());
-
-        let mut s = LogMemoryStore::new_for_testing();
-        s.resize(DEFAULT_LOG_MEMORY_LIMIT);
-        s.append_delta_log(&mut delta);
-
-        assert_eq!(s.next_idx(), 3);
-        assert!(!s.is_empty());
-        assert_gt!(s.bytes_used(), 0);
-        assert_eq!(
-            s.records(None),
-            vec![
-                make_canister_record(0, 100, "a"),
-                make_canister_record(1, 200, "bb"),
-                make_canister_record(2, 300, "ccc"),
-            ]
-        );
-    }
-
-    #[test]
-    fn filtering_by_idx_and_timestamp() {
-        // Same small dataset — test index and timestamp filters.
-        let mut delta = CanisterLog::default_delta();
-        delta.add_record(10, b"a".to_vec());
-        delta.add_record(20, b"b".to_vec());
-        delta.add_record(30, b"c".to_vec());
-
-        let mut s = LogMemoryStore::new_for_testing();
-        s.resize(DEFAULT_LOG_MEMORY_LIMIT);
-        s.append_delta_log(&mut delta);
-
-        // By index — inclusive range.
-        // Range is [1, 2).
-        let records = s.records(Some(FetchCanisterLogsFilter::ByIdx(
-            FetchCanisterLogsRange { start: 1, end: 2 },
-        )));
-        assert_eq!(records, vec![make_canister_record(1, 20, "b")]);
-
-        // By timestamp — inclusive range that picks middle record.
-        // Range is [15, 25).
-        let records = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
-            FetchCanisterLogsRange { start: 15, end: 25 },
-        )));
-        assert_eq!(records, vec![make_canister_record(1, 20, "b")]);
-    }
-
-    #[test]
-    fn eviction_when_capacity_reached() {
-        // Force repeated large appends so aggregate log approaches capacity — beginning records should be dropped.
-        let aggregate_capacity = 50_000; // keep small for the test.
-        let start_idx = 0;
-        let mut s = LogMemoryStore::new_for_testing();
-        s.resize(aggregate_capacity);
-
-        // Append 100k records in batches of 10k deltas of ~1KB record each.
-        append_deltas(&mut s, start_idx, 100_000, 10_000, 1_000);
-
-        let used = s.bytes_used();
-        assert_le!(used, s.byte_capacity());
-        // If store is non-empty, at least one record should remain and next_id advances.
-        let records = s.records(None);
-        assert!(!records.is_empty());
-        assert_ne!(
-            records.first().unwrap().idx,
-            start_idx,
-            "beginning records should be evicted"
-        );
-        assert_eq!(
-            records.last().unwrap().idx + 1,
-            s.next_idx(),
-            "end records should be present"
-        );
-    }
-
-    #[test]
-    fn max_response_size_respected_without_filtering() {
-        // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
-        let aggregate_capacity = 10_000_000;
-        let start_idx = 1_000;
-        assert_gt!(
-            aggregate_capacity,
-            RESULT_MAX_SIZE.get() as usize,
-            "large enough capacity"
-        );
-
-        let mut s = LogMemoryStore::new_for_testing();
-        s.resize(aggregate_capacity);
-        // Append 5 MB records in batches of 1 MB deltas of ~1KB record each.
-        append_deltas(&mut s, start_idx, 5_000_000, 1_000_000, 1_000);
-
-        // Without filters — returned bytes must not exceed RESULT_MAX_SIZE.
-        let result = s.records(None);
-        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
-        // And recent records (tail) must be present.
-        assert_eq!(result.last().unwrap().idx + 1, s.next_idx());
-    }
-
-    #[test]
-    fn max_response_size_respected_with_filtering_by_idx() {
-        // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
-        let aggregate_capacity = 10_000_000;
-        let start_idx = 1_000;
-        assert_gt!(
-            aggregate_capacity,
-            RESULT_MAX_SIZE.get() as usize,
-            "large enough capacity"
-        );
-
-        let mut s = LogMemoryStore::new_for_testing();
-        s.resize(aggregate_capacity);
-        // Append 5 MB records in batches of 1 MB deltas of ~1KB record each.
-        append_deltas(&mut s, start_idx, 5_000_000, 1_000_000, 1_000);
-
-        // With an explicit wide index filter — response must also be capped.
-        let result = s.records(Some(FetchCanisterLogsFilter::ByIdx(
-            FetchCanisterLogsRange {
-                start: 0,
-                end: u64::MAX,
-            },
-        )));
-        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
-        // Oldest records (head) must be present.
-        assert_eq!(result.first().unwrap().idx, start_idx);
-
-        // For a partial range that fits within the available records — beginning should match requested start.
-        let partial_start = start_idx + 50;
-        let result = s.records(Some(FetchCanisterLogsFilter::ByIdx(
-            FetchCanisterLogsRange {
-                start: partial_start,
-                end: partial_start + 300,
-            },
-        )));
-        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
-        // Oldest records (head) must be present.
-        assert_eq!(result.first().unwrap().idx, partial_start);
-    }
-
-    #[test]
-    fn max_response_size_respected_with_filtering_by_timestamp() {
-        // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
-        let aggregate_capacity = 10_000_000;
-        let start_idx = 1_000;
-        assert_gt!(
-            aggregate_capacity,
-            RESULT_MAX_SIZE.get() as usize,
-            "large enough capacity"
-        );
-
-        let mut s = LogMemoryStore::new_for_testing();
-        s.resize(aggregate_capacity);
-        // Append 5 MB records in batches of 1 MB deltas of ~1KB record each.
-        append_deltas(&mut s, start_idx, 5_000_000, 1_000_000, 1_000);
-
-        // With an explicit wide timestamp filter — response must also be capped.
-        let result = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
-            FetchCanisterLogsRange {
-                start: 0,
-                end: u64::MAX,
-            },
-        )));
-        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
-        // Oldest records (head) must be present.
-        assert_eq!(result.first().unwrap().timestamp_nanos, start_idx * 1_000);
-
-        // For a partial range that fits within the available records — beginning should match requested start.
-        let partial_start_ts = (start_idx + 50) * 1_000;
-        let result = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
-            FetchCanisterLogsRange {
-                start: partial_start_ts,
-                end: partial_start_ts + 300_000,
-            },
-        )));
-        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
-        // Oldest records (head) must be present.
-        assert_eq!(result.first().unwrap().timestamp_nanos, partial_start_ts);
-    }
-
-    #[test]
-    fn test_increasing_capacity_preserves_records() {
-        let mut s = LogMemoryStore::new_for_testing();
-        s.resize(1_000_000); // 1 MB
-
-        // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
-        append_deltas(&mut s, 0, 200_000, 100_000, 1_000);
-
-        let records_before = s.records(None);
-        let bytes_used_before = s.bytes_used();
-
-        // Increase capacity.
-        s.resize(2_000_000); // 2 MB
-
-        let records_after = s.records(None);
-        let bytes_used_after = s.bytes_used();
-
-        // Verify all records are preserved.
-        assert_eq!(records_before, records_after);
-        assert_eq!(bytes_used_before, bytes_used_after);
-    }
-
-    #[test]
-    fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
-        let mut s = LogMemoryStore::new_for_testing();
-        s.resize(500_000); // 500 KB
-
-        // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
-        append_deltas(&mut s, 0, 200_000, 100_000, 1_000);
-
-        let records_before = s.records(None);
-        let bytes_used_before = s.bytes_used();
-        let next_idx_before = s.next_idx();
-
-        // Decrease capacity.
-        s.resize(100_000); // 100 KB
-
-        let records_after = s.records(None);
-        let bytes_used_after = s.bytes_used();
-
-        // Verify some records are dropped.
-        assert_lt!(records_after.len(), records_before.len());
-        assert_lt!(bytes_used_after, bytes_used_before);
-        // Verify recent records are preserved.
-        assert_eq!(next_idx_before, s.next_idx());
-    }
-
-    #[test]
-    fn test_small_capacity_indexing() {
-        let mut s = LogMemoryStore::new_for_testing();
-        // Set a very small capacity, smaller than 146 bytes (INDEX_ENTRY_COUNT_MAX).
-        // 146 entries. If capacity is 100. 100 / 146 = 0.
-        s.resize(100);
-
-        let mut delta = CanisterLog::new_delta_with_next_index(0, 100);
-        // Add multiple records.
-        // Header overhead is 8+8+4 = 20 bytes.
-        // Content "a" is 1 byte.
-        // Total 21 bytes per record.
-        delta.add_record(0, b"a".to_vec());
-        delta.add_record(1, b"b".to_vec());
-
-        s.append_delta_log(&mut delta);
-
-        assert!(!s.is_empty());
-        // 21 * 2 = 42 bytes used.
-        assert_eq!(s.bytes_used(), 42);
-
-        // Try to read it back.
-        let records = s.records(None);
-        assert_eq!(records.len(), 2, "Should return 2 records");
-        assert_eq!(records[0].content, b"a");
-        assert_eq!(records[1].content, b"b");
-    }
-
-    #[test]
-    fn test_multiple_records_in_same_segment() {
-        let mut s = LogMemoryStore::new_for_testing();
-        // Capacity 100KB. Segment size ~685 bytes.
-        s.resize(100_000);
-
-        let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
-        // Add 10 records, each ~21 bytes. All should fit in segment 0.
-        for i in 0..10 {
-            delta.add_record(i, vec![i as u8]);
-        }
-        s.append_delta_log(&mut delta);
-
-        // Verify we can retrieve all of them.
-        let records = s.records(None);
-        assert_eq!(records.len(), 10);
-        for (i, r) in records.iter().enumerate() {
-            assert_eq!(r.idx, i as u64);
-        }
-
-        // Verify filtering works.
-        // Filter for record 5. Range is [5, 6).
-        let records = s.records(Some(FetchCanisterLogsFilter::ByIdx(
-            FetchCanisterLogsRange { start: 5, end: 6 },
-        )));
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].idx, 5);
-    }
-
-    #[test]
-    fn test_very_small_capacity_single_byte() {
-        let mut s = LogMemoryStore::new_for_testing();
-        // Set capacity to 1 byte - this will be clamped to DATA_CAPACITY_MIN (4096 bytes).
-        s.resize(1);
-
-        // Verify byte capacity was clamped to minimum.
-        assert_eq!(s.byte_capacity(), 4096);
-
-        let mut delta = CanisterLog::new_delta_with_next_index(0, 4096);
-        // Add a record - it should fit within the minimum capacity.
-        delta.add_record(0, b"a".to_vec());
-
-        s.append_delta_log(&mut delta);
-
-        // The record should be stored.
-        assert_eq!(s.byte_capacity(), 4096);
-        assert_eq!(s.next_idx(), 1);
-        assert_eq!(s.bytes_used(), 21);
-        let records = s.records(None);
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].content, b"a");
-    }
-
-    #[test]
-    fn test_small_capacity_with_eviction() {
-        let mut s = LogMemoryStore::new_for_testing();
-        let capacity = 4096;
-        s.resize(capacity);
-
-        assert_eq!(s.byte_capacity(), capacity);
-
-        // Fill the buffer with records until we're close to capacity.
-        // Each record is ~21 bytes (8+8+4+1), so we can fit ~195 records.
-        let record_size = 21;
-        let max_records = capacity / record_size; // ~195
-
-        // Add records to fill the buffer.
-        for i in 0..max_records {
-            let mut delta = CanisterLog::new_delta_with_next_index(i as u64, capacity);
-            delta.add_record(i as u64, vec![i as u8]);
-            s.append_delta_log(&mut delta);
-        }
-
-        // Verify all records fit.
-        assert_eq!(s.byte_capacity(), capacity);
-        assert_eq!(s.next_idx(), max_records as u64);
-        let records = s.records(None);
-        assert_eq!(records.len(), max_records);
-
-        // Add one more record - this should evict the oldest one.
-        let mut delta = CanisterLog::new_delta_with_next_index(max_records as u64, capacity);
-        delta.add_record(max_records as u64, vec![255]);
-        s.append_delta_log(&mut delta);
-
-        // Verify the oldest record was evicted.
-        assert_eq!(s.next_idx(), (max_records + 1) as u64);
-        let records = s.records(None);
-        assert_eq!(records.len(), max_records);
-        assert_eq!(records[0].idx, 1); // First record (idx=0) was evicted.
-        assert_eq!(records.last().unwrap().idx, max_records as u64);
-    }
-
-    #[test]
-    fn test_filtering_with_multiple_records_in_same_segment() {
-        let mut s = LogMemoryStore::new_for_testing();
-        // Capacity 100KB. Segment size ~685 bytes.
-        s.resize(100_000);
-
-        let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
-        // Add 20 records, each ~21 bytes. All should fit in segment 0.
-        for i in 0..20 {
-            delta.add_record(i * 1000, vec![i as u8]);
-        }
-        s.append_delta_log(&mut delta);
-
-        // Filter for records in the middle: [5000, 15000).
-        let records = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
-            FetchCanisterLogsRange {
-                start: 5000,
-                end: 15000,
-            },
-        )));
-        // Should return records 5-14 (10 records).
-        assert_eq!(records.len(), 10);
-        assert_eq!(records[0].idx, 5);
-        assert_eq!(records[9].idx, 14);
-
-        // Filter by idx: [10, 15).
-        let records = s.records(Some(FetchCanisterLogsFilter::ByIdx(
-            FetchCanisterLogsRange { start: 10, end: 15 },
-        )));
-        // Should return records 10-14 (5 records).
-        assert_eq!(records.len(), 5);
-        assert_eq!(records[0].idx, 10);
-        assert_eq!(records[4].idx, 14);
-    }
-    mod cache_tests {
-        use super::*;
-
-        #[test]
-        fn test_cache_lifecycle() {
-            let mut s = LogMemoryStore::new_for_testing();
-
-            // 1. Initial state: Uninitialized (None in OnceLock)
-            assert!(s.header_cache.get().is_none());
-
-            // 2. Read triggers load: Uninitialized -> Empty (since no ring buffer yet)
-            assert_eq!(s.byte_capacity(), 0);
-            assert_eq!(s.header_cache.get(), Some(&None));
-
-            // 3. Set limit: Empty -> Initialized
-            s.resize(DEFAULT_LOG_MEMORY_LIMIT);
-            match s.header_cache.get() {
-                Some(Some(h)) => {
-                    assert_eq!(h.data_capacity.get() as usize, DEFAULT_LOG_MEMORY_LIMIT);
-                }
-                state => panic!("Expected Initialized, got {:?}", state),
-            }
-
-            // 4. Append: Initialized -> Initialized (updated)
-            let mut delta = CanisterLog::default_delta();
-            delta.add_record(1, b"test".to_vec());
-            s.append_delta_log(&mut delta);
-
-            match s.header_cache.get() {
-                Some(Some(h)) => {
-                    assert_gt!(h.data_size.get(), 0);
-                }
-                state => panic!("Expected Initialized, got {:?}", state),
-            }
-
-            // 5. Invalidate: Initialized -> Uninitialized
-            s.page_map_mut();
-            assert!(s.header_cache.get().is_none());
-        }
-    }
-}
+mod tests;

@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Enabling direct node swapping feature on all subnets for all node operators.
+
 ## Changed
 
 ## Deprecated
