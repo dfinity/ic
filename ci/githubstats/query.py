@@ -677,8 +677,12 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
         help="Get the last runs of the specified test in the given period",
         epilog="""
 Examples:
-  # Show the last flaky runs of the rent_subnet_test in the last week
-  bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
+  # Show the last flaky runs of the root_tests in the last week and download their logs
+  bazel run //ci/githubstats:query -- last --flaky //rs/tests/node:root_tests --week --download-logs
+  ...
+  Downloading logs to: /ic/logs_of_root_tests_2026-02-06_16:09:27
+  Downloading 40 log files...
+  Successfully downloaded 40/40 logs to /ic/logs_of_root_tests_2026-02-06_16:09:27
 
   # Show all runs of a test in a specific date range
   bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'
@@ -698,7 +702,14 @@ Examples:
         const="",
         default=None,
         metavar="DIR",
-        help="Download all BuildBuddy logs to a local directory (default: a new directory named after the test in the current directory)",
+        help="""Download all test logs to a local directory.
+If DIR is not specified the directory will be `./logs_of_{test_name}_{timestamp}`
+The directory will contain log files named like `{invocation_id}_{attempt_num}_{attempt_status}.log`, for example:
+0b037b67-dc86-4323-8c4c-ffc936156845_1_FAILED.log
+0b037b67-dc86-4323-8c4c-ffc936156845_2_PASSED.log
+3b054443-e7d8-4013-9897-6778816318c9_1_FAILED.log
+3b054443-e7d8-4013-9897-6778816318c9_2_PASSED.log
+""",
     )
 
     last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
