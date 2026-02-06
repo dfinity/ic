@@ -636,7 +636,8 @@ impl From<CanisterHttpRequestContextError> for UserError {
             ),
             CanisterHttpRequestContextError::NonReplicatedModeRequired => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                "The requested HTTP method is only allowed for non-replicated requests (is_replicated=false).".to_string(), 
+                "The requested HTTP method is only allowed for non-replicated requests."
+                    .to_string(),
             ),
         }
     }

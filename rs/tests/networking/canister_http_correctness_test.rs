@@ -1878,7 +1878,7 @@ fn _test_put_without_non_replicated_rejected(env: TestEnv) {
         },
     ));
     assert_matches!(response, Err(RejectResponse { reject_message, .. }) => {
-        assert!(reject_message.contains("only allowed for non-replicated requests."));
+        assert!(reject_message.contains("only allowed for non-replicated requests"));
     });
 }
 
@@ -1948,7 +1948,7 @@ fn _test_delete_without_non_replicated_rejected(env: TestEnv) {
     ));
 
     assert_matches!(response, Err(RejectResponse { reject_message, .. }) => {
-        assert!(reject_message.contains("only allowed for non-replicated requests."));
+        assert!(reject_message.contains("only allowed for non-replicated requests"));
     });
 }
 
