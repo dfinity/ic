@@ -127,13 +127,16 @@ pub fn generate_subnets(
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     own_subnet_size: usize,
+    own_subnet_cost_schedule: CanisterCyclesCostSchedule,
 ) -> BTreeMap<SubnetId, SubnetTopology> {
     let mut result: BTreeMap<SubnetId, SubnetTopology> = Default::default();
     for subnet_id in subnet_ids {
         let mut subnet_type = SubnetType::System;
         let mut nodes = btreeset! {};
+        let mut cost_schedule = CanisterCyclesCostSchedule::Normal;
         if subnet_id == own_subnet_id {
             subnet_type = own_subnet_type;
+            cost_schedule = own_subnet_cost_schedule;
             // Populate network_topology of own_subnet with fake nodes to simulate subnet_size.
             for i in 0..own_subnet_size {
                 nodes.insert(node_test_id(i as u64));
@@ -152,7 +155,7 @@ pub fn generate_subnets(
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
+                cost_schedule,
             },
         );
     }
@@ -166,10 +169,11 @@ pub fn generate_network_topology(
     own_subnet_type: SubnetType,
     subnets: Vec<SubnetId>,
     routing_table: Option<RoutingTable>,
+    own_subnet_cost_schedule: CanisterCyclesCostSchedule,
 ) -> NetworkTopology {
     NetworkTopology {
         nns_subnet_id,
-        subnets: generate_subnets(subnets, nns_subnet_id, None, own_subnet_id, own_subnet_type, subnet_size),
+        subnets: generate_subnets(subnets, nns_subnet_id, None, own_subnet_id, own_subnet_type, subnet_size, own_subnet_cost_schedule),
         routing_table: match routing_table {
             Some(routing_table) => Arc::new(routing_table),
             None => {
@@ -190,7 +194,6 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
         node_ids: BTreeSet::new(),
         registry_version: RegistryVersion::default(),
-        canister_cycles_cost_schedule: ic_types::batch::CanisterCyclesCostSchedule::Normal,
     }
 }
 
@@ -368,7 +371,10 @@ impl ExecutionTest {
     }
 
     pub fn cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.registry_settings.canister_cycles_cost_schedule
+        self.state
+            .as_ref()
+            .unwrap()
+            .get_own_cost_schedule()
     }
 
     pub fn executed_instructions(&self) -> NumInstructions {
@@ -1164,6 +1170,7 @@ impl ExecutionTest {
     /// Executes a canister task method of the given canister.
     pub fn canister_task(&mut self, canister_id: CanisterId, task: CanisterTask) {
         let mut state = self.state.take().unwrap();
+        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
@@ -1209,7 +1216,7 @@ impl ExecutionTest {
             self.time,
             &mut round_limits,
             self.subnet_size(),
-            self.cost_schedule(),
+            cost_schedule,
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
@@ -1220,6 +1227,7 @@ impl ExecutionTest {
             canister_id,
             self.instruction_limits.message(),
             result.instructions_used.unwrap(),
+            cost_schedule,
         );
     }
 
@@ -1304,6 +1312,7 @@ impl ExecutionTest {
         response: Response,
     ) -> ExecutionResponse {
         let mut state = self.state.take().unwrap();
+        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
@@ -1322,7 +1331,7 @@ impl ExecutionTest {
             network_topology,
             &mut round_limits,
             self.subnet_size(),
-            self.cost_schedule(),
+            cost_schedule,
         );
         let (canister, response, instructions_used, heap_delta) = match result {
             ExecuteMessageResult::Finished {
@@ -1344,6 +1353,7 @@ impl ExecutionTest {
             canister_id,
             self.instruction_limits.message(),
             instructions_used,
+            cost_schedule,
         );
         state.put_canister_state(canister);
         self.state = Some(state);
@@ -1410,6 +1420,7 @@ impl ExecutionTest {
     /// Return a progress flag indicating if the message was executed or not.
     pub fn execute_subnet_message(&mut self) -> bool {
         let mut state = self.state.take().unwrap();
+        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let message = match state.pop_subnet_input() {
             Some(message) => message,
@@ -1448,6 +1459,7 @@ impl ExecutionTest {
                 canister_id,
                 self.install_code_instruction_limits.message(),
                 instructions_used,
+                cost_schedule,
             );
         }
         true
@@ -1472,6 +1484,7 @@ impl ExecutionTest {
             executed_any = true;
         }
         let mut state = self.state.take().unwrap();
+        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
         let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
@@ -1501,7 +1514,7 @@ impl ExecutionTest {
                     self.time,
                     &mut round_limits,
                     self.subnet_size(),
-                    self.cost_schedule(),
+                    cost_schedule,
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
@@ -1510,6 +1523,7 @@ impl ExecutionTest {
                         canister_id,
                         self.instruction_limits.message(),
                         instructions_used,
+                        cost_schedule,
                     );
                 }
                 canister = result.canister;
@@ -1544,6 +1558,7 @@ impl ExecutionTest {
     /// Executes a slice of the given canister.
     pub fn execute_slice(&mut self, canister_id: CanisterId) {
         let mut state = self.state.take().unwrap();
+        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
@@ -1578,6 +1593,7 @@ impl ExecutionTest {
                         canister_id,
                         self.install_code_instruction_limits.message(),
                         instructions_used,
+                        cost_schedule,
                     );
                 }
             }
@@ -1598,7 +1614,7 @@ impl ExecutionTest {
                     self.time,
                     &mut round_limits,
                     self.subnet_size(),
-                    self.cost_schedule(),
+                    cost_schedule,
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
@@ -1608,6 +1624,7 @@ impl ExecutionTest {
                         canister_id,
                         self.instruction_limits.message(),
                         instructions_used,
+                        cost_schedule,
                     );
                 }
                 canister = result.canister;
@@ -1636,6 +1653,7 @@ impl ExecutionTest {
         canister_id: CanisterId,
         limit: NumInstructions,
         executed: NumInstructions,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) {
         let left = limit - executed;
         let mgr = &self.cycles_account_manager;
@@ -1651,18 +1669,18 @@ impl ExecutionTest {
         let fixed_cost = mgr.execution_cost(
             NumInstructions::from(0),
             self.subnet_size(),
-            self.cost_schedule(),
+            cost_schedule,
             is_wasm64_execution,
         );
         let instruction_cost = mgr.execution_cost(
             limit,
             self.subnet_size(),
-            self.cost_schedule(),
+            cost_schedule,
             is_wasm64_execution,
         ) - mgr.execution_cost(
             left,
             self.subnet_size(),
-            self.cost_schedule(),
+            cost_schedule,
             is_wasm64_execution,
         );
 
@@ -2478,6 +2496,7 @@ impl ExecutionTestBuilder {
             self.own_subnet_id,
             self.subnet_type,
             self.registry_settings.subnet_size,
+            self.cost_schedule,
         );
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
@@ -2660,8 +2679,6 @@ impl ExecutionTestBuilder {
                 )
         }
 
-        state.set_own_cost_schedule(self.cost_schedule);
-        self.registry_settings.canister_cycles_cost_schedule = self.cost_schedule;
         let subnet_available_memory = execution_services
             .execution_environment
             .scaled_subnet_available_memory(&state);
