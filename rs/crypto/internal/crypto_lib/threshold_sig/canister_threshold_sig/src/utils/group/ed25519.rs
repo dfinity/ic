@@ -1,4 +1,6 @@
-use curve25519_dalek::{edwards::CompressedEdwardsY, traits::MultiscalarMul, traits::VartimeMultiscalarMul};
+use curve25519_dalek::{
+    edwards::CompressedEdwardsY, traits::MultiscalarMul, traits::VartimeMultiscalarMul,
+};
 use group::{Group, GroupEncoding, ff::Field};
 use hex_literal::hex;
 use ic_crypto_sha2::Sha512;
