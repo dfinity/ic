@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import os
 import re
+import shlex
 import subprocess
 import sys
 import urllib.parse
@@ -364,23 +365,23 @@ def top(args):
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
     colalignments = [
-        "decimal",  # idx
-        "left",  # label
-        "decimal",  # total
-        "decimal",  # non_success
-        "decimal",  # flaky
-        "decimal",  # timeout
-        "decimal",  # fail
-        "decimal",  # non_success%
-        "decimal",  # flaky%
-        "decimal",  # timeout%
-        "decimal",  # fail%
-        "right",  # impact
-        "right",  # duration_p90
-        "left",  # owners
+        ("label", "left"),
+        ("total", "decimal"),
+        ("non_success", "decimal"),
+        ("flaky", "decimal"),
+        ("timeout", "decimal"),
+        ("fail", "decimal"),
+        ("non_success%", "decimal"),
+        ("flaky%", "decimal"),
+        ("timeout%", "decimal"),
+        ("fail%", "decimal"),
+        ("impact", "right"),
+        ("duration_p90", "right"),
+        ("owners", "left"),
     ]
 
-    print(tabulate(df, headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
+    columns, alignments = zip(*colalignments)
+    print(tabulate(df[list(columns)], headers="keys", tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)))
 
 
 def last(args):
@@ -428,14 +429,47 @@ def last(args):
         return f"{redirect}?target={args.test_target}" if redirect else url
 
     with ThreadPoolExecutor() as executor:
-        df["buildbuddy"] = list(executor.map(direct_url_to_buildbuddy, df["invocation_id"]))
+        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["invocation_id"]))
+
+    # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
+    df["commit_link"] = df["commit"].apply(
+        lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/{ORG}/{REPO}/commit/{commit}")
+    )
+
+    df["last started at (UTC)"] = df["last_started_at"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
+
+    df["branch_link"] = df["branch"].apply(
+        lambda branch: terminal_hyperlink(branch, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
+    )
+
+    df["PR_link"] = df["PR"].apply(
+        lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
+    )
+
+    df["duration"] = df["duration"].apply(normalize_duration)
+
+    df["buildbuddy_links"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
+
+    colalignments = [
+        # (column, header, alignment)
+        ("last started at (UTC)", "last started at (UTC)", "right"),
+        ("duration", "duration", "right"),
+        ("status", "status", "left"),
+        ("branch_link", "branch", "left"),
+        ("PR_link", "PR", "left"),
+        ("commit_link", "commit", "left"),
+        ("buildbuddy_links", "buildbuddy", "left"),
+    ]
+
+    columns, headers, alignments = zip(*colalignments)
+    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)))
 
     if args.download_logs is not None:
+        timestamp = datetime.now().isoformat(timespec="seconds")
         # Determine output directory
         if args.download_logs == "":
             # Extract test name from target (part after ':')
             test_name = args.test_target.split(":")[-1]
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
             dir_name = f"logs_of_{test_name}_{timestamp}"
         else:
             dir_name = args.download_logs
@@ -446,14 +480,44 @@ def last(args):
         # Create directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        readme_path = output_dir / "README.md"
+
+        colalignments = [
+            ('last started at (UTC)', "right"),
+            ('duration', "right"),
+            ('status', "left"),
+            ('branch', "left"),
+            ('PR', "left"),
+            ('commit', "left"),
+            ('buildbuddy_url', "left"),
+        ]
+
+        cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
+        columns, alignments = zip(*colalignments)
+        table_md = tabulate(df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments))
+        readme = f"""Logs of `{args.test_target}`
+===
+Generated at {timestamp} using:
+```
+{cmd}
+```
+{table_md}
+"""
+        readme_path.write_text(readme)
+
         print(f"Downloading logs to: {output_dir}", file=sys.stderr)
 
         # Collect all download tasks
         download_tasks = []
-        for _, row in df.iterrows():
-            url = row["buildbuddy"]
+        for _ix, row in df.iterrows():
+            url = row["buildbuddy_url"]
 
             invocation_id = row["invocation_id"]
+
+            last_started_at = row["last_started_at"].strftime("%Y-%m-%dT%H:%M:%S")
+
+            invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
+            invocation_dir.mkdir(exist_ok=True)
 
             # Parse the BuildBuddy URL to extract base URL and invocation ID
             parsed = urllib.parse.urlparse(url)
@@ -463,8 +527,11 @@ def last(args):
             log_urls = get_all_buildbuddy_log_urls(buildbuddy_base_url, str(invocation_id), args.test_target)
 
             for attempt_num, download_url, attempt_status in log_urls:
-                filename = f"{invocation_id}_{attempt_num}_{attempt_status}.log"
-                filepath = output_dir / filename
+                attempt_dir = invocation_dir / str(attempt_num)
+                attempt_dir.mkdir(exist_ok=True)
+
+                filename = f"{attempt_status}.log"
+                filepath = attempt_dir / filename
                 download_tasks.append((download_url, filepath, filename))
 
         if not download_tasks:
@@ -496,40 +563,6 @@ def last(args):
             successful = sum(results)
             print(f"Successfully downloaded {successful}/{len(download_tasks)} logs to {output_dir}", file=sys.stderr)
 
-    # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
-    df["commit"] = df["commit"].apply(
-        lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/{ORG}/{REPO}/commit/{commit}")
-    )
-
-    df["last started at (UTC)"] = df["last started at (UTC)"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
-
-    df["branch"] = df["branch"].apply(
-        lambda branch: terminal_hyperlink(branch, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
-    )
-
-    df["PR"] = df["PR"].apply(
-        lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
-    )
-
-    df = df.drop(columns=["invocation_id"])
-
-    df["duration"] = df["duration"].apply(normalize_duration)
-
-    df["buildbuddy"] = df["buildbuddy"].apply(lambda url: terminal_hyperlink("logs", url))
-
-    colalignments = [
-        "decimal",  # idx
-        "right",  # last started at (UTC)
-        "right",  # duration
-        "left",  # status
-        "left",  # branch
-        "left",  # PR
-        "left",  # commit
-        "left",  # buildbuddy
-    ]
-
-    columns = list(df.columns)
-    print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
 
 
 # argparse formatter to allow newlines in --help.
@@ -704,11 +737,11 @@ Examples:
         metavar="DIR",
         help="""Download all test logs to a local directory.
 If DIR is not specified the directory will be `./logs_of_{test_name}_{timestamp}`
-The directory will contain log files named like `{invocation_id}_{attempt_num}_{attempt_status}.log`, for example:
-0b037b67-dc86-4323-8c4c-ffc936156845_1_FAILED.log
-0b037b67-dc86-4323-8c4c-ffc936156845_2_PASSED.log
-3b054443-e7d8-4013-9897-6778816318c9_1_FAILED.log
-3b054443-e7d8-4013-9897-6778816318c9_2_PASSED.log
+The directory will contain log files named like `{timestamp}_{invocation_id}/{attempt_num}/{attempt_status}.log`, for example:
+2026-02-01T04:22:13_459bd6b8-a538-48d4-8644-363bbe64eb8f/1/FAILED.log
+2026-02-01T04:22:13_459bd6b8-a538-48d4-8644-363bbe64eb8f/2/PASSED.log
+2026-02-01T20:01:40_b1429b38-723e-4938-9bc5-470f08d624f1/1/FAILED.log
+2026-02-01T20:01:40_b1429b38-723e-4938-9bc5-470f08d624f1/2/PASSED.log
 """,
     )
 

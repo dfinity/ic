@@ -1,6 +1,6 @@
 SELECT
   -- Bazel's first_start_time is really the time the last attempt started.
-  bt.first_start_time AS "last started at (UTC)",
+  bt.first_start_time AS "last_started_at",
 
   bt.total_run_duration * INTERVAL '1 second' AS "duration",
 
