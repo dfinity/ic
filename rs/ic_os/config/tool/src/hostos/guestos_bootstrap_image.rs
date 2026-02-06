@@ -47,7 +47,6 @@ impl BootstrapOptions {
     /// a disk image that can be mounted by the GuestOS. The image contains a FAT filesystem with
     /// the configuration files.
     pub fn build_bootstrap_config_image(&self, out_file: &Path) -> Result<()> {
-        let bootstrap_dir = self.build_bootstrap_dir()?;
         let tmp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
 
         // Create bootstrap directory with all files
@@ -182,7 +181,6 @@ impl BootstrapOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config_types::{DeploymentEnvironment, ICOSSettings, Ipv6Config, NetworkSettings};
 
     #[test]
     fn test_build_bootstrap_image() -> Result<()> {
