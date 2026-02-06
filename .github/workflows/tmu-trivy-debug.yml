@@ -21,6 +21,8 @@ jobs:
         id: setup-environment-deps
         shell: bash
         run: |
+          pwd
+          ls -la
           # this is needed to get more free space on the runner, otherwise might run OOM when building icOS
           rm -rf /opt/hostedtoolcache
           # Ignore externally-managed-environment pip error, install packages system-wide.
