@@ -462,7 +462,11 @@ def last(args):
     ]
 
     columns, headers, alignments = zip(*colalignments)
-    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)))
+    print(
+        tabulate(
+            df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)
+        )
+    )
 
     if args.download_logs is not None:
         timestamp = datetime.now().isoformat(timespec="seconds")
@@ -483,18 +487,20 @@ def last(args):
         readme_path = output_dir / "README.md"
 
         colalignments = [
-            ('last started at (UTC)', "right"),
-            ('duration', "right"),
-            ('status', "left"),
-            ('branch', "left"),
-            ('PR', "left"),
-            ('commit', "left"),
-            ('buildbuddy_url', "left"),
+            ("last started at (UTC)", "right"),
+            ("duration", "right"),
+            ("status", "left"),
+            ("branch", "left"),
+            ("PR", "left"),
+            ("commit", "left"),
+            ("buildbuddy_url", "left"),
         ]
 
         cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
         columns, alignments = zip(*colalignments)
-        table_md = tabulate(df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments))
+        table_md = tabulate(
+            df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments)
+        )
         readme = f"""Logs of `{args.test_target}`
 ===
 Generated at {timestamp} using:
@@ -562,7 +568,6 @@ Generated at {timestamp} using:
 
             successful = sum(results)
             print(f"Successfully downloaded {successful}/{len(download_tasks)} logs to {output_dir}", file=sys.stderr)
-
 
 
 # argparse formatter to allow newlines in --help.
