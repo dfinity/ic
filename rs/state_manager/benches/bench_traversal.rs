@@ -237,13 +237,13 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
         let mut state = get_initial_state(/*num_canisters=*/ 100u64, 0);
         state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         assert_eq!(state.canister_states().len(), 100);
-        for (_, canister) in state.canister_states_iter_mut() {
+        for canister in state.canisters_iter_mut() {
             Arc::make_mut(canister)
                 .execution_state
                 .as_mut()
                 .unwrap()
                 .metadata = WasmMetadata::new(btreemap! {
-            "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1u8; 1 << 20]),
+                "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1u8; 1 << 20]),
             });
         }
         state

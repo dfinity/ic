@@ -403,9 +403,10 @@ fn install_code(
     let network_topology = state.metadata.network_topology.clone();
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
-    let old_canister = Arc::try_unwrap(old_canister).unwrap_or_else(|canister| (*canister).clone());
     execution_parameters.compute_allocation = old_canister.compute_allocation();
+    execution_parameters.memory_allocation = old_canister.memory_allocation();
 
+    let old_canister = Arc::unwrap_or_clone(old_canister);
     let dts_result = canister_manager.install_code_dts(
         context,
         CanisterCall::Ingress(Arc::new(ingress)),
@@ -426,14 +427,19 @@ fn install_code(
     // Canister manager tests do not trigger DTS executions.
     let (result, instructions_used, canister) = match dts_result {
         DtsInstallCodeResult::Finished {
-            mut canister,
+            canister,
             call_id: _,
             message: _,
             instructions_used,
             result,
         } => {
+            let mut canister = Arc::new(canister);
             canister.update_on_low_wasm_memory_hook_condition();
-            (result, instructions_used, Some(canister))
+            (
+                result,
+                instructions_used,
+                Some(Arc::unwrap_or_clone(canister)),
+            )
         }
         DtsInstallCodeResult::Paused {
             canister: _,
@@ -1556,7 +1562,7 @@ fn get_canister_status_of_stopped_canister() {
         let canister = get_stopped_canister(canister_id);
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state(&canister_id).unwrap();
         let status_res = canister_manager
             .get_canister_status(
                 sender,
@@ -1591,7 +1597,7 @@ fn get_canister_status_of_stopping_canister() {
         let canister = get_stopping_canister(canister_id);
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state(&canister_id).unwrap();
         let status = canister_manager
             .get_canister_status(
                 sender,

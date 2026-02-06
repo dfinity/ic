@@ -1214,7 +1214,7 @@ impl ExecutionTest {
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
-        state.put_canister_state_arc(result.canister);
+        state.put_canister_state(result.canister);
         state.metadata.heap_delta_estimate += result.heap_delta;
         self.state = Some(state);
         self.update_execution_stats(
@@ -1307,7 +1307,7 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
-        let canister = Arc::try_unwrap(canister).unwrap_or_else(|canister| (*canister).clone());
+        let canister = Arc::unwrap_or_clone(canister);
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),

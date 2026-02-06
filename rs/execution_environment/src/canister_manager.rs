@@ -951,7 +951,7 @@ impl CanisterManager {
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
         let time = state.time();
-        let canister = match state.canister_state_mut(&canister_id) {
+        let canister = match state.canister_state(&canister_id) {
             Some(canister) => canister,
             None => return Err(CanisterManagerError::CanisterNotFound(canister_id)),
         };
@@ -963,6 +963,7 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
 
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         let rejects = uninstall_canister(
             &self.log,
             canister,
@@ -1011,7 +1012,7 @@ impl CanisterManager {
         mut stop_context: StopCanisterContext,
         state: &mut ReplicatedState,
     ) -> StopCanisterResult {
-        let canister = match state.canister_state_mut(&canister_id) {
+        let canister = match state.canister_state(&canister_id) {
             None => {
                 return StopCanisterResult::Failure {
                     error: CanisterManagerError::CanisterNotFound(canister_id),
@@ -1028,6 +1029,7 @@ impl CanisterManager {
             };
         }
 
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         let result = match canister.system_state.begin_stopping(stop_context) {
             Some(mut stop_context) => StopCanisterResult::AlreadyStopped {
                 cycles_to_return: stop_context.take_cycles(),

@@ -1742,11 +1742,11 @@ fn execute_idle_and_canisters_with_messages() {
     //     ExecutionRound::from(1)
     // );
     let active = test.canister_state(active);
-    let system_state = &active.system_state;
-    assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
+    assert_eq!(active.system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
     assert_eq!(
-        system_state
+        active
+            .system_state
             .canister_metrics()
             .interrupted_during_execution(),
         0
@@ -2727,7 +2727,7 @@ fn can_record_metrics_for_a_round() {
         }
     }
 
-    for (_, canister) in test.state_mut().canister_states_iter_mut() {
+    for canister in test.state_mut().canisters_iter_mut() {
         Arc::make_mut(canister)
             .system_state
             .time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
@@ -2871,12 +2871,12 @@ fn heap_delta_rate_limiting_metrics_recorded() {
         .with_rate_limiting_of_heap_delta()
         .build();
 
-    // One canister starts with a heap delta already above the limit, so it should
-    // be rate limited.
+    // One canister starts with a heap delta already at the limit, so it should be
+    // rate limited.
     let canister0 = test.create_canister();
     test.canister_state_mut(canister0)
         .scheduler_state
-        .heap_delta_debit = (2 * scheduler_config.heap_delta_rate_limit.get()).into();
+        .heap_delta_debit = scheduler_config.heap_delta_rate_limit;
     test.send_ingress(canister0, ingress(1).dirty_pages(1));
 
     let canister1 = test.create_canister();
@@ -2888,7 +2888,7 @@ fn heap_delta_rate_limiting_metrics_recorded() {
     assert_eq!(metrics.canister_heap_delta_debits.get_sample_count(), 2);
     assert_eq!(
         metrics.canister_heap_delta_debits.get_sample_sum() as u64,
-        scheduler_config.heap_delta_rate_limit.get()
+        scheduler_config.heap_delta_rate_limit.get() + 4096
     );
     assert_eq!(
         metrics
@@ -2917,7 +2917,11 @@ fn heap_delta_rate_limiting_disabled() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.canister_heap_delta_debits.get_sample_count(), 0);
+    assert_eq!(metrics.canister_heap_delta_debits.get_sample_count(), 2);
+    assert_eq!(
+        metrics.canister_heap_delta_debits.get_sample_sum() as u64,
+        0,
+    );
     assert_eq!(
         metrics
             .heap_delta_rate_limited_canisters_per_round
@@ -4726,12 +4730,7 @@ fn scheduler_respects_compute_allocation(
     // for free, i.e. `number_of_canisters` rounds.
     let number_of_rounds = number_of_canisters;
 
-    let canister_ids: Vec<_> = test
-        .state()
-        .canister_states()
-        .iter()
-        .map(|x| *x.0)
-        .collect();
+    let canister_ids: Vec<_> = test.state().canister_states().keys().cloned().collect();
 
     // Add one more round as we update the accumulated priorities at the end of the round now.
     for _ in 0..=number_of_rounds {
@@ -5676,9 +5675,9 @@ fn test_is_next_method_added_to_task_queue() {
     let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
     assert!(
         !test
-            .canister_state_mut(canister)
+            .canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
@@ -5715,16 +5714,13 @@ fn test_is_next_method_added_to_task_queue() {
         });
 
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
-        != NextScheduledMethod::Message
+    while test.canister_state(canister).get_next_scheduled_method() != NextScheduledMethod::Message
     {
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
@@ -5740,7 +5736,7 @@ fn test_is_next_method_added_to_task_queue() {
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
     // and GlobalTimer are added to the queue.
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .is_empty()
@@ -5748,9 +5744,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::Heartbeat
     {
         test.canister_state_mut(canister)
@@ -5768,7 +5762,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5781,7 +5775,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5797,9 +5791,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     heartbeat_and_timer_canister_ids = BTreeSet::new();
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::GlobalTimer
     {
         test.canister_state_mut(canister)
@@ -5816,7 +5808,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5829,7 +5821,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),

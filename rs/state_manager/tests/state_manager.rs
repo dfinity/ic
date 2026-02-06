@@ -7373,7 +7373,7 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
         .metadata
         .unflushed_checkpoint_ops
         .load_snapshot(canister_id, snapshot_id);
-    state.put_canister_state_arc(canister_arc);
+    state.put_canister_state(canister_arc);
 }
 
 #[test]
@@ -8224,7 +8224,7 @@ fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: Can
         .rename_canister(old_id, new_id);
 
     // Put canister with the new id
-    state.put_canister_state_arc(canister_arc);
+    state.put_canister_state(canister_arc);
 }
 
 #[test]

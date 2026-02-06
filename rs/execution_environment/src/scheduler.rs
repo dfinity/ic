@@ -46,7 +46,6 @@ use ic_types::{
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
-use num_traits::SaturatingSub;
 use prometheus::Histogram;
 use std::{
     cell::RefCell,
@@ -956,6 +955,8 @@ impl SchedulerImpl {
                 ),
                 Some(canister) => canister,
             };
+            // TODO(DSM-102): Consider checking whether the canister has output messages for
+            // local canisters before calling `make_mut()`.
             let source_canister = Arc::make_mut(&mut source_canister_arc);
 
             let messages_before_induction = source_canister
@@ -1007,7 +1008,7 @@ impl SchedulerImpl {
                 .output_queues_message_count();
             inducted_messages_to_others +=
                 messages_before_induction.saturating_sub(messages_after_induction);
-            state.put_canister_state_arc(source_canister_arc);
+            state.put_canister_state(source_canister_arc);
         }
         self.metrics
             .inducted_messages
@@ -1072,9 +1073,8 @@ impl SchedulerImpl {
             .iter()
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
-                let mut canister = state.take_canister_state(&rs.canister_id()).unwrap();
-                self.exec_env.abort_canister(&mut canister, &self.log);
-                state.put_canister_state_arc(canister);
+                let canister = state.canister_state_mut_arc(&rs.canister_id()).unwrap();
+                self.exec_env.abort_canister(canister, &self.log);
             });
     }
 
@@ -1117,7 +1117,7 @@ impl SchedulerImpl {
         }
 
         let default_wasm_memory_limit = self.exec_env.default_wasm_memory_limit();
-        for (_id, canister) in state.canister_states_iter_mut() {
+        for canister in state.canisters_iter_mut() {
             if canister.system_state.wasm_memory_limit.is_none() {
                 let num_wasm_pages = canister
                     .execution_state
@@ -1491,32 +1491,36 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
                 // FIXME: Consider iterating over `round_schedule` instead of `canister_states`.
                 for canister in state.canisters_iter_mut() {
-                    if canister.scheduler_state.heap_delta_debit.get() > 0 {
+                    let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
+                    self.metrics
+                        .canister_heap_delta_debits
+                        .observe(heap_delta_debit as f64);
+                    if heap_delta_debit > 0 {
                         let canister = Arc::make_mut(canister);
-                        let heap_delta_debit = &mut canister.scheduler_state.heap_delta_debit;
-                        if self.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-                            *heap_delta_debit =
-                                heap_delta_debit.saturating_sub(&self.config.heap_delta_rate_limit);
-                            self.metrics
-                                .canister_heap_delta_debits
-                                .observe(heap_delta_debit.get() as f64);
-                        } else {
-                            *heap_delta_debit = NumBytes::from(0);
-                        }
+                        canister.scheduler_state.heap_delta_debit =
+                            match self.rate_limiting_of_heap_delta {
+                                FlagStatus::Enabled => NumBytes::from(
+                                    heap_delta_debit
+                                        .saturating_sub(self.config.heap_delta_rate_limit.get()),
+                                ),
+                                FlagStatus::Disabled => NumBytes::from(0),
+                            };
                     }
 
-                    if canister.scheduler_state.install_code_debit.get() > 0 {
+                    let install_code_debit = canister.scheduler_state.install_code_debit.get();
+                    self.metrics
+                        .canister_install_code_debits
+                        .observe(install_code_debit as f64);
+                    if install_code_debit > 0 {
                         let canister = Arc::make_mut(canister);
-                        let install_code_debit = &mut canister.scheduler_state.install_code_debit;
-                        if self.rate_limiting_of_instructions == FlagStatus::Enabled {
-                            *install_code_debit = install_code_debit
-                                .saturating_sub(&self.config.install_code_rate_limit);
-                            self.metrics
-                                .canister_install_code_debits
-                                .observe(install_code_debit.get() as f64);
-                        } else {
-                            *install_code_debit = NumInstructions::from(0);
-                        }
+                        canister.scheduler_state.install_code_debit =
+                            match self.rate_limiting_of_instructions {
+                                FlagStatus::Enabled => NumInstructions::from(
+                                    install_code_debit
+                                        .saturating_sub(self.config.install_code_rate_limit.get()),
+                                ),
+                                FlagStatus::Disabled => NumInstructions::from(0),
+                            };
                     }
 
                     self.metrics

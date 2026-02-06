@@ -157,7 +157,8 @@ impl<'a> OutputIterator<'a> {
                 if !canister.has_output() {
                     return None;
                 }
-                // TODO: Have CanisterOutputQueuesIterator take a `&mut Arc<_>`.
+                // TODO(DSM-102): Consider making `CanisterOutputQueuesIterator` initialize
+                // lazily, from a `&mut Arc<_>`.
                 let canister = Arc::make_mut(canister);
                 Some(canister.system_state.output_into_iter())
             })
@@ -529,17 +530,24 @@ impl ReplicatedState {
             .map(|canister| canister.as_ref())
     }
 
+    /// Makes a mutable reference to the canister state, cloning it if necessary.
+    ///
+    /// Make sure to only call this when actually mutating the canister state.
+    //
+    // TODO(DSM-102) Rename to `canister_state_make_mut`, to make it clearer that
+    // this is an expensive operation.
+    pub fn canister_state_mut(&mut self, canister_id: &CanisterId) -> Option<&mut CanisterState> {
+        self.canister_states.get_mut(canister_id).map(Arc::make_mut)
+    }
+
+    /// Returns a mutable reference to the canister state without cloning it.
+    ///
+    /// The caller may call `Arc::make_mut()` if and when necessary to mutate it.
     pub fn canister_state_mut_arc(
         &mut self,
         canister_id: &CanisterId,
     ) -> Option<&mut Arc<CanisterState>> {
         self.canister_states.get_mut(canister_id)
-    }
-
-    // TODO: Check if all callers always need a mutable reference.
-    // Better yet, return a `&mut Arc<_>` so the caller can bail out before cloning.
-    pub fn canister_state_mut(&mut self, canister_id: &CanisterId) -> Option<&mut CanisterState> {
-        self.canister_states.get_mut(canister_id).map(Arc::make_mut)
     }
 
     /// Takes the canister state out of the replicated state, with the expectation
@@ -551,53 +559,14 @@ impl ReplicatedState {
         self.canister_states.remove(canister_id)
     }
 
-    /// Permanently removes the canister and its scheduling priority from the subnet
-    /// schedule.
-    pub fn remove_canister(&mut self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
-        self.metadata.subnet_schedule.remove(canister_id);
-        self.canister_states.remove(canister_id)
-    }
-
-    pub fn canister_states(&self) -> &BTreeMap<CanisterId, Arc<CanisterState>> {
-        &self.canister_states
-    }
-
-    pub fn canister_states_iter_mut(
-        &mut self,
-    ) -> std::collections::btree_map::IterMut<'_, CanisterId, Arc<CanisterState>> {
-        self.canister_states.iter_mut()
-    }
-
-    pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, Arc<CanisterState>> {
-        std::mem::take(&mut self.canister_states)
-    }
-
-    pub fn routing_table(&self) -> Arc<RoutingTable> {
-        Arc::clone(&self.metadata.network_topology.routing_table)
-    }
-
-    /// Insert the canister state into the replicated state. If a canister
-    /// already exists for the given canister ID, it will be replaced. It is the
-    /// responsibility of the caller of this function to ensure that any
-    /// relevant state associated with the older canister state are properly
-    /// cleaned up.
-    pub fn put_canister_state(&mut self, canister_state: CanisterState) {
-        // Also insert a scheduling priority for the canister. This is a temporary
-        // measure to ensure that every canister has an explicit priority.
-        self.metadata
-            .subnet_schedule
-            .get_mut(canister_state.canister_id());
-        self.canister_states
-            .insert(canister_state.canister_id(), Arc::new(canister_state));
-    }
-
-    /// Insert the canister state into the replicated state.
+    /// Inserts the canister state into the replicated state.
     ///
     /// If a canister already exists for the given canister ID, it will be replaced.
     /// It is the responsibility of the caller of this function to ensure that any
     /// relevant state associated with the older canister state are properly
     /// cleaned up.
-    pub fn put_canister_state_arc(&mut self, canister_state: Arc<CanisterState>) {
+    pub fn put_canister_state<CS: Into<Arc<CanisterState>>>(&mut self, canister_state: CS) {
+        let canister_state = canister_state.into();
         // Also insert a scheduling priority for the canister. This is a temporary
         // measure to ensure that every canister has an explicit priority.
         self.metadata
@@ -605,6 +574,27 @@ impl ReplicatedState {
             .get_mut(canister_state.canister_id());
         self.canister_states
             .insert(canister_state.canister_id(), canister_state);
+    }
+
+    /// Permanently removes the canister and its scheduling priority from the subnet
+    /// schedule.
+    pub fn remove_canister(&mut self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
+        self.metadata.subnet_schedule.remove(canister_id);
+        self.canister_states.remove(canister_id)
+    }
+
+    /// Returns a reference to the canister states.
+    pub fn canister_states(&self) -> &BTreeMap<CanisterId, Arc<CanisterState>> {
+        &self.canister_states
+    }
+
+    /// Takes the canister states out of the replicated state, with the expectation
+    /// that they will be replaced using `put_canister_states()`.
+    ///
+    /// Intended to work around borrow checker limitations (e.g. routing messages
+    /// from one canister's output queues into another canister's input queues).
+    pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, Arc<CanisterState>> {
+        std::mem::take(&mut self.canister_states)
     }
 
     /// Replaces the content of `self.canister_states` with the provided `canisters`.
@@ -664,10 +654,20 @@ impl ReplicatedState {
         self.metadata.subnet_schedule.get(canister_id)
     }
 
+    /// Returns a mutable reference to the scheduling priority for the given
+    /// canister, inserting the default priority if not found.
+    pub fn canister_priority_mut(&mut self, canister_id: CanisterId) -> &mut CanisterPriority {
+        self.metadata.subnet_schedule.get_mut(canister_id)
+    }
+
     pub fn canister_priorities(&self) -> &SubnetSchedule {
         &self.metadata.subnet_schedule
     }
 
+    /// Returns mutable references to the canister states and subnet schedule.
+    ///
+    /// Intended to work around borrow checker limitations and allow inspecting
+    /// and/or mutating the two collections concurrently.
     pub fn subnet_schedule_mut(
         &mut self,
     ) -> (
@@ -706,6 +706,10 @@ impl ReplicatedState {
 
     pub fn system_metadata(&self) -> &SystemMetadata {
         &self.metadata
+    }
+
+    pub fn routing_table(&self) -> Arc<RoutingTable> {
+        Arc::clone(&self.metadata.network_topology.routing_table)
     }
 
     /// Returns the cost schedule of this subnet.
@@ -1176,10 +1180,11 @@ impl ReplicatedState {
     /// Garbage collects empty canister and subnet queues.
     pub fn garbage_collect_canister_queues(&mut self) {
         for (_canister_id, canister) in self.canister_states.iter_mut() {
-            // TODO: Don't make a mutable reference unless necessary.
-            Arc::make_mut(canister)
-                .system_state
-                .garbage_collect_canister_queues();
+            if canister.system_state.can_garbage_collect_canister_queues() {
+                Arc::make_mut(canister)
+                    .system_state
+                    .garbage_collect_canister_queues();
+            }
         }
         self.subnet_queues.garbage_collect();
     }
@@ -1527,10 +1532,11 @@ impl ReplicatedState {
         let local_canister_ids = canister_states.keys().cloned().collect::<Vec<_>>();
         for canister_id in local_canister_ids.iter() {
             let mut canister_state = canister_states.remove(canister_id).unwrap();
-            // TODO Check if canister has inputs before making a mutable reference.
-            Arc::make_mut(&mut canister_state)
-                .system_state
-                .split_input_schedules(canister_id, canister_states);
+            if canister_state.has_input() {
+                Arc::make_mut(&mut canister_state)
+                    .system_state
+                    .split_input_schedules(canister_id, canister_states);
+            }
             canister_states.insert(*canister_id, canister_state);
         }
 
@@ -1629,10 +1635,11 @@ impl ReplicatedState {
         let local_canister_ids = canister_states.keys().cloned().collect::<Vec<_>>();
         for canister_id in local_canister_ids.iter() {
             let mut canister_state = canister_states.remove(canister_id).unwrap();
-            // TODO Check if canister has inputs before making a mutable reference.
-            Arc::make_mut(&mut canister_state)
-                .system_state
-                .split_input_schedules(canister_id, &canister_states);
+            if canister_state.has_input() {
+                Arc::make_mut(&mut canister_state)
+                    .system_state
+                    .split_input_schedules(canister_id, &canister_states);
+            }
             canister_states.insert(*canister_id, canister_state);
         }
 
@@ -1797,9 +1804,6 @@ pub mod testing {
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
-        /// Testing only: Returns a mutable reference to `self.canister_states`.
-        fn canister_states_mut(&mut self) -> &mut BTreeMap<CanisterId, Arc<CanisterState>>;
-
         /// Testing only: Returns a reference to `self.subnet_queues`
         fn subnet_queues(&self) -> &CanisterQueues;
 
@@ -1826,10 +1830,6 @@ pub mod testing {
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
-        fn canister_states_mut(&mut self) -> &mut BTreeMap<CanisterId, Arc<CanisterState>> {
-            &mut self.canister_states
-        }
-
         fn subnet_queues(&self) -> &CanisterQueues {
             &self.subnet_queues
         }
