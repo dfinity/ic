@@ -157,13 +157,13 @@ thread_local! {
     static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 
     pub static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
-        RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS));
+        const { RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS)) };
     pub static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData<7>> =
-        RefCell::new(HistogramData::new(&ARCHIVING_CHUNK_DURATION_BUCKETS));
+        const { RefCell::new(HistogramData::new(&ARCHIVING_CHUNK_DURATION_BUCKETS)) };
     pub static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData<7>> =
-        RefCell::new(HistogramData::new(&ARCHIVING_CHUNKS_BUCKETS));
+        const { RefCell::new(HistogramData::new(&ARCHIVING_CHUNKS_BUCKETS)) };
     pub static ARCHIVING_BLOCKS_HISTOGRAM: RefCell<HistogramData<6>> =
-        RefCell::new(HistogramData::new(&ARCHIVING_BLOCKS_BUCKETS));
+        const { RefCell::new(HistogramData::new(&ARCHIVING_BLOCKS_BUCKETS)) };
 }
 
 #[derive(Debug, Clone)]
