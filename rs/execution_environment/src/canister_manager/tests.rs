@@ -1561,7 +1561,7 @@ fn get_canister_status_of_stopped_canister() {
         let canister = get_stopped_canister(canister_id);
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state(&canister_id).unwrap();
         let status_res = canister_manager
             .get_canister_status(
                 sender,
@@ -1596,7 +1596,7 @@ fn get_canister_status_of_stopping_canister() {
         let canister = get_stopping_canister(canister_id);
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state(&canister_id).unwrap();
         let status = canister_manager
             .get_canister_status(
                 sender,

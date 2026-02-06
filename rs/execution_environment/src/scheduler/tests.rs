@@ -5688,9 +5688,9 @@ fn test_is_next_method_added_to_task_queue() {
     let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
     assert!(
         !test
-            .canister_state_mut(canister)
+            .canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
@@ -5727,16 +5727,13 @@ fn test_is_next_method_added_to_task_queue() {
         });
 
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
-        != NextScheduledMethod::Message
+    while test.canister_state(canister).get_next_scheduled_method() != NextScheduledMethod::Message
     {
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
@@ -5752,7 +5749,7 @@ fn test_is_next_method_added_to_task_queue() {
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
     // and GlobalTimer are added to the queue.
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .is_empty()
@@ -5760,9 +5757,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::Heartbeat
     {
         test.canister_state_mut(canister)
@@ -5780,7 +5775,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5793,7 +5788,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5809,9 +5804,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     heartbeat_and_timer_canister_ids = BTreeSet::new();
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::GlobalTimer
     {
         test.canister_state_mut(canister)
@@ -5828,7 +5821,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5841,7 +5834,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
