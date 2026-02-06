@@ -1362,6 +1362,22 @@ impl CanisterQueues {
         self.message_stats().cycles
     }
 
+    /// Returns `true` if calling `garbage_collect()` would actually do something.
+    ///
+    /// Time complexity: `O(num_queues)`.
+    pub fn can_garbage_collect(&self) -> bool {
+        // Garbage collect if any input queue / output queue pair are both empty...
+        self.canister_queues
+            .iter()
+            .any(|(_, (input_queue, output_queue))| {
+                !input_queue.has_used_slots() && !output_queue.has_used_slots()
+            })
+            // ...or if all queues are empty but not all struct fields are reset to default.
+            || self.canister_queues.is_empty()
+                && self.ingress_queue.is_empty()
+                && pb_queues::CanisterQueues::from(self as &Self).encoded_len() != 0
+    }
+
     /// Garbage collects all input and output queue pairs that are both empty.
     ///
     /// Because there is no useful information in an empty queue, there is no
