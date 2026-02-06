@@ -1518,7 +1518,7 @@ impl From<pb_api::NervousSystemParameters> for pb::NervousSystemParameters {
 impl From<pb::CustomProposalCriticality> for pb_api::CustomProposalCriticality {
     fn from(item: pb::CustomProposalCriticality) -> Self {
         Self {
-            critical_native_action_ids: Some(item.critical_native_action_ids),
+            critical_native_action_ids: item.critical_native_action_ids,
         }
     }
 }
@@ -1526,7 +1526,7 @@ impl From<pb::CustomProposalCriticality> for pb_api::CustomProposalCriticality {
 impl From<pb_api::CustomProposalCriticality> for pb::CustomProposalCriticality {
     fn from(item: pb_api::CustomProposalCriticality) -> Self {
         Self {
-            critical_native_action_ids: item.critical_native_action_ids.unwrap_or_default(),
+            critical_native_action_ids: item.critical_native_action_ids,
         }
     }
 }

@@ -1281,7 +1281,7 @@ pub struct CustomProposalCriticality {
     /// List of native function IDs that should be treated as critical.
     /// These functions will require a higher level of consensus to be executed.
     /// Only non-critical native function IDs can be added to this list.
-    pub critical_native_action_ids: Option<Vec<u64>>,
+    pub critical_native_action_ids: Vec<u64>,
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct VotingRewardsParameters {

@@ -550,7 +550,7 @@ type NervousSystemFunction = record {
 };
 
 type CustomProposalCriticality = record {
-  critical_native_action_ids : opt vec nat64;
+  critical_native_action_ids : vec nat64;
 };
 
 type NervousSystemParameters = record {
