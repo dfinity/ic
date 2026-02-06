@@ -1386,7 +1386,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
         state_after_round.metadata.subnet_metrics.num_canisters =
             state_after_round.canister_states.len() as u64;
+        let observe_memory_usage_since = Instant::now();
         let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
+        info!(self.log, "observe_canisters_memory_usage took {:?}", observe_memory_usage_since.elapsed());
         state_after_round
             .metadata
             .subnet_metrics
