@@ -6253,7 +6253,6 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-handler-root",
  "ic-nns-init",

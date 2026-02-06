@@ -187,7 +187,10 @@ pub(crate) fn shortened_pids_string(pids: &[PrincipalId]) -> String {
     pids_string
 }
 
-pub(crate) fn read_from_json_file<T: serde::de::DeserializeOwned>(path: &Path) -> T {
+pub(crate) fn read_from_json_file<R>(path: &Path) -> R
+where
+    R: serde::de::DeserializeOwned,
+{
     let file = File::open(path)
         .unwrap_or_else(|err| panic!("Failed to open file '{}': {}", path.display(), err));
     serde_json::from_reader(file).unwrap_or_else(|err| {

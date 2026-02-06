@@ -1602,16 +1602,19 @@ struct ProposeToBlessAlternativeGuestOsVersionCmd {
     node_ids: Vec<NodeId>,
 
     /// Hex-encoded chip IDs (AMD Secure Processor chip IDs). Each must be exactly 64 bytes.
-    /// Can be specified multiple times.
+    /// Multiple values can be passed.
     /// Either --subnet or (--chip-ids/--node-ids and --base-launch-measurements) must be provided.
     #[clap(long, requires = "base_launch_measurements", conflicts_with = "subnet")]
     chip_ids: Vec<String>,
 
-    /// Hexadecimal fingerprint of the recovery rootfs.
+    /// Hexadecimal fingerprint of the Recovery-GuestOS rootfs that is allowed to run on the nodes
+    /// if the proposal is accepted.
     #[clap(long, required = true)]
     rootfs_hash: String,
 
-    /// Path to JSON file containing GuestLaunchMeasurements.
+    /// Path to JSON file containing GuestLaunchMeasurements of the broken base GuestOS that needs
+    /// to be recovered using the Recovery-GuestOS. Can be extracted from a ReplicaVersionRecord.
+    /// Only nodes with this launch measurement can run the Recovery-GuestOS.
     /// Either --subnet or (--chip-ids/--node-ids and --base-launch-measurements) must be provided.
     #[clap(long, conflicts_with = "subnet", required_unless_present = "subnet")]
     base_launch_measurements: Option<PathBuf>,
@@ -1624,7 +1627,7 @@ impl ProposalTitle for ProposeToBlessAlternativeGuestOsVersionCmd {
             None => {
                 if let Some(subnet) = self.subnet {
                     format!(
-                        "Bless alternative Guest OS for hash {} on subnet {}",
+                        "Bless alternative Guest OS for with rootfs_hash={} on subnet {}",
                         self.rootfs_hash,
                         shortened_subnet_string(&subnet)
                     )
@@ -1644,6 +1647,36 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
     ) -> (Vec<Vec<u8>>, ic_nns_governance_api::GuestLaunchMeasurements) {
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
 
+        let subnet_record = Self::fetch_subnet_record(&registry_canister, subnet).await;
+        let node_ids: Vec<NodeId> = Self::get_subnet_member_node_ids(&subnet_record);
+        let chip_ids = get_chip_ids_from_node_ids(&registry_canister, &node_ids, false).await;
+
+        // Query the ReplicaVersionRecord to get guest_launch_measurements
+        let guest_launch_measurements = get_guest_launch_measurements_from_replica_version(
+            &registry_canister,
+            &subnet_record.replica_version_id,
+        )
+        .await;
+
+        (chip_ids, guest_launch_measurements)
+    }
+
+    fn get_subnet_member_node_ids(subnet_record: &SubnetRecord) -> Vec<NodeId> {
+        subnet_record
+            .membership
+            .iter()
+            .map(|id| {
+                let principal_id =
+                    PrincipalId::try_from(id.as_slice()).expect("Failed to parse PrincipalID");
+                NodeId::from(principal_id)
+            })
+            .collect()
+    }
+
+    async fn fetch_subnet_record(
+        registry_canister: &RegistryCanister,
+        subnet: &SubnetDescriptor,
+    ) -> SubnetRecord {
         let subnet_id = subnet.get_id(&registry_canister).await;
 
         // Query the SubnetRecord
@@ -1657,32 +1690,14 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
                     subnet_id, err
                 )
             });
-        let subnet_record =
-            SubnetRecordProto::decode(&subnet_record_bytes[..]).unwrap_or_else(|err| {
+        SubnetRecordProto::decode(&subnet_record_bytes[..])
+            .unwrap_or_else(|err| {
                 panic!(
                     "Failed to decode SubnetRecord for subnet {}: {}",
                     subnet_id, err
                 )
-            });
-        let node_ids: Vec<NodeId> = subnet_record
-            .membership
-            .iter()
-            .map(|id| {
-                let principal_id = PrincipalId::try_from(id.as_slice()).unwrap();
-                NodeId::from(principal_id)
             })
-            .collect();
-
-        // Query the ReplicaVersionRecord to get guest_launch_measurements
-        let guest_launch_measurements = get_guest_launch_measurements_from_replica_version(
-            &registry_canister,
-            &subnet_record.replica_version_id,
-        )
-        .await;
-
-        let chip_ids = get_chip_ids_from_subnet_nodes(&registry_canister, &node_ids).await;
-
-        (chip_ids, guest_launch_measurements)
+            .into()
     }
 
     fn decode_chip_ids(chip_ids: &[String]) -> Vec<Vec<u8>> {
@@ -1703,6 +1718,100 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
             })
             .collect()
     }
+
+    /// Extracts chip IDs from all nodes in a subnet.
+    /// Returns the chip IDs as a vector of 64-byte blobs.
+    /// If `panic_on_missing_chip_id` is true, panics if any node does not have a chip ID, otherwise
+    /// the missing chip IDs are skipped.
+    async fn get_chip_ids_from_node_ids(
+        registry_canister: &RegistryCanister,
+        node_ids: &[NodeId],
+        panic_on_missing_chip_id: bool,
+    ) -> Vec<Vec<u8>> {
+        // Create futures for all node queries in parallel
+        let futures = node_ids.iter().map(|node_id| {
+            async move {
+                // Query the NodeRecord
+                let node_record_key = make_node_record_key(*node_id);
+                let (node_record_bytes, _version) = registry_canister
+                    .get_value_with_update(node_record_key.as_bytes().to_vec(), None)
+                    .await
+                    .unwrap_or_else(|err| {
+                        panic!("Failed to fetch NodeRecord for node {node_id}: {err}",)
+                    });
+                let node_record =
+                    NodeRecord::decode(&node_record_bytes[..]).unwrap_or_else(|err| {
+                        panic!("Failed to decode NodeRecord for node {node_id}: {err}",)
+                    });
+
+                // Extract chip_id
+                if let Some(chip_id) = node_record.chip_id {
+                    if chip_id.len() != 64 {
+                        panic!(
+                            "Chip ID for node {node_id} must be exactly 64 bytes, got {} bytes",
+                            chip_id.len()
+                        );
+                    }
+                    Some(chip_id)
+                } else {
+                    if panic_on_missing_chip_id {
+                        panic!("Node {node_id} does not have a chip_id in the registry");
+                    }
+                    println!("Node {node_id} does not have a chip_id in the registry, will skip");
+                    None
+                }
+            }
+        });
+
+        // Execute all futures in parallel and collect results
+        let chip_ids = futures::future::join_all(futures).await;
+        let chip_ids: Vec<_> = chip_ids.into_iter().flatten().collect();
+
+        if chip_ids.is_empty() {
+            panic!("No chip IDs found for subnet");
+        }
+
+        chip_ids
+    }
+
+    /// Queries the ReplicaVersionRecord and extracts GuestLaunchMeasurements.
+    async fn get_guest_launch_measurements_from_replica_version(
+        registry_canister: &RegistryCanister,
+        replica_version_id: &str,
+    ) -> ic_nns_governance_api::GuestLaunchMeasurements {
+        // Query the ReplicaVersionRecord
+        let replica_version_key = make_replica_version_key(replica_version_id);
+        let (replica_version_bytes, _version) = registry_canister
+            .get_value_with_update(replica_version_key.as_bytes().to_vec(), None)
+            .await
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to fetch ReplicaVersionRecord for version {}: {}",
+                    replica_version_id, err
+                )
+            });
+        let replica_version_record = ReplicaVersionRecord::decode(&replica_version_bytes[..])
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to decode ReplicaVersionRecord for version {}: {}",
+                    replica_version_id, err
+                )
+            });
+
+        // Extract guest_launch_measurements (protobuf version)
+        let guest_launch_measurements_proto = replica_version_record
+            .guest_launch_measurements
+            .unwrap_or_else(|| {
+                panic!(
+                    "ReplicaVersionRecord for version {} does not have guest_launch_measurements",
+                    replica_version_id
+                )
+            });
+
+        ic_nns_governance::pb::convert_guest_launch_measurements_from_pb_to_api(
+            guest_launch_measurements_proto,
+        )
+    }
 }
 
 #[async_trait]
@@ -1720,7 +1829,7 @@ impl ProposalAction for ProposeToBlessAlternativeGuestOsVersionCmd {
             if !node_ids.is_empty() {
                 let registry_canister = RegistryCanister::new_with_agent(agent.clone());
                 let chip_ids_from_node_ids =
-                    get_chip_ids_from_subnet_nodes(&registry_canister, node_ids).await;
+                    get_chip_ids_from_node_ids(&registry_canister, node_ids, true).await;
                 if chip_ids_from_node_ids.len() != node_ids.len() {
                     panic!("Not all node IDs provided have a chip ID in the registry.");
                 }
@@ -6175,92 +6284,6 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
         }
         Err(error) => panic!("Error getting value from registry: {error:?}"),
     }
-}
-
-/// Extracts chip IDs from all nodes in a subnet.
-/// Returns the chip IDs as a vector of 64-byte blobs.
-async fn get_chip_ids_from_subnet_nodes(
-    registry_canister: &RegistryCanister,
-    node_ids: &[NodeId],
-) -> Vec<Vec<u8>> {
-    // Create futures for all node queries in parallel
-    let futures = node_ids.iter().map(|node_id| {
-        async move {
-            // Query the NodeRecord
-            let node_record_key = make_node_record_key(*node_id);
-            let (node_record_bytes, _version) = registry_canister
-                .get_value_with_update(node_record_key.as_bytes().to_vec(), None)
-                .await
-                .unwrap_or_else(|err| {
-                    panic!("Failed to fetch NodeRecord for node {node_id}: {err}",)
-                });
-            let node_record = NodeRecord::decode(&node_record_bytes[..]).unwrap_or_else(|err| {
-                panic!("Failed to decode NodeRecord for node {node_id}: {err}",)
-            });
-
-            // Extract chip_id
-            if let Some(chip_id) = node_record.chip_id {
-                if chip_id.len() != 64 {
-                    panic!(
-                        "Chip ID for node {node_id} must be exactly 64 bytes, got {} bytes",
-                        chip_id.len()
-                    );
-                }
-                Some(chip_id)
-            } else {
-                println!("Node {node_id} does not have a chip_id in the registry, will skip");
-                None
-            }
-        }
-    });
-
-    // Execute all futures in parallel and collect results
-    let chip_ids = futures::future::join_all(futures).await;
-    let chip_ids: Vec<_> = chip_ids.into_iter().flatten().collect();
-
-    if chip_ids.is_empty() {
-        panic!("No chip IDs found for subnet");
-    }
-    chip_ids
-}
-
-/// Queries the ReplicaVersionRecord and extracts GuestLaunchMeasurements.
-async fn get_guest_launch_measurements_from_replica_version(
-    registry_canister: &RegistryCanister,
-    replica_version_id: &str,
-) -> ic_nns_governance_api::GuestLaunchMeasurements {
-    // Query the ReplicaVersionRecord
-    let replica_version_key = make_replica_version_key(replica_version_id);
-    let (replica_version_bytes, _version) = registry_canister
-        .get_value_with_update(replica_version_key.as_bytes().to_vec(), None)
-        .await
-        .unwrap_or_else(|err| {
-            panic!(
-                "Failed to fetch ReplicaVersionRecord for version {}: {}",
-                replica_version_id, err
-            )
-        });
-    let replica_version_record = ReplicaVersionRecord::decode(&replica_version_bytes[..])
-        .unwrap_or_else(|err| {
-            panic!(
-                "Failed to decode ReplicaVersionRecord for version {}: {}",
-                replica_version_id, err
-            )
-        });
-
-    // Extract guest_launch_measurements (protobuf version)
-    let guest_launch_measurements_proto = replica_version_record
-        .guest_launch_measurements
-        .unwrap_or_else(|| {
-            panic!(
-                "ReplicaVersionRecord for version {} does not have guest_launch_measurements",
-                replica_version_id
-            )
-        });
-
-    ic_nns_governance::pb::convert_guest_launch_measurements_from_pb_to_api(
-        guest_launch_measurements_proto,
-    )
 }
 
 fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
