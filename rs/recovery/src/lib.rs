@@ -26,7 +26,7 @@ use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
-use std::{env, io::ErrorKind};
+use std::{collections::BTreeMap, env, io::ErrorKind};
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -277,6 +277,25 @@ impl Recovery {
             ic_admin_cmd: self
                 .admin_helper
                 .get_halt_subnet_command(subnet_id, is_halted, keys),
+        }
+    }
+
+    /// Return a recovery [AdminStep] to take the given subnet offline for repairs
+    pub fn take_subnet_offline_for_repairs(
+        &self,
+        subnet_id: SubnetId,
+        subnet_readonly_keys: &[String],
+        node_write_keys: &BTreeMap<NodeId, Vec<String>>,
+    ) -> impl Step + use<> {
+        AdminStep {
+            logger: self.logger.clone(),
+            ic_admin_cmd: self
+                .admin_helper
+                .get_propose_to_take_subnet_offline_for_repairs_command(
+                    subnet_id,
+                    subnet_readonly_keys,
+                    node_write_keys,
+                ),
         }
     }
 
@@ -634,15 +653,18 @@ impl Recovery {
     /// a node and restart it.
     pub fn get_upload_state_and_restart_step(
         &self,
+        ssh_user: SshUser,
         upload_method: DataLocation,
+        key_file: Option<PathBuf>,
     ) -> impl Step + use<> {
         UploadStateAndRestartStep {
             logger: self.logger.clone(),
+            ssh_user,
             upload_method,
             work_dir: self.work_dir.clone(),
             data_src: self.work_dir.join(IC_STATE_DIR),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.admin_key_file.clone(),
+            key_file,
             check_ic_replay_height: true,
         }
     }

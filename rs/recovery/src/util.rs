@@ -19,6 +19,7 @@ pub enum SshUser {
     Admin,
     Readonly,
     Backup,
+    Recovery,
     Other(String),
 }
 
@@ -28,6 +29,7 @@ impl fmt::Display for SshUser {
             SshUser::Admin => write!(f, "admin"),
             SshUser::Readonly => write!(f, "readonly"),
             SshUser::Backup => write!(f, "backup"),
+            SshUser::Recovery => write!(f, "recovery"),
             SshUser::Other(user) => write!(f, "{}", user),
         }
     }
@@ -73,6 +75,19 @@ pub fn node_id_from_str(s: &str) -> RecoveryResult<NodeId> {
     PrincipalId::from_str(s)
         .map_err(|e| RecoveryError::UnexpectedError(format!("Unable to parse node_id {e:?}")))
         .map(NodeId::from)
+}
+
+pub fn node_id_and_pub_key_from_str(s: &str) -> RecoveryResult<(NodeId, String)> {
+    let parts: Vec<&str> = s.splitn(2, ':').collect();
+    let [node_id_str, pub_key_str] = parts.as_slice() else {
+        return Err(RecoveryError::UnexpectedError(format!(
+            "Unable to parse node_id and public key from string: {s}"
+        )));
+    };
+
+    let node_id = node_id_from_str(node_id_str)?;
+    let pub_key = pub_key_str.to_string();
+    Ok((node_id, pub_key))
 }
 
 pub fn make_logger() -> Logger {

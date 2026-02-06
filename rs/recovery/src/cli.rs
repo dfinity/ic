@@ -235,13 +235,6 @@ pub fn read_input(logger: &Logger, prompt: &str) -> String {
     input.trim().to_string()
 }
 
-/// Request and read input from the user with the given prompt. Convert empty
-/// input to `None`.
-fn read_optional_input(logger: &Logger, prompt: &str) -> Option<String> {
-    let input = read_input(logger, &format!("(Optional) {prompt}"));
-    if input.is_empty() { None } else { Some(input) }
-}
-
 pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeId>> {
     read_optional_type(logger, prompt, |input| {
         input
@@ -270,18 +263,41 @@ pub fn read_optional_data_location(logger: &Logger, prompt: &str) -> Option<Data
     read_optional_type(logger, prompt, data_location_from_str)
 }
 
-/// Optionally read an input of the generic type by applying the given deserialization function.
+/// Read an optional input of the generic type by applying the given deserialization function if the
+/// input is not empty.
 pub fn read_optional_type<T, E: Display>(
     logger: &Logger,
     prompt: &str,
     mapper: impl Fn(&str) -> Result<T, E>,
 ) -> Option<T> {
+    read_type(logger, &format!("(Optional) {prompt}"), |input| {
+        if input.is_empty() {
+            Ok(None)
+        } else {
+            mapper(input).map(Some)
+        }
+    })
+}
+
+pub fn read<T: FromStr>(logger: &Logger, prompt: &str) -> T
+where
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    read_type(logger, prompt, FromStr::from_str)
+}
+
+/// Read an input of the generic type by applying the given deserialization function.
+fn read_type<T, E: Display>(
+    logger: &Logger,
+    prompt: &str,
+    mapper: impl Fn(&str) -> Result<T, E>,
+) -> T {
     loop {
-        match mapper(&read_optional_input(logger, prompt)?) {
+        match mapper(&read_input(logger, prompt)) {
             Err(e) => {
                 warn!(logger, "Could not parse input: {}", e);
             }
-            Ok(v) => return Some(v),
+            Ok(v) => return v,
         }
     }
 }
