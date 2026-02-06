@@ -35,7 +35,6 @@ jobs:
           set -euo pipefail
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           cd ci/src/dependencies/
-          cp -a $GITHUB_WORKSPACE/config/. config/
           $SHELL_WRAPPER python3 job/bazel_trivy_test.py
           df -h
         env:
