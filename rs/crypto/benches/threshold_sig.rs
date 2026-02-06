@@ -29,8 +29,6 @@ criterion_group!(
     benches,
     bench_threshold_sig_1_node_threshold_1,
     bench_threshold_sig_34_nodes_threshold_12,
-    /* CRP-1176
-     * bench_threshold_sig_100_nodes_threshold_34, */
 );
 
 #[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
@@ -75,16 +73,6 @@ fn bench_threshold_sig_34_nodes_threshold_12(criterion: &mut Criterion) {
         }
     }
 }
-
-// CRP-1176: Loading the NI-DKG transcript for all nodes in such a large subnet
-// takes too long.
-//fn bench_threshold_sig_100_nodes_threshold_34(criterion: &mut Criterion) {
-//    let group = &mut
-// criterion.benchmark_group("crypto_threshold_sig_100_nodes_threshold_34");
-//    group.sample_size(25);
-//    group.measurement_time(Duration::from_secs(14));
-//    bench_threshold_sig_n_nodes(group, 100, 34);
-//}
 
 fn bench_threshold_sig_n_nodes<M: Measurement>(
     group: &mut BenchmarkGroup<'_, M>,

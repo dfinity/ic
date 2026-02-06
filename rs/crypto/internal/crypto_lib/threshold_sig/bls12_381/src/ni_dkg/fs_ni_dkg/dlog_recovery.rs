@@ -120,8 +120,6 @@ struct BabyStepGiantStepTable {
 }
 
 /// The table for storing the baby steps of BSGS
-///
-/// TODO(CRP-2308) use a better data structure than HashMap here.
 impl BabyStepGiantStepTable {
     const GT_REPR_SIZE: usize = 28;
     /// The byte length of the prefix is chosen to be the smallest possible that

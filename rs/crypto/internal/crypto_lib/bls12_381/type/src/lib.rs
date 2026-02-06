@@ -2567,8 +2567,6 @@ const NUM_BITS_BATCH_VERIFICATION: u8 = 30;
 /// pairwise verification. For efficiency, the provided batch is automatically
 /// dispatched into subcases: same message, same public key, distinct keys and
 /// messages batches.
-///
-/// TODO(CRP-2013): use only one multi-pairing per call.
 pub fn verify_bls_signature_batch<R: RngCore + CryptoRng>(
     sigs_pks_msgs: &[(&G1Affine, &G2Affine, &G1Affine)],
     rng: &mut R,

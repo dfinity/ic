@@ -285,5 +285,3 @@ fn encrypted_chunks_should_validate_00() {
 fn encrypted_chunks_should_validate_01() {
     encrypted_chunks_should_validate(Epoch::from(1))
 }
-
-// TODO (CRP-831): Add a test that incorrect encryptions do not validate.
