@@ -981,7 +981,7 @@ mod tests {
     }
 
     mod idkg_dealing_encryption_key_rotation {
-        use crate::catch_up_package_provider::tests::mock_tls_config;
+        use crate::catch_up_package_provider::tests::mock_tls_config_called_times;
 
         use super::*;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
@@ -1281,7 +1281,7 @@ mod tests {
 
                 let local_store = Arc::new(LocalStoreImpl::new(temp_dir.as_ref()));
                 let node_config = Config::new(temp_dir.keep());
-                let tls_config = mock_tls_config();
+                let tls_config = mock_tls_config_called_times(self.expect_tls_config_call_times);
 
                 let node_registration = NodeRegistration::new(
                     self.logger.unwrap_or_else(no_op_logger),
