@@ -390,6 +390,8 @@ impl Point {
     }
 
     pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {
+        // Note: not using variable time since this function is used when
+        // creating commitments or verifying a commitment opening
         let g = Self::generator();
         let h = Self::generator_h();
         Self::new(curve25519_dalek::EdwardsPoint::multiscalar_mul(
