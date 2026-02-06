@@ -2600,6 +2600,7 @@ fn test_burn_whole_balance() {
 
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
+    use ic_ledger_suite_state_machine_helpers::parse_metric;
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -2707,20 +2708,11 @@ mod metrics {
             "Expected ledger_archiving_blocks_bucket metric after archiving"
         );
 
-        // Verify that the count metrics show at least 1 observation
-        let duration_count_line = metrics_after
-            .iter()
-            .find(|line| line.contains("ledger_archiving_duration_seconds_count"))
-            .expect("Should find duration count metric");
-        let count_value: f64 = duration_count_line
-            .split_whitespace()
-            .nth(1)
-            .expect("Should have value")
-            .parse()
-            .expect("Should be a number");
-        assert!(
-            count_value >= 1.0,
-            "Expected at least 1 archiving operation, got {}",
+        // Verify that the count metrics show 1 observation
+        let count_value = parse_metric(&env, ledger_id, "ledger_archiving_duration_seconds_count");
+        assert_eq!(
+            count_value, 1,
+            "Expected 1 archiving operation, got {}",
             count_value
         );
     }
