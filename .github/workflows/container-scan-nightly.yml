@@ -8,6 +8,7 @@ on:
 jobs:
   container-scan-nightly:
     name: Container Scan Nightly
+    environment: dependency-scan
     runs-on:
       labels: dind-large
     container:
