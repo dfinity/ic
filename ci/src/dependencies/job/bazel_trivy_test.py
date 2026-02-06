@@ -24,8 +24,11 @@ def main():
         raise RuntimeError(f"path {path} is invalid")
     json_file_path = f"{path.resolve()}/ic-os/guestos/envs/prod/findings.json"
     hash_file_path = f"{path.resolve()}/ic-os/guestos/envs/prod/file-hashes.txt"
+    # command = (
+    #     f"ci/container/container-run.sh bazel run vuln-scan -- --output-path /ic/ic-os/guestos/envs/prod/findings.json --format json --hash-output-path /ic/ic-os/guestos/envs/prod/file-hashes.txt"
+    # )
     command = (
-        f"ci/container/container-run.sh bazel run vuln-scan -- --output-path /ic/ic-os/guestos/envs/prod/findings.json --format json --hash-output-path /ic/ic-os/guestos/envs/prod/file-hashes.txt"
+        f"ci/container/container-run.sh"
     )
     trivy_output = ProcessExecutor.execute_command(command, path.resolve(), {})
     if os.path.exists(json_file_path):
