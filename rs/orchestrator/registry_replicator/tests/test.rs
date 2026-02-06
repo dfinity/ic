@@ -459,7 +459,7 @@ async fn test_has_replicated_all_versions_certified_before_init() {
     assert!(latest_certified_time > time_after_init);
     assert!(replicator.has_replicated_all_versions_certified_before_init());
 
-    for _ in 0..INIT_NUM_VERSIONS {
+    for _ in 0..(INIT_NUM_VERSIONS + 2) {
         random_mutate(&pocket_ic, &mut rng).await;
     }
 
