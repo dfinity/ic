@@ -8,13 +8,21 @@ Downloaded from: https://github.com/buildbuddy-io/buildbuddy/tree/master/proto
 
 ## Usage
 
-These proto files are compiled at runtime by `query.py` using `protoc`. The proto files are stored in this repository and included as data files in the Bazel build. When `query.py` needs to call BuildBuddy's API, it compiles the proto files on-demand and imports the generated Python modules.
+These proto files are compiled at build time by Bazel into Python modules (`*_pb2.py`). The proto files are stored in this repository and compiled using Bazel's `proto_library` and `py_proto_library` rules defined in [ci/githubstats/BUILD.bazel](../BUILD.bazel). When `query.py` needs to call BuildBuddy's API, it imports the pre-compiled `target_pb2` module.
 
-**Why runtime compilation?** BuildBuddy's proto files have complex external dependencies (googleapis, google/rpc, etc.) that would require significant Bazel configuration to compile statically. Runtime compilation keeps the setup simple while still using BuildBuddy's official proto definitions.
+## Build
+
+The proto files are automatically compiled when you build the query tool:
+
+```bash
+bazel build //ci/githubstats:query
+```
+
+The generated `*_pb2.py` files are created in the `bazel-bin/` directory as part of the build process.
 
 ## Requirements
 
-The `protobuf` Python package is required and listed in `/ic/requirements.in`. The `protoc` compiler must be available in the PATH.
+No runtime dependencies on `protoc` are needed. The `protobuf` Python package is required and listed in `/ic/requirements.in` for using the compiled proto modules.
 
 ## Updating
 

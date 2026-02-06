@@ -23,6 +23,12 @@ import requests
 from psycopg import sql
 from tabulate import tabulate
 
+# Import compiled protobuf module (compiled at build time by Bazel)
+try:
+    import target_pb2
+except ImportError:
+    target_pb2 = None
+
 THIS_SCRIPT_DIR = Path(__file__).parent
 
 ORG = "dfinity"
@@ -86,66 +92,6 @@ def shorten_owner(owner: str) -> str:
     """Shorten a code owner string for display. For example '@dfinity/node' -> 'node'."""
     parts = owner.split("/", 1)
     return parts[1] if len(parts) == 2 else owner
-
-
-def setup_buildbuddy_protos():
-    """Compile BuildBuddy proto files at runtime and make them importable."""
-    import os
-    import subprocess
-    import tempfile
-    from pathlib import Path
-
-    # Find the proto files directory (they're included as data files)
-    script_dir = Path(__file__).parent
-    proto_dir = script_dir / "buildbuddy_proto"
-
-    if not proto_dir.exists():
-        raise RuntimeError(f"BuildBuddy proto directory not found at {proto_dir}")
-
-    # Create a temporary directory for compiled protos
-    temp_dir = tempfile.mkdtemp(prefix="buildbuddy_proto_")
-
-    # Only compile proto files needed for target.proto (excluding ones with external googleapis dependencies)
-    # Determined by analyzing the import graph starting from target.proto
-    proto_files_to_compile = [
-        # target.proto and its direct imports
-        "target.proto",
-        "api/v1/common.proto",
-        "context.proto",
-        "build_event_stream.proto",
-        # Transitive dependencies
-        "user_id.proto",
-        "action_cache.proto",
-        "command_line.proto",
-        "invocation_policy.proto",
-        "failure_details.proto",
-        "package_load_metrics.proto",
-        "option_filters.proto",
-        "strategy_policy.proto",
-    ]
-
-    result = subprocess.run(
-        ["protoc", f"--python_out={temp_dir}", f"--proto_path={proto_dir}"] + proto_files_to_compile,
-        capture_output=True,
-        text=True
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError(f"Failed to compile protos: {result.stderr}")
-
-    # Create __init__.py files for Python package structure
-    temp_path = Path(temp_dir)
-    for package_dir in [
-        temp_path / "api",
-        temp_path / "api" / "v1",
-    ]:
-        package_dir.mkdir(parents=True, exist_ok=True)
-        (package_dir / "__init__.py").touch()
-
-    # Add temp directory to Python path so we can import the compiled modules
-    sys.path.insert(0, temp_dir)
-
-    return temp_dir
 
 
 def get_buildbuddy_log_download_url(buildbuddy_url: str, test_target: str, target_pb2, verbose: bool = False) -> Optional[str]:
@@ -518,15 +464,6 @@ def last(args):
     # we first need to resolve the redirect to the cluster-specific BuildBuddy URL.
     # We also fetch the direct download URL from BuildBuddy's API.
     # Since this I/O takes time we parallelize it speeding it up by a factor of 6.
-
-    # Compile protos once before parallel execution
-    target_pb2 = None
-    try:
-        setup_buildbuddy_protos()
-        import target_pb2
-    except Exception as e:
-        if args.verbose:
-            print(f"Failed to setup BuildBuddy protos: {e}", file=sys.stderr)
 
     def direct_url_to_buildbuddy(url):
         redirect = get_redirect_location(url)

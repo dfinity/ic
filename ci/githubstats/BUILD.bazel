@@ -1,13 +1,124 @@
+load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+# Proto library definitions for BuildBuddy protos
+# These are compiled at build time instead of runtime
+
+proto_library(
+    name = "user_id_proto",
+    srcs = ["buildbuddy_proto/user_id.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = ["@com_google_protobuf//:timestamp_proto"],
+)
+
+proto_library(
+    name = "context_proto",
+    srcs = ["buildbuddy_proto/context.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = [":user_id_proto"],
+)
+
+proto_library(
+    name = "common_proto",
+    srcs = ["buildbuddy_proto/api/v1/common.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = [
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+proto_library(
+    name = "action_cache_proto",
+    srcs = ["buildbuddy_proto/action_cache.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = ["@com_google_protobuf//:timestamp_proto"],
+)
+
+proto_library(
+    name = "option_filters_proto",
+    srcs = ["buildbuddy_proto/option_filters.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+)
+
+proto_library(
+    name = "strategy_policy_proto",
+    srcs = ["buildbuddy_proto/strategy_policy.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+)
+
+proto_library(
+    name = "command_line_proto",
+    srcs = ["buildbuddy_proto/command_line.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = [":option_filters_proto"],
+)
+
+proto_library(
+    name = "invocation_policy_proto",
+    srcs = ["buildbuddy_proto/invocation_policy.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = [":strategy_policy_proto"],
+)
+
+proto_library(
+    name = "failure_details_proto",
+    srcs = ["buildbuddy_proto/failure_details.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = ["@com_google_protobuf//:descriptor_proto"],
+)
+
+proto_library(
+    name = "package_load_metrics_proto",
+    srcs = ["buildbuddy_proto/package_load_metrics.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = ["@com_google_protobuf//:duration_proto"],
+)
+
+proto_library(
+    name = "build_event_stream_proto",
+    srcs = ["buildbuddy_proto/build_event_stream.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = [
+        ":action_cache_proto",
+        ":command_line_proto",
+        ":failure_details_proto",
+        ":invocation_policy_proto",
+        ":package_load_metrics_proto",
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+proto_library(
+    name = "target_proto",
+    srcs = ["buildbuddy_proto/target.proto"],
+    strip_import_prefix = "buildbuddy_proto",
+    deps = [
+        ":build_event_stream_proto",
+        ":common_proto",
+        ":context_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+# Python bindings for the proto libraries
+py_proto_library(
+    name = "target_py_proto",
+    deps = [":target_proto"],
+)
 
 py_binary(
     name = "query",
     srcs = ["query.py"],
-    data = glob(["*.sql"]) + ["//.github:CODEOWNERS"] + glob(["buildbuddy_proto/**/*.proto"]),
+    data = glob(["*.sql"]) + ["//.github:CODEOWNERS"],
     env = {"CODEOWNERS_PATH": "$(rootpath //.github:CODEOWNERS)"},
     deps = [
+        ":target_py_proto",
         requirement("pandas"),
         requirement("psycopg"),
         requirement("requests"),
