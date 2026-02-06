@@ -65,6 +65,7 @@ use ic_replicated_state::{
         SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
         SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
+    testing::ReplicatedStateTesting,
 };
 use ic_types::{
     CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
@@ -1955,7 +1956,8 @@ impl ExecutionEnvironment {
                 let res = match response {
                     Ok((res, canister_id)) => {
                         if let Some(canister_id) = canister_id
-                            && let Some(canister_state) = state.canister_state_mut(canister_id)
+                            && let Some(canister_state) =
+                                state.canister_states_mut().get_mut(canister_id)
                         {
                             canister_state.update_on_low_wasm_memory_hook_condition();
                         }
@@ -3908,8 +3910,7 @@ impl ExecutionEnvironment {
                 let since = Instant::now();
                 let paused = self.take_paused_install_code(id).unwrap();
                 let canister = state.take_canister_state(canister_id).unwrap();
-                let canister =
-                    Arc::try_unwrap(canister).unwrap_or_else(|canister| (*canister).clone());
+                let canister = Arc::unwrap_or_clone(canister);
                 let round_counters = RoundCounters {
                     execution_refund_error: &self.metrics.execution_cycles_refund_error,
                     state_changes_error: &self.metrics.state_changes_error,
@@ -4523,7 +4524,7 @@ pub fn execute_canister(
         NextExecution::StartNew | NextExecution::ContinueLong => {}
     }
 
-    let mut canister = Arc::try_unwrap(canister).unwrap_or_else(|canister| (*canister).clone());
+    let mut canister = Arc::unwrap_or_clone(canister);
     let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
             ExecutionTask::PausedExecution { id, .. } => {

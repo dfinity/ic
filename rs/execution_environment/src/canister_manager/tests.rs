@@ -403,7 +403,7 @@ fn install_code(
     let network_topology = state.metadata.network_topology.clone();
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
-    let old_canister = Arc::try_unwrap(old_canister).unwrap_or_else(|canister| (*canister).clone());
+    let old_canister = Arc::unwrap_or_clone(old_canister);
     execution_parameters.compute_allocation = old_canister.compute_allocation();
 
     let dts_result = canister_manager.install_code_dts(
@@ -426,14 +426,19 @@ fn install_code(
     // Canister manager tests do not trigger DTS executions.
     let (result, instructions_used, canister) = match dts_result {
         DtsInstallCodeResult::Finished {
-            mut canister,
+            canister,
             call_id: _,
             message: _,
             instructions_used,
             result,
         } => {
+            let mut canister = Arc::new(canister);
             canister.update_on_low_wasm_memory_hook_condition();
-            (result, instructions_used, Some(canister))
+            (
+                result,
+                instructions_used,
+                Some(Arc::unwrap_or_clone(canister)),
+            )
         }
         DtsInstallCodeResult::Paused {
             canister: _,
