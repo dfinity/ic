@@ -1613,20 +1613,23 @@ fn test_from_manage_ledger_parameters_into_ledger_upgrade_args_no_logo() {
 }
 
 #[test]
-fn test_validate_additional_critical_native_function_ids() {
-    use crate::types::native_action_ids;
+fn test_validate_critical_native_action_ids() {
+    use crate::{pb::v1::CustomProposalCriticality, types::NativeAction};
 
     // Test 1: Empty list should be valid
     let mut params = NervousSystemParameters::with_default_values();
     assert!(params.validate().is_ok());
 
     // Test 2: Non-critical native function (Motion) should be valid
-    params.additional_critical_native_function_ids = vec![native_action_ids::MOTION];
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        critical_native_action_ids: vec![NativeAction::Motion as u64],
+    });
     assert!(params.validate().is_ok());
 
     // Test 3: Critical native function (ManageNervousSystemParameters) should be invalid
-    params.additional_critical_native_function_ids =
-        vec![native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS];
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        critical_native_action_ids: vec![NativeAction::ManageNervousSystemParameters as u64],
+    });
     let result = params.validate();
     assert!(result.is_err());
     let error = result.unwrap_err();
@@ -1637,10 +1640,12 @@ fn test_validate_additional_critical_native_function_ids() {
     );
 
     // Test 4: Mix of valid and invalid should be invalid
-    params.additional_critical_native_function_ids = vec![
-        native_action_ids::MOTION,
-        native_action_ids::TRANSFER_SNS_TREASURY_FUNDS, // Critical
-    ];
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        critical_native_action_ids: vec![
+            NativeAction::Motion as u64,
+            NativeAction::TransferSnsTreasuryFunds as u64, // Critical
+        ],
+    });
     let result = params.validate();
     assert!(result.is_err());
     let error = result.unwrap_err();
@@ -1651,7 +1656,9 @@ fn test_validate_additional_critical_native_function_ids() {
     );
 
     // Test 5: Unknown function ID should be invalid
-    params.additional_critical_native_function_ids = vec![999999];
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        critical_native_action_ids: vec![999_999],
+    });
     let result = params.validate();
     assert!(result.is_err());
     let error = result.unwrap_err();
@@ -1662,9 +1669,11 @@ fn test_validate_additional_critical_native_function_ids() {
     );
 
     // Test 6: Multiple non-critical functions should be valid
-    params.additional_critical_native_function_ids = vec![
-        native_action_ids::MOTION,
-        native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
-    ];
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        critical_native_action_ids: vec![
+            NativeAction::Motion as u64,
+            NativeAction::UpgradeSnsToNextVersion as u64,
+        ],
+    });
     assert!(params.validate().is_ok());
 }

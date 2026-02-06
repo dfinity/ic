@@ -1852,9 +1852,13 @@ message CreateServiceNervousSystem {
 
     VotingRewardParameters voting_reward_parameters = 10;
 
-    // Additional native function IDs that are considered critical. These functions require
-    // a higher level of consensus to be modified or executed.
-    repeated uint64 additional_critical_native_function_ids = 11;
+    message CustomProposalCriticality {
+      repeated uint64 critical_native_action_ids = 1;
+    }
+
+    // Custom proposal criticality configuration. Allows specifying additional native function IDs
+    // that should be considered critical, requiring a higher level of consensus.
+    optional CustomProposalCriticality custom_proposal_criticality = 11;
   }
 
   GovernanceParameters governance_parameters = 10;

@@ -124,7 +124,7 @@ lazy_static! {
                 }),
             }),
 
-            additional_critical_native_function_ids: vec![],
+            custom_proposal_criticality: None,
         }),
         dapp_canisters: vec![pb::Canister {
             id: Some(SPECIFIED_CANISTER_ID.get())

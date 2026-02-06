@@ -10,7 +10,7 @@ use crate::{
         nervous_system_function,
     },
     storage::cache_registered_extension,
-    types::native_action_ids,
+    types::NativeAction,
     types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment},
 };
 use ic_base_types::{CanisterId, PrincipalId};
@@ -310,12 +310,14 @@ fn test_all_topics() {
 }
 
 #[test]
-fn test_additional_critical_native_function_ids_upgrades_criticality() {
-    //  Create a governance instance with additional_critical_native_function_ids set
+fn test_additional_critical_native_action_ids_upgrades_criticality() {
+    //  Create a governance instance with custom_proposal_criticality set
     let mut governance_proto = basic_governance_proto();
     let mut parameters = NervousSystemParameters::with_default_values();
-    let motion_action_id = native_action_ids::MOTION;
-    parameters.additional_critical_native_function_ids = vec![motion_action_id];
+    let motion_action_id = NativeAction::Motion as u64;
+    parameters.custom_proposal_criticality = Some(pb::CustomProposalCriticality {
+        critical_native_action_ids: vec![motion_action_id],
+    });
     governance_proto.parameters = Some(parameters);
     let governance_proto = ValidGovernanceProto::try_from(governance_proto).unwrap();
     let governance = Governance::new(
@@ -326,7 +328,7 @@ fn test_additional_critical_native_function_ids_upgrades_criticality() {
         Box::new(FakeCmc::new()),
     );
 
-    // Test that Motion is upgraded to Critical due to additional_critical_native_function_ids
+    // Test that Motion is upgraded to Critical due to custom_proposal_criticality
     let motion_action = pb::proposal::Action::Motion(pb::Motion {
         motion_text: "test".to_string(),
     });
@@ -337,7 +339,7 @@ fn test_additional_critical_native_function_ids_upgrades_criticality() {
     assert_eq!(
         criticality,
         ProposalCriticality::Critical,
-        "Motion should be upgraded to Critical when in additional_critical_native_function_ids"
+        "Motion should be upgraded to Critical when in custom_proposal_criticality"
     );
 
     // Test that a critical action stays critical.
@@ -355,7 +357,7 @@ fn test_additional_critical_native_function_ids_upgrades_criticality() {
     assert_eq!(topic, Some(pb::Topic::TreasuryAssetManagement));
     assert_eq!(criticality, ProposalCriticality::Critical);
 
-    // Test that a normal action stays normal when not in additional_critical_native_function_ids
+    // Test that a normal action stays normal when not in custom_proposal_criticality
     let register_dapp_action =
         pb::proposal::Action::RegisterDappCanisters(pb::RegisterDappCanisters {
             canister_ids: vec![],
@@ -367,6 +369,6 @@ fn test_additional_critical_native_function_ids_upgrades_criticality() {
     assert_eq!(
         criticality,
         ProposalCriticality::Normal,
-        "RegisterDappCanisters should stay Normal when NOT in additional_critical_native_function_ids"
+        "RegisterDappCanisters should stay Normal when NOT in custom_proposal_criticality"
     );
 }

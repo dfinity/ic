@@ -5,7 +5,8 @@ use crate::{
     logs::ERROR,
     pb::v1::{self as pb, NervousSystemFunction, nervous_system_function::FunctionType},
     storage::list_registered_extensions_from_cache,
-    types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION},
+    types::NativeAction,
+    types::native_action_ids,
 };
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
@@ -60,14 +61,6 @@ pub struct ListTopicsResponse {
 /// Returns an exhaustive list of topic descriptions, each corresponding to a topic.
 /// Each topic may have a list of built-in functions that are categorized within that topic.
 pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
-    use crate::types::native_action_ids::{
-        ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION, ADVANCE_SNS_TARGET_VERSION, DEREGISTER_DAPP_CANISTERS,
-        MANAGE_DAPP_CANISTER_SETTINGS, MANAGE_LEDGER_PARAMETERS, MANAGE_NERVOUS_SYSTEM_PARAMETERS,
-        MANAGE_SNS_METADATA, MINT_SNS_TOKENS, MOTION, REGISTER_DAPP_CANISTERS, REGISTER_EXTENSION,
-        REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION, TRANSFER_SNS_TREASURY_FUNDS, UPGRADE_EXTENSION,
-        UPGRADE_SNS_CONTROLLED_CANISTER, UPGRADE_SNS_TO_NEXT_VERSION,
-    };
-
     [
         TopicInfo::<NativeFunctions> {
             topic: Topic::DaoCommunitySettings,
@@ -75,9 +68,9 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
             description: "Proposals to set the direction of the DAO by tokenomics & branding, such as the name and description, token name etc".to_string(),
             functions: NativeFunctions {
                 native_functions: vec![
-                    MANAGE_NERVOUS_SYSTEM_PARAMETERS,
-                    MANAGE_LEDGER_PARAMETERS,
-                    MANAGE_SNS_METADATA,
+                    NativeAction::ManageNervousSystemParameters as u64,
+                    NativeAction::ManageLedgerParameters as u64,
+                    NativeAction::ManageSnsMetadata as u64,
                 ],
             },
             extension_operations: vec![],
@@ -89,8 +82,8 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
             description: "Proposals to upgrade and manage the SNS DAO framework.".to_string(),
             functions: NativeFunctions {
                 native_functions: vec![
-                    UPGRADE_SNS_TO_NEXT_VERSION,
-                    ADVANCE_SNS_TARGET_VERSION,
+                    NativeAction::UpgradeSnsToNextVersion as u64,
+                    NativeAction::AdvanceSnsTargetVersion as u64,
                 ],
             },
             extension_operations: vec![],
@@ -102,9 +95,9 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
             description: "Proposals to upgrade the registered dapp canisters and dapp upgrades via built-in or custom logic and updates to frontend assets.".to_string(),
             functions: NativeFunctions {
                 native_functions: vec![
-                    UPGRADE_SNS_CONTROLLED_CANISTER,
-                    REGISTER_DAPP_CANISTERS,
-                    MANAGE_DAPP_CANISTER_SETTINGS,
+                    NativeAction::UpgradeSnsControlledCanister as u64,
+                    NativeAction::RegisterDappCanisters as u64,
+                    NativeAction::ManageDappCanisterSettings as u64,
                 ],
             },
             extension_operations: vec![],
@@ -125,7 +118,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
             name: "Governance".to_string(),
             description: "Proposals that represent community polls or other forms of community opinion but don't have any immediate effect in terms of code changes.".to_string(),
             functions: NativeFunctions {
-                native_functions: vec![MOTION],
+                native_functions: vec![NativeAction::Motion as u64],
             },
             extension_operations: vec![],
             is_critical: false,
@@ -136,8 +129,8 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
             description: "Proposals to move and manage assets that are DAO-owned, including tokens in the treasury, tokens in liquidity pools, or DAO-owned neurons.".to_string(),
             functions: NativeFunctions {
                 native_functions: vec![
-                    TRANSFER_SNS_TREASURY_FUNDS,
-                    MINT_SNS_TOKENS,
+                    NativeAction::TransferSnsTreasuryFunds as u64,
+                    NativeAction::MintSnsTokens as u64,
                 ],
             },
             extension_operations: vec![],
@@ -149,12 +142,12 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
             description: "Proposals to execute critical operations on dapps, such as adding or removing dapps from the SNS, or executing custom logic on dapps.".to_string(),
             functions: NativeFunctions {
                 native_functions: vec![
-                    DEREGISTER_DAPP_CANISTERS,
-                    ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
-                    REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
-                    SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
-                    REGISTER_EXTENSION,
-                    UPGRADE_EXTENSION,
+                    NativeAction::DeregisterDappCanisters as u64,
+                    NativeAction::AddGenericNervousSystemFunction as u64,
+                    NativeAction::RemoveGenericNervousSystemFunction as u64,
+                    NativeAction::SetTopicsForCustomProposals as u64,
+                    NativeAction::RegisterExtension as u64,
+                    NativeAction::UpgradeExtension as u64,
                 ],
             },
             extension_operations: vec![],
@@ -261,16 +254,14 @@ impl Governance {
         let action_code = u64::from(action);
 
         // Helper to check if the action should be upgraded to critical based on
-        // additional_critical_native_function_ids
+        // additional_critical_native_action_ids
         let maybe_upgrade_criticality = |criticality: ProposalCriticality| -> ProposalCriticality {
             let is_additional_critical = self
                 .proto
                 .parameters
                 .as_ref()
-                .map(|p| {
-                    p.additional_critical_native_function_ids
-                        .contains(&action_code)
-                })
+                .and_then(|p| p.custom_proposal_criticality.as_ref())
+                .map(|c| c.critical_native_action_ids.contains(&action_code))
                 .unwrap_or(false);
 
             if is_additional_critical {

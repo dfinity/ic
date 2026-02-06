@@ -11,7 +11,7 @@ use ic_nns_governance_api::{
     CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
     create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
-        governance_parameters::VotingRewardParameters,
+        governance_parameters::{CustomProposalCriticality, VotingRewardParameters},
         initial_token_distribution::{
             DeveloperDistribution, SwapDistribution, TreasuryDistribution,
             developer_distribution::NeuronDistribution,
@@ -134,7 +134,9 @@ lazy_static! {
                     final_reward_rate: Some(Percentage::from_percentage(2.5)),
                     reward_rate_transition_duration: Some(Duration::from_secs(0)),
                 }),
-                additional_critical_native_function_ids: Some(vec![3]), // UpgradeSnsControlledCanister
+                custom_proposal_criticality: Some(CustomProposalCriticality {
+                    critical_native_action_ids: Some(vec![3]), // UpgradeSnsControlledCanister
+                }),
             }),
         };
 }

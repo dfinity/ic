@@ -5,6 +5,7 @@ use ic_nns_governance_api::{
     CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
     proposal_validation::validate_user_submitted_proposal_fields,
 };
+use ic_sns_governance::types::NativeAction;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use std::{
     fmt::Debug,
@@ -18,7 +19,7 @@ use std::{
 mod nns_governance_pb {
     pub use ic_nns_governance_api::create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
-        governance_parameters::VotingRewardParameters,
+        governance_parameters::{CustomProposalCriticality, VotingRewardParameters},
         initial_token_distribution::{
             DeveloperDistribution, SwapDistribution, TreasuryDistribution,
             developer_distribution::NeuronDistribution,
@@ -101,8 +102,9 @@ pub(crate) struct Proposals {
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration,
 
+    /// Additional native function IDs that should be considered critical.
     #[serde(default)]
-    additional_critical_native_function_ids: Vec<u64>,
+    additional_critical_native_action_ids: Vec<NativeAction>,
 }
 
 #[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
@@ -662,7 +664,7 @@ fn convert_to_governance_parameters(
         rejection_fee,
         initial_voting_period,
         maximum_wait_for_quiet_deadline_extension,
-        additional_critical_native_function_ids,
+        additional_critical_native_action_ids,
     } = proposals;
     let Neurons {
         minimum_creation_stake,
@@ -715,7 +717,18 @@ fn convert_to_governance_parameters(
 
         voting_reward_parameters,
 
-        additional_critical_native_function_ids: additional_critical_native_function_ids.clone(),
+        custom_proposal_criticality: if additional_critical_native_action_ids.is_empty() {
+            None
+        } else {
+            Some(nns_governance_pb::CustomProposalCriticality {
+                critical_native_action_ids: Some(
+                    additional_critical_native_action_ids
+                        .iter()
+                        .map(|action| *action as u64)
+                        .collect(),
+                ),
+            })
+        },
     }
 }
 

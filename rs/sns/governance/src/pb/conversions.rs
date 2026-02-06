@@ -1481,9 +1481,7 @@ impl From<pb::NervousSystemParameters> for pb_api::NervousSystemParameters {
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
             automatically_advance_target_version: item.automatically_advance_target_version,
-            additional_critical_native_function_ids: Some(
-                item.additional_critical_native_function_ids,
-            ),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -1512,9 +1510,23 @@ impl From<pb_api::NervousSystemParameters> for pb::NervousSystemParameters {
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
             automatically_advance_target_version: item.automatically_advance_target_version,
-            additional_critical_native_function_ids: item
-                .additional_critical_native_function_ids
-                .unwrap_or_default(),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::CustomProposalCriticality> for pb_api::CustomProposalCriticality {
+    fn from(item: pb::CustomProposalCriticality) -> Self {
+        Self {
+            critical_native_action_ids: Some(item.critical_native_action_ids),
+        }
+    }
+}
+
+impl From<pb_api::CustomProposalCriticality> for pb::CustomProposalCriticality {
+    fn from(item: pb_api::CustomProposalCriticality) -> Self {
+        Self {
+            critical_native_action_ids: item.critical_native_action_ids.unwrap_or_default(),
         }
     }
 }
