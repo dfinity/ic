@@ -477,6 +477,13 @@ impl CanisterHttpRequestContext {
             request_body.as_ref().unwrap_or(&vec![]),
         )?;
 
+        // Allow PUT and DELETE only in non-replicated mode to avoid race conditions.
+        if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
+            && args.is_replicated != Some(false)
+        {
+            return Err(CanisterHttpRequestContextError::NonReplicatedModeRequired);
+        }
+
         let replication = match args.is_replicated {
             Some(false) => {
                 if node_ids.is_empty() {
@@ -514,6 +521,8 @@ impl CanisterHttpRequestContext {
                 HttpMethod::GET => CanisterHttpMethod::GET,
                 HttpMethod::POST => CanisterHttpMethod::POST,
                 HttpMethod::HEAD => CanisterHttpMethod::HEAD,
+                HttpMethod::PUT => CanisterHttpMethod::PUT,
+                HttpMethod::DELETE => CanisterHttpMethod::DELETE,
             },
             transform: args.transform.map(From::from),
             time,
@@ -566,6 +575,7 @@ pub enum CanisterHttpRequestContextError {
     TooLargeHeaders(usize),
     TooLargeRequest(usize),
     NoNodesAvailableForDelegation,
+    NonReplicatedModeRequired,
 }
 
 impl From<CanisterHttpRequestContextError> for UserError {
@@ -623,6 +633,10 @@ impl From<CanisterHttpRequestContextError> for UserError {
                 ErrorCode::CanisterRejectedMessage,
                 "No nodes available for delegation for non-replicated canister HTTP request."
                     .to_string(),
+            ),
+            CanisterHttpRequestContextError::NonReplicatedModeRequired => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "The requested HTTP method is only allowed for non-replicated requests (is_replicated=false).".to_string(), 
             ),
         }
     }
@@ -729,6 +743,8 @@ pub enum CanisterHttpMethod {
     GET = 1,
     POST = 2,
     HEAD = 3,
+    PUT = 4,
+    DELETE = 5,
 }
 
 impl CanisterHttpMethod {
@@ -737,6 +753,8 @@ impl CanisterHttpMethod {
             CanisterHttpMethod::GET => "GET",
             CanisterHttpMethod::POST => "POST",
             CanisterHttpMethod::HEAD => "HEAD",
+            CanisterHttpMethod::PUT => "PUT",
+            CanisterHttpMethod::DELETE => "DELETE",
         }
     }
 }
@@ -747,6 +765,8 @@ impl From<&CanisterHttpMethod> for pb_metadata::HttpMethod {
             CanisterHttpMethod::GET => pb_metadata::HttpMethod::Get,
             CanisterHttpMethod::POST => pb_metadata::HttpMethod::Post,
             CanisterHttpMethod::HEAD => pb_metadata::HttpMethod::Head,
+            CanisterHttpMethod::PUT => pb_metadata::HttpMethod::Put,
+            CanisterHttpMethod::DELETE => pb_metadata::HttpMethod::Delete,
         }
     }
 }
@@ -759,6 +779,8 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
             pb_metadata::HttpMethod::Get => Ok(CanisterHttpMethod::GET),
             pb_metadata::HttpMethod::Post => Ok(CanisterHttpMethod::POST),
             pb_metadata::HttpMethod::Head => Ok(CanisterHttpMethod::HEAD),
+            pb_metadata::HttpMethod::Put => Ok(CanisterHttpMethod::PUT),
+            pb_metadata::HttpMethod::Delete => Ok(CanisterHttpMethod::DELETE),
             pb_metadata::HttpMethod::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
                 err: "Unspecified HttpMethod".to_string(),
@@ -867,6 +889,11 @@ mod tests {
 
     use super::*;
 
+    use assert_matches::assert_matches;
+    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+    use ic_management_canister_types_private::{
+        BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod,
+    };
     use ic_types_test_utils::ids::node_test_id;
     use strum::IntoEnumIterator;
 
@@ -974,7 +1001,7 @@ mod tests {
             CanisterHttpMethod::iter()
                 .map(|x| x as i32)
                 .collect::<Vec<i32>>(),
-            [1, 2, 3]
+            [1, 2, 3, 4, 5]
         );
     }
 
@@ -1017,6 +1044,112 @@ mod tests {
         let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
         let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
         assert_eq!(initial, round_trip);
+    }
+
+    #[test]
+    fn put_requires_non_replicated() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1)]);
+        let request = dummy_request();
+
+        // PUT with is_replicated None -> rejected
+        let args = dummy_args(HttpMethod::PUT, None);
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+        );
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::NonReplicatedModeRequired)
+        );
+
+        // PUT with is_replicated Some(true) -> rejected
+        let args = dummy_args(HttpMethod::PUT, Some(true));
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+        );
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::NonReplicatedModeRequired)
+        );
+
+        // PUT with is_replicated Some(false) -> accepted
+        let args = dummy_args(HttpMethod::PUT, Some(false));
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+        );
+        assert_matches!(
+            result,
+            Ok(ctx) => {
+                assert_eq!(ctx.http_method, CanisterHttpMethod::PUT);
+                assert_matches!(ctx.replication, Replication::NonReplicated(_));
+            }
+        );
+    }
+
+    #[test]
+    fn delete_requires_non_replicated() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1)]);
+        let request = dummy_request();
+
+        // DELETE with is_replicated None -> rejected
+        let args = dummy_args(HttpMethod::DELETE, None);
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+        );
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::NonReplicatedModeRequired)
+        );
+
+        // DELETE with is_replicated Some(true) -> rejected
+        let args = dummy_args(HttpMethod::DELETE, Some(true));
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+        );
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::NonReplicatedModeRequired)
+        );
+
+        // DELETE with is_replicated Some(false) -> accepted
+        let args = dummy_args(HttpMethod::DELETE, Some(false));
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+        );
+        assert_matches!(
+            result,
+            Ok(ctx) => {
+                assert_eq!(ctx.http_method, CanisterHttpMethod::DELETE);
+                assert_matches!(ctx.replication, Replication::NonReplicated(_));
+            }
+        );
+    }
+
+    fn dummy_request() -> Request {
+        Request {
+            receiver: CanisterId::ic_00(),
+            sender: CanisterId::ic_00(),
+            sender_reply_callback: CallbackId::from(3),
+            payment: Cycles::new(10),
+            method_name: "http_request".to_string(),
+            method_payload: Vec::new(),
+            metadata: Default::default(),
+            deadline: NO_DEADLINE,
+        }
+    }
+
+    fn dummy_args(method: HttpMethod, is_replicated: Option<bool>) -> CanisterHttpRequestArgs {
+        CanisterHttpRequestArgs {
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: BoundedHttpHeaders::new(vec![]),
+            body: None,
+            method,
+            transform: None,
+            is_replicated,
+            pricing_version: None,
+        }
     }
 }
 

@@ -193,6 +193,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             CanisterHttpMethod::GET => HttpMethod::Get.into(),
                             CanisterHttpMethod::POST => HttpMethod::Post.into(),
                             CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
+                            CanisterHttpMethod::PUT => HttpMethod::Put.into(),
+                            CanisterHttpMethod::DELETE => HttpMethod::Delete.into(),
                         },
                         max_response_size_bytes,
                         headers: request_headers
