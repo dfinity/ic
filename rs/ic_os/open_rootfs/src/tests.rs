@@ -449,7 +449,7 @@ fn test_nns_root_key_mismatch() {
         .run()
         .expect_err("rootfs via alternative GuestOS proposal should fail due to NNS key mismatch");
     assert!(
-        format!("{error:?}").contains("Certificate verification"),
+        format!("{error:?}").contains("Signature verification failed"),
         "{error:?}"
     );
 }
