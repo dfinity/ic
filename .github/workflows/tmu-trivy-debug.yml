@@ -13,7 +13,7 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     steps:
-      - *checkout
+      - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
