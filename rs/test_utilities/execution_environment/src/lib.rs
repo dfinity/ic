@@ -61,16 +61,15 @@ use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterCall, CanisterMessage, CanisterTask,
+        CallbackId, CanisterCall, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
-        QuerySource, RequestOrResponse, Response,
+        QuerySource, RequestOrResponse, Response, SubnetMessage,
     },
     time::UNIX_EPOCH,
 };
@@ -1305,7 +1304,7 @@ impl ExecutionTest {
     ) -> ExecutionResponse {
         let mut state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
-        let canister = state.take_canister_state(&canister_id).unwrap();
+        let mut canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
@@ -1314,9 +1313,15 @@ impl ExecutionTest {
             compute_allocation_used,
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
+        let callback = canister
+            .system_state
+            .unregister_callback(response.originator_reply_callback)
+            .unwrap()
+            .unwrap();
         let result = self.exec_env.execute_canister_response(
             canister,
             Arc::new(response),
+            callback,
             self.instruction_limits.clone(),
             UNIX_EPOCH,
             network_topology,
@@ -2795,11 +2800,11 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
     output
 }
 
-fn get_canister_id_if_install_code(message: CanisterMessage) -> Option<CanisterId> {
+fn get_canister_id_if_install_code(message: SubnetMessage) -> Option<CanisterId> {
     let message = match message {
-        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => return None,
-        CanisterMessage::Request(request) => CanisterCall::Request(request),
-        CanisterMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
+        SubnetMessage::Response(_) => return None,
+        SubnetMessage::Request(request) => CanisterCall::Request(request),
+        SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
     if message.method_name() != "install_code" {
         return None;
