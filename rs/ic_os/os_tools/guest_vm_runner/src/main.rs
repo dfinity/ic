@@ -539,8 +539,6 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
-        self.write_to_console_and_stdout("\nPreparing GuestOS virtual machine...\n");
-
         // Try to destroy any existing VM, if this fails, don't even try to create the configuration
         VirtualMachine::try_destroy_existing_vm(
             &self.libvirt_connection,
