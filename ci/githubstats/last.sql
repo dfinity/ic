@@ -11,7 +11,7 @@ SELECT
       WHEN bt.overall_status = 4 THEN 'FAILED'
   END AS "status",
 
-  'https://dash.idx.dfinity.network/invocation/' || bi.build_id AS "buildbuddy_url",
+  bi.build_id AS "invocation_id",
 
   wr.head_branch AS "branch",
 
