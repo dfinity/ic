@@ -27,9 +27,7 @@ def main():
     # command = (
     #     f"ci/container/container-run.sh bazel run vuln-scan -- --output-path /ic/ic-os/guestos/envs/prod/findings.json --format json --hash-output-path /ic/ic-os/guestos/envs/prod/file-hashes.txt"
     # )
-    command = (
-        f"bazel run //ic-os/guestos/envs/prod:vuln-scan -- --output-path {json_file_path} --format json --hash-output-path {hash_file_path}"
-    )
+    command = f"bazel run //ic-os/guestos/envs/prod:vuln-scan -- --output-path {json_file_path} --format json --hash-output-path {hash_file_path}"
     trivy_output = ProcessExecutor.execute_command(command, path.resolve(), {})
     if os.path.exists(json_file_path):
         with open(json_file_path, "r") as file:
