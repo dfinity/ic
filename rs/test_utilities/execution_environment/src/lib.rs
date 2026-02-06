@@ -371,10 +371,7 @@ impl ExecutionTest {
     }
 
     pub fn cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.state
-            .as_ref()
-            .unwrap()
-            .get_own_cost_schedule()
+        self.state.as_ref().unwrap().get_own_cost_schedule()
     }
 
     pub fn executed_instructions(&self) -> NumInstructions {
@@ -1672,17 +1669,13 @@ impl ExecutionTest {
             cost_schedule,
             is_wasm64_execution,
         );
-        let instruction_cost = mgr.execution_cost(
-            limit,
-            self.subnet_size(),
-            cost_schedule,
-            is_wasm64_execution,
-        ) - mgr.execution_cost(
-            left,
-            self.subnet_size(),
-            cost_schedule,
-            is_wasm64_execution,
-        );
+        let instruction_cost =
+            mgr.execution_cost(
+                limit,
+                self.subnet_size(),
+                cost_schedule,
+                is_wasm64_execution,
+            ) - mgr.execution_cost(left, self.subnet_size(), cost_schedule, is_wasm64_execution);
 
         *self
             .execution_cost
