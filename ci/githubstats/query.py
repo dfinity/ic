@@ -20,14 +20,9 @@ import codeowners
 import pandas as pd
 import psycopg
 import requests
+import target_pb2
 from psycopg import sql
 from tabulate import tabulate
-
-# Import compiled protobuf module (compiled at build time by Bazel)
-try:
-    import target_pb2
-except ImportError:
-    target_pb2 = None
 
 THIS_SCRIPT_DIR = Path(__file__).parent
 
@@ -94,30 +89,32 @@ def shorten_owner(owner: str) -> str:
     return parts[1] if len(parts) == 2 else owner
 
 
-def get_buildbuddy_log_download_url(buildbuddy_url: str, test_target: str, target_pb2, verbose: bool = False) -> Optional[str]:
+def get_buildbuddy_log_download_url(
+    buildbuddy_url: str, test_target: str, verbose: bool = False
+) -> Optional[str]:
     """
     Get the direct log download URL from BuildBuddy using its protobuf API.
 
     Args:
         buildbuddy_url: URL like "https://dash.dm1-idx1.dfinity.network/invocation/7ba81d70-..."
         test_target: The Bazel test target like "//rs/tests/consensus/upgrade:upgrade_downgrade_nns_subnet_test"
-        target_pb2: The compiled protobuf module (passed in to avoid recompiling)
         verbose: Whether to print debug information
 
     Returns:
         The direct download URL for the test log, or None if not found
+
     """
     # Parse the BuildBuddy URL to extract base URL and invocation ID
     parsed = urllib.parse.urlparse(buildbuddy_url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
 
-    path_parts = parsed.path.split('/')
-    if 'invocation' not in path_parts:
+    path_parts = parsed.path.split("/")
+    if "invocation" not in path_parts:
         if verbose:
             print(f"No 'invocation' in path: {parsed.path}", file=sys.stderr)
         return None
 
-    invocation_idx = path_parts.index('invocation')
+    invocation_idx = path_parts.index("invocation")
     if invocation_idx + 1 >= len(path_parts):
         if verbose:
             print(f"No invocation ID found in path: {parsed.path}", file=sys.stderr)
@@ -139,12 +136,7 @@ def get_buildbuddy_log_download_url(buildbuddy_url: str, test_target: str, targe
         if verbose:
             print(f"Calling BuildBuddy API: {rpc_url}", file=sys.stderr)
 
-        response = requests.post(
-            rpc_url,
-            headers={"Content-Type": "application/proto"},
-            data=request_bytes,
-            timeout=10
-        )
+        response = requests.post(rpc_url, headers={"Content-Type": "application/proto"}, data=request_bytes, timeout=10)
 
         if not response.ok:
             if verbose:
@@ -165,7 +157,7 @@ def get_buildbuddy_log_download_url(buildbuddy_url: str, test_target: str, targe
                 print(f"Target group has {len(target_group.targets)} targets", file=sys.stderr)
             for target in target_group.targets:
                 # Check if test_summary exists
-                if not target.HasField('test_summary'):
+                if not target.HasField("test_summary"):
                     if verbose:
                         print(f"Target {test_target} has no test_summary", file=sys.stderr)
                     continue
@@ -176,16 +168,24 @@ def get_buildbuddy_log_download_url(buildbuddy_url: str, test_target: str, targe
                 all_log_files = list(test_summary.failed) + list(test_summary.passed)
 
                 if verbose:
-                    print(f"Test summary has {len(test_summary.failed)} failed logs, {len(test_summary.passed)} passed logs", file=sys.stderr)
+                    print(
+                        f"Test summary has {len(test_summary.failed)} failed logs, {len(test_summary.passed)} passed logs",
+                        file=sys.stderr,
+                    )
 
                 for file in all_log_files:
                     if verbose:
-                        print(f"  Log file: name='{file.name}', uri='{file.uri[:80] if file.uri else ''}'", file=sys.stderr)
+                        print(
+                            f"  Log file: name='{file.name}', uri='{file.uri[:80] if file.uri else ''}'",
+                            file=sys.stderr,
+                        )
                     # Test log files may have empty names, so just check for a valid URI
                     if file.uri:
                         bytestream_url = file.uri
-                        encoded = urllib.parse.quote(bytestream_url, safe='')
-                        download_url = f"{base_url}/file/download?bytestream_url={encoded}&invocation_id={invocation_id}"
+                        encoded = urllib.parse.quote(bytestream_url, safe="")
+                        download_url = (
+                            f"{base_url}/file/download?bytestream_url={encoded}&invocation_id={invocation_id}"
+                        )
                         if verbose:
                             print(f"Found test.log download URL: {download_url}", file=sys.stderr)
                         return download_url
@@ -196,10 +196,129 @@ def get_buildbuddy_log_download_url(buildbuddy_url: str, test_target: str, targe
     except Exception as e:
         if verbose:
             import traceback
+
             print(f"Error calling BuildBuddy API: {e}", file=sys.stderr)
             traceback.print_exc()
 
     return None
+
+
+def get_all_buildbuddy_log_urls(buildbuddy_url: str, test_target: str, verbose: bool = False) -> list:
+    """
+    Get all log download URLs from BuildBuddy using its protobuf API.
+
+    Args:
+        buildbuddy_url: URL like "https://dash.dm1-idx1.dfinity.network/invocation/7ba81d70-..."
+        test_target: The Bazel test target like "//rs/tests/consensus/upgrade:upgrade_downgrade_nns_subnet_test"
+        verbose: Whether to print debug information
+
+    Returns:
+        List of tuples: [(attempt_number, download_url, attempt_status), ...]
+        where attempt_status is "PASSED" or "FAILED"
+    """
+    # Parse the BuildBuddy URL to extract base URL and invocation ID
+    parsed = urllib.parse.urlparse(buildbuddy_url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+
+    path_parts = parsed.path.split("/")
+    if "invocation" not in path_parts:
+        if verbose:
+            print(f"No 'invocation' in path: {parsed.path}", file=sys.stderr)
+        return []
+
+    invocation_idx = path_parts.index("invocation")
+    if invocation_idx + 1 >= len(path_parts):
+        if verbose:
+            print(f"No invocation ID found in path: {parsed.path}", file=sys.stderr)
+        return []
+
+    invocation_id = path_parts[invocation_idx + 1]
+
+    try:
+        # Create the GetTarget request
+        request = target_pb2.GetTargetRequest()
+        request.invocation_id = invocation_id
+        request.target_label = test_target
+
+        # Serialize to protobuf bytes
+        request_bytes = request.SerializeToString()
+
+        # Make the RPC call
+        rpc_url = f"{base_url}/rpc/BuildBuddyService/GetTarget"
+        if verbose:
+            print(f"Calling BuildBuddy API: {rpc_url}", file=sys.stderr)
+
+        response = requests.post(rpc_url, headers={"Content-Type": "application/proto"}, data=request_bytes, timeout=10)
+
+        if not response.ok:
+            if verbose:
+                print(f"BuildBuddy API returned {response.status_code}: {response.text[:200]}", file=sys.stderr)
+            return []
+
+        # Parse the protobuf response
+        target_response = target_pb2.GetTargetResponse()
+        target_response.ParseFromString(response.content)
+
+        if verbose:
+            print(f"Response has {len(target_response.target_groups)} target groups", file=sys.stderr)
+
+        # Collect all log URLs with their attempt numbers and status
+        log_urls = []
+
+        for target_group in target_response.target_groups:
+            if verbose:
+                print(f"Target group has {len(target_group.targets)} targets", file=sys.stderr)
+            for target in target_group.targets:
+                # Check if test_summary exists
+                if not target.HasField("test_summary"):
+                    if verbose:
+                        print(f"Target {test_target} has no test_summary", file=sys.stderr)
+                    continue
+
+                test_summary = target.test_summary
+
+                if verbose:
+                    print(
+                        f"Test summary has {len(test_summary.failed)} failed logs, {len(test_summary.passed)} passed logs",
+                        file=sys.stderr,
+                    )
+
+                # Collect failed attempts
+                for attempt_num, file in enumerate(test_summary.failed, start=1):
+                    if file.uri:
+                        bytestream_url = file.uri
+                        encoded = urllib.parse.quote(bytestream_url, safe="")
+                        download_url = (
+                            f"{base_url}/file/download?bytestream_url={encoded}&invocation_id={invocation_id}"
+                        )
+                        log_urls.append((attempt_num, download_url, "FAILED"))
+                        if verbose:
+                            print(f"  Found failed attempt {attempt_num}: {download_url[:80]}...", file=sys.stderr)
+
+                # Collect passed attempts (continue numbering from failed attempts)
+                start_num = len(test_summary.failed) + 1
+                for attempt_num, file in enumerate(test_summary.passed, start=start_num):
+                    if file.uri:
+                        bytestream_url = file.uri
+                        encoded = urllib.parse.quote(bytestream_url, safe="")
+                        download_url = (
+                            f"{base_url}/file/download?bytestream_url={encoded}&invocation_id={invocation_id}"
+                        )
+                        log_urls.append((attempt_num, download_url, "PASSED"))
+                        if verbose:
+                            print(f"  Found passed attempt {attempt_num}: {download_url[:80]}...", file=sys.stderr)
+
+        if verbose and not log_urls:
+            print(f"No logs found for {test_target}", file=sys.stderr)
+
+        return log_urls
+
+    except Exception as e:
+        if verbose:
+            import traceback
+            print(f"Error calling BuildBuddy API: {e}", file=sys.stderr)
+            traceback.print_exc()
+        return []
 
 
 def log_psql_query(log_query: bool, query: str, conninfo: str):
@@ -468,23 +587,106 @@ def last(args):
     def direct_url_to_buildbuddy(url):
         redirect = get_redirect_location(url)
         if not redirect:
-            return terminal_hyperlink("log", url)
+            return (terminal_hyperlink("log", url), None)
 
         web_url = f"{redirect}?target={args.test_target}"
 
         # Try to get the download URL from BuildBuddy API
-        if target_pb2:
-            download_url = get_buildbuddy_log_download_url(redirect, args.test_target, target_pb2, verbose=args.verbose)
-
-            if download_url:
-                # Link directly to downloadable log
-                return terminal_hyperlink("log", download_url)
+        #if target_pb2:
+        #    download_url = get_buildbuddy_log_download_url(redirect, args.test_target, verbose=args.verbose)
+#
+        #    if download_url:
+        #        # Link directly to downloadable log
+        #        return terminal_hyperlink("log", download_url)
 
         # Fall back to web UI
-        return terminal_hyperlink("log", web_url)
+        return (terminal_hyperlink("log", web_url), redirect)
 
     with ThreadPoolExecutor() as executor:
-        df["buildbuddy"] = list(executor.map(direct_url_to_buildbuddy, df["buildbuddy_url"]))
+        results = list(executor.map(direct_url_to_buildbuddy, df["buildbuddy_url"]))
+
+    df["buildbuddy"] = [r[0] for r in results]
+    df["buildbuddy_redirect"] = [r[1] for r in results]
+
+    if args.download_logs is not None:
+        # Determine output directory
+        if args.download_logs == "":
+            # Extract test name from target (part after ':')
+            test_name = args.test_target.split(":")[-1]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = Path.cwd() / f"{test_name}_{timestamp}"
+        else:
+            output_dir = Path(args.download_logs)
+
+        # Create directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        print(f"Downloading logs to: {output_dir}", file=sys.stderr)
+
+        # Collect all download tasks
+        download_tasks = []
+        for _, row in df.iterrows():
+            # Use the already-resolved redirect URL
+            redirect = row["buildbuddy_redirect"]
+            if not redirect:
+                if args.verbose:
+                    print(f"Could not resolve redirect for {row['buildbuddy_url']}", file=sys.stderr)
+                continue
+
+            # Extract invocation_id from the resolved URL
+            parsed = urllib.parse.urlparse(redirect)
+            path_parts = parsed.path.split("/")
+            if "invocation" not in path_parts:
+                if args.verbose:
+                    print(f"No invocation in URL: {redirect}", file=sys.stderr)
+                continue
+
+            invocation_idx = path_parts.index("invocation")
+            if invocation_idx + 1 >= len(path_parts):
+                if args.verbose:
+                    print(f"No invocation ID in URL: {redirect}", file=sys.stderr)
+                continue
+
+            invocation_id = path_parts[invocation_idx + 1]
+
+            # Get all log URLs for this test run
+            log_urls = get_all_buildbuddy_log_urls(redirect, args.test_target, verbose=args.verbose)
+
+            for attempt_num, download_url, attempt_status in log_urls:
+                filename = f"{invocation_id}_{attempt_num}_{attempt_status}.log"
+                filepath = output_dir / filename
+                download_tasks.append((download_url, filepath, filename))
+
+        if not download_tasks:
+            print("No logs to download", file=sys.stderr)
+        else:
+            print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
+
+            # Download logs in parallel
+            def download_log(task):
+                download_url, filepath, filename = task
+                try:
+                    response = requests.get(download_url, timeout=30, stream=True)
+                    if response.ok:
+                        with open(filepath, "wb") as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                        if args.verbose:
+                            print(f"Downloaded: {filename}", file=sys.stderr)
+                        return True
+                    else:
+                        print(f"Failed to download {filename}: HTTP {response.status_code}", file=sys.stderr)
+                        return False
+                except Exception as e:
+                    print(f"Error downloading {filename}: {e}", file=sys.stderr)
+                    return False
+
+            # Use ThreadPoolExecutor to download in parallel (limit to 10 concurrent downloads)
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                results = list(executor.map(download_log, download_tasks))
+
+            successful = sum(results)
+            print(f"Successfully downloaded {successful}/{len(download_tasks)} logs to {output_dir}", file=sys.stderr)
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
     df["commit"] = df["commit"].apply(
@@ -501,7 +703,7 @@ def last(args):
         lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
     )
 
-    df = df.drop(columns=["buildbuddy_url"])
+    df = df.drop(columns=["buildbuddy_url", "buildbuddy_redirect"])
 
     df["duration"] = df["duration"].apply(normalize_duration)
 
@@ -679,6 +881,15 @@ Examples:
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
     last_runs_parser.add_argument("--failed", action="store_true", help="Include failed runs")
     last_runs_parser.add_argument("--timedout", action="store_true", help="Include timed-out runs")
+
+    last_runs_parser.add_argument(
+        "--download-logs",
+        nargs='?',
+        const='',
+        default=None,
+        metavar='DIR',
+        help="Download all BuildBuddy logs to a local directory (default: a new directory named after the test in the current directory)"
+    )
 
     last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
     last_runs_parser.set_defaults(func=last)
