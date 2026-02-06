@@ -306,14 +306,16 @@ impl Governance {
         action: &pb::proposal::Action,
     ) -> Result<(Option<pb::Topic>, ProposalCriticality), String> {
         let maybe_topic = self.get_topic_for_action(action)?;
-        let action_code = u64::from(action);
 
         let is_critical_by_customization = self
             .proto
             .parameters
             .as_ref()
             .and_then(|p| p.custom_proposal_criticality.as_ref())
-            .map(|c| c.critical_native_action_ids.contains(&action_code))
+            .map(|c| {
+                c.additional_critical_native_action_ids
+                    .contains(&u64::from(action))
+            })
             .unwrap_or(false);
 
         let criticality = if is_critical_by_customization {

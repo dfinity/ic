@@ -2568,7 +2568,7 @@ pub mod create_service_nervous_system {
         )]
         pub struct CustomProposalCriticality {
             #[prost(uint64, repeated, tag = "1")]
-            pub critical_native_action_ids: ::prost::alloc::vec::Vec<u64>,
+            pub additional_critical_native_action_ids: ::prost::alloc::vec::Vec<u64>,
         }
     }
 }

@@ -135,7 +135,7 @@ lazy_static! {
                     reward_rate_transition_duration: Some(Duration::from_secs(0)),
                 }),
                 custom_proposal_criticality: Some(CustomProposalCriticality {
-                    critical_native_action_ids: Some(vec![3]), // UpgradeSnsControlledCanister
+                    additional_critical_native_action_ids: Some(vec![3]), // UpgradeSnsControlledCanister
                 }),
             }),
         };

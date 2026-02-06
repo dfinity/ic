@@ -86,17 +86,7 @@ pub const MAX_INSTALL_CODE_WASM_AND_ARG_SIZE: usize = 2_000_000; // 2MB
 /// The Governance spec gives each Action a u64 equivalent identifier. This enum gives those u64
 /// values a human-readable name for use in the SNS.
 #[repr(u64)]
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    candid::CandidType,
-    serde::Serialize,
-    serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum NativeAction {
     /// Unspecified Action.
     Unspecified = 0,
@@ -598,7 +588,7 @@ impl NervousSystemParameters {
         self.validate_voting_rewards_parameters()?;
         self.validate_max_dissolve_delay_bonus_percentage()?;
         self.validate_max_age_bonus_percentage()?;
-        self.validate_critical_native_action_ids()?;
+        self.validate_additional_critical_native_action_ids()?;
 
         Ok(())
     }
@@ -995,13 +985,13 @@ impl NervousSystemParameters {
     }
 
     /// Validates CustomProposalCriticality.
-    fn validate_critical_native_action_ids(&self) -> Result<(), String> {
+    fn validate_additional_critical_native_action_ids(&self) -> Result<(), String> {
         let Some(custom_proposal_criticality) = self.custom_proposal_criticality.as_ref() else {
             return Ok(());
         };
 
         let CustomProposalCriticality {
-            critical_native_action_ids: custom_critical_native_action_ids,
+            additional_critical_native_action_ids: custom_additional_critical_native_action_ids,
         } = custom_proposal_criticality;
 
         // Pre-process the default critical and non-critical native function IDs.
@@ -1028,8 +1018,8 @@ impl NervousSystemParameters {
         let mut already_critical_ids = Vec::new();
         let mut unknown_ids = Vec::new();
 
-        for custom_critical_native_action_id in custom_critical_native_action_ids {
-            // Look for defective elements in CustomProposalCriticality.critical_native_action_ids
+        for custom_critical_native_action_id in custom_additional_critical_native_action_ids {
+            // Look for defective elements in CustomProposalCriticality.additional_critical_native_action_ids
             // (and classify defects as either already critical, or unknown).
             if default_critical_ids.contains(custom_critical_native_action_id) {
                 already_critical_ids.push(*custom_critical_native_action_id);
@@ -1053,7 +1043,7 @@ impl NervousSystemParameters {
             defects.push(format!("unknown function IDs: {:?}", unknown_ids));
         }
         Err(format!(
-            "NervousSystemParameters.custom_proposal_criticality.critical_native_action_ids \
+            "NervousSystemParameters.custom_proposal_criticality.additional_critical_native_action_ids \
                 contains defects: {}",
             defects.join("; ")
         ))

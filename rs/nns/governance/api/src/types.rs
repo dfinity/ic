@@ -2477,7 +2477,7 @@ pub mod create_service_nervous_system {
             Default,
         )]
         pub struct CustomProposalCriticality {
-            pub critical_native_action_ids: Option<Vec<u64>>,
+            pub additional_critical_native_action_ids: Option<Vec<u64>>,
         }
     }
 }

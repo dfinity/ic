@@ -1400,7 +1400,7 @@ type VotingRewardParameters = record {
 };
 
 type CustomProposalCriticality = record {
-  critical_native_action_ids : opt vec nat64;
+  additional_critical_native_action_ids : opt vec nat64;
 };
 
 type WaitForQuietState = record {

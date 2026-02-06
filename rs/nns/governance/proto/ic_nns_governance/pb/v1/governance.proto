@@ -1853,7 +1853,7 @@ message CreateServiceNervousSystem {
     VotingRewardParameters voting_reward_parameters = 10;
 
     message CustomProposalCriticality {
-      repeated uint64 critical_native_action_ids = 1;
+      repeated uint64 additional_critical_native_action_ids = 1;
     }
 
     // Custom proposal criticality configuration. Allows specifying additional native function IDs

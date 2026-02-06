@@ -310,13 +310,12 @@ fn test_all_topics() {
 }
 
 #[test]
-fn test_additional_critical_native_action_ids_upgrades_criticality() {
+fn test_additional_additional_critical_native_action_ids_upgrades_criticality() {
     //  Create a governance instance with custom_proposal_criticality set
     let mut governance_proto = basic_governance_proto();
     let mut parameters = NervousSystemParameters::with_default_values();
-    let motion_action_id = NativeAction::Motion as u64;
     parameters.custom_proposal_criticality = Some(pb::CustomProposalCriticality {
-        critical_native_action_ids: vec![motion_action_id],
+        additional_critical_native_action_ids: vec![NativeAction::Motion as u64],
     });
     governance_proto.parameters = Some(parameters);
     let governance_proto = ValidGovernanceProto::try_from(governance_proto).unwrap();

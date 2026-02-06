@@ -46,7 +46,7 @@ fn test_parse() {
             maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration {
                 seconds: Some(ONE_DAY_SECONDS),
             },
-            additional_critical_native_action_ids: vec![
+            additional_additional_critical_native_action_ids: vec![
                 NativeAction::UpgradeSnsControlledCanister,
                 NativeAction::AddGenericNervousSystemFunction,
             ],
@@ -407,7 +407,7 @@ fn test_convert_to_create_service_nervous_system() {
             }),
 
             custom_proposal_criticality: Some(nns_governance_pb::CustomProposalCriticality {
-                critical_native_action_ids: Some(vec![3, 4]),
+                additional_critical_native_action_ids: Some(vec![3, 4]),
             }),
         },
     );
