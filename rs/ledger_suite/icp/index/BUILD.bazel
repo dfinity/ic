@@ -33,6 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
+    "//rs/types/types",
     "@crate_index//:candid_parser",
     "@crate_index//:proptest",
 ]
