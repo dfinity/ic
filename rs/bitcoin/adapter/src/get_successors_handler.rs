@@ -227,8 +227,13 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
         self.metrics
             .response_blocks_size
             .observe(blocks_size as f64);
+        let empty_label = match response.blocks.is_empty() {
+            true => "true",
+            false => "false",
+        };
         self.metrics
             .response_build_duration
+            .with_label_values(&[empty_label])
             .observe(start_time.elapsed().as_secs_f64());
 
         Ok(response)

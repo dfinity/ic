@@ -169,7 +169,7 @@ impl CatchUpPackageProvider {
 
         let mut nodes: Vec<(NodeId, NodeRecord)> = self
             .registry
-            .registry_client
+            .get_registry_client()
             .get_subnet_node_records(subnet_id, registry_version)
             .ok()
             .flatten()
@@ -518,9 +518,6 @@ fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::{
-        catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
-    };
     use assert_matches::assert_matches;
     use http_body_util::{StreamBody, combinators::BoxBody};
     use hyper::{

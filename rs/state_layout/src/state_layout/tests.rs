@@ -100,7 +100,7 @@ fn test_encode_decode_empty_controllers() {
     let canister_state_bits = default_canister_state_bits();
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from((pb_bits, canister_test_id(13))).unwrap();
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
     // Controllers are still empty, as expected.
     assert_eq!(canister_state_bits.controllers, BTreeSet::new());
@@ -119,7 +119,7 @@ fn test_encode_decode_non_empty_controllers() {
     };
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from((pb_bits, canister_test_id(13))).unwrap();
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
     let mut expected_controllers = BTreeSet::new();
     expected_controllers.insert(canister_test_id(0).get());
@@ -138,7 +138,7 @@ fn test_encode_decode_empty_history() {
     };
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from((pb_bits, canister_test_id(13))).unwrap();
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
     assert_eq!(canister_state_bits.canister_history, canister_history);
 }
@@ -229,7 +229,7 @@ fn test_encode_decode_non_empty_history() {
     };
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from((pb_bits, canister_test_id(13))).unwrap();
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
     assert_eq!(canister_state_bits.canister_history, canister_history);
 }
@@ -270,8 +270,7 @@ fn test_encode_decode_empty_environment_variables() {
     };
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
 
-    let decoded_canister_state_bits =
-        CanisterStateBits::try_from((pb_bits, canister_test_id(13))).unwrap();
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
     assert_eq!(
         decoded_canister_state_bits.environment_variables,
         BTreeMap::new()
@@ -290,8 +289,7 @@ fn test_encode_decode_non_empty_environment_variables() {
         ..default_canister_state_bits()
     };
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let decoded_canister_state_bits =
-        CanisterStateBits::try_from((pb_bits, canister_test_id(13))).unwrap();
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
     assert_eq!(
         decoded_canister_state_bits.environment_variables,
         environment_variables
@@ -339,8 +337,7 @@ fn test_encode_decode_task_queue() {
         };
 
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-        let canister_state_bits =
-            CanisterStateBits::try_from((pb_bits, canister_test_id(13))).unwrap();
+        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
         assert_eq!(canister_state_bits.task_queue, task_queue);
     }
 }
@@ -1146,7 +1143,7 @@ fn test_encode_decode_empty_task_queue() {
     };
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from((pb_bits, canister_test_id(13))).unwrap();
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
     assert_eq!(canister_state_bits.task_queue, task_queue);
 }
@@ -1168,7 +1165,7 @@ fn test_encode_decode_non_empty_task_queue() {
     };
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from((pb_bits, canister_test_id(13))).unwrap();
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
     assert_eq!(canister_state_bits.task_queue, task_queue);
 }
@@ -1196,7 +1193,6 @@ fn test_decode_task_queue_forward_compatibility() {
     let make_callback = |respondent: CanisterId| {
         Arc::new(Callback {
             call_context_id: CallContextId::new(1),
-            originator: canister_test_id(0),
             respondent,
             cycles_sent: Cycles::new(100),
             prepayment_for_response_execution: Cycles::zero(),
@@ -1243,7 +1239,7 @@ fn test_decode_task_queue_forward_compatibility() {
     };
 
     let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from((pb_bits, canister_test_id(0))).unwrap();
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
 
     let mut expected_task_queue = TaskQueue::default();
     expected_task_queue.enqueue(ExecutionTask::AbortedExecution {
@@ -1276,14 +1272,12 @@ mod mainnet_compatibility_tests {
         use super::super::*;
         use super::*;
 
-        const OWN_CANISTER_ID: CanisterId = CanisterId::from_u64(42);
         const OUTPUT_NAME: &str = "canister.pbuf";
 
         fn make_task_queue_and_status() -> CanisterStateBits {
             let make_callback = |respondent: CanisterId| {
                 Arc::new(Callback {
                     call_context_id: CallContextId::new(1),
-                    originator: OWN_CANISTER_ID,
                     respondent,
                     cycles_sent: Cycles::new(100),
                     prepayment_for_response_execution: Cycles::zero(),
@@ -1351,9 +1345,8 @@ mod mainnet_compatibility_tests {
             let proto_state_bits =
                 pb_canister_state_bits::CanisterStateBits::decode(&serialized as &[u8])
                     .expect("Failed to deserialize the protobuf");
-            let canister_state_bits =
-                CanisterStateBits::try_from((proto_state_bits, OWN_CANISTER_ID))
-                    .expect("Failed to convert the protobuf to CanisterStateBits");
+            let canister_state_bits = CanisterStateBits::try_from(proto_state_bits)
+                .expect("Failed to convert the protobuf to CanisterStateBits");
 
             let CanisterStateBits {
                 task_queue, status, ..

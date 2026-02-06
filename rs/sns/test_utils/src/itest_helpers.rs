@@ -1332,7 +1332,7 @@ pub async fn install_rust_canister_with_memory_allocation(
     );
 }
 
-/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_sns_subnet
 pub fn state_machine_test_on_sns_subnet<Fut, Out, F>(run: F) -> Out
 where
     Fut: Future<Output = Result<Out, String>>,

@@ -47,7 +47,7 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "40.0.0", default-features = false, features = [
+wasmtime = { version = "41.0.2", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',
