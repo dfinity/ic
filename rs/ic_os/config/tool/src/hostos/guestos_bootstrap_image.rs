@@ -47,6 +47,7 @@ impl BootstrapOptions {
     /// a disk image that can be mounted by the GuestOS. The image contains a FAT filesystem with
     /// the configuration files.
     pub fn build_bootstrap_config_image(&self, out_file: &Path) -> Result<()> {
+        let bootstrap_dir = self.build_bootstrap_dir()?;
         let tmp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
 
         // Create bootstrap directory with all files
@@ -80,7 +81,8 @@ impl BootstrapOptions {
         Ok(())
     }
 
-    /// Populate a directory with bootstrap files.
+    /// Build a bootstrap directory with this configuration.
+    /// Returns a TempDir containing all bootstrap files.
     fn populate_bootstrap_dir(&self, bootstrap_dir: &Path) -> Result<()> {
         if let Some(guestos_config) = &self.guestos_config {
             serialize_and_write_config(&bootstrap_dir.join("config.json"), guestos_config)
@@ -274,6 +276,10 @@ mod tests {
             fs::read_to_string(bootstrap_dir.join("ic_registry_local_store/test"))?,
             "registry_data"
         );
+
+        // Check that the image can be created
+        let out_file = tmp_dir.path().join("bootstrap.img");
+        bootstrap_options.build_bootstrap_config_image(&out_file)?;
 
         Ok(())
     }

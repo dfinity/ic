@@ -25,7 +25,7 @@ use ic_logger::{ReplicaLogger, error, fatal, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::{
     BIN_FILE, CANISTER_FILE, CheckpointLayout, OVERLAY, QUEUES_FILE, ReadOnly, SNAPSHOT_FILE,
-    UNVERIFIED_CHECKPOINT_MARKER, WASM_FILE,
+    STATE_SYNC_CHECKPOINT_MARKER, UNVERIFIED_CHECKPOINT_MARKER, WASM_FILE,
 };
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
@@ -866,6 +866,14 @@ pub fn compute_manifest(
     opt_base_manifest_info: Option<&BaseManifestInfo>,
     rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
+    let mut markers_to_exclude = HashSet::new();
+    if !checkpoint.is_checkpoint_verified() {
+        markers_to_exclude.insert(checkpoint.unverified_checkpoint_marker());
+    }
+    if checkpoint.is_unverified_state_sync_checkpoint() {
+        markers_to_exclude.insert(checkpoint.state_sync_checkpoint_marker());
+    }
+
     let mut files = {
         let mut files = files_with_sizes(checkpoint.raw_path(), "".into(), thread_pool)?;
         // We sort the table to make sure that the table is the same on all replicas
@@ -873,20 +881,20 @@ pub fn compute_manifest(
         files
     };
 
-    // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
-    // If it accidentally exists, the replica will crash in the outer function `handle_compute_manifest_request`.
+    // Normally `markers_to_exclude` should be empty:
+    // - Unverified markers should be removed before manifest computation
+    // - State sync checkpoints should already have manifests
     //
-    // Because this function may still be used by tests and external tools to compute manifest of an unverified checkpoint,
-    // the function does not crash here. Instead, we exclude the marker file from the manifest computation.
-    if !checkpoint.is_checkpoint_verified() {
+    // However, tests and external tools may compute manifests for unverified checkpoints.
+    // In that case, we exclude marker files from the manifest computation to avoid including them.
+    if !markers_to_exclude.is_empty() {
         files.retain(|FileWithSize(p, _)| {
-            checkpoint.raw_path().join(p) != checkpoint.unverified_checkpoint_marker()
+            !markers_to_exclude.contains(&checkpoint.raw_path().join(p))
         });
-        assert!(
-            !files
-                .iter()
-                .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER))
-        );
+        assert!(!files.iter().any(
+            |FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER)
+                || p.ends_with(STATE_SYNC_CHECKPOINT_MARKER)
+        ));
     }
 
     let chunk_actions = match opt_base_manifest_info {

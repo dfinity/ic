@@ -50,6 +50,7 @@ use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
+    icrc::metadata_key::MetadataKey,
     icrc3::archive::QueryArchiveFn,
     icrc21::lib::{
         build_icrc21_consent_info, build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
@@ -471,6 +472,10 @@ fn icrc1_supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
         }
     );
+    standards.push(StandardRecord {
+        name: "ICRC-10".to_string(),
+        url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md".to_string(),
+    });
 
     standards
 }
@@ -486,15 +491,24 @@ fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
 }
 
 #[query]
-fn icrc1_metadata() -> Vec<(String, Value)> {
+fn icrc1_metadata() -> Vec<(MetadataKey, Value)> {
     vec![
-        Value::entry("icrc1:decimals", DECIMAL_PLACES as u64),
-        Value::entry("icrc1:name", LEDGER.read().unwrap().token_name.to_string()),
+        Value::entry(MetadataKey::ICRC1_DECIMALS, DECIMAL_PLACES as u64).unwrap(),
         Value::entry(
-            "icrc1:symbol",
+            MetadataKey::ICRC1_NAME,
+            LEDGER.read().unwrap().token_name.to_string(),
+        )
+        .unwrap(),
+        Value::entry(
+            MetadataKey::ICRC1_SYMBOL,
             LEDGER.read().unwrap().token_symbol.to_string(),
-        ),
-        Value::entry("icrc1:fee", LEDGER.read().unwrap().transfer_fee.get_e8s()),
+        )
+        .unwrap(),
+        Value::entry(
+            MetadataKey::ICRC1_FEE,
+            LEDGER.read().unwrap().transfer_fee.get_e8s(),
+        )
+        .unwrap(),
     ]
 }
 

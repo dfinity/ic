@@ -1,20 +1,19 @@
-use candid::{Encode, Principal};
+use candid::{Decode, Encode, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
 use ic_agent::Agent;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::get_dependency_path;
+use ic_system_test_driver::driver::test_env_api::get_dependency_path_from_env;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
-use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
+use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, block_on, runtime_from_url};
 use ic_types::PrincipalId;
-use ic_types::messages::ReplicaHealthStatus;
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::Logger;
 use slog::info;
+use statesync_test::CanisterCreationStatus;
 use std::collections::BTreeMap;
-use std::env;
 use std::fmt::Debug;
 use std::str::FromStr;
 use std::time::Duration;
@@ -35,12 +34,15 @@ pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS: &str =
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
+const NO_STATE_CLONE_COUNT: &str = "state_manager_no_state_clone_count";
 
-const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
+const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 
 const GIB: u64 = 1 << 30;
 
-pub async fn rejoin_test(
+const BACKOFF_TIME_MILLIS: u64 = 1000;
+
+pub fn rejoin_test(
     env: &TestEnv,
     allowed_failures: usize,
     dkg_interval: u64,
@@ -55,17 +57,18 @@ pub async fn rejoin_test(
         agent_node.get_public_url()
     );
 
-    let agent = agent_node.build_default_agent_async().await;
-    let universal_canister =
-        UniversalCanister::new_with_retries(&agent, agent_node.effective_canister_id(), &logger)
-            .await;
+    let agent = agent_node.build_default_agent();
+    let universal_canister = block_on(UniversalCanister::new_with_retries(
+        &agent,
+        agent_node.effective_canister_id(),
+        &logger,
+    ));
 
-    let res = fetch_metrics::<u64>(
+    let res = block_on(fetch_metrics::<u64>(
         &logger,
         rejoin_node.clone(),
         vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
-    )
-    .await;
+    ));
     let base_count = res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0];
 
     info!(
@@ -82,7 +85,11 @@ pub async fn rejoin_test(
     let canister_update_calls = 3 * dkg_interval;
     for i in 0..canister_update_calls {
         info!(logger, "Performing canister update call {i}");
-        store_and_read_stable(&logger, i.to_le_bytes().as_slice(), &universal_canister).await;
+        block_on(store_and_read_stable(
+            &logger,
+            i.to_le_bytes().as_slice(),
+            &universal_canister,
+        ));
     }
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
@@ -102,12 +109,16 @@ pub async fn rejoin_test(
 
     info!(logger, "Checking for subnet progress...");
     let message = b"This beautiful prose should be persisted for future generations";
-    store_and_read_stable(&logger, message, &universal_canister).await;
+    block_on(store_and_read_stable(&logger, message, &universal_canister));
 
-    assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
+    block_on(assert_state_sync_has_happened(
+        &logger,
+        rejoin_node,
+        base_count,
+    ));
 }
 
-pub async fn rejoin_test_large_state(
+pub fn rejoin_test_large_state(
     env: TestEnv,
     allowed_failures: usize,
     canister_size_gib: u64,
@@ -123,16 +134,22 @@ pub async fn rejoin_test_large_state(
         "Installing universal canister on a node {} ...",
         agent_node.get_public_url()
     );
-    let agent = agent_node.build_default_agent_async().await;
-    let universal_canister =
-        UniversalCanister::new_with_retries(&agent, agent_node.effective_canister_id(), &logger)
-            .await;
+    let agent = agent_node.build_default_agent();
+    let universal_canister = block_on(UniversalCanister::new_with_retries(
+        &agent,
+        agent_node.effective_canister_id(),
+        &logger,
+    ));
 
     let endpoint_runtime = runtime_from_url(
         agent_node.get_public_url(),
         agent_node.effective_canister_id(),
     );
-    let canisters = install_statesync_test_canisters(&env, &endpoint_runtime, num_canisters).await;
+    let canisters = block_on(install_statesync_test_canisters(
+        &env,
+        &endpoint_runtime,
+        num_canisters,
+    ));
 
     info!(
         logger,
@@ -140,26 +157,28 @@ pub async fn rejoin_test_large_state(
         num_canisters as u64 * canister_size_gib,
     );
 
-    write_random_data_to_stable_memory(
+    block_on(write_random_data_to_stable_memory(
         logger.clone(),
         canisters.clone(),
         false,
         0,
         canister_size_gib,
         0,
-    )
-    .await;
+    ));
 
     // Kill the rejoin node after it has a checkpoint so that we can test both `copy_chunks` and `fetch_chunks` in the state sync.
     info!(logger, "Waiting for the rejoin_node to have a checkpoint");
-    wait_for_manifest(&logger, dkg_interval + 1, rejoin_node.clone()).await;
+    block_on(wait_for_manifest(
+        &logger,
+        dkg_interval + 1,
+        rejoin_node.clone(),
+    ));
 
-    let res = fetch_metrics::<u64>(
+    let res = block_on(fetch_metrics::<u64>(
         &logger,
         rejoin_node.clone(),
         vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
-    )
-    .await;
+    ));
     let base_count = res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0];
 
     info!(
@@ -180,26 +199,32 @@ pub async fn rejoin_test_large_state(
         "Start modifying canister stable memory by new random data"
     );
 
-    write_random_data_to_stable_memory(
+    block_on(write_random_data_to_stable_memory(
         logger.clone(),
         canisters.clone(),
         true,
         0,
         canister_size_gib,
         1,
-    )
-    .await;
+    ));
 
     info!(logger, "Get the latest certified height of an active node");
     let message = b"Are you actively making progress?";
-    store_and_read_stable(&logger, message, &universal_canister).await;
-    let res =
-        fetch_metrics::<u64>(&logger, agent_node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
+    block_on(store_and_read_stable(&logger, message, &universal_canister));
+    let res = block_on(fetch_metrics::<u64>(
+        &logger,
+        agent_node.clone(),
+        vec![LATEST_CERTIFIED_HEIGHT],
+    ));
     let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
 
     // Wait for the next CUP to make sure the second round of state modification is persisted to a new checkpoint.
     info!(logger, "Waiting for the next CUP");
-    wait_for_cup(&logger, latest_certified_height, agent_node.clone()).await;
+    block_on(wait_for_cup(
+        &logger,
+        latest_certified_height,
+        agent_node.clone(),
+    ));
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
@@ -218,9 +243,13 @@ pub async fn rejoin_test_large_state(
 
     info!(logger, "Checking for subnet progress...");
     let message = b"This beautiful prose should be persisted for future generations";
-    store_and_read_stable(&logger, message, &universal_canister).await;
+    block_on(store_and_read_stable(&logger, message, &universal_canister));
 
-    assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
+    block_on(assert_state_sync_has_happened(
+        &logger,
+        rejoin_node,
+        base_count,
+    ));
 }
 
 async fn deploy_seed_canister(
@@ -235,10 +264,7 @@ async fn deploy_seed_canister(
         .await
         .expect("Failed to create a seed canister")
         .0;
-    let seed_canister_wasm_path = get_dependency_path(
-        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
-            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
-    );
+    let seed_canister_wasm_path = get_dependency_path_from_env("STATESYNC_TEST_CANISTER_WASM_PATH");
     let seed_canister_wasm = std::fs::read(seed_canister_wasm_path)
         .expect("Could not read STATESYNC_TEST_CANISTER_WASM_PATH");
     ic00.install(&seed_canister_id, &seed_canister_wasm)
@@ -298,18 +324,44 @@ async fn deploy_canisters_for_long_rounds(
     );
     let mut create_many_canisters_futs = vec![];
     for seed_canister_id in seed_canisters {
-        let bytes = Encode!(&num_canisters_per_seed_canister)
-            .expect("Failed to candid encode argument for a seed canister");
-        let fut = agent
-            .update(&seed_canister_id, "create_many_canisters")
-            .with_arg(bytes)
-            .call_and_wait();
+        let agent = agent.clone();
+        let fut = async move {
+            loop {
+                let bytes = Encode!(&num_canisters_per_seed_canister)
+                    .expect("Failed to candid encode argument for a seed canister");
+                let res = agent
+                    .update(&seed_canister_id, "create_many_canisters")
+                    .with_arg(bytes)
+                    .call_and_wait()
+                    .await;
+                if res.is_ok() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+            }
+            loop {
+                let bytes = Encode!(&()).expect("Failed to candid encode unit type");
+                let res = agent
+                    .query(&seed_canister_id, "canister_creation_status")
+                    .with_arg(bytes)
+                    .call()
+                    .await;
+                if let Ok(bytes) = res {
+                    let status = Decode!(&bytes, CanisterCreationStatus)
+                        .expect("Failed to candid decode canister creation status");
+                    match status {
+                        CanisterCreationStatus::Idle | CanisterCreationStatus::InProgress(_) => (),
+                        CanisterCreationStatus::Done(_) => {
+                            break;
+                        }
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+            }
+        };
         create_many_canisters_futs.push(fut);
     }
-    let res = join_all(create_many_canisters_futs).await;
-    for r in res {
-        r.expect("Failed to create canisters via a seed canister");
-    }
+    join_all(create_many_canisters_futs).await;
 
     // We deploy 8 "busy" canisters: this way,
     // there are 2 canisters per each of the 4 scheduler threads
@@ -332,6 +384,11 @@ async fn deploy_canisters_for_long_rounds(
     join_all(create_busy_canisters_futs).await;
 }
 
+async fn no_state_clone_count(node: IcNodeSnapshot, logger: &slog::Logger) -> u64 {
+    let count = fetch_metrics::<u64>(logger, node, vec![NO_STATE_CLONE_COUNT]).await;
+    count[NO_STATE_CLONE_COUNT][0]
+}
+
 pub async fn rejoin_test_long_rounds(
     env: TestEnv,
     nodes: Vec<IcNodeSnapshot>,
@@ -349,7 +406,7 @@ pub async fn rejoin_test_long_rounds(
     }
     let mut paired: Vec<_> = average_process_batch_durations
         .into_iter()
-        .zip(nodes.into_iter())
+        .zip(nodes.iter())
         .collect();
     paired.sort_by(|(k1, _), (k2, _)| k1.total_cmp(k2));
     let sorted_nodes: Vec<_> = paired.into_iter().map(|(_, v)| v).collect();
@@ -404,6 +461,10 @@ pub async fn rejoin_test_long_rounds(
     )
     .await;
 
+    info!(
+        logger,
+        "Checking that the restarted node reached the latest CUP height."
+    );
     let rejoin_node_status = rejoin_node
         .status_async()
         .await
@@ -418,10 +479,45 @@ pub async fn rejoin_test_long_rounds(
         rejoin_node_certified_height,
         last_cup_height
     );
-    let rejoin_node_health_status = rejoin_node_status
-        .replica_health_status
-        .expect("Failed to get replica health status of rejoin_node");
-    assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
+
+    info!(logger, "Checking that all nodes are healthy.");
+    for node in &nodes {
+        let health_status = node
+            .status_is_healthy_async()
+            .await
+            .expect("Failed to get replica health status");
+        assert!(health_status, "Node {} is not healthy.", node.node_id);
+    }
+
+    // finally check the metrics for "fast-forward" mode
+    let mut no_state_clone_counts = vec![];
+    for node in nodes {
+        let count = no_state_clone_count(node, &logger).await;
+        no_state_clone_counts.push(count);
+    }
+    no_state_clone_counts.sort();
+    let minimum_no_state_clone_count = no_state_clone_counts[0];
+    info!(
+        logger,
+        "Minimum no state clone count: {minimum_no_state_clone_count}"
+    );
+
+    let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node, &logger).await;
+    info!(
+        logger,
+        "No state clone count of the restarted node: {rejoin_node_no_state_clone_count}"
+    );
+
+    // there should be a node that is (almost) never behind and thus (almost) never skips state cloning
+    assert!(
+        minimum_no_state_clone_count < 10,
+        "Minimum no state clone count is too high"
+    );
+    // the restarted node should be behind for many rounds and skip cloning a majority of states during that time
+    assert!(
+        rejoin_node_no_state_clone_count > 100,
+        "No state clone count of the restarted node is unexpectedly low"
+    );
 }
 
 pub async fn assert_state_sync_has_happened(
@@ -430,7 +526,6 @@ pub async fn assert_state_sync_has_happened(
     base_count: u64,
 ) -> f64 {
     const NUM_RETRIES: u32 = 300;
-    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     info!(
         logger,
@@ -488,34 +583,21 @@ pub async fn assert_state_sync_has_happened(
 }
 
 async fn average_process_batch_duration(log: &slog::Logger, node: IcNodeSnapshot) -> f64 {
-    let label_sum = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_sum");
-    let label_count = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_count");
+    let label_sum = format!("{METRIC_PROCESS_BATCH_DURATION}_sum");
+    let label_count = format!("{METRIC_PROCESS_BATCH_DURATION}_count");
     let metrics = fetch_metrics::<f64>(log, node.clone(), vec![&label_sum, &label_count]).await;
-    let sums: Vec<_> = metrics
+    assert_eq!(metrics.len(), 2);
+    let sum = metrics
         .iter()
-        .filter_map(|(k, v)| {
-            if k.starts_with(&label_sum) {
-                Some(v)
-            } else {
-                None
-            }
-        })
-        .collect();
-    let counts: Vec<_> = metrics
+        .find(|(k, _)| **k == label_sum)
+        .expect("Did not find {label_sum}")
+        .1;
+    let count = metrics
         .iter()
-        .filter_map(|(k, v)| {
-            if k.starts_with(&label_count) {
-                Some(v)
-            } else {
-                None
-            }
-        })
-        .collect();
-    assert_eq!(sums.len(), counts.len());
-    sums.iter()
-        .zip(counts.iter())
-        .map(|(x, y)| x[0] / y[0])
-        .sum()
+        .find(|(k, _)| **k == label_count)
+        .expect("Did not find {label_count}")
+        .1;
+    sum[0] / count[0]
 }
 
 pub async fn fetch_metrics<T>(
@@ -527,7 +609,6 @@ where
     T: Copy + Debug + FromStr,
 {
     const NUM_RETRIES: u32 = 500;
-    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     let metrics = MetricsFetcher::new(
         std::iter::once(node),
@@ -537,10 +618,7 @@ where
         let metrics_result = metrics.fetch::<T>().await;
         match metrics_result {
             Ok(result) => {
-                if labels
-                    .iter()
-                    .all(|&label| result.iter().any(|(k, _)| k.starts_with(label)))
-                {
+                if labels.iter().all(|&label| result.contains_key(label)) {
                     info!(log, "Metrics successfully scraped {:?}.", result);
                     return result;
                 } else {
@@ -585,9 +663,8 @@ pub async fn install_statesync_test_canisters<'a>(
     num_canisters: usize,
 ) -> Vec<Canister<'a>> {
     let logger = env.logger();
-    let wasm = Wasm::from_file(get_dependency_path(
-        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
-            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+    let wasm = Wasm::from_file(get_dependency_path_from_env(
+        "STATESYNC_TEST_CANISTER_WASM_PATH",
     ));
     let mut futures: Vec<_> = Vec::new();
     for canister_idx in 0..num_canisters {

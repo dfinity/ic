@@ -112,7 +112,7 @@ fn dts_subnet_config(
             // We should execute just one slice per round.
             max_instructions_per_round: slice_instruction_limit + slice_instruction_limit / 2,
             max_instructions_per_message: message_instruction_limit,
-            max_instructions_per_message_without_dts: slice_instruction_limit,
+            max_instructions_per_query_message: slice_instruction_limit,
             max_instructions_per_slice: slice_instruction_limit,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
@@ -145,8 +145,6 @@ fn dts_env(
             slice_instruction_limit,
         ))))
         .with_subnet_type(SubnetType::Application)
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
         .build()
 }
 
@@ -161,7 +159,7 @@ fn dts_install_code_env(
             max_instructions_per_install_code_slice: slice_instruction_limit,
             max_instructions_per_round: message_instruction_limit + message_instruction_limit,
             max_instructions_per_message: message_instruction_limit,
-            max_instructions_per_message_without_dts: slice_instruction_limit,
+            max_instructions_per_query_message: slice_instruction_limit,
             max_instructions_per_slice: message_instruction_limit,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
@@ -1137,6 +1135,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             // No effective canister id.
             Method::CreateCanister
             | Method::HttpRequest
+            | Method::FlexibleHttpRequest
             | Method::ECDSAPublicKey
             | Method::RawRand
             | Method::SetupInitialDKG

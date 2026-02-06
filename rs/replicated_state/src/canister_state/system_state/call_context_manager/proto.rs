@@ -2,15 +2,15 @@ use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types::user_id_try_from_option;
 
 impl From<&CallContext> for pb::CallContext {
     fn from(item: &CallContext) -> Self {
-        let funds = Funds::new(item.available_cycles);
         Self {
             call_origin: Some((&item.call_origin).into()),
             responded: item.responded,
             deleted: item.deleted,
-            available_funds: Some((&funds).into()),
+            available_cycles: Some((item.available_cycles).into()),
             time_nanos: item.time.as_nanos_since_unix_epoch(),
             metadata: Some((&item.metadata).into()),
             instructions_executed: item.instructions_executed.get(),
@@ -21,14 +21,14 @@ impl From<&CallContext> for pb::CallContext {
 impl TryFrom<pb::CallContext> for CallContext {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::CallContext) -> Result<Self, Self::Error> {
-        let funds: Funds =
-            try_from_option_field(value.available_funds, "CallContext::available_funds")?;
-
         Ok(Self {
             call_origin: try_from_option_field(value.call_origin, "CallContext::call_origin")?,
             responded: value.responded,
             deleted: value.deleted,
-            available_cycles: funds.cycles(),
+            available_cycles: try_from_option_field(
+                value.available_cycles,
+                "CallContext::available_cycles",
+            )?,
             time: Time::from_nanos_since_unix_epoch(value.time_nanos),
             metadata: value
                 .metadata
@@ -85,10 +85,7 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
                 message_id,
                 method_name,
             }) => Self::Ingress(
-                user_id_try_from_protobuf(try_from_option_field(
-                    user_id,
-                    "CallOrigin::Ingress::user_id",
-                )?)?,
+                user_id_try_from_option(user_id, "CallOrigin::Ingress::user_id")?,
                 message_id.as_slice().try_into()?,
                 method_name,
             ),
@@ -121,10 +118,7 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
                 user_id,
                 method_name,
             }) => Self::Query(
-                user_id_try_from_protobuf(try_from_option_field(
-                    user_id,
-                    "CallOrigin::UserQuery::user_id",
-                )?)?,
+                user_id_try_from_option(user_id, "CallOrigin::UserQuery::user_id")?,
                 method_name,
             ),
             pb::call_context::CallOrigin::SystemTask { .. } => Self::SystemTask,

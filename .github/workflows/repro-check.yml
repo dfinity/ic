@@ -14,6 +14,11 @@ on:
         description: Commit on which the repro check should be run
         required: true
         type: string
+  pull_request:
+    paths:
+      - 'ci/container/*'
+      - 'ci/scripts/repro-check'
+      - '.github/workflows/repro-check.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -21,7 +26,7 @@ concurrency:
 
 jobs:
   repro-check:
-    name: Run repro-check for ${{ inputs.github_sha }}
+    name: Run repro-check for ${{ inputs.github_sha || github.sha }}
     runs-on:
       labels: dind-large
     container:
@@ -41,26 +46,25 @@ jobs:
           echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/nopasswd
           chmod 0440 /etc/sudoers.d/nopasswd
 
-      - name: Create ext4 workspace for rootless podman for the cache
+      - name: Checkout
+        uses: actions/checkout@v6
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          sparse-checkout: "ci/scripts/repro-check"
+
+      - name: Repro check for PR
+        shell: bash
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          CI_PROJECT_DIR: ${{ github.workspace }}
         run: |
-          fallocate -l 110G /tmp/workspace.img
-          mkfs.ext4 /tmp/workspace.img
-          mkdir -p /home/ubuntu/
-
-          mount -o loop /tmp/workspace.img /home/ubuntu/
-          chown -R ubuntu:ubuntu /home/ubuntu/
-
-      - name: Create ext4 workspace for rootless podman for ict_testnets dir in tmp
-        run: |
-          fallocate -l 2G /tmp/tmp.img
-          mkfs.ext4 /tmp/tmp.img
-          mkdir -p /tmp/ict_testnets
-
-          mount -o loop /tmp/tmp.img /tmp/ict_testnets
-          chown -R ubuntu:ubuntu /tmp/ict_testnets
+          # Hermetic python interpreter requires a non-root user to be built.
+          set -euo pipefail
+          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ github.sha }} --dry-run
 
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
+        if: ${{ github.event_name != 'pull_request' }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
           sudo -u ubuntu bash -c '

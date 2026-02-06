@@ -7,6 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+attestation = { path = "../../../ic_os/sev/attestation" }
+der = { workspace = true, features = ["alloc", "derive", "std"] }
 ic-base-types = { path = "../../../types/base_types" }
 ic-nervous-system-chunks = { path = "../../../nervous_system/chunks" }
 ic-registry-transport = { path = "../../transport" }

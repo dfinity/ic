@@ -30,7 +30,7 @@ use crate::{
     node_id_into_protobuf, node_id_try_from_option,
 };
 use common::SignatureScheme;
-use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_protobuf};
+use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_option};
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -65,7 +65,7 @@ pub mod schnorr;
 /// This means they will be immediately purged from the blockchain once delivered.
 /// If disabled, pre-signatures remain on the blockchain, until they are consumed by a signature
 /// request.
-pub const STORE_PRE_SIGNATURES_IN_STATE: bool = false;
+pub const STORE_PRE_SIGNATURES_IN_STATE: bool = true;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
@@ -1172,10 +1172,7 @@ impl TryFrom<pb::IDkgArtifactIdData> for IDkgArtifactIdData {
     fn try_from(value: pb::IDkgArtifactIdData) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::from(value.height),
-            subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
-                value.subnet_id,
-                "IDkgArtifactIdData::subnet_id",
-            )?)?,
+            subnet_id: subnet_id_try_from_option(value.subnet_id, "IDkgArtifactIdData::subnet_id")?,
             hash: CryptoHash(value.hash),
         })
     }

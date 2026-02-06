@@ -99,12 +99,8 @@ impl CanisterFixture {
     }
 
     fn with_input_slot_reservation(&mut self) -> CallbackId {
-        let callback_id = register_callback(
-            &mut self.canister_state,
-            CANISTER_ID,
-            OTHER_CANISTER_ID,
-            NO_DEADLINE,
-        );
+        let callback_id =
+            register_callback(&mut self.canister_state, OTHER_CANISTER_ID, NO_DEADLINE);
 
         self.push_output_request(output_request_to(OTHER_CANISTER_ID, callback_id))
             .unwrap();
@@ -207,20 +203,10 @@ fn validate_responses_against_callback_details() {
     let canister_c_id = canister_test_id(17);
 
     // Creating the CallContext and registering the callback for a request from this canister -> canister B.
-    let callback_id_1 = register_callback(
-        &mut fixture.canister_state,
-        CANISTER_ID,
-        canister_b_id,
-        NO_DEADLINE,
-    );
+    let callback_id_1 = register_callback(&mut fixture.canister_state, canister_b_id, NO_DEADLINE);
 
     // Creating the CallContext and registering the callback for a request from this canister -> canister C.
-    let callback_id_2 = register_callback(
-        &mut fixture.canister_state,
-        CANISTER_ID,
-        canister_c_id,
-        NO_DEADLINE,
-    );
+    let callback_id_2 = register_callback(&mut fixture.canister_state, canister_c_id, NO_DEADLINE);
 
     // Reserving slots in the input queue for the corresponding responses.
     // Request from this canister to canister B.
@@ -300,7 +286,6 @@ fn validate_response_fails_with_mismatching_deadline() {
         // Register a callback with the given `callback_deadline`.
         let callback_id = register_callback(
             &mut fixture.canister_state,
-            CANISTER_ID,
             OTHER_CANISTER_ID,
             callback_deadline,
         );

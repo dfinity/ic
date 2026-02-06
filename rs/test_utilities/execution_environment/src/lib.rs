@@ -260,7 +260,7 @@ pub struct ExecutionTest {
     dirty_heap_page_overhead: u64,
     instruction_limits: InstructionLimits,
     install_code_instruction_limits: InstructionLimits,
-    instruction_limit_without_dts: NumInstructions,
+    instruction_limit_per_query_message: NumInstructions,
     initial_canister_cycles: Cycles,
     ingress_memory_capacity: NumBytes,
     registry_settings: RegistryExecutionSettings,
@@ -429,10 +429,7 @@ impl ExecutionTest {
             .canister_state(canister_id)
             .system_state
             .memory_allocation;
-        let compute_allocation = self
-            .canister_state(canister_id)
-            .scheduler_state
-            .compute_allocation;
+        let compute_allocation = self.canister_state(canister_id).compute_allocation();
         let message_memory_usage = self.canister_state(canister_id).message_memory_usage();
         self.cycles_account_manager.idle_cycles_burned_rate(
             memory_allocation,
@@ -449,7 +446,7 @@ impl ExecutionTest {
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
         let memory_allocation = canister.system_state.memory_allocation;
-        let compute_allocation = canister.scheduler_state.compute_allocation;
+        let compute_allocation = canister.compute_allocation();
         let freeze_threshold = canister.system_state.freeze_threshold;
         self.cycles_account_manager.freeze_threshold_cycles(
             freeze_threshold,
@@ -1177,10 +1174,6 @@ impl ExecutionTest {
             compute_allocation_used,
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
-        let instruction_limits = InstructionLimits::new(
-            self.instruction_limit_without_dts,
-            self.instruction_limit_without_dts,
-        );
         match task {
             CanisterTask::Heartbeat => {
                 canister
@@ -1210,8 +1203,8 @@ impl ExecutionTest {
         let result = execute_canister(
             &self.exec_env,
             canister,
-            instruction_limits,
-            self.instruction_limit_without_dts,
+            self.instruction_limits.clone(),
+            self.instruction_limit_per_query_message,
             Arc::clone(&network_topology),
             self.time,
             &mut round_limits,
@@ -1251,6 +1244,8 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), Arc::clone(&state)),
             None,
             true,
+            None,
+            None,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1501,7 +1496,7 @@ impl ExecutionTest {
                     &self.exec_env,
                     canister,
                     self.instruction_limits.clone(),
-                    self.instruction_limit_without_dts,
+                    self.instruction_limit_per_query_message,
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
@@ -1598,7 +1593,7 @@ impl ExecutionTest {
                     &self.exec_env,
                     canister,
                     self.instruction_limits.clone(),
-                    self.instruction_limit_without_dts,
+                    self.instruction_limit_per_query_message,
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
@@ -1797,6 +1792,8 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), state),
             Some(data_certificate_with_delegation_metadata),
             true,
+            None,
+            None,
         )
     }
 
@@ -2119,6 +2116,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_scheduler_cores(mut self, scheduler_cores: usize) -> Self {
+        self.subnet_config.scheduler_config.scheduler_cores = scheduler_cores;
+        self
+    }
+
     pub fn with_instruction_limit(mut self, limit: u64) -> Self {
         self.subnet_config
             .scheduler_config
@@ -2133,10 +2135,10 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_instruction_limit_without_dts(mut self, limit: u64) -> Self {
+    pub fn with_instruction_limit_per_query_message(mut self, limit: u64) -> Self {
         self.subnet_config
             .scheduler_config
-            .max_instructions_per_message_without_dts = NumInstructions::from(limit);
+            .max_instructions_per_query_message = NumInstructions::from(limit);
         self
     }
 
@@ -2425,21 +2427,23 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_snapshot_metadata_download(mut self) -> Self {
-        self.execution_config.canister_snapshot_download = FlagStatus::Enabled;
-        self
-    }
-
-    pub fn with_snapshot_metadata_upload(mut self) -> Self {
-        self.execution_config.canister_snapshot_upload = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_environment_variables_flag(
         mut self,
         environment_variables_flag: FlagStatus,
     ) -> Self {
         self.execution_config.environment_variables = environment_variables_flag;
+        self
+    }
+
+    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .deterministic_memory_tracker = if enabled {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
         self
     }
 
@@ -2528,7 +2532,9 @@ impl ExecutionTestBuilder {
                 key_id.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
-                    pre_signatures_to_create_in_advance: 5,
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(5),
                 },
             );
 
@@ -2691,10 +2697,10 @@ impl ExecutionTestBuilder {
                     .max_instructions_per_install_code_slice,
             ),
             ingress_memory_capacity: self.execution_config.ingress_history_memory_capacity,
-            instruction_limit_without_dts: self
+            instruction_limit_per_query_message: self
                 .subnet_config
                 .scheduler_config
-                .max_instructions_per_message_without_dts,
+                .max_instructions_per_query_message,
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),
@@ -2791,7 +2797,7 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
 
 fn get_canister_id_if_install_code(message: CanisterMessage) -> Option<CanisterId> {
     let message = match message {
-        CanisterMessage::Response(_) => return None,
+        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => return None,
         CanisterMessage::Request(request) => CanisterCall::Request(request),
         CanisterMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };

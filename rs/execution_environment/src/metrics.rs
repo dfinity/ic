@@ -1,3 +1,4 @@
+use crate::units::{GIB, KIB, MIB};
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::RequestMetadataStats;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::QueryMethod;
@@ -306,7 +307,7 @@ impl QueryHandlerMetrics {
         };
 
         self.subnet_query_messages
-            .with_label_values(&[method_name_label, status_label])
+            .with_label_values(&[method_name_label.as_str(), status_label])
             .observe(duration);
     }
 }
@@ -496,9 +497,6 @@ pub fn unique_sorted_buckets(buckets: &[u64]) -> Vec<f64> {
 
 /// Returns buckets appropriate for Wasm and Stable memories
 fn memory_buckets() -> Vec<f64> {
-    const KIB: u64 = 1024;
-    const MIB: u64 = 1024 * KIB;
-    const GIB: u64 = 1024 * MIB;
     unique_sorted_buckets(&[
         0,
         4 * KIB,

@@ -69,7 +69,7 @@ pub mod canister_http;
 pub mod canister_log;
 pub mod consensus;
 pub mod crypto;
-pub mod funds;
+pub mod cycles;
 pub mod hostos_version;
 pub mod ingress;
 pub mod malicious_behavior;
@@ -91,11 +91,11 @@ pub mod exhaustive;
 
 pub use crate::canister_log::{
     CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_DELTA_LOG_MEMORY_LIMIT, MIN_AGGREGATE_LOG_MEMORY_LIMIT,
+    MAX_DELTA_LOG_MEMORY_LIMIT,
 };
+pub use crate::cycles::Cycles;
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
-pub use funds::*;
 pub use ic_base_types::{
     CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,
     PrincipalIdBlobParseError, PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
@@ -128,13 +128,16 @@ pub fn user_id_into_protobuf(id: UserId) -> pb::UserId {
     }
 }
 
-/// From its protobuf definition convert to a UserId.  Normally, we would
+/// From an optional protobuf definition convert to a UserId.  Normally, we would
 /// use `impl TryFrom<pb::UserId> for UserId` here however we cannot as
 /// both `Id` and `pb::UserId` are defined in other crates.
-pub fn user_id_try_from_protobuf(value: pb::UserId) -> Result<UserId, PrincipalIdBlobParseError> {
-    // All fields in Protobuf definition are required hence they are encoded in
-    // `Option`.  We simply treat them as required here though.
-    let principal_id = PrincipalId::try_from(value.principal_id.unwrap())?;
+pub fn user_id_try_from_option(
+    value: Option<pb::UserId>,
+    field_name: &'static str,
+) -> Result<UserId, ProxyDecodeError> {
+    let value: pb::UserId = value.ok_or(ProxyDecodeError::MissingField(field_name))?;
+    let principal_id: PrincipalId =
+        try_from_option_field(value.principal_id, "UserId::principal_id")?;
     Ok(UserId::from(principal_id))
 }
 

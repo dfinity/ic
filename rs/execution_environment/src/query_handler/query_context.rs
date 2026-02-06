@@ -43,7 +43,7 @@ use ic_types::{
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::Arc,
+    sync::{Arc, atomic::AtomicU64},
     time::{Duration, Instant},
 };
 
@@ -117,6 +117,9 @@ pub(super) struct QueryContext<'a> {
     /// The number of transient errors.
     transient_errors: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    /// An optional atomic to observe the number of instructions used in the query.
+    /// This should only be populated for http outcalls transformations.
+    instruction_observation: Option<Arc<AtomicU64>>,
 }
 
 impl<'a> QueryContext<'a> {
@@ -141,6 +144,7 @@ impl<'a> QueryContext<'a> {
         query_critical_error: &'a IntCounter,
         local_query_execution_stats: Option<&'a QueryStatsCollector>,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        instruction_observation: Option<Arc<AtomicU64>>,
     ) -> Self {
         let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
         let round_limits = RoundLimits {
@@ -177,6 +181,7 @@ impl<'a> QueryContext<'a> {
             evaluated_canister_stats: BTreeMap::from([(canister_id, QueryStats::default())]),
             transient_errors: 0,
             cycles_account_manager,
+            instruction_observation,
         }
     }
 
@@ -398,7 +403,7 @@ impl<'a> QueryContext<'a> {
             canister.system_state.memory_allocation,
             canister.memory_usage(),
             canister.message_memory_usage(),
-            canister.scheduler_state.compute_allocation,
+            canister.compute_allocation(),
             subnet_size,
             self.get_cost_schedule(),
             canister.system_state.reserved_balance(),
@@ -450,6 +455,13 @@ impl<'a> QueryContext<'a> {
             },
             Err(_) => 0,
         };
+
+        if let Some(atomic) = self.instruction_observation.as_ref() {
+            atomic.fetch_add(
+                instructions_executed.get(),
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        }
 
         // Add query statistics to the query aggregator.
         let stats = QueryStats {

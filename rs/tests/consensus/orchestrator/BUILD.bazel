@@ -1,11 +1,10 @@
-load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "node_assign_test",
-    env = MESSAGE_CANISTER_ENV,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -29,7 +28,6 @@ system_test_nns(
 
 system_test_nns(
     name = "node_reassignment_test",
-    env = MESSAGE_CANISTER_ENV,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -71,9 +69,9 @@ system_test_nns(
 system_test(
     name = "cup_compatibility_test",
     env = MAINNET_ENV,
-    runtime_deps = [
-        "//rs/tests:cup_compatibility/binaries",
-    ],
+    runtime_deps = {
+        "TYPES_TEST_PATH": "//rs/types/types:types_test",
+    },
     deps = [
         # Keep sorted.
         "//rs/recovery",
@@ -105,7 +103,6 @@ system_test_nns(
 
 system_test_nns(
     name = "unstuck_subnet_test",
-    env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 2.1% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
     tags = [
@@ -125,7 +122,6 @@ system_test_nns(
 
 system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
-    env = MESSAGE_CANISTER_ENV,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
