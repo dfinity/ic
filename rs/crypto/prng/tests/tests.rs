@@ -55,7 +55,7 @@ fn should_produce_deterministic_randomness_from_seed_and_purpose() {
 
     let seed = seed();
 
-    let mut rng = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
+    let mut rng = Csprng::from_randomness_and_purpose(&seed, &CommitteeSampling);
 
     assert_eq!(rng.next_u32(), 2_206_231_697);
 }
@@ -65,7 +65,7 @@ fn should_offer_methods_of_rng_trait() {
     use rand::Rng;
     let seed = seed();
 
-    let mut rng = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
+    let mut rng = Csprng::from_randomness_and_purpose(&seed, &CommitteeSampling);
 
     assert_eq!(rng.r#gen::<u32>(), 2_206_231_697);
 }
@@ -93,9 +93,9 @@ fn should_generate_purpose_specific_randomness_for_random_beacon() {
 fn should_generate_purpose_specific_randomness_for_randomness_seed() {
     let seed = seed();
 
-    let mut rng_cs = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
-    let mut rng_br = Csprng::from_seed_and_purpose(&seed, &BlockmakerRanking);
-    let mut rng_et = Csprng::from_seed_and_purpose(&seed, &ExecutionThread(0));
+    let mut rng_cs = Csprng::from_randomness_and_purpose(&seed, &CommitteeSampling);
+    let mut rng_br = Csprng::from_randomness_and_purpose(&seed, &BlockmakerRanking);
+    let mut rng_et = Csprng::from_randomness_and_purpose(&seed, &ExecutionThread(0));
 
     let mut set = BTreeSet::new();
     assert!(set.insert(rng_cs.next_u32()));
@@ -126,8 +126,8 @@ fn should_produce_different_randomness_for_same_purpose_for_different_randomness
     assert_ne!(s1, s2);
     let purpose = CommitteeSampling;
 
-    let mut csprng1 = Csprng::from_seed_and_purpose(&s1, &purpose);
-    let mut csprng2 = Csprng::from_seed_and_purpose(&s2, &purpose);
+    let mut csprng1 = Csprng::from_randomness_and_purpose(&s1, &purpose);
+    let mut csprng2 = Csprng::from_randomness_and_purpose(&s2, &purpose);
 
     assert_ne!(csprng1.next_u32(), csprng2.next_u32());
 }
@@ -152,8 +152,8 @@ fn should_produce_different_randomness_for_different_execution_threads_for_rando
     let (thread_1, thread_2) = (1, 2);
     assert_ne!(thread_1, thread_2);
 
-    let mut csprng1 = Csprng::from_seed_and_purpose(&seed, &ExecutionThread(thread_1));
-    let mut csprng2 = Csprng::from_seed_and_purpose(&seed, &ExecutionThread(thread_2));
+    let mut csprng1 = Csprng::from_randomness_and_purpose(&seed, &ExecutionThread(thread_1));
+    let mut csprng2 = Csprng::from_randomness_and_purpose(&seed, &ExecutionThread(thread_2));
 
     assert_ne!(csprng1.next_u32(), csprng2.next_u32());
 }

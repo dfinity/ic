@@ -449,3 +449,13 @@ pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
     data.hash(&mut hash);
     CryptoHashOf::new(CryptoHash(hash.finish().to_vec()))
 }
+
+/// Convert a CryptoHashable into Randomness.
+pub fn randomness_from_crypto_hashable<T: CryptoHashable>(hashable: &T) -> crate::Randomness {
+    let hash = crypto_hash(hashable);
+    let CryptoHash(hash_bytes) = hash.get();
+    let mut seed = [0u8; 32];
+    let n = hash_bytes.len().min(32);
+    seed[0..n].copy_from_slice(&hash_bytes[0..n]);
+    crate::Randomness::from(seed)
+}

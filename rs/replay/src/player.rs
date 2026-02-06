@@ -13,10 +13,7 @@ use ic_artifact_pool::{
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus::consensus::batch_delivery::deliver_batches;
 use ic_consensus_certification::VerifierImpl;
-use ic_consensus_utils::{
-    crypto_hashable_to_seed, lookup_replica_version, membership::Membership,
-    pool_reader::PoolReader,
-};
+use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
@@ -65,7 +62,7 @@ use ic_types::{
         certification::{Certification, CertificationContent, CertificationShare},
     },
     crypto::{
-        CombinedThresholdSig, CombinedThresholdSigOf, Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, Signed, randomness_from_crypto_hashable,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     },
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -759,7 +756,7 @@ impl Player {
                 (
                     last_block.context.registry_version,
                     last_block.context.time + Duration::from_nanos(1),
-                    Randomness::from(crypto_hashable_to_seed(&last_block)),
+                    randomness_from_crypto_hashable(&last_block),
                     last_block.version.clone(),
                 )
             }

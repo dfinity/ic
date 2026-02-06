@@ -1,9 +1,9 @@
 //! Offers cryptographically secure pseudorandom number generation (CSPRNG).
 use RandomnessPurpose::*;
 use ic_crypto_internal_seed::Seed;
+use ic_types::Randomness;
 use ic_types::consensus::RandomBeacon;
-use ic_types::crypto::CryptoHashable;
-use ic_types::{Randomness, crypto::crypto_hash};
+use ic_types::crypto::randomness_from_crypto_hashable;
 use rand::{CryptoRng, Error, RngCore};
 use rand_chacha::ChaCha20Rng;
 use std::fmt;
@@ -35,13 +35,12 @@ impl Csprng {
         random_beacon: &RandomBeacon,
         purpose: &RandomnessPurpose,
     ) -> Self {
-        let seed = Self::seed_from_crypto_hashable(random_beacon);
-        let seed_for_purpose = seed.derive(&purpose.domain_separator());
-        Csprng::from_seed(seed_for_purpose)
+        let randomness = randomness_from_crypto_hashable(random_beacon);
+        Self::from_randomness_and_purpose(&randomness, purpose)
     }
 
-    /// Creates a CSPRNG from the given seed for the given purpose.
-    pub fn from_seed_and_purpose(seed: &Randomness, purpose: &RandomnessPurpose) -> Self {
+    /// Creates a CSPRNG from the Randomness value for the given purpose.
+    pub fn from_randomness_and_purpose(seed: &Randomness, purpose: &RandomnessPurpose) -> Self {
         let seed = Seed::from_bytes(&seed.get());
         let seed_for_purpose = seed.derive(&purpose.domain_separator());
         Csprng::from_seed(seed_for_purpose)
@@ -52,12 +51,6 @@ impl Csprng {
         Csprng {
             rng: seed.into_rng(),
         }
-    }
-
-    /// Creates a CSPRNG seed from the given crypto hashable.
-    fn seed_from_crypto_hashable<T: CryptoHashable>(crypto_hashable: &T) -> Seed {
-        let hash = crypto_hash(crypto_hashable);
-        Seed::from_bytes(&hash.get().0)
     }
 }
 
