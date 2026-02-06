@@ -418,6 +418,7 @@ async fn test_has_replicated_all_versions_certified_before_init() {
     let replicator =
         new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, Some(nns_pub_key)).await;
     let token = CancellationToken::new();
+    let time_after_init = current_time();
 
     // Before the replicator starts polling, it should not claim to have replicated all versions
     // certified before its initialization time
@@ -434,7 +435,7 @@ async fn test_has_replicated_all_versions_certified_before_init() {
     // canister is behind (it has only 1 version). This mocks the scenario where the replicator
     // contacts a node that is behind.
     let latest_certified_time = *replicator.get_latest_certified_time().read().unwrap();
-    assert!(latest_certified_time > time_before_init);
+    assert!(latest_certified_time > time_after_init);
     assert!(replicator.has_replicated_all_versions_certified_before_init());
 
     for _ in 0..INIT_NUM_VERSIONS {
@@ -461,6 +462,7 @@ async fn test_has_not_replicated_all_versions_certified_before_init_when_caniste
     let replicator =
         new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, Some(nns_pub_key)).await;
     let token = CancellationToken::new();
+    let time_after_init = current_time();
 
     // Before the replicator starts polling, it should not claim to have replicated all versions
     // certified before its initialization time, even if the canister is ahead
@@ -472,7 +474,7 @@ async fn test_has_not_replicated_all_versions_certified_before_init_when_caniste
 
     // We have waited for the poll delay, so the replicator should have polled the NNS and its
     // response should have been certified after the replicator's initialization time
-    assert!(*replicator.get_latest_certified_time().read().unwrap() > time_before_init);
+    assert!(*replicator.get_latest_certified_time().read().unwrap() > time_after_init);
     assert!(replicator.has_replicated_all_versions_certified_before_init());
 }
 
