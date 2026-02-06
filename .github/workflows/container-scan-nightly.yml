@@ -39,7 +39,6 @@ jobs:
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
-          df -h
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
