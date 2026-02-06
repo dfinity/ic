@@ -385,7 +385,11 @@ async fn deploy_canisters_for_long_rounds(
 }
 
 fn no_state_clone_count(node: IcNodeSnapshot, logger: &slog::Logger) -> u64 {
-    let count = block_on(fetch_metrics::<u64>(logger, node, vec![NO_STATE_CLONE_COUNT]));
+    let count = block_on(fetch_metrics::<u64>(
+        logger,
+        node,
+        vec![NO_STATE_CLONE_COUNT],
+    ));
     count[NO_STATE_CLONE_COUNT][0]
 }
 
@@ -396,7 +400,11 @@ pub fn rejoin_test_long_rounds(
     dkg_interval: u64,
 ) {
     let logger = env.logger();
-    block_on(deploy_canisters_for_long_rounds(&logger, nodes.clone(), num_canisters));
+    block_on(deploy_canisters_for_long_rounds(
+        &logger,
+        nodes.clone(),
+        num_canisters,
+    ));
 
     // Sort nodes by their average duration to process a batch.
     let mut average_process_batch_durations = vec![];
@@ -447,7 +455,11 @@ pub fn rejoin_test_long_rounds(
         .certified_height
         .expect("Failed to get certified height of reference_node")
         .get();
-    block_on(wait_for_cup(&logger, latest_certified_height, reference_node.clone()));
+    block_on(wait_for_cup(
+        &logger,
+        latest_certified_height,
+        reference_node.clone(),
+    ));
 
     info!(logger, "Start the killed node again ...");
     rejoin_node.vm().start();
