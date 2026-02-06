@@ -65,7 +65,6 @@ use ic_replicated_state::{
         SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
         SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
-    testing::ReplicatedStateTesting,
 };
 use ic_types::{
     CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
@@ -1956,8 +1955,7 @@ impl ExecutionEnvironment {
                 let res = match response {
                     Ok((res, canister_id)) => {
                         if let Some(canister_id) = canister_id
-                            && let Some(canister_state) =
-                                state.canister_states_mut().get_mut(canister_id)
+                            && let Some(canister_state) = state.canister_state_mut_arc(canister_id)
                         {
                             canister_state.update_on_low_wasm_memory_hook_condition();
                         }
