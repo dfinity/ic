@@ -403,9 +403,10 @@ fn install_code(
     let network_topology = state.metadata.network_topology.clone();
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
-    let old_canister = Arc::unwrap_or_clone(old_canister);
     execution_parameters.compute_allocation = old_canister.compute_allocation();
+    execution_parameters.memory_allocation = old_canister.memory_allocation();
 
+    let old_canister = Arc::unwrap_or_clone(old_canister);
     let dts_result = canister_manager.install_code_dts(
         context,
         CanisterCall::Ingress(Arc::new(ingress)),

@@ -397,6 +397,8 @@ fn ingress_filter() {
 
     assert_eq!(queue.pop(), Some(msg3.into()));
     assert_eq!(IngressQueue::size_bytes(&queue.queues), queue.count_bytes());
+
+    assert_eq!(queue.pop(), None);
 }
 
 #[test]

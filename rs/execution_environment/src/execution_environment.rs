@@ -2550,7 +2550,7 @@ impl ExecutionEnvironment {
             &resource_saturation,
         );
         // Put canister back.
-        state.put_canister_state_arc(canister);
+        state.put_canister_state(canister);
 
         match result {
             Ok((response, rejects, instructions_used)) => {
@@ -2615,7 +2615,7 @@ impl ExecutionEnvironment {
             }
             Err(err) => {
                 // Could not load the canister snapshot, thus put back old state.
-                state.put_canister_state_arc(old_canister);
+                state.put_canister_state(old_canister);
                 Err(err.into())
             }
         };
@@ -2677,7 +2677,7 @@ impl ExecutionEnvironment {
             .map_err(|err| err.into());
 
         // Put canister back.
-        state.put_canister_state_arc(canister);
+        state.put_canister_state(canister);
         result
     }
 
@@ -2718,7 +2718,7 @@ impl ExecutionEnvironment {
         };
 
         // Put canister back.
-        state.put_canister_state_arc(canister);
+        state.put_canister_state(canister);
         result
     }
 
@@ -2765,7 +2765,7 @@ impl ExecutionEnvironment {
             .map_err(|err| err.into());
 
         // Put canister back with the new id.
-        state.put_canister_state_arc(canister);
+        state.put_canister_state(canister);
         result
     }
 
@@ -2828,7 +2828,7 @@ impl ExecutionEnvironment {
             &resource_saturation,
         );
         // Put canister back.
-        state.put_canister_state_arc(canister);
+        state.put_canister_state(canister);
         match result {
             Ok((snapshot_id, instructions_used)) => (
                 Ok(Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap()),
@@ -2873,7 +2873,7 @@ impl ExecutionEnvironment {
             &resource_saturation,
         );
         // Put canister back.
-        state.put_canister_state_arc(canister);
+        state.put_canister_state(canister);
         match result {
             (Ok(()), instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
             (Err(e), instructions_used) => (Err(UserError::from(e)), instructions_used),
@@ -4027,24 +4027,27 @@ impl ExecutionEnvironment {
     /// Aborts paused execution in the given state.
     pub fn abort_canister(&self, canister: &mut Arc<CanisterState>, log: &ReplicaLogger) {
         if !canister.system_state.task_queue.is_empty() {
-            let canister = Arc::make_mut(canister);
             if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
                 self.metrics.executions_aborted.inc();
                 // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
                 // paused execution on the canister without requesting ID from TaskQueue.
                 let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
 
-                canister
+                Arc::make_mut(canister)
                     .system_state
                     .task_queue
                     .replace_paused_with_aborted_task(aborted_task);
             }
-            let canister_id = canister.canister_id();
-            canister.system_state.apply_ingress_induction_cycles_debit(
-                canister_id,
-                log,
-                &self.metrics.charging_from_balance_error,
-            );
+            if canister.system_state.ingress_induction_cycles_debit() > Cycles::zero() {
+                let canister_id = canister.canister_id();
+                Arc::make_mut(canister)
+                    .system_state
+                    .apply_ingress_induction_cycles_debit(
+                        canister_id,
+                        log,
+                        &self.metrics.charging_from_balance_error,
+                    );
+            }
         };
     }
 
@@ -4247,11 +4250,11 @@ impl ExecutionEnvironment {
         let time = state.time();
 
         for canister in canister_states.values_mut() {
-            // TODO: Only make a mutable reference if the canister needs to be mutated.
             match canister.system_state.get_status() {
                 CanisterStatus::Running { .. } | CanisterStatus::Stopped => continue,
                 CanisterStatus::Stopping { .. } => {}
             }
+            // TODO(DSM-102): Only `make_mut()` if the canister needs to be mutated.
             let canister = Arc::make_mut(canister);
             let (stopped, stop_contexts) =
                 canister.system_state.try_stop_canister(|stop_context| {

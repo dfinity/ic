@@ -1178,7 +1178,7 @@ fn split() {
     Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_1, expected.canister_states());
-    expected.put_canister_state_arc(canister_state);
+    expected.put_canister_state(canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
     // Everything else should be the same as in phase 1.
@@ -1210,7 +1210,7 @@ fn split() {
     //
 
     // Loading `state_b` will populate the scheduling priority for `CANISTER_2`.
-    state_b.metadata.subnet_schedule.get_mut(CANISTER_2);
+    state_b.canister_priority_mut(CANISTER_2);
 
     state_b.after_split();
 
@@ -1221,7 +1221,7 @@ fn split() {
     Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_2, expected.canister_states());
-    expected.put_canister_state_arc(canister_state);
+    expected.put_canister_state(canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
     // Everything else should be the same as in phase 1.
@@ -1343,7 +1343,7 @@ fn online_split() {
     Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_1, expected.canister_states());
-    expected.put_canister_state_arc(canister_state);
+    expected.put_canister_state(canister_state);
     // The snapshot of `CANISTER_2` should have been deleted.
     expected.canister_snapshots.remove(canister_2_snapshot_id);
 
@@ -1375,7 +1375,7 @@ fn online_split() {
         .split_input_schedules(&CANISTER_2, expected.canister_states());
     // The in-progress `install_code` task should have been silently dropped.
     Arc::make_mut(&mut canister_state).system_state.task_queue = Default::default();
-    expected.put_canister_state_arc(canister_state);
+    expected.put_canister_state(canister_state);
     // The snapshot of `CANISTER_1` should have been deleted.
     expected.canister_snapshots.remove(canister_1_snapshot_id);
 

@@ -573,10 +573,10 @@ fn switch_to_checkpoint(
     layout: &CheckpointLayout<ReadOnly>,
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
-    for (tip_id, tip_canister) in tip.canister_states_iter_mut() {
-        // TODO: Is this necessary for all canisters?
+    for tip_canister in tip.canisters_iter_mut() {
+        // FIXME: Is this necessary for all canisters?
         let tip_canister = Arc::make_mut(tip_canister);
-        let canister_layout = layout.canister(tip_id).unwrap();
+        let canister_layout = layout.canister(&tip_canister.canister_id()).unwrap();
         tip_canister
             .system_state
             .wasm_chunk_store
@@ -666,11 +666,12 @@ fn switch_to_checkpoint(
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
-    for (tip_id, tip_canister) in tip.canister_states_iter_mut() {
-        // TODO: Is this necessary for all canisters?
+    for tip_canister in tip.canisters_iter_mut() {
+        // FIXME: Is this necessary for all canisters?
         let tip_canister = Arc::make_mut(tip_canister);
+        let tip_id = tip_canister.canister_id();
         if let Some(tip_state) = &mut tip_canister.execution_state {
-            let canister_layout = layout.canister(tip_id).unwrap();
+            let canister_layout = layout.canister(&tip_id).unwrap();
 
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.

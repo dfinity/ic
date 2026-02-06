@@ -1750,11 +1750,11 @@ fn execute_idle_and_canisters_with_messages() {
         ExecutionRound::from(1)
     );
     let active = test.canister_state(active);
-    let system_state = &active.system_state;
-    assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
+    assert_eq!(active.system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
     assert_eq!(
-        system_state
+        active
+            .system_state
             .canister_metrics()
             .interrupted_during_execution(),
         0
@@ -2763,7 +2763,7 @@ fn can_record_metrics_for_a_round() {
         }
     }
 
-    for (_, canister) in test.state_mut().canister_states_iter_mut() {
+    for canister in test.state_mut().canisters_iter_mut() {
         Arc::make_mut(canister)
             .system_state
             .time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
@@ -4495,9 +4495,7 @@ fn construct_scheduler_for_prop_test(
             None,
         );
         test.state_mut()
-            .metadata
-            .subnet_schedule
-            .get_mut(canister)
+            .canister_priority_mut(canister)
             .last_full_execution_round = last_round;
         for _ in 0..messages_per_canister {
             test.send_ingress(canister, ingress(instructions_per_message as u64));
@@ -4739,12 +4737,7 @@ fn scheduler_respects_compute_allocation(
     // for free, i.e. `100 * number_of_canisters` rounds.
     let number_of_rounds = 100 * number_of_canisters;
 
-    let canister_ids: Vec<_> = test
-        .state()
-        .canister_states()
-        .iter()
-        .map(|x| *x.0)
-        .collect();
+    let canister_ids: Vec<_> = test.state().canister_states().keys().cloned().collect();
 
     // Add one more round as we update the accumulated priorities at the end of the round now.
     for _ in 0..=number_of_rounds {

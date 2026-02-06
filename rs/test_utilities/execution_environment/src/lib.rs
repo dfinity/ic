@@ -1214,7 +1214,7 @@ impl ExecutionTest {
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
-        state.put_canister_state_arc(result.canister);
+        state.put_canister_state(result.canister);
         state.metadata.heap_delta_estimate += result.heap_delta;
         self.state = Some(state);
         self.update_execution_stats(

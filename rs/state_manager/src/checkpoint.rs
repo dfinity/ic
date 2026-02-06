@@ -275,8 +275,8 @@ fn strip_page_map_deltas(
     state: &mut ReplicatedState,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
-    for (_id, canister) in state.canister_states_iter_mut() {
-        // TODO: Check if canister has deltas before making a mutable reference.
+    for canister in state.canisters_iter_mut() {
+        // FIXME: Check if canister has deltas before making a mutable reference.
         let canister = Arc::make_mut(canister);
         canister
             .system_state
@@ -363,20 +363,21 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
         page_map.strip_unflushed_delta();
     };
 
-    for (id, canister) in tip_state.canister_states_iter_mut() {
-        // TODO: Filter out canisters with no heap deltas before making a mutable reference.
+    for canister in tip_state.canisters_iter_mut() {
+        // FIXME: Filter out canisters with no heap deltas before making a mutable reference.
         let canister = Arc::make_mut(canister);
+        let id = canister.canister_id();
         add_to_pagemaps_and_strip(
-            PageMapType::WasmChunkStore(id.to_owned()),
+            PageMapType::WasmChunkStore(id),
             canister.system_state.wasm_chunk_store.page_map_mut(),
         );
         if let Some(execution_state) = canister.execution_state.as_mut() {
             add_to_pagemaps_and_strip(
-                PageMapType::WasmMemory(id.to_owned()),
+                PageMapType::WasmMemory(id),
                 &mut execution_state.wasm_memory.page_map,
             );
             add_to_pagemaps_and_strip(
-                PageMapType::StableMemory(id.to_owned()),
+                PageMapType::StableMemory(id),
                 &mut execution_state.stable_memory.page_map,
             );
         }

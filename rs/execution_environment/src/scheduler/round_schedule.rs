@@ -321,11 +321,8 @@ impl RoundSchedule {
         for canister_id in fully_executed_canister_ids {
             if state.canister_state(&canister_id).is_some() {
                 total_charged_priority += 100 * multiplier;
-                state
-                    .metadata
-                    .subnet_schedule
-                    .get_mut(canister_id)
-                    .priority_credit += (100 * multiplier).into();
+                state.canister_priority_mut(canister_id).priority_credit +=
+                    (100 * multiplier).into();
             }
         }
 
@@ -426,7 +423,7 @@ impl RoundSchedule {
         let mut accumulated_priority_invariant = AccumulatedPriority::default();
         let mut accumulated_priority_deviation = 0.0;
         let (canister_states, subnet_schedule) = state.subnet_schedule_mut();
-        for (&canister_id, canister) in canister_states.iter() {
+        for (&canister_id, canister) in canister_states.iter_mut() {
             if is_reset_round {
                 let canister_priority = subnet_schedule.get_mut(canister_id);
                 // By default, each canister accumulated priority is set to its compute allocation.
@@ -453,8 +450,6 @@ impl RoundSchedule {
             accumulated_priority_invariant += accumulated_priority;
             accumulated_priority_deviation +=
                 accumulated_priority.get() as f64 * accumulated_priority.get() as f64;
-        }
-        for (_, canister) in state.canister_states_iter_mut() {
             if canister.has_input() {
                 let canister = Arc::make_mut(canister);
                 canister
@@ -558,9 +553,7 @@ impl RoundSchedule {
             .take(long_execution_cores)
         {
             state
-                .metadata
-                .subnet_schedule
-                .get_mut(*canister_id)
+                .canister_priority_mut(*canister_id)
                 .long_execution_mode = LongExecutionMode::Prioritized;
         }
 

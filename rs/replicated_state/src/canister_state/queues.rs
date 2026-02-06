@@ -1371,11 +1371,12 @@ impl CanisterQueues {
         self.message_stats().cycles
     }
 
-    /// Returns `true` if calling `garbage_collect()` would actually do something.
+    /// Returns `true` if calling `garbage_collect()` would actually garbage collect
+    /// anything.
     ///
     /// Time complexity: `O(num_queues)`.
     pub fn can_garbage_collect(&self) -> bool {
-        // Garbage collect if any input queue / output queue pair are both empty...
+        // Can garbage collect if any input queue / output queue pair are both empty...
         self.canister_queues
             .iter()
             .any(|(_, (input_queue, output_queue))| {
