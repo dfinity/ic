@@ -1,0 +1,5 @@
+# Compiled Python protobuf files (generated at runtime)
+*_pb2.py
+*_pb2.pyi
+__pycache__/
+*.pyc

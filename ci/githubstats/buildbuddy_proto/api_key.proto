@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+import "ci/githubstats/buildbuddy_proto/capability.proto";
+import "ci/githubstats/buildbuddy_proto/context.proto";
+import "google/protobuf/duration.proto";
+
+package api_key;
+
+// An API key used to access BuildBuddy.
+message ApiKey {
+  // The unique ID of this API key.
+  // ex: "AK123456789"
+  string id = 1;
+
+  // The string value of this API key which is passed in API requests.
+  string value = 2;
+
+  // Optional. The user-specified label of this API key that helps them
+  // remember what it's for.
+  string label = 3;
+
+  // Capabilities associated with this API key.
+  repeated capability.Capability capability = 4;
+
+  // True if this API key is visible to developers.
+  bool visible_to_developers = 5;
+
+  // True if this is a user owned key.
+  bool user_owned = 6;
+
+  // Optional time after which this API key is no longer valid.
+  int64 expiry_usec = 7;
+
+  // Optional certificate corresponding to this API key, if
+  // requested.
+  Certificate certificate = 8;
+}
+
+message Certificate {
+  // String representation of certificate file.
+  string cert = 1;
+
+  // String representation of key file.
+  string key = 2;
+}
+
+message CreateApiKeyRequest {
+  context.RequestContext request_context = 1;
+
+  reserved 2;  // group_id
+
+  // The ID of the user to create the API key for.
+  // Requires ORG_ADMIN capability if different than the authenticated
+  // user.
+  string user_id = 6;
+
+  // Optional. The user-specified label of this API key that helps them
+  // remember what it's for.
+  string label = 3;
+
+  // Optional. Capabilities granted to this API key.
+  repeated capability.Capability capability = 4;
+
+  // True if this API key should be visible to developers.
+  bool visible_to_developers = 5;
+
+  // Optional. Duration after which the API key should no longer be valid.
+  google.protobuf.Duration expires_in = 7;
+}
+
+message CreateApiKeyResponse {
+  context.ResponseContext response_context = 1;
+
+  // The API key that was created.
+  ApiKey api_key = 2;
+}
+
+message GetApiKeysRequest {
+  context.RequestContext request_context = 1;
+
+  // The ID of the user to get API keys for.
+  // ex: "US123456789"
+  string user_id = 3;
+
+  // The ID of the group to get API keys for.
+  // ex: "GR123456789"
+  string group_id = 2;
+}
+
+message GetApiKeysResponse {
+  context.ResponseContext response_context = 1;
+
+  // The API keys owned by the requested group.
+  repeated ApiKey api_key = 2;
+}
+
+message GetApiKeyRequest {
+  context.RequestContext request_context = 1;
+
+  // The ID of the API key to retrieve.
+  // ex: "AK123456789"
+  string api_key_id = 2;
+
+  // Whether to populate the certificate for the returned API key.
+  bool include_certificate = 3;
+}
+
+message GetApiKeyResponse {
+  context.ResponseContext response_context = 1;
+
+  ApiKey api_key = 2;
+}
+
+message UpdateApiKeyRequest {
+  context.RequestContext request_context = 1;
+
+  // The unique ID of the API key to be updated.
+  // ex: "AK123456789"
+  string id = 2;
+
+  // Optional. The user-specified label of this API key that helps them
+  // remember what it's for.
+  //
+  // NOTE: If this is empty, the label will be deleted.
+  string label = 3;
+
+  // Optional. The capabilities associated with this API key.
+  //
+  // NOTE: If this is empty, all capabilities will be removed as part of
+  // this update.
+  repeated capability.Capability capability = 4;
+
+  // True if this API key should be visible to developers.
+  bool visible_to_developers = 5;
+}
+
+message UpdateApiKeyResponse {
+  context.ResponseContext response_context = 1;
+}
+
+message DeleteApiKeyRequest {
+  context.RequestContext request_context = 1;
+
+  // The unique ID of the API key to be updated.
+  // ex: "AK123456789"
+  string id = 2;
+}
+
+message DeleteApiKeyResponse {
+  context.ResponseContext response_context = 1;
+}
+
+message CreateImpersonationApiKeyRequest {
+  context.RequestContext request_context = 1;
+}
+
+message CreateImpersonationApiKeyResponse {
+  context.ResponseContext response_context = 1;
+
+  // The API key that was created.
+  ApiKey api_key = 2;
+}

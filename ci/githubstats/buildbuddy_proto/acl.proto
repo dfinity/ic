@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+import "ci/githubstats/buildbuddy_proto/user_id.proto";
+
+package acl;
+
+// Access control list for BuildBuddy objects.
+message ACL {
+  // ID of the user that owns the object.
+  user_id.UserId user_id = 1;
+
+  // ID of the group that owns the object.
+  string group_id = 2;
+
+  Permissions owner_permissions = 3;
+  Permissions group_permissions = 4;
+  Permissions others_permissions = 5;
+
+  message Permissions {
+    bool read = 1;
+    bool write = 2;
+  }
+}

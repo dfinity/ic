@@ -10,9 +10,11 @@ import os
 import re
 import subprocess
 import sys
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import codeowners
 import pandas as pd
@@ -84,6 +86,181 @@ def shorten_owner(owner: str) -> str:
     """Shorten a code owner string for display. For example '@dfinity/node' -> 'node'."""
     parts = owner.split("/", 1)
     return parts[1] if len(parts) == 2 else owner
+
+
+def setup_buildbuddy_protos():
+    """Compile BuildBuddy proto files at runtime and make them importable."""
+    import os
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    # Find the proto files directory (they're included as data files)
+    script_dir = Path(__file__).parent
+    proto_dir = script_dir / "buildbuddy_proto"
+
+    if not proto_dir.exists():
+        raise RuntimeError(f"BuildBuddy proto directory not found at {proto_dir}")
+
+    # Create a temporary directory for compiled protos
+    temp_dir = tempfile.mkdtemp(prefix="buildbuddy_proto_")
+
+    # Workspace root is two levels up from script_dir (/ic)
+    workspace_root = script_dir.parent.parent
+
+    # Only compile proto files needed for target.proto (excluding ones with external googleapis dependencies)
+    # Determined by analyzing the import graph starting from target.proto
+    proto_files_to_compile = [
+        # target.proto and its direct imports
+        "ci/githubstats/buildbuddy_proto/target.proto",
+        "ci/githubstats/buildbuddy_proto/api/v1/common.proto",
+        "ci/githubstats/buildbuddy_proto/context.proto",
+        "ci/githubstats/buildbuddy_proto/build_event_stream.proto",
+        # Transitive dependencies
+        "ci/githubstats/buildbuddy_proto/user_id.proto",
+        "ci/githubstats/buildbuddy_proto/action_cache.proto",
+        "ci/githubstats/buildbuddy_proto/command_line.proto",
+        "ci/githubstats/buildbuddy_proto/invocation_policy.proto",
+        "ci/githubstats/buildbuddy_proto/failure_details.proto",
+        "ci/githubstats/buildbuddy_proto/package_load_metrics.proto",
+        "ci/githubstats/buildbuddy_proto/option_filters.proto",
+        "ci/githubstats/buildbuddy_proto/strategy_policy.proto",
+        "ci/githubstats/buildbuddy_proto/semver.proto",
+    ]
+
+    result = subprocess.run(
+        ["protoc", f"--python_out={temp_dir}", f"--proto_path={workspace_root}"] + proto_files_to_compile,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to compile protos: {result.stderr}")
+
+    # Create __init__.py files for Python package structure
+    temp_path = Path(temp_dir)
+    for package_dir in [
+        temp_path / "ci",
+        temp_path / "ci" / "githubstats",
+        temp_path / "ci" / "githubstats" / "buildbuddy_proto",
+        temp_path / "ci" / "githubstats" / "buildbuddy_proto" / "api",
+        temp_path / "ci" / "githubstats" / "buildbuddy_proto" / "api" / "v1",
+    ]:
+        if package_dir.exists():
+            (package_dir / "__init__.py").touch()
+
+    # Add temp directory to Python path so we can import the compiled modules
+    sys.path.insert(0, temp_dir)
+
+    return temp_dir
+
+
+def get_buildbuddy_log_download_url(buildbuddy_url: str, test_target: str, target_pb2, verbose: bool = False) -> Optional[str]:
+    """
+    Get the direct log download URL from BuildBuddy using its protobuf API.
+
+    Args:
+        buildbuddy_url: URL like "https://dash.dm1-idx1.dfinity.network/invocation/7ba81d70-..."
+        test_target: The Bazel test target like "//rs/tests/consensus/upgrade:upgrade_downgrade_nns_subnet_test"
+        target_pb2: The compiled protobuf module (passed in to avoid recompiling)
+        verbose: Whether to print debug information
+
+    Returns:
+        The direct download URL for the test log, or None if not found
+    """
+    # Parse the BuildBuddy URL to extract base URL and invocation ID
+    parsed = urllib.parse.urlparse(buildbuddy_url)
+    base_url = f"{parsed.scheme}://{parsed.netloc}"
+
+    path_parts = parsed.path.split('/')
+    if 'invocation' not in path_parts:
+        if verbose:
+            print(f"No 'invocation' in path: {parsed.path}", file=sys.stderr)
+        return None
+
+    invocation_idx = path_parts.index('invocation')
+    if invocation_idx + 1 >= len(path_parts):
+        if verbose:
+            print(f"No invocation ID found in path: {parsed.path}", file=sys.stderr)
+        return None
+
+    invocation_id = path_parts[invocation_idx + 1]
+
+    try:
+        # Create the GetTarget request
+        request = target_pb2.GetTargetRequest()
+        request.invocation_id = invocation_id
+        request.target_label = test_target
+
+        # Serialize to protobuf bytes
+        request_bytes = request.SerializeToString()
+
+        # Make the RPC call
+        rpc_url = f"{base_url}/rpc/BuildBuddyService/GetTarget"
+        if verbose:
+            print(f"Calling BuildBuddy API: {rpc_url}", file=sys.stderr)
+
+        response = requests.post(
+            rpc_url,
+            headers={"Content-Type": "application/proto"},
+            data=request_bytes,
+            timeout=10
+        )
+
+        if not response.ok:
+            if verbose:
+                print(f"BuildBuddy API returned {response.status_code}: {response.text[:200]}", file=sys.stderr)
+            return None
+
+        # Parse the protobuf response
+        target_response = target_pb2.GetTargetResponse()
+        target_response.ParseFromString(response.content)
+
+        if verbose:
+            print(f"Response has {len(target_response.target_groups)} target groups", file=sys.stderr)
+
+        # Look for test.log in the test_summary passed/failed logs
+        # Response structure: target_groups[] -> targets[] -> test_summary -> passed/failed[]
+        for target_group in target_response.target_groups:
+            if verbose:
+                print(f"Target group has {len(target_group.targets)} targets", file=sys.stderr)
+            for target in target_group.targets:
+                # Check if test_summary exists
+                if not target.HasField('test_summary'):
+                    if verbose:
+                        print(f"Target {test_target} has no test_summary", file=sys.stderr)
+                    continue
+
+                test_summary = target.test_summary
+
+                # Check failed logs first (most common case for investigation)
+                all_log_files = list(test_summary.failed) + list(test_summary.passed)
+
+                if verbose:
+                    print(f"Test summary has {len(test_summary.failed)} failed logs, {len(test_summary.passed)} passed logs", file=sys.stderr)
+
+                for file in all_log_files:
+                    if verbose:
+                        print(f"  Log file: name='{file.name}', uri='{file.uri[:80] if file.uri else ''}'", file=sys.stderr)
+                    # Test log files may have empty names, so just check for a valid URI
+                    if file.uri:
+                        bytestream_url = file.uri
+                        encoded = urllib.parse.quote(bytestream_url, safe='')
+                        download_url = f"{base_url}/file/download?bytestream_url={encoded}&invocation_id={invocation_id}"
+                        if verbose:
+                            print(f"Found test.log download URL: {download_url}", file=sys.stderr)
+                        return download_url
+
+        if verbose:
+            print(f"No test.log found for {test_target}", file=sys.stderr)
+
+    except Exception as e:
+        if verbose:
+            import traceback
+            print(f"Error calling BuildBuddy API: {e}", file=sys.stderr)
+            traceback.print_exc()
+
+    return None
 
 
 def log_psql_query(log_query: bool, query: str, conninfo: str):
@@ -346,11 +523,35 @@ def last(args):
     # Turn the buildbuddy URLs into terminal hyperlinks to the logs of the test target.
     # Since the buildbuddy_url column points to the BuildBuddy redirect service
     # we first need to resolve the redirect to the cluster-specific BuildBuddy URL.
+    # We also fetch the direct download URL from BuildBuddy's API.
     # Since this I/O takes time we parallelize it speeding it up by a factor of 6.
+
+    # Compile protos once before parallel execution
+    target_pb2 = None
+    try:
+        setup_buildbuddy_protos()
+        from ci.githubstats.buildbuddy_proto import target_pb2
+    except Exception as e:
+        if args.verbose:
+            print(f"Failed to setup BuildBuddy protos: {e}", file=sys.stderr)
+
     def direct_url_to_buildbuddy(url):
         redirect = get_redirect_location(url)
-        url = f"{redirect}?target={args.test_target}"
-        return terminal_hyperlink("log", url)
+        if not redirect:
+            return terminal_hyperlink("log", url)
+
+        web_url = f"{redirect}?target={args.test_target}"
+
+        # Try to get the download URL from BuildBuddy API
+        if target_pb2:
+            download_url = get_buildbuddy_log_download_url(redirect, args.test_target, target_pb2, verbose=args.verbose)
+
+            if download_url:
+                # Link directly to downloadable log
+                return terminal_hyperlink("log", download_url)
+
+        # Fall back to web UI
+        return terminal_hyperlink("log", web_url)
 
     with ThreadPoolExecutor() as executor:
         df["buildbuddy"] = list(executor.map(direct_url_to_buildbuddy, df["buildbuddy_url"]))

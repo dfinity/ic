@@ -5,7 +5,7 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 py_binary(
     name = "query",
     srcs = ["query.py"],
-    data = glob(["*.sql"]) + ["//.github:CODEOWNERS"],
+    data = glob(["*.sql"]) + ["//.github:CODEOWNERS"] + glob(["buildbuddy_proto/**/*.proto"]),
     env = {"CODEOWNERS_PATH": "$(rootpath //.github:CODEOWNERS)"},
     deps = [
         requirement("pandas"),
@@ -13,6 +13,7 @@ py_binary(
         requirement("requests"),
         requirement("codeowners"),
         requirement("tabulate"),
+        requirement("protobuf"),
     ],
 )
 

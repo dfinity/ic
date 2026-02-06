@@ -1,0 +1,362 @@
+syntax = "proto3";
+
+import "google/longrunning/operations.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/rpc/status.proto";
+import "ci/githubstats/buildbuddy_proto/acl.proto";
+import "ci/githubstats/buildbuddy_proto/context.proto";
+import "ci/githubstats/buildbuddy_proto/invocation_status.proto";
+import "ci/githubstats/buildbuddy_proto/remote_execution.proto";
+import "ci/githubstats/buildbuddy_proto/scheduler.proto";
+import "ci/githubstats/buildbuddy_proto/stat_filter.proto";
+
+package execution_stats;
+
+// Proto representation of the rusage struct used in the Linux/BSD getrusage()
+// system call.
+message Rusage {
+  // ru_utime: Amount of CPU time in seconds spent in userspace.
+  int64 user_cpu_time_usec = 1;
+
+  // ru_stime: Amount of CPU time in seconds spent in kernelspace.
+  int64 sys_cpu_time_usec = 2;
+
+  // ru_maxrss: Maximum amount of resident memory in bytes.
+  int64 max_resident_set_size_bytes = 3;
+
+  // ru_minflt: Page reclaims.
+  int64 page_reclaims = 4;
+
+  // ru_majflt: Page faults.
+  int64 page_faults = 5;
+
+  // ru_nswap: Number of swaps.
+  int64 swaps = 6;
+
+  // ru_inblock: Block input operations.
+  int64 block_input_operations = 7;
+
+  // ru_oublock: Block output operations.
+  int64 block_output_operations = 8;
+
+  // ru_msgsnd: Messages sent.
+  int64 messages_sent = 9;
+
+  // ru_msgrcv: Messages received.
+  int64 messages_received = 10;
+
+  // ru_nsignals: Signals received.
+  int64 signals_received = 11;
+
+  // ru_nvcsw: Voluntary context switches.
+  int64 voluntary_context_switches = 12;
+
+  // ru_nivcsw: Involuntary context switches.
+  int64 involuntary_context_switches = 13;
+}
+
+// TODO(http://go/b/1451): remove this; stats have been moved to
+// ExecutedActionMetadata. Next tag: 12
+message ExecutionSummary {
+  reserved 1, 3, 4, 5, 6, 7, 9;
+
+  // Any io_stats that were collected during this execution.
+  build.bazel.remote.execution.v2.IOStats io_stats = 2;
+
+  // Any compute stats (CPU/memory) that were collected during this execution.
+  build.bazel.remote.execution.v2.UsageStats usage_stats = 10;
+
+  // Estimated task size that was used for scheduling purposes.
+  scheduler.TaskSize estimated_task_size = 11;
+
+  // Execution stage timings.
+  build.bazel.remote.execution.v2.ExecutedActionMetadata
+      executed_action_metadata = 8;
+}
+
+// Next Tag: 12
+message Execution {
+  reserved 4, 10;
+  // The digest of the [Action][build.bazel.remote.execution.v2.Action] to
+  // execute.
+  build.bazel.remote.execution.v2.Digest action_digest = 1;
+
+  // The digest of the [Action][build.bazel.remote.execution.v2.Action] to
+  // execute.
+  // When an action succeeds, this field is the same as the action_digest; when
+  // an action fails, this field contains the result details and action_digest
+  // doesn't.
+  build.bazel.remote.execution.v2.Digest action_result_digest = 9;
+
+  // A digest used to retrieve the
+  // [build.bazel.remote.execution.v2.ExecuteResponse] produced by the executor
+  // for the latest attempt of this execution.
+  //
+  // This digest can be used to fetch a specially formatted ActionResult from
+  // the Action Cache. In particular, the ActionResult's stdout_raw field is set
+  // to the marshaled ExecuteResponse bytes.
+  build.bazel.remote.execution.v2.Digest execute_response_digest = 12;
+
+  // Inlined ExecuteResponse, if requested.
+  build.bazel.remote.execution.v2.ExecuteResponse execute_response = 13;
+
+  // The stage this execution is currently in.
+  build.bazel.remote.execution.v2.ExecutionStage.Value stage = 2;
+
+  // The Status of this execution (if it has finished).
+  google.rpc.Status status = 3;
+
+  // Estimated task size that was used for scheduling purposes.
+  scheduler.TaskSize task_size = 11;
+
+  // Execution stage timings.
+  build.bazel.remote.execution.v2.ExecutedActionMetadata
+      executed_action_metadata = 5;
+
+  // Permissions for this execution.
+  acl.ACL acl = 6;
+
+  // A snippet of the command that ran as part of this execution.
+  // Ex. /usr/bin/gcc foo.cc -o foo
+  string command_snippet = 7;
+
+  // The exit code of the command. Should be ignored if status != OK.
+  int32 exit_code = 8;
+
+  // The identifier of the scheduled execution. Note that if an execution is
+  // retried internally, this Execution will reflect the latest execution
+  // attempt.
+  string execution_id = 14;
+
+  // The target label associated with the execution.
+  string target_label = 15;
+
+  // The action mnemonic associated with the execution (a short string
+  // describing the action being executed).
+  string action_mnemonic = 17;
+
+  // The primary output path associated with the execution, if any.
+  string primary_output_path = 18;
+
+  // The executor hostname that ran the execution. This is only populated if the
+  // user has permission to view the executor metadata.
+  string executor_hostname = 16;
+}
+
+// Auxiliary metadata with BuildBuddy-specific information.
+// This is stored in the auxiliary_metadata field of
+// ExecutedActionMetadata.
+message ExecutionAuxiliaryMetadata {
+  // Platform overrides set via remote header.
+  build.bazel.remote.execution.v2.Platform platform_overrides = 1;
+
+  // The effective isolation type. Usually either user requested or the
+  // default.
+  string isolation_type = 2;
+
+  build.bazel.remote.execution.v2.ExecuteRequest execute_request = 3;
+
+  scheduler.SchedulingMetadata scheduling_metadata = 4;
+
+  // The effective action timeout. Either user requested or the default.
+  google.protobuf.Duration timeout = 6;
+
+  string executor_hostname = 7;
+
+  repeated string experiments = 8;
+
+  // The timestamp at which the task was locally enqueued on the worker.
+  google.protobuf.Timestamp worker_queued_timestamp = 9;
+
+  // Metadata about the runner assigned to process the task.
+  RunnerMetadata runner_metadata = 10;
+}
+
+message RunnerMetadata {
+  // Runner unique ID.
+  string runner_id = 1;
+
+  // The number of the tasks that were ever assigned to the runner this task was
+  // assigned to, including this task. This is not currently populated for
+  // Firecracker runners.
+  //
+  // Example: if this is 1, then the task associated with this RunnerMetadata
+  // was the first task assigned to the runner.
+  //
+  // In rare cases, a task may be canceled and the runner may be returned to the
+  // pool before a task is executed. But generally speaking, if this number if
+  // >= 2, it roughly indicates that the task was assigned to a "warm" runner.
+  int64 task_number = 2;
+
+  // The hash of the platform proto. This is part of the runner key and
+  // determines whether a task can be assigned to a runner in the runner pool.
+  // TODO: see whether we can just store the full platform in the DB - it'd be
+  // nice to be able to query this.
+  string platform_hash = 3;
+
+  // Persistent worker key (the 'persistentWorkerKey' platform property). This
+  // is part of the runner key and determines whether a persistent worker action
+  // can be assigned to a runner in the runner pool.
+  string persistent_worker_key = 4;
+}
+
+message ExecutionLookup {
+  // The invocation_id associated with the execution.
+  string invocation_id = 1;
+
+  // Optional action digest filter. Only the executions for this action digest
+  // will be returned.
+  string action_digest_hash = 2;
+
+  // Optional execution ID. Only the specific execution with this ID will be
+  // returned.
+  string execution_id = 3;
+
+  // Optional target label filter. Only executions for this target will be
+  // returned (exact match). Ex: "//foo/bar:baz"
+  string target_label = 4;
+}
+
+message GetExecutionRequest {
+  context.RequestContext request_context = 1;
+
+  ExecutionLookup execution_lookup = 2;
+
+  // Fetch the ExecuteResponse from cache for each execution and include it in
+  // the response if it is available.
+  bool inline_execute_response = 3;
+}
+
+message GetExecutionResponse {
+  context.ResponseContext response_context = 1;
+
+  repeated Execution execution = 2;
+}
+
+message WaitExecutionRequest {
+  context.RequestContext request_context = 1;
+
+  string execution_id = 2;
+}
+
+message WaitExecutionResponse {
+  context.ResponseContext response_context = 1;
+
+  google.longrunning.Operation operation = 2;
+}
+
+message ExecutionQuery {
+  // The unix-user who performed the build.
+  string invocation_user = 1;
+
+  // The host this build was executed on.
+  string invocation_host = 2;
+
+  // The git repo the build was for.
+  string repo_url = 3;
+
+  // The commit sha used for the build.
+  string commit_sha = 4;
+
+  // The ROLE metadata set on the build. If multiple filters are specified, they
+  // are combined with "OR".
+  repeated string role = 5;
+
+  // The timestamp on or after which the execution was last updated (inclusive).
+  google.protobuf.Timestamp updated_after = 6;
+
+  // The timestamp up to which the execution was last updated (exclusive).
+  google.protobuf.Timestamp updated_before = 7;
+
+  // Status of the build. If multiple are specified, they are combined with
+  // "OR".
+  repeated invocation_status.OverallStatus invocation_status = 8;
+
+  // The git branch used for the build.
+  string branch_name = 9;
+
+  // The bazel command that was used. Ex: "build", "test", "run"
+  string command = 10;
+
+  // The pattern for the targets built (exact match). Ex: "//..."
+  string pattern = 11;
+
+  // Stat filters (duration_usec, queue_time_usec, etc.)
+  repeated stat_filter.StatFilter filter = 12;
+
+  // String-based dimensional filters (execution worker, branch, etc.)
+  repeated stat_filter.DimensionFilter dimension_filter = 14;
+
+  // New, robust filters that will eventually replace all other fields.
+  repeated stat_filter.GenericFilter generic_filters = 15;
+
+  // Plaintext tags for the invocation (exact match). Ex: "my-cool-tag"
+  repeated string tags = 13;
+}
+
+// Searches executions data for all matching executions.  This request is
+// automatically filtered to only return readable executions for the user's
+// currently selected group.
+message SearchExecutionRequest {
+  context.RequestContext request_context = 1;
+
+  ExecutionQuery query = 2;
+
+  // The number of results to return. Optional.
+  // If unset, the server will pick a reasonable page size.
+  int32 count = 3;
+
+  // The next_page_token value returned from a previous request, if any.
+  string page_token = 4;
+}
+
+message InvocationMetadata {
+  // The invocation identifier itself.
+  string id = 1;
+
+  // The unix-user who performed this invocation.
+  string user = 2;
+
+  // The host this invocation was executed on.
+  string host = 3;
+
+  // The build patterns specified for this invocation.
+  string pattern = 4;
+
+  // The role played by this invocation. Ex: "CI"
+  string role = 5;
+
+  // The name of the git branch for this invocation, if any
+  string branch_name = 6;
+
+  // The commit SHA that this invocation was for.
+  string commit_sha = 7;
+
+  // A URL to the git repo this invocation was for.
+  string repo_url = 8;
+
+  // The command performed (usually "build" or "test").
+  string command = 9;
+
+  // Whether or not the invocation was successful
+  bool success = 10;
+
+  // The current status of the invocation.
+  invocation_status.InvocationStatus invocation_status = 11;
+}
+
+message ExecutionWithInvocationMetadata {
+  Execution execution = 1;
+  InvocationMetadata invocation_metadata = 2;
+}
+
+message SearchExecutionResponse {
+  context.ResponseContext response_context = 1;
+
+  repeated ExecutionWithInvocationMetadata execution = 2;
+
+  // Token to retrieve the next page of results, or empty if there are no
+  // more results in the list.
+  string next_page_token = 3;
+}

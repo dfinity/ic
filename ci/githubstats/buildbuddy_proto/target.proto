@@ -1,0 +1,363 @@
+syntax = "proto3";
+
+import "ci/githubstats/buildbuddy_proto/api/v1/common.proto";
+import "ci/githubstats/buildbuddy_proto/context.proto";
+import "ci/githubstats/buildbuddy_proto/build_event_stream.proto";
+import "google/protobuf/timestamp.proto";
+
+package target;
+
+// A single "Target" that is part of a build.
+message TargetMetadata {
+  // The id of this target.
+  // For example: "TS12345".
+  // DEPRECATED: Use repo_url and label to identify a target.
+  string id = 1 [deprecated = true];
+
+  // The label of the target.
+  // For example: "//server/test:foo"
+  string label = 2;
+
+  // The type of the target rule.
+  // For example: java_binary
+  string rule_type = 3;
+
+  // The (enum) type of this target.
+  // For example: APPLICATION, BINARY, TEST.
+  api.v1.TargetType target_type = 4;
+
+  // The (enum) size of this target.
+  // For example: SMALL, MEDIUM, ENORMOUS.
+  api.v1.TestSize test_size = 5;
+}
+
+message TargetStatus {
+  // The invocation identifier itself.
+  string invocation_id = 1;
+
+  // The commit SHA that this invocation was for.
+  // For example: "e6a712c7c15b87ea772e13468fdbf78ecf3ed43d"
+  string commit_sha = 2;
+
+  // The aggregate status of the target. Targets can be run multiple times by
+  // bazel which computes an "aggregate" enum status, like PASSED, FAILED, or
+  // FLAKY.
+  api.v1.Status status = 3;
+
+  // When this target started and its duration.
+  // Note: The target's start time is when the test is run and it's different
+  // from invocation_created_at_usec when the target is cached.
+  api.v1.Timing timing = 4;
+
+  // When the invocation was created.
+  int64 invocation_created_at_usec = 5;
+}
+
+message TargetHistory {
+  // The target that was run.
+  TargetMetadata target = 1;
+
+  // The git repo the build was for.
+  // For example: "buildbuddy-io/buildbuddy"
+  string repo_url = 2;
+
+  // A list of target statuses run across a range of invocations / commits.
+  // If multiple targets were run at the same commit, the latest run will be
+  // returned.
+  repeated TargetStatus target_status = 3;
+}
+
+// NB: TargetQuery params apply to both invocations and their child targets. For
+// example, filtering to role: "CI" and target_type: TEST will only return
+// invocations that were run via CI and within each of those only targets of
+// type TEST.
+message TargetQuery {
+  // The search parameters in this query will be ANDed when performing a
+  // query -- so if a client specifies both "user" and "host", all results
+  // returned must match both fields.
+
+  // The unix-user who performed the build.
+  string user = 1;
+
+  // The host this build was executed on.
+  string host = 2;
+
+  // The git repo the build was for.
+  string repo_url = 3;
+
+  // The commit sha used for the build.
+  string commit_sha = 4;
+
+  // The role played by the build. Ex: "CI"
+  string role = 5;
+
+  // The type of target to return.
+  // For example: TEST.
+  api.v1.TargetType target_type = 6;
+
+  // The git branch the build was for.
+  string branch_name = 7;
+}
+
+message GetTargetHistoryRequest {
+  // The request context.
+  context.RequestContext request_context = 1;
+
+  // The filters to apply to this query. Required.
+  // When server_side_pagination = true, only repo_url takes effect.
+  TargetQuery query = 2;
+
+  // Return records that were run *after* this timestamp.
+  // Deprecated when server_side_pagination = true.
+  int64 start_time_usec = 3;
+
+  // Return records that were run *before* this timestamp.
+  // Deprecated when server_side_pagination = true.
+  int64 end_time_usec = 4;
+
+  // This boolean is used to roll out server side pagination.
+  bool server_side_pagination = 5;
+
+  // The pagination token. If unset, the server returns the first page of
+  // the result.
+  string page_token = 6;
+}
+
+message GetTargetHistoryResponse {
+  // The response context.
+  context.ResponseContext response_context = 1;
+
+  // The targets and statuses that matched the query, ordered by
+  // the time they were executed, descending.
+  repeated TargetHistory invocation_targets = 2;
+
+  // Indicates if the server had to truncate results because of size. If true,
+  // the client should fetch additional time ranges working backwards from the
+  // oldest timestamp returned.
+  bool truncated_results = 3;
+
+  // The pagination token to retrieve the next page of results.
+  string next_page_token = 4;
+}
+
+// Target details along with optional artifacts associated with the target.
+message Target {
+  // Target metadata.
+  TargetMetadata metadata = 1;
+
+  // Target status.
+  api.v1.Status status = 2;
+
+  // Target timing.
+  api.v1.Timing timing = 3;
+
+  // If the build failed, whether this target is one of the root cause targets.
+  bool root_cause = 4;
+
+  // Files associated with the target.
+  repeated build_event_stream.File files = 5;
+
+  // Test results associated with the target. The whole event is included
+  // because the ID contains useful info, such as configuration.
+  repeated build_event_stream.BuildEvent test_result_events = 6;
+
+  // Test summary associated with the target.
+  build_event_stream.TestSummary test_summary = 7;
+
+  // ActionCompleted events associated with the target.
+  repeated build_event_stream.BuildEvent action_events = 8;
+}
+
+message TargetGroup {
+  // Status of all targets in the group.
+  api.v1.Status status = 1;
+
+  // Targets in the group. If this is empty but next_page_token is set, this
+  // means that the invocation is still in progress and that more targets may be
+  // fetched later.
+  repeated Target targets = 2;
+
+  // Page token for fetching the next target group.
+  string next_page_token = 3;
+
+  // Total target count in this group across all pages.
+  int64 total_count = 4;
+}
+
+message GetTargetRequest {
+  context.RequestContext request_context = 6;
+
+  // Invocation ID to fetch targets for.
+  string invocation_id = 1;
+
+  // Optional, if nonempty, only targets with this label will be
+  // returned. If empty or unset, all targets will be returned.
+  string target_label = 2;
+
+  // Optional, if set, only targets with this status will be returned.
+  // If not set, all targets will be returned.
+  optional api.v1.Status status = 3;
+
+  string page_token = 4;
+
+  // Only return targets whose labels contain this substring (case-insensitive).
+  //
+  // When requesting the artifact listing (status 0), only return targets whose
+  // labels contain this substring or any of their file names contain this
+  // substring (case insensitive), and if any file names are matched then
+  // restrict the file listing to just the matched files.
+  string filter = 5;
+}
+
+message GetTargetResponse {
+  context.ResponseContext response_context = 2;
+
+  repeated TargetGroup target_groups = 1;
+}
+
+// Fetches statistics on flaky tests for the specified targets (or all targets)
+// in the specified time period. If no time period is specified, the last 7
+// days will be fetched.
+message GetTargetStatsRequest {
+  context.RequestContext request_context = 1;
+
+  // If specified, a list of targets for which we should fetch flake data. If
+  // this list is empty, this request will instead return a sorted list of the
+  // flakiest tests in the last 30 days.
+  repeated string labels = 2;
+
+  // If specified, stats will be restricted to invocations in this repo.
+  string repo = 3;
+
+  // If specified, stats will be restricted to invocations in this branch.
+  string branch_name = 6;
+
+  google.protobuf.Timestamp started_after = 4;
+
+  google.protobuf.Timestamp started_before = 5;
+}
+
+message TargetStatsData {
+  // The total number of runs of this target. This number will equal
+  // successful_runs + flaky_runs + failed_runs.
+  int64 total_runs = 2;
+  // The total number of successful runs of this target, not including
+  // runs with a status of FLAKY.
+  int64 successful_runs = 5;
+  // The total number of runs that had a FLAKY test status.
+  int64 flaky_runs = 3;
+  // The total number of failures that came immediately before and after a
+  // pass--that is, the failure didn't occur in successive CI runs, so we
+  // feel like it's probably a flake, but can't be sure.
+  int64 likely_flaky_runs = 4;
+  // The total number of failed runs of any type(this includes runs in
+  // likely_flaky_runs, but not tests in flaky_runs).
+  int64 failed_runs = 6;
+  // The total amount of time spent on flaky runs:
+  int64 total_flake_runtime_usec = 7;
+}
+
+message AggregateTargetStats {
+  // The target label that these stats are for.
+  string label = 1;
+
+  TargetStatsData data = 2;
+}
+
+message GetTargetStatsResponse {
+  context.ResponseContext response_context = 1;
+  // Per-target stats on observed flakes.  Currently, flakes are computed based
+  // on CI runs on master--it's difficult to assert "sequentialness" of non-CI
+  // runs, and moreover, individual users can cause random weird-looking
+  // failures locally all the time.
+  repeated AggregateTargetStats stats = 2;
+}
+
+// Fetches a timeseries showing how many flakes there were on each day for
+// the specified set of targets. If no time period is specified, the last 7
+// days will be fetched.
+message GetDailyTargetStatsRequest {
+  context.RequestContext request_context = 1;
+
+  // If specified, a list of targets for which we should fetch flake data.
+  // Daily stats will be aggregated over this set of targets--if no targets are
+  // specified, total stats for all
+  repeated string labels = 2;
+
+  // If specified, stats will be restricted to invocations in this repo.
+  string repo = 3;
+
+  // If specified, stats will be restricted to invocations in this branch.
+  string branch_name = 7;
+
+  // If many/all labels are requested, there may be multiple pages of results.
+  string page_token = 4;
+
+  google.protobuf.Timestamp started_after = 5;
+
+  google.protobuf.Timestamp started_before = 6;
+}
+
+message DailyTargetStats {
+  // YYYY-MM-DD
+  string date = 1;
+
+  TargetStatsData data = 2;
+}
+
+message GetDailyTargetStatsResponse {
+  context.ResponseContext response_context = 1;
+  // Per-target stats on observed flakes.  Currently, flakes are computed based
+  // on CI runs on master--it's difficult to assert "sequentialness" of non-CI
+  // runs, and moreover, individual users can cause random weird-looking
+  // failures locally all the time.
+  repeated DailyTargetStats stats = 2;
+}
+
+// Fetches examples of flaky runs for a single target in the specified time
+// period. If no time period is specified, the last 7 days will be fetched.
+message GetTargetFlakeSamplesRequest {
+  context.RequestContext request_context = 1;
+
+  // The target label for which we'd like to see flaky runs.
+  string label = 2;
+
+  // If specified, all flaky invocations must match this repo.
+  string repo = 3;
+
+  // If specified, all flaky invocations must match this branch.
+  string branch_name = 7;
+
+  // A token for fetching another page of flaky runs.
+  string page_token = 4;
+
+  google.protobuf.Timestamp started_after = 5;
+
+  google.protobuf.Timestamp started_before = 6;
+}
+
+message FlakeSample {
+  // The exact failure status of the flake.
+  api.v1.Status status = 1;
+
+  // The invocation ID that the flake was in, so that we can link to it.
+  string invocation_id = 3;
+
+  // The start time of the invocation (just as a hint for the user).
+  int64 invocation_start_time_usec = 4;
+
+  // The build event (a TestResult) corresponding to the failure that generated
+  // the flake.
+  build_event_stream.BuildEvent event = 5;
+}
+
+message GetTargetFlakeSamplesResponse {
+  context.ResponseContext response_context = 1;
+
+  // The samples that were found.
+  repeated FlakeSample samples = 2;
+
+  // A token that can be sent on a subsequent request to fetch another page of
+  // samples.
+  string next_page_token = 3;
+}

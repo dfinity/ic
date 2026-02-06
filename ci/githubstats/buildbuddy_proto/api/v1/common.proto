@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+enum Status {
+  // The implicit default enum value. Should never be set.
+  STATUS_UNSPECIFIED = 0;
+
+  // Displays as "Building". Means the target is compiling, linking, etc.
+  BUILDING = 1;
+
+  // Displays as "Built". Means the target was built successfully.
+  // If testing was requested, it should never reach this status: it should go
+  // straight from BUILDING to TESTING.
+  BUILT = 2;
+
+  // Displays as "Broken". Means build failure such as compile error.
+  FAILED_TO_BUILD = 3;
+
+  // Displays as "Testing". Means the test is running.
+  TESTING = 4;
+
+  // Displays as "Passed". Means the test was run and passed.
+  PASSED = 5;
+
+  // Displays as "Failed". Means the test was run and failed.
+  FAILED = 6;
+
+  // Displays as "Timed out". Means the test didn't finish in time.
+  TIMED_OUT = 7;
+
+  // Displays as "Cancelled". Means the build or test was cancelled.
+  // E.g. User hit control-C.
+  CANCELLED = 8;
+
+  // Displays as "Tool Failed". Means the build or test had internal tool
+  // failure.
+  TOOL_FAILED = 9;
+
+  // Displays as "Incomplete". Means the build or test did not complete.  This
+  // might happen when a build breakage or test failure causes the tool to stop
+  // trying to build anything more or run any more tests, with the default
+  // bazel --nokeep_going option or the --notest_keep_going option.
+  INCOMPLETE = 10;
+
+  // Displays as "Flaky". Means the aggregate status contains some runs that
+  // were successful, and some that were not.
+  FLAKY = 11;
+
+  // Displays as "Unknown". Means the tool uploading to the server died
+  // mid-upload or does not know the state.
+  UNKNOWN = 12;
+
+  // Displays as "Skipped". Means building and testing were skipped.
+  // (E.g. Restricted to a different configuration.)
+  SKIPPED = 13;
+}
+
+// These correspond to the suffix of the rule name. Eg cc_test has type TEST.
+enum TargetType {
+  // Unspecified by the build system.
+  TARGET_TYPE_UNSPECIFIED = 0;
+
+  // An application e.g. ios_application.
+  APPLICATION = 1;
+
+  // A binary target e.g. cc_binary.
+  BINARY = 2;
+
+  // A library target e.g. java_library
+  LIBRARY = 3;
+
+  // A package
+  PACKAGE = 4;
+
+  // Any test target, in bazel that means a rule with a '_test' suffix.
+  TEST = 5;
+}
+
+// Indicates how big the user indicated the test action was.
+enum TestSize {
+  // Unspecified by the user.
+  TEST_SIZE_UNSPECIFIED = 0;
+
+  // Unit test taking less than 1 minute.
+  SMALL = 1;
+
+  // Integration tests taking less than 5 minutes.
+  MEDIUM = 2;
+
+  // End-to-end tests taking less than 15 minutes.
+  LARGE = 3;
+
+  // Even bigger than LARGE.
+  ENORMOUS = 4;
+
+  // Something that doesn't fit into the above categories.
+  OTHER_SIZE = 5;
+}
+
+// The timing of a particular Invocation, Action, etc. The start_time is
+// specified, stop time can be calculated by adding duration to start_time.
+message Timing {
+  // The time the resource started running. This is in UTC Epoch time.
+  google.protobuf.Timestamp start_time = 1;
+
+  // The duration for which the resource ran.
+  google.protobuf.Duration duration = 2;
+}

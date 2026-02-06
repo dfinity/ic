@@ -1,0 +1,308 @@
+syntax = "proto3";
+
+package cache;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+import "ci/githubstats/buildbuddy_proto/context.proto";
+import "ci/githubstats/buildbuddy_proto/remote_execution.proto";
+import "ci/githubstats/buildbuddy_proto/resource.proto";
+
+// Next Tag: 17
+message CacheStats {
+  // Server-side Action-cache stats.
+  int64 action_cache_hits = 1;
+  int64 action_cache_misses = 2;
+  int64 action_cache_uploads = 3;
+
+  // Server-side CAS-cache stats.
+  int64 cas_cache_hits = 4;
+  int64 cas_cache_misses = 5;
+  int64 cas_cache_uploads = 6;
+
+  // NOTE: Do not use size / time fields to compute throughput; use the
+  // throughput fields instead which are intended to be more accurate.
+
+  // Sum of digest sizes for all cache download requests.
+  int64 total_download_size_bytes = 7;
+
+  // Sum of digest sizes for all cache upload requests.
+  int64 total_upload_size_bytes = 8;
+
+  //  Sum of payload sizes (compressed, if applicable) for all cache download
+  // requests.
+  int64 total_download_transferred_size_bytes = 14;
+
+  // Sum of payload sizes (compressed, if applicable) for all cache upload
+  // requests.
+  int64 total_upload_transferred_size_bytes = 15;
+
+  int64 total_download_usec = 9;
+  int64 total_upload_usec = 10;
+
+  // Mean throughput numbers computed from all uploads and downloads.
+  int64 download_throughput_bytes_per_second = 12;
+  int64 upload_throughput_bytes_per_second = 13;
+
+  // The approximate time savings of a build based on
+  // the sum of execution time of cached objects.
+  int64 total_cached_action_exec_usec = 11;
+
+  // The sum of execution time of actions that missed the action cache.
+  int64 total_uncached_action_exec_usec = 16;
+}
+
+// Request to retrieve detailed per-request cache stats.
+message GetCacheScoreCardRequest {
+  context.RequestContext request_context = 1;
+
+  // The invocation ID for which to look up cache stats.
+  string invocation_id = 2;
+
+  // A page token returned from the previous response, or an empty string
+  // initially.
+  string page_token = 3;
+
+  message Filter {
+    // Field mask selecting filters to be applied.
+    google.protobuf.FieldMask mask = 1;
+
+    // Return only results with this request type.
+    RequestType request_type = 3;
+
+    // Return only results matching this response type.
+    ResponseType response_type = 4;
+
+    // Return only results whose target ID, action mnemonic, action ID, or
+    // digest hash contain this string.
+    string search = 5;
+
+    // Return only results with this cache type.
+    resource.CacheType cache_type = 6;
+
+    // If true, the search string must match exactly and won't match prefix
+    // strings.
+    bool exact_match = 7;
+  }
+
+  // Optional filter for returned results.
+  Filter filter = 4;
+
+  enum OrderBy {
+    UNKNOWN_ORDER_BY = 0;
+    // Order by start time.
+    ORDER_BY_START_TIME = 1;
+    // Order by request duration.
+    ORDER_BY_DURATION = 2;
+    // Order by digest size.
+    ORDER_BY_SIZE = 3;
+    // Order by cache savings.
+    ORDER_BY_CPU_SAVINGS = 4;
+  }
+
+  // OrderBy specifies how to group results.
+  OrderBy order_by = 5;
+
+  // Whether to sort in descending order.
+  bool descending = 6;
+
+  reserved 7;
+
+  enum GroupBy {
+    UNKNOWN_GROUP_BY = 0;
+    // Group by action ID.
+    GROUP_BY_ACTION = 1;
+    // Group by target ID.
+    GROUP_BY_TARGET = 2;
+  }
+
+  // Specifies how to group results. When grouping, the results are grouped by
+  // first sorting all results by the OrderBy field, then effectively re-sorting
+  // so that results with the same group key are in contiguous runs, while still
+  // preserving the original relative ordering within groups.
+  //
+  // For example, when grouping by action and sorting by start time in ascending
+  // order, the results will be grouped into contiguous runs of results where
+  // each run is sorted in ascending order of start time, and the runs
+  // themselves are ordered by earliest result start time.
+  GroupBy group_by = 8;
+}
+
+message GetCacheScoreCardResponse {
+  context.ResponseContext response_context = 1;
+
+  // The cache results for the current page.
+  repeated ScoreCard.Result results = 2;
+
+  // An opaque token that can be included in a subsequent request to fetch more
+  // results from the server. If empty, there are no more results available.
+  string next_page_token = 3;
+}
+
+// RequestType represents the type of cache request being performed: read or
+// write.
+enum RequestType {
+  UNKNOWN_REQUEST_TYPE = 0;
+  // Cache read.
+  READ = 1;
+  // Cache write.
+  WRITE = 2;
+}
+
+// ResponseType represents a category of RPC response codes. This is used
+// instead of raw response codes since NOT_FOUND errors are quite common and it
+// is helpful to have a category representing "all other errors".
+enum ResponseType {
+  UNKNOWN_RESPONSE_TYPE = 0;
+  // Show only successful responses (OK response).
+  OK = 1;
+  // Show only NOT_FOUND responses.
+  NOT_FOUND = 2;
+  // Show only error responses (excluding NOT_FOUND).
+  ERROR = 3;
+}
+
+message ScoreCard {
+  // Result holds details about the result of a single cache request.
+  message Result {
+    // The short action name of the action relevant to the transfer,
+    // such as "GoCompile".
+    string action_mnemonic = 1;
+
+    // The Bazel target label relevant to the transfer, such as "//foo:bar".
+    string target_id = 2;
+
+    // Action digest hash for the action relevant to the transfer.
+    string action_id = 3;
+
+    // The type of cache request described by this result (read or write).
+    RequestType request_type = 5;
+
+    // Response status of the cache request. For example, a cache miss is
+    // represented by a READ request_type with a NotFound status code.
+    google.rpc.Status status = 6;
+
+    // The digest of the requested contents.
+    build.bazel.remote.execution.v2.Digest digest = 7;
+
+    // The timestamp at which the server received the request from the client.
+    google.protobuf.Timestamp start_time = 8;
+
+    // The time needed for the transfer to complete, starting from start_time.
+    google.protobuf.Duration duration = 9;
+
+    // Compression type used for the transfer.
+    build.bazel.remote.execution.v2.Compressor.Value compressor = 10;
+
+    // The number of bytes transferred. If the request was successful, then this
+    // will be the size of the compressed payload (possibly the IDENTITY
+    // compressor, in which case this will just be the digest size). If the
+    // request was unsuccessful, this represents the number of bytes
+    // transferred before the failure, if any.
+    int64 transferred_size_bytes = 11;
+
+    // The file name of the cache artifact, if known.
+    // Ex: "server/util/url/url.a"
+    string name = 12;
+
+    // The file's path prefix, if known. This is part of the full file path, so
+    // it is important, but it can be "noisy" for display purposes, so it is
+    // kept separate.
+    // Ex: "bazel-out/k8-fastbuild/bin"
+    string path_prefix = 13;
+
+    // The type of cache relevant to this result.
+    resource.CacheType cache_type = 14;
+
+    // The details of the execution that originally produced this result.
+
+    // When the worker started executing the action command.
+    google.protobuf.Timestamp execution_start_timestamp = 15;
+    // When the worker completed executing the action command.
+    google.protobuf.Timestamp execution_completed_timestamp = 16;
+
+    // The invocation that originally uploaded this result to the action cache.
+    string origin_invocation_id = 17;
+  }
+
+  // In the interest of saving space, we only show cache misses.
+  // TODO(bduffany): use flat `results` list and deprecate this
+  repeated Result misses = 1;
+
+  repeated Result results = 2;
+}
+
+// Fetches metadata about a cache resource
+message GetCacheMetadataRequest {
+  context.RequestContext request_context = 1;
+
+  // The name of the resource we wish to fetch metadata for
+  resource.ResourceName resource_name = 2;
+}
+
+message GetCacheMetadataResponse {
+  context.ResponseContext response_context = 1;
+  int64 stored_size_bytes = 2;
+  int64 last_access_usec = 3;
+  int64 last_modify_usec = 4;
+  int64 digest_size_bytes = 5;
+}
+
+// Used to cache GetTree responses.
+message DirectoryWithDigest {
+  reserved 2;
+
+  build.bazel.remote.execution.v2.Directory directory = 1;
+  resource.ResourceName resource_name = 3;
+}
+
+message TreeCache {
+  repeated DirectoryWithDigest children = 1;
+
+  // Some directories (node_modules, etc.) are so large that storing them
+  // directly inside of all cached trees is cost-prohibitive.  In those
+  // cases, we store a reference to another TreeCache in this list and fetch
+  // it as part of constructing a GetTree response.  There's nothing
+  // preventing it, but for performance reasons, these entries *should not*
+  // recursively specify tree_cache_children of their own.
+  repeated resource.ResourceName tree_cache_children = 2;
+}
+
+// Fetch the cumulative sizes of all of the directories beneath the specified
+// root.  If the cache doesn't hold the full file hierarchy for any subtree,
+// all parents of the subtree will *not* be calculated, since we can't know
+// the "true" size of the tree.
+message GetTreeDirectorySizesRequest {
+  context.RequestContext request_context = 1;
+
+  build.bazel.remote.execution.v2.Digest root_digest = 2;
+
+  string instance_name = 3;
+
+  build.bazel.remote.execution.v2.DigestFunction.Value digest_function = 4;
+}
+
+message DigestWithTotalSize {
+  // The stringified digest in the form <hash/size>
+  string digest = 1;
+
+  // The total size of the specified object in the CAS, *including* the
+  // recursively expanded subcontents of child directories if this is a
+  // Directory.
+  int64 total_size = 2;
+
+  // If this is a directory, the total number of files and directories
+  // contained within the directory.  The directory itself does not count
+  // (i.e., an empty directory has child_count == 0)
+  int64 child_count = 3;
+}
+
+message GetTreeDirectorySizesResponse {
+  context.ResponseContext response_context = 1;
+
+  // A map from the digest string (hash/bytes) to the *total* cumulative size
+  // of the directory (i.e., a different, potentially larger number of bytes).
+  repeated DigestWithTotalSize sizes = 2;
+}

@@ -1,0 +1,455 @@
+syntax = "proto3";
+
+package stat_filter;
+
+import "google/protobuf/descriptor.proto";
+import "ci/githubstats/buildbuddy_proto/invocation_status.proto";
+
+enum InvocationMetricType {
+  UNKNOWN_INVOCATION_METRIC = 0;
+  DURATION_USEC_INVOCATION_METRIC = 1;
+  CAS_CACHE_MISSES_INVOCATION_METRIC = 2;
+  UPDATED_AT_USEC_INVOCATION_METRIC = 3;
+  CAS_CACHE_DOWNLOAD_SIZE_INVOCATION_METRIC = 4;
+  CAS_CACHE_DOWNLOAD_SPEED_INVOCATION_METRIC = 5;
+  CAS_CACHE_UPLOAD_SIZE_INVOCATION_METRIC = 6;
+  CAS_CACHE_UPLOAD_SPEED_INVOCATION_METRIC = 7;
+  ACTION_CACHE_MISSES_INVOCATION_METRIC = 8;
+  TIME_SAVED_USEC_INVOCATION_METRIC = 9;
+}
+
+enum ExecutionMetricType {
+  UNKNOWN_EXECUTION_METRIC = 0;
+  QUEUE_TIME_USEC_EXECUTION_METRIC = 1;
+  UPDATED_AT_USEC_EXECUTION_METRIC = 2;
+  INPUT_DOWNLOAD_TIME_EXECUTION_METRIC = 3;
+  REAL_EXECUTION_TIME_EXECUTION_METRIC = 4;
+  OUTPUT_UPLOAD_TIME_EXECUTION_METRIC = 5;
+  PEAK_MEMORY_EXECUTION_METRIC = 6;
+  INPUT_DOWNLOAD_SIZE_EXECUTION_METRIC = 7;
+  OUTPUT_UPLOAD_SIZE_EXECUTION_METRIC = 8;
+  EXECUTION_WALL_TIME_EXECUTION_METRIC = 9;
+  EXECUTION_CPU_NANOS_EXECUTION_METRIC = 10;
+  EXECUTION_AVERAGE_MILLICORES_EXECUTION_METRIC = 11;
+}
+
+message Metric {
+  optional InvocationMetricType invocation = 1;
+  optional ExecutionMetricType execution = 2;
+}
+
+message StatFilter {
+  Metric metric = 1;
+  optional int64 min = 2;
+  optional int64 max = 3;
+}
+
+enum InvocationDimensionType {
+  UNKNOWN_INVOCATION_DIMENSION = 0;
+  BRANCH_INVOCATION_DIMENSION = 1;
+}
+
+enum ExecutionDimensionType {
+  UNKNOWN_EXECUTION_DIMENSION = 0;
+  WORKER_EXECUTION_DIMENSION = 1;
+  TARGET_LABEL_EXECUTION_DIMENSION = 2;
+  ACTION_MNEMONIC_EXECUTION_DIMENSION = 3;
+  EFFECTIVE_POOL_EXECUTION_DIMENSION = 4;
+  EXIT_CODE_EXECUTION_DIMENSION = 5;
+}
+
+message Dimension {
+  optional InvocationDimensionType invocation = 1;
+  optional ExecutionDimensionType execution = 2;
+}
+
+message DimensionFilter {
+  Dimension dimension = 1;
+  string value = 2;
+}
+
+enum FilterCategory {
+  UNKNOWN_FILTER_CATEGORY = 0;
+  STRING_FILTER_CATEGORY = 1;
+  INT_FILTER_CATEGORY = 2;
+  STATUS_FILTER_CATEGORY = 3;
+  STRING_ARRAY_FILTER_CATEGORY = 4;
+}
+
+enum FilterArgumentCount {
+  UNKNOWN_FILTER_ARGUMENT_COUNT = 0;
+  ONE_FILTER_ARGUMENT_COUNT = 1;
+  MANY_FILTER_ARGUMENT_COUNT = 2;
+}
+
+enum ObjectTypes {
+  UNKNOWN_OBJECTS = 0;
+  INVOCATION_OBJECTS = 1;
+  EXECUTION_OBJECTS = 2;
+  TARGET_STATUS_OBJECTS = 3;
+}
+
+message FilterTypeOptions {
+  FilterCategory category = 1;
+  string database_column_name = 2;
+  repeated ObjectTypes supported_objects = 3;
+}
+
+message FilterOperandOptions {
+  repeated FilterCategory supported_categories = 1;
+  string database_query_string = 2;
+  FilterArgumentCount argument_count = 3;
+}
+
+extend google.protobuf.EnumValueOptions {
+  FilterTypeOptions filter_type_options = 7000;
+  FilterOperandOptions filter_operand_options = 7001;
+}
+
+message FilterValue {
+  repeated string string_value = 1;
+  repeated int64 int_value = 2;
+  repeated invocation_status.OverallStatus status_value = 3;
+}
+
+enum FilterType {
+  UNKNOWN_FILTER_TYPE = 0 [(filter_type_options) = {
+    supported_objects:
+      [];
+  }];
+  TEXT_MATCH_FILTER_TYPE = 1 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  REPO_URL_FILTER_TYPE = 2 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "repo_url";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  USER_FILTER_TYPE = 3 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "\"user\"";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  INVOCATION_DURATION_USEC_FILTER_TYPE = 4 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "duration_usec";
+    supported_objects:
+      [INVOCATION_OBJECTS];
+  }];
+  PATTERN_FILTER_TYPE = 5 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "pattern";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  COMMAND_FILTER_TYPE = 6 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "command";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  HOST_FILTER_TYPE = 7 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "host";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  COMMIT_SHA_FILTER_TYPE = 8 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "commit_sha";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  BRANCH_FILTER_TYPE = 9 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "branch_name";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  WORKER_FILTER_TYPE = 10 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "worker";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  INVOCATION_CREATED_AT_USEC_FILTER_TYPE = 11 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "created_at_usec";
+    supported_objects:
+      [INVOCATION_OBJECTS];
+  }];
+  EXECUTION_CREATED_AT_USEC_FILTER_TYPE = 12 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "created_at_usec";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  ROLE_FILTER_TYPE = 13 [(filter_type_options) = {
+    category:
+      STRING_FILTER_CATEGORY;
+    database_column_name:
+      "role";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  INVOCATION_UPDATED_AT_USEC_FILTER_TYPE = 14 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "updated_at_usec";
+    supported_objects:
+      [INVOCATION_OBJECTS];
+  }];
+  EXECUTION_UPDATED_AT_USEC_FILTER_TYPE = 15 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "updated_at_usec";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  INVOCATION_STATUS_FILTER_TYPE = 16 [(filter_type_options) = {
+    category:
+      STATUS_FILTER_CATEGORY;
+    database_column_name:
+      "";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  TAG_FILTER_TYPE = 17 [(filter_type_options) = {
+    category:
+      STRING_ARRAY_FILTER_CATEGORY;
+    database_column_name:
+      "tags";
+    supported_objects:
+      [INVOCATION_OBJECTS, EXECUTION_OBJECTS];
+  }];
+  INVOCATION_CAS_CACHE_MISSES_FILTER_TYPE = 18 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "cas_cache_misses";
+    supported_objects:
+      [INVOCATION_OBJECTS];
+  }];
+  INVOCATION_ACTION_CACHE_MISSES_FILTER_TYPE = 19 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "action_cache_misses";
+    supported_objects:
+      [INVOCATION_OBJECTS];
+  }];
+  INVOCATION_CAS_CACHE_DOWNLOAD_BYTES_FILTER_TYPE = 20
+      [(filter_type_options) = {
+        category:
+          INT_FILTER_CATEGORY;
+        database_column_name:
+          "total_download_size_bytes";
+        supported_objects:
+          [INVOCATION_OBJECTS];
+      }];
+  INVOCATION_CAS_CACHE_DOWNLOAD_BPS_FILTER_TYPE = 21 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "download_throughput_bytes_per_second";
+    supported_objects:
+      [INVOCATION_OBJECTS];
+  }];
+  INVOCATION_CAS_CACHE_UPLOAD_BYTES_FILTER_TYPE = 22 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "total_upload_size_bytes";
+    supported_objects:
+      [INVOCATION_OBJECTS];
+  }];
+  INVOCATION_CAS_CACHE_UPLOAD_BPS_FILTER_TYPE = 23 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "upload_throughput_bytes_per_second";
+    supported_objects:
+      [INVOCATION_OBJECTS];
+  }];
+  INVOCATION_TIME_SAVED_USEC_FILTER_TYPE = 24 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "total_cached_action_exec_usec";
+    supported_objects:
+      [INVOCATION_OBJECTS];
+  }];
+  EXECUTION_QUEUE_TIME_USEC_FILTER_TYPE = 25 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "IF(worker_start_timestamp_usec < queued_timestamp_usec, 0, (worker_start_timestamp_usec - queued_timestamp_usec))";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  EXECUTION_INPUT_DOWNLOAD_TIME_USEC_FILTER_TYPE = 26 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "(input_fetch_completed_timestamp_usec - input_fetch_start_timestamp_usec)";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  EXECUTION_REAL_TIME_USEC_FILTER_TYPE = 27 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "(execution_completed_timestamp_usec - execution_start_timestamp_usec)";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  OUTPUT_UPLOAD_TIME_USEC_FILTER_TYPE = 28 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "(output_upload_completed_timestamp_usec - output_upload_start_timestamp_usec)";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  PEAK_MEMORY_BYTES_FILTER_TYPE = 29 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "peak_memory_bytes";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  INPUT_DOWNLOAD_SIZE_BYTES_FILTER_TYPE = 30 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "file_download_size_bytes";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  OUTPUT_UPLOAD_SIZE_BYTES_FILTER_TYPE = 31 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "file_upload_size_bytes";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  EXECUTION_WALL_TIME_USEC_FILTER_TYPE = 32 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "IF(worker_completed_timestamp_usec < queued_timestamp_usec, 0, (worker_completed_timestamp_usec - queued_timestamp_usec))";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  EXECUTION_CPU_NANOS_FILTER_TYPE = 33 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "cpu_nanos";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+  EXECUTION_AVERAGE_MILLICORES_FILTER_TYPE = 34 [(filter_type_options) = {
+    category:
+      INT_FILTER_CATEGORY;
+    database_column_name:
+      "IF(cpu_nanos <= 0 OR (execution_completed_timestamp_usec - execution_start_timestamp_usec) <= 0, 0, intDivOrZero(cpu_nanos*1000, (execution_completed_timestamp_usec - execution_start_timestamp_usec) * 1000))";
+    supported_objects:
+      [EXECUTION_OBJECTS];
+  }];
+}
+
+enum FilterOperand {
+  UNKNOWN_FILTER_OPERAND = 0 [(filter_operand_options) = {
+    supported_categories:
+      [];
+  }];
+  GREATER_THAN_OPERAND = 1 [(filter_operand_options) = {
+    supported_categories:
+      [INT_FILTER_CATEGORY];
+    database_query_string:
+      "?field > ?value";
+    argument_count:
+      ONE_FILTER_ARGUMENT_COUNT;
+  }];
+  LESS_THAN_OPERAND = 2 [(filter_operand_options) = {
+    supported_categories:
+      [INT_FILTER_CATEGORY];
+    database_query_string:
+      "?field < ?value";
+    argument_count:
+      ONE_FILTER_ARGUMENT_COUNT;
+  }];
+  IN_OPERAND = 3 [(filter_operand_options) = {
+    supported_categories:
+      [INT_FILTER_CATEGORY, STRING_FILTER_CATEGORY, STATUS_FILTER_CATEGORY];
+    database_query_string:
+      "?field IN ?value";
+    argument_count:
+      MANY_FILTER_ARGUMENT_COUNT;
+  }];
+  TEXT_MATCH_OPERAND = 4 [(filter_operand_options) = {
+    supported_categories:
+      [STRING_FILTER_CATEGORY];
+    database_query_string:
+      "INSTR(pattern, ?value) > 0 OR INSTR(user, ?value) > 0 OR INSTR(repo_url, ?value) > 0";
+    argument_count:
+      ONE_FILTER_ARGUMENT_COUNT;
+  }];
+  ARRAY_CONTAINS_OPERAND = 5 [(filter_operand_options) = {
+    supported_categories:
+      [STRING_ARRAY_FILTER_CATEGORY];
+    database_query_string:
+      "hasAny(?field, array(?value))";
+    argument_count:
+      MANY_FILTER_ARGUMENT_COUNT;
+  }];
+  STRING_CONTAINS_OPERAND = 6 [(filter_operand_options) = {
+    supported_categories:
+      [STRING_FILTER_CATEGORY];
+    database_query_string:
+      "INSTR(?field, ?value) > 0";
+    argument_count:
+      ONE_FILTER_ARGUMENT_COUNT;
+  }];
+}
+
+message GenericFilter {
+  FilterType type = 1;
+  FilterOperand operand = 2;
+  FilterValue value = 3;
+  bool negate = 4;
+}

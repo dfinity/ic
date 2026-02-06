@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package invocation_status;
+
+// OverallStatus is a status representing both the completion status and
+// success status of an invocation.
+enum OverallStatus {
+  UNKNOWN_OVERALL_STATUS = 0;
+
+  // Status representing a completed, successful invocation.
+  SUCCESS = 1;
+
+  // Status representing a completed, unsuccessful invocation.
+  FAILURE = 2;
+
+  // Status representing a partial invocation.
+  IN_PROGRESS = 3;
+
+  // Status representing a disconnected invocation.
+  DISCONNECTED = 4;
+}
+
+enum InvocationStatus {
+  UNKNOWN_INVOCATION_STATUS = 0;
+  COMPLETE_INVOCATION_STATUS = 1;
+  PARTIAL_INVOCATION_STATUS = 2;
+  DISCONNECTED_INVOCATION_STATUS = 3;
+}

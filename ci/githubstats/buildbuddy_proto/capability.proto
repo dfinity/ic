@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package capability;
+
+// A capability associated with a user or API key.
+enum Capability {
+  UNKNOWN_CAPABILITY = 0;
+  // Allows writing to the content-addressable store and action cache.
+  CACHE_WRITE = 1;  // 2^0
+  // Allows registering an executor with the scheduler.
+  REGISTER_EXECUTOR = 2;  // 2^1
+  // Allows writing to the content-addressable store only.
+  CAS_WRITE = 4;  // 2^2
+  // Allows changing org-level settings and managing org users, such as via
+  // the settings UI or via the SCIM API.
+  ORG_ADMIN = 8;  // 2^3
+  // Allows read-only access to audit logs.
+  AUDIT_LOG_READ = 16;  // 2^4
+}
