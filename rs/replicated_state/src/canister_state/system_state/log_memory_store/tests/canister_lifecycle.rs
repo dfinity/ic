@@ -32,27 +32,32 @@ impl MockCanister {
     /// Creates a new canister with default settings.
     fn create_canister() -> Self {
         let mut canister = Self {
-            log_memory_store: LogMemoryStore::new_for_testing(),
+            log_memory_store: LogMemoryStore::new(),
             fake_timestamp: 0,
         };
         canister.update_settings(TEST_DEFAULT_LOG_MEMORY_LIMIT);
         canister
     }
 
-    /// Updates the log memory limit and resizes the log memory store.
+    /// Updates the maximum capacity of the log memory store.
+    ///
+    /// Resizes the underlying storage to match the provided byte limit.
     fn update_settings(&mut self, log_memory_limit: NumBytes) {
         self.log_memory_store
             .resize_for_testing(log_memory_limit.get() as usize);
     }
 
-    /// Installs or reinstalls the canister.
-    /// Unlike 'upgrade' install or reinstall provides a clean state,
-    /// same as after 'unistall' followed by 'install'.
+    /// Installs or reinstalls the canister code.
+    ///
+    /// Starts with a clean state by clearing the log memory store.
     fn install_code(&mut self) {
         self.log_memory_store.clear();
     }
 
     /// Uninstalls the canister.
+    ///
+    /// Deallocates the log memory store and its configuration.
+    /// Removes all logs and metadata; a manual settings update is required to reuse the store.
     fn uninstall_code(&mut self) {
         self.log_memory_store.deallocate();
     }

@@ -462,10 +462,8 @@ impl CanisterManager {
             DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
         )));
         if let Some(requested_limit) = log_memory_limit {
-            if requested_limit == NumBytes::new(0) {
-                // User can setup a zero log memory limit to disable logging.
-            }
-
+            // User can setup a zero log memory limit to disable logging.
+            // But cannot set it higher than the maximum limit.
             let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {

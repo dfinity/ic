@@ -48,23 +48,18 @@ impl LogMemoryStore {
     /// The store technically exists but has 0 capacity and is considered "uninitialized".
     /// Any attempts to append logs will be silently ignored until the store is
     /// explicitly resized to a non-zero capacity.
-    pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
-        Self::new_inner(PageMap::new(fd_factory))
-    }
-
-    /// Creates a new store that will use the temp file system for allocating new pages.
-    pub fn new_for_testing() -> Self {
-        Self::new_inner(PageMap::new_for_testing())
+    pub fn new() -> Self {
+        Self::new_inner(None)
     }
 
     /// Creates a new store from a checkpoint.
     pub fn from_checkpoint(page_map: PageMap) -> Self {
-        Self::new_inner(page_map)
+        Self::new_inner(Some(page_map))
     }
 
-    fn new_inner(page_map: PageMap) -> Self {
+    fn new_inner(maybe_page_map: Option<PageMap>) -> Self {
         Self {
-            maybe_page_map: Some(page_map),
+            maybe_page_map,
             delta_log_sizes: VecDeque::new(),
             header_cache: OnceLock::new(),
         }
@@ -229,6 +224,12 @@ impl LogMemoryStore {
     /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
     pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
         self.delta_log_sizes.drain(..).collect()
+    }
+}
+
+impl Default for LogMemoryStore {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
