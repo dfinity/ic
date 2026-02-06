@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:regex",
     "@crate_index//:tempfile",
-    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
