@@ -94,10 +94,8 @@ pub async fn main() -> Result<()> {
     let args = Args::parse();
 
     let startup_message = match args.vm_type {
-        GuestVMType::Default => "Starting GuestOS service... (this may take several minutes)",
-        GuestVMType::Upgrade => {
-            "Starting Upgrade GuestOS service... (this may take several minutes)"
-        }
+        GuestVMType::Default => "Launching GuestOS Virtual Machine...",
+        GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
     };
     println!("{startup_message}");
     for path in [CONSOLE_TTY1_PATH, CONSOLE_TTY_SERIAL_PATH] {
