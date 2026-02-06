@@ -352,7 +352,10 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
     // A poor man's parallel_map; process up to MAX_THREADS state pairs in parallel. Use mpsc channels
     // to signal threads becoming available. Additionally, use the channels to signal any errors while
     // performing the Apalache checks.
-    const MAX_THREADS: usize = 20;
+    //
+    // XXX: Apalache struggles to access TLA module files concurrently across threads & processes.
+    // Until this is resolved we limit the concurrency.
+    const MAX_THREADS: usize = 1;
     let mut running_threads = 0;
     let (thread_freed_tx, thread_freed_rx) = mpsc::channel::<bool>();
     for (i, (model_name, constants, pair)) in all_pairs.iter().enumerate() {
