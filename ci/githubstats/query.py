@@ -105,18 +105,16 @@ def get_all_buildbuddy_log_urls(buildbuddy_base_url: str, invocation_id: str, te
     """
 
     try:
-        # Create the GetTarget request
         request = target_pb2.GetTargetRequest()
         request.invocation_id = invocation_id
         request.target_label = test_target
 
-        # Serialize to protobuf bytes
-        request_bytes = request.SerializeToString()
-
-        # Make the RPC call
-        rpc_url = f"{buildbuddy_base_url}/rpc/BuildBuddyService/GetTarget"
-
-        response = requests.post(rpc_url, headers={"Content-Type": "application/proto"}, data=request_bytes, timeout=10)
+        response = requests.post(
+            f"{buildbuddy_base_url}/rpc/BuildBuddyService/GetTarget",
+            headers={"Content-Type": "application/proto"},
+            data=request.SerializeToString(),
+            timeout=10,
+        )
 
         if not response.ok:
             return []
@@ -130,7 +128,6 @@ def get_all_buildbuddy_log_urls(buildbuddy_base_url: str, invocation_id: str, te
 
         for target_group in target_response.target_groups:
             for target in target_group.targets:
-                # Check if test_summary exists
                 if not target.HasField("test_summary"):
                     continue
 
@@ -139,18 +136,16 @@ def get_all_buildbuddy_log_urls(buildbuddy_base_url: str, invocation_id: str, te
                 # Collect failed attempts
                 for attempt_num, file in enumerate(test_summary.failed, start=1):
                     if file.uri:
-                        bytestream_url = file.uri
-                        encoded = urllib.parse.quote(bytestream_url, safe="")
-                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded}&invocation_id={invocation_id}"
+                        encoded_file_uri = urllib.parse.quote(file.uri, safe="")
+                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
                         log_urls.append((attempt_num, download_url, "FAILED"))
 
                 # Collect passed attempts (continue numbering from failed attempts)
                 start_num = len(test_summary.failed) + 1
                 for attempt_num, file in enumerate(test_summary.passed, start=start_num):
                     if file.uri:
-                        bytestream_url = file.uri
-                        encoded = urllib.parse.quote(bytestream_url, safe="")
-                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded}&invocation_id={invocation_id}"
+                        encoded_file_uri = urllib.parse.quote(file.uri, safe="")
+                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
                         log_urls.append((attempt_num, download_url, "PASSED"))
 
         return log_urls
@@ -286,6 +281,105 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
+def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
+    colalignments = [
+        ("last started at (UTC)", "right"),
+        ("duration", "right"),
+        ("status", "left"),
+        ("branch", "left"),
+        ("PR", "left"),
+        ("commit", "left"),
+        ("buildbuddy_url", "left"),
+    ]
+
+    cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
+    columns, alignments = zip(*colalignments)
+    table_md = tabulate(df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments))
+    readme = f"""Logs of `{test_target}`
+===
+Generated at {timestamp} using:
+```
+{cmd}
+```
+{table_md}
+"""
+    readme_path.write_text(readme)
+
+
+def download_logs(output_dir: str, test_target: str, df: pd.DataFrame):
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    if output_dir == "":
+        test_name = test_target.split(":")[-1]
+        dir_name = f"logs_of_{test_name}_{timestamp}"
+    else:
+        dir_name = output_dir
+
+    original_cwd = Path(os.environ.get("BUILD_WORKING_DIRECTORY", Path.cwd()))
+    output_dir = original_cwd / dir_name
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
+
+    print(f"Downloading logs to: {output_dir}", file=sys.stderr)
+
+    # Collect all download tasks
+    download_tasks = []
+    for _ix, row in df.iterrows():
+        url = row["buildbuddy_url"]
+
+        invocation_id = row["invocation_id"]
+
+        last_started_at = row["last_started_at"].strftime("%Y-%m-%dT%H:%M:%S")
+
+        invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
+        invocation_dir.mkdir(exist_ok=True)
+
+        # Parse the BuildBuddy URL to extract base URL and invocation ID
+        parsed = urllib.parse.urlparse(url)
+        buildbuddy_base_url = f"{parsed.scheme}://{parsed.netloc}"
+
+        # Get all log URLs for this test run
+        log_urls = get_all_buildbuddy_log_urls(buildbuddy_base_url, str(invocation_id), test_target)
+
+        for attempt_num, download_url, attempt_status in log_urls:
+            attempt_dir = invocation_dir / str(attempt_num)
+            attempt_dir.mkdir(exist_ok=True)
+
+            filename = f"{attempt_status}.log"
+            filepath = attempt_dir / filename
+            download_tasks.append((download_url, filepath, filename))
+
+    if not download_tasks:
+        print("No logs to download", file=sys.stderr)
+    else:
+        print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
+
+        # Download logs in parallel
+        def download_log(task):
+            download_url, filepath, filename = task
+            try:
+                response = requests.get(download_url, timeout=30, stream=True)
+                if response.ok:
+                    with open(filepath, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    return True
+                else:
+                    print(f"Failed to download {filename}: HTTP {response.status_code}", file=sys.stderr)
+                    return False
+            except Exception as e:
+                print(f"Error downloading {filename}: {e}", file=sys.stderr)
+                return False
+
+        # Use ThreadPoolExecutor to download in parallel (limit to 10 concurrent downloads)
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(download_log, download_tasks))
+
+        successful = sum(results)
+        print(f"Successfully downloaded {successful}/{len(download_tasks)} logs to {output_dir}", file=sys.stderr)
+
+
 def top(args):
     """
     Get the top N non-successful / flaky / failed / timed-out tests
@@ -365,6 +459,7 @@ def top(args):
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
     colalignments = [
+        # (column, alignment)
         ("label", "left"),
         ("total", "decimal"),
         ("non_success", "decimal"),
@@ -417,12 +512,9 @@ def last(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
-    # Turn the buildbuddy URLs into terminal hyperlinks to the logs of the test target.
-    # Since the buildbuddy_url column points to the BuildBuddy url service
-    # we first need to resolve the url to the cluster-specific BuildBuddy URL.
-    # We also fetch the direct download URL from BuildBuddy's API.
-    # Since this I/O takes time we parallelize it speeding it up by a factor of 6.
-
+    # We need to create links to the cluster-specific BuildBuddy service.
+    # To get the cluster-specific BuildBuddy URL we need to resolve the redirect via the BuildBuddy redirect service.
+    # Since this I/O takes time we parallelize to speed it up by an order of magnitude.
     def direct_url_to_buildbuddy(invocation_id):
         url = f"https://dash.idx.dfinity.network/invocation/{invocation_id}"
         redirect = get_redirect_location(url)
@@ -430,6 +522,8 @@ def last(args):
 
     with ThreadPoolExecutor() as executor:
         df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["invocation_id"]))
+
+    df["buildbuddy_links"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
     df["commit_link"] = df["commit"].apply(
@@ -447,8 +541,6 @@ def last(args):
     )
 
     df["duration"] = df["duration"].apply(normalize_duration)
-
-    df["buildbuddy_links"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
 
     colalignments = [
         # (column, header, alignment)
@@ -469,105 +561,7 @@ def last(args):
     )
 
     if args.download_logs is not None:
-        timestamp = datetime.now().isoformat(timespec="seconds")
-        # Determine output directory
-        if args.download_logs == "":
-            # Extract test name from target (part after ':')
-            test_name = args.test_target.split(":")[-1]
-            dir_name = f"logs_of_{test_name}_{timestamp}"
-        else:
-            dir_name = args.download_logs
-
-        original_cwd = Path(os.environ.get("BUILD_WORKING_DIRECTORY", Path.cwd()))
-        output_dir = original_cwd / dir_name
-
-        # Create directory if it doesn't exist
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        readme_path = output_dir / "README.md"
-
-        colalignments = [
-            ("last started at (UTC)", "right"),
-            ("duration", "right"),
-            ("status", "left"),
-            ("branch", "left"),
-            ("PR", "left"),
-            ("commit", "left"),
-            ("buildbuddy_url", "left"),
-        ]
-
-        cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
-        columns, alignments = zip(*colalignments)
-        table_md = tabulate(
-            df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments)
-        )
-        readme = f"""Logs of `{args.test_target}`
-===
-Generated at {timestamp} using:
-```
-{cmd}
-```
-{table_md}
-"""
-        readme_path.write_text(readme)
-
-        print(f"Downloading logs to: {output_dir}", file=sys.stderr)
-
-        # Collect all download tasks
-        download_tasks = []
-        for _ix, row in df.iterrows():
-            url = row["buildbuddy_url"]
-
-            invocation_id = row["invocation_id"]
-
-            last_started_at = row["last_started_at"].strftime("%Y-%m-%dT%H:%M:%S")
-
-            invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
-            invocation_dir.mkdir(exist_ok=True)
-
-            # Parse the BuildBuddy URL to extract base URL and invocation ID
-            parsed = urllib.parse.urlparse(url)
-            buildbuddy_base_url = f"{parsed.scheme}://{parsed.netloc}"
-
-            # Get all log URLs for this test run
-            log_urls = get_all_buildbuddy_log_urls(buildbuddy_base_url, str(invocation_id), args.test_target)
-
-            for attempt_num, download_url, attempt_status in log_urls:
-                attempt_dir = invocation_dir / str(attempt_num)
-                attempt_dir.mkdir(exist_ok=True)
-
-                filename = f"{attempt_status}.log"
-                filepath = attempt_dir / filename
-                download_tasks.append((download_url, filepath, filename))
-
-        if not download_tasks:
-            print("No logs to download", file=sys.stderr)
-        else:
-            print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
-
-            # Download logs in parallel
-            def download_log(task):
-                download_url, filepath, filename = task
-                try:
-                    response = requests.get(download_url, timeout=30, stream=True)
-                    if response.ok:
-                        with open(filepath, "wb") as f:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                f.write(chunk)
-                        return True
-                    else:
-                        print(f"Failed to download {filename}: HTTP {response.status_code}", file=sys.stderr)
-                        return False
-                except Exception as e:
-                    print(f"Error downloading {filename}: {e}", file=sys.stderr)
-                    return False
-
-            # Use ThreadPoolExecutor to download in parallel (limit to 10 concurrent downloads)
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                results = list(executor.map(download_log, download_tasks))
-
-            successful = sum(results)
-            print(f"Successfully downloaded {successful}/{len(download_tasks)} logs to {output_dir}", file=sys.stderr)
+        download_logs(args.download_logs, args.test_target, df)
 
 
 # argparse formatter to allow newlines in --help.
