@@ -3,6 +3,7 @@ name = "attestation_testing"
 edition.workspace = true
 
 [dependencies]
+attestation = { path = "../../attestation" }
 der = { workspace = true }
 p384 = { workspace = true }
 rand = { workspace = true }
