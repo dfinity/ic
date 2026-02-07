@@ -7,6 +7,7 @@ RequiresMountsFor=/var
 
 [Service]
 Type=notify
+ExecStartPre=/bin/sh -c 'printf "\nStarting GuestOS service...\n\n" > /dev/tty1; printf "\nStarting GuestOS service...\n\n" > /dev/ttyS0'
 ExecStartPre=/opt/ic/bin/detect-first-boot.sh
 ExecStart=/opt/ic/bin/guest_vm_runner
 ExecStartPost=/opt/ic/bin/manageboot.sh hostos confirm
