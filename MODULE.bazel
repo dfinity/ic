@@ -894,7 +894,7 @@ http_archive(
         "BUILD.bazel": "//ci/githubstats:BUILD.buildbuddy-proto.bazel",
     },
     patch_cmds = [
-        # Remove everytbing except ./proto/
+        # Remove everything except ./proto/
         "find . -mindepth 1 -maxdepth 1 ! -name proto -exec rm -rf {} +",
         "find ./proto -name BUILD -delete",
     ],
