@@ -278,7 +278,10 @@ def download_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
                     line = response.text.split("\n")[0].strip()
                     if len(line) > 80:
                         line = line[:80] + "..."
-                    print(f".../{shortened_path} failed to download: HTTP {response.status_code}: '{line}'", file=sys.stderr)
+                    print(
+                        f".../{shortened_path} failed to download: HTTP {response.status_code}: '{line}'",
+                        file=sys.stderr,
+                    )
                     return False
             except Exception as e:
                 print(f"Error downloading .../{shortened_path}: {e}", file=sys.stderr)
@@ -731,7 +734,9 @@ Examples:
     last_runs_parser.add_argument("--failed", action="store_true", help="Include failed runs")
     last_runs_parser.add_argument("--timedout", action="store_true", help="Include timed-out runs")
 
-    last_runs_parser.add_argument("--skip-download", action="store_true", help="Don't download logs of the runs, just show the table")
+    last_runs_parser.add_argument(
+        "--skip-download", action="store_true", help="Don't download logs of the runs, just show the table"
+    )
 
     last_runs_parser.add_argument(
         "--logs-base-dir",
