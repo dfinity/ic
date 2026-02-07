@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use candid::CandidType;
 use cycles_minting_canister::IcpXdrConversionRate;
 use ic_base_types::CanisterId;
-use ic_cdk::api::call::CallResult;
+use ic_cdk::call::{Call, CallFailed, InsufficientLiquidCycleBalance, Response};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayloadReason;
 use ic_xrc_types::{
     Asset, AssetClass, ExchangeRate, ExchangeRateError, GetExchangeRateRequest,
@@ -45,7 +45,8 @@ impl RealExchangeRateCanisterClient {
 #[async_trait]
 impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
     async fn get_exchange_rate(&self) -> Result<ExchangeRate, GetExchangeRateError> {
-        let payload = GetExchangeRateRequest {
+        // Prepare request.
+        let request = GetExchangeRateRequest {
             base_asset: Asset {
                 class: AssetClass::Cryptocurrency,
                 symbol: ICP_SYMBOL.to_string(),
@@ -56,16 +57,71 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
             },
             timestamp: None,
         };
-        let result: CallResult<(GetExchangeRateResult,)> =
-            ic_cdk::call(self.0.get().0, "get_exchange_rate", (payload,)).await;
-        result
-            .map_err(|(code, message)| GetExchangeRateError::Call {
-                code: code as i32,
-                message,
-            })?
-            .0
-            .map_err(GetExchangeRateError::Xrc)
+
+        // Send the request. If it takes too long, time out (a "bounded wait").
+        let exchange_rate_canister_id = self.0.get().0; // The callee.
+        let result: Result<Response, CallFailed> =
+            Call::bounded_wait(exchange_rate_canister_id, "get_exchange_rate")
+                .with_arg(request)
+                .await;
+
+        // Unwrap the many layers of result.
+
+        let result: Response = result.map_err(call_failed_to_get_exchange_rate_error)?;
+
+        // Decode reply.
+        let result = result
+            .candid::<GetExchangeRateResult>()
+            // Handle decode fail.
+            .map_err(|candid_decode_failed| GetExchangeRateError::Call {
+                code: -1,
+                message: format!(
+                    "Got a reply from the Exchange Rate canister, \
+                         but it was not decodable as a GetExchangeRateResult: \
+                         {candid_decode_failed:?}",
+                ),
+            })?;
+
+        result.map_err(GetExchangeRateError::Xrc)
     }
+}
+
+fn call_failed_to_get_exchange_rate_error(call_failed: CallFailed) -> GetExchangeRateError {
+    let (code, message) = match call_failed {
+        CallFailed::InsufficientLiquidCycleBalance(err) => {
+            let InsufficientLiquidCycleBalance {
+                available,
+                required,
+            } = err;
+
+            // This would never happen here in the Cycles Minting canister,
+            // because it runs on the NNS subnet.
+            let message = format!(
+                "The cycles in the Cycles Minting canister is insufficient to \
+                 call the Exchange Rate canister: \
+                 available={available} vs. required={required}",
+            );
+
+            (-1, message)
+        }
+
+        CallFailed::CallPerformFailed(_no_data) => {
+            // This message is copied more or less verbatim from the ic_cdk documentation.
+            (
+                -1,
+                "The underlying ic0.call_perform operation returned a non-zero code.".to_string(),
+            )
+        }
+
+        CallFailed::CallRejected(err) => {
+            let code = err.reject_code().map(|code| code as i32).unwrap_or(-1);
+            let message = err.reject_message().to_string();
+
+            (code, message)
+        }
+    };
+
+    GetExchangeRateError::Call { code, message }
 }
 
 #[repr(u8)]
