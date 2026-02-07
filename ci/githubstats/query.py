@@ -750,6 +750,7 @@ The directory will contain log files named like `{timestamp}_{invocation_id}/{at
 2026-02-01T04:22:13_459bd6b8-a538-48d4-8644-363bbe64eb8f/2/PASSED.log
 2026-02-01T20:01:40_b1429b38-723e-4938-9bc5-470f08d624f1/1/FAILED.log
 2026-02-01T20:01:40_b1429b38-723e-4938-9bc5-470f08d624f1/2/PASSED.log
+and a README.md describing the test runs and the //ci/githubstats:query invocation that generated the logs.
 """,
     )
 
