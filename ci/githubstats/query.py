@@ -258,6 +258,10 @@ def download_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
             filepath = attempt_dir / filename
             download_tasks.append((download_url, filepath, filename))
 
+    execute_download_tasks(download_tasks, output_dir)
+
+
+def execute_download_tasks(download_tasks: list, output_dir: Path):
     if not download_tasks:
         print("No logs to download", file=sys.stderr)
     else:
@@ -279,12 +283,12 @@ def download_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
                     if len(line) > 80:
                         line = line[:80] + "..."
                     print(
-                        f".../{shortened_path} failed to download: HTTP {response.status_code}: '{line}'",
+                        f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{line}'",
                         file=sys.stderr,
                     )
                     return False
             except Exception as e:
-                print(f"Error downloading .../{shortened_path}: {e}", file=sys.stderr)
+                print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
                 return False
 
         # Use ThreadPoolExecutor to download in parallel (limit to 10 concurrent downloads)
@@ -372,6 +376,7 @@ def get_all_buildbuddy_log_urls(buildbuddy_base_url: str, invocation_id: str, te
                 for attempt_num, file in enumerate(test_summary.failed, start=1):
                     if file.uri:
                         encoded_file_uri = urllib.parse.quote(file.uri, safe="")
+                        # TODO: consider downloading the file.uri from the bazel cache directly instead of going via BuildBuddy.
                         download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
                         log_urls.append((attempt_num, download_url, "FAILED"))
 
