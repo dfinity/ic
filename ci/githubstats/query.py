@@ -89,72 +89,6 @@ def shorten_owner(owner: str) -> str:
     return parts[1] if len(parts) == 2 else owner
 
 
-def get_all_buildbuddy_log_urls(buildbuddy_base_url: str, invocation_id: str, test_target: str) -> list:
-    """
-    Get all log download URLs from BuildBuddy using its protobuf API.
-
-    Args:
-        buildbuddy_base_url: Base URL like "https://dash.dm1-idx1.dfinity.network"
-        invocation_id: The invocation UUID like "7ba81d70-..."
-        test_target: The Bazel test target like "//rs/tests/consensus/upgrade:upgrade_downgrade_nns_subnet_test"
-
-    Returns:
-        List of tuples: [(attempt_number, download_url, attempt_status), ...]
-        where attempt_status is "PASSED" or "FAILED"
-
-    """
-
-    try:
-        target_request = target_pb2.GetTargetRequest()
-        target_request.invocation_id = invocation_id
-        target_request.target_label = test_target
-
-        response = requests.post(
-            f"{buildbuddy_base_url}/rpc/BuildBuddyService/GetTarget",
-            headers={"Content-Type": "application/proto"},
-            data=target_request.SerializeToString(),
-            timeout=10,
-        )
-
-        if not response.ok:
-            return []
-
-        # Parse the protobuf response
-        target_response = target_pb2.GetTargetResponse()
-        target_response.ParseFromString(response.content)
-
-        # Collect all log URLs with their attempt numbers and status
-        log_urls = []
-
-        for target_group in target_response.target_groups:
-            for target in target_group.targets:
-                if not target.HasField("test_summary"):
-                    continue
-
-                test_summary = target.test_summary
-
-                # Collect failed attempts
-                for attempt_num, file in enumerate(test_summary.failed, start=1):
-                    if file.uri:
-                        encoded_file_uri = urllib.parse.quote(file.uri, safe="")
-                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
-                        log_urls.append((attempt_num, download_url, "FAILED"))
-
-                # Collect passed attempts (continue numbering from failed attempts)
-                start_num = len(test_summary.failed) + 1
-                for attempt_num, file in enumerate(test_summary.passed, start=start_num):
-                    if file.uri:
-                        encoded_file_uri = urllib.parse.quote(file.uri, safe="")
-                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
-                        log_urls.append((attempt_num, download_url, "PASSED"))
-
-        return log_urls
-
-    except Exception as e:
-        print(f"Error calling BuildBuddy API: {e}", file=sys.stderr)
-        return []
-
-
 def log_psql_query(log_query: bool, query: str, conninfo: str):
     """Optionally log the given query to stderr in a form that can be copy-pasted into psql."""
     if log_query:
@@ -281,31 +215,6 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
-def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
-    colalignments = [
-        ("last started at (UTC)", "right"),
-        ("duration", "right"),
-        ("status", "left"),
-        ("branch", "left"),
-        ("PR", "left"),
-        ("commit", "left"),
-        ("buildbuddy_url", "left"),
-    ]
-
-    cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
-    columns, alignments = zip(*colalignments)
-    table_md = tabulate(df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments))
-    readme = f"""Logs of `{test_target}`
-===
-Generated at {timestamp} using:
-```
-{cmd}
-```
-{table_md}
-"""
-    readme_path.write_text(readme)
-
-
 def download_logs(output_dir: str, test_target: str, df: pd.DataFrame):
     timestamp = datetime.now().isoformat(timespec="seconds")
     if output_dir == "":
@@ -378,6 +287,97 @@ def download_logs(output_dir: str, test_target: str, df: pd.DataFrame):
 
         successful = sum(results)
         print(f"Successfully downloaded {successful}/{len(download_tasks)} logs to {output_dir}", file=sys.stderr)
+
+
+def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
+    colalignments = [
+        ("last started at (UTC)", "right"),
+        ("duration", "right"),
+        ("status", "left"),
+        ("branch", "left"),
+        ("PR", "left"),
+        ("commit", "left"),
+        ("buildbuddy_url", "left"),
+    ]
+
+    cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
+    columns, alignments = zip(*colalignments)
+    table_md = tabulate(df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments))
+    readme = f"""Logs of `{test_target}`
+===
+Generated at {timestamp} using:
+```
+{cmd}
+```
+{table_md}
+"""
+    readme_path.write_text(readme)
+
+
+def get_all_buildbuddy_log_urls(buildbuddy_base_url: str, invocation_id: str, test_target: str) -> list:
+    """
+    Get all log download URLs from BuildBuddy using its protobuf API.
+
+    Args:
+        buildbuddy_base_url: Base URL like "https://dash.dm1-idx1.dfinity.network"
+        invocation_id: The invocation UUID like "7ba81d70-..."
+        test_target: The Bazel test target like "//rs/tests/consensus/upgrade:upgrade_downgrade_nns_subnet_test"
+
+    Returns:
+        List of tuples: [(attempt_number, download_url, attempt_status), ...]
+        where attempt_status is "PASSED" or "FAILED"
+
+    """
+
+    try:
+        target_request = target_pb2.GetTargetRequest()
+        target_request.invocation_id = invocation_id
+        target_request.target_label = test_target
+
+        response = requests.post(
+            f"{buildbuddy_base_url}/rpc/BuildBuddyService/GetTarget",
+            headers={"Content-Type": "application/proto"},
+            data=target_request.SerializeToString(),
+            timeout=10,
+        )
+
+        if not response.ok:
+            return []
+
+        # Parse the protobuf response
+        target_response = target_pb2.GetTargetResponse()
+        target_response.ParseFromString(response.content)
+
+        # Collect all log URLs with their attempt numbers and status
+        log_urls = []
+
+        for target_group in target_response.target_groups:
+            for target in target_group.targets:
+                if not target.HasField("test_summary"):
+                    continue
+
+                test_summary = target.test_summary
+
+                # Collect failed attempts
+                for attempt_num, file in enumerate(test_summary.failed, start=1):
+                    if file.uri:
+                        encoded_file_uri = urllib.parse.quote(file.uri, safe="")
+                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
+                        log_urls.append((attempt_num, download_url, "FAILED"))
+
+                # Collect passed attempts (continue numbering from failed attempts)
+                start_num = len(test_summary.failed) + 1
+                for attempt_num, file in enumerate(test_summary.passed, start=start_num):
+                    if file.uri:
+                        encoded_file_uri = urllib.parse.quote(file.uri, safe="")
+                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
+                        log_urls.append((attempt_num, download_url, "PASSED"))
+
+        return log_urls
+
+    except Exception as e:
+        print(f"Error calling BuildBuddy API: {e}", file=sys.stderr)
+        return []
 
 
 def top(args):
