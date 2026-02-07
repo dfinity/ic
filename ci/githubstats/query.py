@@ -216,6 +216,11 @@ def normalize_duration(td: pd.Timedelta):
 
 
 def download_logs(output_dir: str, test_target: str, df: pd.DataFrame):
+    """
+    This function is invoked when --download-logs is specified for the 'last' subcommand.
+    It downloads all logs of the test runs of the test_target in the given DataFrame
+    and saves them to the specified output_dir. If output_dir is empty it defaults to "./logs_of_{test_name}_{timestamp}".
+    """
     timestamp = datetime.now().isoformat(timespec="seconds")
     if output_dir == "":
         test_name = test_target.split(":")[-1]
@@ -290,6 +295,10 @@ def download_logs(output_dir: str, test_target: str, df: pd.DataFrame):
 
 
 def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
+    """
+    Write a nice README.md in the log output directory describing the //ci/githubstats:query invocation
+    that was used to generate the log output directory. This is useful when the invocation has to be redone or tweaked later.
+    """
     colalignments = [
         ("last started at (UTC)", "right"),
         ("duration", "right"),
