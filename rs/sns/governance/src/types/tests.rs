@@ -1,10 +1,13 @@
 use super::*;
-use crate::pb::v1::{
-    CustomProposalCriticality, ExecuteGenericNervousSystemFunction, NativeAction, Proposal,
-    ProposalData, VotingRewardsParameters,
-    claim_swap_neurons_request::neuron_recipe,
-    governance::Mode::PreInitializationSwap,
-    nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+use crate::{
+    pb::v1::{
+        CustomProposalCriticality, ExecuteGenericNervousSystemFunction, Proposal, ProposalData,
+        VotingRewardsParameters,
+        claim_swap_neurons_request::neuron_recipe,
+        governance::Mode::PreInitializationSwap,
+        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+    },
+    types::NativeAction,
 };
 use candid::Nat;
 use futures::FutureExt;

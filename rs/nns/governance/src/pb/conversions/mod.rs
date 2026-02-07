@@ -2515,7 +2515,9 @@ impl From<api::create_service_nervous_system::governance_parameters::CustomPropo
         item: api::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
     ) -> Self {
         Self {
-            additional_critical_native_action_ids: item.additional_critical_native_action_ids.unwrap_or_default(),
+            additional_critical_native_action_ids: item
+                .additional_critical_native_action_ids
+                .unwrap_or_default(),
         }
     }
 }

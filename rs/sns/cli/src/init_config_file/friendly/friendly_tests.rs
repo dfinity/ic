@@ -46,7 +46,7 @@ fn test_parse() {
             maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration {
                 seconds: Some(ONE_DAY_SECONDS),
             },
-            additional_additional_critical_native_action_ids: vec![
+            additional_critical_native_action_ids: vec![
                 NativeAction::UpgradeSnsControlledCanister,
                 NativeAction::AddGenericNervousSystemFunction,
             ],

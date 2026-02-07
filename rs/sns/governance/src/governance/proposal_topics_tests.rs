@@ -310,7 +310,7 @@ fn test_all_topics() {
 }
 
 #[test]
-fn test_additional_additional_critical_native_action_ids_upgrades_criticality() {
+fn test_additional_critical_native_action_ids_upgrades_criticality() {
     //  Create a governance instance with custom_proposal_criticality set
     let mut governance_proto = basic_governance_proto();
     let mut parameters = NervousSystemParameters::with_default_values();

@@ -104,7 +104,7 @@ pub(crate) struct Proposals {
 
     /// Additional native function IDs that should be considered critical.
     #[serde(default)]
-    additional_additional_critical_native_action_ids: Vec<NativeAction>,
+    additional_critical_native_action_ids: Vec<NativeAction>,
 }
 
 #[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
@@ -664,7 +664,7 @@ fn convert_to_governance_parameters(
         rejection_fee,
         initial_voting_period,
         maximum_wait_for_quiet_deadline_extension,
-        additional_additional_critical_native_action_ids,
+        additional_critical_native_action_ids,
     } = proposals;
     let Neurons {
         minimum_creation_stake,
@@ -717,12 +717,12 @@ fn convert_to_governance_parameters(
 
         voting_reward_parameters,
 
-        custom_proposal_criticality: if additional_additional_critical_native_action_ids.is_empty() {
+        custom_proposal_criticality: if additional_critical_native_action_ids.is_empty() {
             None
         } else {
             Some(nns_governance_pb::CustomProposalCriticality {
                 additional_critical_native_action_ids: Some(
-                    additional_additional_critical_native_action_ids
+                    additional_critical_native_action_ids
                         .iter()
                         .map(|action| *action as u64)
                         .collect(),
