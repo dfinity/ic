@@ -1782,6 +1782,26 @@ pub struct NervousSystemParameters {
     /// by the NNS. If not specified, defaults to false for backward compatibility.
     #[prost(bool, optional, tag = "23")]
     pub automatically_advance_target_version: ::core::option::Option<bool>,
+    /// Custom proposal criticality configuration. Allows specifying additional native function IDs
+    /// that should be treated as critical. If not specified, defaults to None (no custom criticality).
+    #[prost(message, optional, tag = "24")]
+    pub custom_proposal_criticality: ::core::option::Option<CustomProposalCriticality>,
+}
+/// Defines custom proposal criticality settings for the nervous system.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CustomProposalCriticality {
+    /// List of native function IDs that should be treated as critical.
+    /// These functions will require a higher level of consensus to be executed.
+    /// Only non-critical native function IDs can be added to this list.
+    #[prost(uint64, repeated, tag = "1")]
+    pub additional_critical_native_action_ids: ::prost::alloc::vec::Vec<u64>,
 }
 #[derive(
     candid::CandidType,
