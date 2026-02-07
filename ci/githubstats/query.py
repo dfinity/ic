@@ -217,7 +217,7 @@ def normalize_duration(td: pd.Timedelta):
 
 def download_logs(output_dir: str, test_target: str, df: pd.DataFrame):
     """
-    This function is invoked when --download-logs is specified for the 'last' subcommand.
+    Invoked when --download-logs is specified for the 'last' subcommand.
     It downloads all logs of the test runs of the test_target in the given DataFrame
     and saves them to the specified output_dir. If output_dir is empty it defaults to "./logs_of_{test_name}_{timestamp}".
     """
