@@ -105,14 +105,14 @@ def get_all_buildbuddy_log_urls(buildbuddy_base_url: str, invocation_id: str, te
     """
 
     try:
-        request = target_pb2.GetTargetRequest()
-        request.invocation_id = invocation_id
-        request.target_label = test_target
+        target_request = target_pb2.GetTargetRequest()
+        target_request.invocation_id = invocation_id
+        target_request.target_label = test_target
 
         response = requests.post(
             f"{buildbuddy_base_url}/rpc/BuildBuddyService/GetTarget",
             headers={"Content-Type": "application/proto"},
-            data=request.SerializeToString(),
+            data=target_request.SerializeToString(),
             timeout=10,
         )
 
