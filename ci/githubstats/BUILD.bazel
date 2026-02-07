@@ -1,27 +1,6 @@
-load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
-load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("@python_deps//:requirements.bzl", "requirement")
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-
-proto_library(
-    name = "buildbuddy_proto",
-    srcs = glob(["buildbuddy_proto/**/*.proto"]),
-    import_prefix = "proto/",
-    strip_import_prefix = "/ci/githubstats/buildbuddy_proto",
-    deps = [
-        "@com_google_protobuf//:any_proto",
-        "@com_google_protobuf//:descriptor_proto",
-        "@com_google_protobuf//:duration_proto",
-        "@com_google_protobuf//:timestamp_proto",
-    ],
-)
-
-py_proto_library(
-    name = "buildbuddy_py_proto",
-    visibility = ["//ci/githubstats:__pkg__"],
-    deps = [":buildbuddy_proto"],
-)
 
 py_binary(
     name = "query",
@@ -29,7 +8,7 @@ py_binary(
     data = glob(["*.sql"]) + ["//.github:CODEOWNERS"],
     env = {"CODEOWNERS_PATH": "$(rootpath //.github:CODEOWNERS)"},
     deps = [
-        ":buildbuddy_py_proto",
+        "@buildbuddy_proto//:buildbuddy_py_proto",
         requirement("pandas"),
         requirement("psycopg"),
         requirement("requests"),
