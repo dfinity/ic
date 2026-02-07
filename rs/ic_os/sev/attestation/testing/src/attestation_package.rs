@@ -27,6 +27,12 @@ pub struct ParsedSevAttestationPackageBuilder {
     custom_data_debug_info: Option<String>,
 }
 
+impl Default for ParsedSevAttestationPackageBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ParsedSevAttestationPackageBuilder {
     pub fn new() -> Self {
         Self {

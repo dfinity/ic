@@ -24,6 +24,7 @@ ic-utils = { path = "../../../utils" }
 getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
+attestation_testing = { path = "testing" }
 ic-utils-rustfmt = { path = "../../../utils/rustfmt" }
 prost-build = { workspace = true }
 tempfile = { workspace = true }
