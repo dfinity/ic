@@ -215,21 +215,15 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
-def download_logs(output_dir: str, test_target: str, df: pd.DataFrame):
+def download_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
     """
-    Invoked when --download-logs is specified for the 'last' subcommand.
-    It downloads all logs of the test runs of the test_target in the given DataFrame
-    and saves them to the specified output_dir. If output_dir is empty it defaults to "./logs_of_{test_name}_{timestamp}".
+    Downloads the logs of all runs of test_target in the given DataFrame
+    and saves them to the specified logs_base_dir.
     """
-    timestamp = datetime.now().isoformat(timespec="seconds")
-    if output_dir == "":
-        test_name = test_target.split(":")[-1]
-        dir_name = f"logs_of_{test_name}_{timestamp}"
-    else:
-        dir_name = output_dir
-
     original_cwd = Path(os.environ.get("BUILD_WORKING_DIRECTORY", Path.cwd()))
-    output_dir = original_cwd / dir_name
+    test_name = test_target.split(":")[-1]
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    output_dir = original_cwd / logs_base_dir / test_name / timestamp
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -272,18 +266,22 @@ def download_logs(output_dir: str, test_target: str, df: pd.DataFrame):
         # Download logs in parallel
         def download_log(task):
             download_url, filepath, filename = task
+            shortened_path = filepath.relative_to(output_dir)
             try:
-                response = requests.get(download_url, timeout=30, stream=True)
+                response = requests.get(download_url, timeout=60, stream=True)
                 if response.ok:
                     with open(filepath, "wb") as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
                     return True
                 else:
-                    print(f"Failed to download {filename}: HTTP {response.status_code}", file=sys.stderr)
+                    line = response.text.split("\n")[0].strip()
+                    if len(line) > 80:
+                        line = line[:80] + "..."
+                    print(f".../{shortened_path} failed to download: HTTP {response.status_code}: '{line}'", file=sys.stderr)
                     return False
             except Exception as e:
-                print(f"Error downloading {filename}: {e}", file=sys.stderr)
+                print(f"Error downloading .../{shortened_path}: {e}", file=sys.stderr)
                 return False
 
         # Use ThreadPoolExecutor to download in parallel (limit to 10 concurrent downloads)
@@ -551,6 +549,9 @@ def last(args):
 
     df["duration"] = df["duration"].apply(normalize_duration)
 
+    if not args.skip_download:
+        download_logs(args.logs_base_dir, args.test_target, df)
+
     colalignments = [
         # (column, header, alignment)
         ("last started at (UTC)", "last started at (UTC)", "right"),
@@ -568,9 +569,6 @@ def last(args):
             df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)
         )
     )
-
-    if args.download_logs is not None:
-        download_logs(args.download_logs, args.test_target, df)
 
 
 # argparse formatter to allow newlines in --help.
@@ -718,12 +716,8 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
         help="Get the last runs of the specified test in the given period",
         epilog="""
 Examples:
-  # Show the last flaky runs of the root_tests in the last week and download their logs
-  bazel run //ci/githubstats:query -- last --flaky //rs/tests/node:root_tests --week --download-logs
-  ...
-  Downloading logs to: /ic/logs_of_root_tests_2026-02-06_16:09:27
-  Downloading 40 log files...
-  Successfully downloaded 40/40 logs to /ic/logs_of_root_tests_2026-02-06_16:09:27
+  # Show the last flaky runs of the root_tests in the last week
+  bazel run //ci/githubstats:query -- last --flaky //rs/tests/node:root_tests --week
 
   # Show all runs of a test in a specific date range
   bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'
@@ -737,20 +731,30 @@ Examples:
     last_runs_parser.add_argument("--failed", action="store_true", help="Include failed runs")
     last_runs_parser.add_argument("--timedout", action="store_true", help="Include timed-out runs")
 
+    last_runs_parser.add_argument("--skip-download", action="store_true", help="Don't download logs of the runs, just show the table")
+
     last_runs_parser.add_argument(
-        "--download-logs",
-        nargs="?",
-        const="",
-        default=None,
+        "--logs-base-dir",
         metavar="DIR",
-        help="""Download all test logs to a local directory.
-If DIR is not specified the directory will be `./logs_of_{test_name}_{timestamp}`
-The directory will contain log files named like `{timestamp}_{invocation_id}/{attempt_num}/{attempt_status}.log`, for example:
-2026-02-01T04:22:13_459bd6b8-a538-48d4-8644-363bbe64eb8f/1/FAILED.log
-2026-02-01T04:22:13_459bd6b8-a538-48d4-8644-363bbe64eb8f/2/PASSED.log
-2026-02-01T20:01:40_b1429b38-723e-4938-9bc5-470f08d624f1/1/FAILED.log
-2026-02-01T20:01:40_b1429b38-723e-4938-9bc5-470f08d624f1/2/PASSED.log
-and a README.md describing the test runs and the //ci/githubstats:query invocation that generated the logs.
+        type=str,
+        default="logs",
+        help="""Download the logs of all runs of test_target to {DIR}/{test_name}/{now}.
+That directory will contain log files named like `{invocation_timestamp}_{invocation_id}/{attempt_num}/{attempt_status}.log`, for example:
+logs
+└── upgrade_downgrade_nns_subnet_test
+    └── 2026-02-07T22:09:59
+        ├── 2026-02-02T10:21:15_3b80203d-ff20-42d5-b29c-62ae6aaaf66b
+        │   ├── 1
+        │   │   └── FAILED.log
+        │   └── 2
+        │       └── PASSED.log
+        ├── 2026-02-02T11:43:30_3b054443-e7d8-4013-9897-6778816318c9
+        │   ├── 1
+        │   │   └── FAILED.log
+        │   └── 2
+        │       └── PASSED.log
+        ...
+        └── README.md
 """,
     )
 
