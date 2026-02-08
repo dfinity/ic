@@ -235,28 +235,23 @@ def download_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
     download_tasks = []
     for _ix, row in df.iterrows():
         url = row["buildbuddy_url"]
-
         invocation_id = row["invocation_id"]
-
         last_started_at = row["last_started_at"].strftime("%Y-%m-%dT%H:%M:%S")
-
         invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
-        invocation_dir.mkdir(exist_ok=True)
 
         # Parse the BuildBuddy URL to extract base URL and invocation ID
         parsed = urllib.parse.urlparse(url)
+        cluster = parsed.netloc.split(".")[1]  # e.g., "dash.zh1-idx1.dfinity.network'" -> "zh1-idx1"
         buildbuddy_base_url = f"{parsed.scheme}://{parsed.netloc}"
 
         # Get all log URLs for this test run
-        log_urls = get_all_buildbuddy_log_urls(buildbuddy_base_url, str(invocation_id), test_target)
+        log_urls = get_all_log_urls_from_buildbuddy(buildbuddy_base_url, cluster, str(invocation_id), test_target)
 
         for attempt_num, download_url, attempt_status in log_urls:
             attempt_dir = invocation_dir / str(attempt_num)
-            attempt_dir.mkdir(exist_ok=True)
-
             filename = f"{attempt_status}.log"
             filepath = attempt_dir / filename
-            download_tasks.append((download_url, filepath, filename))
+            download_tasks.append((download_url, filepath))
 
     execute_download_tasks(download_tasks, output_dir)
 
@@ -269,23 +264,24 @@ def execute_download_tasks(download_tasks: list, output_dir: Path):
 
         # Download logs in parallel
         def download_log(task):
-            download_url, filepath, filename = task
+            download_url, filepath = task
             shortened_path = filepath.relative_to(output_dir)
             try:
                 response = requests.get(download_url, timeout=60, stream=True)
                 if response.ok:
+                    filepath.parent.mkdir(parents=True, exist_ok=True)
                     with open(filepath, "wb") as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
                     return True
                 else:
-                    line = response.text.split("\n")[0].strip()
-                    if len(line) > 80:
-                        line = line[:80] + "..."
-                    print(
-                        f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{line}'",
-                        file=sys.stderr,
-                    )
+                    error_line = response.text.split("\n")[0].strip()
+                    if len(error_line) > 80:
+                        error_line = error_line[:80] + "..."
+                    msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
+                    if response.status_code == 404:
+                        msg += " The log has probably already been garbage collected from the bazel-remote cache."
+                    print(msg, file=sys.stderr)
                     return False
             except Exception as e:
                 print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
@@ -328,9 +324,11 @@ Generated at {timestamp} using:
     readme_path.write_text(readme)
 
 
-def get_all_buildbuddy_log_urls(buildbuddy_base_url: str, invocation_id: str, test_target: str) -> list:
+def get_all_log_urls_from_buildbuddy(
+    buildbuddy_base_url: str, cluster: str, invocation_id: str, test_target: str
+) -> list:
     """
-    Get all log download URLs from BuildBuddy using its protobuf API.
+    Get all log download URLs from BuildBuddy using its gRPC-based API.
 
     Args:
         buildbuddy_base_url: Base URL like "https://dash.dm1-idx1.dfinity.network"
@@ -372,20 +370,31 @@ def get_all_buildbuddy_log_urls(buildbuddy_base_url: str, invocation_id: str, te
 
                 test_summary = target.test_summary
 
+                # The log is pointed to by file.uri below and will look like:
+                # bytestream://bazel-remote.idx.dfinity.network/blobs/{hash}/{size}
+                # We could download the log via BuildBuddy using the download_url:
+                #
+                #   encoded_file_uri = urllib.parse.quote(file.uri, safe="")
+                #   download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
+                #
+                # However, to reduce the dependency on BuildBuddy,
+                # we download the log directly from our bazel-remote HTTP server:
+
                 # Collect failed attempts
                 for attempt_num, file in enumerate(test_summary.failed, start=1):
                     if file.uri:
-                        encoded_file_uri = urllib.parse.quote(file.uri, safe="")
-                        # TODO: consider downloading the file.uri from the bazel cache directly instead of going via BuildBuddy.
-                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
+                        parsed = urllib.parse.urlparse(file.uri)
+                        hash = parsed.path.split("/")[2]
+                        download_url = f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
                         log_urls.append((attempt_num, download_url, "FAILED"))
 
                 # Collect passed attempts (continue numbering from failed attempts)
                 start_num = len(test_summary.failed) + 1
                 for attempt_num, file in enumerate(test_summary.passed, start=start_num):
                     if file.uri:
-                        encoded_file_uri = urllib.parse.quote(file.uri, safe="")
-                        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
+                        parsed = urllib.parse.urlparse(file.uri)
+                        hash = parsed.path.split("/")[2]
+                        download_url = f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
                         log_urls.append((attempt_num, download_url, "PASSED"))
 
         return log_urls
