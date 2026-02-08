@@ -377,6 +377,16 @@ def annotate_df_with_summaries(row, attempt_num, attempt_status, filepath, df):
 
 
 def render_error_summaries(summaries: dict[int, SystemGroupSummary | str]) -> str:
+    """
+    Render the error summaries of all attempts to a human-readable string. For example:
+
+    "1: upgrade_downgrade_nns_subnet: Replica did reboot, but never came back online!
+        assert_no_replica_restarts: assertion `left == right` failed: The replica process on node 4q7mj-2koq2-vbcih-...
+     2: upgrade_downgrade_nns_subnet: Replica did reboot, but never came back online!
+        assert_no_replica_restarts: assertion `left == right` failed: The replica process on node l6edn-e5wfk-ooxb7-...
+     3: upgrade_downgrade_nns_subnet: Replica did reboot, but never came back online!
+        assert_no_replica_restarts: assertion `left == right` failed: The replica process on node yafn5-op57q-xfatj-..."
+    """
     lines = []
     for attempt_num, summary in sorted(summaries.items()):
         s = render_error_summary(summary)
@@ -487,32 +497,35 @@ def get_all_log_urls_from_buildbuddy(
 
                 test_summary = target.test_summary
 
-                # The log is pointed to by file.uri below and will look like:
-                # bytestream://bazel-remote.idx.dfinity.network/blobs/{hash}/{size}
-                # We could download the log via BuildBuddy using the download_url:
-                #
-                #   encoded_file_uri = urllib.parse.quote(file.uri, safe="")
-                #   download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
-                #
-                # However, to reduce the dependency on BuildBuddy,
-                # we download the log directly from our bazel-remote HTTP server:
+                def convert_download_url(uri) -> str:
+                    """
+                    The log is pointed to by file.uri below and will look like:
+                    bytestream://bazel-remote.idx.dfinity.network/blobs/{hash}/{size}
+                    We could download the log via BuildBuddy using the download_url:
+
+                      encoded_file_uri = urllib.parse.quote(file.uri, safe="")
+                      download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
+
+                    However, to reduce the dependency on BuildBuddy,
+                    we download the log directly from our bazel-remote HTTP server at:
+                    "https://artifacts.{cluster}.dfinity.network/cas/{hash}"
+                    This has the additional benefit of getting 404 errors instead of 500
+                    for already garbage collected logs, which we can handle more gracefully.
+                    """
+                    parsed = urllib.parse.urlparse(uri)
+                    hash = parsed.path.split("/")[2]
+                    return f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
 
                 # Collect failed attempts
                 for attempt_num, file in enumerate(test_summary.failed, start=1):
                     if file.uri:
-                        parsed = urllib.parse.urlparse(file.uri)
-                        hash = parsed.path.split("/")[2]
-                        download_url = f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
-                        log_urls.append((attempt_num, download_url, "FAILED"))
+                        log_urls.append((attempt_num, convert_download_url(file.uri), "FAILED"))
 
                 # Collect passed attempts (continue numbering from failed attempts)
                 start_num = len(test_summary.failed) + 1
                 for attempt_num, file in enumerate(test_summary.passed, start=start_num):
                     if file.uri:
-                        parsed = urllib.parse.urlparse(file.uri)
-                        hash = parsed.path.split("/")[2]
-                        download_url = f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
-                        log_urls.append((attempt_num, download_url, "PASSED"))
+                        log_urls.append((attempt_num, convert_download_url(file.uri), "PASSED"))
 
         return log_urls
 
