@@ -6,17 +6,22 @@
 #
 import argparse
 import contextlib
+import json
 import os
 import re
 import shlex
 import subprocess
 import sys
+import threading
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
 import codeowners
+import dacite
 import pandas as pd
 import psycopg
 import requests
@@ -234,6 +239,9 @@ def download_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
     # Collect all download tasks
     download_tasks = []
     for _ix, row in df.iterrows():
+        # Add a lock to each row for thread-safe updates when annotating the DataFrame with errors below
+        row["lock"] = threading.Lock()
+
         url = row["buildbuddy_url"]
         invocation_id = row["invocation_id"]
         last_started_at = row["last_started_at"].strftime("%Y-%m-%dT%H:%M:%S")
@@ -251,12 +259,12 @@ def download_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
             attempt_dir = invocation_dir / str(attempt_num)
             filename = f"{attempt_status}.log"
             filepath = attempt_dir / filename
-            download_tasks.append((download_url, filepath))
+            download_tasks.append((row, attempt_num, download_url, filepath))
 
-    execute_download_tasks(download_tasks, output_dir)
+    execute_download_tasks(download_tasks, output_dir, df)
 
 
-def execute_download_tasks(download_tasks: list, output_dir: Path):
+def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFrame):
     if not download_tasks:
         print("No logs to download", file=sys.stderr)
     else:
@@ -264,7 +272,7 @@ def execute_download_tasks(download_tasks: list, output_dir: Path):
 
         # Download logs in parallel
         def download_log(task):
-            download_url, filepath = task
+            row, attempt_num, download_url, filepath = task
             shortened_path = filepath.relative_to(output_dir)
             try:
                 response = requests.get(download_url, timeout=60, stream=True)
@@ -273,26 +281,115 @@ def execute_download_tasks(download_tasks: list, output_dir: Path):
                     with open(filepath, "wb") as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
-                    return True
+                    thread = threading.Thread(target=annotate_df_with_summaries, args=(filepath, row, attempt_num, df))
+                    thread.start()
+                    return thread
                 else:
                     error_line = response.text.split("\n")[0].strip()
-                    if len(error_line) > 80:
-                        error_line = error_line[:80] + "..."
+                    MAX_ERROR_LINE_LENGTH = 80
+                    if len(error_line) > MAX_ERROR_LINE_LENGTH:
+                        error_line = error_line[:MAX_ERROR_LINE_LENGTH] + "..."
                     msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
                     if response.status_code == 404:
                         msg += " The log has probably already been garbage collected from the bazel-remote cache."
                     print(msg, file=sys.stderr)
-                    return False
+                    return None
             except Exception as e:
                 print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
-                return False
+                return None
 
-        # Use ThreadPoolExecutor to download in parallel (limit to 10 concurrent downloads)
+        # Download in parallel (limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server)
         with ThreadPoolExecutor(max_workers=10) as executor:
-            results = list(executor.map(download_log, download_tasks))
+            threads = list(executor.map(download_log, download_tasks))
 
-        successful = sum(results)
-        print(f"Successfully downloaded {successful}/{len(download_tasks)} logs to {output_dir}", file=sys.stderr)
+        successes = 0
+        for thread in threads:
+            if thread is not None:
+                successes += 1
+                thread.join()
+
+        print(
+            f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs to {output_dir}",
+            file=sys.stderr,
+        )
+
+
+@dataclass
+class TaskReport:
+    """Matches the Rust struct `ic_system_test_driver::report::TaskReport`"""
+
+    name: str
+    runtime: float
+    message: Optional[str]
+
+
+@dataclass
+class SystemGroupSummary:
+    """Matches the Rust struct `ic_system_test_driver::report::SystemGroupSummary`"""
+
+    test_name: str
+    success: List[TaskReport]
+    failure: List[TaskReport]
+    skipped: List[TaskReport]
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SystemGroupSummary":
+        return dacite.from_dict(data_class=cls, data=data, config=dacite.Config(strict=True))
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "SystemGroupSummary":
+        value = json.loads(json_str)
+        if not isinstance(value, dict):
+            raise ValueError(f"Expected dict but got {type(value).__name__}: {value}")
+        return cls.from_dict(value)
+
+
+def annotate_df_with_summaries(filepath, row, attempt_num, df):
+    """Annotate the DataFrame with the summary of a system-test"""
+
+    summary = None
+    for line in reversed(filepath.read_text().splitlines()):
+        try:
+            summary = SystemGroupSummary.from_json(line)
+            break
+        except json.JSONDecodeError:
+            continue  # Not a valid JSON, keep looking
+        except ValueError:
+            continue  # JSON is valid but not the expected dict structure, keep looking
+        except dacite.DaciteError:
+            continue  # Not a valid SystemGroupSummary, keep looking
+
+    if summary is not None:
+        with row["lock"]:
+            row["summaries"][attempt_num] = summary
+
+
+def render_summaries(summaries: dict[int, SystemGroupSummary]):
+    lines = []
+    for attempt_num, summary in sorted(summaries.items()):
+        s = render_summary(summary)
+        if len(s) > 0:
+            summary_lines = s.splitlines()
+            lines.append(
+                f"{attempt_num}: {summary_lines[0]}"
+                + (
+                    "\n" + "\n".join([f"   {summary_line}" for summary_line in summary_lines[1:]])
+                    if len(summary_lines[1:]) > 0
+                    else ""
+                )
+            )
+    return "\n".join(lines)
+
+
+def render_summary(summary: SystemGroupSummary):
+    s = ""
+    MAX_ERROR_LINE_LENGTH = 80
+    for failed_task in summary.failure:
+        msg = failed_task.message.replace("\n", "\\n")
+        if len(msg) > MAX_ERROR_LINE_LENGTH:
+            msg = msg[:MAX_ERROR_LINE_LENGTH] + "..."
+        s += f"{failed_task.name}: {msg}\n"
+    return s
 
 
 def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
@@ -556,9 +653,14 @@ def last(args):
 
     df["last started at (UTC)"] = df["last_started_at"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
 
-    df["branch_link"] = df["branch"].apply(
-        lambda branch: terminal_hyperlink(branch, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
-    )
+    def render_branch(branch):
+        MAX_BRANCH_LENGTH = 16
+        link_name = branch
+        if len(link_name) > MAX_BRANCH_LENGTH:
+            link_name = link_name[:MAX_BRANCH_LENGTH] + "..."
+        return terminal_hyperlink(link_name, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
+
+    df["branch_link"] = df["branch"].apply(render_branch)
 
     df["PR_link"] = df["PR"].apply(
         lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
@@ -567,7 +669,9 @@ def last(args):
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
+        df["summaries"] = [{} for _ in range(len(df))]
         download_logs(args.logs_base_dir, args.test_target, df)
+        df["errors"] = df["summaries"].apply(render_summaries)
 
     colalignments = [
         # (column, header, alignment)
@@ -578,6 +682,7 @@ def last(args):
         ("PR_link", "PR", "left"),
         ("commit_link", "commit", "left"),
         ("buildbuddy_links", "buildbuddy", "left"),
+        ("errors", "error per task per attempt", "left"),
     ]
 
     columns, headers, alignments = zip(*colalignments)
@@ -613,7 +718,7 @@ def main():
         "--tablefmt",
         metavar="FMT",
         type=str,
-        default="mixed_outline",
+        default="fancy_grid",
         help="Table format. See: https://pypi.org/project/tabulate/",
     )
 

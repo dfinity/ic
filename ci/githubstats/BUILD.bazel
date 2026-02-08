@@ -15,6 +15,7 @@ py_binary(
         requirement("codeowners"),
         requirement("tabulate"),
         requirement("protobuf"),
+        requirement("dacite"),
     ],
 )
 
