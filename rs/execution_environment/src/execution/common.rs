@@ -31,6 +31,7 @@ use ic_types::time::CoarseTime;
 use ic_types::{Cycles, NumInstructions, Time, UserId};
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -336,74 +337,78 @@ pub(crate) fn validate_message(
     Ok(())
 }
 
-// Helper function that extracts the corresponding callback and call context
-// from the `CallContextManager` without changing its state.
-pub fn get_call_context_and_callback(
-    canister: &CanisterState,
+/// Unregisters the callback corresponding to the given response.
+//
+// TODO(DSM-95): Consider making this only apply to non-replicated call origins.
+pub fn unregister_callback(
+    canister: &mut CanisterState,
     response: &Response,
     logger: &ReplicaLogger,
     unexpected_response_error: &IntCounter,
-) -> Option<(Callback, CallbackId, CallContext, CallContextId)> {
-    debug_assert_ne!(canister.status(), CanisterStatusType::Stopped);
-    let call_context_manager = match canister.status() {
-        CanisterStatusType::Stopped => {
-            // A canister by definition can only be stopped when no open call contexts.
-            // Hence, if we receive a response for a stopped canister then that is
-            // a either a bug in the code or potentially a faulty (or
-            // malicious) subnet generating spurious messages.
-            unexpected_response_error.inc();
-            error!(
-                logger,
-                "[EXC-BUG] Stopped canister got a response.  originator {} respondent {}.",
-                response.originator,
-                response.respondent,
-            );
-            return None;
-        }
-        CanisterStatusType::Running | CanisterStatusType::Stopping => {
-            // We are sure there's a call context manager since the canister isn't stopped.
-            canister.system_state.call_context_manager().unwrap()
-        }
-    };
+) -> Option<Arc<Callback>> {
+    match canister
+        .system_state
+        .unregister_callback(response.originator_reply_callback)
+    {
+        Ok(callback) => callback,
 
-    let callback_id = response.originator_reply_callback;
-
-    debug_assert!(call_context_manager.callback(callback_id).is_some());
-    let callback = match call_context_manager.callback(callback_id) {
-        Some(callback) => callback.clone(),
-        None => {
+        Err(e) => {
             // Received an unknown callback ID. Nothing to do.
             unexpected_response_error.inc();
             error!(
                 logger,
-                "[EXC-BUG] Canister got a response with unknown callback ID {}.  originator {} respondent {}.",
-                response.originator_reply_callback,
+                "[EXC-BUG] Canister got unexpected response: {e}.  originator {} respondent {}, deadline {:?}.",
                 response.originator,
                 response.respondent,
+                response.deadline,
             );
-            return None;
+            debug_assert!(false);
+            None
         }
-    };
+    }
+}
+
+/// Retrieves the call context corresponding to the given callback.
+pub fn get_call_context(
+    canister: &CanisterState,
+    callback: &Callback,
+    logger: &ReplicaLogger,
+    unexpected_response_error: &IntCounter,
+) -> Option<(CallContext, CallContextId)> {
+    let call_context_manager = canister.system_state.call_context_manager().or_else(|| {
+        // A canister by definition can only be stopped when no open call contexts.
+        // Hence, if we receive a response for a stopped canister then that is
+        // a either a bug in the code or potentially a faulty (or
+        // malicious) subnet generating spurious messages.
+        unexpected_response_error.inc();
+        error!(
+            logger,
+            "[EXC-BUG] Stopped canister got a response.  originator {} respondent {} deadline {:?}.",
+            canister.canister_id(),
+            callback.respondent,
+            callback.deadline,
+        );
+        debug_assert!(false);
+        None
+    })?;
 
     let call_context_id = callback.call_context_id;
-    debug_assert!(call_context_manager.call_context(call_context_id).is_some());
-    let call_context = match call_context_manager.call_context(call_context_id) {
-        Some(call_context) => call_context.clone(),
+    match call_context_manager.call_context(call_context_id) {
+        Some(call_context) => Some((call_context.clone(), call_context_id)),
         None => {
             // Unknown call context. Nothing to do.
             unexpected_response_error.inc();
             error!(
                 logger,
-                "[EXC-BUG] Canister got a response for unknown request.  originator {} respondent {} callback id {}.",
-                response.originator,
-                response.respondent,
-                response.originator_reply_callback,
+                "[EXC-BUG] Canister got a response for unknown request.  originator {} respondent {} deadline {:?}.",
+                canister.canister_id(),
+                callback.respondent,
+                callback.deadline,
             );
-            return None;
+            debug_assert!(false);
+            None
         }
-    };
-
-    Some((callback, callback_id, call_context, call_context_id))
+    }
 }
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {

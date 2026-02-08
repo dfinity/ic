@@ -311,27 +311,14 @@ impl SignedRequestBytes {
 /// A wrapper around ingress messages and canister requests/responses.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterMessage {
-    // TODO(DSM-95): Switch to `NewResponse` (in the next replica release) and drop.
-    Response(Arc<Response>),
-    /// Forward compatibility: a response as an input for Execution, consisting of
-    /// the response itself plus its associated callback.
-    NewResponse {
+    /// A response as an input for Execution consists of the response itself plus
+    /// its associated callback.
+    Response {
         response: Arc<Response>,
         callback: Arc<Callback>,
     },
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
-}
-
-impl CanisterMessage {
-    /// Helper function to extract the effective canister id.
-    pub fn effective_canister_id(&self) -> Option<CanisterId> {
-        match &self {
-            CanisterMessage::Ingress(ingress) => ingress.effective_canister_id,
-            CanisterMessage::Request(request) => request.extract_effective_canister_id(),
-            CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => None,
-        }
-    }
 }
 
 impl Display for CanisterMessage {
@@ -343,18 +330,30 @@ impl Display for CanisterMessage {
             CanisterMessage::Request(request) => {
                 write!(f, "Request, method name {},", request.method_name)
             }
-            CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => {
-                write!(f, "Response")
-            }
+            CanisterMessage::Response { .. } => write!(f, "Response"),
         }
     }
 }
 
-impl From<RequestOrResponse> for CanisterMessage {
-    fn from(msg: RequestOrResponse) -> Self {
-        match msg {
-            RequestOrResponse::Request(request) => CanisterMessage::Request(request),
-            RequestOrResponse::Response(response) => CanisterMessage::Response(response),
+/// A wrapper around ingress messages and canister requests/responses as
+/// management canister inputs.
+///
+/// As opposed to `CanisterMessage`, there is no `Callback` associated with
+/// a `Response`, as the management canister manages its own callbacks.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum SubnetMessage {
+    Request(Arc<Request>),
+    Response(Arc<Response>),
+    Ingress(Arc<Ingress>),
+}
+
+impl SubnetMessage {
+    /// Helper function to extract the effective canister id.
+    pub fn effective_canister_id(&self) -> Option<CanisterId> {
+        match &self {
+            SubnetMessage::Ingress(ingress) => ingress.effective_canister_id,
+            SubnetMessage::Request(request) => request.extract_effective_canister_id(),
+            SubnetMessage::Response { .. } => None,
         }
     }
 }
@@ -438,7 +437,7 @@ impl TryFrom<CanisterMessage> for CanisterCall {
         match msg {
             CanisterMessage::Request(msg) => Ok(CanisterCall::Request(msg)),
             CanisterMessage::Ingress(msg) => Ok(CanisterCall::Ingress(msg)),
-            CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => Err(()),
+            CanisterMessage::Response { .. } => Err(()),
         }
     }
 }
