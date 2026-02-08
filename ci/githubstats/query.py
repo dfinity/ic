@@ -260,7 +260,7 @@ def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame)
             attempt_dir = invocation_dir / str(attempt_num)
             filename = f"{attempt_status}.log"
             filepath = attempt_dir / filename
-            download_tasks.append((row, attempt_num, download_url, filepath))
+            download_tasks.append((row, attempt_num, attempt_status, download_url, filepath))
 
     execute_download_tasks(download_tasks, output_dir, df)
 
@@ -273,7 +273,7 @@ def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFr
 
         # Download logs in parallel.
         def download_log(task):
-            row, attempt_num, download_url, filepath = task
+            row, attempt_num, attempt_status, download_url, filepath = task
             shortened_path = filepath.relative_to(output_dir)
             try:
                 response = requests.get(download_url, timeout=60, stream=True)
@@ -284,14 +284,13 @@ def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFr
                             f.write(chunk)
                     # Fork a thread to annotate the DataFrame with the error summary of this log
                     # while the other logs are still downloading to speed up the whole process.
-                    thread = threading.Thread(target=annotate_df_with_summaries, args=(filepath, row, attempt_num, df))
+                    thread = threading.Thread(
+                        target=annotate_df_with_summaries, args=(row, attempt_num, attempt_status, filepath, df)
+                    )
                     thread.start()
                     return thread
                 else:
-                    error_line = response.text.split("\n")[0].strip()
-                    MAX_ERROR_LINE_LENGTH = 80
-                    if len(error_line) > MAX_ERROR_LINE_LENGTH:
-                        error_line = error_line[:MAX_ERROR_LINE_LENGTH] + "..."
+                    error_line = shorten(response.text.split("\n")[0].strip(), 80)
                     msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
                     if response.status_code == 404:
                         msg += " The log has probably already been garbage collected from the bazel-remote cache."
@@ -353,11 +352,13 @@ class SystemGroupSummary:
             raise ValueError(f"JSON does not match SystemGroupSummary structure: {e}")
 
 
-def annotate_df_with_summaries(filepath, row, attempt_num, df):
+def annotate_df_with_summaries(row, attempt_num, attempt_status, filepath, df):
     """Annotate the DataFrame with the error summary of a system-test"""
 
     summary = None
-    for line in reversed(filepath.read_text().splitlines()):
+    lines = filepath.read_text().strip().splitlines()
+    last_line = lines[-1]
+    for line in reversed(lines):
         # Try parsing the line as a JSON-encoded SystemGroupSummary
         # (potentially written by the ic_system_test_driver)
         # and continue with the next line if that fails.
@@ -367,12 +368,13 @@ def annotate_df_with_summaries(filepath, row, attempt_num, df):
         except ValueError:
             continue
 
-    if summary is not None:
-        with row["lock"]:
-            row["summaries"][attempt_num] = summary
+    with row["lock"]:
+        row["error_summaries"][attempt_num] = (
+            summary if summary is not None else (last_line if attempt_status == "FAILED" else "")
+        )
 
 
-def render_summaries(summaries: dict[int, SystemGroupSummary]):
+def render_summaries(summaries: dict[int, SystemGroupSummary | str]) -> str:
     lines = []
     for attempt_num, summary in sorted(summaries.items()):
         s = render_summary(summary)
@@ -389,15 +391,23 @@ def render_summaries(summaries: dict[int, SystemGroupSummary]):
     return "\n".join(lines)
 
 
-def render_summary(summary: SystemGroupSummary):
-    s = ""
+def render_summary(summary: SystemGroupSummary | str) -> str:
     MAX_ERROR_LINE_LENGTH = 80
+
+    if isinstance(summary, str):
+        return shorten(summary, MAX_ERROR_LINE_LENGTH)
+
+    s = ""
     for failed_task in summary.failure:
-        msg = failed_task.message.replace("\n", "\\n")
-        if len(msg) > MAX_ERROR_LINE_LENGTH:
-            msg = msg[:MAX_ERROR_LINE_LENGTH] + "..."
+        msg = shorten(failed_task.message.replace("\n", "\\n"), MAX_ERROR_LINE_LENGTH)
         s += f"{failed_task.name}: {msg}\n"
     return s
+
+
+def shorten(msg: str, max_length: int) -> str:
+    if len(msg) > max_length:
+        return msg[:max_length] + "..."
+    return msg
 
 
 def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
@@ -661,14 +671,9 @@ def last(args):
 
     df["last started at (UTC)"] = df["last_started_at"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
 
-    def render_branch(branch):
-        MAX_BRANCH_LENGTH = 16
-        link_name = branch
-        if len(link_name) > MAX_BRANCH_LENGTH:
-            link_name = link_name[:MAX_BRANCH_LENGTH] + "..."
-        return terminal_hyperlink(link_name, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
-
-    df["branch_link"] = df["branch"].apply(render_branch)
+    df["branch_link"] = df["branch"].apply(
+        lambda branch: terminal_hyperlink(shorten(branch, 16), f"https://github.com/{ORG}/{REPO}/tree/{branch}")
+    )
 
     df["PR_link"] = df["PR"].apply(
         lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
@@ -677,9 +682,9 @@ def last(args):
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
-        df["summaries"] = [{} for _ in range(len(df))]
+        df["error_summaries"] = [{} for _ in range(len(df))]
         download_and_process_logs(args.logs_base_dir, args.test_target, df)
-        df["errors"] = df["summaries"].apply(render_summaries)
+        df["errors"] = df["error_summaries"].apply(render_summaries)
 
     colalignments = [
         # (column, header, alignment)
@@ -690,7 +695,7 @@ def last(args):
         ("PR_link", "PR", "left"),
         ("commit_link", "commit", "left"),
         ("buildbuddy_links", "buildbuddy", "left"),
-    ] + ([] if args.skip_download else [("errors", "error per task per attempt", "left")])
+    ] + ([] if args.skip_download else [("errors", "errors per attempt", "left")])
 
     columns, headers, alignments = zip(*colalignments)
     print(
