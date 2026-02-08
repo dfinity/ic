@@ -1,6 +1,7 @@
 import logging
 
 from data_source.jira_finding_data_source import JiraFindingDataSource
+from integration.github.github_api import GithubApi
 from model.ic import (
     REPO_NAME,
     get_ic_repo_ci_pipeline_base_url,
@@ -40,5 +41,6 @@ if __name__ == "__main__":
         BazelRustDependencyManager(),
         JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier),
         scanner_subscribers,
+        github_api=GithubApi(),
     )
     scanner_job.do_release_scan(get_ic_repo_for_rust())
