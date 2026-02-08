@@ -497,41 +497,46 @@ def get_all_log_urls_from_buildbuddy(
 
                 test_summary = target.test_summary
 
-                def convert_download_url(uri) -> str:
-                    """
-                    The log is pointed to by file.uri below and will look like:
-                    bytestream://bazel-remote.idx.dfinity.network/blobs/{hash}/{size}
-                    We could download the log via BuildBuddy using the download_url:
-
-                      encoded_file_uri = urllib.parse.quote(file.uri, safe="")
-                      download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
-
-                    However, to reduce the dependency on BuildBuddy,
-                    we download the log directly from our bazel-remote HTTP server at:
-                    "https://artifacts.{cluster}.dfinity.network/cas/{hash}"
-                    This has the additional benefit of getting 404 errors instead of 500
-                    for already garbage collected logs, which we can handle more gracefully.
-                    """
-                    parsed = urllib.parse.urlparse(uri)
-                    hash = parsed.path.split("/")[2]
-                    return f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
-
                 # Collect failed attempts
                 for attempt_num, file in enumerate(test_summary.failed, start=1):
                     if file.uri:
-                        log_urls.append((attempt_num, convert_download_url(file.uri), "FAILED"))
+                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), "FAILED"))
 
                 # Collect passed attempts (continue numbering from failed attempts)
                 start_num = len(test_summary.failed) + 1
                 for attempt_num, file in enumerate(test_summary.passed, start=start_num):
                     if file.uri:
-                        log_urls.append((attempt_num, convert_download_url(file.uri), "PASSED"))
+                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), "PASSED"))
 
         return log_urls
 
     except Exception as e:
         print(f"Error calling BuildBuddy API: {e}", file=sys.stderr)
         return []
+
+
+def convert_download_url(uri, cluster) -> str:
+    """
+    The log URLs are retrieved from BuildBuddy like:
+
+    "bytestream://bazel-remote.idx.dfinity.network/blobs/{hash}/{size}"
+
+    We could download the log via BuildBuddy using the download_url:
+
+        encoded_file_uri = urllib.parse.quote(uri, safe="")
+        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
+
+    However, to reduce the dependency on BuildBuddy,
+    we download the log directly from our bazel-remote HTTP server at:
+
+    "https://artifacts.{cluster}.dfinity.network/cas/{hash}"
+
+    This has the additional benefit of getting 404 errors instead of 500
+    for already garbage collected logs, which we can handle more gracefully.
+    """
+    parsed = urllib.parse.urlparse(uri)
+    hash = parsed.path.split("/")[2]
+    return f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
 
 
 def top(args):
