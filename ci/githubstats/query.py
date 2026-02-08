@@ -682,8 +682,7 @@ def last(args):
         ("PR_link", "PR", "left"),
         ("commit_link", "commit", "left"),
         ("buildbuddy_links", "buildbuddy", "left"),
-        ("errors", "error per task per attempt", "left"),
-    ]
+    ] + ([] if args.skip_download else [("errors", "error per task per attempt", "left")])
 
     columns, headers, alignments = zip(*colalignments)
     print(
