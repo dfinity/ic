@@ -372,11 +372,11 @@ def annotate_df_with_summaries(row, attempt_num, attempt_status, filepath, df):
 
     with row["lock"]:
         row["error_summaries"][attempt_num] = (
-            summary if summary is not None else (last_line if attempt_status == "FAILED" else "")
+            summary if summary is not None else last_line if attempt_status == "FAILED" else None
         )
 
 
-def render_error_summaries(summaries: dict[int, SystemGroupSummary | str]) -> str:
+def render_error_summaries(summaries: dict[int, SystemGroupSummary | str | None]) -> str:
     """
     Render the error summaries of all attempts to a human-readable string. For example:
 
@@ -389,9 +389,8 @@ def render_error_summaries(summaries: dict[int, SystemGroupSummary | str]) -> st
     """
     lines = []
     for attempt_num, summary in sorted(summaries.items()):
-        s = render_error_summary(summary)
-        if len(s) > 0:
-            summary_lines = s.splitlines()
+        summary_lines = render_error_summary(summary)
+        if len(summary_lines) > 0:
             lines.append(
                 f"{attempt_num}: {summary_lines[0]}"
                 + (
@@ -403,17 +402,19 @@ def render_error_summaries(summaries: dict[int, SystemGroupSummary | str]) -> st
     return "\n".join(lines)
 
 
-def render_error_summary(summary: SystemGroupSummary | str) -> str:
+def render_error_summary(summary: SystemGroupSummary | str | None) -> list[str]:
     MAX_ERROR_LINE_LENGTH = 80
 
-    if isinstance(summary, str):
-        return shorten(summary, MAX_ERROR_LINE_LENGTH)
+    if summary is None:
+        return []
 
-    s = ""
-    for failed_task in summary.failure:
-        msg = shorten(failed_task.message.replace("\n", "\\n"), MAX_ERROR_LINE_LENGTH)
-        s += f"{failed_task.name}: {msg}\n"
-    return s
+    if isinstance(summary, str):
+        return [shorten(summary, MAX_ERROR_LINE_LENGTH)]
+
+    return [
+        f"{failed_task.name}: {shorten(failed_task.message.replace("\n", "\\n"), MAX_ERROR_LINE_LENGTH)}"
+        for failed_task in summary.failure
+    ]
 
 
 def shorten(msg: str, max_length: int) -> str:
