@@ -871,6 +871,7 @@ dependencies = [
 name = "attestation_testing"
 version = "0.0.0"
 dependencies = [
+ "attestation",
  "der 0.7.9",
  "ic-interfaces-registry-mocks",
  "ic-protobuf",
