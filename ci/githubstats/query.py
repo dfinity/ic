@@ -220,10 +220,11 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
-def download_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
+def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
     """
-    Downloads the logs of all runs of test_target in the given DataFrame
-    and saves them to the specified logs_base_dir.
+    Download the logs of all runs of test_target in the given DataFrame,
+    save them to the specified logs_base_dir
+    and annotate the DataFrame with error summaries from the downloaded logs.
     """
     original_cwd = Path(os.environ.get("BUILD_WORKING_DIRECTORY", Path.cwd()))
     test_name = test_target.split(":")[-1]
@@ -270,7 +271,7 @@ def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFr
     else:
         print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
-        # Download logs in parallel
+        # Download logs in parallel.
         def download_log(task):
             row, attempt_num, download_url, filepath = task
             shortened_path = filepath.relative_to(output_dir)
@@ -281,6 +282,8 @@ def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFr
                     with open(filepath, "wb") as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
+                    # Fork a thread to annotate the DataFrame with the error summary of this log
+                    # while the other logs are still downloading to speed up the whole process.
                     thread = threading.Thread(target=annotate_df_with_summaries, args=(filepath, row, attempt_num, df))
                     thread.start()
                     return thread
@@ -298,10 +301,11 @@ def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFr
                 print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
                 return None
 
-        # Download in parallel (limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server)
+        # Download in parallel (limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server).
         with ThreadPoolExecutor(max_workers=10) as executor:
             threads = list(executor.map(download_log, download_tasks))
 
+        # Wait for all annotation threads to finish.
         successes = 0
         for thread in threads:
             if thread is not None:
@@ -338,26 +342,30 @@ class SystemGroupSummary:
 
     @classmethod
     def from_json(cls, json_str: str) -> "SystemGroupSummary":
-        value = json.loads(json_str)
-        if not isinstance(value, dict):
-            raise ValueError(f"Expected dict but got {type(value).__name__}: {value}")
-        return cls.from_dict(value)
+        try:
+            value = json.loads(json_str)
+            if not isinstance(value, dict):
+                raise ValueError(f"Expected dict but got {type(value).__name__}: {value}")
+            return cls.from_dict(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+        except dacite.DaciteError as e:
+            raise ValueError(f"JSON does not match SystemGroupSummary structure: {e}")
 
 
 def annotate_df_with_summaries(filepath, row, attempt_num, df):
-    """Annotate the DataFrame with the summary of a system-test"""
+    """Annotate the DataFrame with the error summary of a system-test"""
 
     summary = None
     for line in reversed(filepath.read_text().splitlines()):
+        # Try parsing the line as a JSON-encoded SystemGroupSummary
+        # (potentially written by the ic_system_test_driver)
+        # and continue with the next line if that fails.
         try:
             summary = SystemGroupSummary.from_json(line)
             break
-        except json.JSONDecodeError:
-            continue  # Not a valid JSON, keep looking
         except ValueError:
-            continue  # JSON is valid but not the expected dict structure, keep looking
-        except dacite.DaciteError:
-            continue  # Not a valid SystemGroupSummary, keep looking
+            continue
 
     if summary is not None:
         with row["lock"]:
@@ -670,7 +678,7 @@ def last(args):
 
     if not args.skip_download:
         df["summaries"] = [{} for _ in range(len(df))]
-        download_logs(args.logs_base_dir, args.test_target, df)
+        download_and_process_logs(args.logs_base_dir, args.test_target, df)
         df["errors"] = df["summaries"].apply(render_summaries)
 
     colalignments = [
