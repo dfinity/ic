@@ -251,7 +251,7 @@ def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame)
         last_started_at = row["last_started_at"].strftime("%Y-%m-%dT%H:%M:%S")
         invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
 
-        # Parse the BuildBuddy URL to extract base URL and invocation ID
+        # Parse the BuildBuddy URL to extract the cluster and its base URL for use with gRPC later.
         parsed = urllib.parse.urlparse(url)
         cluster = parsed.netloc.split(".")[1]  # e.g., "dash.zh1-idx1.dfinity.network'" -> "zh1-idx1"
         buildbuddy_base_url = f"{parsed.scheme}://{parsed.netloc}"
@@ -260,9 +260,7 @@ def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame)
         log_urls = get_all_log_urls_from_buildbuddy(buildbuddy_base_url, cluster, str(invocation_id), test_target)
 
         for attempt_num, download_url, attempt_status in log_urls:
-            attempt_dir = invocation_dir / str(attempt_num)
-            filename = f"{attempt_status}.log"
-            filepath = attempt_dir / filename
+            filepath = invocation_dir / str(attempt_num) / f"{attempt_status}.log"
             download_tasks.append((row, attempt_num, attempt_status, download_url, filepath))
 
     execute_download_tasks(download_tasks, output_dir, df)
