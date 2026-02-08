@@ -233,9 +233,12 @@ def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
-
     print(f"Downloading logs to: {output_dir}", file=sys.stderr)
+
+    # Create a new column "error_summaries" in the DataFrame of type dict[int, SystemGroupSummary | str]
+    # mapping the attempt number to either the SystemGroupSummary in case of a system-test
+    # or the last line of the log for other tests.
+    df["error_summaries"] = [{} for _ in range(len(df))]
 
     # Collect all download tasks
     download_tasks = []
@@ -264,57 +267,59 @@ def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame)
 
     execute_download_tasks(download_tasks, output_dir, df)
 
+    write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
+
 
 def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFrame):
-    if not download_tasks:
-        print("No logs to download", file=sys.stderr)
-    else:
-        print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
+    print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
-        # Download logs in parallel.
-        def download_log(task):
-            row, attempt_num, attempt_status, download_url, filepath = task
-            shortened_path = filepath.relative_to(output_dir)
-            try:
-                response = requests.get(download_url, timeout=60, stream=True)
-                if response.ok:
-                    filepath.parent.mkdir(parents=True, exist_ok=True)
-                    with open(filepath, "wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            f.write(chunk)
-                    # Fork a thread to annotate the DataFrame with the error summary of this log
-                    # while the other logs are still downloading to speed up the whole process.
-                    thread = threading.Thread(
-                        target=annotate_df_with_summaries, args=(row, attempt_num, attempt_status, filepath, df)
-                    )
-                    thread.start()
-                    return thread
-                else:
-                    error_line = shorten(response.text.split("\n")[0].strip(), 80)
-                    msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
-                    if response.status_code == 404:
-                        msg += " The log has probably already been garbage collected from the bazel-remote cache."
-                    print(msg, file=sys.stderr)
-                    return None
-            except Exception as e:
-                print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
+    # Download logs in parallel.
+    def download_log(task):
+        row, attempt_num, attempt_status, download_url, filepath = task
+        shortened_path = filepath.relative_to(output_dir)
+        try:
+            response = requests.get(download_url, timeout=60, stream=True)
+            if response.ok:
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                with open(filepath, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                # Fork a thread to annotate the DataFrame with the error summary of this log
+                # while the other logs are still downloading to speed up the whole process.
+                thread = threading.Thread(
+                    target=annotate_df_with_summaries, args=(row, attempt_num, attempt_status, filepath, df)
+                )
+                thread.start()
+                return thread
+            else:
+                error_line = shorten(response.text.split("\n")[0].strip(), 80)
+                msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
+                if response.status_code == 404:
+                    msg += " The log has probably already been garbage collected from the bazel-remote cache."
+                print(msg, file=sys.stderr)
                 return None
+        except Exception as e:
+            print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
+            return None
 
-        # Download in parallel (limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server).
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            threads = list(executor.map(download_log, download_tasks))
+    # Download in parallel (limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server).
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        threads = list(executor.map(download_log, download_tasks))
 
-        # Wait for all annotation threads to finish.
-        successes = 0
-        for thread in threads:
-            if thread is not None:
-                successes += 1
-                thread.join()
+    # Wait for all annotation threads to finish.
+    successes = 0
+    for thread in threads:
+        if thread is not None:
+            successes += 1
+            thread.join()
 
-        print(
-            f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs to {output_dir}",
-            file=sys.stderr,
-        )
+    # Render the error_summaries to human-readable form.
+    df["errors"] = df["error_summaries"].apply(render_error_summaries)
+
+    print(
+        f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs to {output_dir}",
+        file=sys.stderr,
+    )
 
 
 @dataclass
@@ -374,10 +379,10 @@ def annotate_df_with_summaries(row, attempt_num, attempt_status, filepath, df):
         )
 
 
-def render_summaries(summaries: dict[int, SystemGroupSummary | str]) -> str:
+def render_error_summaries(summaries: dict[int, SystemGroupSummary | str]) -> str:
     lines = []
     for attempt_num, summary in sorted(summaries.items()):
-        s = render_summary(summary)
+        s = render_error_summary(summary)
         if len(s) > 0:
             summary_lines = s.splitlines()
             lines.append(
@@ -391,7 +396,7 @@ def render_summaries(summaries: dict[int, SystemGroupSummary | str]) -> str:
     return "\n".join(lines)
 
 
-def render_summary(summary: SystemGroupSummary | str) -> str:
+def render_error_summary(summary: SystemGroupSummary | str) -> str:
     MAX_ERROR_LINE_LENGTH = 80
 
     if isinstance(summary, str):
@@ -682,9 +687,7 @@ def last(args):
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
-        df["error_summaries"] = [{} for _ in range(len(df))]
         download_and_process_logs(args.logs_base_dir, args.test_target, df)
-        df["errors"] = df["error_summaries"].apply(render_summaries)
 
     colalignments = [
         # (column, header, alignment)
