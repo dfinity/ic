@@ -271,7 +271,6 @@ def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame)
 def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFrame):
     print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
-    # Download logs in parallel.
     def download_log(task):
         row, attempt_num, attempt_status, download_url, filepath = task
         shortened_path = filepath.relative_to(output_dir)
