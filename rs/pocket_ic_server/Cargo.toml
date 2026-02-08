@@ -101,6 +101,7 @@ tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
 wat = { workspace = true }
+wsl = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }

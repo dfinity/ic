@@ -1,6 +1,5 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
-use ed25519_dalek::{SigningKey, pkcs8::EncodePrivateKey};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_consensus::BitcoinPayloadBuilder;
@@ -53,7 +52,8 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{
-    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager, StateReader,
+    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateHashMetadata,
+    StateManager, StateReader,
 };
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::no_op_logger;
@@ -874,9 +874,8 @@ impl StateMachineNode {
         let mut xnet_ip_addr_bytes = rng.r#gen::<[u8; 16]>();
         xnet_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
         let xnet_ip_addr = Ipv6Addr::from(xnet_ip_addr_bytes);
-        let seed = rng.r#gen::<[u8; 32]>();
-        let signing_key = SigningKey::from_bytes(&seed);
-        let pkcs8_bytes = signing_key.to_pkcs8_der().unwrap().as_bytes().to_vec();
+        let signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.r#gen());
+        let pkcs8_bytes = signing_key.serialize_pkcs8(ic_ed25519::PrivateKeyFormat::Pkcs8v1);
         let root_key_pair: KeyPair = pkcs8_bytes.try_into().unwrap();
         Self {
             node_id: PrincipalId::new_self_authenticating(
@@ -940,7 +939,7 @@ impl Deref for StateMachineStateManager {
 }
 
 impl StateManager for StateMachineStateManager {
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.deref().list_state_hashes_to_certify()
     }
 
@@ -5025,9 +5024,13 @@ pub fn certify_latest_state_helper(
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
         let state_hashes = state_manager.list_state_hashes_to_certify();
-        let (height, hash) = state_hashes.last().unwrap();
-        state_manager
-            .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
+        let state_hash_metadata = state_hashes.last().unwrap();
+        state_manager.deliver_state_certification(certify_hash(
+            secret_key,
+            subnet_id,
+            &state_hash_metadata.height,
+            &state_hash_metadata.hash,
+        ));
     }
     assert_eq!(
         state_manager.latest_certified_height(),

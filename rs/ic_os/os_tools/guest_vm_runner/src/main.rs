@@ -93,9 +93,16 @@ pub async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    match args.vm_type {
-        GuestVMType::Default => println!("Starting GuestOS service"),
-        GuestVMType::Upgrade => println!("Starting Upgrade GuestOS service"),
+    let startup_message = match args.vm_type {
+        GuestVMType::Default => "Launching GuestOS Virtual Machine...",
+        GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
+    };
+    println!("{startup_message}");
+    for path in [CONSOLE_TTY1_PATH, CONSOLE_TTY_SERIAL_PATH] {
+        if let Ok(mut tty) = File::options().write(true).open(path) {
+            let _ = writeln!(tty, "\n{startup_message}\n");
+            let _ = tty.flush();
+        }
     }
 
     let termination_token = CancellationToken::new();
@@ -144,10 +151,6 @@ impl VirtualMachine {
         vm_domain_name: &str,
         command_runner: Arc<dyn AsyncCommandRunner>,
     ) -> Result<Self, GuestVmServiceError> {
-        // Check if a domain with the same name already exists and, if so, try to destroy it
-        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name, command_runner.as_ref())
-            .await?;
-
         let mut retries = 3;
         let domain = loop {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
@@ -534,6 +537,14 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
+        // Try to destroy any existing VM, if this fails, don't even try to create the configuration
+        VirtualMachine::try_destroy_existing_vm(
+            &self.libvirt_connection,
+            vm_domain_name(self.guest_vm_type),
+            self.command_runner.as_ref(),
+        )
+        .await?;
+
         let config_media = NamedTempFile::with_prefix("config_media")
             .context("Failed to create config media file")?;
 

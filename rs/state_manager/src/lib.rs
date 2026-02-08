@@ -36,7 +36,7 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateReader, TransientStateHashError::*,
+    StateHashError, StateHashMetadata, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, warn};
 use ic_metrics::{
@@ -934,7 +934,7 @@ pub struct StateManagerImpl {
     deallocator_thread: DeallocatorThread,
     // Cached latest state height.  We cache it separately because it's
     // requested quite often and this causes high contention on the lock.
-    latest_state_height: AtomicU64,
+    latest_state_height: Arc<AtomicU64>,
     latest_certified_height: AtomicU64,
     fast_forward_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
@@ -1613,7 +1613,7 @@ impl StateManagerImpl {
             own_subnet_id,
             own_subnet_type,
             deallocator_thread,
-            latest_state_height,
+            latest_state_height: Arc::new(latest_state_height),
             latest_certified_height,
             fast_forward_height,
             persist_metadata_guard,
@@ -2966,7 +2966,7 @@ impl StateManager for StateManagerImpl {
         }
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         let _timer = self
             .metrics
             .api_call_duration
@@ -2978,11 +2978,9 @@ impl StateManager for StateManagerImpl {
             .certifications_metadata
             .iter()
             .filter(|(_, metadata)| metadata.certification.is_none())
-            .map(|(height, metadata)| {
-                (
-                    *height,
-                    CryptoHashOfPartialState::from(metadata.certified_state_hash.clone()),
-                )
+            .map(|(height, metadata)| StateHashMetadata {
+                height: *height,
+                hash: CryptoHashOfPartialState::from(metadata.certified_state_hash.clone()),
             })
             .collect()
     }

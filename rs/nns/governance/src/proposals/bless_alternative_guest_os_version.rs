@@ -156,9 +156,11 @@ fn validate_base_guest_launch_measurements(
 }
 
 impl LocallyDescribableProposalAction for BlessAlternativeGuestOsVersion {
-    const TYPE_NAME: &'static str = "Bless Alternative Guest OS Version";
-    const TYPE_DESCRIPTION: &'static str = "Blesses an alternative Guest OS version that node \
-    operators can manually use to boot nodes in case the normal means of changing software fail.";
+    const TYPE_NAME: &'static str = "Bless Alternative GuestOS Version";
+    const TYPE_DESCRIPTION: &'static str = "Bless an alternative GuestOS version that can be \
+        used to recover the specified set of replicas that are in a non-functional state. This \
+        is a last resort recovery mechanism to be used when the replica cannot be upgraded \
+        through the regular mechanisms.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         SelfDescribingValue::from(self.clone())

@@ -46,6 +46,10 @@ fn test_parse() {
             maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration {
                 seconds: Some(ONE_DAY_SECONDS),
             },
+            additional_critical_native_action_ids: vec![
+                NativeAction::UpgradeSnsControlledCanister,
+                NativeAction::AddGenericNervousSystemFunction,
+            ],
         },
 
         neurons: Neurons {
@@ -400,6 +404,10 @@ fn test_convert_to_create_service_nervous_system() {
                 initial_reward_rate: Some(parse_percentage("10%").unwrap()),
                 final_reward_rate: Some(parse_percentage("2.25%").unwrap()),
                 reward_rate_transition_duration: Some(parse_duration("12 years").unwrap()),
+            }),
+
+            custom_proposal_criticality: Some(nns_governance_pb::CustomProposalCriticality {
+                additional_critical_native_action_ids: Some(vec![3, 4]),
             }),
         },
     );

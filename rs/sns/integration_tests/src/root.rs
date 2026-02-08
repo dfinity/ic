@@ -18,7 +18,8 @@ use ic_sns_root::{
 };
 use ic_sns_test_utils::{
     itest_helpers::{
-        SnsCanisters, SnsTestsInitPayloadBuilder, local_test_on_sns_subnet, set_up_root_canister,
+        SnsCanisters, SnsTestsInitPayloadBuilder, set_up_root_canister,
+        state_machine_test_on_sns_subnet,
     },
     state_test_helpers::{
         Scenario, sns_root_register_dapp_canister, sns_root_register_dapp_canisters,
@@ -32,7 +33,7 @@ use std::{collections::BTreeSet, time::Duration};
 
 #[test]
 fn test_get_status() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Step 1: Prepare: Create root canister.
         let root = set_up_root_canister(
             &runtime,
@@ -84,7 +85,7 @@ fn test_get_status() {
 
 #[test]
 fn test_get_sns_canisters_summary() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Create and setup a basic SNS
         let sns_init_payload = SnsTestsInitPayloadBuilder::new().build();
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
