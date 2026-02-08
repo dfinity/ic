@@ -361,12 +361,22 @@ def annotate_df_with_summaries(row, attempt_num, attempt_status, filepath, df):
     lines = filepath.read_text().strip().splitlines()
     last_line = lines[-1]
     for line in lines:
+        # For uncolocated system-tests the SystemGroupSummary JSON object starts at the beginning of a line.
+        # However for colocated system-tests two SystemGroupSummary JSON objects appear in the logs.
+        # First the SystemGroupSummary of the actual colocated test appears but with log metadata in front of it. This is the one we're interested in.
+        # Then the SystemGroupSummary of the wrapper test-driver appears. This one we want to ignore. For example:
+        #
+        # 2026-02-02 04:28:24.512 INFO[uvms_logs_stream:StdOut] [uvm=colocated-test-driver] TEST_LOG: 2026-02-02 04:28:24.048 INFO[rs/tests/driver/src/driver/log_events.rs:20:9] {"event_name": ... }
+        # ...
+        # {"test_name": ... }
+        #
+        # To handle this we search for JSON objects in ascending order and start parsing from the first '{' character.
+        # Ideally the colocated test-driver would write a single SystemGroupSummary of the colocated test without any log metadata in front of it.
         ix = line.find("{")
         if ix == -1:
             continue
         obj = line[ix:]
-        # Try parsing the line as a JSON-encoded SystemGroupSummary
-        # (potentially written by the ic_system_test_driver)
+        # Try parsing the line fragment as a JSON-encoded SystemGroupSummary
         # and continue with the next line if that fails.
         try:
             summary = SystemGroupSummary.from_json(obj)
