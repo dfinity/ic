@@ -360,12 +360,16 @@ def annotate_df_with_summaries(row, attempt_num, attempt_status, filepath, df):
     summary = None
     lines = filepath.read_text().strip().splitlines()
     last_line = lines[-1]
-    for line in reversed(lines):
+    for line in lines:
+        ix = line.find("{")
+        if ix == -1:
+            continue
+        obj = line[ix:]
         # Try parsing the line as a JSON-encoded SystemGroupSummary
         # (potentially written by the ic_system_test_driver)
         # and continue with the next line if that fails.
         try:
-            summary = SystemGroupSummary.from_json(line)
+            summary = SystemGroupSummary.from_json(obj)
             break
         except ValueError:
             continue
