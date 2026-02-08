@@ -109,7 +109,7 @@ impl CatchUpPackageMaker {
         }
     }
 
-    /// If a CatchUpPackageShare should be proposed, propose it.
+    /// If a [`CatchUpPackageShare`] should be proposed, propose it.
     pub fn on_state_change(&self, pool: &PoolReader<'_>) -> Option<CatchUpPackageShare> {
         trace!(self.log, "on_state_change");
 
@@ -118,28 +118,13 @@ impl CatchUpPackageMaker {
 
         self.report_state_divergence_if_required(pool);
 
-        let current_cup_height = pool.get_catch_up_height();
-        let mut block = pool.get_highest_finalized_summary_block();
+        let block = pool.get_highest_finalized_summary_block();
 
-        while block.height() > current_cup_height {
-            let result = self.consider_block(pool, block.clone());
-            if result.is_some() {
-                // If we were able to generate a share, we simply return.
-                // Subsequent calls into the catch up package maker will only
-                // result in the creation of shares at earlier heights being, if
-                // the creation of this share does not result in an aggregated
-                // catch up package.
-                return result;
-            }
-
-            let next_start_height = pool
-                .get_finalized_block(block.height.decrement())?
-                .payload
-                .as_ref()
-                .dkg_interval_start_height();
-            block = pool.get_finalized_block(next_start_height)?;
+        if block.height > pool.get_catch_up_height() {
+            self.consider_block(pool, block)
+        } else {
+            None
         }
-        None
     }
 
     /// Consider the provided block for the creation of a catch up package.
