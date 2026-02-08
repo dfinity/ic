@@ -355,7 +355,7 @@ class SystemGroupSummary:
 
 
 def annotate_df_with_summaries(row, attempt_num, attempt_status, filepath, df):
-    """Annotate the DataFrame with the error summary of a system-test"""
+    """Annotate the DataFrame with a summary of the error(s)"""
 
     summary = None
     lines = filepath.read_text().strip().splitlines()
