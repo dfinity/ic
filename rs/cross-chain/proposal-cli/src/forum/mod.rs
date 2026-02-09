@@ -17,7 +17,7 @@ use url::Url;
 type ProposalId = u64;
 
 /// Kind of forum topic: application canister management vs protocol canister management.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ForumTopicKind {
     ApplicationCanisterManagement,
     ProtocolCanisterManagement,
@@ -27,10 +27,34 @@ pub enum ForumTopicKind {
 /// `ProtocolCanisterManagement` for protocol canisters and `ApplicationCanisterManagement` for application canisters.
 fn forum_topic_kind(canister: &TargetCanister) -> ForumTopicKind {
     match canister {
-        TargetCanister::Bitcoin | TargetCanister::Dogecoin => {
-            ForumTopicKind::ProtocolCanisterManagement
-        }
-        _ => ForumTopicKind::ApplicationCanisterManagement,
+        TargetCanister::Bitcoin
+        | TargetCanister::BtcWatchdog
+        | TargetCanister::DogeWatchdog
+        | TargetCanister::Dogecoin => ForumTopicKind::ProtocolCanisterManagement,
+        TargetCanister::CyclesLedger
+        | TargetCanister::CyclesIndex
+        | TargetCanister::IcpArchive1
+        | TargetCanister::IcpArchive2
+        | TargetCanister::IcpArchive3
+        | TargetCanister::IcpArchive4
+        | TargetCanister::IcpIndex
+        | TargetCanister::IcpLedger => ForumTopicKind::ProtocolCanisterManagement,
+        TargetCanister::ExchangeRateCanister => ForumTopicKind::ProtocolCanisterManagement,
+        TargetCanister::BtcChecker
+        | TargetCanister::CkBtcArchive
+        | TargetCanister::CkBtcIndex
+        | TargetCanister::CkBtcLedger
+        | TargetCanister::CkBtcMinter
+        | TargetCanister::CkDogeIndex
+        | TargetCanister::CkDogeLedger
+        | TargetCanister::CkDogeMinter
+        | TargetCanister::CkEthArchive
+        | TargetCanister::CkEthIndex
+        | TargetCanister::CkEthLedger
+        | TargetCanister::CkEthMinter
+        | TargetCanister::EvmRpc
+        | TargetCanister::LedgerSuiteOrchestrator
+        | TargetCanister::SolRpc => ForumTopicKind::ApplicationCanisterManagement,
     }
 }
 
@@ -55,7 +79,7 @@ impl ForumTopic {
         proposals: I,
     ) -> Result<ForumTopic, String> {
         let mut summaries = BTreeMap::new();
-        let mut topic_kind = None::<ForumTopicKind>;
+        let mut proposal_kinds = BTreeMap::new();
         for proposal in proposals.into_iter() {
             let proposal_id = proposal.proposal_id;
             let summary = UpgradeProposalSummary::try_from(proposal)?;
