@@ -27,6 +27,7 @@ use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
+    #[validate_eq(Ignore)]
     feature_flag: FlagStatus,
 
     #[validate_eq(Ignore)]
