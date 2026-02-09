@@ -130,6 +130,8 @@ fn reject_remote_callbacks() {
 
     // Now we reject remote callbacks and confirm that the expected reject was observed by the main canister.
     sm.reject_remote_callbacks();
+    // We reject remote callbacks twice in a row to confirm that this operation is idempotent.
+    sm.reject_remote_callbacks();
     sm.tick();
 
     let mut expected_reject = 2_u32.to_le_bytes().to_vec();
