@@ -41,7 +41,7 @@ use ic_types::{
     ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
+    messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage},
 };
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
@@ -326,7 +326,7 @@ impl SchedulerImpl {
     /// Invokes `ExecutionEnvironment` to execute a subnet message.
     fn execute_subnet_message(
         &self,
-        msg: CanisterMessage,
+        msg: SubnetMessage,
         state: ReplicatedState,
         csprng: &mut Csprng,
         current_round: ExecutionRound,
@@ -1228,9 +1228,6 @@ impl Scheduler for SchedulerImpl {
             self.metrics.canister_ingress_queue_latencies.clone(),
         );
 
-        // Copy state of registry flag over to ReplicatedState
-        state.set_own_cost_schedule(registry_settings.canister_cycles_cost_schedule);
-
         // Round preparation.
         let mut scheduler_round_limits = {
             let _timer = self.metrics.round_preparation_duration.start_timer();
@@ -1361,7 +1358,7 @@ impl Scheduler for SchedulerImpl {
                     // Wrap the callback ID and payload into a Response, to make it easier for
                     // `execute_subnet_message()` to deal with. All other fields will be ignored by
                     // `execute_subnet_message()`.
-                    CanisterMessage::Response(
+                    SubnetMessage::Response(
                         Response {
                             originator: CanisterId::ic_00(),
                             respondent: CanisterId::ic_00(),
@@ -1431,7 +1428,7 @@ impl Scheduler for SchedulerImpl {
             {
                 debug_assert_lt!(raw_rand_context.execution_round_id, current_round);
                 let (new_state, _) = self.execute_subnet_message(
-                    CanisterMessage::Request(raw_rand_context.request.into()),
+                    SubnetMessage::Request(raw_rand_context.request.into()),
                     state,
                     &mut csprng,
                     current_round,
@@ -2185,7 +2182,7 @@ fn join_consumed_cycles_by_use_case(
 ///     with another long-running execution in progress.
 ///     2. Install code messages can only be executed sequentially.
 fn can_execute_subnet_msg(
-    msg: &CanisterMessage,
+    msg: &SubnetMessage,
     ongoing_long_install_code: bool,
     canister_states: &BTreeMap<CanisterId, CanisterState>,
     round_limits: &mut RoundLimits,
@@ -2199,13 +2196,9 @@ fn can_execute_subnet_msg(
         return true;
     };
     let maybe_method = match msg {
-        CanisterMessage::Ingress(ingress) => {
-            Ic00Method::from_str(ingress.method_name.as_str()).ok()
-        }
-        CanisterMessage::Request(request) => {
-            Ic00Method::from_str(request.method_name.as_str()).ok()
-        }
-        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => None,
+        SubnetMessage::Ingress(ingress) => Ic00Method::from_str(ingress.method_name.as_str()).ok(),
+        SubnetMessage::Request(request) => Ic00Method::from_str(request.method_name.as_str()).ok(),
+        SubnetMessage::Response { .. } => None,
     };
     let Some(method) = maybe_method else {
         // If there is no method name, we can execute the subnet message.
@@ -2249,17 +2242,17 @@ fn can_execute_subnet_msg(
 /// (de)-serialize a large state and thus consume a lot of instructions.
 fn get_instructions_limits_for_subnet_message(
     config: &SchedulerConfig,
-    msg: &CanisterMessage,
+    msg: &SubnetMessage,
 ) -> InstructionLimits {
     // The default limits are unused since instruction limits only matter
     // for install code in which case the default limits are overriden.
     let default_limits = InstructionLimits::new(NumInstructions::from(0), NumInstructions::from(0));
     let method_name = match &msg {
-        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => {
+        SubnetMessage::Response { .. } => {
             return default_limits;
         }
-        CanisterMessage::Ingress(ingress) => &ingress.method_name,
-        CanisterMessage::Request(request) => &request.method_name,
+        SubnetMessage::Ingress(ingress) => &ingress.method_name,
+        SubnetMessage::Request(request) => &request.method_name,
     };
 
     use Ic00Method::*;
@@ -2274,6 +2267,7 @@ fn get_instructions_limits_for_subnet_message(
             | ECDSAPublicKey
             | RawRand
             | HttpRequest
+            | FlexibleHttpRequest
             | SetupInitialDKG
             | SignWithECDSA
             | ReshareChainKey

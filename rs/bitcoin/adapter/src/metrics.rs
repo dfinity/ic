@@ -33,7 +33,7 @@ pub struct GetSuccessorMetrics {
     pub response_blocks: Histogram,
     pub prune_headers_anchor_height: IntGauge,
     /// Time spent building the GetSuccessors response.
-    pub response_build_duration: Histogram,
+    pub response_build_duration: HistogramVec,
     /// Size of blocks in the response in bytes.
     pub response_blocks_size: Histogram,
 }
@@ -50,24 +50,27 @@ impl GetSuccessorMetrics {
             response_blocks: metrics_registry.histogram(
                 "response_blocks",
                 "Number of blocks returned in response",
-                // 1, 10, 100, 1000
-                exponential_buckets(1.0, 10.0, 3),
+                // 0, 1, 10, 100, 1000
+                vec![0.0, 1.0, 10.0, 100.0, 1000.0],
             ),
             prune_headers_anchor_height: metrics_registry.int_gauge(
                 "prune_headers_anchor_height",
                 "Anchor height used to prune headers",
             ),
-            response_build_duration: metrics_registry.histogram(
+            response_build_duration: metrics_registry.histogram_vec(
                 "response_build_duration_seconds",
                 "Time spent building the GetSuccessors response.",
-                // 1ms, 10ms, 100ms, 1s, 10s
-                vec![0.001, 0.01, 0.1, 1.0, 10.0],
+                // 100µs, 200µs, 500µs, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms, 1s
+                decimal_buckets(-4, 0),
+                &["empty"],
             ),
             response_blocks_size: metrics_registry.histogram(
                 "response_blocks_size_bytes",
                 "Total size of blocks in the GetSuccessors response in bytes.",
-                // 1KB, 10KB, 100KB, 500KB, 1MB, 2MB
-                vec![1024.0, 10240.0, 102400.0, 512000.0, 1048576.0, 2097152.0],
+                // 0, 1KB, 10KB, 100KB, 500KB, 1MB, 2MB
+                vec![
+                    0.0, 1024.0, 10240.0, 102400.0, 512000.0, 1048576.0, 2097152.0,
+                ],
             ),
         }
     }

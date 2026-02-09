@@ -12,7 +12,6 @@ use ic_types::messages::Response;
 use ic_types::{CanisterId, Cycles};
 use prometheus::{Histogram, HistogramVec, IntCounter};
 use std::str::FromStr;
-use std::sync::Arc;
 
 pub const FINISHED_OUTCOME_LABEL: &str = "finished";
 pub const SUBMITTED_OUTCOME_LABEL: &str = "submitted";
@@ -225,7 +224,7 @@ impl ExecutionEnvironmentMetrics {
     pub(crate) fn observe_http_outcall_request(
         &self,
         context: &CanisterHttpRequestContext,
-        response: &Arc<Response>,
+        response: &Response,
     ) {
         self.http_outcalls_metrics
             .request_size
@@ -327,6 +326,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::InstallChunkedCode
                     | ic00::Method::StopCanister
                     | ic00::Method::HttpRequest
+                    | ic00::Method::FlexibleHttpRequest
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
                     | ic00::Method::VetKdDeriveKey

@@ -12,6 +12,7 @@ use ic_types::messages::{
     CanisterMessage, CanisterMessageOrTask, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response,
 };
+use ic_types::methods::Callback;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CanisterId, Cycles};
 use std::{collections::BTreeMap, sync::Arc};
@@ -108,14 +109,14 @@ impl SystemStateFixture {
         &mut self,
         callee: CanisterId,
         deadline: CoarseTime,
-    ) -> (Arc<Request>, Arc<Response>) {
+    ) -> (Arc<Request>, Arc<Response>, Arc<Callback>) {
         // Register a callback.
-        let callback = self.system_state.with_callback(callee, deadline);
+        let (callback_id, callback) = self.system_state.with_callback(callee, deadline);
 
         let request = RequestBuilder::default()
             .sender(CANISTER_ID)
             .receiver(callee)
-            .sender_reply_callback(callback)
+            .sender_reply_callback(callback_id)
             .deadline(deadline)
             .payment(Cycles::new(10))
             .build()
@@ -123,12 +124,12 @@ impl SystemStateFixture {
         let response = ResponseBuilder::default()
             .respondent(callee)
             .originator(CANISTER_ID)
-            .originator_reply_callback(callback)
+            .originator_reply_callback(callback_id)
             .deadline(deadline)
             .refund(Cycles::new(5))
             .build()
             .into();
-        (request, response)
+        (request, response, callback)
     }
 
     fn push_input(
@@ -184,6 +185,18 @@ impl SystemStateFixture {
     }
 }
 
+/// Produces a deadline expired reject response that matches `response`.
+fn deadline_expired_response(response: &Response) -> Arc<Response> {
+    Arc::new(Response {
+        response_payload: Payload::Reject(RejectContext::new(
+            RejectCode::SysUnknown,
+            "Call deadline has expired.",
+        )),
+        refund: Cycles::zero(), // No refund in deadline expired reject.
+        ..response.clone()
+    })
+}
+
 #[test]
 fn correct_charging_target_canister_for_a_response() {
     let freeze_threshold = NumSeconds::new(30 * 24 * 60 * 60);
@@ -221,7 +234,7 @@ fn correct_charging_target_canister_for_a_response() {
 fn induct_messages_to_self_in_running_status_works() {
     let mut fixture = SystemStateFixture::running();
 
-    let (request_to_self, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
+    let (request_to_self, _, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
     fixture.push_output_request(request_to_self).unwrap();
     fixture.induct_messages_to_self();
 
@@ -312,12 +325,12 @@ fn induct_messages_to_self_memory_limit_test_impl(
     let mut fixture = SystemStateFixture::running();
 
     // One guaranteed response self-call response and one self-call request.
-    let (request0, response) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
-    let (request, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
+    let (request0, response, callback) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
+    let (request, _, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
 
     // A second request that might exceed the available memory (if guaranteed
     // response; and on an application subnet).
-    let (second_request, _) = fixture.prepare_call(
+    let (second_request, _, _) = fixture.prepare_call(
         CANISTER_ID,
         CoarseTime::from_secs_since_unix_epoch(deadline),
     );
@@ -346,7 +359,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
 
     // Expect the response and first request to have been inducted.
     assert_eq!(
-        Some(CanisterMessage::Response(response)),
+        Some(CanisterMessage::Response { response, callback }),
         fixture.pop_input(),
     );
     assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input(),);
@@ -379,7 +392,7 @@ fn induct_messages_to_self_full_queue() {
     // Push`DEFAULT_QUEUE_CAPACITY` requests.
     let mut requests = Vec::new();
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
-        let (request, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
+        let (request, _, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
         requests.push(request.clone());
         assert_eq!(
             Ok(None),
@@ -410,8 +423,7 @@ fn induct_messages_to_self_full_queue() {
 fn induct_messages_to_self_duplicate_best_effort_response() {
     let mut fixture = SystemStateFixture::running();
 
-    let (request, response) = fixture.prepare_call(CANISTER_ID, SOME_DEADLINE);
-    let callback = response.originator_reply_callback;
+    let (request, response, callback) = fixture.prepare_call(CANISTER_ID, SOME_DEADLINE);
 
     // Enqueue the outgoing request.
     fixture.push_output_request(request.clone()).unwrap();
@@ -430,7 +442,7 @@ fn induct_messages_to_self_duplicate_best_effort_response() {
     );
 
     // A few rounds later, have the running call context produce a response.
-    fixture.push_output_response(response);
+    fixture.push_output_response(response.clone());
 
     // Try inducting the response and check that it was consumed.
     fixture.induct_messages_to_self();
@@ -438,10 +450,12 @@ fn induct_messages_to_self_duplicate_best_effort_response() {
 
     // Pop the timeout reject response and execute it (consuming the callback).
     // The late response was silently dropped, as a duplicate.
-    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response(resp)) if resp.response_payload == Payload::Reject(RejectContext::new(RejectCode::SysUnknown, "Call deadline has expired.")));
-    assert_matches!(
-        fixture.system_state.unregister_callback(callback),
-        Ok(Some(_))
+    assert_eq!(
+        fixture.pop_input(),
+        Some(CanisterMessage::Response {
+            response: deadline_expired_response(&response),
+            callback,
+        })
     );
 
     // There should now be zero messages and reserved slots in the canister queues.
@@ -458,8 +472,7 @@ fn induct_messages_to_self_duplicate_best_effort_response() {
 fn induct_messages_to_self_best_effort_callback_gone() {
     let mut fixture = SystemStateFixture::running();
 
-    let (request, response) = fixture.prepare_call(CANISTER_ID, SOME_DEADLINE);
-    let callback = response.originator_reply_callback;
+    let (request, response, _) = fixture.prepare_call(CANISTER_ID, SOME_DEADLINE);
 
     // Enqueue the outgoing request.
     fixture.push_output_request(request.clone()).unwrap();
@@ -475,11 +488,7 @@ fn induct_messages_to_self_best_effort_callback_gone() {
     fixture.time_out_callbacks(CoarseTime::from_secs_since_unix_epoch(u32::MAX));
 
     // Pop the resulting reject response and execute it (consuming the callback).
-    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response(_)));
-    assert_matches!(
-        fixture.system_state.unregister_callback(callback),
-        Ok(Some(_))
-    );
+    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response { .. }));
 
     // A few rounds later, have the running call context produce a response.
     fixture.push_output_response(response);
@@ -505,7 +514,7 @@ fn induct_messages_to_self_best_effort_callback_gone() {
 fn induct_messages_to_self_guaranteed_response_callback_gone() {
     let mut fixture = SystemStateFixture::running();
 
-    let (request, response) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
+    let (request, response, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
     let callback = response.originator_reply_callback;
 
     // Enqueue the outgoing request.
@@ -530,49 +539,56 @@ fn induct_messages_to_self_guaranteed_response_callback_gone() {
 
 /// Simulates an outbound call with the given deadline, by registering a
 /// callback and reserving a response slot.
-fn simulate_outbound_call(fixture: &mut SystemStateFixture, deadline: CoarseTime) -> Arc<Response> {
-    let (request, response) = fixture.prepare_call(OTHER_CANISTER_ID, deadline);
+fn simulate_outbound_call(
+    fixture: &mut SystemStateFixture,
+    deadline: CoarseTime,
+) -> (Arc<Response>, Arc<Callback>) {
+    let (request, response, callback) = fixture.prepare_call(OTHER_CANISTER_ID, deadline);
 
     // Reserve a response slot.
     fixture.push_output_request(request).unwrap();
     fixture.pop_output().unwrap();
 
-    response
+    (response, callback)
 }
 
 #[test]
 fn time_out_callbacks() {
     let mut fixture = SystemStateFixture::running();
 
-    let deadline_expired_reject_payload = Payload::Reject(RejectContext::new(
-        RejectCode::SysUnknown,
-        "Call deadline has expired.",
-    ));
-
+    // Deadlines.
     let d1 = CoarseTime::from_secs_since_unix_epoch(1);
     let d2 = CoarseTime::from_secs_since_unix_epoch(2);
     let d3 = CoarseTime::from_secs_since_unix_epoch(3);
 
-    let rep1 = simulate_outbound_call(&mut fixture, d1);
-    let rep2 = simulate_outbound_call(&mut fixture, d1);
-    let c3 = simulate_outbound_call(&mut fixture, d1).originator_reply_callback;
-    let c4 = simulate_outbound_call(&mut fixture, d2).originator_reply_callback;
+    // Responses and matching callbacks.
+    let (rep1, c1) = simulate_outbound_call(&mut fixture, d1);
+    let (rep2, c2) = simulate_outbound_call(&mut fixture, d1);
+    let (rep3, c3) = simulate_outbound_call(&mut fixture, d1);
+    let (rep4, c4) = simulate_outbound_call(&mut fixture, d2);
 
     // Simulate a paused execution for `rep1`.
     assert_eq!(
         Ok(None),
         fixture.push_input(
-            RequestOrResponse::Response(rep1),
+            RequestOrResponse::Response(rep1.clone()),
             InputQueueType::RemoteSubnet,
         )
     );
-    let response1 = fixture.pop_input().unwrap();
+    let message1 = fixture.pop_input().unwrap();
+    assert_eq!(
+        CanisterMessage::Response {
+            response: rep1,
+            callback: c1
+        },
+        message1
+    );
     fixture
         .system_state
         .task_queue
         .enqueue(ExecutionTask::PausedExecution {
             id: PausedExecutionId(1),
-            input: CanisterMessageOrTask::Message(response1),
+            input: CanisterMessageOrTask::Message(message1),
         });
 
     // And enqueue `rep2`.
@@ -590,14 +606,25 @@ fn time_out_callbacks() {
     assert_eq!((1, Vec::new()), fixture.time_out_callbacks(d2));
     assert!(!fixture.system_state.has_expired_callbacks(d2));
 
+    // Complete the paused execution of `rep1`.
+    fixture.system_state.task_queue.pop_front().unwrap();
+
     // Pop `rep2`.
-    assert_eq!(Some(CanisterMessage::Response(rep2)), fixture.pop_input());
+    assert_eq!(
+        Some(CanisterMessage::Response {
+            response: rep2.clone(),
+            callback: c2
+        }),
+        fixture.pop_input()
+    );
 
     // Pop the reject response for `c3`.
-    assert_matches!(
+    assert_eq!(
+        Some(CanisterMessage::Response {
+            response: deadline_expired_response(&rep3),
+            callback: c3
+        }),
         fixture.pop_input(),
-        Some(CanisterMessage::Response(response))
-            if response.originator_reply_callback == c3 && response.response_payload == deadline_expired_reject_payload
     );
     assert_eq!(None, fixture.pop_input());
 
@@ -607,10 +634,12 @@ fn time_out_callbacks() {
     assert!(!fixture.system_state.has_expired_callbacks(d3));
 
     // Pop the reject responses for `c4`.
-    assert_matches!(
+    assert_eq!(
+        Some(CanisterMessage::Response {
+            response: deadline_expired_response(&rep4),
+            callback: c4
+        }),
         fixture.pop_input(),
-        Some(CanisterMessage::Response(response))
-            if response.originator_reply_callback == c4 && response.response_payload == deadline_expired_reject_payload
     );
     assert_eq!(None, fixture.pop_input());
 
@@ -622,18 +651,13 @@ fn time_out_callbacks() {
 fn time_out_callbacks_no_reserved_slot() {
     let mut fixture = SystemStateFixture::running();
 
-    let deadline_expired_reject_payload = Payload::Reject(RejectContext::new(
-        RejectCode::SysUnknown,
-        "Call deadline has expired.",
-    ));
-
     let d1 = CoarseTime::from_secs_since_unix_epoch(1);
     let d2 = CoarseTime::from_secs_since_unix_epoch(2);
 
     // Register 3 callbacks, but only make one slot reservation.
-    let c1 = simulate_outbound_call(&mut fixture, d1).originator_reply_callback;
-    let c2 = fixture.system_state.with_callback(OTHER_CANISTER_ID, d1);
-    let c3 = fixture.system_state.with_callback(OTHER_CANISTER_ID, d1);
+    let (r1, c1) = simulate_outbound_call(&mut fixture, d1);
+    let (cid2, _) = fixture.system_state.with_callback(OTHER_CANISTER_ID, d1);
+    let (cid3, _) = fixture.system_state.with_callback(OTHER_CANISTER_ID, d1);
 
     // Time out callbacks with deadlines before `d2`.
     assert!(fixture.system_state.has_expired_callbacks(d2));
@@ -644,17 +668,19 @@ fn time_out_callbacks_no_reserved_slot() {
     assert_eq!(3, expired_callbacks);
 
     // Only one timeout reject for `c1` was enqueued before we ran out of slots.
-    assert_matches!(
+    assert_eq!(
         fixture.pop_input(),
-        Some(CanisterMessage::Response(response))
-            if response.originator_reply_callback == c1 && response.response_payload == deadline_expired_reject_payload
+        Some(CanisterMessage::Response {
+            response: deadline_expired_response(&r1),
+            callback: c1
+        })
     );
     assert_eq!(None, fixture.pop_input());
 
     // And two errors were produced: one for `c2` and one for `c3`.
     assert_eq!(2, errors.len());
-    assert_matches!(errors[0], StateError::NonMatchingResponse { callback_id, deadline, .. } if callback_id == c2 && deadline == d1);
-    assert_matches!(errors[1], StateError::NonMatchingResponse { callback_id, deadline, .. } if callback_id == c3 && deadline == d1);
+    assert_matches!(errors[0], StateError::NonMatchingResponse { callback_id, deadline, .. } if callback_id == cid2 && deadline == d1);
+    assert_matches!(errors[1], StateError::NonMatchingResponse { callback_id, deadline, .. } if callback_id == cid3 && deadline == d1);
 
     assert!(!fixture.system_state.has_input());
     assert!(!fixture.system_state.queues().has_output());

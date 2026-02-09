@@ -57,7 +57,7 @@ use ic_sns_governance::{
         },
     },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsVersion},
-    types::native_action_ids,
+    types::NativeAction,
 };
 use maplit::{btreemap, btreeset};
 use pretty_assertions::assert_eq;
@@ -2495,7 +2495,7 @@ fn test_neurons_can_follow_themselves() {
         canister_fixture
             .follow(
                 &follower_neuron_id,
-                native_action_ids::UNSPECIFIED,
+                NativeAction::Unspecified as u64,
                 vec![followee_neuron_id.clone()],
                 follower_principal_id
             )
@@ -2508,7 +2508,7 @@ fn test_neurons_can_follow_themselves() {
         canister_fixture
             .follow(
                 &follower_neuron_id,
-                native_action_ids::MOTION,
+                NativeAction::Motion as u64,
                 vec![follower_neuron_id.clone()],
                 follower_principal_id,
             )
@@ -2520,10 +2520,10 @@ fn test_neurons_can_follow_themselves() {
     assert_eq!(
         follower_neuron.followees,
         btreemap! {
-            native_action_ids::UNSPECIFIED => neuron::Followees {
+            NativeAction::Unspecified as u64 => neuron::Followees {
                 followees: vec![followee_neuron_id.clone()],
             },
-            native_action_ids::MOTION => neuron::Followees {
+            NativeAction::Motion as u64 => neuron::Followees {
                 followees: vec![follower_neuron_id.clone()],
             }
         }
@@ -2693,12 +2693,12 @@ fn test_empty_followees_are_filtered() {
                 NeuronPermission::all(&follower_principal_id),
             )
             .add_followees(
-                native_action_ids::UNSPECIFIED,
+                NativeAction::Unspecified as u64,
                 Followees {
                     followees: vec![followee_neuron_id.clone()],
                 },
             )
-            .add_followees(native_action_ids::MOTION, Followees { followees: vec![] })
+            .add_followees(NativeAction::Motion as u64, Followees { followees: vec![] })
             .set_dissolve_delay(15778801),
         )
         .add_neuron(
