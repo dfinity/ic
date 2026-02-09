@@ -91,7 +91,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:rand_distr",
     "@crate_index//:serde_json",
-    "@crate_index//:sev",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
 ]

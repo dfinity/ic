@@ -87,7 +87,6 @@ ic-types-test-utils = { path = "../../types/types_test_utils" }
 lazy_static = { workspace = true }
 rand_distr = "0.4.0"
 serde_json = { workspace = true }
-sev = { workspace = true }
 
 [build-dependencies]
 build-info-build = { workspace = true }

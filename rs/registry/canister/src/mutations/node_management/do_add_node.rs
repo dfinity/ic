@@ -392,11 +392,8 @@ mod tests {
         registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
     };
     use crate::rate_limits::get_available_add_node_capacity;
-    use attestation::custom_data::EncodeSevCustomData;
-    use attestation::{SevAttestationPackage, SevCertificateChain};
-    use attestation_testing::attestation_report::{
-        AttestationReportBuilder, FakeAttestationReportSigner,
-    };
+    use attestation::SevAttestationPackage;
+    use attestation_testing::attestation_package::ParsedSevAttestationPackageBuilder;
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
@@ -418,7 +415,6 @@ mod tests {
     use lazy_static::lazy_static;
     use maplit::btreemap;
     use prost::Message;
-    use sev::parser::ByteParser;
 
     /// Prepares the payload to add a new node, for tests.
     pub fn prepare_add_node_payload(
@@ -1365,36 +1361,17 @@ mod tests {
         measurement: [u8; 48],
         chip_id: [u8; 64],
     ) -> SevAttestationPackage {
-        let signer = FakeAttestationReportSigner::default();
-
         let custom_data = NodeRegistrationAttestationCustomData {
             node_signing_pk: der::asn1::OctetStringRef::new(node_signing_pk)
                 .expect("node_signing_pk must be valid"),
         };
-        let custom_data_bytes = custom_data
-            .encode_for_sev()
-            .expect("Failed to encode custom data for SEV")
-            .to_bytes();
 
-        let report = AttestationReportBuilder::new()
-            .with_custom_data(custom_data_bytes)
+        ParsedSevAttestationPackageBuilder::new()
+            .with_custom_data(&custom_data)
             .with_measurement(measurement)
             .with_chip_id(chip_id)
-            .build_signed(&signer);
-
-        let report_bytes = report
-            .to_bytes()
-            .expect("Failed to serialize attestation report");
-
-        SevAttestationPackage {
-            attestation_report: Some(report_bytes.to_vec()),
-            certificate_chain: Some(SevCertificateChain {
-                vcek_pem: Some(signer.get_vcek_pem()),
-                ask_pem: Some(signer.get_ask_pem()),
-                ark_pem: Some(signer.get_ark_pem()),
-            }),
-            custom_data_debug_info: Some(format!("{custom_data:?}")),
-        }
+            .build()
+            .into()
     }
 
     fn add_blessed_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
