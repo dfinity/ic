@@ -290,6 +290,7 @@ def get_all_log_urls_from_buildbuddy(
     """
 
     try:
+        # See: https://github.com/buildbuddy-io/buildbuddy/blob/v2.241.0/proto/target.proto
         target_request = target_pb2.GetTargetRequest()
         target_request.invocation_id = invocation_id
         target_request.target_label = test_target
@@ -316,6 +317,7 @@ def get_all_log_urls_from_buildbuddy(
                 if not target.HasField("test_summary"):
                     continue
 
+                # See: https://github.com/buildbuddy-io/buildbuddy/blob/v2.241.0/proto/build_event_stream.proto
                 test_summary = target.test_summary
 
                 # Collect failed attempts
