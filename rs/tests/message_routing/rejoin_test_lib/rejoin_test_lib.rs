@@ -384,24 +384,32 @@ async fn deploy_canisters_for_long_rounds(
     join_all(create_busy_canisters_futs).await;
 }
 
-async fn no_state_clone_count(node: IcNodeSnapshot, logger: &slog::Logger) -> u64 {
-    let count = fetch_metrics::<u64>(logger, node, vec![NO_STATE_CLONE_COUNT]).await;
+fn no_state_clone_count(node: IcNodeSnapshot, logger: &slog::Logger) -> u64 {
+    let count = block_on(fetch_metrics::<u64>(
+        logger,
+        node,
+        vec![NO_STATE_CLONE_COUNT],
+    ));
     count[NO_STATE_CLONE_COUNT][0]
 }
 
-pub async fn rejoin_test_long_rounds(
+pub fn rejoin_test_long_rounds(
     env: TestEnv,
     nodes: Vec<IcNodeSnapshot>,
     num_canisters: usize,
     dkg_interval: u64,
 ) {
     let logger = env.logger();
-    deploy_canisters_for_long_rounds(&logger, nodes.clone(), num_canisters).await;
+    block_on(deploy_canisters_for_long_rounds(
+        &logger,
+        nodes.clone(),
+        num_canisters,
+    ));
 
     // Sort nodes by their average duration to process a batch.
     let mut average_process_batch_durations = vec![];
     for node in &nodes {
-        let duration = average_process_batch_duration(&logger, node.clone()).await;
+        let duration = block_on(average_process_batch_duration(&logger, node.clone()));
         average_process_batch_durations.push(duration);
     }
     let mut paired: Vec<_> = average_process_batch_durations
@@ -441,33 +449,34 @@ pub async fn rejoin_test_long_rounds(
     // and we can assert it to catch up until the next CUP.
     info!(logger, "Waiting for a CUP ...");
     let reference_node_status = reference_node
-        .status_async()
-        .await
+        .status()
         .expect("Failed to get status of reference_node");
     let latest_certified_height = reference_node_status
         .certified_height
         .expect("Failed to get certified height of reference_node")
         .get();
-    wait_for_cup(&logger, latest_certified_height, reference_node.clone()).await;
+    block_on(wait_for_cup(
+        &logger,
+        latest_certified_height,
+        reference_node.clone(),
+    ));
 
     info!(logger, "Start the killed node again ...");
     rejoin_node.vm().start();
 
     info!(logger, "Waiting for the next CUP ...");
-    let last_cup_height = wait_for_cup(
+    let last_cup_height = block_on(wait_for_cup(
         &logger,
         latest_certified_height + dkg_interval + 1,
         reference_node.clone(),
-    )
-    .await;
+    ));
 
     info!(
         logger,
         "Checking that the restarted node reached the latest CUP height."
     );
     let rejoin_node_status = rejoin_node
-        .status_async()
-        .await
+        .status()
         .expect("Failed to get status of rejoin_node");
     let rejoin_node_certified_height = rejoin_node_status
         .certified_height
@@ -483,8 +492,7 @@ pub async fn rejoin_test_long_rounds(
     info!(logger, "Checking that all nodes are healthy.");
     for node in &nodes {
         let health_status = node
-            .status_is_healthy_async()
-            .await
+            .status_is_healthy()
             .expect("Failed to get replica health status");
         assert!(health_status, "Node {} is not healthy.", node.node_id);
     }
@@ -492,7 +500,7 @@ pub async fn rejoin_test_long_rounds(
     // finally check the metrics for "fast-forward" mode
     let mut no_state_clone_counts = vec![];
     for node in nodes {
-        let count = no_state_clone_count(node, &logger).await;
+        let count = no_state_clone_count(node, &logger);
         no_state_clone_counts.push(count);
     }
     no_state_clone_counts.sort();
@@ -502,7 +510,7 @@ pub async fn rejoin_test_long_rounds(
         "Minimum no state clone count: {minimum_no_state_clone_count}"
     );
 
-    let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node, &logger).await;
+    let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node, &logger);
     info!(
         logger,
         "No state clone count of the restarted node: {rejoin_node_no_state_clone_count}"
