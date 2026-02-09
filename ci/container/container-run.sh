@@ -249,7 +249,8 @@ if [ -f "$HOME/.container-run.conf" ]; then
     # This file is very handy but is a source of non-hermeticity, and issues
     # related to it are hard to track down so we print a bold yellow message
     # when it is in use.
-    tput -T xterm setaf 3; tput -T xterm bold
+    tput -T xterm setaf 3
+    tput -T xterm bold
     eprintln "Sourcing user's ~/.container-run.conf"
     tput -T xterm sgr0
     source "$HOME/.container-run.conf"
