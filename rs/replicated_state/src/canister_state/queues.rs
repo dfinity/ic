@@ -1742,6 +1742,14 @@ impl CanisterQueues {
             output_queues_reserved_slots,
         }
     }
+
+    /// Checks if a given callback has a response already enqueued.
+    /// Public for use in `StateMachine` tests when producing
+    /// synthetic reject responses.
+    pub fn has_enqueued_response(&self, callback_id: &CallbackId) -> bool {
+        self.callbacks_with_enqueued_response
+            .contains_key(callback_id)
+    }
 }
 
 /// Returns the existing matching pair of input and output queues from/to
