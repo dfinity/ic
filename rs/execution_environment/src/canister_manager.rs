@@ -1313,6 +1313,10 @@ impl CanisterManager {
             .reserved_cycles_limit
             .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
 
+        settings
+            .wasm_memory_limit
+            .get_or_insert(self.config.default_wasm_memory_limit);
+
         // Validate settings before `create_canister_helper` applies them
         // No creation fee applied.
         //

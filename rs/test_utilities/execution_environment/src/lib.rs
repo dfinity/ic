@@ -2183,6 +2183,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_default_wasm_memory_limit(mut self, default_wasm_memory_limit: u64) -> Self {
+        self.execution_config.default_wasm_memory_limit = NumBytes::from(default_wasm_memory_limit);
+        self
+    }
+
     pub fn with_subnet_guaranteed_response_message_memory(
         mut self,
         subnet_guaranteed_response_message_memory: u64,
