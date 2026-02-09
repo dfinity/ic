@@ -35,6 +35,7 @@ The scenarios cover the following:
 */
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SnapshotId};
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::units::{GIB, KIB};
@@ -205,25 +206,40 @@ where
     let memory_allocation = match run_params.memory_allocation {
         MemoryAllocation::BestEffort => 0,
         MemoryAllocation::Small => 1,
-        MemoryAllocation::CrossedDuringTest => match scenario_params.memory_usage_change {
-            // Uploading a chunk only increases the memory usage by 1MiB
-            // and thus we cannot have a larger offset in general.
-            MemoryUsageChange::Increase => memory_usage_after_setup.get() + 512 * KIB,
-            MemoryUsageChange::None => match scenario_params.scenario {
-                Scenario::IncreaseMemoryAllocation => {
-                    assert_ge!(memory_usage_after_setup.get(), GIB);
-                    memory_usage_after_setup.get() - GIB
+        MemoryAllocation::CrossedDuringTest => {
+            // Things to consider when chosing offset:
+            // - chunk store changes memory usage by 1 MiB at most
+            // - canister logging changes memory by 1 OS-page of 4 KiB
+            match scenario_params.memory_usage_change {
+                MemoryUsageChange::Increase => {
+                    // Increasing memory is often done on already installed
+                    // canister, which does not increase canister log, so
+                    // we don't have to account for that.
+                    let memory_allocation_crossed_offset = 512 * KIB;
+                    // What increases memory usage: chunk upload, installing code (canister logs).
+                    memory_usage_after_setup.get() + memory_allocation_crossed_offset
                 }
-                Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
-                _ => memory_usage_after_setup.get(),
-            },
-            MemoryUsageChange::Decrease => {
-                // Clearing the chunk store decreases the memory usage by 1MiB
-                // and thus we cannot have a larger offset in general.
-                assert_ge!(memory_usage_after_setup.get(), 512 * KIB);
-                memory_usage_after_setup.get() - 512 * KIB
+                MemoryUsageChange::None => match scenario_params.scenario {
+                    Scenario::IncreaseMemoryAllocation => {
+                        assert_ge!(memory_usage_after_setup.get(), GIB);
+                        memory_usage_after_setup.get() - GIB
+                    }
+                    Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
+                    _ => memory_usage_after_setup.get(),
+                },
+                MemoryUsageChange::Decrease => {
+                    // Decreasing memory is often done by uninstalling canister
+                    // which also clears canister logs, so we need to account for that.
+                    let memory_allocation_crossed_offset = 2 * KIB;
+                    // What decreases memory usage: clearning chunk store, uninstalling/deleting canister (canister logs).
+                    assert_ge!(
+                        memory_usage_after_setup.get(),
+                        memory_allocation_crossed_offset
+                    );
+                    memory_usage_after_setup.get() - memory_allocation_crossed_offset
+                }
             }
-        },
+        }
         MemoryAllocation::Large => 80 * GIB,
     };
     let settings = CanisterSettingsArgsBuilder::new()
@@ -1016,9 +1032,15 @@ fn test_memory_suite_take_snapshot_and_uninstall_code() {
         )
         .err()
     };
+    let memory_usage_change = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        // Uninstalling code removes canister log allocated memory.
+        MemoryUsageChange::Decrease
+    } else {
+        MemoryUsageChange::None
+    };
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
-        memory_usage_change: MemoryUsageChange::None,
+        memory_usage_change,
         setup,
         op,
     };

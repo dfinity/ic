@@ -1,5 +1,20 @@
 use canister_test::*;
 use ic_state_machine_tests::StateMachine;
+use more_asserts::{assert_le, assert_lt};
+
+const KIB: u64 = 1024;
+const LOG_MEMORY_STORE_LIMIT: u64 = 4 * KIB;
+const LOG_MEMORY_STORE_USAGE: u64 = 4 * KIB + 4 * KIB + LOG_MEMORY_STORE_LIMIT; // Header, index table, data region.
+// LINT.IfChange
+const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = true;
+// LINT.ThenChange(LOG_MEMORY_STORE_FEATURE_ENABLED)
+const fn log_memory_store_usage() -> u64 {
+    if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        LOG_MEMORY_STORE_USAGE
+    } else {
+        0
+    }
+}
 
 // This constant has been obtained empirically by running the tests.
 // The old value of the const was 1_820_000.
@@ -59,10 +74,9 @@ fn creating_canisters_works() {
 
     // Assert the number of running canisters is equal to the number of created canisters.
     assert_eq!(env.num_running_canisters(), 1_001);
-    assert!(
-        env.canister_memory_usage_bytes() <= CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES,
-        "Actual: {} bytes",
-        env.canister_memory_usage_bytes()
+    assert_le!(
+        env.canister_memory_usage_bytes(),
+        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * log_memory_store_usage(),
     );
 }
 
@@ -82,10 +96,9 @@ fn install_code_works() {
         .unwrap();
     assert_eq!(result, WasmResult::Reply("null".as_bytes().to_vec()));
     assert_eq!(env.num_running_canisters(), 1_001);
-    assert!(
-        env.canister_memory_usage_bytes() <= CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES,
-        "Actual: {} bytes",
-        env.canister_memory_usage_bytes()
+    assert_le!(
+        env.canister_memory_usage_bytes(),
+        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * log_memory_store_usage(),
     );
 
     // Install code.
@@ -109,9 +122,8 @@ fn install_code_works() {
     // Assert there are 1_001 canisters running with the memory usage below the
     // subnet storage capacity, which is currently 2 TiB
     assert_eq!(env.num_running_canisters(), 1_001);
-    assert!(
-        env.canister_memory_usage_bytes() < 2 * 1024 * 1024 * 1024 * 1024,
-        "Actual: {} bytes",
-        env.canister_memory_usage_bytes()
+    assert_lt!(
+        env.canister_memory_usage_bytes(),
+        2 * 1024 * 1024 * 1024 * 1024,
     );
 }

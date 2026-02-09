@@ -9,6 +9,10 @@ const MIB: u64 = 1024 * 1024;
 const GIB: u64 = MIB * 1024;
 const TIB: u64 = GIB * 1024;
 
+// LINT.IfChange
+pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = false;
+// LINT.ThenChange(LOG_MEMORY_STORE_FEATURE_ENABLED)
+
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
 /// capacity, then the subnet is never considered to have high usage.
@@ -448,7 +452,11 @@ impl Default for Config {
             max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
             max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
             replicated_inter_canister_log_fetch: FlagStatus::Disabled,
-            log_memory_store_feature: FlagStatus::Disabled,
+            log_memory_store_feature: if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                FlagStatus::Enabled
+            } else {
+                FlagStatus::Disabled
+            },
         }
     }
 }

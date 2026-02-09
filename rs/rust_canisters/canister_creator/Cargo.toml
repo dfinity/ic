@@ -22,6 +22,8 @@ wat = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
+ic-sys = { path = "../../sys" }
+more-asserts = { workspace = true }
 
 [[test]]
 name = "test"

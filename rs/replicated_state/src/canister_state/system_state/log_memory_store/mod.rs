@@ -11,6 +11,7 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
+use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
@@ -26,6 +27,8 @@ use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
+    feature_flag: FlagStatus,
+
     #[validate_eq(Ignore)]
     maybe_page_map: Option<PageMap>,
 
@@ -59,10 +62,15 @@ impl LogMemoryStore {
 
     fn new_inner(maybe_page_map: Option<PageMap>) -> Self {
         Self {
+            feature_flag: FlagStatus::Disabled,
             maybe_page_map,
             delta_log_sizes: VecDeque::new(),
             header_cache: OnceLock::new(),
         }
+    }
+
+    pub fn set_feature_flag(&mut self, feature_flag: FlagStatus) {
+        self.feature_flag = feature_flag;
     }
 
     pub fn maybe_page_map(&self) -> Option<&PageMap> {
@@ -141,10 +149,15 @@ impl LogMemoryStore {
 
     #[cfg(test)]
     fn resize_for_testing(&mut self, limit: usize) {
+        self.set_feature_flag(FlagStatus::Enabled);
         self.resize_impl(limit, PageMap::new_for_testing)
     }
 
     fn resize_impl(&mut self, limit: usize, create_page_map: impl FnOnce() -> PageMap) {
+        if self.feature_flag == FlagStatus::Disabled {
+            self.deallocate();
+            return;
+        }
         if limit == 0 {
             self.deallocate();
             return;
@@ -199,6 +212,10 @@ impl LogMemoryStore {
 
     /// Appends a delta log to the ring buffer if it exists.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
+        if self.feature_flag == FlagStatus::Disabled {
+            self.deallocate();
+            return;
+        }
         if delta_log.is_empty() {
             return; // Don't append if delta is empty.
         }
@@ -236,6 +253,7 @@ impl Default for LogMemoryStore {
 impl Clone for LogMemoryStore {
     fn clone(&self) -> Self {
         Self {
+            feature_flag: self.feature_flag,
             // PageMap is a persistent data structure, so clone is cheap and creates
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),

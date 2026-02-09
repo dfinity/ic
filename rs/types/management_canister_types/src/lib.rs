@@ -1460,6 +1460,7 @@ pub struct MemoryMetrics {
     canister_history_size: candid::Nat,
     wasm_chunk_store_size: candid::Nat,
     snapshots_size: candid::Nat,
+    log_memory_store_size: candid::Nat,
 }
 
 impl CanisterStatusResultV2 {
@@ -1480,6 +1481,7 @@ impl CanisterStatusResultV2 {
         canister_history_size: NumBytes,
         wasm_chunk_store_size: NumBytes,
         snapshots_size: NumBytes,
+        log_memory_store_size: NumBytes,
         cycles: u128,
         compute_allocation: u64,
         memory_allocation: Option<u64>,
@@ -1513,6 +1515,7 @@ impl CanisterStatusResultV2 {
                 canister_history_size: candid::Nat::from(canister_history_size.get()),
                 wasm_chunk_store_size: candid::Nat::from(wasm_chunk_store_size.get()),
                 snapshots_size: candid::Nat::from(snapshots_size.get()),
+                log_memory_store_size: candid::Nat::from(log_memory_store_size.get()),
             },
             cycles: candid::Nat::from(cycles),
             // the following is spec 0.12/0.13 compat;
@@ -1618,6 +1621,16 @@ impl CanisterStatusResultV2 {
 
     pub fn snapshots_size(&self) -> NumBytes {
         NumBytes::from(self.memory_metrics.snapshots_size.0.to_u64().unwrap())
+    }
+
+    pub fn log_memory_store_size(&self) -> NumBytes {
+        NumBytes::from(
+            self.memory_metrics
+                .log_memory_store_size
+                .0
+                .to_u64()
+                .unwrap(),
+        )
     }
 
     pub fn cycles(&self) -> u128 {

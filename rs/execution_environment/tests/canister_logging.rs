@@ -1,5 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_execution_environment::units::KIB;
@@ -544,6 +545,9 @@ fn run_fetch_canister_logs_with_filtering_test(
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_without_any_filters() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
     let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(None);
     assert_eq!(
         readable_logs_without_backtraces(result),
@@ -564,6 +568,9 @@ fn test_fetch_canister_logs_with_filtering_without_any_filters() {
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_by_idx() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
     let start = 2;
     let end = 5;
     let (result, timestamps) = run_fetch_canister_logs_with_filtering_test(Some(
@@ -590,6 +597,9 @@ fn test_fetch_canister_logs_with_filtering_by_idx_zero_length() {
 
 #[test]
 fn test_fetch_canister_logs_with_filtering_by_timestamp() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
     let sec_and_nanosec = |sec, nsec| sec * 10_u64.pow(9) + nsec;
     let start = sec_and_nanosec(1620328633, 2);
     let end = start + sec_and_nanosec(2, 0);

@@ -43,6 +43,7 @@ impl MockCanister {
     ///
     /// Resizes the underlying storage to match the provided byte limit.
     fn update_settings(&mut self, log_memory_limit: NumBytes) {
+        self.log_memory_store.set_feature_flag(FlagStatus::Enabled);
         self.log_memory_store
             .resize_for_testing(log_memory_limit.get() as usize);
     }
