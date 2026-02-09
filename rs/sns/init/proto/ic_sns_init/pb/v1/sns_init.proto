@@ -226,6 +226,11 @@ message SnsInitPayload {
   // the NNS Governance (via SNS-W) to an SNS Swap to determine the Neurons' Fund participation
   // amount as a function of the direct participation amount.
   optional ic_sns_swap.pb.v1.NeuronsFundParticipationConstraints neurons_fund_participation_constraints = 37;
+
+  // Additional native function IDs that should be treated as critical,
+  // requiring a higher level of consensus. If empty, no additional
+  // native functions are treated as critical beyond the defaults.
+  repeated uint64 additional_critical_native_action_ids = 41;
 }
 
 // The FractionalDeveloperVotingPower token distribution strategy configures

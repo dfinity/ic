@@ -214,6 +214,11 @@ pub struct SnsInitPayload {
     #[prost(message, optional, tag = "37")]
     pub neurons_fund_participation_constraints:
         ::core::option::Option<::ic_sns_swap::pb::v1::NeuronsFundParticipationConstraints>,
+    /// Additional native function IDs that should be treated as critical,
+    /// requiring a higher level of consensus. If empty, no additional
+    /// native functions are treated as critical beyond the defaults.
+    #[prost(uint64, repeated, tag = "41")]
+    pub additional_critical_native_action_ids: ::prost::alloc::vec::Vec<u64>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.

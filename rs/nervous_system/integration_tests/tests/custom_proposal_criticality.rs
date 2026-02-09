@@ -16,7 +16,6 @@ use ic_sns_governance_api::pb::v1::{
 use ic_sns_swap::pb::v1::Lifecycle;
 use pocket_ic::PocketIcBuilder;
 
-/// Runbook:
 /// 1. Set up an SNS with Motion as "additional critical proposal type",
 ///    with 3 neurons: 51%, 17%, and 32% of voting power.
 /// 2. Submit a motion proposal with neuron 1 (51%) and assert it is NOT
@@ -132,16 +131,19 @@ async fn custom_proposal_criticality_test() {
         .await
         .neurons;
 
-    let find_neuron_id =
-        |controller: PrincipalId| -> ic_sns_governance_api::pb::v1::NeuronId {
-            neurons
-                .iter()
-                .find(|n| n.permissions.iter().any(|p| p.principal == Some(controller)))
-                .unwrap_or_else(|| panic!("Neuron for controller {controller} not found"))
-                .id
-                .clone()
-                .unwrap()
-        };
+    let find_neuron_id = |controller: PrincipalId| -> ic_sns_governance_api::pb::v1::NeuronId {
+        neurons
+            .iter()
+            .find(|n| {
+                n.permissions
+                    .iter()
+                    .any(|p| p.principal == Some(controller))
+            })
+            .unwrap_or_else(|| panic!("Neuron for controller {controller} not found"))
+            .id
+            .clone()
+            .unwrap()
+    };
 
     let neuron1_id = find_neuron_id(controller1);
     let neuron2_id = find_neuron_id(controller2);
@@ -209,7 +211,12 @@ async fn custom_proposal_criticality_test() {
             sender: controller2.into(),
         };
         governance_canister
-            .register_vote(&agent2, neuron2_id.clone(), motion_proposal_id, Vote::Yes as i32)
+            .register_vote(
+                &agent2,
+                neuron2_id.clone(),
+                motion_proposal_id,
+                Vote::Yes as i32,
+            )
             .await
             .unwrap();
     }

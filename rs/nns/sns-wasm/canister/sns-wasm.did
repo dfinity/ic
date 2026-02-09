@@ -249,6 +249,7 @@ type SnsInitPayload = record {
   restricted_countries : opt Countries;
   min_icp_e8s : opt nat64;
   max_direct_participation_icp_e8s : opt nat64;
+  additional_critical_native_action_ids : vec nat64;
 };
 
 type SnsUpgrade = record {
