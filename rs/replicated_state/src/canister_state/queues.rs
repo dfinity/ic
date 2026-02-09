@@ -1365,6 +1365,7 @@ impl CanisterQueues {
     /// Returns `true` if calling `garbage_collect()` would actually do something.
     ///
     /// Time complexity: `O(|canister_queues|)`.
+    #[allow(dead_code)]
     pub(crate) fn can_garbage_collect(&self) -> bool {
         // Can garbage collect if any input queue / output queue pair are both empty...
         self.canister_queues
