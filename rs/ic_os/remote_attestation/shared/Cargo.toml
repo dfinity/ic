@@ -8,5 +8,4 @@ tonic = { workspace = true }
 attestation = { path = "../../sev/attestation" }
 
 [build-dependencies]
-prost-build = { workspace = true }
 tonic-build = { workspace = true }

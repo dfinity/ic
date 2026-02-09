@@ -36,9 +36,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/build_tools/partition_tools",
     "@crate_index//:goldenfile",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [
