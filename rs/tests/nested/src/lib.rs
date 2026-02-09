@@ -53,8 +53,10 @@ fn simple_setup(env: TestEnv) {
 /// Minimal setup that sets up a bare metal instance without any IC infrastructure.
 /// This is much faster than the full setup() setup.
 fn simple_bare_metal_with_trusted_execution_environment_setup(env: TestEnv) {
-    let bare_metal_secrets = std::env::var(BARE_METAL_HOST_SECRETS)
+    let bare_metal_secrets_file = std::env::var(BARE_METAL_HOST_SECRETS)
         .expect("Could not read env var BARE_METAL_HOST_SECRETS");
+    let bare_metal_secrets = std::fs::read_to_string(bare_metal_secrets_file)
+        .expect("Could not read baremetal secrets file");
     let bare_metal_login_info =
         bare_metal_deployment::parse_login_info_from_ini(&bare_metal_secrets)
             .expect("Failed to parse baremetal login info");
