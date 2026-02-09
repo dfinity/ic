@@ -92,10 +92,8 @@ pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 pub const MAX_TCP_ERROR_RETRIES: usize = 5;
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
-    ic_agent::identity::BasicIdentity::from_pem(std::io::Cursor::new(
-        TEST_IDENTITY_KEYPAIR.to_pem(),
-    ))
-    .expect("Invalid secret key.")
+    ic_agent::identity::BasicIdentity::from_pem(TEST_IDENTITY_KEYPAIR.to_pem())
+        .expect("Invalid secret key.")
 }
 
 /// Initializes a testing [Runtime] from a node's url. You should really
