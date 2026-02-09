@@ -23,8 +23,6 @@ DEPENDENCIES = [
     "@crate_index//:slog",
 ]
 
-MACRO_DEPENDENCIES = []
-
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
@@ -42,15 +40,10 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
-    "@crate_index//:proptest",
     "@crate_index//:rand",
     "@crate_index//:rstest",
     "@crate_index//:tokio",
 ]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
 
 DATA = [
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
@@ -63,19 +56,24 @@ ENV = {
 rust_library(
     name = "ingress_manager",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_ingress_manager",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "ingress_manager_test",
-    aliases = ALIASES,
     crate = ":ingress_manager",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "ingress_manager_prop_test",
+    crate = ":ingress_manager",
+    # the tests can run for over a minute
+    size = "medium",
+    crate_features = ["proptest"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + ["@crate_index//:proptest"]
 )
 
 rust_ic_bench(

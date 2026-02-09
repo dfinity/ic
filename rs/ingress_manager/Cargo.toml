@@ -55,3 +55,7 @@ harness = false
 [[bench]]
 name = "handle_ingress"
 harness = false
+
+[features]
+default = []
+proptest = []

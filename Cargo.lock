@@ -21009,6 +21009,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-ni-dkg",
  "ic-interfaces-registry",
+ "ic-limits",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
  "ic-nervous-system-access-list",

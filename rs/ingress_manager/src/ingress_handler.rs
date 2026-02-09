@@ -9,7 +9,7 @@ use ic_interfaces::{
     p2p::consensus::PoolMutationsProducer,
 };
 use ic_limits::MAX_INGRESS_TTL;
-use ic_logger::debug;
+use ic_logger::{debug, error};
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_types::{
     CountBytes, RegistryVersion, Time, artifact::IngressMessageId, ingress::IngressStatus,
@@ -23,9 +23,12 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
     fn on_state_change(&self, pool: &T) -> Mutations {
         // Skip on_state_change when ingress_message_setting is not available in registry.
         let registry_version = self.registry_client.get_latest_version();
-        let Some(ingress_message_settings) = self.get_ingress_message_settings(registry_version)
-        else {
-            return Mutations::new();
+        let ingress_message_settings = match self.get_ingress_message_settings(registry_version) {
+            Ok(settings) => settings,
+            Err(err) => {
+                error!(self.log, "Failed to get ingress message settings: {err}");
+                return Mutations::new();
+            }
         };
 
         let _timer = self.metrics.ingress_handler_time.start_timer();

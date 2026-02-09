@@ -13,7 +13,12 @@
 //! We therefore build multiple proptests, where we keep most properties fixed and only leave a
 //! small number of values variable.
 
-use crate::tests::{access_ingress_pool, setup_with_params};
+use crate::{
+    ingress_selector::tests::{
+        generate_ingress_with_params, test_ingress_size_is_taken_into_account,
+    },
+    tests::{access_ingress_pool, setup_with_params},
+};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::ChangeAction,
@@ -28,11 +33,14 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    Height, NumBytes, RegistryVersion, artifact::IngressMessageId, batch::ValidationContext,
-    messages::SignedIngress, time::UNIX_EPOCH,
+    CountBytes, Height, NumBytes, RegistryVersion,
+    artifact::IngressMessageId,
+    batch::ValidationContext,
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, SignedIngress},
+    time::UNIX_EPOCH,
 };
 use proptest::prelude::*;
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 const MAX_BLOCK_SIZE: u64 = 4 * 1024 * 1024;
 
@@ -44,7 +52,7 @@ proptest! {
     })]
 
     #[test]
-    fn proptest_ingress_payload_builder_size(singed_ingress_vec in prop_signed_ingress_vec_for_size_test()) {
+    fn proptest_ingress_payload_builder_size(signed_ingress_vec in prop_signed_ingress_vec_for_size_test()) {
         setup_with_params(
             None,
             None,
@@ -68,9 +76,9 @@ proptest! {
                     certified_height: Height::from(0),
                 };
 
-                assert!(!singed_ingress_vec.is_empty());
+                assert!(!signed_ingress_vec.is_empty());
 
-                for m in singed_ingress_vec.iter() {
+                for m in signed_ingress_vec.iter() {
                     let message_id = IngressMessageId::from(m);
                     access_ingress_pool(&ingress_pool, |ingress_pool| {
                         ingress_pool.insert(UnvalidatedArtifact {
@@ -106,10 +114,8 @@ proptest! {
                 // If not, we have an issue with the payload builder
                 assert!(ingress_manager.validate_ingress_payload(&payload.payload, &HashSet::new(), &validation_context).is_ok());
             },
-        )
+        );
     }
-
-
 }
 
 /// Props up a mock ingress message, which varies in size.
@@ -131,4 +137,56 @@ fn prop_signed_ingress_for_size_test(
 
 fn prop_signed_ingress_vec_for_size_test() -> impl Strategy<Value = Vec<SignedIngress>> {
     prop::collection::vec(prop_signed_ingress_for_size_test(0, 1024), 1..6000)
+}
+
+const MB: usize = 1024 * 1024;
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 128,
+        ..ProptestConfig::default()
+    })]
+    #[test]
+    fn proptest_ingress_payload_builder_expected_number_of_included_messages(
+        ingress_message_payload_size in 0..(ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize - 1024),
+        memory_bytes_limit in 1..= 8 * MB,
+        wire_bytes_limit in 1..= 8 * MB,
+        messages_count_limit in 1..= 1000_usize,
+        hashes_in_blocks_enabled: bool,
+    ){
+        prop_assume!(
+            ingress_message_payload_size <=std::cmp::min(memory_bytes_limit, wire_bytes_limit)
+        );
+
+        let expected_included_messages_count = {
+            let ingress_size = generate_ingress_with_params(
+                canister_test_id(0),
+                ingress_message_payload_size,
+                UNIX_EPOCH + Duration::from_secs(30),
+            )
+            .count_bytes();
+
+            let expected_included_messages_count = if hashes_in_blocks_enabled {
+                std::cmp::min(
+                    memory_bytes_limit / ingress_size,
+                    wire_bytes_limit / EXPECTED_MESSAGE_ID_LENGTH,
+                )
+            } else {
+                std::cmp::min(memory_bytes_limit, wire_bytes_limit) / ingress_size
+            };
+
+            std::cmp::min(expected_included_messages_count, messages_count_limit)
+        };
+
+        let test_result = test_ingress_size_is_taken_into_account(
+            hashes_in_blocks_enabled,
+            ingress_message_payload_size,
+            wire_bytes_limit,
+            Some(memory_bytes_limit),
+            messages_count_limit,
+            expected_included_messages_count,
+        );
+
+        prop_assert_eq!(test_result, Ok(()))
+    }
 }

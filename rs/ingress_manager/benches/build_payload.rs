@@ -91,7 +91,11 @@ where
         .returning(|_| Ok(Box::new(|_| IngressStatus::Unknown)));
     let subnet_id = subnet_test_id(0);
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let registry = setup_registry(subnet_id, runtime.handle().clone());
+    let registry = set_up_registry(
+        subnet_id,
+        test_case.payload_size_limit,
+        runtime.handle().clone(),
+    );
     let consensus_time = Arc::new(MockConsensusTime::new());
     let mut state_manager = MockStateManager::new();
     state_manager.expect_get_state_at().return_const(Ok(
@@ -143,9 +147,14 @@ where
 }
 
 /// Sets up a registry client.
-fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<dyn RegistryClient> {
+fn set_up_registry(
+    subnet_id: SubnetId,
+    max_ingress_bytes_per_block: u64,
+    runtime: tokio::runtime::Handle,
+) -> Arc<dyn RegistryClient> {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-    let subnet_record = test_subnet_record();
+    let mut subnet_record = test_subnet_record();
+    subnet_record.max_ingress_bytes_per_block = max_ingress_bytes_per_block;
     registry_data_provider
         .add(
             &make_subnet_record_key(subnet_id),

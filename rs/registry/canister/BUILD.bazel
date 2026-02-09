@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/ni_dkg",
     "//rs/ic_os/sev/attestation",
+    "//rs/limits",
     "//rs/nervous_system/access_list",
     "//rs/nervous_system/chunks",
     "//rs/nervous_system/common",
