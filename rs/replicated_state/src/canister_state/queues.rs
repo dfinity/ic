@@ -1362,6 +1362,22 @@ impl CanisterQueues {
         self.message_stats().cycles
     }
 
+    /// Returns `true` if calling `garbage_collect()` would actually do something.
+    ///
+    /// Time complexity: `O(|canister_queues|)`.
+    pub(crate) fn can_garbage_collect(&self) -> bool {
+        // Can garbage collect if any input queue / output queue pair are both empty...
+        self.canister_queues
+            .iter()
+            .any(|(_, (input_queue, output_queue))| {
+                !input_queue.has_used_slots() && !output_queue.has_used_slots()
+            })
+            // ...or if all queues are empty but not all struct fields are reset to default.
+            || self.canister_queues.is_empty()
+                && self.ingress_queue.is_empty()
+                && pb_queues::CanisterQueues::from(self as &Self).encoded_len() != 0
+    }
+
     /// Garbage collects all input and output queue pairs that are both empty.
     ///
     /// Because there is no useful information in an empty queue, there is no
@@ -1372,7 +1388,7 @@ impl CanisterQueues {
     /// every round; but not e.g. when deserializing, which may happen at
     /// different times on restarting or state syncing replicas).
     ///
-    /// Time complexity: `O(num_queues)`.
+    /// Time complexity: `O(|canister_queues|)`.
     pub fn garbage_collect(&mut self) {
         self.garbage_collect_impl();
 
