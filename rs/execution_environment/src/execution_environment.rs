@@ -9,7 +9,7 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::{
-        call_or_task::execute_call_or_task, inspect_message, install_code::validate_controller,
+        call_or_task::execute_call_or_task, common::validate_controller, inspect_message,
         response::execute_response,
     },
     execution_environment_metrics::{

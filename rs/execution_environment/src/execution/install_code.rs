@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::execution::common::log_dirty_pages;
+use crate::execution::common::{log_dirty_pages, validate_controller};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::{
@@ -810,20 +810,6 @@ pub(crate) struct OriginalContext {
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
     pub wasm_execution_mode: WasmExecutionMode,
-}
-
-pub(crate) fn validate_controller(
-    canister: &CanisterState,
-    controller: &PrincipalId,
-) -> Result<(), CanisterManagerError> {
-    if !canister.controllers().contains(controller) {
-        return Err(CanisterManagerError::CanisterInvalidController {
-            canister_id: canister.canister_id(),
-            controllers_expected: canister.system_state.controllers.clone(),
-            controller_provided: *controller,
-        });
-    }
-    Ok(())
 }
 
 pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {

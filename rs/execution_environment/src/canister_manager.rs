@@ -1,5 +1,5 @@
 use crate::as_round_instructions;
-use crate::execution::install_code::{OriginalContext, validate_controller};
+use crate::execution::{common::validate_controller, install_code::OriginalContext};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
     CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
