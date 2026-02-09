@@ -871,6 +871,7 @@ dependencies = [
 name = "attestation_testing"
 version = "0.0.0"
 dependencies = [
+ "attestation",
  "der 0.7.9",
  "ic-interfaces-registry-mocks",
  "ic-protobuf",
@@ -10103,6 +10104,7 @@ dependencies = [
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
+ "ic-types",
  "icp-ledger",
  "icrc-ledger-types",
  "num-traits",
@@ -13700,6 +13702,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
+ "ic-sns-governance",
  "ic-sns-governance-api",
  "ic-sns-init",
  "ic-sns-root",
@@ -17129,6 +17132,16 @@ dependencies = [
  "core2",
  "hashbrown 0.14.5",
  "rle-decode-fast",
+]
+
+[[package]]
+name = "libfuzzer-sys"
+version = "0.4.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5037190e1f70cbeef565bd267599242926f724d3b8a9f510fd7e0b540cfa4404"
+dependencies = [
+ "arbitrary",
+ "cc",
 ]
 
 [[package]]
@@ -25142,6 +25155,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-smith"
+version = "0.243.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "119b7dd7690868543d344025ee894271d9c66fa00d5c1cd233a5c72eb7a2ea03"
+dependencies = [
+ "anyhow",
+ "arbitrary",
+ "flagset",
+ "wasm-encoder 0.243.0",
+ "wasmparser 0.243.0",
+]
+
+[[package]]
 name = "wasm-streams"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -25152,6 +25178,39 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "wasm_fuzzers"
+version = "0.9.0"
+dependencies = [
+ "arbitrary",
+ "clap 4.5.27",
+ "futures",
+ "ic-config",
+ "ic-cycles-account-manager",
+ "ic-embedders",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-management-canister-types-private",
+ "ic-metrics",
+ "ic-registry-subnet-type",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-embedders",
+ "ic-test-utilities-state",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-wasm-types",
+ "lazy_static",
+ "libfuzzer-sys",
+ "num-traits",
+ "tokio",
+ "wasm-encoder 0.243.0",
+ "wasm-smith",
+ "wasmparser 0.243.0",
+ "wasmprinter",
+ "wasmtime",
 ]
 
 [[package]]

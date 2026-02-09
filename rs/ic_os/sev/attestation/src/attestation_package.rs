@@ -72,7 +72,7 @@ pub trait AttestationPackageVerifier: Sized {
 pub struct ParsedSevAttestationPackage {
     attestation_report: AttestationReport,
     certificate_chain: SevCertificateChain,
-    custom_data_debug_info: String,
+    custom_data_debug_info: Option<String>,
 }
 
 impl ParsedSevAttestationPackage {
@@ -82,7 +82,7 @@ impl ParsedSevAttestationPackage {
         attestation_report: AttestationReport,
         certificate_chain: SevCertificateChain,
         sev_root_certificate_verification: SevRootCertificateVerification,
-        custom_data_debug_info: String,
+        custom_data_debug_info: Option<String>,
     ) -> Result<Self, VerificationError> {
         verify_sev_attestation_report_signature(
             &attestation_report,
@@ -101,7 +101,7 @@ impl ParsedSevAttestationPackage {
     pub fn new_with_unverified_certificate_chain(
         attestation_report: AttestationReport,
         certificate_chain: SevCertificateChain,
-        custom_data_debug_info: String,
+        custom_data_debug_info: Option<String>,
     ) -> Self {
         Self {
             attestation_report,
@@ -142,7 +142,7 @@ impl ParsedSevAttestationPackage {
             attestation_report,
             certificate_chain,
             sev_root_certificate_verification,
-            package.custom_data_debug_info.unwrap_or_default(),
+            package.custom_data_debug_info,
         )
     }
 
@@ -162,7 +162,7 @@ impl From<ParsedSevAttestationPackage> for SevAttestationPackage {
                     .to_vec(),
             ),
             certificate_chain: Some(value.certificate_chain),
-            custom_data_debug_info: Some(value.custom_data_debug_info),
+            custom_data_debug_info: value.custom_data_debug_info,
         }
     }
 }
@@ -220,7 +220,10 @@ impl<T: Borrow<ParsedSevAttestationPackage>> AttestationPackageVerifier for T {
              Debug info: \
              expected: {expected_custom_data:?} \
              actual: {}",
-            self.borrow().custom_data_debug_info
+            self.borrow()
+                .custom_data_debug_info
+                .as_deref()
+                .unwrap_or("[none]")
         )))
     }
 

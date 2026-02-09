@@ -215,6 +215,8 @@ fn convert_from_flags_to_create_service_nervous_system() {
                         seconds: Some(4383 * ONE_DAY_SECONDS),
                     }),
                 }),
+
+                custom_proposal_criticality: None,
             }),
 
             initial_token_distribution: None,
