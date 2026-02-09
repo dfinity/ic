@@ -5025,7 +5025,11 @@ impl StateMachine {
                     } else {
                         true // non-routable callees are treated as remote and synthetic rejects are produced
                     };
-                if is_remote {
+                let has_enqueued_response = canister_state
+                    .system_state
+                    .queues()
+                    .has_enqueued_response(callback_id);
+                if is_remote && !has_enqueued_response {
                     let reject_context = RejectContext::new(
                         RejectCode::SysTransient,
                         "Remote callback rejected by StateMachine test.",
