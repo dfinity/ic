@@ -1,3 +1,4 @@
+use crate::driver::resource::BootImage;
 use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
     farm::{Farm, HostFeature},
@@ -131,6 +132,7 @@ impl InternetComputer {
             self.unassigned_nodes.push(Node::new_with_settings(
                 self.default_vm_resources,
                 self.vm_allocation.clone(),
+                BootImage::GroupDefault,
                 self.required_host_features.clone(),
             ));
         }
@@ -151,6 +153,7 @@ impl InternetComputer {
                 Node::new_with_settings(
                     self.default_vm_resources,
                     self.vm_allocation.clone(),
+                    BootImage::GroupDefault,
                     self.required_host_features.clone(),
                 )
                 .with_domain(format!("apibn-{idx}.ic.net")),
@@ -171,6 +174,7 @@ impl InternetComputer {
             Node::new_with_settings(
                 self.default_vm_resources,
                 self.vm_allocation.clone(),
+                BootImage::GroupDefault,
                 self.required_host_features.clone(),
             )
             .with_ipv4_config(ipv4_config),
@@ -467,6 +471,7 @@ impl InternetComputer {
 pub struct Subnet {
     pub default_vm_resources: VmResources,
     pub vm_allocation: Option<VmAllocationStrategy>,
+    pub boot_image: BootImage,
     pub required_host_features: Vec<HostFeature>,
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
@@ -499,6 +504,7 @@ impl Subnet {
         Self {
             default_vm_resources: Default::default(),
             vm_allocation: Default::default(),
+            boot_image: Default::default(),
             required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
@@ -548,6 +554,11 @@ impl Subnet {
         max_ingress_messages_per_block: u64,
     ) -> Self {
         self.max_ingress_messages_per_block = Some(max_ingress_messages_per_block);
+        self
+    }
+
+    pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {
+        self.boot_image = boot_image;
         self
     }
 
@@ -608,10 +619,12 @@ impl Subnet {
         (0..no_of_nodes).fold(self, |subnet, _| {
             let default_vm_resources = subnet.default_vm_resources;
             let vm_allocation = subnet.vm_allocation.clone();
+            let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
             subnet.add_node(Node::new_with_settings(
                 default_vm_resources,
                 vm_allocation,
+                boot_image,
                 required_host_features,
             ))
         })
@@ -627,17 +640,17 @@ impl Subnet {
     /// The nodes will inherit the VM resources of the subnet and extend required host features with the given ones.
     pub fn add_node_with_required_host_features(
         self,
-        required_host_features: Vec<HostFeature>,
+        mut required_host_features: Vec<HostFeature>,
     ) -> Self {
         let default_vm_resources = self.default_vm_resources;
         let vm_allocation = self.vm_allocation.clone();
-        let required_host_features = required_host_features
-            .into_iter()
-            .chain(self.required_host_features.iter().cloned())
-            .collect();
+        let boot_image = self.boot_image.clone();
+        required_host_features.extend_from_slice(&self.required_host_features);
+
         self.add_node(Node::new_with_settings(
             default_vm_resources,
             vm_allocation,
+            boot_image,
             required_host_features,
         ))
     }
@@ -711,11 +724,13 @@ impl Subnet {
         (0..no_of_nodes).fold(self, |subnet, _| {
             let default_vm_resources = subnet.default_vm_resources;
             let vm_allocation = subnet.vm_allocation.clone();
+            let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
             subnet.add_node(
                 Node::new_with_settings(
                     default_vm_resources,
                     vm_allocation,
+                    boot_image,
                     required_host_features,
                 )
                 .with_malicious_behavior(malicious_behavior.clone()),
@@ -726,10 +741,16 @@ impl Subnet {
     pub fn add_node_with_ipv4(self, ipv4_config: IPv4Config) -> Self {
         let default_vm_resources = self.default_vm_resources;
         let vm_allocation = self.vm_allocation.clone();
+        let boot_image = self.boot_image.clone();
         let required_host_features = self.required_host_features.clone();
         self.add_node(
-            Node::new_with_settings(default_vm_resources, vm_allocation, required_host_features)
-                .with_ipv4_config(ipv4_config),
+            Node::new_with_settings(
+                default_vm_resources,
+                vm_allocation,
+                boot_image,
+                required_host_features,
+            )
+            .with_ipv4_config(ipv4_config),
         )
     }
 
@@ -749,6 +770,7 @@ impl Default for Subnet {
         Self {
             default_vm_resources: Default::default(),
             vm_allocation: Default::default(),
+            boot_image: BootImage::GroupDefault,
             required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
@@ -815,6 +837,7 @@ pub struct Node {
     pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
     pub recovery_hash: Option<String>,
+    pub boot_image: BootImage,
 }
 
 impl Node {
@@ -825,11 +848,13 @@ impl Node {
     pub fn new_with_settings(
         vm_resources: VmResources,
         vm_allocation: Option<VmAllocationStrategy>,
+        boot_image: BootImage,
         required_host_features: Vec<HostFeature>,
     ) -> Self {
         let mut node = Node::new();
         node.vm_resources = vm_resources;
         node.vm_allocation = vm_allocation;
+        node.boot_image = boot_image;
         node.required_host_features = required_host_features;
         node
     }

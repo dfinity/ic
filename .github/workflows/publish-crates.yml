@@ -1,0 +1,58 @@
+name: Publish ic crates to crates.io
+
+on:
+  workflow_dispatch:
+    inputs:
+      crate-name:
+        description: 'The name of the crate to publish'
+        required: true
+      crate-version:
+        description: 'The version of the crate to publish'
+        required: true
+      dry-run:
+        description: 'If true, run publish in dry-run mode'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-crates:
+    name: Publish Crates
+    runs-on: ubuntu-latest
+    environment: publish-crates
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec
+        id: auth
+
+      - name: Check crate version
+        run: |
+          set -euo pipefail
+          crate_name="${{ github.event.inputs.crate-name }}"
+          crate_version="${{ github.event.inputs.crate-version }}"
+
+          current_crate_version=$(cargo metadata --no-deps --format-version 1 | jq -r ".packages[] | select(.name==\"${crate_name}\") | .version")
+          if [ "$current_crate_version" != "$crate_version" ]; then
+            echo "Crate version mismatch: expected $crate_version, found $current_crate_version"
+            exit 1
+          fi
+
+      - name: Build and Test Crate
+        run: |
+          cargo build --package ${{ github.event.inputs.crate-name }}
+          cargo test --package ${{ github.event.inputs.crate-name }}
+
+      - name: Publish Dry Run
+        if: ${{ github.event.inputs.dry-run == 'true' }}
+        run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty --dry-run
+
+      - name: Publish Crate
+        if: ${{ github.event.inputs.dry-run == 'false' }}
+        run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

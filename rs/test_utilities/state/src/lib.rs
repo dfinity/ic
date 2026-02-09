@@ -818,7 +818,6 @@ pub fn new_canister_state_with_execution(
 /// Helper function to register a callback.
 pub fn register_callback(
     canister_state: &mut CanisterState,
-    originator: CanisterId,
     respondent: CanisterId,
     deadline: CoarseTime,
 ) -> CallbackId {
@@ -836,7 +835,6 @@ pub fn register_callback(
         .system_state
         .register_callback(Callback::new(
             call_context_id,
-            originator,
             respondent,
             Cycles::zero(),
             Cycles::new(42),

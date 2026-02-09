@@ -9,6 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
+- Introduced `additional_critical_native_action_ids` into `NervousSystemParameters` so that an SNS
+  can set additional proposal actions as critical.
+
 ## Changed
 
 ## Deprecated

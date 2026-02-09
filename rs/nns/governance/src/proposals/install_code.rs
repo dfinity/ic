@@ -170,8 +170,8 @@ impl CallCanister for InstallCode {
 
 impl LocallyDescribableProposalAction for InstallCode {
     const TYPE_NAME: &'static str = "Install Code";
-    const TYPE_DESCRIPTION: &'static str =
-        "Installs, reinstalls, or upgrades the code of an NNS canister.";
+    const TYPE_DESCRIPTION: &'static str = "Install, reinstall or upgrade code of a canister \
+        controlled by the NNS.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         let Self {

@@ -7,12 +7,13 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-limits = { path = "../limits" }
+ic-consensus-features = { path = "../consensus/features" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -44,6 +45,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 pprof = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
+rstest = { workspace = true }
 tokio = { workspace = true }
 
 [[bench]]
