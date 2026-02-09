@@ -32,14 +32,11 @@ attr
 ca-certificates
 cryptsetup
 curl
-faketime
 fdisk
 iproute2
-isc-dhcp-client
 jq
 less
 lvm2
-net-tools
 nftables
 parted
 rsync
@@ -48,13 +45,9 @@ sysfsutils
 udev
 usbutils
 xfsprogs
-zstd
 
 # Required for API boundary nodes to enable IPv4 HTTP outcalls
 dante-server
-
-# This is unclear -- why is this here? This should "probably" be dev tool.
-protobuf-compiler
 
 # SELinux support
 selinux-policy-default
