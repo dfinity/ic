@@ -45,14 +45,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tokio",
 ]
 
-DATA = [
-    "//rs/rust_canisters/stable_structures:stable_structures_canister",
-]
-
-ENV = {
-    "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
-}
-
 rust_library(
     name = "ingress_manager",
     srcs = glob(["src/**/*.rs"]),
@@ -69,19 +61,17 @@ rust_test(
 
 rust_test(
     name = "ingress_manager_prop_test",
-    crate = ":ingress_manager",
     # the tests can run for over a minute
     size = "medium",
+    crate = ":ingress_manager",
     crate_features = ["proptest"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + ["@crate_index//:proptest"]
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + ["@crate_index//:proptest"],
 )
 
 rust_ic_bench(
     name = "build_payload_bench",
     testonly = True,
     srcs = ["benches/build_payload.rs"],
-    data = DATA,
-    env = ENV,
     deps = [
         # Keep sorted.
         ":ingress_manager",
@@ -118,8 +108,6 @@ rust_ic_bench(
     name = "handle_ingress_bench",
     testonly = True,
     srcs = ["benches/handle_ingress.rs"],
-    data = DATA,
-    env = ENV,
     deps = [
         # Keep sorted.
         ":ingress_manager",
