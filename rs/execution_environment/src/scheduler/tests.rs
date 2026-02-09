@@ -4200,11 +4200,12 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 
 #[test]
 fn http_outcalls_free() {
-    let mut test = SchedulerTestBuilder::new().build();
+    let mut test = SchedulerTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .build();
     let caller_canister = test.create_canister();
 
     test.state_mut().metadata.own_subnet_features.http_requests = true;
-    test.set_cost_schedule(CanisterCyclesCostSchedule::Free);
 
     let cycles_before = test.canister_state(caller_canister).system_state.balance();
 

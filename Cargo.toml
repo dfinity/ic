@@ -138,6 +138,7 @@ members = [
     "rs/dogecoin/ckdoge/minter",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
+    "rs/embedders/fuzz",
     "rs/ethereum/cketh/minter",
     "rs/ethereum/cketh/test_utils",
     "rs/ethereum/ledger-suite-orchestrator",

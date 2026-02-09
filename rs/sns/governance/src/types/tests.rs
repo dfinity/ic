@@ -1,9 +1,13 @@
 use super::*;
-use crate::pb::v1::{
-    ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
-    claim_swap_neurons_request::neuron_recipe,
-    governance::Mode::PreInitializationSwap,
-    nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+use crate::{
+    pb::v1::{
+        CustomProposalCriticality, ExecuteGenericNervousSystemFunction, Proposal, ProposalData,
+        VotingRewardsParameters,
+        claim_swap_neurons_request::neuron_recipe,
+        governance::Mode::PreInitializationSwap,
+        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+    },
+    types::NativeAction,
 };
 use candid::Nat;
 use futures::FutureExt;
@@ -1610,4 +1614,70 @@ fn test_from_manage_ledger_parameters_into_ledger_upgrade_args_no_logo() {
             index_principal: None,
         }
     );
+}
+
+#[test]
+fn test_validate_additional_critical_native_action_ids() {
+    // Test 1: Empty list should be valid
+    let mut params = NervousSystemParameters::with_default_values();
+    assert!(params.validate().is_ok());
+
+    // Test 2: Non-critical native function (Motion) should be valid
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        additional_critical_native_action_ids: vec![NativeAction::Motion as u64],
+    });
+    assert!(params.validate().is_ok());
+
+    // Test 3: Critical native function (ManageNervousSystemParameters) should be invalid
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        additional_critical_native_action_ids: vec![
+            NativeAction::ManageNervousSystemParameters as u64,
+        ],
+    });
+    let result = params.validate();
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        error.contains("already critical"),
+        "Expected error about already critical functions, got: {}",
+        error
+    );
+
+    // Test 4: Mix of valid and invalid should be invalid
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        additional_critical_native_action_ids: vec![
+            NativeAction::Motion as u64,
+            NativeAction::TransferSnsTreasuryFunds as u64, // Critical
+        ],
+    });
+    let result = params.validate();
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        error.contains("already critical"),
+        "Expected error about already critical functions, got: {}",
+        error
+    );
+
+    // Test 5: Unknown function ID should be invalid
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        additional_critical_native_action_ids: vec![999_999],
+    });
+    let result = params.validate();
+    assert!(result.is_err());
+    let error = result.unwrap_err();
+    assert!(
+        error.contains("unknown function IDs"),
+        "Expected error about unknown function IDs, got: {}",
+        error
+    );
+
+    // Test 6: Multiple non-critical functions should be valid
+    params.custom_proposal_criticality = Some(CustomProposalCriticality {
+        additional_critical_native_action_ids: vec![
+            NativeAction::Motion as u64,
+            NativeAction::UpgradeSnsToNextVersion as u64,
+        ],
+    });
+    assert!(params.validate().is_ok());
 }
