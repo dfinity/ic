@@ -4498,11 +4498,6 @@ pub fn execute_canister(
     subnet_size: usize,
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
-    canister
-        .system_state
-        .log_memory_store
-        .set_feature_flag(exec_env.config.log_memory_store_feature);
-
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
             return ExecuteCanisterResult {

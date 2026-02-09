@@ -51,26 +51,22 @@ impl LogMemoryStore {
     /// The store technically exists but has 0 capacity and is considered "uninitialized".
     /// Any attempts to append logs will be silently ignored until the store is
     /// explicitly resized to a non-zero capacity.
-    pub fn new() -> Self {
-        Self::new_inner(None)
+    pub fn new(feature_flag: FlagStatus) -> Self {
+        Self::new_inner(feature_flag, None)
     }
 
     /// Creates a new store from a checkpoint.
-    pub fn from_checkpoint(page_map: PageMap) -> Self {
-        Self::new_inner(Some(page_map))
+    pub fn from_checkpoint(feature_flag: FlagStatus, page_map: PageMap) -> Self {
+        Self::new_inner(feature_flag, Some(page_map))
     }
 
-    fn new_inner(maybe_page_map: Option<PageMap>) -> Self {
+    fn new_inner(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
         Self {
-            feature_flag: FlagStatus::Disabled,
+            feature_flag,
             maybe_page_map,
             delta_log_sizes: VecDeque::new(),
             header_cache: OnceLock::new(),
         }
-    }
-
-    pub fn set_feature_flag(&mut self, feature_flag: FlagStatus) {
-        self.feature_flag = feature_flag;
     }
 
     pub fn maybe_page_map(&self) -> Option<&PageMap> {
@@ -149,7 +145,6 @@ impl LogMemoryStore {
 
     #[cfg(test)]
     fn resize_for_testing(&mut self, limit: usize) {
-        self.set_feature_flag(FlagStatus::Enabled);
         self.resize_impl(limit, PageMap::new_for_testing)
     }
 
@@ -246,7 +241,7 @@ impl LogMemoryStore {
 
 impl Default for LogMemoryStore {
     fn default() -> Self {
-        Self::new()
+        Self::new(FlagStatus::Disabled)
     }
 }
 

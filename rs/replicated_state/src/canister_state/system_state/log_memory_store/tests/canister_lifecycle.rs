@@ -32,7 +32,7 @@ impl MockCanister {
     /// Creates a new canister with default settings.
     fn create_canister() -> Self {
         let mut canister = Self {
-            log_memory_store: LogMemoryStore::new(),
+            log_memory_store: LogMemoryStore::new(FlagStatus::Enabled),
             fake_timestamp: 0,
         };
         canister.update_settings(TEST_DEFAULT_LOG_MEMORY_LIMIT);
@@ -43,7 +43,6 @@ impl MockCanister {
     ///
     /// Resizes the underlying storage to match the provided byte limit.
     fn update_settings(&mut self, log_memory_limit: NumBytes) {
-        self.log_memory_store.set_feature_flag(FlagStatus::Enabled);
         self.log_memory_store
             .resize_for_testing(log_memory_limit.get() as usize);
     }

@@ -4794,8 +4794,12 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
         .canister_state(canister_id)
         .log_memory_store_memory_usage()
         .get();
-    // Assert that canister log memory store memory was non empty.
-    assert_gt!(initial_log_memory_store_memory_usage, 0);
+    if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        // Assert that canister log memory store memory was non empty.
+        assert_gt!(initial_log_memory_store_memory_usage, 0);
+    } else {
+        assert_eq!(initial_log_memory_store_memory_usage, 0);
+    }
 
     test.uninstall_code(canister_id).unwrap();
 

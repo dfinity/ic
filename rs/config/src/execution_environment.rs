@@ -9,9 +9,12 @@ const MIB: u64 = 1024 * 1024;
 const GIB: u64 = MIB * 1024;
 const TIB: u64 = GIB * 1024;
 
-// LINT.IfChange
-pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = false;
-// LINT.ThenChange(LOG_MEMORY_STORE_FEATURE_ENABLED)
+pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = true;
+pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+    FlagStatus::Enabled
+} else {
+    FlagStatus::Disabled
+};
 
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet

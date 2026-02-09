@@ -9,6 +9,7 @@ use crate::{
     util::process_responses,
 };
 use ic_config::embedders::Config as HypervisorConfig;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -1558,17 +1559,26 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+
+                    let (log_memory_usage, delta_log_sizes) = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                        let log = &mut canister.system_state.log_memory_store;
+                        (log.memory_usage(), log.take_delta_log_sizes())
+                    } else {
+                        let log = &mut canister.system_state.canister_log;
+                        (log.bytes_used(), log.take_delta_log_sizes())
+                    };
                     self.metrics
                         .canister_log_memory_usage_v2
-                        .observe(canister.system_state.canister_log.bytes_used() as f64);
+                        .observe(log_memory_usage as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
-                        .observe(canister.system_state.canister_log.bytes_used() as f64);
-                    for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
+                        .observe(log_memory_usage as f64);
+                    for size in delta_log_sizes {
                         self.metrics
                             .canister_log_delta_memory_usage
-                            .observe(memory_usage as f64);
+                            .observe(size as f64);
                     }
+
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_allocated_bytes += canister
                         .memory_allocation()

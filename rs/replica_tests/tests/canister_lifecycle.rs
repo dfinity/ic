@@ -28,6 +28,13 @@ const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const KIB: u64 = 1024;
 const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4 * KIB;
 const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = 4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT; // Header, index table, data region.
+const fn default_log_memory_limit() -> u64 {
+    if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        TEST_DEFAULT_LOG_MEMORY_LIMIT
+    } else {
+        0
+    }
+}
 const fn log_memory_store_usage() -> u64 {
     if LOG_MEMORY_STORE_FEATURE_ENABLED {
         TEST_DEFAULT_LOG_MEMORY_USAGE
@@ -737,7 +744,7 @@ fn can_get_canister_information() {
                 2592000,
                 Some(5_000_000_000_000u128),
                 LogVisibilityV2::default(),
-                TEST_DEFAULT_LOG_MEMORY_LIMIT,
+                default_log_memory_limit(),
                 0u128,
                 0u128,
                 0u128,
@@ -807,7 +814,7 @@ fn can_get_canister_information() {
                     259200,
                     None,
                     LogVisibilityV2::default(),
-                    TEST_DEFAULT_LOG_MEMORY_LIMIT,
+                    default_log_memory_limit(),
                     0u128,
                     0u128,
                     0u128,

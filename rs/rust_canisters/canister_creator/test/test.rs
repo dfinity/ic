@@ -1,13 +1,11 @@
 use canister_test::*;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_state_machine_tests::StateMachine;
 use more_asserts::{assert_le, assert_lt};
 
 const KIB: u64 = 1024;
 const LOG_MEMORY_STORE_LIMIT: u64 = 4 * KIB;
 const LOG_MEMORY_STORE_USAGE: u64 = 4 * KIB + 4 * KIB + LOG_MEMORY_STORE_LIMIT; // Header, index table, data region.
-// LINT.IfChange
-const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = true;
-// LINT.ThenChange(LOG_MEMORY_STORE_FEATURE_ENABLED)
 const fn log_memory_store_usage() -> u64 {
     if LOG_MEMORY_STORE_FEATURE_ENABLED {
         LOG_MEMORY_STORE_USAGE
