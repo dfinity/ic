@@ -16,6 +16,22 @@ use url::Url;
 
 type ProposalId = u64;
 
+/// Kind of forum topic: application canister management vs protocol canister management.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ForumTopicKind {
+    ApplicationCanisterManagement,
+    ProtocolCanisterManagement,
+}
+
+/// Forum topic kind to use for each canister. Edit this match to use
+/// `ProtocolCanisterManagement` for protocol canisters and `ApplicationCanisterManagement` for application canisters.
+fn forum_topic_kind(canister: &TargetCanister) -> ForumTopicKind {
+    match canister {
+        TargetCanister::Bitcoin | TargetCanister::Dogecoin => ForumTopicKind::ProtocolCanisterManagement,
+        _ => ForumTopicKind::ApplicationCanisterManagement,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ForumTopic {
     /// A new topic in the application canister management category for the given proposals.
@@ -24,24 +40,45 @@ pub enum ForumTopic {
     ApplicationCanisterManagement {
         proposals: BTreeMap<ProposalId, UpgradeProposalSummary>,
     },
+    ProtocolCanisterManagement { proposals: BTreeMap<ProposalId, UpgradeProposalSummary>}
 }
 
 impl ForumTopic {
+    /// Build a forum topic for the given upgrade proposals. The topic kind (application vs
+    /// protocol canister management) is determined by `forum_topic_kind` in this module.
+    /// All canisters in the batch must map to the same topic kind.
     pub fn for_upgrade_proposals<I: IntoIterator<Item = ProposalInfo>>(
         proposals: I,
     ) -> Result<ForumTopic, String> {
         let mut summaries = BTreeMap::new();
+        let mut topic_kind = None::<ForumTopicKind>;
         for proposal in proposals.into_iter() {
             let proposal_id = proposal.proposal_id;
             let summary = UpgradeProposalSummary::try_from(proposal)?;
+            let kind = forum_topic_kind(&summary.canister);
+            if let Some(prev) = topic_kind {
+                if prev != kind {
+                    return Err(
+                        "Proposals mix application and protocol canister topics: cannot create a single forum topic".to_string(),
+                    );
+                }
+            } else {
+                topic_kind = Some(kind);
+            }
             summaries.insert(proposal_id, summary);
         }
         assert!(
             !summaries.is_empty(),
             "BUG: no forum topic needed if there is no proposal"
         );
-        Ok(ForumTopic::ApplicationCanisterManagement {
-            proposals: summaries,
+        let kind = topic_kind.unwrap_or(ForumTopicKind::ApplicationCanisterManagement);
+        Ok(match kind {
+            ForumTopicKind::ApplicationCanisterManagement => ForumTopic::ApplicationCanisterManagement {
+                proposals: summaries,
+            },
+            ForumTopicKind::ProtocolCanisterManagement => ForumTopic::ProtocolCanisterManagement {
+                proposals: summaries,
+            },
         })
     }
 }
@@ -104,7 +141,7 @@ impl fmt::Display for CanisterInstallMode {
 impl ForumTopic {
     fn title(&self) -> String {
         match self {
-            ForumTopic::ApplicationCanisterManagement { proposals } => {
+            ForumTopic::ApplicationCanisterManagement { proposals } | ForumTopic::ProtocolCanisterManagement { proposals } => {
                 let proposal_ids: Vec<_> = proposals.keys().collect();
                 let canister_names: Vec<_> =
                     proposals.values().map(|c| c.canister.to_string()).collect();
@@ -131,7 +168,7 @@ impl ForumTopic {
 
     fn body(&self) -> String {
         match self {
-            ForumTopic::ApplicationCanisterManagement { proposals } => {
+            ForumTopic::ApplicationCanisterManagement { proposals } | ForumTopic::ProtocolCanisterManagement { proposals } => {
                 let mut res = Vec::new();
                 res.push("Hi everyone :waving_hand:".to_string());
                 res.push(String::new());
@@ -154,7 +191,7 @@ impl ForumTopic {
 
     fn category(&self) -> u64 {
         match &self {
-            ForumTopic::ApplicationCanisterManagement { .. } => {
+            ForumTopic::ApplicationCanisterManagement { .. } | ForumTopic::ProtocolCanisterManagement { .. } => {
                 // Category "NNS proposal discussions"
                 // https://forum.dfinity.org/c/governance/nns-proposal-discussions/76
                 76
@@ -163,7 +200,10 @@ impl ForumTopic {
     }
 
     fn tags(&self) -> BTreeSet<Tag> {
-        btreeset! {Tag::ApplicationCanisterMgmt}
+        match &self {
+            ForumTopic::ApplicationCanisterManagement { .. } => btreeset! {Tag::ApplicationCanisterMgmt},
+            ForumTopic::ProtocolCanisterManagement { .. } => btreeset! {Tag::ProtocolCanisterMgmt},
+        }
     }
 }
 
@@ -190,12 +230,15 @@ fn display_sequence<T: fmt::Display>(seq: &[T]) -> String {
 enum Tag {
     /// [Application canister management](https://forum.dfinity.org/tags/c/governance/nns-proposal-discussions/76/application-canister-mgmt) tag.
     ApplicationCanisterMgmt,
+    /// [Protocol canister management](https://forum.dfinity.org/tags/c/governance/nns-proposal-discussions/76/protocol-canister-management) tag.
+    ProtocolCanisterMgmt,
 }
 
 impl Tag {
     fn id(&self) -> &'static str {
         match self {
             Tag::ApplicationCanisterMgmt => "Application-canister-mgmt",
+            Tag::ProtocolCanisterMgmt => "Protocol-canister-management",
         }
     }
 }
