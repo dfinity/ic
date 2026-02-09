@@ -562,9 +562,6 @@ fn create_guestos_config_for_node(
     };
 
     let guestos_settings = GuestOSSettings {
-        inject_ic_crypto: false,
-        inject_ic_state: false,
-        inject_ic_registry_local_store: false,
         guestos_dev_settings,
     };
 

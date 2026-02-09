@@ -40,7 +40,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.11.0";
+pub const CONFIG_VERSION: &str = "1.12.0";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
@@ -49,6 +49,9 @@ pub static RESERVED_FIELD_PATHS: &[&str] = &[
     "hostos_settings.vm_cpu",
     "hostos_settings.vm_memory",
     "hostos_settings.vm_nr_of_vcpus",
+    "guestos_settings.inject_ic_crypto",
+    "guestos_settings.inject_ic_state",
+    "guestos_settings.inject_ic_registry_local_store",
 ];
 
 pub type ConfigMap = HashMap<String, String>;
@@ -202,17 +205,6 @@ pub struct GuestOSUpgradeConfig {
 /// GuestOS-specific settings.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSSettings {
-    /// Externally generated cryptographic keys.
-    /// Must be a directory with contents matching the internal representation of the ic_crypto directory.
-    /// When given, this provides the private keys of the node.
-    /// If not given, the node will generate its own private/public key pair.
-    pub inject_ic_crypto: bool,
-    pub inject_ic_state: bool,
-    /// Initial registry state.
-    /// Must be a directory with contents matching the internal representation of the ic_registry_local_store.
-    /// When given, this provides the initial state of the registry.
-    /// If not given, the node will fetch (initial) registry state from the NNS.
-    pub inject_ic_registry_local_store: bool,
     pub guestos_dev_settings: GuestOSDevSettings,
 }
 
@@ -347,10 +339,6 @@ mod tests {
                 "icos_dev_settings": {}
             },
             "guestos_settings": {
-                "inject_ic_crypto": false,
-                "inject_ic_state": false,
-                "inject_ic_registry_local_store": false,
-                "recovery_hash": None::<String>,
                 "guestos_dev_settings": {}
             },
             "guest_vm_type": "unknown_future_variant"
