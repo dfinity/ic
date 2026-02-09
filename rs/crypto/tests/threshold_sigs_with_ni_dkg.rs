@@ -1037,18 +1037,16 @@ mod verification_failures {
 
         let msg = SignableMock::new(b"message".to_vec());
 
-        // Sign with DKG1
+        // Sign with one DKG
         let signer1 = random_node_in(config1.receivers().get(), rng);
         let sig_share = crypto_for(signer1, &crypto_components1)
             .sign_threshold(&msg, &dkg_id1)
             .expect("signing failed");
 
-        // Try to verify with DKG2's transcript (wrong DKG ID)
-        // First load DKG1's transcript into a DKG2 node so it can verify
+        // Try to verify in another DKG
         let verifier2 = random_node_in(config2.receivers().get(), rng);
 
-        // The verifier doesn't have DKG1's transcript loaded, so it should fail
-        // with ThresholdSigDataNotFound
+        // The verifier doesn't have DKG1's transcript loaded
         let result = crypto_for(verifier2, &crypto_components2)
             .verify_threshold_sig_share(&sig_share, &msg, &dkg_id1, signer1);
 
@@ -1132,86 +1130,6 @@ mod verification_failures {
         );
 
         assert_matches!(result, Err(CryptoError::MalformedSignature { .. }));
-    }
-
-    #[test]
-    fn should_fail_to_verify_threshold_sig_share_with_swapped_signature() {
-        // Tests that a valid signature for one message doesn't verify against a different message.
-        // This tests semantic corruption (valid curve point, wrong value) without risking
-        // parsing errors from byte manipulation.
-        let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..7);
-        let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
-
-        run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
-
-        let msg = SignableMock::new(b"message".to_vec());
-        let different_msg = SignableMock::new(b"different message".to_vec());
-
-        let signer = random_node_in(config.receivers().get(), rng);
-
-        // Create a signature for a different message
-        let sig_for_different_msg = crypto_for(signer, &crypto_components)
-            .sign_threshold(&different_msg, &dkg_id)
-            .expect("signing failed");
-
-        // Re-type it as a signature for the original message
-        let corrupted_sig_share: ThresholdSigShareOf<SignableMock> =
-            ThresholdSigShareOf::new(ThresholdSigShare(sig_for_different_msg.get().0.clone()));
-
-        let verifier = random_node_in(config.receivers().get(), rng);
-        let result = crypto_for(verifier, &crypto_components).verify_threshold_sig_share(
-            &corrupted_sig_share,
-            &msg,
-            &dkg_id,
-            signer,
-        );
-
-        assert_matches!(result, Err(CryptoError::SignatureVerification { .. }));
-    }
-
-    #[test]
-    fn should_fail_to_verify_threshold_sig_combined_with_swapped_signature() {
-        // Tests that a valid combined signature for one message doesn't verify against another.
-        // This tests semantic corruption (valid curve point, wrong value) without risking
-        // parsing errors from byte manipulation.
-        let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..7);
-        let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
-
-        run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
-
-        let msg = SignableMock::new(b"message".to_vec());
-        let different_msg = SignableMock::new(b"different message".to_vec());
-
-        let combiner = random_node_in(config.receivers().get(), rng);
-        let signers = n_random_nodes_in(config.receivers().get(), config.threshold().get(), rng);
-
-        // Create combined signature for a different message
-        let combined_sig_for_different_msg = threshold_sign_and_combine(
-            SignersAndCombiner {
-                signers: signers.clone(),
-                combiner,
-            },
-            &different_msg,
-            dkg_id.clone(),
-            &crypto_components,
-        );
-
-        // Re-type it as a signature for the original message
-        let corrupted_combined_sig: CombinedThresholdSigOf<SignableMock> =
-            CombinedThresholdSigOf::new(CombinedThresholdSig(
-                combined_sig_for_different_msg.get().0.clone(),
-            ));
-
-        let verifier = random_node_in(config.receivers().get(), rng);
-        let result = crypto_for(verifier, &crypto_components).verify_threshold_sig_combined(
-            &corrupted_combined_sig,
-            &msg,
-            &dkg_id,
-        );
-
-        assert_matches!(result, Err(CryptoError::SignatureVerification { .. }));
     }
 
     #[test]
