@@ -84,22 +84,22 @@ impl ForumTopic {
             let proposal_id = proposal.proposal_id;
             let summary = UpgradeProposalSummary::try_from(proposal)?;
             let kind = forum_topic_kind(&summary.canister);
-            if let Some(prev) = topic_kind {
-                if prev != kind {
-                    return Err(
-                        "Proposals mix application and protocol canister topics: cannot create a single forum topic".to_string(),
-                    );
-                }
-            } else {
-                topic_kind = Some(kind);
-            }
+            proposal_kinds
+                .entry(kind)
+                .and_modify(|p: &mut Vec<u64>| p.push(proposal_id))
+                .or_insert_with(|| vec![proposal_id]);
             summaries.insert(proposal_id, summary);
         }
         assert!(
             !summaries.is_empty(),
             "BUG: no forum topic needed if there is no proposal"
         );
-        let kind = topic_kind.unwrap_or(ForumTopicKind::ApplicationCanisterManagement);
+        assert_eq!(
+            proposal_kinds.len(),
+            1,
+            "ERROR: cannot create single forum topic for proposals mixing application and protocol canister topics: {proposal_kinds:?}"
+        );
+        let kind = proposal_kinds.keys().next().unwrap();
         Ok(match kind {
             ForumTopicKind::ApplicationCanisterManagement => {
                 ForumTopic::ApplicationCanisterManagement {
