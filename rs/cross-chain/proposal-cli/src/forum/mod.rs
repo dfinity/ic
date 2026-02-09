@@ -27,7 +27,9 @@ pub enum ForumTopicKind {
 /// `ProtocolCanisterManagement` for protocol canisters and `ApplicationCanisterManagement` for application canisters.
 fn forum_topic_kind(canister: &TargetCanister) -> ForumTopicKind {
     match canister {
-        TargetCanister::Bitcoin | TargetCanister::Dogecoin => ForumTopicKind::ProtocolCanisterManagement,
+        TargetCanister::Bitcoin | TargetCanister::Dogecoin => {
+            ForumTopicKind::ProtocolCanisterManagement
+        }
         _ => ForumTopicKind::ApplicationCanisterManagement,
     }
 }
@@ -40,7 +42,9 @@ pub enum ForumTopic {
     ApplicationCanisterManagement {
         proposals: BTreeMap<ProposalId, UpgradeProposalSummary>,
     },
-    ProtocolCanisterManagement { proposals: BTreeMap<ProposalId, UpgradeProposalSummary>}
+    ProtocolCanisterManagement {
+        proposals: BTreeMap<ProposalId, UpgradeProposalSummary>,
+    },
 }
 
 impl ForumTopic {
@@ -73,9 +77,11 @@ impl ForumTopic {
         );
         let kind = topic_kind.unwrap_or(ForumTopicKind::ApplicationCanisterManagement);
         Ok(match kind {
-            ForumTopicKind::ApplicationCanisterManagement => ForumTopic::ApplicationCanisterManagement {
-                proposals: summaries,
-            },
+            ForumTopicKind::ApplicationCanisterManagement => {
+                ForumTopic::ApplicationCanisterManagement {
+                    proposals: summaries,
+                }
+            }
             ForumTopicKind::ProtocolCanisterManagement => ForumTopic::ProtocolCanisterManagement {
                 proposals: summaries,
             },
@@ -141,7 +147,8 @@ impl fmt::Display for CanisterInstallMode {
 impl ForumTopic {
     fn title(&self) -> String {
         match self {
-            ForumTopic::ApplicationCanisterManagement { proposals } | ForumTopic::ProtocolCanisterManagement { proposals } => {
+            ForumTopic::ApplicationCanisterManagement { proposals }
+            | ForumTopic::ProtocolCanisterManagement { proposals } => {
                 let proposal_ids: Vec<_> = proposals.keys().collect();
                 let canister_names: Vec<_> =
                     proposals.values().map(|c| c.canister.to_string()).collect();
@@ -168,7 +175,8 @@ impl ForumTopic {
 
     fn body(&self) -> String {
         match self {
-            ForumTopic::ApplicationCanisterManagement { proposals } | ForumTopic::ProtocolCanisterManagement { proposals } => {
+            ForumTopic::ApplicationCanisterManagement { proposals }
+            | ForumTopic::ProtocolCanisterManagement { proposals } => {
                 let mut res = Vec::new();
                 res.push("Hi everyone :waving_hand:".to_string());
                 res.push(String::new());
@@ -191,7 +199,8 @@ impl ForumTopic {
 
     fn category(&self) -> u64 {
         match &self {
-            ForumTopic::ApplicationCanisterManagement { .. } | ForumTopic::ProtocolCanisterManagement { .. } => {
+            ForumTopic::ApplicationCanisterManagement { .. }
+            | ForumTopic::ProtocolCanisterManagement { .. } => {
                 // Category "NNS proposal discussions"
                 // https://forum.dfinity.org/c/governance/nns-proposal-discussions/76
                 76
@@ -201,7 +210,9 @@ impl ForumTopic {
 
     fn tags(&self) -> BTreeSet<Tag> {
         match &self {
-            ForumTopic::ApplicationCanisterManagement { .. } => btreeset! {Tag::ApplicationCanisterMgmt},
+            ForumTopic::ApplicationCanisterManagement { .. } => {
+                btreeset! {Tag::ApplicationCanisterMgmt}
+            }
             ForumTopic::ProtocolCanisterManagement { .. } => btreeset! {Tag::ProtocolCanisterMgmt},
         }
     }
