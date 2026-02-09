@@ -46,4 +46,3 @@ upgrade_device_mapper_test = []
 
 [dev-dependencies]
 goldenfile = { workspace = true }
-url = { workspace = true }
