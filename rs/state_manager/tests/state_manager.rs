@@ -1039,9 +1039,9 @@ fn populates_prev_state_hash() {
         let hashes = state_manager.list_state_hashes_to_certify();
 
         assert_eq!(2, hashes.len());
-        assert_ne!(hashes[0].1, hashes[1].1);
+        assert_ne!(hashes[0].hash, hashes[1].hash);
         assert_eq!(
-            Some(hashes[0].1.clone()),
+            Some(hashes[0].hash.clone()),
             state_2.system_metadata().prev_state_hash
         );
     });
@@ -2424,7 +2424,7 @@ fn recomputes_metadata_on_restart_if_missing() {
             .expect("Failed to remove states metadata");
         let cert_hashes = state_manager.list_state_hashes_to_certify();
         assert_eq!(1, cert_hashes.len());
-        assert_eq!(height(1), cert_hashes[0].0);
+        assert_eq!(height(1), cert_hashes[0].height);
 
         let state_manager = restart_fn(state_manager, None);
 
