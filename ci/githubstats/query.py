@@ -34,6 +34,9 @@ THIS_SCRIPT_DIR = Path(__file__).parent
 ORG = "dfinity"
 REPO = "ic"
 
+FAILED = "FAILED"
+PASSED = "PASSED"
+
 
 def die(*args):
     print(*args, file=sys.stderr)
@@ -282,7 +285,7 @@ def get_all_log_urls_from_buildbuddy(
 
     Returns:
         List of tuples: [(attempt_number, download_url, attempt_status), ...]
-        where attempt_status is "PASSED" or "FAILED"
+        where attempt_status is PASSED or FAILED
 
     """
 
@@ -318,13 +321,13 @@ def get_all_log_urls_from_buildbuddy(
                 # Collect failed attempts
                 for attempt_num, file in enumerate(test_summary.failed, start=1):
                     if file.uri:
-                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), "FAILED"))
+                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), FAILED))
 
                 # Collect passed attempts (continue numbering from failed attempts)
                 start_num = len(test_summary.failed) + 1
                 for attempt_num, file in enumerate(test_summary.passed, start=start_num):
                     if file.uri:
-                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), "PASSED"))
+                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), PASSED))
 
         return log_urls
 
@@ -440,7 +443,7 @@ def annotate_df_with_summaries(row, attempt_num, attempt_status, download_to_pat
 
     with row["lock"]:
         row["error_summaries"][attempt_num] = (
-            summary if summary is not None else last_line if attempt_status == "FAILED" else None
+            summary if summary is not None else last_line if attempt_status == FAILED else None
         )
 
 
