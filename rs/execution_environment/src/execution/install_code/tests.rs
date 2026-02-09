@@ -1,7 +1,7 @@
 use crate::units::KIB;
 use assert_matches::assert_matches;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_base_types::PrincipalId;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
@@ -12,9 +12,7 @@ use ic_management_canister_types_private::{
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-use ic_replicated_state::canister_state::system_state::{
-     wasm_chunk_store,
-};
+use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
 use ic_replicated_state::{ExecutionTask, ReplicatedState};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
