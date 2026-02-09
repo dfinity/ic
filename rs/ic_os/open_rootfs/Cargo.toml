@@ -1,0 +1,41 @@
+[package]
+name = "open_rootfs"
+version = "0.1.0"
+edition.workspace = true
+
+[features]
+dev = []
+
+[[bin]]
+name = "open_rootfs"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic-certification = { workspace = true }
+pem = { workspace = true }
+rand = { workspace = true }
+sev = { workspace = true }
+serde_cbor = { workspace = true }
+uuid = { workspace = true }
+
+attestation = { path = "../sev/attestation" }
+command_runner = { path = "../command_runner" }
+config_tool = { path = "../config/tool" }
+config_types = { path = "../config/types" }
+ic_device = { path = "../device" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
+sev_guest = { path = "../sev/guest" }
+linux_kernel_command_line = { path = "../linux_kernel_command_line" }
+
+[dev-dependencies]
+ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+rand = { workspace = true }
+sev_guest_testing = { path = "../sev/guest/testing" }
+tempfile = { workspace = true }
+

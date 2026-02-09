@@ -1,7 +1,6 @@
 use candid::{CandidType, DecoderConfig, decode_one_with_config};
 use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
 use ic_config::embedders::{Config as EmbeddersConfig, StableMemoryPageLimit};
-use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -1154,11 +1153,6 @@ pub struct SystemApiImpl {
 
     execution_parameters: ExecutionParameters,
 
-    /// Canister backtraces are enabled. This means we should attempt to collect
-    /// a backtrace if the canister calls the trap API.
-    #[allow(unused)]
-    canister_backtrace: FlagStatus,
-
     /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
     /// `canister_query <name>`, or `canister_composite_query <name>`.
     max_sum_exported_function_name_lengths: usize,
@@ -1235,7 +1229,6 @@ impl SystemApiImpl {
             api_type,
             memory_usage,
             execution_parameters,
-            canister_backtrace: embedders_config.feature_flags.canister_backtrace,
             max_sum_exported_function_name_lengths: embedders_config
                 .max_sum_exported_function_name_lengths,
             stable_memory,
@@ -1250,6 +1243,12 @@ impl SystemApiImpl {
 
     pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
         self.sandbox_safe_system_state.cost_schedule
+    }
+
+    /// Note that this function is made public only for the tests
+    #[doc(hidden)]
+    pub fn set_api_type(&mut self, api_type: ApiType) {
+        self.api_type = api_type;
     }
 
     /// Refunds any cycles used for an outgoing request that doesn't get sent

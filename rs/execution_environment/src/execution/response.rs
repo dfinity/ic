@@ -6,6 +6,7 @@ use std::sync::Arc;
 use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use more_asserts::debug_assert_le;
 
 use ic_embedders::{
     wasm_executor::{
@@ -142,7 +143,7 @@ impl ResponseHelper {
         //
         // Therefore, the cycles in the response must not exceed the cycles in
         // the request. Otherwise, there might be potentially malicious faults.
-        debug_assert!(response.refund <= original.callback.cycles_sent);
+        debug_assert_le!(response.refund, original.callback.cycles_sent);
         let refund_for_sent_cycles = if response.refund > original.callback.cycles_sent {
             round.counters.response_cycles_refund_error.inc();
             error!(
@@ -238,7 +239,7 @@ impl ResponseHelper {
                 error!(
                     round.log,
                     "[EXC-BUG] Canister {} has a deleted context that has not responded",
-                    self.canister.system_state.canister_id,
+                    self.canister.canister_id(),
                 );
                 // Since this branch doesn't call `early_finish()`, it needs to manually
                 // revert the subnet memory reservation.
@@ -264,7 +265,7 @@ impl ResponseHelper {
             error!(
                 round.log,
                 "[EXC-BUG] Canister {} is attempting to execute a response, but the execution state does not exist.",
-                self.canister.system_state.canister_id,
+                self.canister.canister_id(),
             );
             let result = Err(HypervisorError::WasmModuleNotFound);
             return Err(self.early_finish(result, original, round, round_limits));
@@ -307,9 +308,9 @@ impl ResponseHelper {
         // the callback have been checked in `execute_response()`.
         // Note that we cannot return an error here because the cleanup callback
         // cannot be invoked without a valid call context and a callback.
-        let (_, _, call_context, _) = common::get_call_context_and_callback(
+        let (call_context, _) = common::get_call_context(
             clean_canister,
-            &original.message,
+            &original.callback,
             round.log,
             round.counters.unexpected_response_error,
         )
@@ -546,12 +547,7 @@ impl ResponseHelper {
         let (action, call_context) = self
             .canister
             .system_state
-            .on_canister_result(
-                original.call_context_id,
-                Some(original.callback_id),
-                result,
-                instructions_used,
-            )
+            .on_canister_result(original.call_context_id, result, instructions_used)
             .unwrap();
         let response = action_to_response(
             &self.canister,
@@ -584,7 +580,7 @@ impl ResponseHelper {
             info!(
                 round.log,
                 "Canister {} received unaccepted {} cycles as refund from canister {}.",
-                self.canister.system_state.canister_id,
+                self.canister.canister_id(),
                 self.refund_for_sent_cycles,
                 self.response_sender,
             );
@@ -665,7 +661,7 @@ impl ResponseHelper {
 /// time slicing execution of a response.
 #[derive(Clone, Debug)]
 struct OriginalContext {
-    callback: Callback,
+    callback: Arc<Callback>,
     call_context_id: CallContextId,
     callback_id: CallbackId,
     call_origin: CallOrigin,
@@ -780,13 +776,19 @@ impl PausedExecution for PausedResponseExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message = CanisterMessage::Response(self.original.message);
+        let message = CanisterMessage::Response {
+            response: self.original.message,
+            callback: self.original.callback,
+        };
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
     }
 
     fn input(&self) -> CanisterMessageOrTask {
-        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
+        CanisterMessageOrTask::Message(CanisterMessage::Response {
+            response: self.original.message.clone(),
+            callback: self.original.callback.clone(),
+        })
     }
 }
 
@@ -880,13 +882,19 @@ impl PausedExecution for PausedCleanupExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message = CanisterMessage::Response(self.original.message);
+        let message = CanisterMessage::Response {
+            response: self.original.message,
+            callback: self.original.callback,
+        };
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
     }
 
     fn input(&self) -> CanisterMessageOrTask {
-        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
+        CanisterMessageOrTask::Message(CanisterMessage::Response {
+            response: self.original.message.clone(),
+            callback: self.original.callback.clone(),
+        })
     }
 }
 
@@ -899,6 +907,7 @@ impl PausedExecution for PausedCleanupExecution {
 pub fn execute_response(
     clean_canister: CanisterState,
     response: Arc<Response>,
+    callback: Arc<Callback>,
     time: Time,
     execution_parameters: ExecutionParameters,
     round: RoundContext,
@@ -908,26 +917,25 @@ pub fn execute_response(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let (callback, callback_id, call_context, call_context_id) =
-        match common::get_call_context_and_callback(
-            &clean_canister,
-            &response,
-            round.log,
-            round.counters.unexpected_response_error,
-        ) {
-            Some(r) => r,
-            None => {
-                // This case is unreachable because the call context and
-                // callback should always exist.
-                return ExecuteMessageResult::Finished {
-                    canister: clean_canister,
-                    instructions_used: NumInstructions::from(0),
-                    heap_delta: NumBytes::from(0),
-                    response: ExecutionResponse::Empty,
-                    call_duration: None,
-                };
-            }
-        };
+    let (call_context, call_context_id) = match common::get_call_context(
+        &clean_canister,
+        &callback,
+        round.log,
+        round.counters.unexpected_response_error,
+    ) {
+        Some(r) => r,
+        None => {
+            // This case is unreachable because the call context and
+            // callback should always exist.
+            return ExecuteMessageResult::Finished {
+                canister: clean_canister,
+                instructions_used: NumInstructions::from(0),
+                heap_delta: NumBytes::from(0),
+                response: ExecutionResponse::Empty,
+                call_duration: None,
+            };
+        }
+    };
 
     let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
         clean_canister.system_state.freeze_threshold,
@@ -943,7 +951,7 @@ pub fn execute_response(
     let original = OriginalContext {
         callback,
         call_context_id,
-        callback_id,
+        callback_id: response.originator_reply_callback,
         call_origin: call_context.call_origin().clone(),
         time,
         call_context_creation_time: call_context.time(),

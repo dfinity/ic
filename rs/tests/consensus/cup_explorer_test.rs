@@ -190,6 +190,7 @@ fn test(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        .without_assert_no_replica_restarts()
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())

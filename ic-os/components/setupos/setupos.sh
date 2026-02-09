@@ -43,6 +43,7 @@ main() {
     /opt/ic/bin/check-config.sh
     /opt/ic/bin/check-hardware.sh
     /opt/ic/bin/check-network.sh
+    /opt/ic/bin/check-guestos-blessed.sh
     /opt/ic/bin/check-ntp.sh
     /opt/ic/bin/setup-disk.sh
     /opt/ic/bin/install-hostos.sh

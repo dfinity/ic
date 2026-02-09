@@ -12,7 +12,7 @@ documentation.workspace = true
 # use dependencies that can be compiled to WebAssembly.
 ########################################################
 hex = { workspace = true }
-ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
+ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
 serde = { workspace = true }

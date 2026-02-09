@@ -4,7 +4,7 @@ on:
   schedule:
     # Note that we would like there to be no overlap between the system-tests-benchmarks-nightly job below
     # and the Release Testing workflow triggered by the Schedule RC workflow.
-    - cron: "0 0 * * *"
+    - cron: "0 1 * * *"
   workflow_dispatch:
 
 env:
@@ -20,7 +20,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:308ba70f44250bdc987039ff886678ebadc0385745e5ad2de9e544e4b410449d
+      image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     timeout-minutes: 720 # 12 hours

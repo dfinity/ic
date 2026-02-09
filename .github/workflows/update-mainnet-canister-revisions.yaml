@@ -25,7 +25,7 @@ jobs:
       labels: dind-small
     environment: CREATE_PR
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:308ba70f44250bdc987039ff886678ebadc0385745e5ad2de9e544e4b410449d
+      image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     env:
