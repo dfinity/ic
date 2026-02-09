@@ -481,7 +481,7 @@ pub mod local {
             .as_ref()
             .map(|(node_id, pub_key)| format!("{}:{}", node_id, pub_key));
         let write_node_id_and_pub_key_cli = opt_cli_arg!(write_node_id_and_pub_key);
-        let recovery_key_file = upload_ssh_key_and_return_cli_arg(
+        let recovery_key_file_cli = upload_ssh_key_and_return_cli_arg(
             session,
             &node_id,
             &node_ip,
