@@ -33,9 +33,6 @@ use url::Url;
     strum_macros::Display,
 )]
 pub enum StepType {
-    /// TODO (CON-XXX): Add a first step that displays node metrics that can help choose an
-    /// up-to-date node for write access and avoid long state upload times.
-
     /// Before we can start the recovery process, we need to prevent the subnet from attempting to
     /// finalize new blocks. This step issues a simple ic-admin command creating a proposal halting
     /// the consensus of the subnet we try to recover. It is recommended to add an SSH key which
@@ -271,6 +268,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
 
                 if self.params.write_node_id_and_pub_key.is_none() {
+                    // Prit node heights to help choose an up-to-date node for write access and
+                    // avoid long state upload times later.
                     print_height_info(
                         &self.logger,
                         &self.recovery.registry_helper,
