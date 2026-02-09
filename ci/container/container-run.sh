@@ -246,7 +246,13 @@ OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --ne
 
 if [ -f "$HOME/.container-run.conf" ]; then
     # conf file with user's custom PODMAN_RUN_USR_ARGS
+    # This file is very handy but is a source of non-hermeticity, and issues
+    # related to it are hard to track down so we print a bold yellow message
+    # when it is in use.
+    tput -T xterm setaf 3
+    tput -T xterm bold
     eprintln "Sourcing user's ~/.container-run.conf"
+    tput -T xterm sgr0
     source "$HOME/.container-run.conf"
     PODMAN_RUN_ARGS+=("${PODMAN_RUN_USR_ARGS[@]}")
 fi
