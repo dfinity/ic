@@ -9,8 +9,14 @@ DEPENDENCIES = [
     "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/networking/network",
     "//rs/ic_os/utils",
+    "//rs/protobuf",
+    "//rs/registry/keys",
+    "//rs/registry/nns_data_provider",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:prost",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []

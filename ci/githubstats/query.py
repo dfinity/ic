@@ -6,18 +6,26 @@
 #
 import argparse
 import contextlib
+import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import threading
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
 import codeowners
+import dacite
 import pandas as pd
 import psycopg
 import requests
+from proto import target_pb2
 from psycopg import sql
 from tabulate import tabulate
 
@@ -25,6 +33,9 @@ THIS_SCRIPT_DIR = Path(__file__).parent
 
 ORG = "dfinity"
 REPO = "ic"
+
+FAILED = "FAILED"
+PASSED = "PASSED"
 
 
 def die(*args):
@@ -212,6 +223,343 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
+def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
+    """
+    Download the logs of all runs of test_target in the given DataFrame,
+    save them to the specified logs_base_dir
+    and annotate the DataFrame with error summaries from the downloaded logs.
+    """
+    original_cwd = Path(os.environ.get("BUILD_WORKING_DIRECTORY", Path.cwd()))
+    test_name = test_target.split(":")[-1]
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    output_dir = original_cwd / logs_base_dir / test_name / timestamp
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Downloading logs to: {output_dir}", file=sys.stderr)
+
+    # Create a new column "error_summaries" in the DataFrame of type dict[int, SystemGroupSummary | str]
+    # mapping the attempt number to either the SystemGroupSummary in case of a system-test
+    # or the last line of the log for other tests.
+    df["error_summaries"] = [{} for _ in range(len(df))]
+
+    # Collect all download tasks
+    download_tasks = []
+    for _ix, row in df.iterrows():
+        # Add a lock to each row for thread-safe updates when annotating the DataFrame with errors below
+        row["lock"] = threading.Lock()
+
+        buildbuddy_url = row["buildbuddy_url"]
+        invocation_id = row["invocation_id"]
+        last_started_at = row["last_started_at"].strftime("%Y-%m-%dT%H:%M:%S")
+        invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
+
+        # Parse the BuildBuddy URL to extract the cluster and its base URL for use with gRPC later.
+        parsed_buildbuddy_url = urllib.parse.urlparse(buildbuddy_url)
+        cluster = parsed_buildbuddy_url.netloc.split(".")[1]  # e.g., "dash.zh1-idx1.dfinity.network'" -> "zh1-idx1"
+        buildbuddy_base_url = f"{parsed_buildbuddy_url.scheme}://{parsed_buildbuddy_url.netloc}"
+
+        # Get all log URLs for this test run
+        log_urls = get_all_log_urls_from_buildbuddy(buildbuddy_base_url, cluster, str(invocation_id), test_target)
+
+        for attempt_num, download_url, attempt_status in log_urls:
+            download_to_path = invocation_dir / str(attempt_num) / f"{attempt_status}.log"
+            download_tasks.append((row, attempt_num, attempt_status, download_url, download_to_path))
+
+    execute_download_tasks(download_tasks, output_dir, df)
+
+    write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
+
+
+def get_all_log_urls_from_buildbuddy(
+    buildbuddy_base_url: str, cluster: str, invocation_id: str, test_target: str
+) -> list[tuple[int, str, str]]:
+    """
+    Get all log download URLs from BuildBuddy using its gRPC-based API.
+
+    Args:
+        buildbuddy_base_url: Base URL like "https://dash.dm1-idx1.dfinity.network"
+        cluster: the IDX cluster like "dm1-idx1" from which bazel-remote we'll download the logs from.
+        invocation_id: The Bazel invocation UUID like "7ba81d70-..."
+        test_target: The Bazel test target like "//rs/tests/consensus/upgrade:upgrade_downgrade_nns_subnet_test"
+
+    Returns:
+        List of tuples: [(attempt_number, download_url, attempt_status), ...]
+        where attempt_status is PASSED or FAILED
+
+    """
+
+    try:
+        # See: https://github.com/buildbuddy-io/buildbuddy/blob/v2.241.0/proto/target.proto
+        target_request = target_pb2.GetTargetRequest()
+        target_request.invocation_id = invocation_id
+        target_request.target_label = test_target
+
+        response = requests.post(
+            f"{buildbuddy_base_url}/rpc/BuildBuddyService/GetTarget",
+            headers={"Content-Type": "application/proto"},
+            data=target_request.SerializeToString(),
+            timeout=10,
+        )
+
+        if not response.ok:
+            return []
+
+        # Parse the protobuf response
+        target_response = target_pb2.GetTargetResponse()
+        target_response.ParseFromString(response.content)
+
+        # Collect all log URLs with their attempt numbers and status
+        log_urls = []
+
+        for target_group in target_response.target_groups:
+            for target in target_group.targets:
+                if not target.HasField("test_summary"):
+                    continue
+
+                # See: https://github.com/buildbuddy-io/buildbuddy/blob/v2.241.0/proto/build_event_stream.proto
+                test_summary = target.test_summary
+
+                # Collect failed attempts
+                for attempt_num, file in enumerate(test_summary.failed, start=1):
+                    if file.uri:
+                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), FAILED))
+
+                # Collect passed attempts (continue numbering from failed attempts)
+                start_num = len(test_summary.failed) + 1
+                for attempt_num, file in enumerate(test_summary.passed, start=start_num):
+                    if file.uri:
+                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), PASSED))
+
+        return log_urls
+
+    except Exception as e:
+        print(f"Error calling BuildBuddy API: {e}", file=sys.stderr)
+        return []
+
+
+def convert_download_url(uri, cluster) -> str:
+    """
+    The log URLs are retrieved from BuildBuddy like:
+
+    "bytestream://bazel-remote.idx.dfinity.network/blobs/{hash}/{size}"
+
+    We could download the log via BuildBuddy using the download_url:
+
+        encoded_file_uri = urllib.parse.quote(uri, safe="")
+        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
+
+    However, to reduce the dependency on BuildBuddy,
+    we download the log directly from our bazel-remote HTTP server at:
+
+    "https://artifacts.{cluster}.dfinity.network/cas/{hash}"
+
+    This has the additional benefit of getting 404 errors instead of 500
+    for already garbage collected logs, which we can handle more gracefully.
+    """
+    parsed = urllib.parse.urlparse(uri)
+    hash = parsed.path.split("/")[2]
+    return f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
+
+
+def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFrame):
+    print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
+
+    def download_log(task):
+        row, attempt_num, attempt_status, download_url, download_to_path = task
+        shortened_path = download_to_path.relative_to(output_dir)
+        try:
+            response = requests.get(download_url, timeout=60, stream=True)
+            if response.ok:
+                download_to_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(download_to_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                # Fork a thread to annotate the DataFrame with the error summary of this log
+                # while the other logs are still downloading to speed up the whole process.
+                thread = threading.Thread(
+                    target=annotate_df_with_summaries, args=(row, attempt_num, attempt_status, download_to_path, df)
+                )
+                thread.start()
+                return thread
+            else:
+                error_line = shorten(response.text.split("\n")[0].strip(), 80)
+                msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
+                if response.status_code == 404:
+                    msg += " The log has probably already been garbage collected from the bazel-remote cache."
+                print(msg, file=sys.stderr)
+                return None
+        except Exception as e:
+            print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
+            return None
+
+    # Download in parallel (limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server).
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        threads = list(executor.map(download_log, download_tasks))
+
+    # Wait for all annotation threads to finish.
+    successes = 0
+    for thread in threads:
+        if thread is not None:
+            successes += 1
+            thread.join()
+
+    # Render the error_summaries to human-readable form.
+    df["errors"] = df["error_summaries"].apply(render_error_summaries)
+
+    print(
+        f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs to {output_dir}",
+        file=sys.stderr,
+    )
+
+
+def annotate_df_with_summaries(row, attempt_num, attempt_status, download_to_path, df):
+    """Annotate the DataFrame with a summary of the error(s)"""
+
+    summary = None
+    lines = download_to_path.read_text().strip().splitlines()
+    last_line = lines[-1]
+    for line in lines:
+        # For uncolocated system-tests the SystemGroupSummary JSON object starts at the beginning of a line.
+        # However for colocated system-tests two SystemGroupSummary JSON objects appear in the logs.
+        # First the SystemGroupSummary of the actual colocated test appears but with log metadata in front of it. This is the one we're interested in.
+        # Then the SystemGroupSummary of the wrapper test-driver appears. This one we want to ignore. For example:
+        #
+        # 2026-02-02 04:28:24.512 INFO[uvms_logs_stream:StdOut] [uvm=colocated-test-driver] TEST_LOG: 2026-02-02 04:28:24.048 INFO[rs/tests/driver/src/driver/log_events.rs:20:9] {"event_name": ... }
+        # ...
+        # {"test_name": ... }
+        #
+        # To handle this we search for JSON objects in ascending order and start parsing from the first '{' character.
+        # Ideally the colocated test-driver would write a single SystemGroupSummary of the colocated test without any log metadata in front of it.
+        ix = line.find("{")
+        if ix == -1:
+            continue
+        obj = line[ix:]
+        # Try parsing the line fragment as a JSON-encoded SystemGroupSummary
+        # and continue with the next line if that fails.
+        try:
+            summary = SystemGroupSummary.from_json(obj)
+            break
+        except ValueError:
+            continue
+
+    with row["lock"]:
+        row["error_summaries"][attempt_num] = (
+            summary if summary is not None else last_line if attempt_status == FAILED else None
+        )
+
+
+@dataclass
+class TaskReport:
+    """Matches the Rust struct `ic_system_test_driver::report::TaskReport`"""
+
+    name: str
+    runtime: float
+    message: Optional[str]
+
+
+@dataclass
+class SystemGroupSummary:
+    """Matches the Rust struct `ic_system_test_driver::report::SystemGroupSummary`"""
+
+    test_name: str
+    success: List[TaskReport]
+    failure: List[TaskReport]
+    skipped: List[TaskReport]
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SystemGroupSummary":
+        return dacite.from_dict(data_class=cls, data=data, config=dacite.Config(strict=True))
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "SystemGroupSummary":
+        try:
+            value = json.loads(json_str)
+            if not isinstance(value, dict):
+                raise ValueError(f"Expected dict but got {type(value).__name__}: {value}")
+            return cls.from_dict(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+        except dacite.DaciteError as e:
+            raise ValueError(f"JSON does not match SystemGroupSummary structure: {e}")
+
+
+def render_error_summaries(summaries: dict[int, SystemGroupSummary | str | None]) -> str:
+    """
+    Render the error summaries of all attempts to a human-readable string. For example:
+
+    "1: upgrade_downgrade_nns_subnet: Replica did reboot, but never came back online!
+        assert_no_replica_restarts: assertion `left == right` failed: The replica process on node 4q7mj-2koq2-vbcih-...
+     2: upgrade_downgrade_nns_subnet: Replica did reboot, but never came back online!
+        assert_no_replica_restarts: assertion `left == right` failed: The replica process on node l6edn-e5wfk-ooxb7-...
+     3: upgrade_downgrade_nns_subnet: Replica did reboot, but never came back online!
+        assert_no_replica_restarts: assertion `left == right` failed: The replica process on node yafn5-op57q-xfatj-..."
+    """
+    lines = []
+    for attempt_num, summary in sorted(summaries.items()):
+        summary_lines = render_error_summary(summary)
+        if len(summary_lines) > 0:
+            lines.append(
+                f"{attempt_num}: {summary_lines[0]}"
+                + (
+                    "\n" + "\n".join([f"   {summary_line}" for summary_line in summary_lines[1:]])
+                    if len(summary_lines[1:]) > 0
+                    else ""
+                )
+            )
+    return "\n".join(lines)
+
+
+def render_error_summary(summary: SystemGroupSummary | str | None) -> list[str]:
+    MAX_ERROR_LINE_LENGTH = 80
+
+    if summary is None:
+        return []
+
+    if isinstance(summary, str):
+        return [shorten(summary, MAX_ERROR_LINE_LENGTH)]
+
+    return [
+        f"{failed_task.name}: {shorten(failed_task.message.replace("\n", "\\n"), MAX_ERROR_LINE_LENGTH)}"
+        for failed_task in summary.failure
+    ]
+
+
+def shorten(msg: str, max_length: int) -> str:
+    if len(msg) > max_length:
+        return msg[:max_length] + "..."
+    return msg
+
+
+def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
+    """
+    Write a nice README.md in the log output directory describing the //ci/githubstats:query invocation
+    that was used to generate the log output directory. This is useful when the invocation has to be redone or tweaked later.
+    """
+    colalignments = [
+        ("last started at (UTC)", "right"),
+        ("duration", "right"),
+        ("status", "left"),
+        ("branch", "left"),
+        ("PR", "left"),
+        ("commit", "left"),
+        ("buildbuddy_url", "left"),
+    ]
+
+    cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
+    columns, alignments = zip(*colalignments)
+    table_md = tabulate(df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments))
+    readme = f"""Logs of `{test_target}`
+===
+Generated at {timestamp} using:
+```
+{cmd}
+```
+{table_md}
+"""
+    readme_path.write_text(readme)
+
+
 def top(args):
     """
     Get the top N non-successful / flaky / failed / timed-out tests
@@ -291,23 +639,24 @@ def top(args):
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
     colalignments = [
-        "decimal",  # idx
-        "left",  # label
-        "decimal",  # total
-        "decimal",  # non_success
-        "decimal",  # flaky
-        "decimal",  # timeout
-        "decimal",  # fail
-        "decimal",  # non_success%
-        "decimal",  # flaky%
-        "decimal",  # timeout%
-        "decimal",  # fail%
-        "right",  # impact
-        "right",  # duration_p90
-        "left",  # owners
+        # (column, alignment)
+        ("label", "left"),
+        ("total", "decimal"),
+        ("non_success", "decimal"),
+        ("flaky", "decimal"),
+        ("timeout", "decimal"),
+        ("fail", "decimal"),
+        ("non_success%", "decimal"),
+        ("flaky%", "decimal"),
+        ("timeout%", "decimal"),
+        ("fail%", "decimal"),
+        ("impact", "right"),
+        ("duration_p90", "right"),
+        ("owners", "left"),
     ]
 
-    print(tabulate(df, headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
+    columns, alignments = zip(*colalignments)
+    print(tabulate(df[list(columns)], headers="keys", tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)))
 
 
 def last(args):
@@ -343,50 +692,56 @@ def last(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
-    # Turn the buildbuddy URLs into terminal hyperlinks to the logs of the test target.
-    # Since the buildbuddy_url column points to the BuildBuddy redirect service
-    # we first need to resolve the redirect to the cluster-specific BuildBuddy URL.
-    # Since this I/O takes time we parallelize it speeding it up by a factor of 6.
-    def direct_url_to_buildbuddy(url):
+    # We need to create links to the cluster-specific BuildBuddy service.
+    # To get the cluster-specific BuildBuddy URL we need to resolve the redirect via the BuildBuddy redirect service.
+    # Since this I/O takes time we parallelize to speed it up by an order of magnitude.
+    def direct_url_to_buildbuddy(invocation_id):
+        url = f"https://dash.idx.dfinity.network/invocation/{invocation_id}"
         redirect = get_redirect_location(url)
-        url = f"{redirect}?target={args.test_target}"
-        return terminal_hyperlink("log", url)
+        return f"{redirect}?target={args.test_target}" if redirect else url
 
     with ThreadPoolExecutor() as executor:
-        df["buildbuddy"] = list(executor.map(direct_url_to_buildbuddy, df["buildbuddy_url"]))
+        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["invocation_id"]))
+
+    df["buildbuddy_links"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
-    df["commit"] = df["commit"].apply(
+    df["commit_link"] = df["commit"].apply(
         lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/{ORG}/{REPO}/commit/{commit}")
     )
 
-    df["last started at (UTC)"] = df["last started at (UTC)"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
+    df["last started at (UTC)"] = df["last_started_at"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
 
-    df["branch"] = df["branch"].apply(
-        lambda branch: terminal_hyperlink(branch, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
+    df["branch_link"] = df["branch"].apply(
+        lambda branch: terminal_hyperlink(shorten(branch, 16), f"https://github.com/{ORG}/{REPO}/tree/{branch}")
     )
 
-    df["PR"] = df["PR"].apply(
+    df["PR_link"] = df["PR"].apply(
         lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
     )
 
-    df = df.drop(columns=["buildbuddy_url"])
-
     df["duration"] = df["duration"].apply(normalize_duration)
 
-    colalignments = [
-        "decimal",  # idx
-        "right",  # last started at (UTC)
-        "right",  # duration
-        "left",  # status
-        "left",  # branch
-        "left",  # PR
-        "left",  # commit
-        "left",  # buildbuddy
-    ]
+    if not args.skip_download:
+        download_and_process_logs(args.logs_base_dir, args.test_target, df)
 
-    columns = list(df.columns)
-    print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
+    colalignments = [
+        # (column, header, alignment)
+        ("last started at (UTC)", "last started at (UTC)", "right"),
+        ("duration", "duration", "right"),
+        ("status", "status", "left"),
+        ("branch_link", "branch", "left"),
+        ("PR_link", "PR", "left"),
+        ("commit_link", "commit", "left"),
+        ("buildbuddy_links", "buildbuddy", "left"),
+    ] + ([] if args.skip_download else [("errors", "errors per attempt", "left")])
+
+    columns, headers, alignments = zip(*colalignments)
+    print(
+        tabulate(
+            df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)
+        )
+    )
 
 
 # argparse formatter to allow newlines in --help.
@@ -414,7 +769,7 @@ def main():
         "--tablefmt",
         metavar="FMT",
         type=str,
-        default="mixed_outline",
+        default="fancy_grid",
         help="Table format. See: https://pypi.org/project/tabulate/",
     )
 
@@ -534,8 +889,8 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
         help="Get the last runs of the specified test in the given period",
         epilog="""
 Examples:
-  # Show the last flaky runs of the rent_subnet_test in the last week
-  bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
+  # Show the last flaky runs of the root_tests in the last week
+  bazel run //ci/githubstats:query -- last --flaky //rs/tests/node:root_tests --week
 
   # Show all runs of a test in a specific date range
   bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'
@@ -548,6 +903,35 @@ Examples:
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
     last_runs_parser.add_argument("--failed", action="store_true", help="Include failed runs")
     last_runs_parser.add_argument("--timedout", action="store_true", help="Include timed-out runs")
+
+    last_runs_parser.add_argument(
+        "--skip-download", action="store_true", help="Don't download logs of the runs, just show the table"
+    )
+
+    last_runs_parser.add_argument(
+        "--logs-base-dir",
+        metavar="DIR",
+        type=str,
+        default="logs",
+        help="""Download the logs of all runs of test_target to {DIR}/{test_name}/{now}.
+That directory will contain log files named like `{invocation_timestamp}_{invocation_id}/{attempt_num}/{attempt_status}.log`, for example:
+logs
+└── upgrade_downgrade_nns_subnet_test
+    └── 2026-02-07T22:09:59
+        ├── 2026-02-02T10:21:15_3b80203d-ff20-42d5-b29c-62ae6aaaf66b
+        │   ├── 1
+        │   │   └── FAILED.log
+        │   └── 2
+        │       └── PASSED.log
+        ├── 2026-02-02T11:43:30_3b054443-e7d8-4013-9897-6778816318c9
+        │   ├── 1
+        │   │   └── FAILED.log
+        │   └── 2
+        │       └── PASSED.log
+        ...
+        └── README.md
+""",
+    )
 
     last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
     last_runs_parser.set_defaults(func=last)
