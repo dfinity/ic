@@ -45,6 +45,7 @@ fn should_parse_constructor_parameters() {
             || canister == TargetCanister::SolRpc
             || canister == TargetCanister::Bitcoin
             || canister == TargetCanister::BtcWatchdog
+            || canister == TargetCanister::DogeWatchdog
             || canister == TargetCanister::Dogecoin
         {
             continue;
@@ -74,7 +75,7 @@ fn should_parse_constructor_parameters() {
                 | (TargetCanister::CkEthLedger, "(LedgerArg)")
                 | (TargetCanister::CkEthMinter, "(MinterArg)")
                 | (TargetCanister::CyclesIndex, "(opt IndexArg)")
-                | (TargetCanister::IcpIndex, "(InitArg)")
+                | (TargetCanister::IcpIndex, "(opt IndexArg)")
                 | (TargetCanister::IcpLedger, "(LedgerCanisterPayload)")
                 | (TargetCanister::LedgerSuiteOrchestrator, "(OrchestratorArg)")
         );

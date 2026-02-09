@@ -441,12 +441,14 @@ rust_test_suite_with_extra_srcs(
     data = [
         ":tests/neurons.csv",
         ":tla_models",
-        "@bazel_tools//tools/jdk:current_java_runtime",
         "@tla_apalache//:bin/apalache-mc",
     ],
     env = {
+
+        # XXX: Apalache struggles to access TLA module files concurrently across threads & processes.
+        # Until this is resolved we limit the concurrency.
+        "RUST_TEST_THREADS": "1",
         "NEURON_CSV_PATH": "$(rootpath :tests/neurons.csv)",
-        "JAVABASE": "$(JAVABASE)",
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
         "TLA_MODULES": "$(locations :tla_models)",
     },
@@ -455,7 +457,7 @@ rust_test_suite_with_extra_srcs(
     ]) + ["tests/fake.rs"],
     flaky = True,  # the governance test times out in over 2% of runs
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
+    tags = ["long_test"],  # the test takes ~800s because of the hard limit on concurrency, see 'RUST_TEST_THREADS'
     deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
     ],

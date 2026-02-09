@@ -57,8 +57,8 @@ use ic_replicated_state::{
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_AGGREGATE_LOG_MEMORY_LIMIT, MIN_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
+    MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
+    SnapshotId, SubnetId, Time,
     ingress::{IngressState, IngressStatus},
     messages::{
         CanisterCall, Payload, RejectContext, Response as CanisterResponse, SignedIngressContent,
@@ -461,24 +461,16 @@ impl CanisterManager {
         let log_memory_limit = settings.log_memory_limit().or(Some(NumBytes::new(
             DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
         )));
-        let (min_limit, max_limit) = (
-            NumBytes::new(MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64),
-            NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64),
-        );
-        match log_memory_limit {
-            Some(bytes) if bytes < min_limit => {
-                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooLow {
-                    bytes,
-                    limit: min_limit,
-                });
-            }
-            Some(bytes) if bytes > max_limit => {
+        if let Some(requested_limit) = log_memory_limit {
+            // User can setup a zero log memory limit to disable logging.
+            // But cannot set it higher than the maximum limit.
+            let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
+            if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
-                    bytes,
+                    bytes: requested_limit,
                     limit: max_limit,
                 });
             }
-            _ => {}
         }
 
         Ok(ValidatedCanisterSettings::new(
