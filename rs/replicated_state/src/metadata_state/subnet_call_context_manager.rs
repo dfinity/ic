@@ -608,13 +608,21 @@ impl SignWithThresholdContext {
 
     pub fn requires_pre_signature(&self) -> bool {
         match &self.args {
+            ThresholdArguments::Ecdsa(args) => args.pre_signature.is_none(),
+            ThresholdArguments::Schnorr(args) => args.pre_signature.is_none(),
+            ThresholdArguments::VetKd(_) => false,
+        }
+    }
+
+    pub fn height(&self) -> Option<Height> {
+        match &self.args {
             ThresholdArguments::Ecdsa(args) => {
-                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+                args.pre_signature.as_ref().map(|pre_sig| pre_sig.height)
             }
             ThresholdArguments::Schnorr(args) => {
-                self.matched_pre_signature.is_none() && args.pre_signature.is_none()
+                args.pre_signature.as_ref().map(|pre_sig| pre_sig.height)
             }
-            ThresholdArguments::VetKd(_) => false,
+            ThresholdArguments::VetKd(args) => Some(args.height),
         }
     }
 

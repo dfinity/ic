@@ -41,8 +41,8 @@ pub(crate) fn update_signature_request_contexts(
     for context in &mut contexts {
         if context.nonce.is_none()
             && context
-                .matched_pre_signature
-                .is_some_and(|(_, height)| height.get() + 1 == current_round.get())
+                .height()
+                .is_some_and(|height| height.get() + 1 == current_round.get())
         {
             let mut nonce = [0u8; 32];
             csprng.fill_bytes(&mut nonce);
