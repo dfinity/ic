@@ -191,7 +191,7 @@ mod tests {
                     fake_node_id(),
                     String::from("Fake write public key"),
                 )),
-                node_write_key_file: Some(PathBuf::from(dir)),
+                recovery_key_file: Some(PathBuf::from(dir)),
                 download_pool_node: None,
                 download_state_method: None,
                 keep_downloaded_state: Some(false),

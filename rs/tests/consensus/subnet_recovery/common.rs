@@ -677,7 +677,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         write_node_id_and_pub_key: cfg
             .provision_write_access
             .then_some((upload_node.node_id, ssh_recovery_pub_key)),
-        node_write_key_file: Some(ssh_recovery_priv_key_path),
+        recovery_key_file: Some(ssh_recovery_priv_key_path),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         download_state_method: Some(DataLocation::Remote(download_state_node.get_ip_addr())),
         keep_downloaded_state: Some(cfg.chain_key),

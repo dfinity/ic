@@ -434,7 +434,7 @@ pub mod local {
             readonly_pub_key,
             readonly_key_file,
             write_node_id_and_pub_key,
-            node_write_key_file,
+            recovery_key_file,
             download_pool_node,
             download_state_method: _, // ignored to choose "local" in local recoveries, see below
             keep_downloaded_state,
@@ -481,12 +481,12 @@ pub mod local {
             .as_ref()
             .map(|(node_id, pub_key)| format!("{}:{}", node_id, pub_key));
         let write_node_id_and_pub_key_cli = opt_cli_arg!(write_node_id_and_pub_key);
-        let node_write_key_file_cli = upload_ssh_key_and_return_cli_arg(
+        let recovery_key_file = upload_ssh_key_and_return_cli_arg(
             session,
             &node_id,
             &node_ip,
             RECOVERY_USERNAME,
-            node_write_key_file.as_deref(),
+            recovery_key_file.as_deref(),
             logger,
         );
         let download_pool_node_cli = opt_cli_arg!(download_pool_node);
@@ -513,7 +513,7 @@ pub mod local {
             {readonly_pub_key_cli} \
             {readonly_key_file_cli} \
             {write_node_id_and_pub_key_cli} \
-            {node_write_key_file_cli} \
+            {recovery_key_file_cli} \
             {download_pool_node_cli} \
             {download_state_method_cli} \
             {keep_downloaded_state_cli} \

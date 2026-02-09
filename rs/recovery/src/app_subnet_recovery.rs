@@ -156,9 +156,10 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long, value_parser=crate::util::node_id_and_pub_key_from_str)]
     pub write_node_id_and_pub_key: Option<(NodeId, String)>,
 
-    /// The path to a file containing the private key associated with `node_write_pub_key`.
+    /// The path to a file containing the private key associated with the public key in
+    /// `write_node_id_and_pub_key`, i.e. for the `recovery` SSH user.
     #[clap(long)]
-    pub node_write_key_file: Option<PathBuf>,
+    pub recovery_key_file: Option<PathBuf>,
 
     /// IP address of the node to download the consensus pool from.
     #[clap(long)]
@@ -493,7 +494,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             StepType::UploadState => {
                 if let Some(method) = self.params.upload_method {
                     let (ssh_user, key_file) = if self.params.write_node_id_and_pub_key.is_some() {
-                        (SshUser::Recovery, self.params.node_write_key_file.clone())
+                        (SshUser::Recovery, self.params.recovery_key_file.clone())
                     } else {
                         (SshUser::Admin, self.recovery.admin_key_file.clone())
                     };
