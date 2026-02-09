@@ -1,7 +1,7 @@
 use crate::driver::farm::VmSpec;
 use crate::driver::ic::VmResources;
 use crate::driver::port_allocator::AddrType;
-use crate::driver::resource::AllocatedVm;
+use crate::driver::resource::{AllocatedVm, BootImage};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
 use crate::driver::{
@@ -79,11 +79,21 @@ impl NestedNodes {
 pub struct NestedNode {
     pub name: String,
     pub vm_resources: VmResources,
+    pub boot_image: BootImage,
 }
 
 impl NestedNode {
     pub fn new(name: String, vm_resources: VmResources) -> Self {
-        NestedNode { name, vm_resources }
+        NestedNode {
+            name,
+            vm_resources,
+            boot_image: BootImage::GroupDefault,
+        }
+    }
+
+    pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {
+        self.boot_image = boot_image;
+        self
     }
 }
 
