@@ -43,7 +43,8 @@ use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
-    Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
+    Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
+    Time,
 };
 use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
@@ -917,6 +918,16 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
+        let mut subnet_admins = BTreeSet::new();
+        for p in subnet_record.subnet_admins.into_iter() {
+            let super_user = PrincipalId::try_from(p).map_err(|err| {
+                ReadRegistryError::Persistent(format!(
+                    "'failed to read subnet admins from subnet record', err: {err:?}"
+                ))
+            })?;
+            subnet_admins.insert(super_user);
+        }
+
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
             .subnet_info
@@ -964,6 +975,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 subnet_size,
                 node_ids: nodes,
                 registry_version,
+                subnet_admins,
             },
             node_public_keys,
             api_boundary_nodes,

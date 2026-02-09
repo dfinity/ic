@@ -211,6 +211,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
         node_ids: BTreeSet::new(),
         registry_version: RegistryVersion::default(),
+        subnet_admins: BTreeSet::new(),
     }
 }
 
@@ -2495,6 +2496,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_network_topology(mut self, network_topology: NetworkTopology) -> Self {
         self.network_topology = Some(network_topology);
+        self
+    }
+
+    pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
+        self.registry_settings.subnet_admins = subnet_admins.into_iter().collect();
         self
     }
 

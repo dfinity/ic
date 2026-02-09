@@ -93,7 +93,7 @@ use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     convert::{Into, TryFrom},
     fmt,
     str::FromStr,
@@ -787,6 +787,7 @@ impl ExecutionEnvironment {
                             &mut state,
                             round_limits,
                             &self.metrics.canister_not_found_error,
+                            &registry_settings.subnet_admins,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into())
@@ -932,8 +933,13 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::StartCanister) => {
                 let res = CanisterIdRecord::decode(payload).and_then(|args| {
-                    self.start_canister(args.get_canister_id(), *msg.sender(), &mut state)
-                        .map(|res| (res, Some(args.get_canister_id())))
+                    self.start_canister(
+                        args.get_canister_id(),
+                        *msg.sender(),
+                        &mut state,
+                        &registry_settings.subnet_admins,
+                    )
+                    .map(|res| (res, Some(args.get_canister_id())))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -946,7 +952,12 @@ impl ExecutionEnvironment {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => self.stop_canister(args.get_canister_id(), &msg, &mut state),
+                Ok(args) => self.stop_canister(
+                    args.get_canister_id(),
+                    &msg,
+                    &mut state,
+                    &registry_settings.subnet_admins,
+                ),
             },
 
             Ok(Ic00Method::DeleteCanister) => {
@@ -956,7 +967,7 @@ impl ExecutionEnvironment {
 
                     let result = self
                         .canister_manager
-                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits)
+                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits, &registry_settings.subnet_admins)
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into());
 
@@ -2289,10 +2300,13 @@ impl ExecutionEnvironment {
         canister_id: CanisterId,
         sender: PrincipalId,
         state: &mut ReplicatedState,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister_mut(canister_id, state)?;
 
-        let result = self.canister_manager.start_canister(sender, canister);
+        let result = self
+            .canister_manager
+            .start_canister(sender, canister, subnet_admins);
 
         match result {
             Ok(stop_contexts) => {
@@ -2408,6 +2422,7 @@ impl ExecutionEnvironment {
         canister_id: CanisterId,
         msg: &CanisterCall,
         state: &mut ReplicatedState,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> ExecuteSubnetMessageResult {
         let call_id = state
             .metadata
@@ -2421,6 +2436,7 @@ impl ExecutionEnvironment {
             canister_id,
             StopCanisterContext::from((msg.clone(), call_id)),
             state,
+            subnet_admins,
         ) {
             StopCanisterResult::RequestAccepted => ExecuteSubnetMessageResult::Processing,
             StopCanisterResult::Failure {
