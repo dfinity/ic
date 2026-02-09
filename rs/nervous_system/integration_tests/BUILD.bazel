@@ -3,9 +3,6 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
-
-
-
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:rust_decimal_macros",
