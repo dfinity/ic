@@ -1021,14 +1021,21 @@ mod verification_failures {
     }
 
     #[test]
-    fn should_fail_to_verify_threshold_sig_share_from_different_dkg() {
+    fn should_fail_to_verify_threshold_sig_share_from_different_dkg_unless_transcript_loaded() {
         let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(1..7);
 
         // Setup first DKG
         let (config1, dkg_id1, crypto_components1) =
             setup_with_random_ni_dkg_config(subnet_size, rng);
-        run_ni_dkg_and_load_transcript_for_receivers(&config1, &crypto_components1);
+
+        let transcript1 = run_ni_dkg_and_create_single_transcript(&config1, &crypto_components1);
+        load_transcript_for_receivers_expecting_status(
+            &config1,
+            &transcript1,
+            &crypto_components1,
+            Some(LoadTranscriptResult::SigningKeyAvailable),
+        );
 
         // Setup second DKG with different nodes
         let (config2, _dkg_id2, crypto_components2) =
@@ -1051,17 +1058,34 @@ mod verification_failures {
             .verify_threshold_sig_share(&sig_share, &msg, &dkg_id1, signer1);
 
         assert_matches!(result, Err(CryptoError::ThresholdSigDataNotFound { .. }));
+
+        // Load DKG1 transcript into verifier2 and try again:
+        crypto_for(verifier2, &crypto_components2)
+            .load_transcript(&transcript1)
+            .expect("Failed to load transcript1 into verifier2");
+
+        let result = crypto_for(verifier2, &crypto_components2)
+            .verify_threshold_sig_share(&sig_share, &msg, &dkg_id1, signer1);
+
+        assert_matches!(result, Ok(()));
     }
 
     #[test]
-    fn should_fail_to_verify_threshold_sig_combined_from_different_dkg() {
+    fn should_fail_to_verify_threshold_sig_combined_from_different_dkg_unless_transcript_loaded() {
         let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(1..7);
 
         // Setup first DKG
         let (config1, dkg_id1, crypto_components1) =
             setup_with_random_ni_dkg_config(subnet_size, rng);
-        run_ni_dkg_and_load_transcript_for_receivers(&config1, &crypto_components1);
+
+        let transcript1 = run_ni_dkg_and_create_single_transcript(&config1, &crypto_components1);
+        load_transcript_for_receivers_expecting_status(
+            &config1,
+            &transcript1,
+            &crypto_components1,
+            Some(LoadTranscriptResult::SigningKeyAvailable),
+        );
 
         // Setup second DKG
         let (config2, _dkg_id2, crypto_components2) =
@@ -1096,6 +1120,19 @@ mod verification_failures {
 
         // Should fail because DKG1's transcript is not loaded in DKG2's components
         assert_matches!(result, Err(CryptoError::ThresholdSigDataNotFound { .. }));
+
+        // Load DKG1 transcript into verifier2 and try again:
+        crypto_for(verifier2, &crypto_components2)
+            .load_transcript(&transcript1)
+            .expect("Failed to load transcript1 into verifier2");
+
+        let result = crypto_for(verifier2, &crypto_components2).verify_threshold_sig_combined(
+            &combined_sig,
+            &msg,
+            &dkg_id1,
+        );
+
+        assert_matches!(result, Ok(()));
     }
 
     #[test]
