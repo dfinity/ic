@@ -1,7 +1,6 @@
 import logging
 import os
 
-from integration.github.github_api import GithubApi
 from model.log_level import get_log_level
 
 LOCKFILE = "Cargo.Bazel.toml.lock"
