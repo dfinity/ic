@@ -52,6 +52,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 ssh_backup_access: vec![],
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                recalled_replica_version_ids: vec![],
             };
 
             let key = make_subnet_record_key(subnet_id);
@@ -170,6 +171,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     ssh_backup_access: vec!["pub_key_1".to_string()],
                     chain_key_config: None,
                     canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                    recalled_replica_version_ids: vec![],
                 }
             );
             Ok(())

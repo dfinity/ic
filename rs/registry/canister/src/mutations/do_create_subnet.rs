@@ -551,6 +551,8 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .map(CanisterCyclesCostSchedulePb::from)
                 .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
                 as i32,
+
+            recalled_replica_version_ids: vec![],
         }
     }
 }

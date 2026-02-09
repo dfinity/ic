@@ -50,6 +50,7 @@ impl Registry {
             operational_level,
             ssh_readonly_access,
             ssh_node_state_write_access,
+            recalled_replica_version_ids,
         } = payload;
 
         let mut mutations: Vec<RegistryMutation> = vec![];
@@ -61,6 +62,7 @@ impl Registry {
                 self.get_subnet_or_panic(subnet_id),
                 operational_level,
                 ssh_readonly_access,
+                recalled_replica_version_ids,
             ));
         }
 
@@ -82,10 +84,16 @@ impl Registry {
             operational_level,
             ssh_readonly_access,
             ssh_node_state_write_access,
+            recalled_replica_version_ids,
         } = payload;
 
         match subnet_id {
             None => {
+                if recalled_replica_version_ids.is_some() {
+                    return Err(
+                        "recalled_replica_version_ids specified, but not subnet_id.".to_string()
+                    );
+                }
                 if operational_level.is_some() {
                     return Err("operational_level specified, but not subnet_id.".to_string());
                 }
@@ -106,6 +114,7 @@ impl Registry {
         validate_operational_level(*operational_level)?;
         validate_ssh_readonly_access(ssh_readonly_access)?;
         validate_ssh_node_state_write_access(ssh_node_state_write_access)?;
+        validate_recalled_replica_version_ids(recalled_replica_version_ids)?;
 
         Ok(())
     }
@@ -185,6 +194,22 @@ fn validate_node_ssh_access(node_ssh_access: &NodeSshAccess) -> Result<(), Strin
     Ok(())
 }
 
+fn validate_recalled_replica_version_ids(
+    recalled_replica_version_ids: &Option<Vec<String>>,
+) -> Result<(), String> {
+    if let Some(version_ids) = recalled_replica_version_ids {
+        for version_id in version_ids {
+            if version_id.is_empty() {
+                return Err(
+                    "recalled_replica_version_ids cannot contain empty strings.".to_string()
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Returns mutation(s) (possibly 0) to subnet_record to effect
 /// operational_level and ssh_readonly_access.
 fn modify_subnet_record_for_set_subnet_operational_level(
@@ -192,6 +217,7 @@ fn modify_subnet_record_for_set_subnet_operational_level(
     mut subnet_record: SubnetRecord,
     operational_level: Option<i32>,
     ssh_readonly_access: Option<Vec<String>>,
+    recalled_replica_version_ids: Option<Vec<String>>,
 ) -> RegistryMutation {
     if let Some(operational_level) = operational_level {
         let is_halted = match operational_level {
@@ -205,6 +231,17 @@ fn modify_subnet_record_for_set_subnet_operational_level(
 
     if let Some(ssh_readonly_access) = ssh_readonly_access {
         subnet_record.ssh_readonly_access = ssh_readonly_access;
+    }
+
+    if let Some(version_ids) = recalled_replica_version_ids {
+        for version_id in version_ids {
+            if !subnet_record
+                .recalled_replica_version_ids
+                .contains(&version_id)
+            {
+                subnet_record.recalled_replica_version_ids.push(version_id);
+            }
+        }
     }
 
     update(
@@ -254,6 +291,7 @@ pub struct SetSubnetOperationalLevelPayload {
     pub operational_level: Option<i32>,
     pub ssh_readonly_access: Option<Vec<String>>,
     pub ssh_node_state_write_access: Option<Vec<NodeSshAccess>>,
+    pub recalled_replica_version_ids: Option<Vec<String>>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize)]
