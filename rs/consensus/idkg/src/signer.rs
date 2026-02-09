@@ -17,8 +17,7 @@ use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{ReplicaLogger, debug, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    ReplicatedState,
-    metadata_state::subnet_call_context_manager::{SignWithThresholdContext},
+    ReplicatedState, metadata_state::subnet_call_context_manager::SignWithThresholdContext,
 };
 use ic_types::{
     Height, NodeId,
