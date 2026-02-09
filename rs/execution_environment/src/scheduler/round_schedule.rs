@@ -447,7 +447,7 @@ impl RoundSchedule {
         // Charge canisters for full executions in this round.
         for canister_id in self.fully_executed_canisters.iter() {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
-            if let Some(_) = canister_states.get(&canister_id) {
+            if canister_states.get(canister_id).is_some() {
                 canister_priority.priority_credit += ONE_HUNDRED_PERCENT;
             }
             canister_priority.last_full_execution_round = current_round;
@@ -485,7 +485,7 @@ impl RoundSchedule {
             .collect::<BTreeSet<_>>();
         for canister_id in relevant_canister_ids {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
-            if let Some(canister) = canister_states.get_mut(&canister_id) {
+            if let Some(canister) = canister_states.get_mut(canister_id) {
                 canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
                 let canister = Arc::make_mut(canister);
                 canister

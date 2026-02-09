@@ -452,7 +452,7 @@ impl SchedulerImpl {
                 .round_inner_iteration_prep_step
                 .with_label_values(&["scheduling"])
                 .start_timer();
-            round_schedule.start_iteration(&mut state, &self.metrics, &round_log);
+            round_schedule.start_iteration(&mut state, &self.metrics, round_log);
             if round_schedule.active_canister_count() == 0 {
                 break state;
             }
@@ -1645,38 +1645,6 @@ impl Scheduler for SchedulerImpl {
         self.finish_round(state, ExecutionRoundType::CheckpointRound);
     }
 }
-
-////////////////////////////////////////////////////////////////////////
-/// Filtered Canisters
-///
-/// This struct represents a collection of canister IDs.
-// struct FilteredCanisters {
-//     /// Active canisters during the execution of the inner round.
-//     active_canister_ids: BTreeSet<CanisterId>,
-
-//     /// Canisters that were heap delta rate-limited during the execution of the inner round.
-//     rate_limited_canister_ids: BTreeSet<CanisterId>,
-// }
-
-// impl FilteredCanisters {
-//     fn new() -> Self {
-//         Self {
-//             active_canister_ids: BTreeSet::new(),
-//             rate_limited_canister_ids: BTreeSet::new(),
-//         }
-//     }
-
-//     fn add_canisters(
-//         &mut self,
-//         active_round_schedule: &RoundSchedule,
-//         rate_limited_ids: &[CanisterId],
-//     ) {
-//         self.active_canister_ids
-//             .extend(active_round_schedule.iter());
-//         self.rate_limited_canister_ids
-//             .extend(rate_limited_ids.iter());
-//     }
-// }
 
 fn observe_instructions_consumed_per_message(
     logger: &ReplicaLogger,
