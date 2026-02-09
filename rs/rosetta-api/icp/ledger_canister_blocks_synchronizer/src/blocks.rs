@@ -1753,16 +1753,18 @@ impl Blocks {
         // and sorting rows. This is significantly faster on large tables. This pattern was
         // successfully applied in the ICRC rosetta service (commit 1a92267b05).
         let block_idx = match connection
-            .prepare_cached(
-                "SELECT MAX(rosetta_block_idx) FROM rosetta_blocks",
-            )
-            .map_err(|e| format!("Unable to prepare query: {e:?}"))?.query_map(params![], |row|
-                row.get(0)
-            ).map_err(|e| BlockStoreError::Other(format!("Unable to select from rosetta_blocks: {e:?}")))?.next(){
-                Some(Ok(block_idx)) => block_idx,
-                Some(Err(e)) => return Err(BlockStoreError::Other(e.to_string())),
-                None =>  None,
-            };
+            .prepare_cached("SELECT MAX(rosetta_block_idx) FROM rosetta_blocks")
+            .map_err(|e| format!("Unable to prepare query: {e:?}"))?
+            .query_map(params![], |row| row.get(0))
+            .map_err(|e| {
+                BlockStoreError::Other(format!("Unable to select from rosetta_blocks: {e:?}"))
+            })?
+            .next()
+        {
+            Some(Ok(block_idx)) => block_idx,
+            Some(Err(e)) => return Err(BlockStoreError::Other(e.to_string())),
+            None => None,
+        };
         Ok(block_idx)
     }
 
