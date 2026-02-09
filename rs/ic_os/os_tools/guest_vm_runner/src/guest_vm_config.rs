@@ -5,7 +5,7 @@ use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, calculate_deterministic_mac};
+use deterministic_ips::calculate_deterministic_mac;
 use std::path::{Path, PathBuf};
 
 // See build.rs
@@ -106,7 +106,6 @@ pub fn generate_vm_config(
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,
-        IpVariant::V6,
         node_type,
     );
 
