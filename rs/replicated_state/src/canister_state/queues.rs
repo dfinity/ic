@@ -1364,9 +1364,9 @@ impl CanisterQueues {
 
     /// Returns `true` if calling `garbage_collect()` would actually do something.
     ///
-    /// Time complexity: `O(num_queues)`.
-    pub fn can_garbage_collect(&self) -> bool {
-        // Garbage collect if any input queue / output queue pair are both empty...
+    /// Time complexity: `O(|canister_queues|)`.
+    pub(crate) fn can_garbage_collect(&self) -> bool {
+        // Can garbage collect if any input queue / output queue pair are both empty...
         self.canister_queues
             .iter()
             .any(|(_, (input_queue, output_queue))| {
@@ -1388,7 +1388,7 @@ impl CanisterQueues {
     /// every round; but not e.g. when deserializing, which may happen at
     /// different times on restarting or state syncing replicas).
     ///
-    /// Time complexity: `O(num_queues)`.
+    /// Time complexity: `O(|canister_queues|)`.
     pub fn garbage_collect(&mut self) {
         self.garbage_collect_impl();
 

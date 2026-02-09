@@ -1597,7 +1597,7 @@ impl SystemState {
 
     /// Returns `true` if calling `garbage_collect_canister_queues()` would actually
     /// mutate the canister queues.
-    pub fn can_garbage_collect_canister_queues(&self) -> bool {
+    pub(crate) fn can_garbage_collect_canister_queues(&self) -> bool {
         self.queues.can_garbage_collect()
     }
 
