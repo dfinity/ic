@@ -1,4 +1,4 @@
-pipeline_poisioin_test
+ctf-pipline-test==1.0.0
 ansible>=12.2.0
 cbor>=1.0.0
 cbor2>=5.8.0
