@@ -19,7 +19,7 @@ clap = { workspace = true }
 ctrlc = { version = "3.4.5", features = ["termination"] }
 cycles-minting-canister = { path = "../nns/cmc" }
 flate2 = { workspace = true }
-fqdn = "0.3.11"
+fqdn = { version = "0.5.2", features = ["serde"] }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
@@ -109,7 +109,7 @@ flate2 = { workspace = true }
 ic-btc-adapter-test-utils = { path = "../bitcoin/adapter/test_utils" }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
-nix = { version = "0.29.0" }
+nix = { version = "0.29.0", features = ["process", "signal"] }
 prometheus = { workspace = true }
 rcgen = { workspace = true }
 reqwest = { workspace = true }

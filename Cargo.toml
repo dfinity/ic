@@ -674,8 +674,8 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
-ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
-ic-bn-lib = { version = "0.1.7", features = ["acme-alpn"] }
+ic-agent = { version = "0.45.0", features = ["pem", "ring"] }
+ic-bn-lib = { version = "0.1.14", features = ["acme-alpn"] }
 ic-bn-lib-common = "0.1"
 ic-btc-interface = "0.2.3"
 ic-canister-runtime = "0.1.0"
@@ -686,7 +686,7 @@ ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
 ic-doge-interface = "0.1.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "92ee522a4514584ccf6de487ba40d92063effd9a", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.4.0", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730" }
 ic-identity-hsm = "0.40.1"
@@ -695,7 +695,7 @@ ic-response-verification = "3"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
-ic-utils = { version = "0.40.1", features = ["raw"] }
+ic-utils = { version = "0.45.0", features = ["raw"] }
 ic-vetkeys = "0.6.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
@@ -909,8 +909,10 @@ wasmprinter = "0.243.0"
 wast = "243.0.0"
 wat = "1.243.0"
 which = "6.0.3"
-wirm = { version = "2.1.0", features = ["parallel"] }
+wirm = { version = "=2.1.0", features = ["parallel"] }
 wsl = "0.1.0"
+xz2 = { version = "0.1.7", features = ["static"] }
+>>>>>>> 0d9d116f1a (fix(pocket-ic-server): Update dependencies after ic-agent upgrade)
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 xz2 = { version = "0.1.7", features = ["static"] }
