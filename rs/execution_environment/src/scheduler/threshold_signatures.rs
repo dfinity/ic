@@ -666,7 +666,6 @@ mod tests {
                 subnet_size: 0,
                 node_ids: BTreeSet::new(),
                 registry_version: RegistryVersion::from(0),
-                canister_cycles_cost_schedule: Default::default(),
             },
             &SchedulerMetrics::new(&MetricsRegistry::new()),
             &SchedulerConfig {
