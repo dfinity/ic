@@ -86,11 +86,12 @@ pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
 ) -> HashSet<(NiDkgId, NodeId)> {
-    let (dkg_dealings, _) = extract_from_dkg_dealing_messages(pool_reader, block, false, |_| ());
-    dkg_dealings
+    let (dealers_by_dkg_id, _) =
+        extract_from_dkg_dealing_messages(pool_reader, block, false, |_| ());
+    dealers_by_dkg_id
         .into_iter()
-        .flat_map(|(dkg_id, dealings)| {
-            dealings
+        .flat_map(|(dkg_id, dealers)| {
+            dealers
                 .into_keys()
                 .map(move |node_id| (dkg_id.clone(), node_id))
         })
@@ -216,8 +217,8 @@ mod tests {
         Height, RegistryVersion,
         batch::BatchPayload,
         consensus::{
-            Block, BlockPayload, BlockProposal, DataPayload, Payload, Rank,
-            dkg::DkgDataPayload, idkg,
+            Block, BlockPayload, BlockProposal, DataPayload, Payload, Rank, dkg::DkgDataPayload,
+            idkg,
         },
         crypto::{
             crypto_hash,
