@@ -75,6 +75,15 @@ fn bitcoin_canister_proposal() -> ProposalInfo {
     }
 }
 
+#[test]
+#[should_panic(expected = "mixing application and protocol canister topics")]
+fn should_not_mix_protocol_and_application_canister_topics() {
+    let _ = ForumTopic::for_upgrade_proposals(vec![
+        bitcoin_canister_proposal(),
+        ckbtc_ledger_proposal(),
+    ]);
+}
+
 fn ckbtc_ledger_proposal() -> ProposalInfo {
     ProposalInfo {
         proposal_id: 137360,
