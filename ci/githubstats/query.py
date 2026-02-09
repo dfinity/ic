@@ -270,13 +270,14 @@ def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame)
 
 def get_all_log_urls_from_buildbuddy(
     buildbuddy_base_url: str, cluster: str, invocation_id: str, test_target: str
-) -> list:
+) -> list[tuple[int, str, str]]:
     """
     Get all log download URLs from BuildBuddy using its gRPC-based API.
 
     Args:
         buildbuddy_base_url: Base URL like "https://dash.dm1-idx1.dfinity.network"
-        invocation_id: The invocation UUID like "7ba81d70-..."
+        cluster: the IDX cluster like "dm1-idx1" from which bazel-remote we'll download the logs from.
+        invocation_id: The Bazel invocation UUID like "7ba81d70-..."
         test_target: The Bazel test target like "//rs/tests/consensus/upgrade:upgrade_downgrade_nns_subnet_test"
 
     Returns:
