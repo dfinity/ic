@@ -417,10 +417,10 @@ mod tests {
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-subnet \
             --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
-            --test-neuron-proposer \
             --is-halted true \
             --ssh-readonly-access \"fake public key\" \
-            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\""
+            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\" \
+            --test-neuron-proposer"
         );
     }
 

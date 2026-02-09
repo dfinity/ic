@@ -158,10 +158,10 @@ mod tests {
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-subnet \
             --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
-            --test-neuron-proposer \
             --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe at cup height and optionally update ssh readonly access\" \
             --halt-at-cup-height true \
-            --ssh-readonly-access \"fake ssh key\""
+            --ssh-readonly-access \"fake ssh key\" \
+            --test-neuron-proposer"
         );
     }
 
