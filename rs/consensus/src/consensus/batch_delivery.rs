@@ -308,7 +308,7 @@ pub(crate) fn deliver_batches_with_result_processor(
 
 /// This function creates responses to the system calls that are redirected to
 /// consensus. There are two types of calls being handled here:
-/// - Initial NiDKG transcript creation, where a response may come from summary payloads.
+/// - Initial NiDKG transcript creation, where a response may come from summary or data payloads.
 /// - Canister threshold signature creation, where a response may come from from data payloads.
 /// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
 fn generate_responses_to_subnet_calls(
