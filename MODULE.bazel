@@ -886,6 +886,23 @@ http_archive(
     url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-amd64.tar.gz",
 )
 
+## For //ci/githubstats:query to query our BuildBuddy services via protobuf-based RPC to fetch logs
+
+http_archive(
+    name = "buildbuddy_proto",
+    files = {
+        "BUILD.bazel": "//ci/githubstats:BUILD.buildbuddy-proto.bazel",
+    },
+    patch_cmds = [
+        # Remove everything except ./proto/
+        "find . -mindepth 1 -maxdepth 1 ! -name proto -exec rm -rf {} +",
+        "find ./proto -name BUILD -delete",
+    ],
+    sha256 = "9c675c30ae4c7e41018ad5539fc27287221d31fc3ab7c6439a30f46c4325c56a",
+    strip_prefix = "buildbuddy-2.241.0",
+    url = "https://github.com/buildbuddy-io/buildbuddy/archive/refs/tags/v2.241.0.tar.gz",
+)
+
 ## shfmt, for formatting bash code
 
 http_file(
