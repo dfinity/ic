@@ -40,7 +40,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.12.0";
+pub const CONFIG_VERSION: &str = "1.13.0";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
@@ -205,20 +205,6 @@ pub struct GuestOSUpgradeConfig {
 /// GuestOS-specific settings.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSSettings {
-    /// Externally generated cryptographic keys.
-    /// Must be a directory with contents matching the internal representation of the ic_crypto directory.
-    /// When given, this provides the private keys of the node.
-    /// If not given, the node will generate its own private/public key pair.
-    #[serde(default)]
-    pub inject_ic_crypto: bool,
-    #[serde(default)]
-    pub inject_ic_state: bool,
-    /// Initial registry state.
-    /// Must be a directory with contents matching the internal representation of the ic_registry_local_store.
-    /// When given, this provides the initial state of the registry.
-    /// If not given, the node will fetch (initial) registry state from the NNS.
-    #[serde(default)]
-    pub inject_ic_registry_local_store: bool,
     pub guestos_dev_settings: GuestOSDevSettings,
 }
 
