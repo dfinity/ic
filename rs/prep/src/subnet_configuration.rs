@@ -323,7 +323,7 @@ impl SubnetConfig {
             ssh_backup_access: self.ssh_backup_access,
             chain_key_config: self.chain_key_config,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
-            super_users: vec![],
+            subnet_admins: vec![],
         };
 
         let dkg_dealing_encryption_pubkeys: BTreeMap<_, _> = initialized_nodes

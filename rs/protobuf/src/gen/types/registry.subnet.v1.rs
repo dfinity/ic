@@ -73,9 +73,9 @@ pub struct SubnetRecord {
     /// means to behave according to the `subnet_type` field.
     #[prost(enumeration = "CanisterCyclesCostSchedule", tag = "30")]
     pub canister_cycles_cost_schedule: i32,
-    /// List of principals that have super-user privileges on the subnet.
+    /// List of principals that have admin privileges on the subnet.
     #[prost(message, repeated, tag = "31")]
-    pub super_users: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {

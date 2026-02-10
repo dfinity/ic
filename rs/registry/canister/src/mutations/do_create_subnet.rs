@@ -287,7 +287,7 @@ pub struct CreateSubnetPayload {
     /// preferred over None though, because explicit is better than implicit.
     pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
 
-    pub super_users: Option<Vec<PrincipalId>>,
+    pub subnet_admins: Option<Vec<PrincipalId>>,
 
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub ingress_bytes_per_block_soft_cap: u64,
@@ -556,8 +556,8 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .map(CanisterCyclesCostSchedulePb::from)
                 .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
                 as i32,
-            super_users: val
-                .super_users
+            subnet_admins: val
+                .subnet_admins
                 .unwrap_or_default()
                 .into_iter()
                 .map(PrincipalIdPb::from)
