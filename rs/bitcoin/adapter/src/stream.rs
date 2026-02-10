@@ -335,7 +335,7 @@ pub fn handle_stream<
                 stream
             }
             Err(err) => {
-                error!(every_n_seconds => 300, &logger, "Failed to connect to {} ::: {}", address, err);
+                error!(&logger, "Failed to connect to {} ::: {}", address, err);
                 let kind = match err {
                     StreamError::Io(_) => StreamEventKind::FailedToConnect,
                     StreamError::Timeout => StreamEventKind::FailedToConnect,
