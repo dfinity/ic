@@ -12,9 +12,7 @@ use ic_embedders::{
         system_api_complexity,
     },
 };
-use ic_interfaces::execution_environment::{
-    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
-};
+use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
