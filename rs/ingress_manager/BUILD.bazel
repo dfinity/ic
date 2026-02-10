@@ -42,7 +42,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:rand",
     "@crate_index//:rstest",
-    "@crate_index//:tokio",
 ]
 
 rust_library(

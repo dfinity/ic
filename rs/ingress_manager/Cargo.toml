@@ -46,7 +46,6 @@ pprof = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
 rstest = { workspace = true }
-tokio = { workspace = true }
 
 [[bench]]
 name = "build_payload"

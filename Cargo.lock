@@ -10576,7 +10576,6 @@ dependencies = [
  "rand 0.8.5",
  "rstest",
  "slog",
- "tokio",
 ]
 
 [[package]]

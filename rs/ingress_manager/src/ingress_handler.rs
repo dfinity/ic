@@ -232,8 +232,8 @@ mod tests {
     use std::time::Duration;
     use std::{collections::HashSet, sync::Arc};
 
-    #[tokio::test]
-    async fn test_ingress_on_state_change_valid() {
+    #[test]
+    fn test_ingress_on_state_change_valid() {
         let time = UNIX_EPOCH;
         let mut consensus_time = MockConsensusTime::new();
         consensus_time
@@ -268,8 +268,8 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_ingress_on_state_change_too_many_get_removed() {
+    #[test]
+    fn test_ingress_on_state_change_too_many_get_removed() {
         let time = UNIX_EPOCH;
         let mut consensus_time = MockConsensusTime::new();
         consensus_time
@@ -336,8 +336,8 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_ingress_on_state_change_invalid() {
+    #[test]
+    fn test_ingress_on_state_change_invalid() {
         let time = UNIX_EPOCH;
         let mut consensus_time = MockConsensusTime::new();
         consensus_time
@@ -386,8 +386,8 @@ mod tests {
 
     /// Verify that a message with an expiry time after MAX_INGRESS_TTL is
     /// removed from the unvalidated pool
-    #[tokio::test]
-    async fn test_ingress_on_state_change_invalid_expiry() {
+    #[test]
+    fn test_ingress_on_state_change_invalid_expiry() {
         let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
         ingress_hist_reader
             .expect_get_latest_status()
@@ -434,8 +434,8 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_ingress_on_state_change_remove_validated() {
+    #[test]
+    fn test_ingress_on_state_change_remove_validated() {
         let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
         ingress_hist_reader
             .expect_get_latest_status()
@@ -486,8 +486,8 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_ingress_signature_verification() {
+    #[test]
+    fn test_ingress_signature_verification() {
         let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
         ingress_hist_reader
             .expect_get_latest_status()

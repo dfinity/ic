@@ -749,9 +749,6 @@ impl<T: IngressSetQuery> IngressSetQuery for IngressSetChain<'_, T> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    // NOTE: These tests need to be run in a tokio runtime, because they internally
-    // use the `RegistryClient` which spawns tokio tasks. Without tokio, the tests
-    // would compile but panic at runtime.
     use super::*;
     use crate::{
         RandomStateKind,
@@ -803,8 +800,8 @@ pub(crate) mod tests {
     const MAX_INGRESS_SIZE_BYTES: usize = 2 * 1024 * 1024;
     const MAX_WIRE_BYTES: NumBytes = NumBytes::new(1000);
 
-    #[tokio::test]
-    async fn test_get_empty_ingress_payload() {
+    #[test]
+    fn test_get_empty_ingress_payload() {
         setup(|ingress_manager, _| {
             let ingress_msgs = ingress_manager.get_ingress_payload(
                 &HashSet::new(),
@@ -819,8 +816,8 @@ pub(crate) mod tests {
         })
     }
 
-    #[tokio::test]
-    async fn test_validate_empty_ingress_payload() {
+    #[test]
+    fn test_validate_empty_ingress_payload() {
         setup(|ingress_manager, _| {
             let ingress_validation = ingress_manager.validate_ingress_payload(
                 &IngressPayload::default(),
@@ -837,8 +834,7 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn test_validate_ingress_payload_max_messages(
+    fn test_validate_ingress_payload_max_messages(
         #[values[true, false]] hashes_in_blocks_enabled: bool,
     ) {
         setup(|mut ingress_manager, _| {
@@ -875,8 +871,8 @@ pub(crate) mod tests {
         })
     }
 
-    #[tokio::test]
-    async fn test_expiry_get_payload() {
+    #[test]
+    fn test_expiry_get_payload() {
         setup_with_params(
             None,
             None,
@@ -948,8 +944,8 @@ pub(crate) mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_expiry_validate_payload() {
+    #[test]
+    fn test_expiry_validate_payload() {
         setup_with_params(
             None,
             None,
@@ -1046,9 +1042,9 @@ pub(crate) mod tests {
         );
     }
 
-    #[tokio::test]
+    #[test]
     // Validation should fail if the ingress message exists in the past payload
-    async fn test_validate_ingress_payload_exists() {
+    fn test_validate_ingress_payload_exists() {
         setup(|ingress_manager, _| {
             let ingress_msg1 = SignedIngressBuilder::new()
                 .nonce(2)
@@ -1075,8 +1071,8 @@ pub(crate) mod tests {
         });
     }
 
-    #[tokio::test]
-    async fn test_get_ingress_payload_once() {
+    #[test]
+    fn test_get_ingress_payload_once() {
         setup_with_params(
             None,
             None,
@@ -1125,8 +1121,8 @@ pub(crate) mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_get_ingress_payload_twice() {
+    #[test]
+    fn test_get_ingress_payload_twice() {
         setup_with_params(
             None,
             None,
@@ -1187,9 +1183,8 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[tokio::test]
     // Select two small messages in the artifact pool
-    async fn test_get_payload_small_size_accumulation(
+    fn test_get_payload_small_size_accumulation(
         #[values(true, false)] hashes_in_blocks_enabled: bool,
     ) {
         setup_with_params(
@@ -1259,9 +1254,8 @@ pub(crate) mod tests {
 
     #[rstest]
     #[trace]
-    #[tokio::test]
     // Select only one out of two big messages in the artifact pool
-    async fn test_get_payload_large_size_accumulation(
+    fn test_get_payload_large_size_accumulation(
         #[values(true, false)] hashes_in_blocks_enabled: bool,
         #[values(None, Some(2 * MAX_INGRESS_SIZE_BYTES - 1))] memory_bytes_limit: Option<usize>,
     ) {
@@ -1341,9 +1335,8 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[tokio::test]
     // Validation should fail if the history status of ingress message is "Received"
-    async fn test_validate_ingress_payload_invalid_history(
+    fn test_validate_ingress_payload_invalid_history(
         #[values(true, false)] hashes_in_blocks_enabled: bool,
     ) {
         let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
@@ -1390,10 +1383,9 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[tokio::test]
     // Validation should fail if the history status of ingress message returns an
     // error
-    async fn test_validate_ingress_payload_error_history(
+    fn test_validate_ingress_payload_error_history(
         #[values(true, false)] hashes_in_blocks_enabled: bool,
     ) {
         let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
@@ -1432,10 +1424,10 @@ pub(crate) mod tests {
         )
     }
 
-    #[tokio::test]
+    #[test]
     // If the ingress message is invalid, it should be ignored and the next
     // ingress message should be added to the payload.
-    async fn test_get_ingress_payload_invalid_ingress() {
+    fn test_get_ingress_payload_invalid_ingress() {
         let ingress_msg1 = SignedIngressBuilder::new()
             .canister_id(canister_test_id(0))
             .nonce(2)
@@ -1519,8 +1511,8 @@ pub(crate) mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_ingress_signature_verification() {
+    #[test]
+    fn test_ingress_signature_verification() {
         setup_with_params(
             None,
             None,
@@ -1586,8 +1578,8 @@ pub(crate) mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_get_payload_canister_has_sufficient_cycles() {
+    #[test]
+    fn test_get_payload_canister_has_sufficient_cycles() {
         let subnet_id = subnet_test_id(0);
         let registry = set_up_registry(
             subnet_id,
@@ -1702,9 +1694,9 @@ pub(crate) mod tests {
         )
     }
 
-    #[tokio::test]
+    #[test]
     // Validation should fail if receiving canisters has insufficient balance.
-    async fn test_validate_canister_has_insufficient_balance() {
+    fn test_validate_canister_has_insufficient_balance() {
         let subnet_id = subnet_test_id(0);
         let registry = set_up_registry(
             subnet_id,
@@ -1762,9 +1754,9 @@ pub(crate) mod tests {
         );
     }
 
-    #[tokio::test]
+    #[test]
     // Validation should fail if receiving canister doesn't exist.
-    async fn test_validate_canister_not_found() {
+    fn test_validate_canister_not_found() {
         let subnet_id = subnet_test_id(0);
         let registry = set_up_registry(
             subnet_id,
@@ -1807,8 +1799,8 @@ pub(crate) mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_validate_management_message_to_non_existing_canister() {
+    #[test]
+    fn test_validate_management_message_to_non_existing_canister() {
         let subnet_id = subnet_test_id(0);
         let registry = set_up_registry(
             subnet_id,
@@ -1856,9 +1848,9 @@ pub(crate) mod tests {
         );
     }
 
-    #[tokio::test]
+    #[test]
     // Validation should succeed if receiving canister is subnet or IC00
-    async fn test_validate_management_message_to_existing_canister_with_sufficient_cycles() {
+    fn test_validate_management_message_to_existing_canister_with_sufficient_cycles() {
         let subnet_id = subnet_test_id(0);
         let registry = set_up_registry(
             subnet_id,
@@ -1912,8 +1904,8 @@ pub(crate) mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_validate_management_message_to_existing_canister_with_insufficient_cycles() {
+    #[test]
+    fn test_validate_management_message_to_existing_canister_with_insufficient_cycles() {
         let subnet_id = subnet_test_id(0);
         let registry = set_up_registry(
             subnet_id,
@@ -2118,8 +2110,8 @@ pub(crate) mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_validate_invalid_management_message() {
+    #[test]
+    fn test_validate_invalid_management_message() {
         let subnet_id = subnet_test_id(0);
         let registry = set_up_registry(
             subnet_id,
@@ -2199,8 +2191,7 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn test_nearly_oversized_ingress(#[values(true, false)] hashes_in_blocks_enabled: bool) {
+    fn test_nearly_oversized_ingress(#[values(true, false)] hashes_in_blocks_enabled: bool) {
         const MAX_SIZE: usize = 4 * 1024 * 1024;
         const ALMOST_MAX_SIZE: usize = MAX_SIZE - 140;
 
@@ -2401,8 +2392,7 @@ pub(crate) mod tests {
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn test_not_stuck(#[values(true, false)] hashes_in_blocks_enabled: bool) {
+    fn test_not_stuck(#[values(true, false)] hashes_in_blocks_enabled: bool) {
         const MSG_SIZE: usize = 154;
         const CANISTER_COUNT: usize = MSG_SIZE + 1;
         const MAX_SIZE: usize = MSG_SIZE * (CANISTER_COUNT + 1);
