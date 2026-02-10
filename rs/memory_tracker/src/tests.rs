@@ -13,7 +13,6 @@ use rstest::rstest;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::sync::Mutex;
 
 use crate::{
