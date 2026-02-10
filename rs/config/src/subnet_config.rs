@@ -26,7 +26,7 @@ pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions
 // The limit on the number of instructions a message is allowed to execute
 // for a single query or composite query method.
 // Going above the limit results in an `InstructionLimitExceeded` error.
-pub(crate) const MAX_INSTRUCTIONS_PER_QUERY_MESSAGE: NumInstructions = NumInstructions::new(5 * B);
+pub const MAX_INSTRUCTIONS_PER_QUERY_MESSAGE: NumInstructions = NumInstructions::new(5 * B);
 
 // The limit on the number of instructions a slice is allowed to executed.
 // If deterministic time slicing is enabled, then going above this limit

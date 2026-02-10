@@ -34,8 +34,6 @@ use std::collections::BTreeMap;
 use std::io::Read;
 use std::time::Duration;
 use tempfile::TempDir;
-#[cfg(windows)]
-use wslpath::windows_to_wsl;
 
 mod common;
 
@@ -1020,12 +1018,7 @@ fn read_registry() {
 )]
 fn with_all_icp_features_and_nns_state() {
     let state_dir = TempDir::new().unwrap();
-    #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();
-    #[cfg(windows)]
-    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let _pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
@@ -1036,12 +1029,7 @@ fn with_all_icp_features_and_nns_state() {
 #[tokio::test]
 async fn with_all_icp_features_and_nns_subnet_state() {
     let state_dir = TempDir::new().unwrap();
-    #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();
-    #[cfg(windows)]
-    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let (_, url) = start_server(StartServerParams::default()).await;
     let client = reqwest::Client::new();

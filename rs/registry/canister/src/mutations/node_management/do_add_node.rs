@@ -189,7 +189,7 @@ impl Registry {
             ));
         }
 
-        let chip_id = extract_chip_id_from_payload(&payload)?;
+        let chip_id = self.extract_chip_id_from_payload(&payload)?;
 
         // Create the Node Record
         let node_record = NodeRecord {
@@ -234,6 +234,43 @@ impl Registry {
         self.get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
             .is_some()
     }
+
+    /// Extracts the chip_id from the AddNodePayload.
+    ///
+    /// If `node_registration_attestation` is provided, it will be parsed and verified,
+    /// and the chip_id will be extracted from the attestation report.
+    ///
+    /// If `node_registration_attestation` is not provided, returns `None` (non-SEV node).
+    fn extract_chip_id_from_payload(
+        &self,
+        payload: &AddNodePayload,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let Some(attestation_package) = &payload.node_registration_attestation else {
+            return Ok(None);
+        };
+
+        let expected_custom_data = NodeRegistrationAttestationCustomData {
+            node_signing_pk: OctetStringRef::new(&payload.node_signing_pk)
+                .expect("node_signing_pk must be valid"),
+        };
+
+        let parsed = ParsedSevAttestationPackage::parse(
+            attestation_package.clone(),
+            SevRootCertificateVerification::Verify,
+        )
+        .verify_custom_data(&expected_custom_data)
+        .verify_measurement(&self.get_all_blessed_guest_launch_measurements())
+        .map_err(|e| format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}"))?;
+
+        let chip_id = parsed.attestation_report().chip_id.to_vec();
+
+        println!(
+            "{LOG_PREFIX}do_add_node: Successfully extracted chip_id from attestation report: {}",
+            hex::encode(&chip_id)
+        );
+
+        Ok(Some(chip_id))
+    }
 }
 
 // try to convert input string into NodeRewardType enum
@@ -264,41 +301,6 @@ pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
             port: sa.port() as u32, // because protobufs don't have u16
         },
     }
-}
-
-/// Extracts the chip_id from the AddNodePayload.
-///
-/// If `node_registration_attestation` is provided, it will be parsed and verified,
-/// and the chip_id will be extracted from the attestation report.
-///
-/// If `node_registration_attestation` is not provided, returns `None` (non-SEV node).
-fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u8>>, String> {
-    let Some(attestation_package) = &payload.node_registration_attestation else {
-        return Ok(None);
-    };
-
-    // Compute the expected custom data using the node signing public key
-    // This ensures the attestation was generated specifically for this node
-    let expected_custom_data = NodeRegistrationAttestationCustomData {
-        node_signing_pk: OctetStringRef::new(&payload.node_signing_pk)
-            .expect("node_signing_pk must be valid"),
-    };
-
-    let parsed = ParsedSevAttestationPackage::parse(
-        attestation_package.clone(),
-        SevRootCertificateVerification::Verify,
-    )
-    .verify_custom_data(&expected_custom_data)
-    .map_err(|e| format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}"))?;
-
-    let chip_id = parsed.attestation_report().chip_id.to_vec();
-
-    println!(
-        "{LOG_PREFIX}do_add_node: Successfully extracted chip_id from attestation report: {}",
-        hex::encode(&chip_id)
-    );
-
-    Ok(Some(chip_id))
 }
 
 /// Validates the payload and extracts node's public keys

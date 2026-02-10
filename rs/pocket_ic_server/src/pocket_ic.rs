@@ -56,7 +56,7 @@ use ic_https_outcalls_service::HttpsOutcallResponse;
 use ic_https_outcalls_service::HttpsOutcallResult;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsService;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
-use ic_icp_index::InitArg as IcpIndexInitArg;
+use ic_icp_index::{IndexArg as IcpIndexArg, InitArg as IcpIndexInitArg};
 use ic_icrc1_index_ng::{IndexArg as CyclesLedgerIndexArg, InitArg as CyclesLedgerIndexInitArg};
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
@@ -537,6 +537,58 @@ impl Subnets for SubnetsImpl {
     }
 }
 
+struct PocketIcStateDir {
+    state_dir: Option<PathBuf>,
+    wsl_native_state_dir: Option<TempDir>,
+}
+
+impl PocketIcStateDir {
+    fn new(state_dir: Option<PathBuf>) -> Result<Self, String> {
+        if wsl::is_wsl()
+            && let Some(state_dir) = state_dir
+        {
+            let temp_dir = TempDir::new()
+                .map_err(|e| format!("Failed to create WSL-native state directory: {e}"))?;
+            let temp_dir_path = temp_dir.path();
+
+            copy_dir(&state_dir, temp_dir_path)
+                .map_err(|e| format!("Failed to copy state to WSL-native state directory: {e}"))?;
+
+            Ok(Self {
+                state_dir: Some(state_dir),
+                wsl_native_state_dir: Some(temp_dir),
+            })
+        } else {
+            Ok(Self {
+                state_dir,
+                wsl_native_state_dir: None,
+            })
+        }
+    }
+
+    fn get(&self) -> Option<PathBuf> {
+        self.wsl_native_state_dir
+            .as_ref()
+            .map(|temp_dir| temp_dir.path().to_path_buf())
+            .or_else(|| self.state_dir.clone())
+    }
+}
+
+impl Drop for PocketIcStateDir {
+    fn drop(&mut self) {
+        if let Some(ref wsl_native_state_dir) = self.wsl_native_state_dir
+            && let Some(ref state_dir) = self.state_dir
+        {
+            // clear state directory first
+            remove_dir_contents(state_dir).expect("Failed to clear state directory");
+
+            // now copy back state from the WSL-native state directory
+            copy_dir(wsl_native_state_dir.path(), state_dir)
+                .expect("Failed to copy back state from WSL-native state directory");
+        }
+    }
+}
+
 struct PocketIcSubnets {
     subnet_configs: Vec<SubnetConfigInternal>,
     subnets: Arc<SubnetsImpl>,
@@ -546,7 +598,7 @@ struct PocketIcSubnets {
     btc_subnet: Option<Arc<Subnet>>,
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
-    state_dir: Option<PathBuf>,
+    state_dir: PocketIcStateDir,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
     icp_config: IcpConfig,
@@ -655,7 +707,7 @@ impl PocketIcSubnets {
 
     fn new(
         runtime: Arc<Runtime>,
-        state_dir: Option<PathBuf>,
+        state_dir: PocketIcStateDir,
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -700,7 +752,7 @@ impl PocketIcSubnets {
     }
 
     fn persist_topology(&self, default_effective_canister_id: Principal) {
-        if let Some(ref state_dir) = self.state_dir {
+        if let Some(state_dir) = self.state_dir.get() {
             let raw_topology: RawTopologyInternal = RawTopologyInternal {
                 subnet_configs: self.subnet_configs.clone(),
                 default_effective_canister_id: default_effective_canister_id.into(),
@@ -763,7 +815,7 @@ impl PocketIcSubnets {
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 
         let state_machine_state_dir: Box<dyn StateMachineStateDir> =
-            if let Some(ref state_dir) = self.state_dir {
+            if let Some(state_dir) = self.state_dir.get() {
                 Box::new(state_dir.join(hex::encode(subnet_seed)))
             } else {
                 Box::new(TempDir::new().unwrap())
@@ -1411,16 +1463,30 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, LEDGER_INDEX_CANISTER_ID);
 
             // Install the ICP index.
-            let icp_index_init_arg = IcpIndexInitArg {
-                ledger_id: LEDGER_CANISTER_ID.get().0,
-            };
+            // Mainnet PocketIC embeds an older ICP Index WASM that expects the pre-DEFI-2617 init
+            // format (InitArg with ledger_id only). Head build uses the unified IndexArg::Init(InitArg) format.
+            // TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
+            let icp_index_init_payload: Vec<u8> =
+                if option_env!("POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS").unwrap_or("0") == "1" {
+                    let legacy_arg = IcpIndexInitArg {
+                        ledger_id: LEDGER_CANISTER_ID.get().0,
+                        retrieve_blocks_from_ledger_interval_seconds: None,
+                    };
+                    Encode!(&legacy_arg).unwrap()
+                } else {
+                    let arg = IcpIndexArg::Init(IcpIndexInitArg {
+                        ledger_id: LEDGER_CANISTER_ID.get().0,
+                        retrieve_blocks_from_ledger_interval_seconds: None,
+                    });
+                    Encode!(&arg).unwrap()
+                };
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
                     ICP_INDEX_CANISTER_WASM.to_vec(),
-                    Encode!(&icp_index_init_arg).unwrap(),
+                    icp_index_init_payload,
                 )
                 .unwrap();
         }
@@ -2449,8 +2515,8 @@ impl PocketIcSubnets {
 
     fn persist_registry_changes(&mut self) {
         // Update the registry file on disk.
-        if let Some(ref state_dir) = self.state_dir {
-            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
+        if let Some(state_dir) = self.state_dir.get() {
+            let registry_proto_path = state_dir.join("registry.proto");
             self.registry_data_provider
                 .write_to_file(registry_proto_path);
         }
@@ -2498,7 +2564,7 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        if self.subnets.state_dir.is_some() {
+        if self.subnets.state_dir.get().is_some() {
             let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
@@ -2600,7 +2666,9 @@ impl PocketIc {
             .map(|time| time.into())
             .unwrap_or_else(|| default_timestamp(&icp_features));
 
-        let registry: Option<Vec<u8>> = if let Some(ref state_dir) = state_dir {
+        let state_dir = PocketIcStateDir::new(state_dir)?;
+
+        let registry: Option<Vec<u8>> = if let Some(state_dir) = state_dir.get() {
             let registry_file_path = state_dir.join("registry.proto");
             File::open(registry_file_path).ok().map(|file| {
                 let mut reader = BufReader::new(file);
@@ -2612,7 +2680,7 @@ impl PocketIc {
             None
         };
 
-        let topology: Option<RawTopologyInternal> = if let Some(ref state_dir) = state_dir {
+        let topology: Option<RawTopologyInternal> = if let Some(state_dir) = state_dir.get() {
             let topology_file_path = state_dir.join("topology.json");
             File::open(topology_file_path).ok().map(|file| {
                 let reader = BufReader::new(file);
@@ -5213,6 +5281,19 @@ fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {
         .as_nanos()
         .try_into()
         .unwrap()
+}
+
+fn remove_dir_contents(dir: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            std::fs::remove_dir_all(entry.path())?;
+        } else {
+            std::fs::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

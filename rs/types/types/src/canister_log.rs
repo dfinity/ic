@@ -8,10 +8,9 @@ use std::collections::VecDeque;
 #[allow(non_upper_case_globals)]
 const KiB: usize = 1024;
 
-/// The minimum size of an aggregate canister log buffer.
-pub const MIN_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 /// The maximum size of an aggregate canister log buffer.
 pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+
 /// The default size of an aggregate canister log buffer.
 pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
@@ -27,13 +26,8 @@ const DELTA_LOG_SIZES_CAP: usize = 10_000;
 pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
 
 // Compile-time assertions to ensure the constants are within valid ranges.
-const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
-
-const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_DELTA_LOG_MEMORY_LIMIT);
 const _: () = assert!(MAX_DELTA_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
-
-const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_AGGREGATE_LOG_MEMORY_LIMIT);
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {

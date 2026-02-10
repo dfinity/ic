@@ -141,3 +141,6 @@ zh2-dll01.*
 
 # Claude Code settings
 .claude/settings.local.json
+
+# Directories of downloaded test logs by //ci/githubstats:query
+logs/**

@@ -2,7 +2,9 @@ use crate::metrics::Metrics;
 use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_error_types::{RejectCode, UserError};
-use ic_https_outcalls_pricing::{AdapterLimits, NetworkUsage, PricingError, PricingFactory};
+use ic_https_outcalls_pricing::{
+    AdapterLimits, BudgetTracker, NetworkUsage, PricingError, PricingFactory,
+};
 use ic_https_outcalls_service::{
     CanisterHttpErrorKind, HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
     HttpsOutcallResult, https_outcall_result,
@@ -14,7 +16,7 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    CanisterId, NumBytes,
+    CanisterId, NumBytes, NumInstructions,
     canister_http::{
         CanisterHttpMethod, CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext,
         CanisterHttpResponse, CanisterHttpResponseContent, Transform,
@@ -294,6 +296,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 let transform_response = match &request_transform {
                     Some(transform) => {
                         let (transform_result, instruction_count) = transform_adapter_response(
+                            &mut budget,
                             query_handler,
                             canister_http_payload,
                             request_sender,
@@ -395,11 +398,14 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 /// Make upcall to execution to transform the response.
 /// This gives the ability to prune volatile fields before passing the response to consensus.
 async fn transform_adapter_response(
+    budget: &mut Box<dyn BudgetTracker>,
     query_handler: TransformExecutionService,
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
 ) -> (Result<Vec<u8>, (RejectCode, String)>, u64) {
+    let transform_limit = budget.get_transform_limit();
+
     let transform_args = TransformArgs {
         response: canister_http_response,
         context: transform.context.clone(),
@@ -427,6 +433,7 @@ async fn transform_adapter_response(
         let query_execution_input = TransformExecutionInput {
             query,
             instruction_observation: instruction_observation_clone,
+            max_instructions: transform_limit,
         };
 
         match Oneshot::new(query_handler, query_execution_input).await {
@@ -457,7 +464,20 @@ async fn transform_adapter_response(
 
     let instructions_used = instruction_observation.load(std::sync::atomic::Ordering::Relaxed);
 
-    (execution_result, instructions_used)
+    if let Err(PricingError::InsufficientCycles) =
+        budget.subtract_transform_usage(NumInstructions::from(instructions_used))
+    {
+        debug_assert!(
+            execution_result.is_err(),
+            "Transform should fail if insufficient cycles"
+        );
+        (
+            Err((RejectCode::SysFatal, "Insufficient cycles".to_string())),
+            instructions_used,
+        )
+    } else {
+        (execution_result, instructions_used)
+    }
 }
 
 pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {

@@ -36,14 +36,14 @@ pub struct ResourceRequest {
     pub vm_configs: Vec<VmSpec>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct DiskImage {
     pub image_type: ImageType,
     pub url: Url,
     pub sha256: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub enum ImageType {
     IcOsImage,
     PrometheusImage,
@@ -105,8 +105,9 @@ pub struct VmSpec {
     pub alternate_template: Option<VmType>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Serialize, Deserialize)]
 pub enum BootImage {
+    #[default]
     GroupDefault,
     Image(DiskImage),
     File(FileId),
@@ -194,10 +195,12 @@ pub fn get_resource_request_for_nested_nodes(
 }
 
 /// The SHA-256 hash of the Universal VM disk image.
-/// The latest hash can be retrieved by downloading the SHA256SUMS file from:
-/// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
+/// The latest hash can be retrieved by checking the latest successful test of the farm repo on the master branch:
+/// https://github.com/dfinity-lab/farm/actions?query=branch%3Amaster+is%3Asuccess
+/// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
+/// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/universal-vm/<SHA256-HASH>/x86_64-linux/universal-vm.img.zst
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "36977fe6e829631376dd0bc4b1a8e05b53a7e3a0248a6373f1d7fbdae4bc00ed";
+    "c314e927f9ad976db110910cfef262eec2dddfff05ef3a84b0717a901630b367";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
@@ -330,7 +333,7 @@ fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmS
                 .and_then(|vm_resources| vm_resources.memory_kibibytes)
                 .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
         }),
-        boot_image: BootImage::GroupDefault,
+        boot_image: n.boot_image.clone(),
         boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
             || {
                 default_vm_resources
@@ -363,7 +366,7 @@ fn vm_spec_from_nested_node(
                 .and_then(|vm_resources| vm_resources.memory_kibibytes)
                 .unwrap_or(HOSTOS_MEMORY_KIB_PER_VM)
         }),
-        boot_image: BootImage::GroupDefault,
+        boot_image: node.boot_image.clone(),
         boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
             || {
                 default_vm_resources

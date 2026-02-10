@@ -347,7 +347,11 @@ impl PocketIcBuilder {
     ///  `-- tmp
     pub fn with_subnet_state(mut self, subnet_kind: SubnetKind, path_to_state: PathBuf) -> Self {
         let mut config = self.config.unwrap_or_default();
-        let subnet_spec = SubnetSpec::default().with_state_dir(path_to_state);
+        #[cfg(not(windows))]
+        let state_dir = path_to_state;
+        #[cfg(windows)]
+        let state_dir = wsl_path(&path_to_state, "subnet state").into();
+        let subnet_spec = SubnetSpec::default().with_state_dir(state_dir);
         match subnet_kind {
             SubnetKind::NNS => config.nns = Some(subnet_spec),
             SubnetKind::SNS => config.sns = Some(subnet_spec),
