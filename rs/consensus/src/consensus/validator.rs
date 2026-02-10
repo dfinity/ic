@@ -4291,8 +4291,9 @@ pub mod test {
     #[case::issue_equivocation_proof_when_we_have_multiple_unvalidated_blocks_deduplicated(EquivocationProofTestCase {
         artifacts: vec![
             TestBlockBuilder::unvalidated(),
-            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 0]),
-            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 1]),
+            TestBlockBuilder::unvalidated().with_altered_signature(vec![0, 0, 1]),
+            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 2]),
+            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 3]),
         ],
         expected_equivocations_count: 1,
         expected_validated_blocks_count: 1,
