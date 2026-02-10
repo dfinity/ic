@@ -15,7 +15,7 @@ use ic_test_utilities_types::{
     ids::{SUBNET_6, SUBNET_7, canister_test_id},
     messages::RequestBuilder,
 };
-use ic_types::{Height, SubnetId, messages::CallbackId, xnet::StreamIndexedQueue};
+use ic_types::{SubnetId, messages::CallbackId, xnet::StreamIndexedQueue};
 use maplit::btreemap;
 use std::sync::Barrier;
 use url::Url;
@@ -39,7 +39,7 @@ pub(crate) struct EndpointTestFixture {
 impl EndpointTestFixture {
     pub fn with_replicated_state() -> Self {
         let fixture = EndpointTestFixture::default();
-        put_replicated_state_for_testing(Height::new(13), &*fixture.state_manager);
+        put_replicated_state_for_testing(&*fixture.state_manager);
         fixture
     }
 
@@ -573,14 +573,11 @@ async fn handle_bad_api_path() {
 }
 
 /// Commits a `ReplicatedState` containing a single stream for DST_SUBNET.
-fn put_replicated_state_for_testing(
-    h: Height,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
-) {
+fn put_replicated_state_for_testing(state_manager: &dyn StateManager<State = ReplicatedState>) {
     let (_height, mut state) = state_manager.take_tip();
     let stream = get_stream_for_testing();
     state.with_streams(btreemap![DST_SUBNET => stream]);
-    state_manager.commit_and_certify(state, h, CertificationScope::Metadata, None);
+    state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 }
 
 /// Generates a stream containing `STREAM_COUNT` requests, beginning at

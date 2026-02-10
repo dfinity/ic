@@ -56,7 +56,8 @@ impl Snapshot {
 #[derive(Clone)]
 pub struct FakeStateManager {
     states: Arc<RwLock<Vec<Snapshot>>>,
-    tip: Arc<RwLock<Option<(Height, ReplicatedState)>>>,
+    tip: Arc<RwLock<Option<ReplicatedState>>>,
+    tip_height: Arc<RwLock<Height>>,
     tempdir: Arc<tempfile::TempDir>,
     /// Size 1 by default (no op).
     pub encode_certified_stream_slice_barrier: Arc<RwLock<Barrier>>,
@@ -86,7 +87,8 @@ impl FakeStateManager {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         Self {
             states: Arc::new(RwLock::new(vec![snapshot])),
-            tip: Arc::new(RwLock::new(Some((height, (*state).clone())))),
+            tip: Arc::new(RwLock::new(Some((*state).clone()))),
+            tip_height: Arc::new(RwLock::new(height)),
             tempdir: Arc::new(tmpdir),
             encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
             fd_factory: Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
@@ -99,6 +101,11 @@ impl FakeStateManager {
 
     pub fn get_fd_factory(&self) -> Arc<dyn PageAllocatorFileDescriptor> {
         Arc::clone(&self.fd_factory)
+    }
+
+    pub fn tip_height(&self) -> Height {
+        let h = self.tip_height.read().unwrap();
+        *h
     }
 }
 
@@ -115,24 +122,28 @@ fn initial_state() -> Labeled<Arc<ReplicatedState>> {
 
 impl StateManager for FakeStateManager {
     fn take_tip(&self) -> (Height, Self::State) {
-        self.tip
-            .write()
-            .unwrap()
-            .take()
-            .expect("TIP is not owned by this StateManager")
+        (
+            self.tip_height(),
+            self.tip
+                .write()
+                .unwrap()
+                .take()
+                .expect("TIP is not owned by this StateManager"),
+        )
     }
 
     fn take_tip_at(&self, h: Height) -> StateManagerResult<Self::State> {
         let mut guard = self.tip.write().unwrap();
-        let (height, tip) = guard.take().expect("TIP is not owned by this StateManager");
+        let height = self.tip_height();
+        let tip = guard.take().expect("TIP is not owned by this StateManager");
 
         if height < h {
-            *guard = Some((height, tip));
+            *guard = Some(tip);
             return Err(StateManagerError::StateNotCommittedYet(h));
         }
 
         if h < height {
-            *guard = Some((height, tip));
+            *guard = Some(tip);
             return Err(StateManagerError::StateRemoved(h));
         }
 
@@ -225,10 +236,13 @@ impl StateManager for FakeStateManager {
     fn commit_and_certify(
         &self,
         state: ReplicatedState,
-        height: Height,
         _scope: CertificationScope,
         _batch_summary: Option<BatchSummary>,
     ) {
+        let height = {
+            let h = self.tip_height.write().unwrap();
+            h.increment()
+        };
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         self.states.write().unwrap().push(Snapshot {
             state: Arc::new(state.clone()),
@@ -246,7 +260,7 @@ impl StateManager for FakeStateManager {
             tip.is_none(),
             "Attempt to submit a state not borrowed from this StateManager Height {height}"
         );
-        *tip = Some((height, state));
+        *tip = Some(state);
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {
@@ -723,14 +737,13 @@ impl StateManager for RefMockStateManager {
     fn commit_and_certify(
         &self,
         state: ReplicatedState,
-        height: Height,
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
         self.mock
             .read()
             .unwrap()
-            .commit_and_certify(state, height, scope, batch_summary)
+            .commit_and_certify(state, scope, batch_summary)
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {

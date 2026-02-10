@@ -1334,7 +1334,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
-        let commit_height = Height::from(batch.batch_number.get());
 
         let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
@@ -1401,7 +1400,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
 
         self.state_manager.commit_and_certify(
             state_after_round,
-            commit_height,
             certification_scope,
             batch_summary,
         );
@@ -1465,7 +1463,6 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         };
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
-        let commit_height = Height::from(batch.batch_number.get());
 
         let time = batch.time;
         state.metadata.batch_time = time;
@@ -1511,7 +1508,6 @@ impl BatchProcessor for FakeBatchProcessorImpl {
 
         self.state_manager.commit_and_certify(
             state_after_stream_builder,
-            commit_height,
             certification_scope,
             batch.batch_summary,
         );
