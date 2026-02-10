@@ -91,10 +91,14 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             .neuron_minimum_dissolve_delay_to_vote
             .and_then(|duration| duration.seconds);
 
-        let additional_critical_native_action_ids = governance_parameters
-            .custom_proposal_criticality
-            .and_then(|c| c.additional_critical_native_action_ids)
-            .unwrap_or_default();
+        let custom_proposal_criticality =
+            governance_parameters.custom_proposal_criticality.map(|c| {
+                crate::pb::v1::CustomProposalCriticality {
+                    additional_critical_native_action_ids: c
+                        .additional_critical_native_action_ids
+                        .unwrap_or_default(),
+                }
+            });
 
         let voting_reward_parameters = governance_parameters
             .voting_reward_parameters
@@ -258,7 +262,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             restricted_countries,
             token_logo,
             neurons_fund_participation,
-            additional_critical_native_action_ids,
+            custom_proposal_criticality,
 
             // These are not known from only the CreateServiceNervousSystem
             // proposal. See `Governance::make_sns_init_payload`.

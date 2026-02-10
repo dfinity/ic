@@ -391,7 +391,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 swap_due_timestamp_seconds: None,
                 nns_proposal_id: None,
                 neurons_fund_participation_constraints: None,
-                additional_critical_native_action_ids: vec![],
+                custom_proposal_criticality: None,
             },
         );
 
@@ -740,7 +740,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                 neuron_basket_construction_parameters: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
-                additional_critical_native_action_ids: vec![],
+                custom_proposal_criticality: None,
             },
         );
 

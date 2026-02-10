@@ -434,10 +434,11 @@ impl SnsInitPayload {
             nns_proposal_id: None,
             neurons_fund_participation_constraints: None,
             neurons_fund_participation: None,
-            additional_critical_native_action_ids: nervous_system_parameters_default
+            custom_proposal_criticality: nervous_system_parameters_default
                 .custom_proposal_criticality
-                .map(|c| c.additional_critical_native_action_ids)
-                .unwrap_or_default(),
+                .map(|c| crate::pb::v1::CustomProposalCriticality {
+                    additional_critical_native_action_ids: c.additional_critical_native_action_ids,
+                }),
         }
     }
 
@@ -795,7 +796,7 @@ impl SnsInitPayload {
             token_logo: _,
             neurons_fund_participation_constraints: _,
             neurons_fund_participation: _,
-            additional_critical_native_action_ids,
+            custom_proposal_criticality,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
@@ -819,13 +820,11 @@ impl SnsInitPayload {
             max_age_bonus_percentage,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
-            custom_proposal_criticality: if additional_critical_native_action_ids.is_empty() {
-                None
-            } else {
-                Some(CustomProposalCriticality {
-                    additional_critical_native_action_ids,
-                })
-            },
+            custom_proposal_criticality: custom_proposal_criticality.map(|c| {
+                CustomProposalCriticality {
+                    additional_critical_native_action_ids: c.additional_critical_native_action_ids,
+                }
+            }),
             ..nervous_system_parameters
         }
     }
@@ -2226,7 +2225,7 @@ neurons_fund_participation_constraints:
     intercept_icp_e8s: 0
   ideal_matched_participation_function:
     serialized_representation: '{\"t_1\":\"33300.000000000\",\"t_2\":\"99900.000000000\",\"t_3\":\"166500.000000000\",\"t_4\":\"200000.0000000000\",\"cap\":\"100000.000000000\"}'
-additional_critical_native_action_ids: []
+custom_proposal_criticality: null
 initial_token_distribution: !FractionalDeveloperVotingPower
   developer_distribution:
     developer_neurons:

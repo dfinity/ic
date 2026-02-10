@@ -6,7 +6,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{
     NnsInstaller, add_wasms_to_sns_wasm, nns, sns,
 };
 use ic_nervous_system_integration_tests::create_service_nervous_system_builder::CreateServiceNervousSystemBuilder;
-use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
+use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Percentage, Tokens as TokensPb};
 use ic_nns_governance_api::create_service_nervous_system::governance_parameters::CustomProposalCriticality;
 use ic_nns_governance_api::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution;
 use ic_sns_governance_api::pb::v1::{
@@ -179,12 +179,7 @@ async fn custom_proposal_criticality_test() {
         SubmittedProposal::try_from(response).unwrap().proposal_id
     };
 
-    // Tick to allow proposal processing.
-    for _ in 0..10 {
-        pocket_ic.tick().await;
-    }
-
-    // Verify the proposal is NOT decided or executed.
+    // Verify the proposal has the critical threshold (67% of exercised).
     {
         let GetProposalResponse { result } = governance_canister
             .get_proposal(&pocket_ic, motion_proposal_id)
@@ -195,12 +190,25 @@ async fn custom_proposal_criticality_test() {
             other => panic!("Expected Proposal, got: {other:?}"),
         };
         assert_eq!(
-            proposal_data.decided_timestamp_seconds, 0,
-            "Critical motion with 51% yes should NOT be decided (needs >67% of total for early decision)"
+            proposal_data.minimum_yes_proportion_of_exercised,
+            Some(Percentage {
+                basis_points: Some(6_700)
+            }),
+            "Critical motion should require 67% of exercised voting power"
         );
-        assert_eq!(
-            proposal_data.executed_timestamp_seconds, 0,
-            "Critical motion with 51% yes should NOT be executed"
+    }
+
+    // Assert the proposal does NOT execute with only 51% yes (needs >67% for critical).
+    {
+        let result = sns::governance::wait_for_proposal_execution(
+            &pocket_ic,
+            sns.governance.canister_id,
+            motion_proposal_id,
+        )
+        .await;
+        assert!(
+            result.is_err(),
+            "Critical motion with 51% yes should NOT be executed (needs >67% of total for early decision)"
         );
     }
 
@@ -221,23 +229,14 @@ async fn custom_proposal_criticality_test() {
             .unwrap();
     }
 
-    sns::governance::wait_for_proposal_execution(
-        &pocket_ic,
-        sns.governance.canister_id,
-        motion_proposal_id,
-    )
-    .await
-    .unwrap();
-
     {
-        let GetProposalResponse { result } = governance_canister
-            .get_proposal(&pocket_ic, motion_proposal_id)
-            .await
-            .unwrap();
-        let proposal_data = match result.unwrap() {
-            get_proposal_response::Result::Proposal(p) => p,
-            other => panic!("Expected Proposal, got: {other:?}"),
-        };
+        let proposal_data = sns::governance::wait_for_proposal_execution(
+            &pocket_ic,
+            sns.governance.canister_id,
+            motion_proposal_id,
+        )
+        .await
+        .unwrap();
         assert!(
             proposal_data.decided_timestamp_seconds > 0,
             "Critical motion with 68% yes should be decided"
@@ -329,6 +328,13 @@ async fn custom_proposal_criticality_test() {
         .await
         .unwrap();
 
+        assert_eq!(
+            proposal_data.minimum_yes_proportion_of_exercised,
+            Some(Percentage {
+                basis_points: Some(5_000)
+            }),
+            "Non-critical motion should require 50% of exercised voting power"
+        );
         assert!(
             proposal_data.executed_timestamp_seconds > 0,
             "Non-critical motion with 51% yes should be executed immediately"
