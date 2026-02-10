@@ -18,6 +18,7 @@ use crate::{
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
     metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
+    types::Response as ExecEnvResponse,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -89,6 +90,7 @@ use ic_types::{
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
+use num_traits::SaturatingSub;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
@@ -485,6 +487,57 @@ impl ExecutionEnvironment {
             .saturating_sub(state.callback_count()) as i64
     }
 
+    pub(crate) fn execute_mgmt_operation_on_canister<F, C>(
+        &self,
+        canister_id: CanisterId,
+        op: F,
+        context: C,
+        state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
+    ) -> Result<(), UserError>
+    where
+        F: FnOnce(
+            CanisterState,
+            C,
+        ) -> Result<(CanisterState, Vec<ExecEnvResponse>), CanisterManagerError>,
+    {
+        match state.canister_state(&canister_id).cloned() {
+            Some(canister) => {
+                let old_memory_allocated_bytes = canister.memory_allocated_bytes();
+                match op(canister, context) {
+                    Ok((canister, responses)) => {
+                        let new_memory_allocated_bytes = canister.memory_allocated_bytes();
+                        state.put_canister_state(canister);
+                        let deallocated_bytes =
+                            old_memory_allocated_bytes.saturating_sub(&new_memory_allocated_bytes);
+                        let allocated_bytes =
+                            new_memory_allocated_bytes.saturating_sub(&old_memory_allocated_bytes);
+                        round_limits.subnet_available_memory.increment(
+                            deallocated_bytes,
+                            NumBytes::from(0),
+                            NumBytes::from(0),
+                        );
+                        round_limits.subnet_available_memory.try_decrement(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
+                                        .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
+                        crate::util::process_responses(
+                            responses,
+                            state,
+                            Arc::clone(&self.ingress_history_writer),
+                            self.log.clone(),
+                            self.canister_not_found_error(),
+                        );
+                        Ok(())
+                    }
+                    Err(err) => Err(err.into()),
+                }
+            }
+            None => Err(UserError::new(
+                ErrorCode::CanisterNotFound,
+                format!("Canister {} not found.", &canister_id),
+            )),
+        }
+    }
+
     /// Executes a replicated message sent to a subnet.
     ///
     /// Returns the new replicated state and an optional number of instructions
@@ -780,16 +833,20 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::UninstallCode) => {
                 let res = UninstallCodeArgs::decode(payload).and_then(|args| {
-                    self.canister_manager
-                        .uninstall_code(
-                            msg.canister_change_origin(args.get_sender_canister_version()),
-                            args.get_canister_id(),
-                            &mut state,
-                            round_limits,
-                            &self.metrics.canister_not_found_error,
-                        )
-                        .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
-                        .map_err(|err| err.into())
+                    let canister_id = args.get_canister_id();
+                    let op = |canister, (origin, time)| {
+                        self.canister_manager.uninstall_code(canister, origin, time)
+                    };
+                    let origin = msg.canister_change_origin(args.get_sender_canister_version());
+                    let time = state.time();
+                    self.execute_mgmt_operation_on_canister(
+                        canister_id,
+                        op,
+                        (origin, time),
+                        &mut state,
+                        round_limits,
+                    )
+                    .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,

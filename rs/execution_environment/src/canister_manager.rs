@@ -19,9 +19,7 @@ use ic_embedders::{
     wasm_utils::decoding::decode_wasm, wasmtime_embedder::system_api::ExecutionParameters,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{
-    IngressHistoryWriter, MessageMemoryUsage, SubnetAvailableMemory,
-};
+use ic_interfaces::execution_environment::{MessageMemoryUsage, SubnetAvailableMemory};
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
@@ -67,7 +65,7 @@ use ic_types::{
     nominal_cycles::NominalCycles,
 };
 use ic_wasm_types::WasmHash;
-use more_asserts::{debug_assert_ge, debug_assert_le};
+use more_asserts::debug_assert_ge;
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
 use std::iter::zip;
@@ -100,7 +98,6 @@ pub(crate) struct CanisterManager {
     log: ReplicaLogger,
     config: CanisterMgrConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     environment_variables_flag: FlagStatus,
 }
@@ -111,7 +108,6 @@ impl CanisterManager {
         log: ReplicaLogger,
         config: CanisterMgrConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         environment_variables_flag: FlagStatus,
     ) -> Self {
@@ -120,7 +116,6 @@ impl CanisterManager {
             log,
             config,
             cycles_account_manager,
-            ingress_history_writer,
             fd_factory,
             environment_variables_flag,
         }
@@ -935,52 +930,29 @@ impl CanisterManager {
     /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-uninstall_code
     pub(crate) fn uninstall_code(
         &self,
+        mut canister: CanisterState,
         origin: CanisterChangeOrigin,
-        canister_id: CanisterId,
-        state: &mut ReplicatedState,
-        round_limits: &mut RoundLimits,
-        canister_not_found_error: &IntCounter,
-    ) -> Result<(), CanisterManagerError> {
+        time: Time,
+    ) -> Result<(CanisterState, Vec<Response>), CanisterManagerError> {
         let sender = origin.origin();
-        let time = state.time();
-        let canister = match state.canister_state_mut(&canister_id) {
-            Some(canister) => canister,
-            None => return Err(CanisterManagerError::CanisterNotFound(canister_id)),
-        };
 
         // Skip the controller validation if the sender is the governance
         // canister. The governance canister can forcefully
         // uninstall the code of any canister.
         if sender != GOVERNANCE_CANISTER_ID.get() {
-            validate_controller(canister, &sender)?
+            validate_controller(&canister, &sender)?
         }
 
-        let rejects = uninstall_canister(
-            &self.log,
-            canister,
-            Some(round_limits),
-            time,
-            Arc::clone(&self.fd_factory),
-        );
+        let rejects =
+            uninstall_canister(&mut canister, time, Arc::clone(&self.fd_factory), &self.log);
 
-        let available_execution_memory_change = canister.add_canister_change(
+        let _ = canister.add_canister_change(
             time,
             origin,
             CanisterChangeDetails::CanisterCodeUninstall,
         );
-        round_limits
-            .subnet_available_memory
-            .update_execution_memory_unchecked(available_execution_memory_change);
 
-        crate::util::process_responses(
-            rejects,
-            state,
-            Arc::clone(&self.ingress_history_writer),
-            self.log.clone(),
-            canister_not_found_error,
-        );
-
-        Ok(())
+        Ok((canister, rejects))
     }
 
     /// Signals a canister to stop.
@@ -2044,13 +2016,8 @@ impl CanisterManager {
             .saturating_add(&new_snapshot_size);
 
         let rejects = if uninstall_code {
-            let rejects = uninstall_canister(
-                &self.log,
-                canister,
-                None, /* we don't pass RoundLimits since we update them separately via `cycles_and_memory_usage_updates` */
-                time,
-                Arc::clone(&self.fd_factory),
-            );
+            let rejects =
+                uninstall_canister(canister, time, Arc::clone(&self.fd_factory), &self.log);
             let available_execution_memory_change = canister.add_canister_change(
                 time,
                 origin,
@@ -3178,14 +3145,11 @@ fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterMan
 #[doc(hidden)]
 #[must_use]
 pub fn uninstall_canister(
-    log: &ReplicaLogger,
     canister: &mut CanisterState,
-    round_limits: Option<&mut RoundLimits>,
     time: Time,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    log: &ReplicaLogger,
 ) -> Vec<Response> {
-    let old_allocated_bytes = canister.memory_allocated_bytes();
-
     // Drop the canister's execution state.
     canister.execution_state = None;
 
@@ -3202,18 +3166,6 @@ pub fn uninstall_canister(
     canister.system_state.global_timer = CanisterTimer::Inactive;
     // Increment canister version.
     canister.system_state.bump_canister_version();
-
-    let new_allocated_bytes = canister.memory_allocated_bytes();
-    debug_assert_le!(new_allocated_bytes, old_allocated_bytes);
-
-    if let Some(round_limits) = round_limits {
-        let deallocated_bytes = old_allocated_bytes.saturating_sub(&new_allocated_bytes);
-        round_limits.subnet_available_memory.increment(
-            deallocated_bytes,
-            NumBytes::from(0),
-            NumBytes::from(0),
-        );
-    }
 
     let canister_id = canister.canister_id();
 
