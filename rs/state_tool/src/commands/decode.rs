@@ -13,7 +13,6 @@ use ic_state_layout::{
     SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
 };
 use ic_state_manager::CheckpointMetrics;
-use ic_types::CanisterId;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 
@@ -56,21 +55,7 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
             )
         }
         CANISTER_FILE => {
-            // display_proto::<pb_canister::CanisterStateBits, CanisterStateBits>(path.clone())
-
-            // TODO(MR-539): Temporary workaround. Revert after the next replica release.
-            let f: ProtoFileWith<pb_canister::CanisterStateBits, ReadOnly> = path.into();
-            let pb = f.deserialize().map_err(|e| format!("{e:?}"))?;
-            let t = CanisterStateBits::try_from((pb, CanisterId::ic_00())).map_err(|e| {
-                format!(
-                    "failed to decode rust type {} from protobuf {}: {}",
-                    std::any::type_name::<CanisterStateBits>(),
-                    std::any::type_name::<pb_canister::CanisterStateBits>(),
-                    e
-                )
-            })?;
-            println!("{t:#?}");
-            Ok(())
+            display_proto::<pb_canister::CanisterStateBits, CanisterStateBits>(path.clone())
         }
         _ => Err(format!("don't know how to decode {fname}")),
     }

@@ -483,3 +483,55 @@ KZh4l7SeYvLtL818ibSx/IXoUHNp4/gMp+x2sxwA/mtWO5PdPg7ksg==
         Err(e) => panic!("Unexpected error {e:?}"),
     }
 }
+
+#[test]
+fn non_canonical_encodings_are_rejected() {
+    // Non-canonical due to use of compressed points
+    let non_canonical_encodings = [
+        "3039301306072a8648ce3d020106082a8648ce3d03010703220003f1c1977dc46923076e8a8c5cc060d95a752776cdb24287d1e4d23a4af6f9731d",
+        "3039301306072a8648ce3d020106082a8648ce3d030107032200022cfa75682cfe205515b19f81016bbb202ab08047091f957f8b0e55971a6f349e",
+    ];
+
+    // These test handling of non-canonical (BER) encoding of public keys;
+    // even the usual deserialization method rejects these
+    let non_canonical_ber_encodings = [
+        // Outer SEQUENCE uses 0x81 0x59 instead of 0x59 for length
+        "308159301306072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+        // Outer SEQUENCE uses 0x82 0x00 0x59 for length 89
+        "30820059301306072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+        // Outer SEQUENCE uses indefinite length (0x80) with EOC
+        "3080301306072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f50000",
+        // Algorithm SEQUENCE uses 0x81 0x13 instead of 0x13
+        "305a30811306072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+        // First OID uses 0x81 0x07 instead of 0x07 for length
+        "305a30140681072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+        // BIT STRING uses 0x81 0x42 instead of 0x42 for length
+        "305a301306072a8648ce3d020106082a8648ce3d03010703814200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+        // OID subidentifier 840 uses leading 0x80 padding
+        "305a301406082a8048ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+        // BIT STRING uses constructed tag 0x23 instead of primitive 0x03
+        "305b301306072a8648ce3d020106082a8648ce3d0301072344034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+        // First OID uses constructed tag 0x26 instead of primitive 0x06
+        "3059301326072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+        // Valid encoding followed by extra null bytes
+        "3059301306072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f50000",
+        // Outer SEQUENCE uses 0x83 0x00 0x00 0x59 for length
+        "3083000059301306072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+        // SEQUENCE uses long-form tag 0x3F 0x10 instead of 0x30
+        "3f1059301306072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+    ];
+
+    for nce_hex in non_canonical_encodings {
+        let nce = hex::decode(nce_hex).unwrap();
+        // These are non-canonical due to being compressed, which is accepted by deserialize_der
+        assert!(PublicKey::deserialize_der(&nce).is_ok());
+        assert!(PublicKey::deserialize_canonical_der(&nce).is_err());
+    }
+
+    for nce_hex in non_canonical_ber_encodings {
+        let nce = hex::decode(nce_hex).unwrap();
+        // These are non-canonical due to BER, which is also rejected by deserialize_der
+        assert!(PublicKey::deserialize_der(&nce).is_err());
+        assert!(PublicKey::deserialize_canonical_der(&nce).is_err());
+    }
+}

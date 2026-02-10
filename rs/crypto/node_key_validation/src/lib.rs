@@ -36,7 +36,6 @@
 
 use crate::proto_conversions::fs_ni_dkg::fs_ni_dkg_pubkey_from_proto;
 use ic_base_types::{NodeId, PrincipalId};
-use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381PopBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
@@ -216,15 +215,33 @@ pub struct ValidNodeSigningPublicKey {
 impl TryFrom<PublicKey> for ValidNodeSigningPublicKey {
     type Error = KeyValidationError;
 
-    fn try_from(public_key: PublicKey) -> Result<Self, Self::Error> {
-        let public_key_bytes = BasicSigEd25519PublicKeyBytes::try_from(&public_key)
-            .map_err(|e| invalid_node_signing_key_error(format!("{e}")))?;
-        if !ic_crypto_internal_basic_sig_ed25519::verify_public_key(&public_key_bytes) {
-            return Err(invalid_node_signing_key_error("verification failed"));
+    fn try_from(pk_proto: PublicKey) -> Result<Self, Self::Error> {
+        if AlgorithmIdProto::try_from(pk_proto.algorithm).ok() != Some(AlgorithmIdProto::Ed25519) {
+            return Err(invalid_node_signing_key_error(format!(
+                "Unexpected algorithm id {}",
+                pk_proto.algorithm
+            )));
         }
-        let derived_node_id = derive_node_id(public_key_bytes);
+
+        if pk_proto.key_value.len() != ic_ed25519::PublicKey::BYTES {
+            return Err(invalid_node_signing_key_error(format!(
+                "Unexpected length {}",
+                pk_proto.key_value.len()
+            )));
+        }
+
+        let pk = ic_ed25519::PublicKey::deserialize_raw(&pk_proto.key_value)
+            .map_err(|e| invalid_node_signing_key_error(format!("{:?}", e)))?;
+
+        if !pk.is_torsion_free() {
+            return Err(invalid_node_signing_key_error(
+                "has torsion component".to_string(),
+            ));
+        }
+
+        let derived_node_id = derive_node_id(&pk);
         Ok(Self {
-            public_key,
+            public_key: pk_proto,
             derived_node_id,
         })
     }
@@ -375,8 +392,8 @@ impl fmt::Display for KeyValidationError {
     }
 }
 
-fn derive_node_id(pk_bytes: BasicSigEd25519PublicKeyBytes) -> NodeId {
-    let pubkey_der = ic_crypto_internal_basic_sig_ed25519::public_key_to_der(pk_bytes);
+fn derive_node_id(pk: &ic_ed25519::PublicKey) -> NodeId {
+    let pubkey_der = pk.serialize_rfc8410_der();
     NodeId::from(PrincipalId::new_self_authenticating(&pubkey_der))
 }
 

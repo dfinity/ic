@@ -18,7 +18,6 @@ cargo_build_script(
         "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
     deps = [
-        "@crate_index//:prost-build",
         "@crate_index//:tonic-build",
     ],
 )
@@ -43,7 +42,4 @@ rust_library(
 rust_test(
     name = "shared_test",
     crate = ":shared",
-    deps = [
-        "@crate_index//:tonic-build",
-    ],
 )

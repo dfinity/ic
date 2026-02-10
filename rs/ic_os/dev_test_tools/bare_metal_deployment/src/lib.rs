@@ -4,7 +4,7 @@ pub use deploy::SshAuthMethod;
 
 use anyhow::{Context, Result, bail};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{DeploymentEnvironment, IpVariant, MacAddr6Ext};
+use deterministic_ips::{DeploymentEnvironment, MacAddr6Ext};
 use macaddr::MacAddr6;
 use rexpect::session::PtySession;
 use rexpect::{ReadUntil, spawn};
@@ -192,7 +192,6 @@ impl LoginInfo {
         deterministic_ips::calculate_deterministic_mac(
             &self.mgmt_mac,
             DeploymentEnvironment::Testnet,
-            IpVariant::V6,
             NodeType::HostOS,
         )
         .calculate_slaac(&self.addr_prefix)

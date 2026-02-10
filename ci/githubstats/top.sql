@@ -17,7 +17,7 @@ WITH
     WHERE
       ({exclude} = '' OR bt.label NOT LIKE {exclude})
       AND ({include} = '' OR bt.label LIKE {include})
-      AND ('{period}' = '' OR bt.first_start_time > now() - ('1 {period}'::interval))
+      AND ({time_filter})
       AND (NOT {only_prs} OR wr.event_type = 'pull_request')
       AND ({branch} = '' OR wr.head_branch LIKE {branch})
 

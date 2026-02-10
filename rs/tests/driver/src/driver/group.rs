@@ -722,7 +722,7 @@ impl SystemTestGroup {
                 }
             };
             Some((
-                format!("{ASSERT_NO_CRITICAL_ERRORS_TASK_NAME}_fn"),
+                ASSERT_NO_CRITICAL_ERRORS_TASK_NAME.to_string(),
                 Box::new(teardown_fn),
             ))
         } else {
@@ -752,7 +752,7 @@ impl SystemTestGroup {
                 }
             };
             Some((
-                format!("{ASSERT_NO_REPLICA_RESTARTS_TASK_NAME}_fn"),
+                ASSERT_NO_REPLICA_RESTARTS_TASK_NAME.to_string(),
                 Box::new(teardown_fn),
             ))
         } else {
@@ -762,7 +762,7 @@ impl SystemTestGroup {
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardown
             .into_iter()
-            .map(|teardown| (format!("{TEARDOWN_TASK_NAME}_fn"), teardown))
+            .map(|teardown| (TEARDOWN_TASK_NAME.to_string(), teardown))
             .chain(assert_no_critical_errors_fn)
             .chain(assert_no_replica_restarts_fn)
             .map(|(teardown_name, teardown_fn)| {
@@ -771,7 +771,7 @@ impl SystemTestGroup {
                 let teardown_task = subproc(
                     TaskId::Test(teardown_name.clone()),
                     move || {
-                        debug!(logger, ">>> {teardown_name}");
+                        debug!(logger, ">>> {teardown_name}_fn");
                         let env = ensure_setup_env(group_ctx);
                         teardown_fn(env);
                     },
@@ -1120,6 +1120,7 @@ impl SystemTestGroup {
         let farm_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
-        farm.delete_group(&group_name);
+        farm.delete_group(&group_name)
+            .expect("failed to delete the farm group");
     }
 }
