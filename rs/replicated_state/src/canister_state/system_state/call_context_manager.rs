@@ -731,7 +731,6 @@ impl CallContextManager {
         threshold_time: Time,
         for_each: impl Fn(&CallOrigin, Time),
     ) -> usize {
-        let mut count = 0;
         // Call contexts are stored in order of increasing CallContextId, and
         // the IDs are generated sequentially, so we are iterating in order of
         // creation time. This means we can stop as soon as we encounter a call
@@ -739,13 +738,12 @@ impl CallContextManager {
         self.call_contexts
             .iter()
             .take_while(|(_, call_context)| call_context.time() <= threshold_time)
-            .for_each(|(_, call_context)| {
+            .inspect(|(_, call_context)| {
                 if !call_context.is_deleted() {
                     for_each(call_context.call_origin(), call_context.time());
-                    count += 1;
                 }
-            });
-        count
+            })
+            .count()
     }
 
     /// Returns the number of unresponded canister update call contexts, also taking
