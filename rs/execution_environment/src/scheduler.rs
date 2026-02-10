@@ -886,8 +886,8 @@ impl SchedulerImpl {
     fn charge_canisters_for_resource_allocation_and_usage(
         &self,
         state: &mut ReplicatedState,
-        subnet_size: usize,
         round_limits: &mut RoundLimits,
+        registry_settings: &RegistryExecutionSettings,
     ) {
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
@@ -919,7 +919,7 @@ impl SchedulerImpl {
                         &self.log,
                         canister,
                         duration_since_last_charge,
-                        subnet_size,
+                        registry_settings.subnet_size,
                         cost_schedule,
                     )
                     .is_err()
@@ -953,10 +953,11 @@ impl SchedulerImpl {
                 state_time,
                 state,
                 round_limits,
+                registry_settings,
             ) {
                 error!(
                     self.log,
-                    "EXC-BUG: Uninstalling canister {} failed: {}", canister_id, e
+                    "[EXC-BUG]: Uninstalling canister {} failed: {}", canister_id, e
                 );
             }
 
@@ -1654,8 +1655,8 @@ impl Scheduler for SchedulerImpl {
                     let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
                     self.charge_canisters_for_resource_allocation_and_usage(
                         &mut final_state,
-                        registry_settings.subnet_size,
                         &mut subnet_round_limits,
+                        registry_settings,
                     );
                     scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
                 }

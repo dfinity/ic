@@ -587,13 +587,12 @@ impl SchedulerTest {
 
     pub fn charge_for_resource_allocations(&mut self) {
         let mut state = self.state.take().unwrap();
-        let subnet_size = self.subnet_size();
         let mut round_limits = self.round_limits(&state);
         self.scheduler
             .charge_canisters_for_resource_allocation_and_usage(
                 &mut state,
-                subnet_size,
                 &mut round_limits,
+                &self.registry_settings,
             );
         self.state = Some(state);
     }

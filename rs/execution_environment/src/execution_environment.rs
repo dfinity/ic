@@ -486,6 +486,19 @@ impl ExecutionEnvironment {
             .saturating_sub(state.callback_count()) as i64
     }
 
+    /// Executes a (mgmt canister) operation on the canister state
+    /// for a given canister ID.
+    /// Changes to the canister state and round limits
+    /// are discarded if the operation fails with an error.
+    ///
+    /// If the operation fails with an error, the returned amount
+    /// of cycles is charged and the charge is expected to succeed.
+    /// An example is charging for uploading an existing WASM chunk
+    /// which fails with a corresponding error, but cycles are still
+    /// charged for the work of hashing the uploaded WASM chunk.
+    /// In particular, this means that a dedicated "out of cycles"
+    /// error and no charge should be returned if the canister is
+    /// completely out of cycles.
     pub(crate) fn execute_mgmt_operation_on_canister<F, C>(
         &self,
         canister_id: CanisterId,
@@ -493,6 +506,7 @@ impl ExecutionEnvironment {
         context: C,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
+        registry_settings: &RegistryExecutionSettings,
     ) -> Result<(), UserError>
     where
         F: FnOnce(
@@ -504,8 +518,10 @@ impl ExecutionEnvironment {
             (CanisterManagerError, Cycles),
         >,
     {
-        match state.canister_state(&canister_id).cloned() {
-            Some(clean_canister) => match op(clean_canister, round_limits.clone(), context) {
+        let cost_schedule = state.get_own_cost_schedule();
+        match state.canister_state_mut(&canister_id) {
+            Some(clean_canister) => match op(clean_canister.clone(), round_limits.clone(), context)
+            {
                 Ok((new_canister, new_round_limits, responses)) => {
                     state.put_canister_state(new_canister);
                     *round_limits = new_round_limits;
@@ -518,7 +534,30 @@ impl ExecutionEnvironment {
                     );
                     Ok(())
                 }
-                Err((err, _cycles)) => Err(err.into()),
+                Err((err, cycles)) => {
+                    let memory_usage = clean_canister.memory_usage();
+                    let message_memory_usage = clean_canister.message_memory_usage();
+                    let res = self.cycles_account_manager.consume_cycles(
+                                    &mut clean_canister.system_state,
+                                    memory_usage,
+                                    message_memory_usage,
+                                    cycles,
+                                    registry_settings.subnet_size,
+                                    cost_schedule,
+                                    CyclesUseCase::Instructions,
+                                    true, /* we only log the error, but do not return it to the user => do reveal top up balance */
+                                );
+                    if let Err(e) = res {
+                        error!(
+                            self.log,
+                            "[EXC-BUG]: Failed to charge {} cycles for a failed mgmt canister operation on canister {}: {}",
+                            cycles,
+                            canister_id,
+                            e
+                        );
+                    }
+                    Err(err.into())
+                }
             },
             None => Err(UserError::new(
                 ErrorCode::CanisterNotFound,
@@ -836,6 +875,7 @@ impl ExecutionEnvironment {
                         (origin, time),
                         &mut state,
                         round_limits,
+                        registry_settings,
                     )
                     .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                 });
