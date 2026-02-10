@@ -27,8 +27,8 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
-    ReplicatedState,
+    CallOrigin, CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology,
+    NumWasmPages, ReplicatedState,
     canister_state::{
         NextExecution, execution_state::NextScheduledMethod, system_state::CyclesUseCase,
     },
@@ -44,6 +44,7 @@ use ic_types::{
     messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
 };
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
+use ic_utils::iter::left_outer_join;
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
 use prometheus::Histogram;
@@ -559,12 +560,18 @@ impl SchedulerImpl {
             );
             state.put_canister_states(canisters);
 
-            for canister_id in &round_fully_executed_canister_ids {
-                state
-                    .metadata
-                    .subnet_schedule
-                    .get_mut(*canister_id)
-                    .last_full_execution_round = current_round;
+            // TODO(IC-1976): When we only schedule (and have `CanisterPriorities` for)
+            // active canisters, switch back to `SubnetSchedule::get_mut()`. For now, all
+            // canisters are scheduled, so we always have a matching `CanisterPriority`.
+            for (_, _, canister_priority) in left_outer_join(
+                round_fully_executed_canister_ids
+                    .iter()
+                    .map(|canister_id| (canister_id, ())),
+                state.metadata.subnet_schedule.iter_mut(),
+            ) {
+                if let Some(canister_priority) = canister_priority {
+                    canister_priority.last_full_execution_round = current_round;
+                }
             }
 
             ingress_execution_results.append(&mut loop_ingress_execution_results);
@@ -899,61 +906,62 @@ impl SchedulerImpl {
     ) {
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
+        let threshold_last_allocation_charge = state_time.saturating_sub(
+            self.cycles_account_manager
+                .duration_between_allocation_charges(),
+        );
         let mut all_rejects = Vec::new();
         let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
+            if canister.system_state.time_of_last_allocation_charge
+                > threshold_last_allocation_charge
+            {
+                // Skip charging for the resources in this round because not enough time has passed
+                // since the last charge happened.
+                continue;
+            }
+
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
             if canister.has_paused_execution() || canister.has_paused_install_code() {
                 continue;
             }
 
-            if state_time
-                < canister.system_state.time_of_last_allocation_charge
-                    + self
-                        .cycles_account_manager
-                        .duration_between_allocation_charges()
+            self.observe_canister_metrics(canister);
+            let duration_since_last_charge =
+                canister.duration_since_last_allocation_charge(state_time);
+            canister.system_state.time_of_last_allocation_charge = state_time;
+            if self
+                .cycles_account_manager
+                .charge_canister_for_resource_allocation_and_usage(
+                    &self.log,
+                    canister,
+                    duration_since_last_charge,
+                    subnet_size,
+                    cost_schedule,
+                )
+                .is_err()
             {
-                // Skip charging for the resources in this round because not enough time has passed
-                // since the last charge happened.
-                continue;
-            } else {
-                self.observe_canister_metrics(canister);
-                let duration_since_last_charge =
-                    canister.duration_since_last_allocation_charge(state_time);
-                canister.system_state.time_of_last_allocation_charge = state_time;
-                if self
-                    .cycles_account_manager
-                    .charge_canister_for_resource_allocation_and_usage(
-                        &self.log,
-                        canister,
-                        duration_since_last_charge,
-                        subnet_size,
-                        cost_schedule,
-                    )
-                    .is_err()
-                {
-                    uninstalled_canisters.push(canister.canister_id());
-                    all_rejects.push(uninstall_canister(
-                        &self.log,
-                        canister,
-                        None, /* we're at the end of a round so no need to update round limits */
-                        state_time,
-                        Arc::clone(&self.fd_factory),
-                    ));
-                    canister.system_state.compute_allocation = ComputeAllocation::zero();
-                    canister.system_state.memory_allocation = MemoryAllocation::default();
-                    canister.system_state.clear_canister_history();
-                    // Burn the remaining balance of the canister.
-                    canister.system_state.burn_remaining_balance_for_uninstall();
+                uninstalled_canisters.push(canister.canister_id());
+                all_rejects.push(uninstall_canister(
+                    &self.log,
+                    canister,
+                    None, /* we're at the end of a round so no need to update round limits */
+                    state_time,
+                    Arc::clone(&self.fd_factory),
+                ));
+                canister.system_state.compute_allocation = ComputeAllocation::zero();
+                canister.system_state.memory_allocation = MemoryAllocation::default();
+                canister.system_state.clear_canister_history();
+                // Burn the remaining balance of the canister.
+                canister.system_state.burn_remaining_balance_for_uninstall();
 
-                    info!(
-                        self.log,
-                        "Uninstalling canister {} because it ran out of cycles",
-                        canister.canister_id()
-                    );
-                    self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
-                }
+                info!(
+                    self.log,
+                    "Uninstalling canister {} because it ran out of cycles",
+                    canister.canister_id()
+                );
+                self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
         }
 
@@ -2045,25 +2053,27 @@ fn observe_replicated_state_metrics(
             canisters_not_in_routing_table += 1;
         }
         if let Some(manager) = canister.system_state.call_context_manager() {
-            let old_call_contexts =
-                manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF_ONE_DAY);
             // Log all old call contexts, but not (nearly) every round.
-            if current_round
-                .get()
-                .is_multiple_of(SPAMMY_LOG_INTERVAL_ROUNDS)
-            {
-                for (origin, origin_time) in &old_call_contexts {
+            let maybe_log_old_call_contexts = |origin: &CallOrigin, origin_time: Time| {
+                if current_round
+                    .get()
+                    .is_multiple_of(SPAMMY_LOG_INTERVAL_ROUNDS)
+                {
                     warn!(
                         logger,
                         "Call context on canister {} with origin {:?} has been open for {:?}",
                         canister.canister_id(),
                         origin,
-                        state.time().saturating_duration_since(*origin_time),
+                        state.time().saturating_duration_since(origin_time),
                     );
                 }
-            }
-            if !old_call_contexts.is_empty() {
-                old_call_contexts_count += old_call_contexts.len();
+            };
+            let old_call_contexts = manager.call_contexts_older_than(
+                state.time().saturating_sub(OLD_CALL_CONTEXT_CUTOFF_ONE_DAY),
+                maybe_log_old_call_contexts,
+            );
+            if old_call_contexts > 0 {
+                old_call_contexts_count += old_call_contexts;
                 canisters_with_old_open_call_contexts += 1;
             }
         }
