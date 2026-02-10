@@ -23,9 +23,12 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/registry/mocks",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
     "@crate_index//:assert_matches",
+    "@crate_index//:mockall",
+    "@crate_index//:prost",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

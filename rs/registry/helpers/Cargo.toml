@@ -23,5 +23,8 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }
+mockall = { workspace = true }
+prost = { workspace = true }
