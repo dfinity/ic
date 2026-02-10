@@ -4977,7 +4977,7 @@ impl StateMachine {
             "StateMachine::reject_remote_callbacks must not be used in a multi-subnet setup."
         );
         let routing_table = self.get_routing_table();
-        let (height, mut replicated_state) = self.state_manager.take_tip();
+        let (_height, mut replicated_state) = self.state_manager.take_tip();
         let mut synthetic_responses = vec![];
         for (canister_id, canister_state) in replicated_state.canister_states.iter_mut() {
             let Some(call_context_manager) = canister_state.system_state.call_context_manager()
@@ -5028,12 +5028,8 @@ impl StateMachine {
                 )
                 .unwrap();
         }
-        self.state_manager.commit_and_certify(
-            replicated_state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        self.state_manager
+            .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
     }
 }
 
