@@ -2697,6 +2697,7 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-canister-client",
+ "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
