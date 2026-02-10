@@ -455,7 +455,7 @@ def process_log(
     summary = None
     vm_ipv6s = {}
     lines = download_to_path.read_text().strip().splitlines()
-    last_line = lines[-1]
+    last_line = lines[-1] if len(lines) > 0 else None
 
     # system-tests have structured logs with JSON objects that we can parse to get more detailed error summaries
     # and to determine the group (testnet) name for downloading the IC logs from ElasticSearch.
