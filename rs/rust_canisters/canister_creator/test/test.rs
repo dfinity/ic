@@ -1,18 +1,7 @@
 use canister_test::*;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
+use ic_config::execution_environment::TEST_DEFAULT_LOG_MEMORY_USAGE;
 use ic_state_machine_tests::StateMachine;
 use more_asserts::{assert_le, assert_lt};
-
-const KIB: u64 = 1024;
-const LOG_MEMORY_STORE_LIMIT: u64 = 4 * KIB;
-const LOG_MEMORY_STORE_USAGE: u64 = 4 * KIB + 4 * KIB + LOG_MEMORY_STORE_LIMIT; // Header, index table, data region.
-const fn log_memory_store_usage() -> u64 {
-    if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        LOG_MEMORY_STORE_USAGE
-    } else {
-        0
-    }
-}
 
 // This constant has been obtained empirically by running the tests.
 // The old value of the const was 1_820_000.
@@ -74,7 +63,7 @@ fn creating_canisters_works() {
     assert_eq!(env.num_running_canisters(), 1_001);
     assert_le!(
         env.canister_memory_usage_bytes(),
-        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * log_memory_store_usage(),
+        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * TEST_DEFAULT_LOG_MEMORY_USAGE,
     );
 }
 
@@ -96,7 +85,7 @@ fn install_code_works() {
     assert_eq!(env.num_running_canisters(), 1_001);
     assert_le!(
         env.canister_memory_usage_bytes(),
-        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * log_memory_store_usage(),
+        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * TEST_DEFAULT_LOG_MEMORY_USAGE,
     );
 
     // Install code.

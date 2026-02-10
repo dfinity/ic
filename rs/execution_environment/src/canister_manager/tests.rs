@@ -23,7 +23,7 @@ use ic_config::{
         LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
         MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
         MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
-        SUBNET_MEMORY_RESERVATION,
+        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -5428,17 +5428,7 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
-const DEFAULT_LOG_MEMORY_LIMIT: u64 = 4 * KIB;
-const LOG_MEMORY_STORE_USAGE: u64 = 4 * KIB + 4 * KIB + DEFAULT_LOG_MEMORY_LIMIT; // Header, index table, data region.
-const fn log_memory_store_usage() -> u64 {
-    if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        LOG_MEMORY_STORE_USAGE
-    } else {
-        0
-    }
-}
-
-const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222 + log_memory_store_usage());
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222 + TEST_DEFAULT_LOG_MEMORY_USAGE);
 
 #[test]
 fn empty_canister_memory_usage() {

@@ -27,7 +27,6 @@ use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
-    #[validate_eq(Ignore)]
     feature_flag: FlagStatus,
 
     #[validate_eq(Ignore)]
@@ -259,10 +258,8 @@ impl Clone for LogMemoryStore {
 
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
-        // header_cache is a transient cache and should not be compared.
-        self.maybe_page_map == other.maybe_page_map
-            && self.delta_log_sizes == other.delta_log_sizes
-            && self.feature_flag == other.feature_flag
+        // Do not compare delta_log_sizes and header_cache as they are transient.
+        self.feature_flag == other.feature_flag && self.maybe_page_map == other.maybe_page_map
     }
 }
 

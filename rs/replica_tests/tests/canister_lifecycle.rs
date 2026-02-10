@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use ic_config::Config;
 use ic_config::execution_environment::{
-    DEFAULT_WASM_MEMORY_LIMIT, LOG_MEMORY_STORE_FEATURE_ENABLED,
+    DEFAULT_WASM_MEMORY_LIMIT, TEST_DEFAULT_LOG_MEMORY_LIMIT, TEST_DEFAULT_LOG_MEMORY_USAGE,
 };
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_error_types::{ErrorCode, RejectCode};
@@ -24,24 +24,6 @@ use std::{collections::BTreeSet, mem::size_of, str::FromStr};
 const BALANCE_EPSILON: u64 = 1_000_000;
 const NUM_CYCLES: u128 = 1_000_000_000;
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
-
-const KIB: u64 = 1024;
-const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4 * KIB;
-const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = 4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT; // Header, index table, data region.
-const fn default_log_memory_limit() -> u64 {
-    if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        TEST_DEFAULT_LOG_MEMORY_LIMIT
-    } else {
-        0
-    }
-}
-const fn log_memory_store_usage() -> u64 {
-    if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        TEST_DEFAULT_LOG_MEMORY_USAGE
-    } else {
-        0
-    }
-}
 
 #[test]
 fn can_create_canister_from_another_canister() {
@@ -728,7 +710,7 @@ fn can_get_canister_information() {
                 None,
                 canister_a.get(),
                 vec![canister_a.get()],
-                canister_history_size + NumBytes::from(log_memory_store_usage()),
+                canister_history_size + NumBytes::from(TEST_DEFAULT_LOG_MEMORY_USAGE),
                 NumBytes::from(0),
                 NumBytes::from(0),
                 NumBytes::from(0),
@@ -737,14 +719,14 @@ fn can_get_canister_information() {
                 canister_history_size,
                 NumBytes::from(0),
                 NumBytes::from(0),
-                NumBytes::from(log_memory_store_usage()),
+                NumBytes::from(TEST_DEFAULT_LOG_MEMORY_USAGE),
                 num_cycles.get(),
                 ComputeAllocation::default().as_percent(),
                 None,
                 2592000,
                 Some(5_000_000_000_000u128),
                 LogVisibilityV2::default(),
-                default_log_memory_limit(),
+                TEST_DEFAULT_LOG_MEMORY_LIMIT,
                 0u128,
                 0u128,
                 0u128,
@@ -814,14 +796,14 @@ fn can_get_canister_information() {
                     259200,
                     None,
                     LogVisibilityV2::default(),
-                    default_log_memory_limit(),
+                    TEST_DEFAULT_LOG_MEMORY_LIMIT,
                     0u128,
                     0u128,
                     0u128,
                     0u128,
                     0u128,
                     0u128,
-                    Some(log_memory_store_usage()),
+                    Some(TEST_DEFAULT_LOG_MEMORY_USAGE),
                     0u64,
                     Default::default(),
                 ),
