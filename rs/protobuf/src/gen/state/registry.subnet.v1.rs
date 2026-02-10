@@ -78,7 +78,7 @@ pub struct SubnetRecord {
     /// If the replica_version_id of a subnet points to a broken GuestOS and the subnet is stalled,
     /// even if we manage to rollback the GuestOS locally, the GuestOS would automatically try
     /// to upgrade to the broken GuestOS again. We can use this field to prevent that.
-    /// While nodes read the recalled_replica_version_ids from the registry vesion from the CUP,
+    /// While nodes read the replica_version_id from the registry vesion from the CUP,
     /// they check the latest registry version for recalled_replica_version_ids.
     #[prost(string, repeated, tag = "31")]
     pub recalled_replica_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
