@@ -128,7 +128,7 @@ def system_test(
     icos_images = dict()
 
     # # IC-OS image configuration
-    icos_config = configure_icos(guestos = guestos, guestos_update = guestos_update, setupos = setupos, hostos = hostos, hostos_update = hostos_update)
+    icos_config = configure_icos(guestos = guestos, guestos_update = guestos_update, hostos = hostos, hostos_update = hostos_update, setupos = setupos)
     env_var_files |= icos_config.env_var_files
     env |= icos_config.env
     _runtime_deps |= icos_config.runtime_deps

@@ -5,7 +5,7 @@ IC-OS-specific system test configuration.
 load("@mainnet_icos_versions//:defs.bzl", "MAINNET_APP", "MAINNET_LATEST", "MAINNET_LATEST_HOSTOS", "MAINNET_NNS")
 load("//bazel:mainnet-icos-images.bzl", "icos_dev_image_download_url", "icos_image_download_url")
 
-def configure_icos(guestos, guestos_update, setupos, hostos_update):
+def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     """IC-OS configuration.
 
     Args:

@@ -181,6 +181,7 @@ impl NestedNode {
     pub fn new_farm(name: String, vm_resources: VmResources) -> Self {
         NestedNode {
             name,
+            boot_image: BootImage::default(),
             node_spec: NestedNodeSpec::Vm(vm_resources),
         }
     }
@@ -193,6 +194,7 @@ impl NestedNode {
     ) -> Self {
         NestedNode {
             name,
+            boot_image: BootImage::default(),
             node_spec: NestedNodeSpec::BareMetal {
                 host_address,
                 mgmt_mac,
