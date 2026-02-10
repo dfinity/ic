@@ -7,7 +7,7 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     consensus::{
         Block,
-        dkg::{DkgPayloadCreationError, DkgSummary, Message},
+        dkg::{DkgPayloadCreationError, DkgSummary},
     },
     crypto::{
         AlgorithmId,
@@ -86,14 +86,16 @@ pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
 ) -> HashSet<(NiDkgId, NodeId)> {
-    let (dealers_by_dkg_id, _) =
-        extract_from_dkg_dealing_messages(pool_reader, block, false, |_| ());
-    dealers_by_dkg_id
-        .into_iter()
-        .flat_map(|(dkg_id, dealers)| {
-            dealers
-                .into_keys()
-                .map(move |node_id| (dkg_id.clone(), node_id))
+    pool_reader
+        .chain_iterator(block.clone())
+        .take_while(|block| !block.payload.is_summary())
+        .flat_map(|block| {
+            let payload = &block.payload.as_ref().as_data().dkg;
+            payload
+                .messages
+                .iter()
+                .map(|message| (message.content.dkg_id.clone(), message.signature.signer))
+                .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -110,18 +112,7 @@ pub(super) fn get_dkg_dealings(
     BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>>,
     BTreeSet<NiDkgId>,
 ) {
-    extract_from_dkg_dealing_messages(pool_reader, block, true, |message| {
-        message.content.dealing.clone()
-    })
-}
-
-fn extract_from_dkg_dealing_messages<T>(
-    pool_reader: &PoolReader<'_>,
-    block: &Block,
-    exclude_used: bool,
-    extractor: impl Fn(&Message) -> T,
-) -> (BTreeMap<NiDkgId, BTreeMap<NodeId, T>>, BTreeSet<NiDkgId>) {
-    let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, T>> = BTreeMap::new();
+    let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> = BTreeMap::new();
     let mut excluded: BTreeSet<NiDkgId> = BTreeSet::new();
 
     for block in pool_reader
@@ -130,13 +121,11 @@ fn extract_from_dkg_dealing_messages<T>(
     {
         let payload = &block.payload.as_ref().as_data().dkg;
 
-        if exclude_used {
-            for (dkg_id, _, _) in payload.transcripts_for_remote_subnets.iter() {
-                // Add the finished DKG to excluded list
-                excluded.insert(dkg_id.clone());
-                // Remove already selected dealings
-                dealings.remove(dkg_id);
-            }
+        for (dkg_id, _, _) in payload.transcripts_for_remote_subnets.iter() {
+            // Add the finished DKG to excluded list
+            excluded.insert(dkg_id.clone());
+            // Remove already selected dealings
+            dealings.remove(dkg_id);
         }
 
         for message in payload.messages.iter() {
@@ -147,7 +136,7 @@ fn extract_from_dkg_dealing_messages<T>(
             let old_dealing = dealings
                 .entry(message.content.dkg_id.clone())
                 .or_default()
-                .insert(message.signature.signer, extractor(message));
+                .insert(message.signature.signer, message.content.dealing.clone());
 
             assert!(
                 old_dealing.is_none(),
@@ -197,7 +186,7 @@ pub(crate) fn tags_iter(
 
 #[cfg(test)]
 mod tests {
-    use super::get_dkg_dealings;
+    use super::{get_dealers_from_chain, get_dkg_dealings};
     use crate::test_utils::create_dealing;
     use crate::utils::vetkd_key_ids_for_subnet;
     use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
@@ -421,10 +410,16 @@ mod tests {
             // (dealers 0, 1 from middle; dealer 2 from parent; dealer 3 from child).
             let included = dealings.get(&dkg_id_without_transcript).unwrap();
             assert_eq!(included.len(), 4);
-            assert!(included.contains_key(&node_test_id(0)));
-            assert!(included.contains_key(&node_test_id(1)));
-            assert!(included.contains_key(&node_test_id(2)));
-            assert!(included.contains_key(&node_test_id(3)));
+
+            // get_dealers_from_chain returns all dealers from the chain (no transcript exclusion).
+            let dealers = get_dealers_from_chain(&pool_reader, &child_block);
+            assert_eq!(dealers.len(), 8);
+
+            for i in 0..4 {
+                assert!(included.contains_key(&node_test_id(i)));
+                assert!(dealers.contains(&(dkg_id_with_transcript.clone(), node_test_id(i))));
+                assert!(dealers.contains(&(dkg_id_without_transcript.clone(), node_test_id(i))));
+            }
         });
     }
 
