@@ -425,8 +425,8 @@ impl CanisterState {
     }
 
     /// Returns the memory limit of the log memory store in bytes.
-    pub fn log_memory_limit(&self) -> usize {
-        self.system_state.log_memory_store.byte_capacity()
+    pub fn log_memory_limit(&self) -> NumBytes {
+        NumBytes::new(self.system_state.log_memory_store.byte_capacity() as u64)
     }
 
     /// Returns the memory usage of the log memory store in bytes.
@@ -569,7 +569,6 @@ impl CanisterState {
     /// Removes the canister log.
     pub fn remove_log(&mut self) {
         self.system_state.canister_log.clear();
-        self.system_state.log_memory_limit = NumBytes::new(0);
         self.system_state.log_memory_store.deallocate();
     }
 

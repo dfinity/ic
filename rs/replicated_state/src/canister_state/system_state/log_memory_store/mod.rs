@@ -13,7 +13,7 @@ use crate::canister_state::system_state::log_memory_store::{
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::CanisterLog;
+use ic_types::{CanisterLog, NumBytes};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -27,6 +27,7 @@ use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
+    #[validate_eq(Ignore)]
     feature_flag: FlagStatus,
 
     #[validate_eq(Ignore)]
@@ -56,8 +57,18 @@ impl LogMemoryStore {
     }
 
     /// Creates a new store from a checkpoint.
-    pub fn from_checkpoint(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
-        Self::new_inner(feature_flag, maybe_page_map)
+    pub fn from_checkpoint(
+        feature_flag: FlagStatus,
+        log_memory_limit: NumBytes,
+        page_map: PageMap,
+    ) -> Self {
+        // PageMap is a lazy pointer that doesn't verify file existence on creation.
+        // To avoid redundant disk I/O during restoration, we only initialize it
+        // if the log memory limit is non-zero.
+        Self::new_inner(
+            feature_flag,
+            (log_memory_limit > NumBytes::new(0)).then_some(page_map),
+        )
     }
 
     fn new_inner(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
@@ -258,8 +269,7 @@ impl Clone for LogMemoryStore {
 
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
-        // Do not compare delta_log_sizes and header_cache as they are transient.
-        self.feature_flag == other.feature_flag && self.maybe_page_map == other.maybe_page_map
+        self.maybe_page_map == other.maybe_page_map && self.feature_flag == other.feature_flag
     }
 }
 

@@ -398,13 +398,6 @@ pub struct SystemState {
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
 
-    /// Defines the maximum size of the canister log in bytes.
-    ///
-    /// This field also serves as a guard for state restoration: if set to 0,
-    /// the `log_memory_store` is treated as uninitialized (None) to avoid
-    /// unnecessary PageMap allocation and disk I/O.
-    pub log_memory_limit: NumBytes,
-
     /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
@@ -598,7 +591,6 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_memory_limit: NumBytes::new(0),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
@@ -670,14 +662,11 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
-            log_memory_limit,
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 LOG_MEMORY_STORE_FEATURE,
-                // PageMap is a lazy pointer that doesn't verify file existence on creation.
-                // To avoid redundant disk I/O during restoration, we only initialize it
-                // if the log memory limit is non-zero.
-                (log_memory_limit > NumBytes::new(0)).then_some(log_memory_store_data),
+                log_memory_limit,
+                log_memory_store_data,
             ),
             wasm_memory_limit,
             next_snapshot_id,
@@ -2362,7 +2351,6 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
-            log_memory_limit: Default::default(),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
