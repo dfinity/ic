@@ -59,7 +59,7 @@ where
     let mut transaction_manager = TransactionStore::new(logger.clone(), metrics_registry);
     let mut connection_manager = ConnectionManager::new(
         config,
-        Arc::new(logger),
+        logger,
         network_message_sender,
         router_metrics.clone(),
     );

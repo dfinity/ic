@@ -86,17 +86,18 @@ pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
 ) -> HashSet<(NiDkgId, NodeId)> {
-    let mut dealers = HashSet::new();
-    for block in pool_reader
+    pool_reader
         .chain_iterator(block.clone())
         .take_while(|block| !block.payload.is_summary())
-    {
-        let payload = &block.payload.as_ref().as_data().dkg;
-        for message in payload.messages.iter() {
-            dealers.insert((message.content.dkg_id.clone(), message.signature.signer));
-        }
-    }
-    dealers
+        .flat_map(|block| {
+            let payload = &block.payload.as_ref().as_data().dkg;
+            payload
+                .messages
+                .iter()
+                .map(|message| (message.content.dkg_id.clone(), message.signature.signer))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 /// Starts with the given block and creates a nested mapping from the DKG Id to
