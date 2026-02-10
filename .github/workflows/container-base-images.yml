@@ -102,7 +102,6 @@ jobs:
     timeout-minutes: 10
     environment: CREATE_PR
     needs: [build-base-image]
-    if: ${{ github.ref_name == 'master' }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
