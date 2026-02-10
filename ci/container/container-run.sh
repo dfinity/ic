@@ -130,13 +130,17 @@ if [ "$DEVENV" = true ]; then
 fi
 
 WORKDIR="/ic"
-USER=$(whoami)
+HOST_USER=$(whoami)
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+CONTAINER_UID="1000"
+CONTAINER_GID="1000"
 
 PODMAN_RUN_ARGS=(
     -w "$WORKDIR"
 
-    -u "ubuntu:ubuntu"
-    -e HOSTUSER="$USER"
+    -u "$HOST_UID:$HOST_GID"
+    -e HOSTUSER="$HOST_USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     -e TERM
@@ -149,9 +153,9 @@ PODMAN_RUN_ARGS=(
     --pull=missing
 )
 
-PODMAN_RUN_ARGS+=(--hostuser="$USER")
+PODMAN_RUN_ARGS+=(--hostuser="$HOST_USER")
 
-if [ "$(id -u)" = "1000" ]; then
+if [ "$HOST_UID" = "1000" ]; then
     CTR_HOME="/home/ubuntu"
 else
     CTR_HOME="/ic"
@@ -175,45 +179,43 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
-    --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
+    --mount type=tmpfs,target="${CTR_HOME}/.local/share/containers"
 )
 
-if [ "$(id -u)" = "1000" ]; then
-    if [ -e "${HOME}/.gitconfig" ]; then
-        PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
-        )
-    fi
+if [ -e "${HOME}/.gitconfig" ]; then
+    PODMAN_RUN_ARGS+=(
+        --mount type=bind,source="${HOME}/.gitconfig",target="${CTR_HOME}/.gitconfig"
+    )
+fi
 
-    if [ -e "${HOME}/.bash_history" ]; then
-        PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
-        )
+if [ -e "${HOME}/.bash_history" ]; then
+    PODMAN_RUN_ARGS+=(
+        --mount type=bind,source="${HOME}/.bash_history",target="${CTR_HOME}/.bash_history"
+    )
 
-    fi
-    if [ -e "${HOME}/.local/share/fish" ]; then
-        PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
-        )
-    fi
-    if [ -e "${HOME}/.zsh_history" ]; then
-        PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
-        )
-    fi
+fi
+if [ -e "${HOME}/.local/share/fish" ]; then
+    PODMAN_RUN_ARGS+=(
+        --mount type=bind,source="${HOME}/.local/share/fish",target="${CTR_HOME}/.local/share/fish"
+    )
+fi
+if [ -e "${HOME}/.zsh_history" ]; then
+    PODMAN_RUN_ARGS+=(
+        --mount type=bind,source="${HOME}/.zsh_history",target="${CTR_HOME}/.zsh_history"
+    )
+fi
 
-    if findmnt /hoststorage >/dev/null; then
-        # use host's storage for cargo target
-        # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
-        # this configuration improves performance of rust-analyzer
-        if [ ! -d /hoststorage/cache/cargo ]; then
-            sudo mkdir -p /hoststorage/cache/cargo
-            sudo chown -R 1000:1000 /hoststorage/cache/cargo
-        fi
-        PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
-        )
+if findmnt /hoststorage >/dev/null; then
+    # use host's storage for cargo target
+    # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
+    # this configuration improves performance of rust-analyzer
+    if [ ! -d /hoststorage/cache/cargo ]; then
+        sudo mkdir -p /hoststorage/cache/cargo
+        sudo chown -R $CONTAINER_UID:$CONTAINER_GID /hoststorage/cache/cargo
     fi
+    PODMAN_RUN_ARGS+=(
+        --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
+    )
 fi
 
 if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
