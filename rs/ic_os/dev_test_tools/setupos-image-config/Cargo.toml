@@ -9,7 +9,6 @@ clap = { workspace = true }
 partition_tools = { path = "../../build_tools/partition_tools" }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
 url = { workspace = true }
 config_tool = { path = "../../config/tool", features = ["dev"] }
 config_types = { path = "../../config/types" }

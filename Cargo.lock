@@ -2573,7 +2573,6 @@ dependencies = [
  "tempfile",
  "url",
  "utils",
- "walkdir",
 ]
 
 [[package]]
@@ -2596,7 +2595,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "config_types",
- "macaddr",
  "serde",
  "serde_json",
  "url",
@@ -5481,7 +5479,6 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
- "url",
  "uuid",
  "virt",
 ]
@@ -5496,7 +5493,6 @@ dependencies = [
  "config_types",
  "indoc 1.0.9",
  "network",
- "regex",
  "utils",
 ]
 
@@ -9604,7 +9600,6 @@ dependencies = [
  "clap 4.5.27",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-sys",
- "maplit",
  "predicates",
  "rand 0.8.5",
  "regex",
@@ -18707,7 +18702,6 @@ dependencies = [
  "command_runner",
  "config_tool",
  "config_types",
- "hex",
  "ic-agent 0.40.1",
  "ic-certification 3.0.3",
  "ic-certification-test-utils",
@@ -18717,7 +18711,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic_device",
  "linux_kernel_command_line",
- "mockall",
  "pem 3.0.6",
  "rand 0.8.5",
  "serde_cbor",
@@ -21166,7 +21159,6 @@ version = "0.0.0"
 dependencies = [
  "attestation",
  "prost 0.13.4",
- "prost-build 0.13.4",
  "tonic 0.12.3",
  "tonic-build",
 ]
@@ -22494,7 +22486,6 @@ dependencies = [
  "partition_tools",
  "regex",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -22508,7 +22499,6 @@ dependencies = [
  "partition_tools",
  "serde_json",
  "tempfile",
- "tokio",
  "url",
 ]
 

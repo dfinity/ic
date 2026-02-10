@@ -37,14 +37,14 @@ pub struct ResourceRequest {
     pub vm_configs: Vec<VmSpec>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub struct DiskImage {
     pub image_type: ImageType,
     pub url: Url,
     pub sha256: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub enum ImageType {
     IcOsImage,
     PrometheusImage,
@@ -106,8 +106,9 @@ pub struct VmSpec {
     pub alternate_template: Option<VmType>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Serialize, Deserialize)]
 pub enum BootImage {
+    #[default]
     GroupDefault,
     Image(DiskImage),
     File(FileId),
@@ -336,7 +337,7 @@ fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmS
                 .and_then(|vm_resources| vm_resources.memory_kibibytes)
                 .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
         }),
-        boot_image: BootImage::GroupDefault,
+        boot_image: n.boot_image.clone(),
         boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
             || {
                 default_vm_resources
@@ -374,7 +375,7 @@ fn vm_spec_from_nested_node(
                 .and_then(|vm_resources| vm_resources.memory_kibibytes)
                 .unwrap_or(HOSTOS_MEMORY_KIB_PER_VM)
         }),
-        boot_image: BootImage::GroupDefault,
+        boot_image: node.boot_image.clone(),
         boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
             || {
                 default_vm_resources

@@ -1,7 +1,7 @@
 use crate::driver::farm::VmSpec;
 use crate::driver::ic::VmResources;
 use crate::driver::port_allocator::AddrType;
-use crate::driver::resource::AllocatedVm;
+use crate::driver::resource::{AllocatedVm, BootImage};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
 use crate::driver::{
@@ -23,7 +23,7 @@ use anyhow::{Context, Result, bail, ensure};
 use async_trait::async_trait;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -174,6 +174,7 @@ pub enum NestedNodeSpec {
 pub struct NestedNode {
     pub name: String,
     pub node_spec: NestedNodeSpec,
+    pub boot_image: BootImage,
 }
 
 impl NestedNode {
@@ -198,6 +199,11 @@ impl NestedNode {
                 enable_trusted_execution_environment,
             },
         }
+    }
+
+    pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {
+        self.boot_image = boot_image;
+        self
     }
 }
 
@@ -355,13 +361,11 @@ impl HasNestedVms for TestEnv {
         let host_mac = calculate_deterministic_mac(
             &seed_mac,
             DeploymentEnvironment::Testnet,
-            IpVariant::V6,
             NodeType::HostOS,
         );
         let guest_mac = calculate_deterministic_mac(
             &seed_mac,
             DeploymentEnvironment::Testnet,
-            IpVariant::V6,
             NodeType::GuestOS,
         );
 

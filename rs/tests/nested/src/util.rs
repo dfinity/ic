@@ -39,10 +39,9 @@ use ic_types::{Height, NodeId, ReplicaVersion, hostos_version::HostosVersion};
 use prost::Message;
 use regex::Regex;
 use reqwest::Client;
+use slog::{Logger, info, warn};
 use std::net::Ipv6Addr;
 use std::time::Duration;
-
-use slog::{Logger, info, warn};
 
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
