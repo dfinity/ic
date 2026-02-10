@@ -221,6 +221,7 @@ impl RoundSchedule {
 
         let (canister_states, subnet_schedule) = state.subnet_schedule_mut();
 
+        // TODO(DSM-102): Consider using `left_outer_join()` here.
         self.schedule = canister_states
             .iter_mut()
             .filter_map(|(canister_id, canister)| {
@@ -415,6 +416,7 @@ impl RoundSchedule {
         state: &mut ReplicatedState,
         completed_messages: &BTreeSet<CanisterId>,
     ) {
+        // TODO(DSM-102): Consider using `left_outer_join()` here.
         for canister_id in completed_messages {
             self.canisters_with_completed_messages.insert(*canister_id);
             // If a canister has completed a long execution, reset its long execution mode.
@@ -445,6 +447,8 @@ impl RoundSchedule {
         let (canister_states, subnet_schedule) = state.subnet_schedule_mut();
 
         // Charge canisters for full executions in this round.
+        //
+        // TODO(DSM-102): Consider using `left_outer_join()` here.
         for canister_id in self.fully_executed_canisters.iter() {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
             if canister_states.get(canister_id).is_some() {
@@ -459,6 +463,8 @@ impl RoundSchedule {
 
         // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
         // because they will be added again in the next round.
+        //
+        // TODO(DSM-102): Consider using `left_outer_join()` here.
         for canister_id in &self.heartbeat_and_timer_canister_ids {
             let canister = canister_states.get_mut(canister_id).unwrap();
             if canister
@@ -483,6 +489,8 @@ impl RoundSchedule {
             .chain(self.rate_limited_canisters.iter())
             .chain(self.heartbeat_and_timer_canister_ids.iter())
             .collect::<BTreeSet<_>>();
+        //
+        // TODO(DSM-102): Consider using `left_outer_join()` here.
         for canister_id in relevant_canister_ids {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
             if let Some(canister) = canister_states.get_mut(canister_id) {

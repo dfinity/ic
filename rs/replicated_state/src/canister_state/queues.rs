@@ -1374,7 +1374,7 @@ impl CanisterQueues {
     /// Returns `true` if calling `garbage_collect()` would actually garbage collect
     /// anything.
     ///
-    /// Time complexity: `O(num_queues)`.
+    /// Time complexity: `O(|canister_queues|)`.
     pub(crate) fn can_garbage_collect(&self) -> bool {
         // Can garbage collect if any input queue / output queue pair are both empty...
         self.canister_queues
@@ -1398,7 +1398,7 @@ impl CanisterQueues {
     /// every round; but not e.g. when deserializing, which may happen at
     /// different times on restarting or state syncing replicas).
     ///
-    /// Time complexity: `O(num_queues)`.
+    /// Time complexity: `O(|canister_queues|)`.
     pub fn garbage_collect(&mut self) {
         self.garbage_collect_impl();
 
@@ -1767,6 +1767,14 @@ impl CanisterQueues {
             input_queues_reserved_slots,
             output_queues_reserved_slots,
         }
+    }
+
+    /// Checks if a given callback has a response already enqueued.
+    /// Public for use in `StateMachine` tests when producing
+    /// synthetic reject responses.
+    pub fn has_enqueued_response(&self, callback_id: &CallbackId) -> bool {
+        self.callbacks_with_enqueued_response
+            .contains_key(callback_id)
     }
 }
 

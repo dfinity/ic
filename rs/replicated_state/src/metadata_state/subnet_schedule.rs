@@ -30,18 +30,20 @@ pub struct CanisterPriority {
     pub last_full_execution_round: ExecutionRound,
 }
 
-/// The default priority for a canister. Applied when a canister is added to the
-/// subnet schedule.
-const DEFAULT_PRIORITY: CanisterPriority = CanisterPriority {
-    accumulated_priority: AccumulatedPriority::new(0),
-    priority_credit: AccumulatedPriority::new(0),
-    long_execution_mode: LongExecutionMode::Opportunistic,
-    last_full_execution_round: ExecutionRound::new(0),
-};
+impl CanisterPriority {
+    /// The default priority for a canister. Applied when a canister is added to the
+    /// subnet schedule.
+    pub const DEFAULT: CanisterPriority = CanisterPriority {
+        accumulated_priority: AccumulatedPriority::new(0),
+        priority_credit: AccumulatedPriority::new(0),
+        long_execution_mode: LongExecutionMode::Opportunistic,
+        last_full_execution_round: ExecutionRound::new(0),
+    };
+}
 
 impl Default for CanisterPriority {
     fn default() -> Self {
-        DEFAULT_PRIORITY
+        Self::DEFAULT
     }
 }
 
@@ -88,7 +90,7 @@ impl SubnetSchedule {
     pub fn get(&self, canister_id: &CanisterId) -> &CanisterPriority {
         self.priorities
             .get(canister_id)
-            .unwrap_or(&DEFAULT_PRIORITY)
+            .unwrap_or(&CanisterPriority::DEFAULT)
     }
 
     /// Returns the priority for the given canister, inserting the default priority
@@ -96,7 +98,7 @@ impl SubnetSchedule {
     pub fn get_mut(&mut self, canister_id: CanisterId) -> &mut CanisterPriority {
         self.priorities
             .entry(canister_id)
-            .or_insert_with(|| DEFAULT_PRIORITY)
+            .or_insert_with(|| CanisterPriority::DEFAULT)
     }
 
     /// Removes the priority of the given canister, essentially resetting it to the

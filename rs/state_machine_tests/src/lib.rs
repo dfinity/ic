@@ -94,6 +94,7 @@ use ic_protobuf::{
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
+    routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_keys::{
@@ -168,7 +169,7 @@ use ic_types::{
         Blob, CallbackId, Certificate, CertificateDelegation, CertificateDelegationMetadata,
         EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
         HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        SignedIngress, extract_effective_canister_id,
+        RequestOrResponse, Response, SignedIngress, extract_effective_canister_id,
     },
     nominal_cycles::NominalCycles,
     signature::ThresholdSignature,
@@ -1143,6 +1144,7 @@ pub struct StateMachine {
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
     cost_schedule: CanisterCyclesCostSchedule,
+    hypervisor_config: HypervisorConfig,
 }
 
 impl Default for StateMachine {
@@ -2024,7 +2026,7 @@ impl StateMachine {
             Arc::clone(&state_manager) as _,
             Arc::clone(&execution_services.ingress_history_writer) as _,
             execution_services.scheduler,
-            hypervisor_config,
+            hypervisor_config.clone(),
             Arc::clone(&execution_services.cycles_account_manager),
             subnet_id,
             max_stream_messages,
@@ -2252,6 +2254,7 @@ impl StateMachine {
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
+            hypervisor_config,
         }
     }
 
@@ -3469,8 +3472,6 @@ impl StateMachine {
     /// Returns an error if the routing table does not contain the subnet Id of the new `env` that
     /// was just created or if the split itself fails.
     pub fn split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
-        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
-
         // Write a checkpoint.
         self.checkpointed_tick();
         self.state_manager.flush_tip_channel();
@@ -3513,12 +3514,7 @@ impl StateMachine {
         self.registry_client.update_to_latest_version();
 
         // Get the routing table.
-        let last_version = self.registry_client.get_latest_version();
-        let routing_table = self
-            .registry_client
-            .get_routing_table(last_version)
-            .expect("malformed routing table")
-            .expect("missing routing table");
+        let routing_table = self.get_routing_table();
 
         // Check the new subnet is in this routing table.
         if routing_table.ranges(env.get_subnet_id()).is_empty() {
@@ -3574,8 +3570,6 @@ impl StateMachine {
     /// Returns an error if the routing table does not contain the subnet ID of the
     /// new `env` that was just created or if the split itself fails.
     pub fn online_split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
-        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
-
         // Write a checkpoint.
         self.checkpointed_tick();
         self.state_manager.flush_tip_channel();
@@ -3618,12 +3612,7 @@ impl StateMachine {
         self.registry_client.update_to_latest_version();
 
         // Check that the new subnet is in the routing table.
-        let last_version = self.registry_client.get_latest_version();
-        let routing_table = self
-            .registry_client
-            .get_routing_table(last_version)
-            .expect("malformed routing table")
-            .expect("missing routing table");
+        let routing_table = self.get_routing_table();
         if routing_table.ranges(env.get_subnet_id()).is_empty() {
             return Err("Routing table does not contain the new subnet".to_string());
         }
@@ -5002,6 +4991,82 @@ impl StateMachine {
             .system_state
             .get_canister_history()
             .clone()
+    }
+
+    fn get_routing_table(&self) -> RoutingTable {
+        let last_version = self.registry_client.get_latest_version();
+        self.registry_client
+            .get_routing_table(last_version)
+            .expect("malformed routing table")
+            .expect("missing routing table")
+    }
+
+    /// Pushes synthetic reject responses for callbacks to remote subnets.
+    /// This function should only be used if this state machine is used "in isolation",
+    /// i.e., it should not be used in a "multi-subnet setup".
+    pub fn reject_remote_callbacks(&self) {
+        assert!(
+            self.pocket_xnet.read().unwrap().is_none(),
+            "StateMachine::reject_remote_callbacks must not be used in a multi-subnet setup."
+        );
+        let routing_table = self.get_routing_table();
+        let (height, mut replicated_state) = self.state_manager.take_tip();
+        let mut synthetic_responses = vec![];
+        for canister_state in replicated_state.canisters_iter_mut() {
+            let Some(call_context_manager) = canister_state.system_state.call_context_manager()
+            else {
+                continue;
+            };
+            for (callback_id, callback) in call_context_manager.callbacks().iter() {
+                let is_remote =
+                    if let Some((_, subnet_id)) = routing_table.lookup_entry(callback.respondent) {
+                        subnet_id != self.get_subnet_id()
+                    } else {
+                        true // non-routable callees are treated as remote and synthetic rejects are produced
+                    };
+                let has_enqueued_response = canister_state
+                    .system_state
+                    .queues()
+                    .has_enqueued_response(callback_id);
+                if is_remote && !has_enqueued_response {
+                    let reject_context = RejectContext::new(
+                        RejectCode::SysTransient,
+                        "Remote callback rejected by StateMachine test.",
+                    );
+                    let response_payload = MsgPayload::Reject(reject_context);
+                    let response = Response {
+                        originator: canister_state.canister_id(),
+                        respondent: callback.respondent,
+                        originator_reply_callback: *callback_id,
+                        refund: Cycles::zero(),
+                        response_payload,
+                        deadline: callback.deadline,
+                    };
+                    synthetic_responses.push(response);
+                }
+            }
+        }
+        let mut available_guaranteed_response_memory = self
+            .hypervisor_config
+            .guaranteed_response_message_memory_capacity
+            .get() as i64
+            - replicated_state
+                .guaranteed_response_message_memory_taken()
+                .get() as i64;
+        for response in synthetic_responses {
+            replicated_state
+                .push_input(
+                    RequestOrResponse::Response(Arc::new(response)),
+                    &mut available_guaranteed_response_memory,
+                )
+                .unwrap();
+        }
+        self.state_manager.commit_and_certify(
+            replicated_state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
     }
 }
 

@@ -4,7 +4,7 @@ use strum::IntoEnumIterator;
 #[test]
 fn default_priority() {
     let priority = CanisterPriority::default();
-    assert_eq!(priority, DEFAULT_PRIORITY);
+    assert_eq!(priority, CanisterPriority::DEFAULT);
 }
 
 #[test]
@@ -14,12 +14,12 @@ fn get() {
 
     // `get()` returns the default priority, but does not mutate the schedule.
     let canister_id = CanisterId::from_u64(1);
-    assert_eq!(schedule.get(&canister_id), &DEFAULT_PRIORITY);
+    assert_eq!(schedule.get(&canister_id), &CanisterPriority::DEFAULT);
     assert_eq!(0, schedule.len());
 
     // `get_mut()` returns a mutable reference to the priority, and inserts it.
     let priority = schedule.get_mut(canister_id);
-    assert_eq!(priority, &DEFAULT_PRIORITY);
+    assert_eq!(priority, &CanisterPriority::DEFAULT);
     assert_eq!(1, schedule.len());
 
     // Mutate the priority.
@@ -45,11 +45,11 @@ fn validate_eq() {
 
     let mut schedule1 = SubnetSchedule::default();
     *schedule1.get_mut(canister_id1) = some_priority;
-    *schedule1.get_mut(canister_id2) = DEFAULT_PRIORITY;
+    *schedule1.get_mut(canister_id2) = CanisterPriority::DEFAULT;
 
     let mut schedule2 = SubnetSchedule::default();
     *schedule2.get_mut(canister_id1) = some_priority;
-    *schedule2.get_mut(canister_id3) = DEFAULT_PRIORITY;
+    *schedule2.get_mut(canister_id3) = CanisterPriority::DEFAULT;
 
     assert!(schedule1.validate_eq(&schedule2).is_ok());
     assert!(schedule2.validate_eq(&schedule1).is_ok());
