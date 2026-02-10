@@ -49,6 +49,10 @@ lazy_static! {
             original_subnet_record.ssh_readonly_access,
             Vec::<String>::new()
         );
+         assert_eq!(
+            original_subnet_record.recalled_replica_version_ids,
+            Vec::<String>::new()
+        );
 
         (registry, node_id, original_node_record, original_subnet_record)
     };
@@ -112,7 +116,7 @@ fn test_set_subnet_operational_level() {
             node_id: Some(*NODE_ID),
             public_keys: Some(vec![]),
         }]),
-        recalled_replica_version_ids: None,
+        recalled_replica_version_ids: Some(vec![]),
     });
 
     // Step 3B: Verify results. In particular, everything is now back to the way it was.
@@ -123,6 +127,33 @@ fn test_set_subnet_operational_level() {
     assert_eq!(
         registry.get_node_or_panic(*NODE_ID),
         ORIGINAL_NODE_RECORD.clone()
+    );
+}
+
+#[test]
+fn test_set_subnet_operational_level_while_recalling_replica_versions() {
+    let mut registry = REGISTRY.clone();
+
+    registry.do_set_subnet_operational_level(SetSubnetOperationalLevelPayload {
+        subnet_id: Some(*SUBNET_ID),
+        operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
+        ssh_readonly_access: Some(vec!["fake read-only public key".to_string()]),
+        ssh_node_state_write_access: Some(vec![NodeSshAccess {
+            node_id: Some(*NODE_ID),
+            public_keys: Some(vec!["fake node state write public key".to_string()]),
+        }]),
+        recalled_replica_version_ids: Some(vec!["test-version".to_string()]),
+    });
+
+    let subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
+    assert_eq!(
+        subnet_record,
+        SubnetRecord {
+            is_halted: true,
+            ssh_readonly_access: vec!["fake read-only public key".to_string()],
+            recalled_replica_version_ids: vec!["test-version".to_string()],
+            ..ORIGINAL_SUBNET_RECORD.clone()
+        }
     );
 }
 
@@ -227,7 +258,7 @@ lazy_static! {
             operational_level: Some(operational_level::NORMAL),
             ssh_readonly_access: Some(vec!["hello".to_string(), "world".to_string()]),
             ssh_node_state_write_access: Some(GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone()),
-            recalled_replica_version_ids: None,
+            recalled_replica_version_ids: Some(vec![]),
         };
 }
 
@@ -248,7 +279,7 @@ fn test_validate_payload_no_subnet_ok() {
             node_id: Some(*NODE_ID),
             public_keys: Some(vec!["fake node state write public key".to_string()]),
         }]),
-        recalled_replica_version_ids: None,
+        recalled_replica_version_ids: Some(vec![]),
     });
 
     // Step 3: Verify results.
@@ -282,7 +313,7 @@ fn test_validate_payload_no_node_ok() {
         ssh_readonly_access: Some(vec!["fake read-only public key".to_string()]),
 
         ssh_node_state_write_access: None,
-        recalled_replica_version_ids: None,
+        recalled_replica_version_ids: Some(vec![]),
     });
 
     // Step 3: Verify results.
@@ -337,7 +368,7 @@ fn test_validate_payload_no_subnet_but_operational_level() {
                 node_id: Some(*NODE_ID),
                 public_keys: Some(vec!["fake node state write public key".to_string()]),
             }]),
-            recalled_replica_version_ids: None,
+            recalled_replica_version_ids: Some(vec![]),
         });
 
     // Step 3: Verify results.
@@ -359,7 +390,7 @@ fn test_validate_payload_no_subnet_but_ssh_readonly_access() {
                 node_id: Some(*NODE_ID),
                 public_keys: Some(vec!["fake node state write public key".to_string()]),
             }]),
-            recalled_replica_version_ids: None,
+            recalled_replica_version_ids: Some(vec![]),
         });
 
     match result {
@@ -425,8 +456,11 @@ fn test_validate_recalled_replica_version_ids_without_subnet_id() {
             .contains("recalled_replica_version_ids specified, but not subnet_id")
     );
 
-    let subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
-    assert_eq!(subnet_record.recalled_replica_version_ids, vec![]);
+    let subnet_record = REGISTRY.get_subnet_or_panic(*SUBNET_ID);
+    assert_eq!(
+        subnet_record.recalled_replica_version_ids,
+        Vec::<String>::new()
+    );
 }
 
 #[test]
@@ -446,6 +480,9 @@ fn test_validate_recalled_replica_version_ids_empty() {
             .contains("recalled_replica_version_ids cannot contain empty strings")
     );
 
-    let subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
-    assert_eq!(subnet_record.recalled_replica_version_ids, vec![]);
+    let subnet_record = REGISTRY.get_subnet_or_panic(*SUBNET_ID);
+    assert_eq!(
+        subnet_record.recalled_replica_version_ids,
+        Vec::<String>::new()
+    );
 }

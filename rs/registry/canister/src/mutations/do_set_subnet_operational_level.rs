@@ -89,7 +89,10 @@ impl Registry {
 
         match subnet_id {
             None => {
-                if recalled_replica_version_ids.is_some() {
+                if recalled_replica_version_ids
+                    .as_ref()
+                    .is_some_and(|ids| !ids.is_empty())
+                {
                     return Err(
                         "recalled_replica_version_ids specified, but not subnet_id.".to_string()
                     );
