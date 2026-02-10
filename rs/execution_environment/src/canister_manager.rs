@@ -65,7 +65,7 @@ use ic_types::{
     nominal_cycles::NominalCycles,
 };
 use ic_wasm_types::WasmHash;
-use more_asserts::debug_assert_ge;
+use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
 use std::iter::zip;
@@ -931,9 +931,10 @@ impl CanisterManager {
     pub(crate) fn uninstall_code(
         &self,
         mut canister: CanisterState,
+        mut round_limits: RoundLimits,
         origin: CanisterChangeOrigin,
         time: Time,
-    ) -> Result<(CanisterState, Vec<Response>), CanisterManagerError> {
+    ) -> Result<(CanisterState, RoundLimits, Vec<Response>), CanisterManagerError> {
         let sender = origin.origin();
 
         // Skip the controller validation if the sender is the governance
@@ -943,16 +944,24 @@ impl CanisterManager {
             validate_controller(&canister, &sender)?
         }
 
-        let rejects =
-            uninstall_canister(&mut canister, time, Arc::clone(&self.fd_factory), &self.log);
+        let rejects = uninstall_canister(
+            &mut canister,
+            Some(&mut round_limits),
+            time,
+            Arc::clone(&self.fd_factory),
+            &self.log,
+        );
 
-        let _ = canister.add_canister_change(
+        let available_execution_memory_change = canister.add_canister_change(
             time,
             origin,
             CanisterChangeDetails::CanisterCodeUninstall,
         );
+        round_limits
+            .subnet_available_memory
+            .update_execution_memory_unchecked(available_execution_memory_change);
 
-        Ok((canister, rejects))
+        Ok((canister, round_limits, rejects))
     }
 
     /// Signals a canister to stop.
@@ -2016,8 +2025,13 @@ impl CanisterManager {
             .saturating_add(&new_snapshot_size);
 
         let rejects = if uninstall_code {
-            let rejects =
-                uninstall_canister(canister, time, Arc::clone(&self.fd_factory), &self.log);
+            let rejects = uninstall_canister(
+                canister,
+                None, /* we don't pass RoundLimits since we update them separately via `cycles_and_memory_usage_updates` */
+                time,
+                Arc::clone(&self.fd_factory),
+                &self.log,
+            );
             let available_execution_memory_change = canister.add_canister_change(
                 time,
                 origin,
@@ -3146,10 +3160,13 @@ fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterMan
 #[must_use]
 pub fn uninstall_canister(
     canister: &mut CanisterState,
+    round_limits: Option<&mut RoundLimits>,
     time: Time,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     log: &ReplicaLogger,
 ) -> Vec<Response> {
+    let old_allocated_bytes = canister.memory_allocated_bytes();
+
     // Drop the canister's execution state.
     canister.execution_state = None;
 
@@ -3166,6 +3183,18 @@ pub fn uninstall_canister(
     canister.system_state.global_timer = CanisterTimer::Inactive;
     // Increment canister version.
     canister.system_state.bump_canister_version();
+
+    let new_allocated_bytes = canister.memory_allocated_bytes();
+    debug_assert_le!(new_allocated_bytes, old_allocated_bytes);
+
+    if let Some(round_limits) = round_limits {
+        let deallocated_bytes = old_allocated_bytes.saturating_sub(&new_allocated_bytes);
+        round_limits.subnet_available_memory.increment(
+            deallocated_bytes,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
+    }
 
     let canister_id = canister.canister_id();
 

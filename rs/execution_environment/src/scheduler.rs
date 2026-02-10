@@ -931,9 +931,10 @@ impl SchedulerImpl {
         }
 
         for canister_id in canisters_to_uninstall {
-            let op = |mut canister, state_time: Time| {
+            let op = |mut canister, mut round_limits, state_time: Time| {
                 let responses = uninstall_canister(
                     &mut canister,
+                    Some(&mut round_limits),
                     state_time,
                     Arc::clone(&self.fd_factory),
                     &self.log,
@@ -944,7 +945,7 @@ impl SchedulerImpl {
                 // Burn the remaining balance of the canister.
                 canister.system_state.burn_remaining_balance_for_uninstall();
 
-                Ok((canister, responses))
+                Ok((canister, round_limits, responses))
             };
             if let Err(e) = self.exec_env.execute_mgmt_operation_on_canister(
                 canister_id,

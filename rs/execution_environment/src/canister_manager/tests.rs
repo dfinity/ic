@@ -2295,6 +2295,7 @@ fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
             &mut CanisterStateBuilder::new()
                 .with_call_context(CallContextBuilder::new().with_responded(true).build())
                 .build(),
+            None,
             UNIX_EPOCH,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
             &no_op_logger(),
@@ -2320,6 +2321,7 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                         .build()
                 )
                 .build(),
+            None,
             UNIX_EPOCH,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
             &no_op_logger(),
@@ -2996,11 +2998,19 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         NumBytes::from(MIB)
     );
 
+    let round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
+    };
     let canister_id = canister_test_id(0);
     let canister = state.canister_state(&canister_id).cloned().unwrap();
-    let (canister, _) = canister_manager
+    let (canister, _, _) = canister_manager
         .uninstall_code(
             canister,
+            round_limits,
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
             state.time(),
         )

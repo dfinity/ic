@@ -90,7 +90,6 @@ use ic_types::{
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
-use num_traits::SaturatingSub;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
@@ -498,39 +497,29 @@ impl ExecutionEnvironment {
     where
         F: FnOnce(
             CanisterState,
+            RoundLimits,
             C,
-        ) -> Result<(CanisterState, Vec<ExecEnvResponse>), CanisterManagerError>,
+        ) -> Result<
+            (CanisterState, RoundLimits, Vec<ExecEnvResponse>),
+            (CanisterManagerError, Cycles),
+        >,
     {
         match state.canister_state(&canister_id).cloned() {
-            Some(canister) => {
-                let old_memory_allocated_bytes = canister.memory_allocated_bytes();
-                match op(canister, context) {
-                    Ok((canister, responses)) => {
-                        let new_memory_allocated_bytes = canister.memory_allocated_bytes();
-                        state.put_canister_state(canister);
-                        let deallocated_bytes =
-                            old_memory_allocated_bytes.saturating_sub(&new_memory_allocated_bytes);
-                        let allocated_bytes =
-                            new_memory_allocated_bytes.saturating_sub(&old_memory_allocated_bytes);
-                        round_limits.subnet_available_memory.increment(
-                            deallocated_bytes,
-                            NumBytes::from(0),
-                            NumBytes::from(0),
-                        );
-                        round_limits.subnet_available_memory.try_decrement(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
-                                        .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
-                        crate::util::process_responses(
-                            responses,
-                            state,
-                            Arc::clone(&self.ingress_history_writer),
-                            self.log.clone(),
-                            self.canister_not_found_error(),
-                        );
-                        Ok(())
-                    }
-                    Err(err) => Err(err.into()),
+            Some(clean_canister) => match op(clean_canister, round_limits.clone(), context) {
+                Ok((new_canister, new_round_limits, responses)) => {
+                    state.put_canister_state(new_canister);
+                    *round_limits = new_round_limits;
+                    crate::util::process_responses(
+                        responses,
+                        state,
+                        Arc::clone(&self.ingress_history_writer),
+                        self.log.clone(),
+                        self.canister_not_found_error(),
+                    );
+                    Ok(())
                 }
-            }
+                Err((err, _cycles)) => Err(err.into()),
+            },
             None => Err(UserError::new(
                 ErrorCode::CanisterNotFound,
                 format!("Canister {} not found.", &canister_id),
@@ -834,8 +823,10 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UninstallCode) => {
                 let res = UninstallCodeArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
-                    let op = |canister, (origin, time)| {
-                        self.canister_manager.uninstall_code(canister, origin, time)
+                    let op = |canister, round_limits, (origin, time)| {
+                        self.canister_manager
+                            .uninstall_code(canister, round_limits, origin, time)
+                            .map_err(|err| (err, Cycles::zero()))
                     };
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
                     let time = state.time();
