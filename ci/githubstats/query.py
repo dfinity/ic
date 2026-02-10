@@ -1082,19 +1082,31 @@ Examples:
         help="""Download the logs of all runs of test_target to {DIR}/{test_name}/{now}.
 That directory will contain log files named like `{invocation_timestamp}_{invocation_id}/{attempt_num}/{attempt_status}.log`, for example:
 logs
-└── upgrade_downgrade_nns_subnet_test
-    └── 2026-02-07T22:09:59
-        ├── 2026-02-02T10:21:15_3b80203d-ff20-42d5-b29c-62ae6aaaf66b
+└── unstuck_subnet_test
+    └── 2026-02-10T15:51:30
+        ├── 2026-02-10T09:44:34_9e523887-572b-41e9-89e0-85db6cc6d307
         │   ├── 1
-        │   │   └── FAILED.log
+        │   │   ├── FAILED.log
+        │   │   └── ic_logs    # Only available for system-tests when --download-ic-logs is specified
+        │   │       ├── 2602:fb2b:110:10:5021:ccff:fe09:9c04.log -> eps42-sqcwm-mxa3t-v5udw-hvnhs-cpyhm-hlemr-rv5gn-ysojg-eo2tw-tqe.log
+        │   │       ├── 2602:fb2b:110:10:5063:d6ff:fed9:84ea.log -> e57ej-6tme6-pisxz-6xhho-a5hag-xhqnm-ll6a6-ywghj-a4wes-yrmw6-iae.log
+        │   │       ├── 2602:fb2b:110:10:506b:8ff:feca:8381.log -> oyqdk-jrqx2-rh2i4-myf6p-svq5r-erpyu-7iizo-fmjuk-oqmsp-rj4ua-bqe.log
+        │   │       ├── 2602:fb2b:110:10:50dc:f7ff:fe99:e6e9.log -> uwls4-qoxto-stzfb-cmngz-ynygb-lf3fs-eahfe-l5bgs-koaw2-m6rum-3qe.log
+        │   │       ├── e57ej-6tme6-pisxz-6xhho-a5hag-xhqnm-ll6a6-ywghj-a4wes-yrmw6-iae.log
+        │   │       ├── eps42-sqcwm-mxa3t-v5udw-hvnhs-cpyhm-hlemr-rv5gn-ysojg-eo2tw-tqe.log
+        │   │       ├── oyqdk-jrqx2-rh2i4-myf6p-svq5r-erpyu-7iizo-fmjuk-oqmsp-rj4ua-bqe.log
+        │   │       └── uwls4-qoxto-stzfb-cmngz-ynygb-lf3fs-eahfe-l5bgs-koaw2-m6rum-3qe.log
         │   └── 2
-        │       └── PASSED.log
-        ├── 2026-02-02T11:43:30_3b054443-e7d8-4013-9897-6778816318c9
-        │   ├── 1
-        │   │   └── FAILED.log
-        │   └── 2
-        │       └── PASSED.log
-        ...
+        │       ├── PASSED.log
+        │       └── ic_logs
+        │           ├── 2602:fb2b:110:10:5027:50ff:fe3b:646f.log -> th33r-jxkvk-3cdru-fzrcc-w2smz-bnovv-a5jue-isjz5-ax4v6-au7tw-nqe.log
+        │           ├── 2602:fb2b:110:10:5035:efff:fea1:fbf5.log -> flemd-fap2g-uohsu-ahgbv-sndvl-jvyzk-uytpv-4tazh-7jej7-bcqrn-mqe.log
+        │           ├── 2602:fb2b:110:10:508a:3eff:fe00:8438.log -> xvyo4-ngkcp-sj6j5-yxh4i-pmc5b-6ev4k-64xbw-tmnid-epliz-s2woi-2ae.log
+        │           ├── 2602:fb2b:110:10:50c4:e9ff:fe10:e4f1.log -> qmovl-k62dw-6z4ik-d4tn3-wwhlk-33rsp-7442w-52zjq-3yaxd-cqsee-gqe.log
+        │           ├── flemd-fap2g-uohsu-ahgbv-sndvl-jvyzk-uytpv-4tazh-7jej7-bcqrn-mqe.log
+        │           ├── qmovl-k62dw-6z4ik-d4tn3-wwhlk-33rsp-7442w-52zjq-3yaxd-cqsee-gqe.log
+        │           ├── th33r-jxkvk-3cdru-fzrcc-w2smz-bnovv-a5jue-isjz5-ax4v6-au7tw-nqe.log
+        │           └── xvyo4-ngkcp-sj6j5-yxh4i-pmc5b-6ev4k-64xbw-tmnid-epliz-s2woi-2ae.log
         └── README.md
 """,
     )
