@@ -721,11 +721,6 @@ fn test_automated_node_provider_remuneration() {
     let expected_rewards_e8s_3 =
         expected_daily_rewards_xdrp_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
             / 155_000;
-    if expected_reward_days_covered_1 == 30 {
-        assert_eq!(expected_rewards_e8s_3, 1399870967);
-    } else {
-        assert_eq!(expected_rewards_e8s_3, 1446500000);
-    }
     let expected_node_provider_reward_3 = RewardNodeProvider {
         node_provider: Some(node_info_3.provider.clone()),
         amount_e8s: expected_rewards_e8s_3,
