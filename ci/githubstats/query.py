@@ -671,20 +671,26 @@ def download_ic_logs_for_system_test(
 
         logs_by_node = {}
         for hit in all_hits:
-            source = hit.get("_source", {})
-            node = source.get("ic_node", "unknown_node")
-            timestamp = source.get("timestamp", "unknown_time")
-            message = source.get("MESSAGE", "")
-            if node not in logs_by_node:
-                logs_by_node[node] = []
-            logs_by_node[node].append((timestamp, message))
+            if "_source" not in hit:
+                continue
+            source = hit["_source"]
+            if "ic_node" not in source or "timestamp" not in source or "MESSAGE" not in source:
+                continue
+            node = source["ic_node"]
+            try:
+                timestamp = pd.to_datetime(source["timestamp"], utc=True)
+            except (ValueError, pd.errors.ParserError):
+                continue
+            logs_by_node.setdefault(node, []).append((timestamp, source["MESSAGE"]))
 
         for node, messages in logs_by_node.items():
             log_file = ic_logs_dir / f"{node}.log"
             if node in vm_ipv6s:
                 ipv6_symlink_path = ic_logs_dir / f"{vm_ipv6s[node]}.log"
                 ipv6_symlink_path.symlink_to(log_file.name)
-            log_file.write_text("\n".join([f"{ts} {msg}" for ts, msg in messages]))
+            log_file.write_text(
+                "\n".join([f"{timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')} {msg}" for timestamp, msg in messages])
+            )
             print(f"Downloaded {len(messages)} log entries for node {node} to {log_file}", file=sys.stderr)
 
     except requests.exceptions.RequestException as e:
