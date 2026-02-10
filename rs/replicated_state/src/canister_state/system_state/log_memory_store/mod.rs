@@ -62,7 +62,7 @@ impl LogMemoryStore {
         page_map: PageMap,
     ) -> Self {
         // PageMap is a lazy pointer that doesn't verify file existence on creation.
-        // To avoid redundant disk I/O during restoration, we only initialize it
+        // To avoid redundant disk I/O during restoration, we only initialize page_map
         // if the log memory limit is non-zero.
         Self::new_inner(
             feature_flag,
