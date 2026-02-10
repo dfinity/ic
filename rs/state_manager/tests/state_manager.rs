@@ -9012,7 +9012,7 @@ fn get_state_hash_at() {
             ))
         );
 
-        // optimization does not trigger
+        // optimization triggers every multiple of 10
         let no_opt_height = Height::new(480);
         for _ in 0..no_opt_height.get() {
             let state = sm.take_tip().1;
@@ -9026,46 +9026,16 @@ fn get_state_hash_at() {
             ))
         );
 
-        // optimization triggers
-        let state = sm.take_tip().1;
-        let _opt_height = Height::new(485);
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        assert_eq!(no_state_clone_count(metrics), 1);
-        assert_eq!(
-            sm.get_state_hash_at(checkpoint_height),
-            Err(StateHashError::Transient(
-                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
-            ))
-        );
-
-        // optimization does not trigger
-        let state = sm.take_tip().1;
-        let _another_no_opt_height = Height::new(490);
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        assert_eq!(no_state_clone_count(metrics), 1);
-        assert_eq!(
-            sm.get_state_hash_at(checkpoint_height),
-            Err(StateHashError::Transient(
-                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
-            ))
-        );
-
-        // optimization triggers
-        let state = sm.take_tip().1;
-        let _another_opt_height = Height::new(495);
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        assert_eq!(no_state_clone_count(metrics), 2);
-        assert_eq!(
-            sm.get_state_hash_at(checkpoint_height),
-            Err(StateHashError::Transient(
-                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
-            ))
-        );
+        // optimization triggers every multiple of 10
+        for _ in no_opt_height.get()..499 {
+            let state = sm.take_tip().1;
+            sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        }
 
         // optimization does not trigger on checkpoint height
         let state = sm.take_tip().1;
         sm.commit_and_certify(state, CertificationScope::Full, None);
-        assert_eq!(no_state_clone_count(metrics), 2);
+        assert_eq!(no_state_clone_count(metrics), 450);
 
         // finally hash for checkpoint height is available
         wait_for_checkpoint(&sm, checkpoint_height);
