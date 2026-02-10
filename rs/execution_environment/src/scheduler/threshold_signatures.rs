@@ -40,6 +40,7 @@ pub(crate) fn update_signature_request_contexts(
     // match with a pre-signature.
     for context in &mut contexts {
         if context.nonce.is_none()
+            && context.key_id().requires_pre_signatures()
             && context
                 .height()
                 .is_some_and(|height| height.get() + 1 == current_round.get())
