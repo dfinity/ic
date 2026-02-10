@@ -304,9 +304,9 @@ http_jar(
 http_archive(
     name = "tla_apalache",
     build_file = "@//third_party:BUILD.tla_apalache.bazel",
-    sha256 = "173a683707c2a639c955328746461cad39e4b8a5adff95e156ce3bf376ba293b",
-    strip_prefix = "apalache-0.44.11",
-    url = "https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz",
+    sha256 = "e0ebea7e45c8f99df8d92f2755101dda84ab71df06d1ec3a21955d3b53a886e2",
+    strip_prefix = "apalache-0.52.2",
+    url = "https://github.com/apalache-mc/apalache/releases/download/v0.52.2/apalache-0.52.2.tgz",
 )
 
 # Official WebAssembly test suite.
