@@ -60,6 +60,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -136,7 +137,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
         let initial_subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_bytes_per_block: ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -185,6 +186,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -260,7 +262,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                         SubnetRecord {
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                            max_ingress_bytes_per_block: ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
+                            max_ingress_bytes_per_block: 4 * 1024 * 1024,
                             max_ingress_messages_per_block: 1000,
                             max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
@@ -302,6 +304,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
@@ -353,7 +356,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             SubnetRecord {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                max_ingress_bytes_per_block: ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
+                max_ingress_bytes_per_block: 4 * 1024 * 1024,
                 max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 unit_delay_millis: 100,
@@ -437,7 +440,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         let initial_subnet_record = SubnetRecord {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_bytes_per_block: ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -650,6 +653,7 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
     UpdateSubnetPayload {
         subnet_id,
         max_ingress_bytes_per_message: None,
+        max_ingress_bytes_per_block: None,
         max_ingress_messages_per_block: None,
         max_block_payload_size: None,
         unit_delay_millis: None,

@@ -290,7 +290,7 @@ impl ProposeToCreateSubnetCmd {
             subnet_id_override: self.subnet_id_override,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap_or_default(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap_or_default(),
-            max_ingress_bytes_per_block: self.max_ingress_bytes_per_block.unwrap_or_default(),
+            max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
             max_block_payload_size: self.max_block_payload_size.unwrap_or_default(),
             replica_version_id: self
                 .replica_version_id

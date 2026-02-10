@@ -12,8 +12,8 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::println;
 use ic_limits::{
     DKG_DEALINGS_PER_BLOCK, DKG_INTERVAL_HEIGHT, INITIAL_NOTARY_DELAY, MAX_BLOCK_PAYLOAD_SIZE,
-    MAX_INGRESS_BYTES_PER_BLOCK, MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
-    MAX_INGRESS_MESSAGES_PER_BLOCK, UNIT_DELAY_APP_SUBNET,
+    MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, MAX_INGRESS_MESSAGES_PER_BLOCK,
+    UNIT_DELAY_APP_SUBNET,
 };
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
@@ -251,7 +251,7 @@ impl ValidFulfillSubnetRentalRequest {
             // Sizes
             max_ingress_bytes_per_message: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
             max_ingress_messages_per_block: MAX_INGRESS_MESSAGES_PER_BLOCK,
-            max_ingress_bytes_per_block: MAX_INGRESS_BYTES_PER_BLOCK,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: MAX_BLOCK_PAYLOAD_SIZE,
             unit_delay_millis,
             initial_notary_delay_millis,
