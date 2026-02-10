@@ -45,6 +45,7 @@ sysfsutils
 udev
 usbutils
 xfsprogs
+zstd
 
 # Required for API boundary nodes to enable IPv4 HTTP outcalls
 dante-server
