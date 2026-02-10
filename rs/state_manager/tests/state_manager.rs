@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
 use ic_canonical_state::encoding::encode_subnet_canister_ranges;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
     Label, LabeledTree, LookupStatus, MatchPattern, MixedHashTree, Path as LabelPath, flatmap,
@@ -376,7 +377,12 @@ fn lazy_pagemaps() {
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
     env.tick();
-    assert_eq!(page_maps_by_status("loaded", &env), 1);
+    if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        // Creating a canister allocates log_memory_store's page_map.
+        assert_eq!(page_maps_by_status("loaded", &env), 1);
+    } else {
+        assert_eq!(page_maps_by_status("loaded", &env), 0);
+    }
     assert!(page_maps_by_status("not_loaded", &env) > 0);
 
     env.execute_ingress(canister_id, "write_heap_64k", vec![])
