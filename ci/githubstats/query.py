@@ -267,7 +267,7 @@ def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs:
             download_to_path = attempt_dir / f"{attempt_status}.log"
             download_tasks.append((row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path))
 
-    execute_download_tasks(download_tasks, output_dir, download_ic_logs, df)
+    execute_download_tasks(download_tasks, test_target, output_dir, download_ic_logs, df)
 
     write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
 
@@ -363,7 +363,9 @@ def convert_download_url(uri, cluster) -> str:
     return f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
 
 
-def execute_download_tasks(download_tasks: list, output_dir: Path, download_ic_logs: bool, df: pd.DataFrame):
+def execute_download_tasks(
+    download_tasks: list, test_target: str, output_dir: Path, download_ic_logs: bool, df: pd.DataFrame
+):
     print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
     # This executor is used for downloading IC logs from ElasticSearch concurrently.
@@ -385,6 +387,7 @@ def execute_download_tasks(download_tasks: list, output_dir: Path, download_ic_l
                         target=process_log,
                         args=(
                             row,
+                            test_target,
                             attempt_num,
                             attempt_status,
                             attempt_dir,
@@ -430,6 +433,7 @@ def execute_download_tasks(download_tasks: list, output_dir: Path, download_ic_l
 
 def process_log(
     row: pd.Series,
+    test_target: str,
     attempt_num: int,
     attempt_status: str,
     attempt_dir: Path,
@@ -452,33 +456,38 @@ def process_log(
     vm_ipv6s = {}
     lines = download_to_path.read_text().strip().splitlines()
     last_line = lines[-1]
-    for line in lines:
-        try:
-            # Here we try parsing a timestamp from the first 23 characters of a line
-            # assuming the line looks something like: "2026-02-03 13:55:09.645 INFO..."
-            last_seen_timestamp = pd.to_datetime(line[:23], utc=True)
-        except (ValueError, pd.errors.ParserError):
-            pass
 
-        ix = line.find("{")
-        if ix == -1:
-            continue
-        obj = line[ix:]
+    # system-tests have structured logs with JSON objects that we can parse to get more detailed error summaries
+    # and to determine the group (testnet) name for downloading the IC logs from ElasticSearch.
+    # Non-system-tests just get annotated with the last line of the log which usually contains the error message.
+    if test_target.startswith("//rs/tests/"):
+        for line in lines:
+            try:
+                # Here we try parsing a timestamp from the first 23 characters of a line
+                # assuming the line looks something like: "2026-02-03 13:55:09.645 INFO..."
+                last_seen_timestamp = pd.to_datetime(line[:23], utc=True)
+            except (ValueError, pd.errors.ParserError):
+                pass
 
-        try:
-            log_event = LogEvent.from_json(obj)
-            match log_event.event_name:
-                case "infra_group_name_created_event":
-                    group_name = GroupName.from_dict(log_event.body).group
-                    test_start_time = last_seen_timestamp
-                case "farm_vm_created_event":
-                    farm_vm_created = FarmVMCreated.from_dict(log_event.body)
-                    vm_ipv6s[farm_vm_created.vm_name] = farm_vm_created.ipv6
-                case "json_report_created_event":
-                    summary = SystemGroupSummary.from_dict(log_event.body)
-                    break
-        except (ValueError, dacite.DaciteError):
-            continue
+            ix = line.find("{")
+            if ix == -1:
+                continue
+            obj = line[ix:]
+
+            try:
+                log_event = LogEvent.from_json(obj)
+                match log_event.event_name:
+                    case "infra_group_name_created_event":
+                        group_name = GroupName.from_dict(log_event.body).group
+                        test_start_time = last_seen_timestamp
+                    case "farm_vm_created_event":
+                        farm_vm_created = FarmVMCreated.from_dict(log_event.body)
+                        vm_ipv6s[farm_vm_created.vm_name] = farm_vm_created.ipv6
+                    case "json_report_created_event":
+                        summary = SystemGroupSummary.from_dict(log_event.body)
+                        break
+            except (ValueError, dacite.DaciteError):
+                continue
 
     if group_name is not None and download_ic_logs:
         # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
