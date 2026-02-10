@@ -323,6 +323,7 @@ pub(crate) mod test {
                         vec![],
                     ))),
                 },
+                height_witness: vec![1, 2, 3],
             },
         }
     }

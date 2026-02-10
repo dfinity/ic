@@ -649,6 +649,7 @@ pub fn encode_certified_stream_slice(
                     vec![],
                 ))),
             },
+            height_witness: vec![1, 2, 3],
         },
     }
 }
