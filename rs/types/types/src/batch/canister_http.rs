@@ -1,7 +1,14 @@
 use crate::{
-    ReplicaVersion, Time, canister_http::{
-        CanisterHttpPaymentMetadata, CanisterHttpPaymentReceipt, CanisterHttpPaymentShare, CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus
-    }, crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed}, messages::CallbackId, signature::{BasicSignature, BasicSignatureBatch}
+    ReplicaVersion, Time,
+    canister_http::{
+        CanisterHttpPaymentMetadata, CanisterHttpPaymentReceipt, CanisterHttpPaymentShare,
+        CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
+        CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+    },
+    crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
+    messages::CallbackId,
+    signature::{BasicSignature, BasicSignatureBatch},
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
 use ic_error_types::RejectCode;
@@ -255,7 +262,9 @@ impl From<CanisterHttpPaymentReceipt> for pb::CanisterHttpPaymentReceipt {
 impl TryFrom<pb::CanisterHttpPaymentReceipt> for CanisterHttpPaymentReceipt {
     type Error = ProxyDecodeError;
     fn try_from(receipt: pb::CanisterHttpPaymentReceipt) -> Result<Self, Self::Error> {
-        Ok(CanisterHttpPaymentReceipt { refund: receipt.refund.map(Into::into).unwrap_or_default() })
+        Ok(CanisterHttpPaymentReceipt {
+            refund: receipt.refund.map(Into::into).unwrap_or_default(),
+        })
     }
 }
 
@@ -275,9 +284,9 @@ impl TryFrom<pb::CanisterHttpPaymentMetadata> for CanisterHttpPaymentMetadata {
         let receipt = metadata.receipt.ok_or(ProxyDecodeError::MissingField(
             "CanisterHttpPaymentMetadata::receipt",
         ))?;
-        Ok(CanisterHttpPaymentMetadata { 
-            id, 
-            receipt: receipt.try_into()? 
+        Ok(CanisterHttpPaymentMetadata {
+            id,
+            receipt: receipt.try_into()?,
         })
     }
 }
@@ -303,10 +312,17 @@ impl From<CanisterHttpPaymentShare> for pb::CanisterHttpPaymentShare {
 impl TryFrom<pb::CanisterHttpPaymentShare> for CanisterHttpPaymentShare {
     type Error = ProxyDecodeError;
     fn try_from(share: pb::CanisterHttpPaymentShare) -> Result<Self, Self::Error> {
-        let metadata = share.metadata.ok_or(ProxyDecodeError::MissingField("share.metadata"))?;
+        let metadata = share
+            .metadata
+            .ok_or(ProxyDecodeError::MissingField("share.metadata"))?;
         let id = CanisterHttpRequestId::new(metadata.id);
-        let receipt = metadata.receipt.map(|receipt| receipt.try_into()).transpose()?;
-        let signature = share.signature.ok_or(ProxyDecodeError::MissingField("share.signature"))?;
+        let receipt = metadata
+            .receipt
+            .map(|receipt| receipt.try_into())
+            .transpose()?;
+        let signature = share
+            .signature
+            .ok_or(ProxyDecodeError::MissingField("share.signature"))?;
         Ok(Signed {
             content: CanisterHttpPaymentMetadata {
                 id,
@@ -357,9 +373,11 @@ impl TryFrom<pb::CanisterHttpArtifact> for CanisterHttpResponseArtifact {
             "CanisterHttpArtifact::share",
         ))?;
 
-        let payment_share = artifact.payment_share.ok_or(ProxyDecodeError::MissingField(
-            "CanisterHttpArtifact::payment_share",
-        ))?;
+        let payment_share = artifact
+            .payment_share
+            .ok_or(ProxyDecodeError::MissingField(
+                "CanisterHttpArtifact::payment_share",
+            ))?;
 
         Ok(CanisterHttpResponseArtifact {
             share: share.try_into()?,
