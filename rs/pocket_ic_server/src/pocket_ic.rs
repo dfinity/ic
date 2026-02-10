@@ -109,6 +109,7 @@ use ic_state_machine_tests::{
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
+use ic_types::canister_http::CanisterHttpPaymentMetadata;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
@@ -441,7 +442,7 @@ pub(crate) type CanisterHttpClient = Arc<
         Box<
             dyn NonBlockingChannel<
                     AdapterCanisterHttpRequest,
-                    Response = AdapterCanisterHttpResponse,
+                    Response = (AdapterCanisterHttpResponse, CanisterHttpPaymentMetadata),
                 > + Send,
         >,
     >,
@@ -3327,7 +3328,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     Err(_) => {
                         break;
                     }
-                    Ok(response) => {
+                    Ok((response, _payment_metadata)) => {
                         canister_http.pending.remove(&response.id);
                         if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
                         {
@@ -3497,7 +3498,7 @@ fn process_mock_canister_https_response(
                     socks_proxy_addrs: vec![],
                 })
                 .unwrap();
-            let response = loop {
+            let (response, _payment_metadata) = loop {
                 match client.try_receive() {
                     Err(_) => std::thread::sleep(Duration::from_millis(10)),
                     Ok(r) => {

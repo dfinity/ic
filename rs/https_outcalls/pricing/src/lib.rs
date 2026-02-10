@@ -2,7 +2,7 @@ mod legacy;
 
 use std::time::Duration;
 
-use ic_types::{NumBytes, NumInstructions, canister_http::CanisterHttpRequestContext};
+use ic_types::{Cycles, NumBytes, NumInstructions, canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext}};
 use legacy::LegacyTracker;
 
 pub trait BudgetTracker: Send {
@@ -23,6 +23,9 @@ pub trait BudgetTracker: Send {
     /// # Invariants
     ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
+
+    /// Creates a payment receipt for the payment metadata.
+    fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt;
 }
 
 pub struct AdapterLimits {

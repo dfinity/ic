@@ -6,7 +6,8 @@ use ic_types::{
     NodeId, Time,
     artifact::CanisterHttpResponseId,
     canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseShare,
+        CanisterHttpPaymentShare, CanisterHttpResponse, CanisterHttpResponseArtifact,
+        CanisterHttpResponseShare,
     },
     consensus::Threshold,
     crypto::{CryptoError, CryptoHashOf},
@@ -92,8 +93,16 @@ pub type CanisterHttpPayloadValidationError =
 
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
-    AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
-    AddToValidatedAndGossipResponse(CanisterHttpResponseShare, CanisterHttpResponse),
+    AddToValidated(
+        CanisterHttpResponseShare,
+        CanisterHttpPaymentShare,
+        CanisterHttpResponse,
+    ),
+    AddToValidatedAndGossipResponse(
+        CanisterHttpResponseShare,
+        CanisterHttpPaymentShare,
+        CanisterHttpResponse,
+    ),
     MoveToValidated(CanisterHttpResponseShare),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),

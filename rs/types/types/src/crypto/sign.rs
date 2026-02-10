@@ -1,7 +1,7 @@
 //! Defines signature types.
 
 use super::hash::domain_separator::DomainSeparator;
-use crate::canister_http::CanisterHttpResponseMetadata;
+use crate::canister_http::{CanisterHttpPaymentMetadata, CanisterHttpResponseMetadata};
 use crate::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
@@ -69,6 +69,7 @@ mod private {
     impl SignatureDomainSeal for WebAuthnEnvelope {}
     impl SignatureDomainSeal for Delegation {}
     impl SignatureDomainSeal for CanisterHttpResponseMetadata {}
+    impl SignatureDomainSeal for CanisterHttpPaymentMetadata {}
     impl SignatureDomainSeal for MessageId {}
     impl SignatureDomainSeal for CertificationContent {}
     impl SignatureDomainSeal for CatchUpContent {}
@@ -84,6 +85,14 @@ impl SignatureDomain for CanisterHttpResponseMetadata {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(
             DomainSeparator::CryptoHashOfCanisterHttpResponseMetadata.as_str(),
+        )
+    }
+}
+
+impl SignatureDomain for CanisterHttpPaymentMetadata {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(
+            DomainSeparator::CanisterHttpPaymentMetadata.as_str(),
         )
     }
 }
