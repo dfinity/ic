@@ -19,7 +19,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::{From, TryFrom, TryInto};
 use std::sync::Arc;
-use std::time::Duration;
 
 #[cfg(test)]
 use std::collections::BTreeMap;
@@ -725,26 +724,28 @@ impl CallContextManager {
         self.next_callback_id
     }
 
-    /// Returns a collection of all call contexts older than the provided age.
+    /// Returns the number of call contexts older than the provided threshold time,
+    /// calling the provided function on each such call context.
     pub fn call_contexts_older_than(
         &self,
-        current_time: Time,
-        age: Duration,
-    ) -> Vec<(&CallOrigin, Time)> {
+        threshold_time: Time,
+        for_each: impl Fn(&CallOrigin, Time),
+    ) -> usize {
+        let mut count = 0;
         // Call contexts are stored in order of increasing CallContextId, and
         // the IDs are generated sequentially, so we are iterating in order of
         // creation time. This means we can stop as soon as we encounter a call
         // context that isn't old enough.
         self.call_contexts
             .iter()
-            .take_while(|(_, call_context)| call_context.time() + age <= current_time)
-            .filter_map(|(_, call_context)| {
+            .take_while(|(_, call_context)| call_context.time() <= threshold_time)
+            .for_each(|(_, call_context)| {
                 if !call_context.is_deleted() {
-                    return Some((call_context.call_origin(), call_context.time()));
+                    for_each(call_context.call_origin(), call_context.time());
+                    count += 1;
                 }
-                None
-            })
-            .collect()
+            });
+        count
     }
 
     /// Returns the number of unresponded canister update call contexts, also taking
