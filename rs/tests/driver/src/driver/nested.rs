@@ -23,7 +23,7 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -226,13 +226,11 @@ impl HasNestedVms for TestEnv {
         let host_mac = calculate_deterministic_mac(
             &seed_mac,
             DeploymentEnvironment::Testnet,
-            IpVariant::V6,
             NodeType::HostOS,
         );
         let guest_mac = calculate_deterministic_mac(
             &seed_mac,
             DeploymentEnvironment::Testnet,
-            IpVariant::V6,
             NodeType::GuestOS,
         );
 
