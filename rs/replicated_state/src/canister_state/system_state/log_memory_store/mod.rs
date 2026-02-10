@@ -57,8 +57,8 @@ impl LogMemoryStore {
     }
 
     /// Creates a new store from a checkpoint.
-    pub fn from_checkpoint(feature_flag: FlagStatus, page_map: PageMap) -> Self {
-        Self::new_inner(feature_flag, Some(page_map))
+    pub fn from_checkpoint(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
+        Self::new_inner(feature_flag, maybe_page_map)
     }
 
     fn new_inner(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
@@ -260,7 +260,8 @@ impl Clone for LogMemoryStore {
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
         // header_cache is a transient cache and should not be compared.
-        self.maybe_page_map == other.maybe_page_map && self.delta_log_sizes == other.delta_log_sizes
+        self.maybe_page_map == other.maybe_page_map
+            && self.delta_log_sizes == other.delta_log_sizes
             && self.feature_flag == other.feature_flag
     }
 }

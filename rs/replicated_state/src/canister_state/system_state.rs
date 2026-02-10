@@ -398,7 +398,11 @@ pub struct SystemState {
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
 
-    /// The capacity of the canister log in bytes.
+    /// Defines the maximum size of the canister log in bytes.
+    ///
+    /// This field also serves as a guard for state restoration: if set to 0,
+    /// the `log_memory_store` is treated as uninitialized (None) to avoid
+    /// unnecessary PageMap allocation and disk I/O.
     pub log_memory_limit: NumBytes,
 
     /// Log records of the canister.
@@ -670,7 +674,10 @@ impl SystemState {
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 LOG_MEMORY_STORE_FEATURE,
-                log_memory_store_data,
+                // PageMap is a lazy pointer that doesn't verify file existence on creation.
+                // To avoid redundant disk I/O during restoration, we only initialize it
+                // if the log memory limit is non-zero.
+                (log_memory_limit > NumBytes::new(0)).then_some(log_memory_store_data),
             ),
             wasm_memory_limit,
             next_snapshot_id,

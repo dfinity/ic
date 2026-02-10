@@ -557,6 +557,7 @@ impl CanisterManager {
             canister.system_state.log_visibility = log_visibility.clone();
         }
         if let Some(log_memory_limit) = settings.log_memory_limit() {
+            canister.system_state.log_memory_limit = log_memory_limit;
             canister
                 .system_state
                 .log_memory_store
