@@ -61,7 +61,7 @@ impl IngressSelector for IngressManager {
                 Err(err) => {
                     warn!(
                         self.log,
-                        "Failed to the memory limit on the ingress payload: {err}"
+                        "Failed to get the memory limit on the ingress payload: {err}"
                     );
 
                     return PayloadWithSizeEstimate::default();

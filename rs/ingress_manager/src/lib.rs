@@ -197,17 +197,13 @@ impl IngressManager {
                 }
                 Ok(settings)
             }
-            Ok(None) => {
-                return Err(format!(
-                    "No subnet record found for registry version={:?} and subnet_id={:?}",
-                    registry_version, self.subnet_id,
-                ));
-            }
-            Err(err) => {
-                return Err(format!(
-                    "Could not retrieve ingress_message_settings from the registry: {err}",
-                ));
-            }
+            Ok(None) => Err(format!(
+                "No subnet record found for registry version={:?} and subnet_id={:?}",
+                registry_version, self.subnet_id,
+            )),
+            Err(err) => Err(format!(
+                "Could not retrieve ingress_message_settings from the registry: {err}",
+            )),
         }
     }
 
