@@ -738,7 +738,7 @@ impl CallContextManager {
         self.call_contexts
             .iter()
             .take_while(|(_, call_context)| call_context.time() <= threshold_time)
-            .for_each(|(_, call_context)| {
+            .inspect(|(_, call_context)| {
                 if !call_context.is_deleted() {
                     for_each(call_context.call_origin(), call_context.time());
                 }
