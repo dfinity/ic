@@ -66,14 +66,13 @@ impl<T: RegistryClient + ?Sized> BlessedReplicaVersionRegistry for T {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_interfaces_registry::RegistryValue;
-    use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_protobuf::registry::replica_version::v1::{
         GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
     };
+    use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_replica_version_key;
-    use mockall::predicate::eq;
-    use prost::Message;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use std::sync::Arc;
 
     fn create_replica_record(
         package_hash: &str,
@@ -113,37 +112,37 @@ mod tests {
             ("version3", create_replica_record("99999", &[measurement4])),
         ];
 
-        let mut mock_client = MockRegistryClient::new();
+        // Set up registry data provider
+        let data_provider = ProtoRegistryDataProvider::new();
 
-        mock_client
-            .expect_get_latest_version()
-            .return_const(registry_version);
-
+        // Add blessed replica versions
         let blessed_versions_proto = BlessedReplicaVersions {
             blessed_version_ids: blessed_versions.iter().map(|x| x.to_string()).collect(),
         };
-
-        mock_client
-            .expect_get_value()
-            .with(
-                eq(make_blessed_replica_versions_key()),
-                eq(registry_version),
+        data_provider
+            .add(
+                &make_blessed_replica_versions_key(),
+                registry_version,
+                Some(blessed_versions_proto),
             )
-            .returning(move |_, _| Ok(Some(blessed_versions_proto.encode_to_vec())));
+            .expect("Failed to add blessed replica versions");
 
+        // Add replica version records
         for (version_id, record) in &replica_versions_and_records {
-            let version_id = version_id.to_string();
-            let record = record.clone();
-            mock_client
-                .expect_get_value()
-                .with(
-                    eq(make_replica_version_key(&version_id)),
-                    eq(registry_version),
+            data_provider
+                .add(
+                    &make_replica_version_key(version_id),
+                    registry_version,
+                    Some(record.clone()),
                 )
-                .returning(move |_, _| Ok(Some(record.encode_to_vec())));
+                .expect("Failed to add replica version record");
         }
 
-        let result = mock_client.get_blessed_guest_launch_measurements(registry_version);
+        // Create registry client and update to latest version
+        let registry_client = FakeRegistryClient::new(Arc::new(data_provider));
+        registry_client.update_to_latest_version();
+
+        let result = registry_client.get_blessed_guest_launch_measurements(registry_version);
 
         assert_eq!(
             result,
