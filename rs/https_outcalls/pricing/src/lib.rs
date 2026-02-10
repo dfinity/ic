@@ -3,7 +3,7 @@ mod legacy;
 use std::time::Duration;
 
 use ic_types::{
-    Cycles, NumBytes, NumInstructions,
+    NumBytes, NumInstructions,
     canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext},
 };
 use legacy::LegacyTracker;
