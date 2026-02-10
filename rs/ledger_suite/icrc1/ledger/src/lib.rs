@@ -832,6 +832,10 @@ impl LedgerData for Ledger {
     fn get_archiving_failure_metric(&self) -> u64 {
         ARCHIVING_FAILURES.get()
     }
+
+    fn record_archiving_stats(&mut self, _stats: ic_ledger_canister_core::archive::ArchivingStats) {
+        // No-op for ICRC ledger - archiving metrics are only tracked in ICP ledger
+    }
 }
 
 impl Ledger {
