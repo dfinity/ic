@@ -27,7 +27,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_with",
     "@crate_index//:tempfile",
     "@crate_index//:url",
-    "@crate_index//:walkdir",
 ]
 
 TEST_DEPENDENCIES = [
