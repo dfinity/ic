@@ -61,11 +61,11 @@ impl LogMemoryStore {
         log_memory_limit: NumBytes,
         page_map: PageMap,
     ) -> Self {
-        // PageMap is a lazy pointer that doesn't verify file existence on creation.
-        // To avoid redundant disk I/O during restoration, we only initialize page_map
-        // if the log memory limit is non-zero.
         Self::new_inner(
             feature_flag,
+            // PageMap is a lazy pointer that doesn't verify file existence on creation.
+            // To avoid redundant disk I/O during restoration, we only initialize page_map
+            // if the log memory limit is non-zero.
             (log_memory_limit > NumBytes::new(0)).then_some(page_map),
         )
     }
@@ -269,6 +269,7 @@ impl Clone for LogMemoryStore {
 
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
+        // header_cache is a transient cache and should not be compared.
         self.feature_flag == other.feature_flag
             && self.maybe_page_map == other.maybe_page_map
             && self.delta_log_sizes == other.delta_log_sizes
