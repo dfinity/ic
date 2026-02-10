@@ -91,9 +91,7 @@ impl SignatureDomain for CanisterHttpResponseMetadata {
 
 impl SignatureDomain for CanisterHttpPaymentMetadata {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(
-            DomainSeparator::CanisterHttpPaymentMetadata.as_str(),
-        )
+        domain_with_prepended_length(DomainSeparator::CanisterHttpPaymentMetadata.as_str())
     }
 }
 

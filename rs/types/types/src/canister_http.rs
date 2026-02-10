@@ -807,7 +807,9 @@ pub struct CanisterHttpPaymentReceipt {
 
 impl Default for CanisterHttpPaymentReceipt {
     fn default() -> Self {
-        CanisterHttpPaymentReceipt { refund: Cycles::zero() }
+        CanisterHttpPaymentReceipt {
+            refund: Cycles::zero(),
+        }
     }
 }
 
@@ -857,7 +859,7 @@ impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMe
 pub type CanisterHttpResponseShare =
     Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
 
-pub type CanisterHttpPaymentShare = 
+pub type CanisterHttpPaymentShare =
     Signed<CanisterHttpPaymentMetadata, BasicSignature<CanisterHttpPaymentMetadata>>;
 
 /// Contains a share and optionally the full response.

@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
-use ic_types::{NumBytes, NumInstructions, canister_http::{CanisterHttpPaymentReceipt, MAX_CANISTER_HTTP_RESPONSE_BYTES}};
+use ic_types::{
+    NumBytes, NumInstructions,
+    canister_http::{CanisterHttpPaymentReceipt, MAX_CANISTER_HTTP_RESPONSE_BYTES},
+};
 
 use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError};
 

@@ -2,7 +2,10 @@ mod legacy;
 
 use std::time::Duration;
 
-use ic_types::{Cycles, NumBytes, NumInstructions, canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext}};
+use ic_types::{
+    Cycles, NumBytes, NumInstructions,
+    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext},
+};
 use legacy::LegacyTracker;
 
 pub trait BudgetTracker: Send {
