@@ -16,7 +16,8 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
-use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
+//use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
+use ic_test_utilities_metrics::{fetch_histogram_vec_stats, labels};
 use ic_types::{CanisterId, Cycles, NumInstructions, ingress::WasmResult};
 use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
