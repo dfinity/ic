@@ -375,6 +375,7 @@ mod tests {
             subnet_id_override: None,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
