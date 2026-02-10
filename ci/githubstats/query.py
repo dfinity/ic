@@ -927,13 +927,6 @@ def main():
     common_parser.add_argument(
         "--timeout", metavar="T", type=int, default=60, help="PostgreSQL connect and query timeout in seconds"
     )
-    common_parser.add_argument(
-        "--tablefmt",
-        metavar="FMT",
-        type=str,
-        default="fancy_grid",
-        help="Table format. See: https://pypi.org/project/tabulate/",
-    )
 
     filter_parser = argparse.ArgumentParser(add_help=False)
     period_group = filter_parser.add_mutually_exclusive_group()
@@ -1042,6 +1035,14 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
 
     top_parser.set_defaults(func=top)
 
+    top_parser.add_argument(
+        "--tablefmt",
+        metavar="FMT",
+        type=str,
+        default="mixed_outline",
+        help="Table format. See: https://pypi.org/project/tabulate/",
+    )
+
     ## last ###################################################################
 
     last_runs_parser = subparsers.add_parser(
@@ -1113,6 +1114,14 @@ logs
 
     last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
     last_runs_parser.set_defaults(func=last)
+
+    last_runs_parser.add_argument(
+        "--tablefmt",
+        metavar="FMT",
+        type=str,
+        default="fancy_grid",
+        help="Table format. See: https://pypi.org/project/tabulate/",
+    )
 
     ###########################################################################
 
