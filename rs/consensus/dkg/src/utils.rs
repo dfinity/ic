@@ -93,7 +93,8 @@ pub(super) fn get_dealers_from_chain(
     {
         let payload = &block.payload.as_ref().as_data().dkg;
         for message in payload.messages.iter() {
-            dealers.insert((message.content.dkg_id.clone(), message.signature.signer));
+            let unique = dealers.insert((message.content.dkg_id.clone(), message.signature.signer));
+            assert!(unique, "Dealings from the same dealers discovered.");
         }
     }
     dealers
