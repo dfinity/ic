@@ -596,3 +596,39 @@ fn test_deallocate_when_resize_to_zero() {
     assert!(s.maybe_page_map().is_none());
     assert_eq!(s.byte_capacity(), 0);
 }
+
+#[test]
+fn test_delta_log_sizes() {
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+
+    // Batch A.
+    let mut delta = CanisterLog::new_delta_with_next_index(0, TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(1, b"a1".to_vec());
+    delta.add_record(2, b"a2".to_vec());
+    let size_a = delta.bytes_used();
+    s.append_delta_log(&mut delta);
+
+    // Batch B.
+    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(3, b"b1".to_vec());
+    delta.add_record(4, b"b2".to_vec());
+    delta.add_record(5, b"b3".to_vec());
+    let size_b = delta.bytes_used();
+    s.append_delta_log(&mut delta);
+
+    // Batch C.
+    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(6, b"c1".to_vec());
+    delta.add_record(7, b"c2".to_vec());
+    delta.add_record(8, b"c3".to_vec());
+    delta.add_record(9, b"c4".to_vec());
+    let size_c = delta.bytes_used();
+    s.append_delta_log(&mut delta);
+
+    // Assert main log has all records and correct used space.
+    assert_eq!(s.records(None).len(), 9);
+    assert_eq!(s.delta_log_sizes(), vec![size_a, size_b, size_c]);
+    s.clear_delta_log_sizes();
+    assert_eq!(s.delta_log_sizes(), Vec::<usize>::new()); // Call after clear_delta_log_sizes.
+}
