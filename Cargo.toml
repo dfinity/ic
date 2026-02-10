@@ -689,7 +689,7 @@ ic-doge-interface = "0.1.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.4.0", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730" }
-ic-identity-hsm = "0.40.1"
+ic-identity-hsm = "0.45.0"
 ic-management-canister-types = "0.5.0"
 ic-response-verification = "3"
 ic-sha3 = "1.0.0"

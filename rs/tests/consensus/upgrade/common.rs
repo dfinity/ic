@@ -31,6 +31,7 @@ use ic_system_test_driver::{
     util::{MessageCanister, block_on},
 };
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use ic_management_canister_types::TakeCanisterSnapshotArgs;
 use ic_utils::interfaces::ManagementCanister;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
@@ -175,7 +176,11 @@ pub fn upgrade(
             .await
             .expect("Failed to create agent");
         let mgr = ManagementCanister::create(&agent);
-        mgr.take_canister_snapshot(&can_id, None).await.unwrap();
+        let snapshot_args = TakeCanisterSnapshotArgs {
+            canister_id: can_id,
+            replace_snapshot: None,
+        };
+        mgr.take_canister_snapshot(&can_id, &snapshot_args).await.unwrap();
     });
 
     info!(logger, "Stopping faulty node {} ...", faulty_node.node_id);

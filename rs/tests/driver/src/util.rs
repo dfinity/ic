@@ -21,6 +21,7 @@ use ic_agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
     },
+    agent_error::TransportError,
     export::Principal,
     identity::BasicIdentity,
 };
@@ -928,7 +929,7 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder.build().map_err(AgentError::TransportError)?;
+    let client = builder.build().map_err(|e| AgentError::TransportError(TransportError::Reqwest(e)))?;
     agent_with_client_identity(url, client, identity).await
 }
 

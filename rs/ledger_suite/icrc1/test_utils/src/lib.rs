@@ -1600,7 +1600,7 @@ impl KeyPairGenerator<Arc<BasicIdentity>> for Arc<BasicIdentity> {
             BasicIdentity::from_pem(
                 secret_key
                     .serialize_pkcs8_pem(PrivateKeyFormat::Pkcs8v2)
-                    .into_bytes(),
+                    .as_bytes(),
             )
             .unwrap(),
         )
