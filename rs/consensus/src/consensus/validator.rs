@@ -1805,20 +1805,21 @@ impl Validator {
         change_set
     }
 
+    /// Same as [`Self::dedup_change_actions`] but only deduplicates
+    /// [`ChangeAction::MoveToValidated`] mutations.
     fn dedup_move_to_validated_actions(&self, name: &str, actions: Mutations) -> Mutations {
         let mut change_set = Mutations::new();
 
         for action in actions {
-            match action {
-                action @ ChangeAction::MoveToValidated(_) => {
-                    if change_set.dedup_push(action).is_some() {
-                        self.metrics
-                            .duplicate_artifact
-                            .with_label_values(&[name])
-                            .inc();
-                    }
+            if let ChangeAction::MoveToValidated(_) = action {
+                if change_set.dedup_push(action).is_some() {
+                    self.metrics
+                        .duplicate_artifact
+                        .with_label_values(&[name])
+                        .inc();
                 }
-                action => change_set.push(action),
+            } else {
+                change_set.push(action)
             }
         }
 
