@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -89,8 +90,9 @@ pub struct ConnectionManager<Network: BlockchainNetwork> {
     /// This field is used to indicate whether or not the connection manager needs to populate the
     /// address book.
     initial_address_discovery: bool,
-    /// This field is used to store an instance of the logger.
-    logger: ReplicaLogger,
+    /// This field is used to store an instance of the logger (shared so that
+    /// rate-limited logs like `every_n_seconds` are throttled across all connection tasks).
+    logger: Arc<ReplicaLogger>,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
     magic: Magic,
@@ -121,11 +123,11 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     /// This function is used to create a new connection manager with a provided config.
     pub fn new(
         config: &Config<Network>,
-        logger: ReplicaLogger,
+        logger: Arc<ReplicaLogger>,
         network_message_sender: Sender<(SocketAddr, NetworkMessageOf<Network>)>,
         metrics: RouterMetrics,
     ) -> Self {
-        let address_book = AddressBook::new(config, logger.clone());
+        let address_book = AddressBook::new(config, logger.as_ref().clone());
         let (stream_event_sender, stream_event_receiver) =
             channel::<StreamEvent>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
@@ -179,7 +181,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
         if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle).await
         {
-            error!(self.logger, "{}", err);
+            error!(&*self.logger, "{}", err);
         }
     }
 
@@ -322,7 +324,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
         let stream_config = crate::stream::StreamConfig {
             address,
-            logger: self.logger.clone(),
+            logger: Arc::clone(&self.logger),
             magic: self.magic,
             network_message_receiver,
             socks_proxy: self.socks_proxy.clone(),
@@ -447,13 +449,13 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
         address: &SocketAddr,
         message: &VersionMessage,
     ) -> Result<(), ProcessNetworkMessageError> {
-        trace!(self.logger, "Received version from {}", address);
+        trace!(&*self.logger, "Received version from {}", address);
         let conn = self
             .get_connection(address)
             .map_err(|_| ProcessNetworkMessageError::InvalidMessage)?;
         if !conn.is_seed() && !self.validate_received_version(message) {
             warn!(
-                self.logger,
+                &*self.logger,
                 "Received an invalid version from {}. Version: {}; Height: {}; Services: {}, while current height is: {}",
                 address,
                 message.version,
@@ -476,7 +478,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
         &mut self,
         address: &SocketAddr,
     ) -> Result<(), ProcessNetworkMessageError> {
-        trace!(self.logger, "Received verack from {}", address);
+        trace!(&*self.logger, "Received verack from {}", address);
         if let Ok(conn) = self.get_connection(address) {
             match conn.address_entry() {
                 AddressEntry::Seed(_) => conn.awaiting_addresses(),
@@ -499,7 +501,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     ) -> Result<(), ProcessNetworkMessageError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
-        trace!(self.logger, "Received ping from {}", address);
+        trace!(&*self.logger, "Received ping from {}", address);
         self.send_pong(address, nonce).ok();
         Ok(())
     }
@@ -512,7 +514,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     ) -> Result<(), ProcessNetworkMessageError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
-        trace!(self.logger, "Received pong from {}", address);
+        trace!(&*self.logger, "Received pong from {}", address);
         if let Ok(conn) = self.get_connection(address) {
             let valid_pong = match conn.ping_state() {
                 PingState::ExpectingPong {
@@ -548,7 +550,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
         }) = result
         {
             warn!(
-                self.logger,
+                &*self.logger,
                 "Received {} addresses from {} (max: {})", received, address, max_amount
             );
             return Err(ProcessNetworkMessageError::InvalidMessage);
@@ -563,7 +565,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
         if self.address_book.has_enough_addresses() {
             if self.initial_address_discovery {
                 info!(
-                    self.logger,
+                    &*self.logger,
                     "Adapter has discovered enough addresses: {}",
                     self.address_book.size()
                 );
@@ -583,7 +585,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
         // If we receive an unknown message from a BTC node, the adapter should log
         // the message for further analysis.
         warn!(
-            self.logger,
+            &*self.logger,
             "Received an unknown message from {}, command: {}, payload: {}",
             address,
             command,
@@ -654,11 +656,11 @@ impl<Network: BlockchainNetwork> ProcessEvent for ConnectionManager<Network> {
                     match result {
                         Ok(_) => {
                             conn.connected();
-                            trace!(self.logger, "Connected to {}", event.address);
+                            trace!(&*self.logger, "Connected to {}", event.address);
                         }
                         Err(err) => {
                             conn.disconnect();
-                            trace!(self.logger, "{}", err);
+                            trace!(&*self.logger, "{}", err);
                         }
                     };
                 }
@@ -719,6 +721,7 @@ mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;
+    use std::sync::Arc;
 
     const BLOCK_HEIGHT_FOR_TESTS: BlockHeight = 1;
 
@@ -748,7 +751,7 @@ mod test {
 
         let manager = ConnectionManager::new(
             &config,
-            no_op_logger(),
+            Arc::new(no_op_logger()),
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
@@ -781,7 +784,7 @@ mod test {
 
         let mut manager = ConnectionManager::new(
             &config,
-            no_op_logger(),
+            Arc::new(no_op_logger()),
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
@@ -816,7 +819,7 @@ mod test {
 
         let manager = ConnectionManager::new(
             &config,
-            no_op_logger(),
+            Arc::new(no_op_logger()),
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
@@ -908,7 +911,7 @@ mod test {
             channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
         let mut manager = ConnectionManager::new(
             &config,
-            no_op_logger(),
+            Arc::new(no_op_logger()),
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
@@ -970,7 +973,7 @@ mod test {
 
         let mut manager = ConnectionManager::new(
             &config,
-            no_op_logger(),
+            Arc::new(no_op_logger()),
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
@@ -1014,7 +1017,7 @@ mod test {
             channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
         let mut manager = ConnectionManager::new(
             &config,
-            no_op_logger(),
+            Arc::new(no_op_logger()),
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
@@ -1086,7 +1089,7 @@ mod test {
 
         let mut manager = ConnectionManager::new(
             &config,
-            no_op_logger(),
+            Arc::new(no_op_logger()),
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
@@ -1152,7 +1155,7 @@ mod test {
 
         let mut manager = ConnectionManager::new(
             &config,
-            no_op_logger(),
+            Arc::new(no_op_logger()),
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
@@ -1201,7 +1204,7 @@ mod test {
 
         let mut manager = ConnectionManager::new(
             &config,
-            no_op_logger(),
+            Arc::new(no_op_logger()),
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );

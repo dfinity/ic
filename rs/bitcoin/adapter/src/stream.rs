@@ -8,7 +8,7 @@ use bitcoin::{
 use futures::TryFutureExt;
 use http::Uri;
 use ic_logger::{ReplicaLogger, debug, error, info};
-use std::{io, net::SocketAddr, time::Duration};
+use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::AsyncWriteExt,
@@ -67,8 +67,9 @@ pub type StreamResult<T> = Result<T, StreamError>;
 pub struct StreamConfig<Header, Block> {
     /// This field represents the target address that the stream will connect to.
     pub address: SocketAddr,
-    /// This field is used to provide an instance of the logger.
-    pub logger: ReplicaLogger,
+    /// This field is used to provide an instance of the logger (shared so that
+    /// rate-limited logs like `every_n_seconds` are throttled across all connection tasks).
+    pub logger: Arc<ReplicaLogger>,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
     pub magic: Magic,
@@ -322,7 +323,7 @@ pub fn handle_stream<
         let logger = config.logger.clone();
         // Clone the sender here to handle errors that the Stream may return.
         let stream_event_sender = config.stream_event_sender.clone();
-        let stream_result = Stream::connect(config, &logger).await;
+        let stream_result = Stream::connect(config, logger.as_ref()).await;
         let mut stream = match stream_result {
             Ok(stream) => {
                 stream_event_sender
@@ -335,12 +336,12 @@ pub fn handle_stream<
                 stream
             }
             Err(err) => {
-                info!(every_n_seconds => 300, &logger, "Failed to connect to {} ::: {}", address, err);
+                info!(every_n_seconds => 300, logger.as_ref(), "Failed to connect to {} ::: {}", address, err);
                 let kind = match err {
                     StreamError::Io(_) => StreamEventKind::FailedToConnect,
                     StreamError::Timeout => StreamEventKind::FailedToConnect,
                     _ => {
-                        error!(logger, "{}", err);
+                        error!(logger.as_ref(), "{}", err);
                         StreamEventKind::Disconnected
                     }
                 };
@@ -384,6 +385,7 @@ pub fn handle_stream<
 pub mod test {
 
     use std::net::{IpAddr, Ipv4Addr};
+    use std::sync::Arc;
 
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
 
@@ -407,7 +409,7 @@ pub mod test {
 
         let stream_config = StreamConfig {
             address,
-            logger: no_op_logger(),
+            logger: Arc::new(no_op_logger()),
             magic: network.magic(),
             network_message_receiver: adapter_rx,
             socks_proxy: None,
@@ -464,7 +466,7 @@ pub mod test {
 
         let stream_config = StreamConfig {
             address,
-            logger: no_op_logger(),
+            logger: Arc::new(no_op_logger()),
             magic: network.magic(),
             network_message_receiver: adapter_rx,
             socks_proxy: None,
@@ -472,7 +474,7 @@ pub mod test {
             network_message_sender: net_tx,
         };
 
-        let stream_result = Stream::connect(stream_config, &no_op_logger()).await;
+        let stream_result = Stream::connect(stream_config, Arc::new(no_op_logger()).as_ref()).await;
         let err = stream_result.unwrap_err();
         assert!(matches!(err, StreamError::Timeout));
     }
@@ -490,7 +492,7 @@ pub mod test {
 
         let stream_config = StreamConfig {
             address,
-            logger: no_op_logger(),
+            logger: Arc::new(no_op_logger()),
             magic: network.magic(),
             network_message_receiver: adapter_rx,
             socks_proxy: None,
