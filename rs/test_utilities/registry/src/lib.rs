@@ -348,6 +348,14 @@ impl SubnetRecordBuilder {
         self
     }
 
+    pub fn with_recalled_replica_version_ids(
+        mut self,
+        recalled_replica_version_ids: &[String],
+    ) -> Self {
+        self.record.recalled_replica_version_ids = recalled_replica_version_ids.to_vec();
+        self
+    }
+
     pub fn build(self) -> SubnetRecord {
         self.record
     }
