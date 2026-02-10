@@ -223,7 +223,7 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
-def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame):
+def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs: bool, df: pd.DataFrame):
     """
     Download the logs of all runs of test_target in the given DataFrame,
     save them to the specified logs_base_dir
@@ -263,10 +263,11 @@ def download_and_process_logs(logs_base_dir, test_target: str, df: pd.DataFrame)
         log_urls = get_all_log_urls_from_buildbuddy(buildbuddy_base_url, cluster, str(invocation_id), test_target)
 
         for attempt_num, download_url, attempt_status in log_urls:
-            download_to_path = invocation_dir / str(attempt_num) / f"{attempt_status}.log"
-            download_tasks.append((row, attempt_num, attempt_status, download_url, download_to_path))
+            attempt_dir = invocation_dir / str(attempt_num)
+            download_to_path = attempt_dir / f"{attempt_status}.log"
+            download_tasks.append((row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path))
 
-    execute_download_tasks(download_tasks, output_dir, df)
+    execute_download_tasks(download_tasks, output_dir, download_ic_logs, df)
 
     write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
 
@@ -362,47 +363,61 @@ def convert_download_url(uri, cluster) -> str:
     return f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
 
 
-def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFrame):
+def execute_download_tasks(download_tasks: list, output_dir: Path, download_ic_logs: bool, df: pd.DataFrame):
     print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
-    def download_log(task):
-        row, attempt_num, attempt_status, download_url, download_to_path = task
-        shortened_path = download_to_path.relative_to(output_dir)
-        try:
-            response = requests.get(download_url, timeout=60, stream=True)
-            if response.ok:
-                download_to_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(download_to_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                # Fork a thread to annotate the DataFrame with the error summary of this log
-                # while the other logs are still downloading to speed up the whole process.
-                thread = threading.Thread(
-                    target=annotate_df_with_summaries, args=(row, attempt_num, attempt_status, download_to_path, df)
-                )
-                thread.start()
-                return thread
-            else:
-                error_line = shorten(response.text.split("\n")[0].strip(), 80)
-                msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
-                if response.status_code == 404:
-                    msg += " The log has probably already been garbage collected from the bazel-remote cache."
-                print(msg, file=sys.stderr)
+    # This executor is used for downloading IC logs from ElasticSearch concurrently.
+    # Limit to 10 concurrent downloads to not overwhelm ElasticSearch.
+    with ThreadPoolExecutor(max_workers=10) as download_ic_log_executor:
+
+        def download_log(task):
+            row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path = task
+            shortened_path = download_to_path.relative_to(output_dir)
+            try:
+                response = requests.get(download_url, timeout=60, stream=True)
+                if response.ok:
+                    download_to_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(download_to_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    # Fork a thread to process the log while the other logs are still downloading to speed up the whole process.
+                    thread = threading.Thread(
+                        target=process_log,
+                        args=(
+                            row,
+                            attempt_num,
+                            attempt_status,
+                            attempt_dir,
+                            download_to_path,
+                            df,
+                            download_ic_logs,
+                            download_ic_log_executor,
+                        ),
+                    )
+                    thread.start()
+                    return thread
+                else:
+                    error_line = shorten(response.text.split("\n")[0].strip(), 80)
+                    msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
+                    if response.status_code == 404:
+                        msg += " The log has probably already been garbage collected from the bazel-remote cache."
+                    print(msg, file=sys.stderr)
+                    return None
+            except Exception as e:
+                print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
                 return None
-        except Exception as e:
-            print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
-            return None
 
-    # Download in parallel (limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server).
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        threads = list(executor.map(download_log, download_tasks))
+        # Download test logs concurrently.
+        # Limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server.
+        with ThreadPoolExecutor(max_workers=10) as download_test_log_executor:
+            threads = list(download_test_log_executor.map(download_log, download_tasks))
 
-    # Wait for all annotation threads to finish.
-    successes = 0
-    for thread in threads:
-        if thread is not None:
-            successes += 1
-            thread.join()
+        # Wait for all annotation threads to finish.
+        successes = 0
+        for thread in threads:
+            if thread is not None:
+                successes += 1
+                thread.join()
 
     # Render the error_summaries to human-readable form.
     df["errors"] = df["error_summaries"].apply(render_error_summaries)
@@ -413,40 +428,115 @@ def execute_download_tasks(download_tasks: list, output_dir: Path, df: pd.DataFr
     )
 
 
-def annotate_df_with_summaries(row, attempt_num, attempt_status, download_to_path, df):
-    """Annotate the DataFrame with a summary of the error(s)"""
+def process_log(
+    row: pd.Series,
+    attempt_num: int,
+    attempt_status: str,
+    attempt_dir: Path,
+    download_to_path: Path,
+    df: pd.DataFrame,
+    download_ic_logs: bool,
+    download_ic_log_executor: ThreadPoolExecutor,
+):
+    """
+    Process the log
 
+    * Download IC logs from ElasticSearch in case of a system-test.
+    * Annotate the DataFrame with a summary of the error(s).
+    """
+
+    last_seen_timestamp = None
+    test_start_time = None
+    group_name = None
     summary = None
+    vm_ipv6s = {}
     lines = download_to_path.read_text().strip().splitlines()
     last_line = lines[-1]
     for line in lines:
-        # For uncolocated system-tests the SystemGroupSummary JSON object starts at the beginning of a line.
-        # However for colocated system-tests two SystemGroupSummary JSON objects appear in the logs.
-        # First the SystemGroupSummary of the actual colocated test appears but with log metadata in front of it. This is the one we're interested in.
-        # Then the SystemGroupSummary of the wrapper test-driver appears. This one we want to ignore. For example:
-        #
-        # 2026-02-02 04:28:24.512 INFO[uvms_logs_stream:StdOut] [uvm=colocated-test-driver] TEST_LOG: 2026-02-02 04:28:24.048 INFO[rs/tests/driver/src/driver/log_events.rs:20:9] {"event_name": ... }
-        # ...
-        # {"test_name": ... }
-        #
-        # To handle this we search for JSON objects in ascending order and start parsing from the first '{' character.
-        # Ideally the colocated test-driver would write a single SystemGroupSummary of the colocated test without any log metadata in front of it.
+        try:
+            # Here we try parsing a timestamp from the first 23 characters of a line
+            # assuming the line looks something like: "2026-02-03 13:55:09.645 INFO..."
+            last_seen_timestamp = pd.to_datetime(line[:23], utc=True)
+        except (ValueError, pd.errors.ParserError):
+            pass
+
         ix = line.find("{")
         if ix == -1:
             continue
         obj = line[ix:]
-        # Try parsing the line fragment as a JSON-encoded SystemGroupSummary
-        # and continue with the next line if that fails.
+
         try:
-            summary = SystemGroupSummary.from_json(obj)
-            break
-        except ValueError:
+            log_event = LogEvent.from_json(obj)
+            match log_event.event_name:
+                case "infra_group_name_created_event":
+                    group_name = GroupName.from_dict(log_event.body).group
+                    test_start_time = last_seen_timestamp
+                case "farm_vm_created_event":
+                    farm_vm_created = FarmVMCreated.from_dict(log_event.body)
+                    vm_ipv6s[farm_vm_created.vm_name] = farm_vm_created.ipv6
+                case "json_report_created_event":
+                    summary = SystemGroupSummary.from_dict(log_event.body)
+                    break
+        except (ValueError, dacite.DaciteError):
             continue
+
+    if group_name is not None and download_ic_logs:
+        # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
+        # We fork a thread for downloading the IC logs to speed up the whole process instead of doing it sequentially after downloading all test logs.
+        download_ic_log_executor.submit(
+            download_ic_logs_for_system_test, attempt_dir, group_name, test_start_time, last_seen_timestamp, vm_ipv6s
+        )
 
     with row["lock"]:
         row["error_summaries"][attempt_num] = (
             summary if summary is not None else last_line if attempt_status == FAILED else None
         )
+
+
+@dataclass
+class DataClassJsonMixin:
+    @classmethod
+    def from_dict(cls, data: dict):
+        return dacite.from_dict(data_class=cls, data=data, config=dacite.Config(strict=True))
+
+    @classmethod
+    def from_json(cls, json_str: str):
+        try:
+            value = json.loads(json_str)
+            if not isinstance(value, dict):
+                raise ValueError(f"Expected dict but got {type(value).__name__}: {value}")
+            return cls.from_dict(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+        except dacite.DaciteError as e:
+            raise ValueError(f"JSON does not match {cls.__name__} structure: {e}")
+
+
+@dataclass
+class LogEvent(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::log_events::LogEvent`"""
+
+    event_name: str
+    body: dict
+
+
+@dataclass
+class GroupName(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::driver::test_env_api::emit_group_event::GroupName`"""
+
+    message: str
+    group: str
+
+
+@dataclass
+class FarmVMCreated(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::driver::farm::FarmVMCreated`"""
+
+    vm_name: str
+    hostname: str
+    ipv6: str
+    v_cpus: int
+    memory_ki_b: int
 
 
 @dataclass
@@ -459,29 +549,13 @@ class TaskReport:
 
 
 @dataclass
-class SystemGroupSummary:
+class SystemGroupSummary(DataClassJsonMixin):
     """Matches the Rust struct `ic_system_test_driver::report::SystemGroupSummary`"""
 
     test_name: str
     success: List[TaskReport]
     failure: List[TaskReport]
     skipped: List[TaskReport]
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "SystemGroupSummary":
-        return dacite.from_dict(data_class=cls, data=data, config=dacite.Config(strict=True))
-
-    @classmethod
-    def from_json(cls, json_str: str) -> "SystemGroupSummary":
-        try:
-            value = json.loads(json_str)
-            if not isinstance(value, dict):
-                raise ValueError(f"Expected dict but got {type(value).__name__}: {value}")
-            return cls.from_dict(value)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON: {e}")
-        except dacite.DaciteError as e:
-            raise ValueError(f"JSON does not match SystemGroupSummary structure: {e}")
 
 
 def render_error_summaries(summaries: dict[int, SystemGroupSummary | str | None]) -> str:
@@ -529,6 +603,85 @@ def shorten(msg: str, max_length: int) -> str:
     if len(msg) > max_length:
         return msg[:max_length] + "..."
     return msg
+
+
+def download_ic_logs_for_system_test(
+    attempt_dir: Path,
+    group_name: str,
+    test_start_time: pd.Timestamp,
+    test_end_time: pd.Timestamp,
+    vm_ipv6s: dict[str, str],
+):
+    ic_logs_dir = attempt_dir / "ic_logs"
+    ic_logs_dir.mkdir(exist_ok=True)
+
+    elasticsearch_query = {
+        "size": 10000,
+        "query": {
+            "bool": {
+                "must": [
+                    {"match_phrase": {"ic": group_name}},
+                    {
+                        "range": {
+                            "timestamp": {
+                                "gte": test_start_time.isoformat(),
+                                "lte": test_end_time.isoformat(),
+                            }
+                        }
+                    },
+                ]
+            }
+        },
+        "_source": ["MESSAGE", "ic_subnet", "ic_node", "timestamp"],
+        # Sort by timestamp, using _doc as a tie-breaker for stable pagination.
+        "sort": [{"timestamp": {"order": "asc", "format": "strict_date_optional_time_nanos"}}, {"_doc": "asc"}],
+    }
+
+    try:
+        url = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search"
+        params = {"filter_path": "hits.hits"}
+        all_hits = []
+        while True:
+            response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
+
+            if not response.ok:
+                print(
+                    f"Failed to download IC logs for {group_name}: {response.status_code} {response.text}",
+                    file=sys.stderr,
+                )
+                return
+
+            hits = response.json().get("hits", {}).get("hits", [])
+            all_hits.extend(hits)
+
+            if len(hits) < elasticsearch_query["size"]:
+                break
+
+            last_hit = hits[-1]
+            elasticsearch_query["search_after"] = last_hit["sort"]
+
+        logs_by_node = {}
+        for hit in all_hits:
+            source = hit.get("_source", {})
+            node = source.get("ic_node", "unknown_node")
+            timestamp = source.get("timestamp", "unknown_time")
+            message = source.get("MESSAGE", "")
+            if node not in logs_by_node:
+                logs_by_node[node] = []
+            logs_by_node[node].append((timestamp, message))
+
+        for node, messages in logs_by_node.items():
+            log_file = ic_logs_dir / f"{node}.log"
+            if node in vm_ipv6s:
+                ipv6_symlink_path = ic_logs_dir / f"{vm_ipv6s[node]}.log"
+                ipv6_symlink_path.symlink_to(log_file.name)
+            log_file.write_text("\n".join([f"{ts} {msg}" for ts, msg in messages]))
+            print(f"Downloaded {len(messages)} log entries for node {node} to {log_file}", file=sys.stderr)
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading IC logs for {group_name}: {e}", file=sys.stderr)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON response for {group_name}: {e}", file=sys.stderr)
 
 
 def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
@@ -723,7 +876,7 @@ def last(args):
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
-        download_and_process_logs(args.logs_base_dir, args.test_target, df)
+        download_and_process_logs(args.logs_base_dir, args.test_target, args.download_ic_logs, df)
 
     colalignments = [
         # (column, header, alignment)
@@ -906,6 +1059,10 @@ Examples:
 
     last_runs_parser.add_argument(
         "--skip-download", action="store_true", help="Don't download logs of the runs, just show the table"
+    )
+
+    last_runs_parser.add_argument(
+        "--download-ic-logs", action="store_true", help="Download IC logs from ElasticSearch for system-tests"
     )
 
     last_runs_parser.add_argument(
