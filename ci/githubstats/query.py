@@ -489,12 +489,17 @@ def process_log(
             except (ValueError, dacite.DaciteError):
                 continue
 
-    if group_name is not None and download_ic_logs:
-        # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
-        # We fork a thread for downloading the IC logs to speed up the whole process instead of doing it sequentially after downloading all test logs.
-        download_ic_log_executor.submit(
-            download_ic_logs_for_system_test, attempt_dir, group_name, test_start_time, last_seen_timestamp, vm_ipv6s
-        )
+        if group_name is not None and download_ic_logs:
+            # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
+            # We fork a thread for downloading the IC logs to speed up the whole process instead of doing it sequentially after downloading all test logs.
+            download_ic_log_executor.submit(
+                download_ic_logs_for_system_test,
+                attempt_dir,
+                group_name,
+                test_start_time,
+                last_seen_timestamp,
+                vm_ipv6s,
+            )
 
     with row["lock"]:
         row["error_summaries"][attempt_num] = (
