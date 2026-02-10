@@ -1560,13 +1560,17 @@ impl Scheduler for SchedulerImpl {
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
 
+                    let new_log = &mut canister.system_state.log_memory_store;
+                    let old_log = &mut canister.system_state.canister_log;
                     let (log_memory_usage, delta_log_sizes) = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                        let log = &mut canister.system_state.log_memory_store;
-                        (log.memory_usage(), log.take_delta_log_sizes())
+                        (new_log.memory_usage(), new_log.delta_log_sizes())
                     } else {
-                        let log = &mut canister.system_state.canister_log;
-                        (log.bytes_used(), log.take_delta_log_sizes())
+                        (old_log.bytes_used(), old_log.delta_log_sizes())
                     };
+                    // IMPORTANT: clear_delta_log_sizes() must be called unconditionally to
+                    // make sure that the delta log sizes are always empty at the end of the round.
+                    new_log.clear_delta_log_sizes();
+                    old_log.clear_delta_log_sizes();
                     self.metrics
                         .canister_log_memory_usage_v2
                         .observe(log_memory_usage as f64);

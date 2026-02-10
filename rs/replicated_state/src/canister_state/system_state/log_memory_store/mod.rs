@@ -38,7 +38,6 @@ pub struct LogMemoryStore {
     /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
     /// The collected sizes are used to expose per-round memory usage metrics
     /// and the record is cleared at the end of the round.
-    #[validate_eq(Ignore)]
     delta_log_sizes: VecDeque<usize>,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
@@ -244,9 +243,14 @@ impl LogMemoryStore {
         self.delta_log_sizes.push_back(size);
     }
 
-    /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
-    pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
-        self.delta_log_sizes.drain(..).collect()
+    /// Returns delta_log sizes.
+    pub fn delta_log_sizes(&self) -> Vec<usize> {
+        self.delta_log_sizes.iter().cloned().collect()
+    }
+
+    /// Clears the delta_log sizes.
+    pub fn clear_delta_log_sizes(&mut self) {
+        self.delta_log_sizes.clear();
     }
 }
 
@@ -269,7 +273,9 @@ impl Clone for LogMemoryStore {
 
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
-        self.maybe_page_map == other.maybe_page_map && self.feature_flag == other.feature_flag
+        self.feature_flag == other.feature_flag
+            && self.maybe_page_map == other.maybe_page_map
+            && self.delta_log_sizes == other.delta_log_sizes
     }
 }
 
