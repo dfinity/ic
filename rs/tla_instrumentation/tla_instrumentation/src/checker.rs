@@ -171,7 +171,8 @@ fn run_apalache(
         .arg(format!("--next={next_predicate}"))
         .arg("--length=1")
         .arg(tla_module)
-        .env("JDK_JAVA_OPTIONS", jvm_args);
+        .env("JDK_JAVA_OPTIONS", jvm_args)
+        .env("TEST_TMPDIR", &tmp_subdir_str);
     cmd.status()
         .map_err(|e| ApalacheError::SetupError(e.to_string()))
         .and_then(|e| {
