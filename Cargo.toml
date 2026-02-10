@@ -611,7 +611,7 @@ build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
 canbench-rs = "0.4.0"
-candid = { version = "0.10.20" }
+candid = { version = "0.10.22" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.42", default-features = false, features = [
     "alloc",
