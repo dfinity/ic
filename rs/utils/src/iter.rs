@@ -11,9 +11,10 @@ use std::cmp::Ordering;
 ///
 /// ```
 /// use ic_utils::iter::left_outer_join;
+/// use std::collections::BTreeMap;
 ///
-/// let left = vec![(1_u32, "a"), (2, "b"), (4, "d")];
-/// let right = vec![(1_u32, "A"), (3, "C"), (4, "D")];
+/// let left = BTreeMap::from([(1_u32, "a"), (2, "b"), (4, "d")]);
+/// let right = BTreeMap::from([(1_u32, "A"), (3, "C"), (4, "D")]);
 ///
 /// let joined: Vec<_> = left_outer_join(
 ///     left.iter().map(|item| (&item.0, &item.1)),
