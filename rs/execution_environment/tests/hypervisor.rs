@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_utils::instrumentation::{WasmMemoryType, instruction_to_cost},
@@ -48,7 +48,7 @@ use ic_types::{
     messages::{CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
 };
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
-use more_asserts::assert_gt;
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -1078,6 +1078,56 @@ fn ic0_debug_print_out_of_bounds_works() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_debug_print_with_large_memory_wasm64() {
+    // Enable debug_print by disabling rate limiting
+    let mut config = ic_config::execution_environment::Config::default();
+    config
+        .embedders_config
+        .feature_flags
+        .rate_limiting_of_debug_prints = FlagStatus::Disabled;
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(config)
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "debug_print" (func $ic0_debug_print (param i64) (param i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func $test (export "canister_update test")
+                (local $i i64)
+                ;; Call debug_print with offset 0 and large negative size
+                ;; (when interpreted as unsigned, this is a huge number)
+                i64.const 0
+                i64.const -9223372034854775815
+                call $ic0_debug_print
+                ;; Loop to a large count
+                (loop $my_loop
+                    local.get $i
+                    i64.const 1
+                    i64.add
+                    local.tee $i
+                    i64.const 9223372034854775815
+                    i64.lt_s
+                    br_if $my_loop
+                )
+                (call $msg_reply)
+            )
+            (memory i64 49000)
+        )"#;
+    // Give the canister a trillion cycles to ensure it doesn't run out
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let canister_id = test
+        .canister_from_cycles_and_wat(initial_cycles, wat)
+        .unwrap();
+    // Calling debug_print with the large size argument should trap with InstructionLimitExceeded.
+    let result = test.ingress(canister_id, "test", vec![]);
+    let err = result.unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterInstructionLimitExceeded,
+        "Canister exceeded the limit",
+    );
 }
 
 #[test]
@@ -3656,9 +3706,9 @@ fn subnet_available_memory_is_updated_by_canister_init() {
         )"#;
     let initial_subnet_available_memory = test.subnet_available_memory();
     test.canister_from_wat(wat).unwrap();
-    assert!(
-        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64
-            > test.subnet_available_memory().get_execution_memory()
+    assert_gt!(
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_guaranteed_response_message_memory(),
@@ -3685,9 +3735,9 @@ fn subnet_available_memory_is_updated_by_canister_start() {
         )"#;
     let initial_subnet_available_memory = test.subnet_available_memory();
     let canister_id = test.canister_from_wat(wat).unwrap();
-    assert!(
-        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64
-            > test.subnet_available_memory().get_execution_memory()
+    assert_gt!(
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_guaranteed_response_message_memory(),
@@ -3998,7 +4048,7 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
                 assert_eq!(stats.count, 1);
                 // We can't match exactly here because on MacOS the page size is different (16 KiB) so the
                 // number of reported pages is different.
-                assert!(stats.sum >= 2.0)
+                assert_ge!(stats.sum, 2.0)
             }
             Some("stable") => {
                 assert_eq!(stats.count, 1);
@@ -4123,7 +4173,7 @@ fn query_stable_memory_metrics_are_recorded() {
                 assert_eq!(stats.count, 1);
                 // We can't match exactly here because on MacOS the page size is different (16 KiB) so the
                 // number of reported pages is different.
-                assert!(stats.sum >= 1.0)
+                assert_ge!(stats.sum, 1.0)
             }
             Some("stable") => {
                 assert_eq!(stats.count, 1);
@@ -4981,7 +5031,7 @@ impl MemoryAccessor {
         let execution_state = self.test.execution_state(self.canister_id);
         let mut actual_dirty = vec![false; is_dirty_page.len()];
         for (index, _) in execution_state.wasm_memory.page_map.delta_pages_iter() {
-            assert!((index.get() as usize) < actual_dirty.len());
+            assert_lt!((index.get() as usize), actual_dirty.len());
             actual_dirty[index.get() as usize] = true;
         }
         assert_eq!(is_dirty_page, &actual_dirty);
@@ -5152,7 +5202,7 @@ fn account_for_size_of_memory_fill_instruction() {
         )"#;
     assert_eq!(test.executed_instructions(), NumInstructions::from(0));
     test.canister_from_wat(wat).unwrap();
-    assert!(test.executed_instructions() > NumInstructions::from(1000));
+    assert_gt!(test.executed_instructions(), NumInstructions::from(1000));
 }
 
 // Verify that the `memory.fill` with max u32 bytes triggers the out of
@@ -6244,12 +6294,12 @@ fn deleted_call_contexts() {
     );
 
     // The response from B was not processed yet (otherwise cycles would have been refunded).
-    assert!(cycles_balance(&mut test) < initial_cycles / 2_u128);
+    assert_lt!(cycles_balance(&mut test), initial_cycles / 2_u128);
 
     test.execute_message(a_id);
 
     // The response was processed (because cycles have been refunded).
-    assert!(cycles_balance(&mut test) > initial_cycles * 3_u128 / 4_u128);
+    assert_gt!(cycles_balance(&mut test), initial_cycles * 3_u128 / 4_u128);
 
     // The canister can now be stopped.
     test.process_stopping_canisters();
@@ -6671,7 +6721,7 @@ fn cycles_correct_if_update_fails() {
     let execution_cost_before = test.canister_execution_cost(b_id);
     test.execute_message(b_id);
     let execution_cost_after = test.canister_execution_cost(b_id);
-    assert!(execution_cost_after > execution_cost_before);
+    assert_gt!(execution_cost_after, execution_cost_before);
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(b_id)
@@ -7971,7 +8021,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
         Cycles::zero()
     );
     // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+    assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
 
     let subnet_memory_usage =
         CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
@@ -7998,7 +8048,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
         )
     );
 
-    assert!(balance_before - balance_after > reserved_cycles);
+    assert_gt!(balance_before - balance_after, reserved_cycles);
 
     let err = test
         .canister_update_reserved_cycles_limit(canister_id, Cycles::from(reserved_cycles.get() - 1))
@@ -8332,7 +8382,7 @@ fn yield_for_dirty_page_copy_does_not_trigger_dts_slice_without_enough_dirty_pag
 
 #[test]
 fn declaring_too_many_tables_fails() {
-    let wat = format!("(module {})", "(table 0 externref)".repeat(100));
+    let wat = format!("(module {})", "(table 0 funcref)".repeat(100));
     let mut test = ExecutionTestBuilder::new().build();
     let err = test.canister_from_wat(wat).unwrap_err();
     assert_eq!(ErrorCode::CanisterWasmEngineError, err.code());
@@ -8700,7 +8750,7 @@ fn ic0_canister_cycle_balance_u64() {
     match result {
         WasmResult::Reply(response) => {
             let result = u64::from_le_bytes(response.try_into().unwrap());
-            assert!(result >= (1 << 63));
+            assert_ge!(result, (1 << 63));
         }
         WasmResult::Reject(err) => unreachable!("{:?}", err),
     }
@@ -8730,7 +8780,7 @@ fn ic0_msg_cycles_available_u64() {
     match result {
         WasmResult::Reply(response) => {
             let result = u64::from_le_bytes(response.try_into().unwrap());
-            assert!(result >= (1 << 63));
+            assert_ge!(result, (1 << 63));
         }
         WasmResult::Reject(err) => unreachable!("{:?}", err),
     }
@@ -9583,15 +9633,17 @@ fn aborting_call_resets_balance() {
 
 fn balance_is_roughly(actual_balance: u128, expected_balance: u128) {
     const EPS: u128 = 100_000_000_000;
-    assert!(
-        actual_balance >= expected_balance.saturating_sub(EPS),
+    assert_ge!(
+        actual_balance,
+        expected_balance.saturating_sub(EPS),
         "actual: {}; expected: {}; diff: {}B",
         actual_balance,
         expected_balance,
         (expected_balance - actual_balance) / 1_000_000_000
     );
-    assert!(
-        actual_balance <= expected_balance.saturating_add(EPS),
+    assert_le!(
+        actual_balance,
+        expected_balance.saturating_add(EPS),
         "actual: {}; expected: {}: diff: {}B",
         actual_balance,
         expected_balance,
@@ -10711,12 +10763,7 @@ fn test_deep_i32_eqz_chain() {
     let mut test = ExecutionTestBuilder::new().build();
     let result = test.canister_from_wat(&wat);
 
-    // Compilation of this Wasm doesn't overflow on arm.
-    #[cfg(target_arch = "x86_64")]
-    result
-        .unwrap_err()
-        .assert_contains(ErrorCode::CanisterWasmEngineError, "compiler died");
-
-    #[cfg(not(target_arch = "x86_64"))]
+    // The patch was made available in v40.0.2 and compilation
+    // should succeed there after
     result.unwrap();
 }

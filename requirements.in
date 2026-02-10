@@ -1,5 +1,6 @@
-ansible>=6.6.0
+ansible>=12.2.0
 cbor>=1.0.0
+cbor2>=5.8.0
 configargparse
 cryptography>=39.0.2
 cvss>=2.5
@@ -21,16 +22,26 @@ packaging>=21.3
 paramiko>=2.11.0
 parse>=1.19.0
 pyjwt>=2.6.0
+pynacl>=1.6.2
 pytest
 pytest-cov
 PyYAML>=6.0.2
+PyGithub>=2.3.0
+python_gitlab
 requests>=2.26.0
 sev-snp-measure
 simple-parsing
 toml>=0.10.2
 tqdm
 uuid
-PyGithub>=2.3.0
-python_gitlab
 # packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
 typing_extensions>=4.6.0
+urllib3>=2.6.3
+
+# For ci/githubstats/query.py
+pandas
+psycopg
+tabulate
+codeowners
+protobuf>=5.29.0
+dacite

@@ -20,6 +20,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting};
 use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
@@ -27,7 +28,6 @@ use ic_replicated_state::{
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::ApiBoundaryNodeEntry,
     page_map::{PageIndex, Shard, StorageLayout},
-    testing::ReplicatedStateTesting,
 };
 use ic_state_layout::{
     CANISTER_FILE, CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE, StateLayout, WASM_FILE,
@@ -83,12 +83,14 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 pub mod common;
 use common::*;
 
 const NUM_THREADS: u32 = 3;
+
+const INITIAL_STATE_HEIGHT: Height = Height::new(0);
 
 fn tree_payload(t: MixedHashTree) -> LabeledTree<Vec<u8>> {
     t.try_into().unwrap()
@@ -1037,9 +1039,9 @@ fn populates_prev_state_hash() {
         let hashes = state_manager.list_state_hashes_to_certify();
 
         assert_eq!(2, hashes.len());
-        assert_ne!(hashes[0].1, hashes[1].1);
+        assert_ne!(hashes[0].hash, hashes[1].hash);
         assert_eq!(
-            Some(hashes[0].1.clone()),
+            Some(hashes[0].hash.clone()),
             state_2.system_metadata().prev_state_hash
         );
     });
@@ -1625,8 +1627,8 @@ fn cannot_remove_latest_height_or_checkpoint() {
         // We need to wait for hashing to complete, otherwise the
         // checkpoint can be retained until the hashing is complete.
         state_manager.flush_tip_channel();
-        state_manager.remove_states_below(height(20));
-        state_manager.remove_inmemory_states_below(height(20), &BTreeSet::new());
+        state_manager.remove_states_below(height(11));
+        state_manager.remove_inmemory_states_below(height(11), &BTreeSet::new());
         state_manager.flush_deallocation_channel();
 
         assert_eq!(
@@ -2422,7 +2424,7 @@ fn recomputes_metadata_on_restart_if_missing() {
             .expect("Failed to remove states metadata");
         let cert_hashes = state_manager.list_state_hashes_to_certify();
         assert_eq!(1, cert_hashes.len());
-        assert_eq!(height(1), cert_hashes[0].0);
+        assert_eq!(height(1), cert_hashes[0].height);
 
         let state_manager = restart_fn(state_manager, None);
 
@@ -8207,7 +8209,7 @@ fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: Can
     // Take canister out.
     let mut canister = state.take_canister_state(&old_id).unwrap();
 
-    canister.system_state.canister_id = new_id;
+    canister.system_state.set_canister_id(new_id);
     state
         .metadata
         .unflushed_checkpoint_ops
@@ -8922,4 +8924,350 @@ fn random_canister_input(
     for op in ops {
         env = execute_op(env, canister_id, op.clone());
     }
+}
+
+fn no_state_clone_count(metrics: &MetricsRegistry) -> u64 {
+    fetch_int_counter_vec(metrics, "state_manager_no_state_clone_count")
+        .values()
+        .sum::<u64>()
+}
+
+fn tip_hash_count(metrics: &MetricsRegistry) -> u64 {
+    fetch_int_counter_vec(metrics, "state_manager_tip_hash_count")
+        .values()
+        .sum::<u64>()
+}
+
+fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
+    let mut labels = BTreeMap::new();
+    labels.insert("request".to_string(), "flush_unflushed_delta".to_string());
+    fetch_histogram_vec_stats(
+        metrics,
+        "state_manager_tip_handler_request_duration_seconds",
+    )
+    .get(&labels)
+    .map(|stats| stats.count)
+    .unwrap_or_default()
+}
+
+#[test]
+fn commit_and_certify_optimization_conditions() {
+    state_manager_test(|metrics, sm| {
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // all conditions are satisfied => optimization triggers
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 1);
+
+        // `CertificationScope::Full` => optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, Height::new(3), CertificationScope::Full, None);
+        assert_eq!(no_state_clone_count(metrics), 1);
+
+        // height of 20 is divisible by 10 => optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, Height::new(20), CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 1);
+
+        // height of 42 is not less than `fast_forward_height` => optimization does not trigger
+        assert_eq!(sm.fast_forward_height(), 42);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, Height::new(42), CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 1);
+    });
+}
+
+#[test]
+fn commit_and_certify_optimization_semantics() {
+    state_manager_test(|metrics, sm| {
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // just the initial state is stored in `states` at the beginning
+        let only_initial_state = || {
+            assert_eq!(sm.state_snapshot_heights(), vec![INITIAL_STATE_HEIGHT]);
+            assert!(sm.certifications_metadata_heights().is_empty());
+        };
+        only_initial_state();
+
+        // optimization triggers => no state snapshot and certifications metadata are stored => still just the initial state in `states`
+        let mut state = sm.take_tip().1;
+        state.metadata.batch_time += Duration::from_secs(1);
+        let batch_time_opt = state.metadata.batch_time;
+        let opt_height = Height::new(1);
+        sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 1);
+        only_initial_state();
+
+        // optimization does not trigger => state snapshot and certifications metadata with hash tree are stored
+        let (height, mut state) = sm.take_tip();
+        assert_eq!(height, opt_height); // tip height is set correctly if optimization triggers
+        assert_eq!(state.metadata.batch_time, batch_time_opt); // tip is set correctly if optimization triggers
+        state.metadata.batch_time += Duration::from_secs(1);
+        let batch_time_no_opt = state.metadata.batch_time;
+        let no_opt_height = Height::new(10);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 1);
+
+        assert_eq!(
+            sm.state_snapshot_heights(),
+            vec![INITIAL_STATE_HEIGHT, no_opt_height]
+        );
+        let new_snapshot = sm.state_snapshot(no_opt_height);
+        assert_eq!(new_snapshot.metadata.batch_time, batch_time_no_opt);
+
+        assert_eq!(sm.certifications_metadata_heights(), vec![no_opt_height]);
+        assert!(
+            sm.certifications_metadata_hash_tree(no_opt_height)
+                .is_some()
+        );
+        assert!(
+            sm.certifications_metadata_certification(no_opt_height)
+                .is_none()
+        );
+    });
+}
+
+#[test]
+fn fast_forward_height() {
+    state_manager_test(|_metrics, sm| {
+        // initial value
+        assert_eq!(sm.fast_forward_height(), 0);
+
+        // `update_fast_forward_height` updates `fast_forward_height`
+        sm.update_fast_forward_height(Height::new(100));
+        assert_eq!(sm.fast_forward_height(), 100);
+
+        // `update_fast_forward_height` does not update `fast_forward_height`
+        // to a lower value
+        sm.update_fast_forward_height(Height::new(10));
+        assert_eq!(sm.fast_forward_height(), 100);
+    });
+}
+
+#[test]
+#[should_panic(
+    expected = "Attempt to commit state not borrowed from this StateManager, height = 10, tip_height = 0"
+)]
+fn commit_and_certify_tip_set_panic() {
+    state_manager_test(|_metrics, sm| {
+        // optimization does not trigger
+        let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+        let no_opt_height = Height::new(10);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+    });
+}
+
+#[test]
+#[should_panic(
+    expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
+)]
+fn commit_and_certify_optimization_tip_set_panic() {
+    state_manager_test(|_metrics, sm| {
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
+
+        // optimization triggers
+        let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+        let opt_height = Height::new(1);
+        sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+    });
+}
+
+#[test]
+fn take_tip_does_not_hash_without_optimization() {
+    state_manager_test(|metrics, sm| {
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // the initial state is always hashed in `take_tip`
+        assert_eq!(tip_hash_count(metrics), 0);
+        let (initial_height, initial_state) = sm.take_tip();
+        assert_eq!(initial_height, INITIAL_STATE_HEIGHT);
+        assert_eq!(tip_hash_count(metrics), 1);
+
+        // optimization does not trigger
+        let no_opt_height = Height::new(1);
+        sm.commit_and_certify(
+            initial_state,
+            no_opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // the state at height 1 is not hashed in `take_tip` since certification metadata are computed
+        assert_eq!(tip_hash_count(metrics), 1);
+        let (height, _state) = sm.take_tip();
+        assert_eq!(tip_hash_count(metrics), 1);
+        assert_eq!(height, no_opt_height);
+    });
+}
+
+#[test]
+fn take_tip_hashes_with_optimization() {
+    state_manager_test(|metrics, sm| {
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // the initial state is always hashed in `take_tip`
+        assert_eq!(tip_hash_count(metrics), 0);
+        let (initial_height, initial_state) = sm.take_tip();
+        assert_eq!(initial_height, INITIAL_STATE_HEIGHT);
+        assert_eq!(tip_hash_count(metrics), 1);
+
+        // optimization triggers
+        let opt_height = Height::new(1);
+        sm.commit_and_certify(
+            initial_state,
+            opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
+        assert_eq!(no_state_clone_count(metrics), 1);
+
+        // the state at height 1 is hashed in `take_tip` since certification metadata are not computed
+        assert_eq!(tip_hash_count(metrics), 1);
+        let (height, _state) = sm.take_tip();
+        assert_eq!(tip_hash_count(metrics), 2);
+        assert_eq!(height, opt_height);
+    });
+}
+
+#[test]
+fn get_state_hash_at() {
+    state_manager_test(|metrics, sm| {
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(500));
+        assert_eq!(sm.fast_forward_height(), 500);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // future checkpoints yield transient error
+        let checkpoint_height = Height::new(500);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        let no_opt_height = Height::new(480);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization triggers
+        let state = sm.take_tip().1;
+        let opt_height = Height::new(485);
+        sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 1);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        let another_no_opt_height = Height::new(490);
+        sm.commit_and_certify(
+            state,
+            another_no_opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
+        assert_eq!(no_state_clone_count(metrics), 1);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization triggers
+        let state = sm.take_tip().1;
+        let another_opt_height = Height::new(495);
+        sm.commit_and_certify(
+            state,
+            another_opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
+        assert_eq!(no_state_clone_count(metrics), 2);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization does not trigger on checkpoint height
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, checkpoint_height, CertificationScope::Full, None);
+        assert_eq!(no_state_clone_count(metrics), 2);
+
+        // finally hash for checkpoint height is available
+        wait_for_checkpoint(&sm, checkpoint_height);
+        assert!(sm.get_state_hash_at(checkpoint_height).is_ok());
+    });
+}
+
+#[test]
+fn flush_with_optimization() {
+    state_manager_test(|metrics, sm| {
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // no delta has been flushed
+        assert_eq!(flush_unflushed_delta_count(metrics), 0);
+
+        // optimization triggers
+        let state = sm.take_tip().1;
+        let opt_height = Height::new(1);
+        let batch_summary = BatchSummary {
+            next_checkpoint_height: opt_height
+                + Height::new(NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY),
+            current_interval_length: height(500),
+        };
+        sm.commit_and_certify(
+            state,
+            opt_height,
+            CertificationScope::Metadata,
+            Some(batch_summary),
+        );
+        assert_eq!(no_state_clone_count(metrics), 1);
+
+        // delta has been flushed
+        sm.flush_tip_channel();
+        assert_eq!(flush_unflushed_delta_count(metrics), 1);
+    });
 }

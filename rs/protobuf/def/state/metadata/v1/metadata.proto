@@ -151,7 +151,15 @@ message CanisterHttpRequestContext {
   google.protobuf.BytesValue transform_context = 10;
   optional Replication replication = 11;
   optional PricingVersion pricing_version = 12;
+  optional RefundStatus refund_status = 13;
   reserved 5;
+}
+
+message RefundStatus {
+  state.queues.v1.Cycles refundable_cycles = 1;
+  state.queues.v1.Cycles per_replica_allowance = 2;
+  state.queues.v1.Cycles refunded_cycles = 3;
+  repeated types.v1.NodeId refunding_nodes = 4;
 }
 
 message PricingVersion {

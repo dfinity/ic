@@ -1,13 +1,12 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "CANISTER_HTTP_DATA", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-PROXY_CANISTER_DATA = [
-    # Keep sorted.
-    "//rs/rust_canisters/proxy_canister:proxy_canister",
-]
+CANISTER_HTTP_RUNTIME_DEPS = {
+    "HTTP_UVM_CONFIG_IMAGE_PATH": "//rs/tests/networking/canister_http:http_uvm_config_image",
+}
 
 CANISTER_HTTP_BASE_DEPS = [
     # Keep sorted.
@@ -53,27 +52,33 @@ HTTP_ENDPOINTS_DEPS = [
 
 system_test_nns(
     name = "canister_http_test",
-    data =
-        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
-    env = {
-        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
-    },
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
 system_test_nns(
-    name = "canister_http_stress_test",
-    data =
-        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
-    enable_metrics = True,
-    env = {
-        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    name = "canister_http_flexible_test",
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/rust_canisters/canister_test",
+    ],
+)
+
+system_test_nns(
+    name = "canister_http_stress_test",
+    enable_metrics = True,
     tags = ["manual"],  # not meant to be run on CI
     test_timeout = "eternal",
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -88,17 +93,15 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_soak_test",
-    data =
-        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     enable_metrics = True,
-    env = {
-        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
-    },
     tags = [
         "dynamic_testnet",
         "manual",
     ],
     test_timeout = "eternal",
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -114,15 +117,13 @@ system_test_nns(
 # NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 system_test_nns(
     name = "canister_http_socks_test",
-    data =
-        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
-    env = {
-        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
-    },
     tags = [
         "dynamic_testnet",
         "long_test",
     ],
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -132,10 +133,8 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_correctness_test",
-    data =
-        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
-    env = {
-        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_type",
@@ -155,14 +154,12 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_fault_tolerance_test",
-    data =
-        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
-    env = {
-        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
-    },
     tags = [
         "manual",
     ],
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
@@ -175,24 +172,20 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_non_replicated_test",
-    data =
-        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
-    env = {
-        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
 system_test_nns(
     name = "canister_http_time_out_test",
-    data =
-        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
-    env = {
-        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
-    },
     tags = [
         "long_test",
     ],
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
     deps = CANISTER_HTTP_BASE_DEPS,
 )
 
@@ -358,16 +351,15 @@ system_test_nns(
 
 system_test_nns(
     name = "p2p_performance_test",
-    data = [
-        "//rs/tests:jaeger_uvm_config_image",
-    ],
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
+    },
     deps = COMMON_DEPS + [
         "@crate_index//:ic-agent",
     ],

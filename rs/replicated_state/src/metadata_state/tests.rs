@@ -5,7 +5,7 @@ use super::subnet_call_context_manager::{
 };
 use super::*;
 use crate::InputQueueType;
-use crate::testing::CanisterQueuesTesting;
+use crate::testing::{CanisterQueuesTesting, StreamTesting};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
@@ -29,7 +29,8 @@ use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::canister_http::{
-    CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, Replication, Transform,
+    CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus, Replication,
+    Transform,
 };
 use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature};
 use ic_types::crypto::AlgorithmId;
@@ -761,6 +762,7 @@ fn subnet_call_contexts_deserialization() {
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
         pricing_version: PricingVersion::Legacy,
+        refund_status: RefundStatus::default(),
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -1948,6 +1950,7 @@ fn stream_roundtrip_encoding() {
 
     let mut stream = Stream::with_signals(
         messages,
+        130.into(),
         153.into(),
         [RejectSignal::new(
             RejectReason::CanisterMigrating,
@@ -1965,54 +1968,80 @@ fn stream_roundtrip_encoding() {
 }
 
 #[test]
-fn deserializing_stream_fails_for_bad_reject_signals() {
+fn deserializing_stream_fails_for_bad_signals() {
     let stream = pb_queues::Stream {
         messages_begin: 0,
         messages: Vec::new(),
+        signals_begin: 150,
         signals_end: 153,
         reject_signals: Vec::new(),
         reverse_stream_flags: None,
     };
+    let assert_invalid_reject_signals =
+        |reject_signals: Vec<pb_queues::RejectSignal>, expected_error: &str| {
+            let bad_stream = pb_queues::Stream {
+                reject_signals,
+                ..stream.clone()
+            };
+            let deserialized_result: Result<Stream, _> = bad_stream.try_into();
+            assert_matches!(deserialized_result, Err(ProxyDecodeError::Other(err_msg)) if err_msg == expected_error, "expected \"{expected_error}\"");
+        };
 
     // Deserializing a stream with duplicate reject signals (by index) should fail.
-    let bad_stream = pb_queues::Stream {
-        reject_signals: vec![
+    assert_invalid_reject_signals(
+        vec![
             pb_queues::RejectSignal {
                 reason: 1,
-                index: 1,
+                index: 150,
             },
             pb_queues::RejectSignal {
                 reason: 1,
-                index: 1,
+                index: 150,
             },
         ],
-        ..stream.clone()
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 1]"
+        "reject signals not strictly sorted, received [150, 150]",
     );
 
     // Deserializing a stream with descending reject signals (by index) should fail.
-    let bad_stream = pb_queues::Stream {
-        reject_signals: vec![
+    assert_invalid_reject_signals(
+        vec![
             pb_queues::RejectSignal {
                 reason: 1,
-                index: 1,
+                index: 151,
             },
             pb_queues::RejectSignal {
                 reason: 1,
-                index: 0,
+                index: 150,
             },
         ],
+        "reject signals not strictly sorted, received [151, 150]",
+    );
+
+    // Deserializing a stream with reject signals before `signals_begin` should fail.
+    assert_invalid_reject_signals(
+        vec![pb_queues::RejectSignal {
+            reason: 1,
+            index: 149,
+        }],
+        "first reject signal RejectSignal { reason: CanisterMigrating, index: 149 } before signals_begin 150",
+    );
+
+    // Deserializing a stream with reject signals after `signals_end` should fail.
+    assert_invalid_reject_signals(
+        vec![pb_queues::RejectSignal {
+            reason: 1,
+            index: 153,
+        }],
+        "reject signals not strictly sorted, received [153, 153]",
+    );
+
+    let bad_stream = pb_queues::Stream {
+        signals_begin: 153,
+        signals_end: 150,
         ..stream
     };
     let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 0]"
-    );
+    assert_matches!(deserialized_result, Err(ProxyDecodeError::Other(err_msg)) if err_msg == "signals_begin 153 after signals_end 150");
 }
 
 #[test]

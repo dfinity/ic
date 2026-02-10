@@ -29,6 +29,7 @@ curl
 faketime
 fdisk
 iproute2
+iputils-ping
 isc-dhcp-client
 jq
 less
@@ -72,12 +73,10 @@ nvme-cli
 pciutils
 python3-libvirt
 python3-requests
+strace
 xxd
 
 # Install select components from future releases
-# Install >=9.1 qemu
-qemu-system-x86/plucky # Top level
-
 # Install >=2025 OVMF
 ovmf/plucky # Top level
 

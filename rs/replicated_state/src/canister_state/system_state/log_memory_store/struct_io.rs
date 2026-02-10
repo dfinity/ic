@@ -6,18 +6,21 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{HEADER_OFFSET, INDEX_TABLE_OFFSET, RESULT_MAX_SIZE},
 };
 use crate::page_map::{Buffer, PageMap};
-use std::cell::Cell;
+use std::sync::OnceLock;
 
 pub(super) struct StructIO {
     buffer: Buffer,
-    cache_header: Cell<Option<Header>>,
+    /// Caches the ring buffer header for the lifetime of the `StructIO` instance.
+    /// This avoids repeated reads from the `PageMap` during complex operations,
+    /// eg. `RingBuffer::append_log(records)`.
+    header_cache: OnceLock<Header>,
 }
 
 impl StructIO {
     pub fn new(page_map: PageMap) -> Self {
         Self {
             buffer: Buffer::new(page_map),
-            cache_header: Cell::new(None),
+            header_cache: OnceLock::new(),
         }
     }
 
@@ -26,39 +29,37 @@ impl StructIO {
     }
 
     pub fn load_header(&self) -> Header {
-        if let Some(cached_header) = self.cache_header.get() {
-            return cached_header;
-        }
-        let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
-        let (version, addr) = self.read_raw_u8(addr);
-        let (index_table_pages, addr) = self.read_raw_u16(addr);
-        let (index_entries_count, addr) = self.read_raw_u16(addr);
-        let (data_offset, addr) = self.read_raw_u64(addr);
-        let (data_capacity, addr) = self.read_raw_u64(addr);
-        let (data_size, addr) = self.read_raw_u64(addr);
-        let (data_head, addr) = self.read_raw_u64(addr);
-        let (data_tail, addr) = self.read_raw_u64(addr);
-        let (next_idx, addr) = self.read_raw_u64(addr);
-        let (max_timestamp, _addr) = self.read_raw_u64(addr);
-        let header = Header {
-            magic,
-            version,
-            index_table_pages,
-            index_entries_count,
-            data_offset: MemoryAddress::new(data_offset),
-            data_capacity: MemorySize::new(data_capacity),
-            data_size: MemorySize::new(data_size),
-            data_head: MemoryPosition::new(data_head),
-            data_tail: MemoryPosition::new(data_tail),
-            next_idx,
-            max_timestamp,
-        };
-        self.cache_header.set(Some(header));
-        header
+        *self.header_cache.get_or_init(|| {
+            let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
+            let (version, addr) = self.read_raw_u8(addr);
+            let (index_table_pages, addr) = self.read_raw_u16(addr);
+            let (index_entries_count, addr) = self.read_raw_u16(addr);
+            let (data_offset, addr) = self.read_raw_u64(addr);
+            let (data_capacity, addr) = self.read_raw_u64(addr);
+            let (data_size, addr) = self.read_raw_u64(addr);
+            let (data_head, addr) = self.read_raw_u64(addr);
+            let (data_tail, addr) = self.read_raw_u64(addr);
+            let (next_idx, addr) = self.read_raw_u64(addr);
+            let (max_timestamp, _addr) = self.read_raw_u64(addr);
+            Header {
+                magic,
+                version,
+                index_table_pages,
+                index_entries_count,
+                data_offset: MemoryAddress::new(data_offset),
+                data_capacity: MemorySize::new(data_capacity),
+                data_size: MemorySize::new(data_size),
+                data_head: MemoryPosition::new(data_head),
+                data_tail: MemoryPosition::new(data_tail),
+                next_idx,
+                max_timestamp,
+            }
+        })
     }
 
     pub fn save_header(&mut self, header: &Header) {
-        self.cache_header.set(Some(*header));
+        self.header_cache = OnceLock::new();
+        let _ = self.header_cache.set(*header);
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
         addr = self.write_raw_u8(addr, header.version);
@@ -503,5 +504,26 @@ mod tests {
         // So we expect data at custom_offset + 20.
         let (content, _) = io.read_raw_bytes::<5>(custom_offset + MemorySize::new(20));
         assert_eq!(&content, b"hello");
+    }
+
+    #[test]
+    fn test_struct_io_cache_reused() {
+        let mut io = StructIO::new(PageMap::new_for_testing());
+        // Initial state
+        let header = Header::new(MemorySize::new(1024));
+        io.save_header(&header);
+
+        // Load header - should populate cache
+        let loaded_header = io.load_header();
+        assert_eq!(loaded_header.data_capacity.get(), 1024);
+
+        // Manually overwrite cache with a fake header.
+        // This proves that load_header() uses the cache instead of reading from page map.
+        let header_fake = Header::new(MemorySize::new(9999));
+        io.header_cache = OnceLock::new();
+        let _ = io.header_cache.set(header_fake);
+
+        let loaded = io.load_header();
+        assert_eq!(loaded.data_capacity.get(), 9999);
     }
 }

@@ -10,10 +10,12 @@ use ic_ledger_core::tokens::TokensType;
 use ic_ledger_hash_of::HashOf;
 use ic_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -146,11 +148,29 @@ fn operation_strategy<Tokens: TokensType>(
                 fee,
             });
 
+        let fee_collector_strategy = (
+            prop::option::of(principal_strategy()),
+            prop::option::of(account_strategy()),
+            prop_oneof![
+                Just(None),
+                Just(Some("107set_fee_collector".to_string())),
+                Just(Some("other_mthd".to_string())),
+            ],
+        )
+            .prop_map(
+                move |(caller, fee_collector, mthd)| Operation::FeeCollector {
+                    fee_collector,
+                    caller,
+                    mthd,
+                },
+            );
+
         prop_oneof![
             mint_strategy,
             burn_strategy,
             transfer_strategy,
             approve_strategy,
+            fee_collector_strategy,
         ]
     })
 }
@@ -225,6 +245,10 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::FeeCollector { .. } => None,
             };
+            let btype = match transaction.operation {
+                Operation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                _ => None,
+            };
 
             Block {
                 parent_hash: Some(Block::<Tokens>::block_hash(
@@ -244,7 +268,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 timestamp,
                 fee_collector,
                 fee_collector_block_index: None,
-                btype: None,
+                btype,
             }
         })
 }
@@ -1340,14 +1364,11 @@ pub fn symbol_strategy() -> impl Strategy<Value = String> {
     prop::string::string_regex("[A-Za-z0-9]{1,5}").expect("failed to make generator")
 }
 
-pub fn metadata_strategy() -> impl Strategy<Value = Vec<(String, MetadataValue)>> {
+pub fn metadata_strategy() -> impl Strategy<Value = Vec<(MetadataKey, MetadataValue)>> {
     (symbol_strategy(), decimals_strategy()).prop_map(|(symbol, decimals)| {
         vec![
-            ("icrc1:symbol".to_string(), MetadataValue::Text(symbol)),
-            (
-                "icrc1:decimals".to_string(),
-                MetadataValue::Nat(candid::Nat::from(decimals)),
-            ),
+            MetadataValue::entry(MetadataKey::ICRC1_SYMBOL, symbol).unwrap(),
+            MetadataValue::entry(MetadataKey::ICRC1_DECIMALS, candid::Nat::from(decimals)).unwrap(),
         ]
     })
 }

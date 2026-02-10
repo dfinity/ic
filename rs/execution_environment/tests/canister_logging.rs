@@ -2,6 +2,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
+use ic_execution_environment::units::KIB;
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
@@ -20,8 +21,8 @@ use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
 
-const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024;
-const MAX_LOG_MESSAGE_LEN: usize = 4 * 1024;
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KIB as usize;
+const MAX_LOG_MESSAGE_LEN: usize = 4 * KIB as usize;
 const TIME_STEP: Duration = Duration::from_nanos(111_111);
 
 // Change limits in order not to duplicate prod values.

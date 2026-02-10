@@ -424,7 +424,11 @@ impl Setup {
 
     fn upgrade_index(&self, wasm: &Wasm) {
         self.state_machine
-            .upgrade_canister(LEDGER_INDEX_CANISTER_ID, wasm.clone().bytes(), vec![])
+            .upgrade_canister(
+                LEDGER_INDEX_CANISTER_ID,
+                wasm.clone().bytes(),
+                Encode!(&()).unwrap(),
+            )
             .expect("should successfully upgrade index to new local version");
     }
 

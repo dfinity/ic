@@ -35,8 +35,8 @@ use ic_types::{
     batch::{CanisterCyclesCostSchedule, QueryStats},
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext,
-        Request, RequestOrResponse, Response,
+        CallContextId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext, Request,
+        RequestOrResponse, Response,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
 };
@@ -403,7 +403,7 @@ impl<'a> QueryContext<'a> {
             canister.system_state.memory_allocation,
             canister.memory_usage(),
             canister.message_memory_usage(),
-            canister.scheduler_state.compute_allocation,
+            canister.compute_allocation(),
             subnet_size,
             self.get_cost_schedule(),
             canister.system_state.reserved_balance(),
@@ -486,7 +486,6 @@ impl<'a> QueryContext<'a> {
             let _action = self.finish(
                 &mut canister,
                 call_context_id,
-                None,
                 Ok(None),
                 instructions_executed,
             );
@@ -528,13 +527,12 @@ impl<'a> QueryContext<'a> {
         &self,
         canister: &mut CanisterState,
         call_context_id: CallContextId,
-        callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> CallContextAction {
         canister
             .system_state
-            .on_canister_result(call_context_id, callback_id, result, instructions_used)
+            .on_canister_result(call_context_id, result, instructions_used)
             // This `unwrap()` cannot fail because of the non-optional `call_context_id`.
             .unwrap()
             .0
@@ -574,29 +572,22 @@ impl<'a> QueryContext<'a> {
         response: Response,
         measurement_scope: &MeasurementScope,
     ) -> Result<(CanisterState, CallOrigin, CallContextAction), UserError> {
-        let canister_id = canister.canister_id();
-        let (callback, callback_id, call_context, call_context_id) =
-            match common::get_call_context_and_callback(
-                &canister,
-                &response,
-                self.log,
-                self.query_critical_error,
-            ) {
-                Some(r) => r,
-                None => {
-                    error!(
-                        self.log,
-                        "[EXC-BUG] Canister {} does not have call context and callback. This is a bug @{}",
-                        canister_id,
-                        QUERY_HANDLER_CRITICAL_ERROR,
-                    );
-                    self.query_critical_error.inc();
-                    return Err(UserError::new(
-                        ErrorCode::QueryCallGraphInternal,
-                        "Composite query: canister does not have call context and callback",
-                    ));
-                }
-            };
+        let err = || {
+            UserError::new(
+                ErrorCode::QueryCallGraphInternal,
+                "Composite query: no callback for response",
+            )
+        };
+        let callback = common::unregister_callback(
+            &mut canister,
+            &response,
+            self.log,
+            self.query_critical_error,
+        )
+        .ok_or_else(err)?;
+        let (call_context, call_context_id) =
+            common::get_call_context(&canister, &callback, self.log, self.query_critical_error)
+                .ok_or_else(err)?;
 
         let call_responded = call_context.has_responded();
         let call_origin = call_context.call_origin().clone();
@@ -605,7 +596,6 @@ impl<'a> QueryContext<'a> {
             let action = self.finish(
                 &mut canister,
                 call_context_id,
-                Some(callback_id),
                 Err(HypervisorError::WasmModuleNotFound),
                 0.into(),
             );
@@ -687,7 +677,7 @@ impl<'a> QueryContext<'a> {
             Err(callback_err) => {
                 // A trap has occurred when executing the reply/reject closure.
                 // Execute the cleanup if it exists.
-                match callback.on_cleanup {
+                match &callback.on_cleanup {
                     None => {
                         // No cleanup closure present. Return the callback error as-is.
                         (output.num_instructions_left, Err(callback_err))
@@ -698,7 +688,7 @@ impl<'a> QueryContext<'a> {
                         self.execute_cleanup(
                             time,
                             &mut canister,
-                            cleanup_closure,
+                            cleanup_closure.clone(),
                             &call_origin,
                             callback_err,
                             canister_current_memory_usage,
@@ -716,13 +706,7 @@ impl<'a> QueryContext<'a> {
                 .get()
                 .saturating_sub(instructions_left.get()),
         );
-        let action = self.finish(
-            &mut canister,
-            call_context_id,
-            Some(callback_id),
-            result,
-            instructions_used,
-        );
+        let action = self.finish(&mut canister, call_context_id, result, instructions_used);
 
         measurement_scope.add(instructions_used, NumSlices::from(1), NumMessages::from(1));
         Ok((canister, call_origin, action))

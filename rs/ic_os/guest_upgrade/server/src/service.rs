@@ -1,8 +1,7 @@
 use crate::SevFirmwareFactory;
 use crate::server::ConnInfo;
-use attestation::attestation_package::generate_attestation_package;
-use attestation::verification::{
-    AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+use attestation::attestation_package::{
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
@@ -15,9 +14,8 @@ use guest_upgrade_shared::{
         disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
     },
 };
-use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use sev::firmware::guest::AttestationReport;
-use sev::parser::ByteParser;
+use sev_guest::attestation_package::generate_attestation_package;
+use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::ops::Deref;
 use std::path::Path;
 use tokio::sync::watch::Sender;
@@ -130,13 +128,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         )
         .map_err(|e| Status::internal(format!("Failed to generate attestation package: {e:?}")))?;
 
-        let my_attestation_report = AttestationReport::from_bytes(
-            my_attestation_package
-                .attestation_report
-                .as_ref()
-                .expect("Expected attestation report to be present"),
-        )
-        .map_err(|e| Status::internal(format!("Failed to parse own attestation report: {e:?}")))?;
+        let my_attestation_report = *my_attestation_package.attestation_report();
 
         ParsedSevAttestationPackage::parse(
             client_attestation_package,
@@ -163,7 +155,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
                 .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?
                 .into_bytes(),
             ),
-            sev_attestation_package: Some(my_attestation_package),
+            sev_attestation_package: Some(my_attestation_package.into()),
         }))
     }
 

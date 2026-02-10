@@ -231,6 +231,7 @@ where
     where
         Self: HeaderValidator<Network>,
     {
+        let start_time = std::time::Instant::now();
         let block_hash = block.block_hash();
 
         if block.compute_merkle_root().is_some() && !block.check_merkle_root() {
@@ -248,6 +249,11 @@ where
             .consensus_encode(&mut serialized_block)
             .map_err(|e| AddBlockError::CouldNotSerialize(block_hash, e.to_string()))?;
 
+        // Record block size metric
+        self.metrics
+            .block_received_size
+            .observe(serialized_block.len() as f64);
+
         // The unwrap below would only fail when the RwLock is poisoned, which will
         // not happen here because the use of the lock is never nested.
         self.block_cache
@@ -261,6 +267,12 @@ where
         self.metrics
             .block_cache_elements
             .set(self.block_cache.read().unwrap().len() as i64);
+
+        // Record block processing duration
+        self.metrics
+            .block_processing_duration
+            .observe(start_time.elapsed().as_secs_f64());
+
         Ok(())
     }
 

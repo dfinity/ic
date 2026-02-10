@@ -11,7 +11,9 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_replicated_state::{
-    ReplicatedState, Stream, metadata_state::StreamMap, testing::ReplicatedStateTesting,
+    ReplicatedState, Stream,
+    metadata_state::StreamMap,
+    testing::{ReplicatedStateTesting, StreamTesting},
 };
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_registry::test_subnet_record;

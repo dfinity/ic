@@ -1,4 +1,3 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
@@ -9,12 +8,11 @@ exports_files([
 
 DEPENDENCIES = [
     # Keep sorted.
-    ":build_script",
     "//rs/config",
     "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/networking/network",
-    "//rs/ic_os/sev",
+    "//rs/ic_os/sev/guest",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
@@ -29,7 +27,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_with",
     "@crate_index//:tempfile",
     "@crate_index//:url",
-    "@crate_index//:walkdir",
 ]
 
 TEST_DEPENDENCIES = [
@@ -41,12 +38,6 @@ TEST_DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 ALIASES = {}
-
-cargo_build_script(
-    name = "build_script",
-    srcs = ["build.rs"],
-    data = ["templates/ic.json5.template"],
-)
 
 BIN_SOURCES = [
     "src/main.rs",
@@ -60,6 +51,7 @@ LIB_SOURCES = glob(
 rust_library(
     name = "config_lib",
     srcs = LIB_SOURCES,
+    compile_data = ["templates/ic.json5.template"],
     crate_name = "config_tool",
     target_compatible_with = [
         "@platforms//os:linux",
@@ -75,6 +67,7 @@ rust_library(
 rust_library(
     name = "config_lib_dev",
     srcs = LIB_SOURCES,
+    compile_data = ["templates/ic.json5.template"],
     crate_features = ["dev"],
     crate_name = "config_tool",
     target_compatible_with = [

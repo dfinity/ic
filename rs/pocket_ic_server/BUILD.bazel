@@ -40,12 +40,10 @@ LIB_DEPENDENCIES = [
     "//rs/nns/governance/init",
     "//rs/nns/handlers/root/impl:root",
     "//rs/nns/sns-wasm",
-    "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/canister/api",
     "//rs/registry/client",
     "//rs/registry/helpers",
-    "//rs/registry/keys",
     "//rs/registry/nns_data_provider",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
@@ -54,11 +52,8 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_machine_tests",
     "//rs/state_manager",
-    "//rs/test_utilities",
-    "//rs/test_utilities/registry",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "//rs/utils/thread",
     "//rs/validator/ingress_message",
     "@crate_index//:aide",
     "@crate_index//:askama",
@@ -73,12 +68,10 @@ LIB_DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:ctrlc",
     "@crate_index//:flate2",
-    "@crate_index//:form_urlencoded",
     "@crate_index//:fqdn",
     "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:http",
-    "@crate_index//:http-body-util",
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
@@ -90,7 +83,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
     "@crate_index//:libc",
-    "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
@@ -107,8 +99,8 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
-    "@crate_index//:uuid",
     "@crate_index//:wat",
+    "@crate_index//:wsl",
 ]
 
 TEST_DEPENDENCIES = [
@@ -192,6 +184,9 @@ HEAD_NNS_CANISTER_DATA = [
 ]
 
 HEAD_NNS_CANISTER_ENV = {
+    # Head build uses current canister interfaces (e.g. unified ICP Index init/upgrade args).
+    # TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
+    "POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS": "0",
     "REGISTRY_CANISTER_WASM_PATH": "$(location //rs/registry/canister:registry-canister)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location //rs/nns/cmc:cycles-minting-canister)",
     "ICP_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
@@ -228,6 +223,9 @@ MAINNET_NNS_CANISTER_DATA = [
 ]
 
 MAINNET_NNS_CANISTER_ENV = {
+    # Mainnet embeds older canister WASMs; use legacy ICP Index init args until mainnet is updated (see DEFI-2617).
+    # TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
+    "POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS": "1",
     "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:registry.wasm.gz)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:cycles-minting.wasm.gz)",
     "ICP_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:ledger.wasm.gz)",
@@ -251,9 +249,7 @@ MAINNET_NNS_CANISTER_ENV = {
         srcs = ["build.rs"],
         aliases = ALIASES,
         build_script_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        data = EXTERNAL_CANISTER_DATA + nns_canister_data + [
-            "templates/dashboard.html",
-        ],
+        data = EXTERNAL_CANISTER_DATA + nns_canister_data + ["templates/dashboard.html"],
         deps = BUILD_DEPENDENCIES,
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [
@@ -278,7 +274,7 @@ MAINNET_NNS_CANISTER_ENV = {
         crate_name = "pocket_ic_server",
         proc_macro_deps = MACRO_DEPENDENCIES,
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "11.0.0",
+        version = "12.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [
@@ -287,26 +283,13 @@ MAINNET_NNS_CANISTER_ENV = {
     ]
 ]
 
-# The latest registry version to bump the hard-coded registry version can be determined using:
-# `bazel run //rs/registry/admin:ic-admin -- get-registry-version`
-genrule(
-    name = "mainnet_routing_table",
-    testonly = True,
-    srcs = [],
-    outs = ["mainnet_routing_table.json"],
-    cmd = "$(location //rs/registry/admin:ic-admin) get-routing-table --json --registry-version 55267 > $@",
-    tags = ["requires-network"],
-    tools = ["//rs/registry/admin:ic-admin"],
-)
-
 [
     rust_binary(
         name = "pocket-ic-server" + name_suffix,
         testonly = True,
         srcs = ["src/main.rs"],
-        compile_data = [":mainnet_routing_table"],
+        compile_data = ["src/mainnet-routing-table.json"],
         proc_macro_deps = MACRO_DEPENDENCIES,
-        rustc_env = {"MAINNET_ROUTING_TABLE": "$(location :mainnet_routing_table)"},
         # TODO: restrict the visibility
         visibility = ["//visibility:public"],
         deps = LIB_DEPENDENCIES + [

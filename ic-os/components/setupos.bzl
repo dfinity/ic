@@ -8,6 +8,7 @@ component_files = {
 
     # setupos components
     Label("//ic-os/components/setupos:check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
+    Label("//ic-os/components/setupos:check-guestos-blessed.sh"): "/opt/ic/bin/check-guestos-blessed.sh",
     Label("//ic-os/components/setupos:check-config.sh"): "/opt/ic/bin/check-config.sh",
     Label("//ic-os/components/setupos:preload-config.sh"): "/opt/ic/bin/preload-config.sh",
     Label("//ic-os/components/setupos:setup-hostos-config.sh"): "/opt/ic/bin/setup-hostos-config.sh",

@@ -29,18 +29,13 @@ lcov # used for bazel coverage
 
 # RUST
 gcc
-lld
 pkg-config
-libssl-dev
-libunwind-dev
-libusb-1.0-0-dev
-libsqlite3-dev
-zlib1g-dev
 libclang-18-dev
+libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)  
+libusb-1.0-0-dev # required for HSM
+lld # required for ovmf_sev genrule
 protobuf-compiler
 llvm
-liblmdb-dev
-liblzma-dev
 
 # IC-OS
 clang
@@ -66,3 +61,6 @@ iputils-ping # for ping6 required by the bazel-test-bare-metal
 # Unknown
 containernetworking-plugins
 buildah
+
+# For ci/githubstats/query.py
+libpq-dev

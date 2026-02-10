@@ -218,7 +218,13 @@ where
         let dogecoin = self.setup.as_ref().dogecoind();
         let tx = dogecoin.get_raw_transaction_from_mempool(txid);
 
-        let (request_block_indices, change_amount, withdrawal_fee, used_utxos) = {
+        let (
+            request_block_indices,
+            change_amount,
+            effective_fee_per_vbyte,
+            withdrawal_fee,
+            used_utxos,
+        ) = {
             let sent_tx_event = minter
                 .assert_that_events()
                 .extract_exactly_one(
@@ -231,12 +237,13 @@ where
                     utxos,
                     change_output,
                     submitted_at: _,
-                    fee_per_vbyte: _,
+                    effective_fee_per_byte: effective_fee_per_vbyte,
                     withdrawal_fee,
                     signed_tx: _,
                 } => (
                     request_block_indices,
                     change_output.expect("BUG: missing change output").value,
+                    effective_fee_per_vbyte.expect("BUG: missing effective_fee_per_vbyte"),
                     withdrawal_fee.expect("BUG: missing withdrawal fee"),
                     utxos,
                 ),
@@ -249,6 +256,10 @@ where
                 "BUG: failed to estimate withdrawal fee, even though transaction is expected"
             ),
             "BUG: withdrawal fee from event does not match fees retrieved from endpoint"
+        );
+        assert_eq!(
+            (withdrawal_fee.dogecoin_fee * 1_000).div_ceil(tx.total_size() as u64),
+            effective_fee_per_vbyte
         );
         assert!(request_block_indices.contains(&self.retrieve_doge_id.block_index));
 
@@ -463,18 +474,52 @@ where
             .await_submitted_doge_transaction(self.retrieve_doge_id.block_index, |txid| {
                 txid != &old_txid
             });
-        let _replaced_tx_event = minter
-            .assert_that_events()
-            .extract_exactly_one(
-                |event| matches!(event,
-                    CkDogeMinterEventType::ReplacedDogeTransaction {old_txid: event_old_txid, new_txid: event_new_txid, ..}
-                    if event_old_txid == &old_txid && event_new_txid == &new_txid),
-            );
-
+        self.ensure_fee_rate_increase(&old_txid, &new_txid);
         let new_tx = dogecoin.get_raw_transaction_from_mempool(new_txid);
         assert_replacement_transaction(old_transaction, &new_tx);
         self.sent_transactions.push(new_tx);
         self
+    }
+
+    fn ensure_fee_rate_increase(&self, old_txid: &Txid, new_txid: &Txid) {
+        let minter = self.setup.as_ref().minter();
+
+        let sent_old_tx_event = minter.assert_that_events().extract_exactly_one(|event| {
+            matches!(
+                event,
+                CkDogeMinterEventType::SentDogeTransaction {txid, ..} | //old_txid is the first transaction and not a replacement one
+                CkDogeMinterEventType::ReplacedDogeTransaction {new_txid: txid, ..} //old_txid is already a replacement transaction
+                if txid == old_txid
+            )
+        });
+        let old_effective_fee_per_vbyte = match sent_old_tx_event {
+            CkDogeMinterEventType::SentDogeTransaction {
+                effective_fee_per_byte: effective_fee_per_vbyte,
+                ..
+            } => effective_fee_per_vbyte.expect("BUG: missing effective fee per vbyte"),
+            CkDogeMinterEventType::ReplacedDogeTransaction {
+                effective_fee_per_byte: effective_fee_per_vbyte,
+                ..
+            } => effective_fee_per_vbyte,
+            _ => unreachable!(),
+        };
+
+        let replaced_tx_event = minter
+            .assert_that_events()
+            .extract_exactly_one(
+                |event| matches!(event,
+                    CkDogeMinterEventType::ReplacedDogeTransaction {old_txid: event_old_txid, new_txid: event_new_txid, ..}
+                    if event_old_txid == old_txid && event_new_txid == new_txid),
+            );
+        let new_effective_fee_per_vbyte = match replaced_tx_event {
+            CkDogeMinterEventType::ReplacedDogeTransaction {
+                effective_fee_per_byte: effective_fee_per_vbyte,
+                ..
+            } => effective_fee_per_vbyte,
+            _ => unreachable!(),
+        };
+
+        assert!(new_effective_fee_per_vbyte >= old_effective_fee_per_vbyte);
     }
 
     /// Try to drop a transaction from the mempool.

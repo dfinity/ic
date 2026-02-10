@@ -43,7 +43,7 @@ ic-vetkeys = { workspace = true }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
-more-asserts = "0.3.1"
+more-asserts = { workspace = true }
 num-rational = "0.2.2"
 num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
@@ -51,12 +51,10 @@ prometheus = { workspace = true }
 rand = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
-threadpool = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
@@ -87,6 +85,7 @@ maplit = "1.0.2"
 proptest = { workspace = true }
 regex-lite = { workspace = true }
 rstest = { workspace = true }
+serde_bytes = { workspace = true }
 test-strategy = "0.3.1"
 wat = { workspace = true }
 wirm = { workspace = true }

@@ -7,8 +7,9 @@ use ic_cketh_minter::endpoints::events::{
     EventPayload, EventSource, TransactionReceipt, TransactionStatus, UnsignedTransaction,
 };
 use ic_cketh_minter::endpoints::{
-    CandidBlockTag, EthTransaction, GasFeeEstimate, MinterInfo, RetrieveEthStatus,
-    TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
+    BurnMemo as EndpointsBurn, CandidBlockTag, DecodeLedgerMemoError, DecodeLedgerMemoResult,
+    DecodedMemo, EthTransaction, GasFeeEstimate, MemoType, MintMemo as EndpointsMint, MinterInfo,
+    RetrieveEthStatus, TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
@@ -1280,6 +1281,50 @@ fn should_retrieve_minter_info() {
 
 fn format_ethereum_address_to_eip_55(address: &str) -> String {
     Address::from_str(address).unwrap().to_string()
+}
+
+#[test]
+fn decode_ledger_memo_smoke() {
+    let cketh = CkEthSetup::default();
+
+    // mint memo
+    let buf = hex::decode("8202811a000e2a39").expect("failed to decode hex");
+    let result = cketh.decode_ledger_memo(MemoType::Mint, buf);
+    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
+        EndpointsMint::ReimburseWithdrawal {
+            withdrawal_id: 928313u64,
+        },
+    ))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+
+    // burn memo
+    let buf =
+        hex::decode("82018366636b555344541a0174b2e25423c68fabd29a2e4ad98544d6c9d1992685397781")
+            .expect("failed to decode hex");
+    let result = cketh.decode_ledger_memo(MemoType::Burn, buf);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20GasFee {
+            ckerc20_token_symbol: "ckUSDT".to_string(),
+            ckerc20_withdrawal_amount: Nat::from(24425186u64),
+            to_address: "0x23c68FAbD29A2E4AD98544d6c9D1992685397781".to_string(),
+        }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+
+    // invalid memo
+    let result = cketh.decode_ledger_memo(MemoType::Mint, vec![]);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding MintMemo")
+    );
 }
 
 /// Tests with the EVM RPC canister

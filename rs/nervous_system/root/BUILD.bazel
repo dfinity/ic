@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/lock",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/dfn_core",
+    "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",

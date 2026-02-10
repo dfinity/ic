@@ -35,6 +35,7 @@ pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
 pub const DOGE: u64 = 100_000_000;
 pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 50 * DOGE;
+pub const DEPOSIT_DOGE_MIN_AMOUNT: u64 = DOGE;
 /// Realistic median transaction fee in millikoinus/byte.
 ///
 /// [Average transaction fee](https://bitinfocharts.com/dogecoin/)
@@ -122,6 +123,7 @@ impl Setup {
             let minter_init_args = MinterArg::Init(InitArgs {
                 doge_network,
                 ecdsa_key_name: "key_1".into(),
+                deposit_doge_min_amount: Some(DEPOSIT_DOGE_MIN_AMOUNT),
                 retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
                 ledger_id: ledger,
                 max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,

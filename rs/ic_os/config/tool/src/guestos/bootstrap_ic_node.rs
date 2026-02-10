@@ -56,7 +56,7 @@ fn populate_nns_public_key_impl(
 /// Bootstrap IC Node from a bootstrap package
 #[cfg(target_os = "linux")]
 pub fn bootstrap_ic_node(bootstrap_dir: &Path) -> Result<()> {
-    let is_sev_active = ic_sev::guest::is_sev_active()?;
+    let is_sev_active = sev_guest::is_sev_active()?;
     bootstrap_ic_node_impl(bootstrap_dir, Path::new("/"), is_sev_active)
 }
 
@@ -143,11 +143,11 @@ fn copy_bootstrap_files(
         fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400))?;
     }
 
-    // set up initial ssh authorized keys
+    // Copy ssh authorized keys (setup-user-ssh-keys installs them)
     let ssh_keys_src = bootstrap_dir.join("accounts_ssh_authorized_keys");
     let ssh_keys_dst = config_root.join("accounts_ssh_authorized_keys");
     if ssh_keys_src.exists() {
-        println!("Setting up accounts_ssh_authorized_keys");
+        println!("Copying accounts_ssh_authorized_keys");
         copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
     }
 

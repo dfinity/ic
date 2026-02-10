@@ -6,15 +6,11 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
-    "//rs/nns/common",
-    "//rs/nns/constants",
     "//rs/registry/transport",
     "//rs/types/types",
-    "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:itertools",
     "@crate_index//:prost",
 ]
 

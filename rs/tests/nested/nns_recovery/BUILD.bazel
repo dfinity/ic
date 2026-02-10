@@ -1,7 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load(
     "//rs/tests:common.bzl",
-    "IC_GATEWAY_DATA",
+    "CANISTER_SANDBOX_RUNTIME_DEPS",
+    "IC_GATEWAY_RUNTIME_DEPS",
     "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS",
     "MAINNET_ENV",
     "MESSAGE_CANISTER_RUNTIME_DEPS",
@@ -12,9 +13,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 ENV = MAINNET_ENV
 
-DATA = IC_GATEWAY_DATA
-
-RUNTIME_DEPS = MESSAGE_CANISTER_RUNTIME_DEPS | IMPERSONATE_UPSTREAMS_RUNTIME_DEPS | {
+RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | IC_GATEWAY_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS | IMPERSONATE_UPSTREAMS_RUNTIME_DEPS | {
     "RECOVERY_GUESTOS_IMG_PATH": "//ic-os/guestos/envs/recovery-dev:update-img.tar.zst",
 }
 
@@ -34,6 +33,7 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
@@ -41,15 +41,12 @@ rust_library(
 
 system_test_nns(
     name = "nr_broken_dfinity_node",
-    data = DATA + [
-        "//rs/tests:recovery/binaries",
-    ],
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -61,19 +58,15 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_large",
-    data = DATA + [
-        "//rs/tests:recovery/binaries",
-    ],
     enable_head_nns_variant = False,
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = [
-        "manual",
         "system_test_large",
     ],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -85,13 +78,12 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_local",
-    data = DATA,
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -103,15 +95,12 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_no_bless_fix_like_np",
-    data = DATA + [
-        "//rs/tests:recovery/binaries",
-    ],
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -123,15 +112,12 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_seq_np_actions",
-    data = DATA + [
-        "//rs/tests:recovery/binaries",
-    ],
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.

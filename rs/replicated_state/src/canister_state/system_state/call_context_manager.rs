@@ -8,12 +8,12 @@ use ic_management_canister_types_private::IC_00;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, NO_DEADLINE, Request,
-    RequestMetadata, Response,
+    RequestMetadata,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, Cycles, Funds, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
+    CanisterId, Cycles, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -277,53 +277,6 @@ impl CallContextManagerStats {
     }
 
     /// Calculates the expected number of response slots (responses plus
-    /// reservations) per input queue.
-    ///
-    /// This is the count of callbacks per respondent; except for the callback
-    /// corresponding to a potential paused or aborted canister response execution
-    /// (since this response was just delivered).
-    ///
-    /// Time complexity: `O(n)`.
-    #[cfg(test)]
-    pub(crate) fn calculate_unresponded_callbacks_per_respondent(
-        callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
-        aborted_or_paused_response: Option<&Response>,
-    ) -> BTreeMap<CanisterId, usize> {
-        use std::collections::btree_map::Entry;
-
-        let mut callback_counts = callbacks.values().fold(
-            BTreeMap::<CanisterId, usize>::new(),
-            |mut counts, callback| {
-                *counts.entry(callback.respondent).or_default() += 1;
-                counts
-            },
-        );
-
-        // Discount the callback corresponding to an aborted or paused response
-        // execution, because this response was already delivered.
-        if let Some(response) = aborted_or_paused_response {
-            match callback_counts.entry(response.respondent) {
-                Entry::Occupied(mut entry) => {
-                    let count = entry.get_mut();
-                    if *count > 1 {
-                        *count -= 1;
-                    } else {
-                        entry.remove();
-                    }
-                }
-                Entry::Vacant(_) => {
-                    debug_assert!(
-                        false,
-                        "Aborted or paused DTS response with no matching callback: {response:?}"
-                    )
-                }
-            }
-        }
-
-        callback_counts
-    }
-
-    /// Calculates the expected number of response slots (responses plus
     /// reservations) per output queue corresponding to unresponded call contexts.
     ///
     /// This is the count of unresponded call contexts per originator; potentially
@@ -521,7 +474,6 @@ impl CallContextManager {
     pub(super) fn on_canister_result(
         &mut self,
         call_context_id: CallContextId,
-        callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> (CallContextAction, Option<CallContext>) {
@@ -532,10 +484,6 @@ impl CallContextManager {
         enum Responded {
             Yes,
             No,
-        }
-
-        if let Some(callback_id) = callback_id {
-            self.unregister_callback(callback_id);
         }
 
         let outstanding_calls = if self.outstanding_calls(call_context_id) > 0 {
@@ -662,6 +610,18 @@ impl CallContextManager {
         self.next_callback_id += 1;
         let callback_id = CallbackId::from(self.next_callback_id);
 
+        self.insert_callback(callback_id, callback);
+
+        callback_id
+    }
+
+    /// Inserts a callback under the given ID. Returns an error if the canister is
+    /// `Stopped`.
+    //
+    // TODO(DSM-95) Drop this when we drop the legacy `CanisterMessage::Response`
+    // variant and no longer need forward compatible decoding.
+    #[doc(hidden)]
+    pub fn insert_callback(&mut self, callback_id: CallbackId, callback: Callback) {
         self.stats.on_register_callback(&callback);
         if callback.deadline != NO_DEADLINE {
             self.unexpired_callbacks
@@ -681,8 +641,6 @@ impl CallContextManager {
             self.outstanding_callbacks
         );
         debug_assert!(self.stats_ok());
-
-        callback_id
     }
 
     /// If we get a response for one of the outstanding calls, we unregister
@@ -821,36 +779,20 @@ impl CallContextManager {
             }
     }
 
-    /// Returns the number of unresponded callbacks, ignoring the callback
-    /// corresponding to a potential paused or aborted canister response execution
-    /// (since this response was just delivered).
+    /// Returns the number of unresponded callbacks, including those for which
+    /// responses are already enqueued.
     ///
     /// Time complexity: `O(1)`.
-    pub fn unresponded_callback_count(
-        &self,
-        aborted_or_paused_response: Option<&Response>,
-    ) -> usize {
+    pub fn unresponded_callback_count(&self) -> usize {
         self.callbacks.len()
-            - match aborted_or_paused_response {
-                Some(_) => 1,
-                None => 0,
-            }
     }
 
-    /// Returns the number of unresponded guaranteed response callbacks, ignoring
-    /// the callback corresponding to a potential paused or aborted canister
-    /// response execution (since this response was just delivered).
+    /// Returns the number of unresponded guaranteed response callbacks, including
+    /// those for which responses are already enqueued.
     ///
     /// Time complexity: `O(1)`.
-    pub fn unresponded_guaranteed_response_callback_count(
-        &self,
-        aborted_or_paused_response: Option<&Response>,
-    ) -> usize {
+    pub fn unresponded_guaranteed_response_callback_count(&self) -> usize {
         self.stats.guaranteed_response_callback_count
-            - match aborted_or_paused_response {
-                Some(response) if response.deadline == NO_DEADLINE => 1,
-                _ => 0,
-            }
     }
 
     /// Helper function to concisely validate stats adjustments in debug builds,
@@ -985,8 +927,7 @@ impl AsInt for (CoarseTime, CallbackId) {
 }
 
 pub mod testing {
-    use super::{CallContext, CallContextManager};
-    use ic_types::messages::CallContextId;
+    use super::*;
 
     /// Exposes `CallContextManager` internals for use in other modules' or crates'
     /// tests.
@@ -994,6 +935,12 @@ pub mod testing {
         /// Testing only: Registers the given call context (which may already be
         /// responded or deleted).
         fn with_call_context(&mut self, call_context: CallContext) -> CallContextId;
+
+        /// Testing only: Publicly exposes `register_callback()`.
+        fn with_callback(&mut self, callback: Callback) -> CallbackId;
+
+        /// Testing only: Publicly exposes `unregister_callback()`.
+        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>>;
     }
 
     impl CallContextManagerTesting for CallContextManager {
@@ -1009,6 +956,14 @@ pub mod testing {
             debug_assert!(self.stats_ok());
 
             id
+        }
+
+        fn with_callback(&mut self, callback: Callback) -> CallbackId {
+            self.register_callback(callback)
+        }
+
+        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
+            self.unregister_callback(callback_id)
         }
     }
 }

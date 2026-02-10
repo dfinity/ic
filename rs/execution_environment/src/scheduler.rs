@@ -41,10 +41,10 @@ use ic_types::{
     ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
+    messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage},
 };
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
-use more_asserts::{debug_assert_ge, debug_assert_le};
+use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
 use prometheus::Histogram;
 use std::{
@@ -326,7 +326,7 @@ impl SchedulerImpl {
     /// Invokes `ExecutionEnvironment` to execute a subnet message.
     fn execute_subnet_message(
         &self,
-        msg: CanisterMessage,
+        msg: SubnetMessage,
         state: ReplicatedState,
         csprng: &mut Csprng,
         current_round: ExecutionRound,
@@ -512,7 +512,10 @@ impl SchedulerImpl {
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
                     if let Some(canister) = partition.first_mut() {
-                        canister.system_state.canister_metrics.scheduled_as_first += 1;
+                        canister
+                            .system_state
+                            .canister_metrics_mut()
+                            .observe_scheduled_as_first();
                     }
                 }
             }
@@ -627,13 +630,7 @@ impl SchedulerImpl {
                 self.metrics.canister_age.observe(canister_age as f64);
                 // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
                 // scheduled.
-                let allocation = Ratio::new(
-                    canister_state
-                        .scheduler_state
-                        .compute_allocation
-                        .as_percent(),
-                    100,
-                );
+                let allocation = Ratio::new(canister_state.compute_allocation().as_percent(), 100);
                 if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
                 {
                     self.metrics.canister_compute_allocation_violation.inc();
@@ -904,7 +901,7 @@ impl SchedulerImpl {
             }
 
             if state_time
-                < canister.scheduler_state.time_of_last_allocation_charge
+                < canister.system_state.time_of_last_allocation_charge
                     + self
                         .cycles_account_manager
                         .duration_between_allocation_charges()
@@ -916,7 +913,7 @@ impl SchedulerImpl {
                 self.observe_canister_metrics(canister);
                 let duration_since_last_charge =
                     canister.duration_since_last_allocation_charge(state_time);
-                canister.scheduler_state.time_of_last_allocation_charge = state_time;
+                canister.system_state.time_of_last_allocation_charge = state_time;
                 if self
                     .cycles_account_manager
                     .charge_canister_for_resource_allocation_and_usage(
@@ -936,7 +933,7 @@ impl SchedulerImpl {
                         state_time,
                         Arc::clone(&self.fd_factory),
                     ));
-                    canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
+                    canister.system_state.compute_allocation = ComputeAllocation::zero();
                     canister.system_state.memory_allocation = MemoryAllocation::default();
                     canister.system_state.clear_canister_history();
                     // Burn the remaining balance of the canister.
@@ -1231,9 +1228,6 @@ impl Scheduler for SchedulerImpl {
             self.metrics.canister_ingress_queue_latencies.clone(),
         );
 
-        // Copy state of registry flag over to ReplicatedState
-        state.set_own_cost_schedule(registry_settings.canister_cycles_cost_schedule);
-
         // Round preparation.
         let mut scheduler_round_limits = {
             let _timer = self.metrics.round_preparation_duration.start_timer();
@@ -1364,7 +1358,7 @@ impl Scheduler for SchedulerImpl {
                     // Wrap the callback ID and payload into a Response, to make it easier for
                     // `execute_subnet_message()` to deal with. All other fields will be ignored by
                     // `execute_subnet_message()`.
-                    CanisterMessage::Response(
+                    SubnetMessage::Response(
                         Response {
                             originator: CanisterId::ic_00(),
                             respondent: CanisterId::ic_00(),
@@ -1432,9 +1426,9 @@ impl Scheduler for SchedulerImpl {
                 .raw_rand_contexts
                 .pop_front()
             {
-                debug_assert!(raw_rand_context.execution_round_id < current_round);
+                debug_assert_lt!(raw_rand_context.execution_round_id, current_round);
                 let (new_state, _) = self.execute_subnet_message(
-                    CanisterMessage::Request(raw_rand_context.request.into()),
+                    SubnetMessage::Request(raw_rand_context.request.into()),
                     state,
                     &mut csprng,
                     current_round,
@@ -1824,8 +1818,8 @@ fn execute_canisters_on_thread(
             if round_limits.instructions_reached() {
                 canister
                     .system_state
-                    .canister_metrics
-                    .interrupted_during_execution += 1;
+                    .canister_metrics_mut()
+                    .observe_interrupted_during_execution();
                 break;
             }
             let measurement_scope = MeasurementScope::nested(
@@ -1924,7 +1918,10 @@ fn execute_canisters_on_thread(
             is_first_iteration,
             rank,
         );
-        canister.system_state.canister_metrics.executed += 1;
+        canister
+            .system_state
+            .canister_metrics_mut()
+            .observe_executed();
         canisters.push(canister);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
@@ -2014,13 +2011,13 @@ fn observe_replicated_state_metrics(
             | Some(&ExecutionTask::OnLowWasmMemory)
             | None => {}
         }
-        consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
+        consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             canister
                 .system_state
-                .canister_metrics
-                .get_consumed_cycles_by_use_cases(),
+                .canister_metrics()
+                .consumed_cycles_by_use_cases(),
         );
         let queues = canister.system_state.queues();
         ingress_queue_message_count += queues.ingress_queue_message_count();
@@ -2185,7 +2182,7 @@ fn join_consumed_cycles_by_use_case(
 ///     with another long-running execution in progress.
 ///     2. Install code messages can only be executed sequentially.
 fn can_execute_subnet_msg(
-    msg: &CanisterMessage,
+    msg: &SubnetMessage,
     ongoing_long_install_code: bool,
     canister_states: &BTreeMap<CanisterId, CanisterState>,
     round_limits: &mut RoundLimits,
@@ -2199,13 +2196,9 @@ fn can_execute_subnet_msg(
         return true;
     };
     let maybe_method = match msg {
-        CanisterMessage::Ingress(ingress) => {
-            Ic00Method::from_str(ingress.method_name.as_str()).ok()
-        }
-        CanisterMessage::Request(request) => {
-            Ic00Method::from_str(request.method_name.as_str()).ok()
-        }
-        CanisterMessage::Response(_) => None,
+        SubnetMessage::Ingress(ingress) => Ic00Method::from_str(ingress.method_name.as_str()).ok(),
+        SubnetMessage::Request(request) => Ic00Method::from_str(request.method_name.as_str()).ok(),
+        SubnetMessage::Response { .. } => None,
     };
     let Some(method) = maybe_method else {
         // If there is no method name, we can execute the subnet message.
@@ -2249,17 +2242,17 @@ fn can_execute_subnet_msg(
 /// (de)-serialize a large state and thus consume a lot of instructions.
 fn get_instructions_limits_for_subnet_message(
     config: &SchedulerConfig,
-    msg: &CanisterMessage,
+    msg: &SubnetMessage,
 ) -> InstructionLimits {
     // The default limits are unused since instruction limits only matter
     // for install code in which case the default limits are overriden.
     let default_limits = InstructionLimits::new(NumInstructions::from(0), NumInstructions::from(0));
     let method_name = match &msg {
-        CanisterMessage::Response(_) => {
+        SubnetMessage::Response { .. } => {
             return default_limits;
         }
-        CanisterMessage::Ingress(ingress) => &ingress.method_name,
-        CanisterMessage::Request(request) => &request.method_name,
+        SubnetMessage::Ingress(ingress) => &ingress.method_name,
+        SubnetMessage::Request(request) => &request.method_name,
     };
 
     use Ic00Method::*;
@@ -2274,6 +2267,7 @@ fn get_instructions_limits_for_subnet_message(
             | ECDSAPublicKey
             | RawRand
             | HttpRequest
+            | FlexibleHttpRequest
             | SetupInitialDKG
             | SignWithECDSA
             | ReshareChainKey

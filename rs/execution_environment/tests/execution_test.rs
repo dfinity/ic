@@ -7,6 +7,7 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
+use ic_execution_environment::units::{GIB, MIB};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs, DerivationPath,
@@ -25,13 +26,8 @@ use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, Cycles, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
-use more_asserts::{assert_gt, assert_le, assert_lt};
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
-
-/// One megabyte for better readability.
-const MIB: u64 = 1024 * 1024;
-/// One gigabyte for better readability.
-const GIB: u64 = 1024 * MIB;
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -1800,7 +1796,7 @@ fn current_interval_length_works_on_app_subnets() {
     // => we are now at Round 3.
     for _ in 3..500 {
         // Assert there is a dirty page.
-        assert!(env.heap_delta_estimate_bytes() > 0);
+        assert_gt!(env.heap_delta_estimate_bytes(), 0);
         env.tick();
     }
     // Assert there are no dirty pages after the checkpoint.
@@ -1823,7 +1819,7 @@ fn current_interval_length_works_on_system_subnets() {
     // => we are now at Round 3.
     for _ in 3..200 {
         // Assert there is a dirty page.
-        assert!(env.heap_delta_estimate_bytes() > 0);
+        assert_gt!(env.heap_delta_estimate_bytes(), 0);
         env.tick();
     }
     // Assert there are no dirty pages after the checkpoint.
@@ -1835,7 +1831,6 @@ fn current_interval_length_works_on_system_subnets() {
 #[test]
 #[ignore]
 fn system_subnets_are_not_rate_limited() {
-    const GIB: u64 = 1024 * MIB;
     const WASM_PAGE_SIZE: u64 = 65_536;
     const SUBNET_HEAP_DELTA_CAPACITY: u64 = 140 * GIB;
     // It's a bit less than 2GiB, otherwise the vector allocation in canister traps.
@@ -1883,7 +1878,7 @@ fn system_subnets_are_not_rate_limited() {
         );
     }
     // Assert that we reached the subnet heap delta capacity (140 GiB) in 70 rounds.
-    assert!(env.heap_delta_estimate_bytes() >= SUBNET_HEAP_DELTA_CAPACITY);
+    assert_ge!(env.heap_delta_estimate_bytes(), SUBNET_HEAP_DELTA_CAPACITY);
 
     // Once the subnet capacity is reached, there should be no further executions.
     let msg_id = send_2g_ingress(70, &env, &canister_id);
@@ -2666,11 +2661,12 @@ fn failed_stable_memory_grow_cost_and_time_single_canister() {
     );
     let elapsed_ms = timer.elapsed().as_millis();
     let cycles_m = (initial_balance - env.cycle_balance(canister_id)) / 1000 / 1000;
-    assert!(
-        elapsed_ms < 10_000,
+    assert_lt!(
+        elapsed_ms,
+        10_000,
         "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
     );
-    assert!(cycles_m > 5);
+    assert_gt!(cycles_m, 5);
 }
 
 #[test]
@@ -2713,11 +2709,12 @@ fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
         total_balance += balance;
     }
     let cycles_m = (total_initial_balance - total_balance) / 1000 / 1000;
-    assert!(
-        elapsed_ms < 10_000,
+    assert_lt!(
+        elapsed_ms,
+        10_000,
         "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
     );
-    assert!(cycles_m > 800);
+    assert_gt!(cycles_m, 800);
 }
 
 /// Verifies that canister liquid cycle balance can be used to transfer as many cycles as possible.
@@ -2770,23 +2767,24 @@ fn test_canister_liquid_cycle_balance() {
         WasmResult::Reply(blob) => u128::from_le_bytes(blob.try_into().unwrap()),
         WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
-    assert!(0 < accepted_cycles && accepted_cycles < liquid_balance);
+    assert_lt!(0, accepted_cycles);
+    assert_lt!(accepted_cycles, liquid_balance);
 
     // Lost cycles consist of the cost of an inter-canister call and the cost of an ingress message.
     // We assert that the lost cycles are less than 100B (this value was derived by printing the actual value in the test and rounding up)
     // and that the accepted cycles are way more than that.
     let lost_cycles = liquid_balance - accepted_cycles;
-    assert!(lost_cycles < 100 * B);
-    assert!(accepted_cycles > INITIAL_CYCLES_BALANCE.get() - 100 * B);
+    assert_lt!(lost_cycles, 100 * B);
+    assert_gt!(accepted_cycles, INITIAL_CYCLES_BALANCE.get() - 100 * B);
 
     // Finally, we assert that the cycles have indeed moved from one universal canister to the other one.
     // The remaining balance of the sender is larger than the lost cycles by the unspent cycles in the execution of the ingress message,
     // but still less than 100B.
     let balance = env.cycle_balance(canister_id);
-    assert!(balance < 100 * B);
+    assert_lt!(balance, 100 * B);
     // The receiver now holds the joint cycles balance of both canisters at the beginning minus some overhead.
     let receiver_balance = env.cycle_balance(callee);
-    assert!(receiver_balance > 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
+    assert_gt!(receiver_balance, 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
 }
 
 /// Test that a message which results in many calls with large payloads (2 GB in

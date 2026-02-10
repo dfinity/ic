@@ -273,9 +273,9 @@ impl WasmtimeEmbedder {
 
     pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<Module> {
         let module = wasmtime::Module::new(&self.create_engine()?, wasm_binary.as_slice())
-            .map_err(|e| {
+            .map_err(|_| {
                 HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
-                    format!("{e:?}"),
+                    "Error in Wasm compilation".to_string(),
                 ))
             })?;
         Ok(module)
@@ -469,7 +469,6 @@ impl WasmtimeEmbedder {
                     .tables(MAX_STORE_TABLES)
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
-                canister_backtrace: self.config.feature_flags.canister_backtrace,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -642,7 +641,6 @@ impl WasmtimeEmbedder {
             log: self.log.clone(),
             instance_stats: InstanceStats::default(),
             store,
-            canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
             dirty_page_overhead,
             #[cfg(debug_assertions)]
@@ -848,7 +846,6 @@ pub struct StoreData {
     pub num_instructions_global: Option<wasmtime::Global>,
     pub log: ReplicaLogger,
     pub limits: StoreLimits,
-    pub canister_backtrace: FlagStatus,
 }
 
 impl StoreData {
@@ -916,8 +913,6 @@ pub struct WasmtimeInstance {
     log: ReplicaLogger,
     instance_stats: InstanceStats,
     store: wasmtime::Store<StoreData>,
-    #[allow(unused)]
-    canister_backtrace: FlagStatus,
     modification_tracking: ModificationTracking,
     dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]

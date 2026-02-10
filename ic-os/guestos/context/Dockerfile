@@ -53,6 +53,7 @@ RUN apt-get clean && \
 COPY --chmod=644 etc/hosts /etc/hosts
 COPY --chmod=644 etc/hostname /etc/hostname
 COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
+COPY --chmod=755 opt/ic/bin/open_rootfs /opt/ic/bin/open_rootfs
 
 # Update POSIX permissions in /etc/
 # TODO: We overwrite all /etc files with 644 except for the specified.

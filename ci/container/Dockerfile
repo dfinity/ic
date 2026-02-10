@@ -1,17 +1,19 @@
 # https://hub.docker.com/_/ubuntu
 # ubuntu:noble-20250910
-FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d
+FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d as base
+
 ENV TZ=UTC
+RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # copy config files
 ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
-COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
+# marker for scripts to check if they are running in this container
+RUN touch /home/ubuntu/.ic-build-container
 
 # Todo: split out essential packages from application-level packages
-RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
@@ -47,14 +49,6 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
-# Add cocogitto
-ARG COCOGITTO_VERSION="5.4.0"
-ARG COCOGITTO_BIN="/usr/local/bin/cog"
-ARG COCOGITTO_OUT="cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOGITTO_VERSION}/cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "/usr/local/bin" && \
-    rm "/usr/local/bin/LICENSE" && \
-    echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
-
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
 ARG MOLD_VERSION=2.37.1
@@ -62,16 +56,8 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
     echo "98a45fcc651424551f56b8bc4f697ae7ae66930da59b1ef9dfeeaa4da64cb2c6  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
-# Add IC SDK (dfx)
-ARG sdk_version=0.25.1
-ARG sdk_sha=1e2118e0463aa44fed3a5dee8d638144c67e7b6ee8e0beaf75cfd56687bdb7e7
-RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
-    echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
-    tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/dfx
-
 # Add motoko compiler
-ARG motoko_version=0.14.7
+ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 # Create user groups needed for github actions runner
@@ -138,3 +124,6 @@ WORKDIR /
 ARG CI_USER="root"
 USER $CI_USER
 CMD ["/bin/bash"]
+
+FROM base as build
+FROM base as dev

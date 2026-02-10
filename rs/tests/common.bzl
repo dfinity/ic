@@ -122,21 +122,17 @@ SNS_CANISTER_RUNTIME_DEPS = canister_runtime_deps_impl(
     qualifying_canisters = SNS_CANISTER_WASM_PROVIDERS.keys(),
 )
 
-IC_GATEWAY_DATA = [
-    "//rs/tests:ic_gateway_uvm_config_image",
-]
+IC_GATEWAY_RUNTIME_DEPS = {
+    "IC_GATEWAY_UVM_CONFIG_IMAGE_PATH": "//rs/tests:ic_gateway_uvm_config_image",
+}
 
 COUNTER_CANISTER_RUNTIME_DEPS = {
     "COUNTER_CANISTER_WAT_PATH": "//rs/tests:counter.wat",
 }
 
-CANISTER_HTTP_DATA = [
-    "//rs/tests/networking/canister_http:http_uvm_config_image",
-]
-
-XNET_TEST_CANISTER_DATA = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
-
-STATESYNC_TEST_CANISTER_DATA = ["//rs/rust_canisters/statesync_test:statesync-test-canister"]
+XNET_TEST_CANISTER_RUNTIME_DEPS = {
+    "XNET_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/xnet_test:xnet-test-canister",
+}
 
 UNIVERSAL_CANISTER_RUNTIME_DEPS = {
     "UNIVERSAL_CANISTER_WASM_PATH": "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -152,4 +148,10 @@ SIGNER_CANISTER_RUNTIME_DEPS = {
 
 IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = {
     "IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH": "//rs/tests:impersonate_upstreams_uvm_config_image",
+}
+
+CANISTER_SANDBOX_RUNTIME_DEPS = {
+    "SANDBOX_BINARY": "//rs/canister_sandbox:canister_sandbox",
+    "LAUNCHER_BINARY": "//rs/canister_sandbox:sandbox_launcher",
+    "COMPILER_BINARY": "//rs/canister_sandbox:compiler_sandbox",
 }

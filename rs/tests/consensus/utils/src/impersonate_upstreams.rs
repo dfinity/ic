@@ -3,7 +3,7 @@ use std::{net::Ipv6Addr, path::Path};
 use anyhow::Result;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{SshSession, get_dependency_path, scp_send_to},
+    test_env_api::{SshSession, get_dependency_path_from_env, scp_send_to},
     universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
 };
 
@@ -24,10 +24,8 @@ pub fn get_upstreams_uvm_ipv6(env: &TestEnv) -> Ipv6Addr {
 
 pub fn setup_upstreams_uvm(env: &TestEnv) {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path(
-            std::env::var("IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH").unwrap_or_else(|_| {
-                panic!("IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH environment variable not found")
-            }),
+        .with_config_img(get_dependency_path_from_env(
+            "IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH",
         ))
         .start(env)
         .expect("failed to setup universal VM");

@@ -1,6 +1,9 @@
 use crate::{
-    pb::v1::{GovernanceError, TakeCanisterSnapshot, Topic},
-    proposals::{call_canister::CallCanister, invalid_proposal_error, topic_to_manage_canister},
+    pb::v1::{GovernanceError, SelfDescribingValue, TakeCanisterSnapshot, Topic},
+    proposals::{
+        call_canister::CallCanister, invalid_proposal_error,
+        self_describing::LocallyDescribableProposalAction, topic_to_manage_canister,
+    },
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -56,3 +59,19 @@ pub fn convert_take_canister_snapshot_from_proposal_to_root_request(
         replace_snapshot,
     })
 }
+
+impl LocallyDescribableProposalAction for TakeCanisterSnapshot {
+    const TYPE_NAME: &'static str = "Take Canister Snapshot";
+    const TYPE_DESCRIPTION: &'static str = "Create a snapshot of a canister controlled by the \
+        NNS. The snapshot saves the canister's current stable memory, heap memory, data, and \
+        Wasm module. The snapshot can be loaded later using a Load Canister Snapshot proposal, \
+        rolling the canister back to the state saved within the snapshot.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        SelfDescribingValue::from(self.clone())
+    }
+}
+
+#[cfg(test)]
+#[path = "take_canister_snapshot_tests.rs"]
+mod tests;

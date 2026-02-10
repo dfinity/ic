@@ -78,10 +78,10 @@ crate.spec(
 )
 crate.spec(
     features = [
-        "serde-json",
+        "serde_json",
     ],
     package = "askama",
-    version = "^0.12.1",
+    version = "0.15",
 )
 crate.spec(
     package = "assert-json-diff",
@@ -881,13 +881,13 @@ crate.spec(
 crate.spec(
     git = "https://github.com/dfinity-lab/lmdb-rs",
     package = "lmdb-rkv",
-    rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+    rev = "64eb770caa940f215190d86d61e4c132511be5e2",
 )
 crate.spec(
     default_features = False,
     git = "https://github.com/dfinity-lab/lmdb-rs",
     package = "lmdb-rkv-sys",
-    rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+    rev = "64eb770caa940f215190d86d61e4c132511be5e2",
 )
 crate.spec(
     package = "local-ip-address",
@@ -901,6 +901,13 @@ crate.spec(
     default_features = False,
     package = "lru",
     version = "^0.7.8",
+)
+crate.spec(
+    features = [
+        "static",  # By using the `static` feature the lzma-sys crate uses its embedded liblzma C library
+    ],
+    package = "lzma-sys",
+    version = "^0.1.20",
 )
 crate.spec(
     package = "macaddr",
@@ -1312,7 +1319,7 @@ crate.spec(
         "getrandom",
     ],
     package = "rsa",
-    version = "^0.9.6",
+    version = "^0.9.10",
 )
 crate.spec(
     package = "rstest",
@@ -1870,7 +1877,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^40.0.0",
+    version = "^41.0.2",
 )
 crate.spec(
     package = "wast",
@@ -1918,6 +1925,17 @@ crate.spec(
     version = "^0.16.0",
 )
 crate.spec(
+    features = [
+        # By using the `static` feature the x2 crate configures the lzma-sys crate to use its embedded liblzma C library
+        # instead of requiring liblzma to be installed in the environment.
+        # See: https://github.com/alexcrichton/xz2-rs/blob/main/Cargo.toml#L33
+        # See: https://github.com/alexcrichton/xz2-rs/blob/main/lzma-sys/build.rs
+        "static",
+    ],
+    package = "xz2",
+    version = "^0.1.7",
+)
+crate.spec(
     package = "yansi",
     version = "^0.5.0",
 )
@@ -1962,7 +1980,7 @@ DEFAULT_SANITIZERS = [
     "-Zsanitizer=address",
     # zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
     "-Zexternal-clangrt",
-    "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
+    "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
 ]
 
 # This flag will be used by third party crates and internal rust_libraries during fuzzing
@@ -1986,12 +2004,12 @@ crate.annotation_select(
 )
 crate.annotation(
     build_script_data = [
-        "@@_main~_repo_rules~openssl//:gen_dir",
+        "@@+_repo_rules+openssl//:gen_dir",
     ],
     build_script_env = {
         "OPENSSL_NO_VENDOR": "1",
-        "OPENSSL_LIB_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/lib64",
-        "OPENSSL_INCLUDE_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/include",
+        "OPENSSL_LIB_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/lib64",
+        "OPENSSL_INCLUDE_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/include",
         "OPENSSL_STATIC": "1",
     },
     crate = "openssl-sys",
@@ -2007,7 +2025,7 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@_main~_repo_rules~openssl//:gen_dir",
+        "@@+_repo_rules+openssl//:gen_dir",
     ],
     crate = "libssh2-sys",
     # Patch for determinism issues
@@ -2046,12 +2064,12 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@_main~_repo_rules~lmdb//:liblmdb",
-        "@@_main~_repo_rules~lmdb//:lmdb.h",
+        "@@+_repo_rules+lmdb//:liblmdb",
+        "@@+_repo_rules+lmdb//:lmdb.h",
     ],
     build_script_env = {
-        "LMDB_OVERRIDE": "$(location @@_main~_repo_rules~lmdb//:liblmdb)",
-        "LMDB_H_PATH": "$(location @@_main~_repo_rules~lmdb//:lmdb.h)",
+        "LMDB_OVERRIDE": "$(location @@+_repo_rules+lmdb//:liblmdb)",
+        "LMDB_H_PATH": "$(location @@+_repo_rules+lmdb//:lmdb.h)",
     },
     crate = "lmdb-rkv-sys",
     # patch our fork of the lmdb-rkv-sys to allow specifying the path
@@ -2068,8 +2086,8 @@ crate.annotation(
 )
 crate.annotation_select(
     # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
-    build_script_data = ["@@_main~_repo_rules~jemalloc//:libjemalloc"],
-    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @@_main~_repo_rules~jemalloc//:libjemalloc)"},
+    build_script_data = ["@@+_repo_rules+jemalloc//:libjemalloc"],
+    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @@+_repo_rules+jemalloc//:libjemalloc)"},
     crate = "tikv-jemalloc-sys",
     triples = ["x86_64-unknown-linux-gnu"],
 )
@@ -2119,10 +2137,10 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@protobuf~//:protoc",
+        "@@protobuf+//:protoc",
     ],
     build_script_env = {
-        "PROTOC": "$(execpath @@protobuf~//:protoc)",
+        "PROTOC": "$(execpath @@protobuf+//:protoc)",
     },
     crate = "pprof",
 )

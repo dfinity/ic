@@ -13,6 +13,9 @@ pub struct InitArgs {
     /// a testing key for testnet and mainnet
     pub ecdsa_key_name: String,
 
+    /// Minimum amount of dogecoin that can be deposited
+    pub deposit_doge_min_amount: Option<u64>,
+
     /// Minimum amount of dogecoin that can be retrieved
     pub retrieve_doge_min_amount: u64,
 
@@ -88,6 +91,7 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
         InitArgs {
             doge_network,
             ecdsa_key_name,
+            deposit_doge_min_amount,
             retrieve_doge_min_amount,
             ledger_id,
             max_time_in_queue_nanos,
@@ -101,6 +105,7 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
         CkbtcMinterInitArgs {
             btc_network: ic_ckbtc_minter::Network::from(doge_network),
             ecdsa_key_name,
+            deposit_btc_min_amount: deposit_doge_min_amount,
             retrieve_btc_min_amount: retrieve_doge_min_amount,
             ledger_id: ledger_id
                 .as_slice()
@@ -129,6 +134,7 @@ impl TryFrom<CkbtcMinterInitArgs> for InitArgs {
         CkbtcMinterInitArgs {
             btc_network,
             ecdsa_key_name,
+            deposit_btc_min_amount,
             retrieve_btc_min_amount,
             ledger_id,
             max_time_in_queue_nanos,
@@ -146,6 +152,7 @@ impl TryFrom<CkbtcMinterInitArgs> for InitArgs {
         Ok(InitArgs {
             doge_network: Network::try_from(btc_network)?,
             ecdsa_key_name,
+            deposit_doge_min_amount: deposit_btc_min_amount,
             retrieve_doge_min_amount: retrieve_btc_min_amount,
             ledger_id: ledger_id.into(),
             max_time_in_queue_nanos,

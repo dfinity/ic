@@ -1,10 +1,9 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
-use attestation::attestation_package::generate_attestation_package;
-use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
-use attestation::verification::{
-    AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+use attestation::attestation_package::{
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
+use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
 use guest_upgrade_shared::STORE_DEVICE;
@@ -18,13 +17,12 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
-use ic_sev::guest::firmware::SevGuestFirmware;
 use rcgen::CertifiedKey;
 use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
-use sev::firmware::guest::AttestationReport;
-use sev::parser::ByteParser;
+use sev_guest::attestation_package::generate_attestation_package;
+use sev_guest::firmware::SevGuestFirmware;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -153,17 +151,11 @@ impl DiskEncryptionKeyExchangeClientAgent {
         )
         .context("Failed to generate attestation package")?;
 
-        let my_attestation_report = AttestationReport::from_bytes(
-            my_attestation_package
-                .attestation_report
-                .as_ref()
-                .context("My attestation report is missing")?,
-        )
-        .context("Failed to parse my attestation report")?;
+        let my_attestation_report = *my_attestation_package.attestation_report();
 
         let get_key_response = upgrade_service_client
             .get_disk_encryption_key(GetDiskEncryptionKeyRequest {
-                sev_attestation_package: Some(my_attestation_package),
+                sev_attestation_package: Some(my_attestation_package.into()),
             })
             .await
             .context("Call to get_disk_encryption_key failed")?

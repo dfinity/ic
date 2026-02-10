@@ -25,6 +25,7 @@ use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDa
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::Stream;
+use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
@@ -668,7 +669,6 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         subnet_size: 0,
         node_ids: BTreeSet::new(),
         registry_version: RegistryVersion::default(),
-        canister_cycles_cost_schedule: ic_types::batch::CanisterCyclesCostSchedule::Normal,
     }));
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),

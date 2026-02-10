@@ -316,9 +316,11 @@ fn stack_overflow_traps() {
                 panic!("Unexpected error {err:?}");
             };
             assert_eq!(trap_code, TrapCode::StackOverflow);
-            for (_index, name) in backtrace.unwrap().0 {
-                assert_eq!(name, Some("f".to_string()));
-            }
+            // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
+            // for (_index, name) in backtrace.unwrap().0 {
+            //     assert_eq!(name, Some("f".to_string()));
+            // }
+            assert!(backtrace.is_none());
         })
         .unwrap();
 
@@ -1654,11 +1656,19 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
+    // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
+    // assert_eq!(
+    //     err,
+    //     HypervisorError::Trapped {
+    //         trap_code: TrapCode::HeapOutOfBounds,
+    //         backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
+    //     }
+    // );
     assert_eq!(
         err,
         HypervisorError::Trapped {
             trap_code: TrapCode::HeapOutOfBounds,
-            backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
+            backtrace: None,
         }
     );
 }
@@ -2131,7 +2141,7 @@ fn wasm64_import_system_api_functions() {
       )
       (import "ic0" "call_on_cleanup"
         (func $ic0_call_on_cleanup (param $fun i64) (param $env i64)))
-      (import "ic0" "call_data_append" 
+      (import "ic0" "call_data_append"
         (func $ic0_call_data_append (param i64) (param i64)))
 
       (import "ic0" "canister_cycle_balance128"
@@ -2705,7 +2715,7 @@ fn wasm64_canister_self_copy() {
 
     // This is the system state used by WasmtimeInstanceBuilder
     let system_state = ic_test_utilities_state::SystemStateBuilder::default().build();
-    let canister_id = system_state.canister_id.get_ref().as_slice();
+    let canister_id = system_state.canister_id().get_ref().to_vec();
 
     // After this call, we expect the instance to have a memory with size of 1 wasm page
     // of which the first OS page was touched and contains relevant data at offset 0
@@ -2731,7 +2741,7 @@ fn wasm64_canister_self_copy() {
     };
 
     let mut expected_heap = vec![0; dirty_heap_size];
-    expected_heap[0..canister_id.len()].copy_from_slice(canister_id);
+    expected_heap[0..canister_id.len()].copy_from_slice(canister_id.as_slice());
 
     assert_eq!(wasm_heap, expected_heap);
 }
@@ -3236,14 +3246,14 @@ fn large_wasm64_stable_read_write_test() {
             (i64.store (i64.const 4294967314) (i64.const 108))
             (i64.store (i64.const 4294967315) (i64.const 108))
             (i64.store (i64.const 4294967316) (i64.const 111))
-           
+ 
             (drop (call $stable_grow (i64.const 10)))
 
             ;; Write to stable memory from large heap offset.
             (call $ic0_stable64_write (i64.const 0) (i64.const 4294967312) (i64.const 5))
             ;; Read from stable memory at a different heap offset.
             (call $ic0_stable64_read (i64.const 4294967320) (i64.const 0) (i64.const 5))
-           
+ 
             ;; Return the result of the read operation.
             (call $msg_reply_data_append (i64.const 4294967320) (i64.const 5))
             (call $msg_reply)
@@ -3417,7 +3427,7 @@ fn test_environment_variable_system_api() {
             (call $trap (i32.const 0) (i32.const 0))
           )
         )
-       
+
         ;; Copy first name to memory
         (local.set $index (i32.const 0))
         (local.set $name_size (call $env_var_name_size (local.get $index)))

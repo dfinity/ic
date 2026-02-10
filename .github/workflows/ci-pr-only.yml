@@ -13,6 +13,11 @@ on:
         required: false
         default: ${{ github.event.pull_request.base.ref }}
         type: string
+      head-ref:
+        description: The head branch of the PR
+        required: false
+        default: ${{ github.event.pull_request.head.ref }}
+        type: string
       pr-number:
         description: 'The PR number'
         required: false
@@ -32,7 +37,7 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:77078e5579d70f97b177ffb5265d08163da65e0e6743376a164c7348c9aa475a
+      image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
       options: >-
          -e NODE_NAME --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     steps:
@@ -94,7 +99,7 @@ jobs:
                 git config --global user.email "infra+github-automation@dfinity.org"
                 git config --global user.name "IDX GitHub Automation"
                 git commit -m "Automatically fixing code for linting and formatting issues"
-                git push
+                git push origin HEAD:'${{ inputs.head-ref }}'
 
                 # Because the buildifier made changes, fail the PR
                 EXIT_STATUS=1
@@ -163,13 +168,39 @@ jobs:
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
-        run: ./ci/scripts/lock-generate.sh
+        shell: bash
+        run: |
+          set -eufo pipefail
+
+          EXIT_STATUS=0
+
+          # Update the cargo lockfile, if necessary
+          cargo update --workspace
+
+          # Repin the bazel crates, if necessary
+          ./bin/bazel-pin.sh
+
+          # Stage files and check if anything changed
+          git add Cargo.lock Cargo.Bazel.*.lock
+          git status
+          if ! git diff --cached --quiet; then
+              # There are some changes staged
+              git config --global user.email "infra+github-automation@dfinity.org"
+              git config --global user.name "IDX GitHub Automation"
+              git commit -m "Automatically updated Cargo*.lock"
+              git push origin HEAD:'${{ inputs.head-ref }}'
+
+              # Because the lockfiles need updating, fail the PR
+              EXIT_STATUS=1
+          fi
+
+          exit "${EXIT_STATUS}"
 
   generate-config-fixtures:
     name: Generate Config Fixtures
-    runs-on: ubuntu-latest
+    runs-on: *dind-small-setup
     container: *container-setup
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -190,7 +221,30 @@ jobs:
       - name: Run Generate Config Fixtures
         id: generate-config-fixtures
         if: steps.filter.outputs.generate-config-fixtures == 'true'
-        run: ./ci/scripts/generate-config-fixtures.sh
+        shell: bash
+        run: |
+          set -eufo pipefail
+
+          EXIT_STATUS=0
+
+          # Generate config fixtures if config types have been updated
+          bazel run //rs/ic_os/config/types/compatibility_tests:generate_config_types_fixture
+
+          # Stage files and check if anything changed
+          git add rs/ic_os/config/types/compatibility_tests/fixtures
+          git status
+          if ! git diff --cached --quiet; then
+              # There are some changes staged
+              git config --global user.email "infra+github-automation@dfinity.org"
+              git config --global user.name "IDX GitHub Automation"
+              git commit -m "Automatically updated config type fixtures"
+              git push origin HEAD:'${{ inputs.head-ref }}'
+
+              # Because the fixtures need updating, fail the PR
+              EXIT_STATUS=1
+          fi
+
+          exit "${EXIT_STATUS}"
 
   # CI job is also executed in Schedule Hourly
   bazel-test-coverage:

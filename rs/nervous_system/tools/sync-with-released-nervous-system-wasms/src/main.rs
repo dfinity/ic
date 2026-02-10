@@ -8,7 +8,7 @@ use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
     MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use reqwest::Client;
 use serde::Deserialize;
@@ -41,7 +41,7 @@ struct ExternalCanisterInfo<'a> {
     test_filename: Option<&'a str>,
 }
 
-const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 6] = [
+const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 7] = [
     (
         "cycles_ledger",
         ExternalCanisterInfo {
@@ -100,6 +100,16 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 6] = [
             filename: "ic-doge-canister.wasm.gz",
             test_filename: None,
             canister_id: DOGECOIN_CANISTER_ID,
+        },
+    ),
+    (
+        "subnet_rental",
+        ExternalCanisterInfo {
+            repository: "dfinity/subnet-rental-canister",
+            tag_name_prefix: None,
+            filename: "subnet_rental_canister.wasm.gz",
+            test_filename: None,
+            canister_id: SUBNET_RENTAL_CANISTER_ID,
         },
     ),
 ];

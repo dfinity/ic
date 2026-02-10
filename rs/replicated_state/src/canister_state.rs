@@ -4,9 +4,9 @@ pub mod system_state;
 #[cfg(test)]
 mod tests;
 
-use crate::canister_state::execution_state::WasmExecutionMode;
-use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{ExecutionTask, SystemState};
+use self::execution_state::{NextScheduledMethod, WasmExecutionMode};
+use self::queues::CanisterOutputQueuesIterator;
+use self::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
@@ -17,14 +17,11 @@ use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_types::batch::TotalQueryStats;
-use ic_types::methods::SystemMethod;
-use ic_types::time::UNIX_EPOCH;
+use ic_types::messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response};
+use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{
     AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, Time,
-    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
-    methods::WasmMethod,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
 use ic_validate_eq::ValidateEq;
@@ -35,8 +32,6 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use self::execution_state::NextScheduledMethod;
-
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
@@ -44,10 +39,6 @@ pub struct SchedulerState {
     /// means that the canister was given the first pulse in the round or
     /// consumed its input queue.
     pub last_full_execution_round: ExecutionRound,
-
-    /// A canister's compute allocation. A higher compute allocation corresponds
-    /// to higher priority in scheduling.
-    pub compute_allocation: ComputeAllocation,
 
     /// Keeps the current priority of this canister, accumulated during the past
     /// rounds. In the scheduler analysis documentation, this value is the entry
@@ -72,46 +63,17 @@ pub struct SchedulerState {
     /// The amount of install_code instruction debit. The canister rejects
     /// install_code messages if this value is non-zero.
     pub install_code_debit: NumInstructions,
-
-    /// The last time when the canister was charged for the resource allocations.
-    ///
-    /// Charging for compute and storage is done periodically, so this is
-    /// needed to calculate how much time should be considered when charging
-    /// occurs.
-    pub time_of_last_allocation_charge: Time,
-
-    /// Query statistics.
-    ///
-    /// As queries are executed in non-deterministic fashion state modifications are
-    /// disallowed during the query call.
-    /// Instead, each node collects statistics about query execution locally and periodically,
-    /// once per "epoch", sends those to other machines as part of consensus blocks.
-    /// At the end of an "epoch", each node deterministically aggregates all those partial
-    /// query statistics received from consensus blocks and mutates these values.
-    pub total_query_stats: TotalQueryStats,
 }
 
 impl Default for SchedulerState {
     fn default() -> Self {
         Self {
             last_full_execution_round: 0.into(),
-            compute_allocation: ComputeAllocation::default(),
             accumulated_priority: AccumulatedPriority::default(),
             priority_credit: AccumulatedPriority::default(),
             long_execution_mode: LongExecutionMode::default(),
             heap_delta_debit: 0.into(),
             install_code_debit: 0.into(),
-            time_of_last_allocation_charge: UNIX_EPOCH,
-            total_query_stats: TotalQueryStats::default(),
-        }
-    }
-}
-
-impl SchedulerState {
-    pub fn new(time: Time) -> Self {
-        Self {
-            time_of_last_allocation_charge: time,
-            ..Default::default()
         }
     }
 }
@@ -165,13 +127,13 @@ impl CanisterState {
     /// Returns the difference in time since the canister was last charged for resource allocations.
     pub fn duration_since_last_allocation_charge(&self, current_time: Time) -> Duration {
         debug_assert!(
-            current_time >= self.scheduler_state.time_of_last_allocation_charge,
+            current_time >= self.system_state.time_of_last_allocation_charge,
             "Expect the time of the current batch to be >= the time of the previous batch"
         );
 
         Duration::from_nanos(
             current_time.as_nanos_since_unix_epoch().saturating_sub(
-                self.scheduler_state
+                self.system_state
                     .time_of_last_allocation_charge
                     .as_nanos_since_unix_epoch(),
             ),
@@ -504,7 +466,7 @@ impl CanisterState {
 
     /// Returns the current compute allocation for the canister.
     pub fn compute_allocation(&self) -> ComputeAllocation {
-        self.scheduler_state.compute_allocation
+        self.system_state.compute_allocation
     }
 
     /// Returns true if the canister exports the `canister_heartbeat` system

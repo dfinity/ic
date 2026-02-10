@@ -41,24 +41,24 @@ go.sum                    @dfinity/idx
 /publish/ @dfinity/idx
 
 # [Packages]
-/packages/canlog/                               @dfinity/defi-team
-/packages/canlog_derive/                        @dfinity/defi-team
-/packages/icrc-cbor/                            @dfinity/defi-team
-/packages/icrc-ledger-agent/                    @dfinity/defi-team
-/packages/icrc-ledger-client/                   @dfinity/defi-team
-/packages/icrc-ledger-client-cdk/               @dfinity/defi-team
-/packages/icrc-ledger-types/                    @dfinity/defi-team
-/packages/ic-ledger-hash-of/                    @dfinity/defi-team
+/packages/canlog/                               @dfinity/defi
+/packages/canlog_derive/                        @dfinity/defi
+/packages/icrc-cbor/                            @dfinity/defi
+/packages/icrc-ledger-agent/                    @dfinity/defi
+/packages/icrc-ledger-client/                   @dfinity/defi
+/packages/icrc-ledger-client-cdk/               @dfinity/defi
+/packages/icrc-ledger-types/                    @dfinity/defi
+/packages/ic-ledger-hash-of/                    @dfinity/defi
 /packages/pocket-ic/                            @dfinity/team-dsm
 /packages/ic-error-types/                       @dfinity/team-dsm
 /packages/ic-dummy-getrandom-for-wasm/          @dfinity/consensus
 /packages/ic-ed25519/                           @dfinity/consensus
-/packages/ic-ethereum-types/                    @dfinity/defi-team
+/packages/ic-ethereum-types/                    @dfinity/defi
 /packages/ic-heap-bytes/                        @dfinity/team-dsm
 /packages/ic-heap-bytes-derive/                 @dfinity/team-dsm
 /packages/ic-hpke/                              @dfinity/consensus
-/packages/ic-http-types/                        @dfinity/defi-team
-/packages/ic-metrics-assert/                    @dfinity/defi-team
+/packages/ic-http-types/                        @dfinity/defi
+/packages/ic-metrics-assert/                    @dfinity/defi
 /packages/ic-pub-key/                           @dfinity/consensus
 /packages/ic-secp256k1/                         @dfinity/consensus
 /packages/ic-secp256r1/                         @dfinity/consensus
@@ -68,7 +68,6 @@ go.sum                    @dfinity/idx
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
-/ic-os/components/ic/share/ic-boundary.env                              @dfinity/node
 /toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
@@ -78,8 +77,11 @@ go.sum                    @dfinity/idx
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
 /.github/workflows/bazel-dependency-submission.yml                       @dfinity/idx @dfinity/product-security
-/.github/workflows/ledger-suite-release.yml                              @dfinity/defi-team @dfinity/idx
-/.github/workflows/rosetta-release.yml                                   @dfinity/defi-team @dfinity/idx
+/.github/workflows/container-scan-nightly.yml                            @dfinity/idx @dfinity/product-security
+/.github/workflows/ledger-suite-release.yml                              @dfinity/defi @dfinity/idx
+/.github/workflows/publish-crates.yml                                    @dfinity/idx @dfinity/infrasec
+/.github/workflows/repro-check.yml                                       @dfinity/dre @dfinity/idx
+/.github/workflows/rosetta-release.yml                                   @dfinity/defi @dfinity/idx
 /.github/workflows/security-checks.yml                                   @dfinity/idx @dfinity/product-security
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 .github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/idx @dfinity/infrasec
@@ -95,7 +97,7 @@ go.sum                    @dfinity/idx
 /rs/                                                    @dfinity/ic-interface-owners
 /rs/artifact_pool/                                      @dfinity/consensus
 /rs/backup/                                             @dfinity/consensus
-/rs/bitcoin/                                            @dfinity/defi-team
+/rs/bitcoin/                                            @dfinity/defi
 /rs/boundary_node/                                      @dfinity/node
 /rs/canister_client/                                    @dfinity/consensus
 /rs/canister_sandbox/                                   @dfinity/team-dsm
@@ -110,16 +112,16 @@ go.sum                    @dfinity/idx
 /rs/config/src/subnet_config.rs                         @dfinity/team-dsm
 /rs/consensus/                                          @dfinity/consensus
 /rs/criterion_time/                                     @dfinity/ic-interface-owners
-/rs/cross-chain/                                        @dfinity/defi-team
+/rs/cross-chain/                                        @dfinity/defi
 /rs/crypto/                                             @dfinity/consensus
 /rs/crypto/tree_hash/                                   @dfinity/team-dsm @dfinity/consensus
 /rs/cup_explorer                                        @dfinity/consensus
 /rs/cycles_account_manager/                             @dfinity/team-dsm
 /rs/depcheck/                                           @dfinity/ic-interface-owners
 /rs/determinism_test/                                   @dfinity/team-dsm
-/rs/dogecoin/                                           @dfinity/defi-team
+/rs/dogecoin/                                           @dfinity/defi
 /rs/embedders/                                          @dfinity/team-dsm
-/rs/ethereum/                                           @dfinity/defi-team
+/rs/ethereum/                                           @dfinity/defi
 /rs/execution_environment/                              @dfinity/team-dsm
 /rs/fuzzers/                                            @dfinity/product-security
 /rs/http_endpoints/                                     @dfinity/consensus
@@ -129,8 +131,8 @@ go.sum                    @dfinity/idx
 /rs/https_outcalls/                                     @dfinity/consensus
 /rs/https_outcalls/consensus/                           @dfinity/consensus
 /rs/ic_os/                                              @dfinity/node
-/rs/ic_os/fstrim_tool/                                  @dfinity/node @dfinity/consensus
-/rs/ic_os/nss_icos/                                     @dfinity/dre
+/rs/ic_os/metrics/fstrim_tool/                          @dfinity/node @dfinity/consensus
+/rs/ic_os/networking/nss_icos/                          @dfinity/dre
 /rs/ingress_manager/                                    @dfinity/consensus
 /rs/interfaces/                                         @dfinity/ic-interface-owners
 /rs/interfaces/adapter_client/                          @dfinity/consensus
@@ -151,7 +153,7 @@ go.sum                    @dfinity/idx
 /rs/interfaces/src/p2p/                                 @dfinity/consensus
 /rs/interfaces/src/vetkd.rs                             @dfinity/consensus
 /rs/interfaces/state_manager/                           @dfinity/team-dsm
-/rs/ledger_suite/                                       @dfinity/defi-team
+/rs/ledger_suite/                                       @dfinity/defi
 /rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/team-dsm
 /rs/messaging/                                          @dfinity/team-dsm
@@ -202,7 +204,7 @@ go.sum                    @dfinity/idx
 /rs/replicated_state/src/canister_state/queues          @dfinity/team-dsm
 /rs/replicated_state/src/page_map.rs                    @dfinity/team-dsm
 /rs/replicated_state/src/page_map/                      @dfinity/team-dsm
-/rs/rosetta-api/                                        @dfinity/defi-team
+/rs/rosetta-api/                                        @dfinity/defi
 /rs/rust_canisters/                                     @dfinity/governance-team
 /rs/rust_canisters/backtrace_canister                   @dfinity/team-dsm
 /rs/rust_canisters/call_loop_canister                   @dfinity/team-dsm
@@ -218,7 +220,7 @@ go.sum                    @dfinity/idx
 /rs/rust_canisters/stable_structures/                   @dfinity/team-dsm
 /rs/rust_canisters/statesync_test                       @dfinity/team-dsm
 /rs/rust_canisters/xnet_test/                           @dfinity/team-dsm
-/rs/rust_canisters/xrc_mock/                            @dfinity/defi-team
+/rs/rust_canisters/xrc_mock/                            @dfinity/defi
 /rs/sns/                                                @dfinity/governance-team
 /rs/state_layout/                                       @dfinity/team-dsm
 /rs/state_machine_tests/                                @dfinity/team-dsm
@@ -243,13 +245,13 @@ go.sum                    @dfinity/idx
 /rs/tests/testnets/nns_recovery.rs                      @dfinity/consensus
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/consensus @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/node
-/rs/tests/ckbtc/                                        @dfinity/defi-team
+/rs/tests/ckbtc/                                        @dfinity/defi
 /rs/tests/consensus/                                    @dfinity/consensus
-/rs/tests/cross_chain/                                  @dfinity/defi-team
+/rs/tests/cross_chain/                                  @dfinity/defi
 /rs/tests/crypto/                                       @dfinity/consensus
 /rs/tests/dre/                                          @dfinity/dre
 /rs/tests/execution/                                    @dfinity/team-dsm
-/rs/tests/financial_integrations/                       @dfinity/defi-team
+/rs/tests/financial_integrations/                       @dfinity/defi
 /rs/tests/message_routing/                              @dfinity/team-dsm
 /rs/tests/nested/                                       @dfinity/node
 /rs/tests/nested/nns_recovery/                          @dfinity/consensus @dfinity/node
@@ -260,7 +262,7 @@ go.sum                    @dfinity/idx
 /rs/tests/sdk/                                          @dfinity/sdk
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
-/rs/tools/check_did/                                    @dfinity/defi-team
+/rs/tools/check_did/                                    @dfinity/defi
 /rs/tree_deserializer/                                  @dfinity/team-dsm
 /rs/types/                                              @dfinity/ic-interface-owners
 /rs/types/exhaustive_derive/                            @dfinity/consensus
@@ -279,7 +281,7 @@ go.sum                    @dfinity/idx
 /rs/types/wasm_types/                                   @dfinity/team-dsm
 /rs/universal_canister/                                 @dfinity/team-dsm
 /rs/utils/                                              @dfinity/ic-interface-owners
-/rs/utils/ensure/                                       @dfinity/defi-team
+/rs/utils/ensure/                                       @dfinity/defi
 /rs/utils/lru_cache/                                    @dfinity/team-dsm
 /rs/utils/thread/                                       @dfinity/team-dsm
 /rs/validator/                                          @dfinity/consensus

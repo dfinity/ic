@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -216,17 +216,18 @@ system_test_nns(
     ],
 )
 
+RECOVERY_TOOLS_RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | {
+    "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
+}
+
 system_test_nns(
     name = "subnet_splitting_test",
-    data = [
-        "//rs/tests:recovery/binaries",
-    ],
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_splitting",
     ],
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/recovery",
         "//rs/recovery/subnet_splitting",
@@ -337,9 +338,6 @@ system_test_nns(
         "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
         "//conditions:default": [],
     }),
-    data = [
-        "//rs/tests:jaeger_uvm_config_image",
-    ],
     enable_head_nns_variant = False,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
@@ -350,6 +348,7 @@ system_test_nns(
     test_timeout = "eternal",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "IC_VERSION_FILE": "//bazel:version.txt",
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
     },
     deps = [
         # Keep sorted.

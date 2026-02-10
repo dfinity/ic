@@ -169,7 +169,7 @@ impl CatchUpPackageProvider {
 
         let mut nodes: Vec<(NodeId, NodeRecord)> = self
             .registry
-            .registry_client
+            .get_registry_client()
             .get_subnet_node_records(subnet_id, registry_version)
             .ok()
             .flatten()
@@ -516,11 +516,8 @@ fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    use crate::{
-        catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
-    };
     use assert_matches::assert_matches;
     use http_body_util::{StreamBody, combinators::BoxBody};
     use hyper::{
@@ -705,7 +702,7 @@ mod tests {
         ))
     }
 
-    fn mock_tls_config() -> MockTlsConfig {
+    pub(crate) fn mock_tls_config() -> MockTlsConfig {
         #[derive(Debug)]
         struct NoVerify;
         impl ServerCertVerifier for NoVerify {

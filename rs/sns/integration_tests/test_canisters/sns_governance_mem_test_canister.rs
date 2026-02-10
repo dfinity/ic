@@ -27,7 +27,7 @@ use ic_sns_governance::{
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
         PROPOSAL_URL_CHAR_MAX,
     },
-    types::native_action_ids,
+    types::NativeAction,
 };
 use ic_stable_structures::{
     DefaultMemoryImpl,
@@ -272,18 +272,18 @@ fn allocate_proposal_data(
 ) -> ProposalData {
     // As Proposal Actions are keyed on u64, below is a map of those keys to ~estimated~ payload size
     let payload_size: usize = match action {
-        native_action_ids::UNSPECIFIED | native_action_ids::MOTION => 10_000, // Max size of motion_text payload = 10_000 bytes
-        native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS => 280, // sizeof(NervousSystemParameter) = 280 bytes
-        native_action_ids::UPGRADE_SNS_CONTROLLED_CANISTER => 1_500_000, // Governance wasm is 1.5 MB
-        native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION => 200, // sizeof(NervousSystemFunction) = ~200 bytes
-        native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 8, // sizeof(u64) = 8 bytes
-        native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 1_000_000, // Estimate of average payload size = 1MB
-        native_action_ids::MANAGE_SNS_METADATA => 2 * 1024 * 1024,
-        native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION => 100,
-        native_action_ids::TRANSFER_SNS_TREASURY_FUNDS => 100,
-        native_action_ids::REGISTER_DAPP_CANISTERS => 100,
-        native_action_ids::DEREGISTER_DAPP_CANISTERS => 100,
-        native_action_ids::MANAGE_LEDGER_PARAMETERS => 100,
+        x if x == NativeAction::Unspecified as u64 || x == NativeAction::Motion as u64 => 10_000, // Max size of motion_text payload = 10_000 bytes
+        x if x == NativeAction::ManageNervousSystemParameters as u64 => 280, // sizeof(NervousSystemParameter) = 280 bytes
+        x if x == NativeAction::UpgradeSnsControlledCanister as u64 => 1_500_000, // Governance wasm is 1.5 MB
+        x if x == NativeAction::AddGenericNervousSystemFunction as u64 => 200, // sizeof(NervousSystemFunction) = ~200 bytes
+        x if x == NativeAction::RemoveGenericNervousSystemFunction as u64 => 8, // sizeof(u64) = 8 bytes
+        x if x == NativeAction::ExecuteGenericNervousSystemFunction as u64 => 1_000_000, // Estimate of average payload size = 1MB
+        x if x == NativeAction::ManageSnsMetadata as u64 => 2 * 1024 * 1024,
+        x if x == NativeAction::UpgradeSnsToNextVersion as u64 => 100,
+        x if x == NativeAction::TransferSnsTreasuryFunds as u64 => 100,
+        x if x == NativeAction::RegisterDappCanisters as u64 => 100,
+        x if x == NativeAction::DeregisterDappCanisters as u64 => 100,
+        x if x == NativeAction::ManageLedgerParameters as u64 => 100,
         _ => panic!("Undefined proposal action"),
     };
 

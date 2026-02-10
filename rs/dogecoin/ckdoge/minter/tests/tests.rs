@@ -4,8 +4,8 @@ use ic_ckdoge_minter::candid_api::{
     RetrieveDogeWithApprovalError, WithdrawalFee,
 };
 use ic_ckdoge_minter_test_utils::{
-    DOGE, DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, MinterCanister,
-    RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
+    DEPOSIT_DOGE_MIN_AMOUNT, DOGE, DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS,
+    MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
 };
 use ic_management_canister_types::CanisterStatusType;
 
@@ -155,8 +155,10 @@ mod get_doge_address {
 }
 
 mod deposit {
+    use ic_ckdoge_minter::lifecycle::upgrade::UpgradeArgs;
     use ic_ckdoge_minter_test_utils::{
-        LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+        DEPOSIT_DOGE_MIN_AMOUNT, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT,
+        Setup, USER_PRINCIPAL,
     };
     use icrc_ledger_types::icrc1::account::Account;
 
@@ -175,6 +177,30 @@ mod deposit {
             .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_update_balance()
             .expect_mint();
+    }
+
+    #[test]
+    fn should_not_mint_when_deposit_amount_below_minimum() {
+        let setup = Setup::default().with_doge_balance();
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+
+        let flow = setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_send_transaction(vec![DEPOSIT_DOGE_MIN_AMOUNT - 1])
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
+            .minter_update_balance()
+            .expect_no_mint_value_too_small();
+
+        setup.minter().upgrade(Some(UpgradeArgs {
+            deposit_doge_min_amount: Some(DEPOSIT_DOGE_MIN_AMOUNT - 1),
+            ..Default::default()
+        }));
+
+        flow.minter_update_balance().expect_mint();
     }
 }
 
@@ -575,6 +601,7 @@ fn should_get_minter_info() {
         minter_info,
         MinterInfo {
             min_confirmations: MIN_CONFIRMATIONS,
+            deposit_doge_min_amount: DEPOSIT_DOGE_MIN_AMOUNT,
             retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
         }
     );

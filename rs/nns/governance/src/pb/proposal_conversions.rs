@@ -163,7 +163,7 @@ fn convert_create_service_nervous_system(
     let dapp_canisters = dapp_canisters.clone();
     let initial_token_distribution = initial_token_distribution.clone().map(|x| x.into());
     let swap_parameters = swap_parameters.clone().map(|x| x.into());
-    let governance_parameters = governance_parameters.map(|x| x.into());
+    let governance_parameters = governance_parameters.clone().map(|x| x.into());
 
     let logo = if omit_large_fields {
         None
@@ -407,6 +407,7 @@ fn convert_self_describing_value(
             api::SelfDescribingValue::Int(int)
         }
         pb::self_describing_value::Value::Null(_) => api::SelfDescribingValue::Null,
+        pb::self_describing_value::Value::Bool(v) => api::SelfDescribingValue::Bool(*v),
         pb::self_describing_value::Value::Array(v) => api::SelfDescribingValue::Array(
             v.values
                 .iter()

@@ -2,7 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
 
-package(default_visibility = ["//rs/dogecoin/ckdoge/test_utils:__subpackages__"])
+package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "ckdoge_minter_lib",
@@ -31,6 +31,11 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:sha2",
     ],
+)
+
+alias(
+    name = "minter",
+    actual = ":ckdoge_minter_lib",
 )
 
 filegroup(

@@ -29,6 +29,8 @@ pub struct Stream {
     pub messages_begin: u64,
     #[prost(message, repeated, tag = "2")]
     pub messages: ::prost::alloc::vec::Vec<StreamMessage>,
+    #[prost(uint64, tag = "4")]
+    pub signals_begin: u64,
     #[prost(uint64, tag = "5")]
     pub signals_end: u64,
     #[prost(message, repeated, tag = "8")]
@@ -58,8 +60,6 @@ pub struct Request {
     pub sender: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(uint64, tag = "3")]
     pub sender_reply_callback: u64,
-    #[prost(message, optional, tag = "4")]
-    pub payment: ::core::option::Option<Funds>,
     #[prost(string, tag = "5")]
     pub method_name: ::prost::alloc::string::String,
     #[prost(bytes = "vec", tag = "6")]
@@ -87,8 +87,6 @@ pub struct Response {
     pub respondent: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(uint64, tag = "3")]
     pub originator_reply_callback: u64,
-    #[prost(message, optional, tag = "4")]
-    pub refund: ::core::option::Option<Funds>,
     #[prost(message, optional, tag = "7")]
     pub cycles_refund: ::core::option::Option<Cycles>,
     /// If non-zero, this is a best-effort call.
