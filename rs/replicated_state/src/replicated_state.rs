@@ -31,7 +31,7 @@ use ic_types::{
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{
-        CallbackId, CanisterMessage, Ingress, MessageId, Refund, RequestOrResponse, Response,
+        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
     },
     time::CoarseTime,
 };
@@ -635,23 +635,6 @@ impl ReplicatedState {
             .map(|x| x.cost_schedule)
     }
 
-    /// Every round, the cost schedule flag is read from the registry and the
-    /// replicated state's flag is updated.
-    ///
-    /// Don't use this outside of tests or `execute_round`, or state may become
-    /// inconsistent.
-    pub fn set_own_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
-        let own_subnet_id = self.metadata.own_subnet_id;
-        if let Some(subnet_topology) = self
-            .metadata
-            .network_topology
-            .subnets
-            .get_mut(&own_subnet_id)
-        {
-            subnet_topology.cost_schedule = cost_schedule
-        }
-    }
-
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
         self.metadata
             .ingress_history
@@ -974,18 +957,14 @@ impl ReplicatedState {
 
     /// Extracts the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
-    pub fn pop_subnet_input(&mut self) -> Option<CanisterMessage> {
-        self.subnet_queues
-            .pop_input()
-            .map(subnet_input_into_canister_message)
+    pub fn pop_subnet_input(&mut self) -> Option<SubnetMessage> {
+        self.subnet_queues.pop_input().map(into_subnet_message)
     }
 
     /// Peeks the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
-    pub fn peek_subnet_input(&mut self) -> Option<CanisterMessage> {
-        self.subnet_queues
-            .peek_input()
-            .map(subnet_input_into_canister_message)
+    pub fn peek_subnet_input(&mut self) -> Option<SubnetMessage> {
+        self.subnet_queues.peek_input().map(into_subnet_message)
     }
 
     /// Skips the next inter-canister or ingress message from `self.subnet_queues`.
@@ -1634,15 +1613,15 @@ impl ReplicatedState {
 }
 
 /// Converts a `CanisterInput` popped from a subnet input queue into a
-/// `CanisterMessage`.
+/// `SubnetMessage`.
 ///
 /// As opposed to actual canister queues, subnet input queues should never hold
 /// any kind of response (because the management canister does not make any
 /// outbound calls as itself).
-fn subnet_input_into_canister_message(input: CanisterInput) -> CanisterMessage {
+fn into_subnet_message(input: CanisterInput) -> SubnetMessage {
     match input {
-        CanisterInput::Ingress(ingress) => CanisterMessage::Ingress(ingress),
-        CanisterInput::Request(request) => CanisterMessage::Request(request),
+        CanisterInput::Ingress(ingress) => SubnetMessage::Ingress(ingress),
+        CanisterInput::Request(request) => SubnetMessage::Request(request),
         CanisterInput::Response(_)
         | CanisterInput::DeadlineExpired(_)
         | CanisterInput::ResponseDropped(_) => {

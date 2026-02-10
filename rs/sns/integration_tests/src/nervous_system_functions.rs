@@ -12,7 +12,7 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_test_utils::itest_helpers::{
     SnsCanisters, SnsTestsInitPayloadBuilder, install_rust_canister_with_memory_allocation,
-    local_test_on_sns_subnet,
+    state_machine_test_on_sns_subnet,
 };
 
 /// Assert the proposal is accepted and executed.
@@ -33,7 +33,7 @@ async fn assert_proposal_executed(sns_canisters: &SnsCanisters<'_>, proposal_id:
 // Once this is fixed, we can remove the ignore flag.
 #[ignore]
 fn test_add_remove_and_execute_nervous_system_functions() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let alloc = Tokens::from_tokens(1000).unwrap();
 

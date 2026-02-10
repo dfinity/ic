@@ -67,7 +67,7 @@ pub fn heights_to_certify(state_manager: &impl StateManager) -> Vec<Height> {
     state_manager
         .list_state_hashes_to_certify()
         .iter()
-        .map(|p| p.0)
+        .map(|p| p.height)
         .collect()
 }
 
@@ -75,7 +75,13 @@ pub fn certify_height(state_manager: &impl StateManager, h: Height) -> Certifica
     let hash = state_manager
         .list_state_hashes_to_certify()
         .into_iter()
-        .find_map(|(height, hash)| if height == h { Some(hash) } else { None })
+        .find_map(|state_hash_metadata| {
+            if state_hash_metadata.height == h {
+                Some(state_hash_metadata.hash)
+            } else {
+                None
+            }
+        })
         .expect("no hash to certify");
 
     let certification = Certification {
