@@ -23,6 +23,7 @@ use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
+use ic_management_canister_types::TakeCanisterSnapshotArgs;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::{LogStream, create_agent};
@@ -31,7 +32,6 @@ use ic_system_test_driver::{
     util::{MessageCanister, block_on},
 };
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
-use ic_management_canister_types::TakeCanisterSnapshotArgs;
 use ic_utils::interfaces::ManagementCanister;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
@@ -180,7 +180,9 @@ pub fn upgrade(
             canister_id: can_id,
             replace_snapshot: None,
         };
-        mgr.take_canister_snapshot(&can_id, &snapshot_args).await.unwrap();
+        mgr.take_canister_snapshot(&can_id, &snapshot_args)
+            .await
+            .unwrap();
     });
 
     info!(logger, "Stopping faulty node {} ...", faulty_node.node_id);
