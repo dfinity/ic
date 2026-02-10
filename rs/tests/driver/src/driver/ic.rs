@@ -471,6 +471,7 @@ pub struct Subnet {
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
+    pub max_ingress_bytes_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
     #[serde(with = "humantime_serde")]
     pub unit_delay: Option<Duration>,
@@ -502,6 +503,7 @@ impl Subnet {
             required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
+            max_ingress_bytes_per_block: None,
             max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay: None,
@@ -752,6 +754,7 @@ impl Default for Subnet {
             required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
+            max_ingress_bytes_per_block: None,
             max_ingress_messages_per_block: None,
             max_block_payload_size: None,
             unit_delay: Some(Duration::from_millis(200)),

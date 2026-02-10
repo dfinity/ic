@@ -718,6 +718,7 @@ pub async fn submit_create_application_subnet_proposal(
         node_ids,
         subnet_id_override: None,
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block: config.max_ingress_bytes_per_block,
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,
         replica_version_id: replica_version.to_string(),

@@ -45,6 +45,10 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     pub max_ingress_messages_per_block: Option<u64>,
 
     #[clap(long)]
+    /// Maximum number of ingress bytes per block. This is a hard cap.
+    pub max_ingress_bytes_per_block: Option<u64>,
+
+    #[clap(long)]
     /// Maximum size in bytes ingress and xnet messages can occupy in a block.
     pub max_block_payload_size: Option<u64>,
 
@@ -286,6 +290,7 @@ impl ProposeToCreateSubnetCmd {
             subnet_id_override: self.subnet_id_override,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap_or_default(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap_or_default(),
+            max_ingress_bytes_per_block: self.max_ingress_bytes_per_block.unwrap_or_default(),
             max_block_payload_size: self.max_block_payload_size.unwrap_or_default(),
             replica_version_id: self
                 .replica_version_id
