@@ -931,10 +931,10 @@ impl SchedulerImpl {
         }
 
         for canister_id in canisters_to_uninstall {
-            let op = |mut canister, mut round_limits, state_time: Time| {
+            let op = |mut canister, round_limits, state_time: Time| {
                 let responses = uninstall_canister(
                     &mut canister,
-                    Some(&mut round_limits),
+                    None, /* we're at the end of a round so no need to update round limits */
                     state_time,
                     Arc::clone(&self.fd_factory),
                     &self.log,
