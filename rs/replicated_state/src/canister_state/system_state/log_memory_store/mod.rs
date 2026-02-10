@@ -260,7 +260,8 @@ impl Clone for LogMemoryStore {
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
         // header_cache is a transient cache and should not be compared.
-        self.maybe_page_map == other.maybe_page_map && self.delta_log_sizes == other.delta_log_sizes
+        self.maybe_page_map == other.maybe_page_map
+            && self.delta_log_sizes == other.delta_log_sizes
             && self.feature_flag == other.feature_flag
     }
 }
