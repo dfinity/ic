@@ -240,12 +240,6 @@ impl LogMemoryStore {
     }
 }
 
-impl Default for LogMemoryStore {
-    fn default() -> Self {
-        Self::new(FlagStatus::Disabled)
-    }
-}
-
 impl Clone for LogMemoryStore {
     fn clone(&self) -> Self {
         Self {
@@ -267,6 +261,7 @@ impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
         // header_cache is a transient cache and should not be compared.
         self.maybe_page_map == other.maybe_page_map && self.delta_log_sizes == other.delta_log_sizes
+            && self.feature_flag == other.feature_flag
     }
 }
 
