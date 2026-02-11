@@ -236,23 +236,6 @@ pub fn test_provisioning_write_access(env: TestEnv) {
     );
 }
 
-// TODO: would be nice but would need to do the first step (`Halt`) remotely to provision the write
-// access key and then do the rest locally.
-//
-// pub fn test_provisioning_write_access_local(env: TestEnv) {
-//     app_subnet_recovery_test(
-//         env,
-//         TestConfig {
-//             subnet_size: APP_NODES,
-//             upgrade: true,
-//             chain_key: false,
-//             corrupt_cup: false,
-//             local_recovery: true,
-//             provision_write_access: true,
-//         },
-//     );
-// }
-
 pub fn test_with_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(
         env,
