@@ -1,6 +1,11 @@
 pub mod deploy;
 
+pub use deploy::SshAuthMethod;
+
 use anyhow::{Context, Result, bail};
+use deterministic_ips::node_type::NodeType;
+use deterministic_ips::{DeploymentEnvironment, MacAddr6Ext};
+use macaddr::MacAddr6;
 use rexpect::session::PtySession;
 use rexpect::{ReadUntil, spawn};
 use std::net::Ipv6Addr;
@@ -12,6 +17,8 @@ pub struct BareMetalIpmiSession {
     session: PtySession,
     /// IPv6 address of the HostOS
     host_address: Ipv6Addr,
+    mgmt_mac: MacAddr6,
+    keep_alive_after_drop: bool,
 }
 
 impl BareMetalIpmiSession {
@@ -59,6 +66,8 @@ impl BareMetalIpmiSession {
                 host_address: host_ip
                     .parse()
                     .with_context(|| format!("Failed to parse Host IPv6 address {host_ip}"))?,
+                mgmt_mac: login_info.mgmt_mac,
+                keep_alive_after_drop: false,
             });
         }
 
@@ -119,6 +128,10 @@ impl BareMetalIpmiSession {
         self.host_address
     }
 
+    pub fn mgmt_mac(&self) -> MacAddr6 {
+        self.mgmt_mac
+    }
+
     /// Process ID of the ipmitool process that keeps the SOL session active
     pub fn process_id(&self) -> i32 {
         self.session.process.child_pid.as_raw()
@@ -140,10 +153,18 @@ impl BareMetalIpmiSession {
 
         Ok(())
     }
+
+    /// Keep the SOL session alive after dropping the BareMetalIpmiSession
+    pub fn keep_alive_after_drop(&mut self) {
+        self.keep_alive_after_drop = true;
+    }
 }
 
 impl Drop for BareMetalIpmiSession {
     fn drop(&mut self) {
+        if self.keep_alive_after_drop {
+            return;
+        }
         // Attempt to cleanly terminate the SOL session
         let _ = self.session.send("\n~.").inspect_err(|err| {
             eprintln!("Failed to send '~.' to terminate SOL session: {err}");
@@ -162,56 +183,50 @@ pub struct LoginInfo {
     host: String,
     username: String,
     password: String,
-    hostos_address: Ipv6Addr,
+    mgmt_mac: MacAddr6,
+    addr_prefix: String,
 }
 
 impl LoginInfo {
     pub fn hostos_address(&self) -> Ipv6Addr {
-        self.hostos_address
+        deterministic_ips::calculate_deterministic_mac(
+            &self.mgmt_mac,
+            DeploymentEnvironment::Testnet,
+            NodeType::HostOS,
+        )
+        .calculate_slaac(&self.addr_prefix)
+        .unwrap()
     }
 }
 
-pub fn parse_login_info_from_csv(data: &str) -> Result<LoginInfo> {
-    let mut parts = data.trim().split(',');
-
-    let host = parts
-        .next()
-        .context("Could not read host from file")?
-        .to_string();
-    let username = parts
-        .next()
-        .context("Could not read username from file")?
-        .to_string();
-    let password = parts
-        .next()
-        .context("Could not read password from file")?
-        .to_string();
-    let guest_ip = parts
-        .next()
-        .context("Could not read host ipv6 from file (expected as the attribute after password)")?
-        .parse()
-        .context("Failed to parse host IP address")?;
-    let host_ip = guestos_ipv6_to_hostos_ipv6(guest_ip);
+pub fn parse_login_info_from_ini(data: &str) -> Result<LoginInfo> {
+    let ini = ini::Ini::load_from_str(data)?;
+    let host_section = ini
+        .section(Some("host"))
+        .context("No [host] section in INI")?;
+    let host = host_section
+        .get("ipmi_addr")
+        .context("No ipmi_addr in [host] section")?;
+    let username = host_section
+        .get("username")
+        .context("No username in [host] section")?;
+    let password = host_section
+        .get("password")
+        .context("No password in [host] section")?;
+    let mgmt_mac = host_section
+        .get("mgmt_mac")
+        .context("No mgmt_mac in [host] section")?
+        .parse::<MacAddr6>()
+        .context("Failed to parse mgmt_mac")?;
+    let addr_prefix = host_section
+        .get("addr_prefix")
+        .context("No addr_prefix in [host] section")?;
 
     Ok(LoginInfo {
-        host,
-        username,
-        password,
-        hostos_address: host_ip,
+        host: host.to_string(),
+        username: username.to_string(),
+        password: password.to_string(),
+        mgmt_mac,
+        addr_prefix: addr_prefix.to_string(),
     })
-}
-
-fn guestos_ipv6_to_hostos_ipv6(guestos_ipv6: Ipv6Addr) -> Ipv6Addr {
-    // TODO: would be nice not to hardcode this but instead calculate it with deterministic_ips tool
-    let segments = guestos_ipv6.segments();
-    Ipv6Addr::new(
-        segments[0],
-        segments[1],
-        segments[2],
-        segments[3],
-        0x6800,
-        segments[5],
-        segments[6],
-        segments[7],
-    )
 }

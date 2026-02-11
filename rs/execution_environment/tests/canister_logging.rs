@@ -2,6 +2,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
+use ic_execution_environment::units::KIB;
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
@@ -20,15 +21,19 @@ use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
 
-const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024;
-const MAX_LOG_MESSAGE_LEN: usize = 4 * 1024;
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KIB as usize;
+const MAX_LOG_MESSAGE_LEN: usize = 4 * KIB as usize;
 const TIME_STEP: Duration = Duration::from_nanos(111_111);
 
 // Change limits in order not to duplicate prod values.
+// Setting the instruction limit per round equal to the instruction limit per slice
+// means that the actual instruction limit used by the scheduler is 1
+// and thus only a single slice is executed in a round.
+// The instruction limit per message must cover 5 slices.
 const B: u64 = 1_000_000_000;
 const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
-const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(20 * B);
-const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(B);
+const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(25 * B);
+const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(5 * B);
 
 const CANISTER_INIT_CYCLES: Cycles = Cycles::new(301_000_000_000_u128);
 

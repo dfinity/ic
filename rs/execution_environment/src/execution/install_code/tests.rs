@@ -25,6 +25,7 @@ use ic_types::{
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
+use more_asserts::assert_le;
 use std::mem::size_of;
 use std::sync::Arc;
 
@@ -1175,7 +1176,7 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
 
     let own_subnet_id = test.state().metadata.own_subnet_id;
     let other_subnet_id = subnet_test_id(13);
-    assert!(own_subnet_id != other_subnet_id);
+    assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
     Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
@@ -1420,8 +1421,9 @@ fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls:
     }
 
     // And ensure that no `InstallCodeCalls` are left over in the `SubnetCallContextManager`.
-    assert!(
-        subnet_call_context_manager.install_code_calls_len() == 0,
+    assert_eq!(
+        subnet_call_context_manager.install_code_calls_len(),
+        0,
         "InstallCodeCalls in SubnetCallContextManager without matching canister AbortedInstallCode task: {:?}",
         subnet_call_context_manager.remove_non_local_install_code_calls(|_| false)
     );
@@ -2070,7 +2072,7 @@ fn install_with_dts_correctly_updates_system_state() {
     let version_before = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     let history_entries_before = test
         .canister_state(canister_id)
@@ -2121,7 +2123,7 @@ fn install_with_dts_correctly_updates_system_state() {
     let version_after = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     assert_eq!(version_before + 1, version_after);
 
@@ -2195,7 +2197,7 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let version_before = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     let history_entries_before = test
         .canister_state(canister_id)
@@ -2248,7 +2250,7 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let version_after = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     assert_eq!(version_before + 1, version_after);
 
@@ -2312,9 +2314,9 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     let final_cycles = test.canister_state(canister_id).system_state.balance();
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
-    assert!(
-        charged_cycles - expected_cost <= Cycles::from(1_u64)
-            && expected_cost - charged_cycles <= Cycles::from(1_u64),
+    assert_le!(
+        charged_cycles.max(expected_cost) - charged_cycles.min(expected_cost),
+        Cycles::from(1_u64),
         "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }
@@ -2395,9 +2397,9 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     let final_cycles = test.canister_state(canister_id).system_state.balance();
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
-    assert!(
-        charged_cycles - expected_cost <= Cycles::from(1_u64)
-            && expected_cost - charged_cycles <= Cycles::from(1_u64),
+    assert_le!(
+        charged_cycles.max(expected_cost) - charged_cycles.min(expected_cost),
+        Cycles::from(1_u64),
         "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }

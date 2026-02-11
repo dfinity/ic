@@ -182,7 +182,7 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 			cmd.PrintErrln(GREEN + "Successfully synced dashboards to path " + icDashboardsDir)
 			icDashboardsDir = filepath.Join(icDashboardsDir, "bases", "apps", "ic-dashboards")
 			cmd.Println(GREEN + "Will use " + icDashboardsDir + " as a root for dashboards")
-			env = append(env, "IC_DASHBOARDS_DIR=" + icDashboardsDir)
+			env = append(env, "IC_DASHBOARDS_DIR="+icDashboardsDir)
 		}
 		if len(cfg.farmBaseUrl) > 0 {
 			command = append(command, "--farm-base-url="+cfg.farmBaseUrl)

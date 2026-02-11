@@ -64,8 +64,7 @@ mod idkg_gen_dealing_encryption_key_pair {
                 .expect("error retrieving public keys")
                 .idkg_dealing_encryption_public_key
                 .expect("missing I-DKG public key");
-            let key_id = KeyId::try_from(&generated_public_key)
-            .expect("valid key ID");
+            let key_id = KeyId::from(&generated_public_key);
 
             prop_assert_eq!(generated_public_key.curve_type(), EccCurveType::K256);
             prop_assert_eq!(idkg_dealing_encryption_pk_to_proto(generated_public_key), stored_public_key);
@@ -381,7 +380,7 @@ mod idkg_retain_active_keys {
         );
         assert!(
             vault
-                .sks_contains(KeyId::try_from(&public_key).expect("invalid key ID"))
+                .sks_contains(KeyId::from(&public_key))
                 .expect("error reading SKS")
         );
     }
@@ -434,7 +433,7 @@ mod idkg_retain_active_keys {
             .expect("error retaining active IDKG keys");
 
         for (i, public_key) in rotated_public_keys.iter().enumerate() {
-            let key_id = KeyId::try_from(public_key).expect("invalid key id");
+            let key_id = KeyId::from(public_key);
             if i < oldest_public_key_index {
                 assert!(!vault.sks_contains(key_id).expect("error reading SKS"));
             } else {
@@ -1328,9 +1327,7 @@ mod idkg_load_transcript {
             let pk = vault
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("failed to generate key pair");
-            let key_id = self.key_id.unwrap_or_else(|| {
-                KeyId::try_from(&pk).expect("failed to generate the key id for the MEGA pubkey")
-            });
+            let key_id = self.key_id.unwrap_or_else(|| KeyId::from(&pk));
             let pk_proto = idkg_dealing_encryption_pk_to_proto(pk.clone());
             let (dealing_bytes, internal_transcript) =
                 self.dealing_bytes_and_internal_transcript(pk_proto, &vault);
@@ -1714,9 +1711,7 @@ mod idkg_load_transcript_with_openings {
             let pk = vault
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("failed to generate key pair");
-            let key_id = self.key_id.unwrap_or_else(|| {
-                KeyId::try_from(&pk).expect("failed to generate the key id for the MEGA pubkey")
-            });
+            let key_id = self.key_id.unwrap_or_else(|| KeyId::from(&pk));
             let pk_proto = idkg_dealing_encryption_pk_to_proto(pk.clone());
             let (dealing_bytes, internal_transcript) =
                 self.dealing_bytes_and_internal_transcript(pk_proto, &vault);
@@ -1995,11 +1990,10 @@ mod idkg_open_dealing {
                 .expect("failed to generate key pair");
 
             let mut mnsks = MockSecretKeyStore::new();
-            mnsks.expect_get().times(1).return_once(move |_key_id| {
-                tmp_vault.sks_read_lock().get(
-                    &KeyId::try_from(&pk).expect("failed to convert a public key to the KeyId"),
-                )
-            });
+            mnsks
+                .expect_get()
+                .times(1)
+                .return_once(move |_key_id| tmp_vault.sks_read_lock().get(&KeyId::from(&pk)));
 
             Box::new(
                 LocalCspVault::builder_for_test()
@@ -2043,8 +2037,7 @@ mod idkg_open_dealing {
             let pk = vault
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("failed to generate key pair");
-            let key_id =
-                KeyId::try_from(&pk).expect("failed to generate the key id for the MEGA pubkey");
+            let key_id = KeyId::from(&pk);
             let pk_proto = idkg_dealing_encryption_pk_to_proto(pk.clone());
             let dealing_bytes = self.dealing_bytes(pk_proto, &vault);
 

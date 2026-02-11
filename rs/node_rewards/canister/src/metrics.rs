@@ -109,14 +109,9 @@ where
         for (subnet_id, call_result) in subnets_metrics {
             match call_result {
                 Ok(subnet_update) => {
-                    if subnet_update.is_empty() {
-                        ic_cdk::println!("No updates for subnet {}", subnet_id);
-                    } else {
-                        // Update the last timestamp for this subnet.
-                        let last_timestamp = subnet_update
-                            .last()
-                            .map(|metrics| metrics.timestamp_nanos)
-                            .expect("Not empty");
+                    if let Some(last_timestamp) =
+                        subnet_update.last().map(|metrics| metrics.timestamp_nanos)
+                    {
                         self.last_timestamp_per_subnet
                             .borrow_mut()
                             .insert(subnet_id.into(), last_timestamp);
@@ -147,6 +142,8 @@ where
                             subnet_id,
                             date
                         );
+                    } else {
+                        ic_cdk::println!("No updates for subnet {}", subnet_id);
                     }
                 }
                 Err(e) => {

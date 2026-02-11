@@ -13,6 +13,9 @@ pub struct InitArgs {
     /// a testing key for testnet and mainnet
     pub ecdsa_key_name: String,
 
+    /// Minimum amount of dogecoin that can be deposited
+    pub deposit_doge_min_amount: Option<u64>,
+
     /// Minimum amount of dogecoin that can be retrieved
     pub retrieve_doge_min_amount: u64,
 
@@ -49,16 +52,18 @@ pub struct InitArgs {
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum Network {
     Mainnet,
-    Testnet,
     Regtest,
 }
 
-impl From<ic_ckbtc_minter::Network> for Network {
-    fn from(network: ic_ckbtc_minter::Network) -> Self {
+impl TryFrom<ic_ckbtc_minter::Network> for Network {
+    type Error = String;
+    fn try_from(network: ic_ckbtc_minter::Network) -> Result<Self, Self::Error> {
         match network {
-            ic_ckbtc_minter::Network::Mainnet => Self::Mainnet,
-            ic_ckbtc_minter::Network::Testnet => Self::Testnet,
-            ic_ckbtc_minter::Network::Regtest => Self::Regtest,
+            ic_ckbtc_minter::Network::Mainnet => Ok(Self::Mainnet),
+            ic_ckbtc_minter::Network::Testnet => {
+                Err(format!("Network {network} is not supported!"))
+            }
+            ic_ckbtc_minter::Network::Regtest => Ok(Self::Regtest),
         }
     }
 }
@@ -67,7 +72,6 @@ impl From<Network> for ic_ckbtc_minter::Network {
     fn from(network: Network) -> Self {
         match network {
             Network::Mainnet => ic_ckbtc_minter::Network::Mainnet,
-            Network::Testnet => ic_ckbtc_minter::Network::Testnet,
             Network::Regtest => ic_ckbtc_minter::Network::Regtest,
         }
     }
@@ -77,7 +81,6 @@ impl std::fmt::Display for Network {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Mainnet => write!(f, "mainnet"),
-            Self::Testnet => write!(f, "testnet"),
             Self::Regtest => write!(f, "regtest"),
         }
     }
@@ -88,6 +91,7 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
         InitArgs {
             doge_network,
             ecdsa_key_name,
+            deposit_doge_min_amount,
             retrieve_doge_min_amount,
             ledger_id,
             max_time_in_queue_nanos,
@@ -101,6 +105,7 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
         CkbtcMinterInitArgs {
             btc_network: ic_ckbtc_minter::Network::from(doge_network),
             ecdsa_key_name,
+            deposit_btc_min_amount: deposit_doge_min_amount,
             retrieve_btc_min_amount: retrieve_doge_min_amount,
             ledger_id: ledger_id
                 .as_slice()
@@ -123,11 +128,13 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
 }
 
 #[allow(deprecated)]
-impl From<CkbtcMinterInitArgs> for InitArgs {
-    fn from(
+impl TryFrom<CkbtcMinterInitArgs> for InitArgs {
+    type Error = String;
+    fn try_from(
         CkbtcMinterInitArgs {
             btc_network,
             ecdsa_key_name,
+            deposit_btc_min_amount,
             retrieve_btc_min_amount,
             ledger_id,
             max_time_in_queue_nanos,
@@ -141,10 +148,11 @@ impl From<CkbtcMinterInitArgs> for InitArgs {
             utxo_consolidation_threshold,
             max_num_inputs_in_transaction,
         }: CkbtcMinterInitArgs,
-    ) -> Self {
-        InitArgs {
-            doge_network: Network::from(btc_network),
+    ) -> Result<Self, Self::Error> {
+        Ok(InitArgs {
+            doge_network: Network::try_from(btc_network)?,
             ecdsa_key_name,
+            deposit_doge_min_amount: deposit_btc_min_amount,
             retrieve_doge_min_amount: retrieve_btc_min_amount,
             ledger_id: ledger_id.into(),
             max_time_in_queue_nanos,
@@ -153,6 +161,6 @@ impl From<CkbtcMinterInitArgs> for InitArgs {
             get_utxos_cache_expiration_seconds,
             utxo_consolidation_threshold,
             max_num_inputs_in_transaction,
-        }
+        })
     }
 }

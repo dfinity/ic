@@ -3,7 +3,6 @@
 mod errors;
 pub use errors::*;
 
-use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::keygen::utils::{
     MEGaPublicKeyFromProtoError, mega_public_key_from_proto,
 };
@@ -21,10 +20,6 @@ use std::convert::TryFrom;
 
 #[cfg(test)]
 mod tests;
-
-pub fn key_id_from_mega_public_key_or_panic(public_key: &MEGaPublicKey) -> KeyId {
-    KeyId::try_from(public_key).unwrap_or_else(|err| panic!("{}", err))
-}
 
 /// Query the registry for the MEGa public key of `node_id` receiver.
 pub fn retrieve_mega_public_key_from_registry(

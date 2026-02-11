@@ -6,23 +6,23 @@ rust_library(
     name = "device",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_device",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
     deps = [
         # Keep sorted.
         "//rs/ic_os/build_tools/partition_tools",
         "@crate_index//:anyhow",
-        "@crate_index//:devicemapper",
         "@crate_index//:gpt",
-        "@crate_index//:loopdev_3",
         "@crate_index//:nix",
         "@crate_index//:rand",
-        "@crate_index//:sys-mount",
         "@crate_index//:tempfile",
-        "@crate_index//:tokio",
         "@crate_index//:uuid",
-    ],
+    ] + select({
+        "@platforms//os:linux": [
+            "@crate_index//:devicemapper",
+            "@crate_index//:loopdev_3",
+            "@crate_index//:sys-mount",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 rust_test(

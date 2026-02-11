@@ -10,8 +10,7 @@ use prometheus::{
 };
 use std::ops::Add;
 use std::time::Instant;
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use strum::{AsRefStr, EnumIter, IntoEnumIterator};
 #[cfg(test)]
 use strum_macros::IntoStaticStr;
 
@@ -241,15 +240,12 @@ impl CryptoMetrics {
         start_time: Option<Instant>,
     ) {
         if let Some(metrics) = &self.metrics {
-            let service_type_string = &format!("{service_type}");
-            let message_type_string = &format!("{message_type}");
-            let domain_string = &format!("{domain}");
             metrics
                 .crypto_vault_message_sizes
                 .with_label_values(&[
-                    service_type_string,
-                    message_type_string,
-                    domain_string,
+                    service_type.as_ref(),
+                    message_type.as_ref(),
+                    domain.as_ref(),
                     method_name,
                 ])
                 .observe(message_size as f64);
@@ -258,9 +254,9 @@ impl CryptoMetrics {
                 metrics
                     .crypto_vault_message_serialization_duration_seconds
                     .with_label_values(&[
-                        service_type_string,
-                        message_type_string,
-                        domain_string,
+                        service_type.as_ref(),
+                        message_type.as_ref(),
+                        domain.as_ref(),
                         method_name,
                     ])
                     .observe(start_time.elapsed().as_secs_f64());
@@ -390,7 +386,9 @@ pub enum KeyType {
     IdkgDealingEncryptionLocal,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display, AsRefStr,
+)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsDomain {
@@ -448,7 +446,9 @@ pub enum KeyRotationResult {
     PublicKeyNotFound,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display, AsRefStr,
+)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum ServiceType {
@@ -456,7 +456,9 @@ pub enum ServiceType {
     Server,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display, AsRefStr,
+)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MessageType {

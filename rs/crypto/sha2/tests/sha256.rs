@@ -1,4 +1,4 @@
-use ic_crypto_sha2::Sha256;
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use std::hash::Hash;
 
 const EXPECTED_DIGEST: [u8; 32] = [
@@ -87,4 +87,68 @@ fn should_act_as_std_hash_hasher() {
 fn should_panic_on_calling_finish_of_std_hash_hasher() {
     use std::hash::Hasher;
     let _hash: u64 = Hasher::finish(&Sha256::new());
+}
+
+#[test]
+fn test_sha256_with_nonempty_context_and_nonempty_input() {
+    let context = DomainSeparationContext::new("ctx");
+    let data = b"data";
+
+    let mut state = Sha256::new_with_context(&context);
+    state.write(data);
+    let digest = state.finish();
+
+    // macOS/Linux: $ echo -n '\x03ctxdata' | shasum -a 256
+    assert_eq!(
+        hex::encode(digest),
+        "52a002f4fa3158b83febff73171786c5dc554d20ef87ba69287e8de433efc28d"
+    );
+}
+
+#[test]
+fn test_sha256_with_empty_context_and_empty_data() {
+    let context = DomainSeparationContext::new("");
+    let data = b"";
+
+    let mut state = Sha256::new_with_context(&context);
+    state.write(data);
+    let digest = state.finish();
+
+    // macOS/Linux: $ echo -n '\0' | shasum -a 256
+    assert_eq!(
+        hex::encode(digest),
+        "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+    );
+}
+
+#[test]
+fn test_sha256_with_nonempty_context_and_empty_input() {
+    let context = DomainSeparationContext::new("ctx");
+    let data = b"";
+
+    let mut state = Sha256::new_with_context(&context);
+    state.write(data);
+    let digest = state.finish();
+
+    // macOS/Linux: $ echo -n '\x03ctx' | shasum -a 256
+    assert_eq!(
+        hex::encode(digest),
+        "39637aa6f13395b5c7707febdbe54390e0288fe0ba0168a0ef2f5454c6ae6319"
+    );
+}
+
+#[test]
+fn test_sha256_with_empty_context_and_nonempty_input() {
+    let context = DomainSeparationContext::new("");
+    let data = b"data";
+
+    let mut state = Sha256::new_with_context(&context);
+    state.write(data);
+    let digest = state.finish();
+
+    // macOS/Linux: $ echo -n '\x00data' | shasum -a 256
+    assert_eq!(
+        hex::encode(digest),
+        "0d3aed023148ffd2a259fbd0cdc7fb3cf975658760d3775b82af6f90aacc2dfc"
+    );
 }

@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::execution::common::log_dirty_pages;
+use crate::execution::common::{log_dirty_pages, validate_controller};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::{
@@ -24,7 +24,7 @@ use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time, funds::Cycles,
+    CanisterLog, CanisterTimer, Cycles, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
 use ic_wasm_types::WasmHash;
@@ -161,7 +161,7 @@ impl InstallCodeHelper {
 
     pub fn bump_canister_version(&mut self) {
         self.steps.push(InstallCodeStep::BumpCanisterVersion);
-        self.canister.system_state.canister_version += 1;
+        self.canister.system_state.bump_canister_version();
     }
 
     pub fn add_canister_change(
@@ -487,7 +487,7 @@ impl InstallCodeHelper {
         self.steps.push(InstallCodeStep::ValidateInput);
 
         let config = &original.config;
-        let id = self.canister.system_state.canister_id;
+        let id = self.canister.canister_id();
 
         validate_controller(&self.canister, &original.sender)?;
 
@@ -810,20 +810,6 @@ pub(crate) struct OriginalContext {
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
     pub wasm_execution_mode: WasmExecutionMode,
-}
-
-pub(crate) fn validate_controller(
-    canister: &CanisterState,
-    controller: &PrincipalId,
-) -> Result<(), CanisterManagerError> {
-    if !canister.controllers().contains(controller) {
-        return Err(CanisterManagerError::CanisterInvalidController {
-            canister_id: canister.canister_id(),
-            controllers_expected: canister.system_state.controllers.clone(),
-            controller_provided: *controller,
-        });
-    }
-    Ok(())
 }
 
 pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {

@@ -1,11 +1,10 @@
-load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "query_stats_basic",
-    env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -19,7 +18,6 @@ system_test(
 
 system_test(
     name = "query_stats_below_threshold",
-    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,  # flakiness rate of 1.22% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
@@ -34,7 +32,6 @@ system_test(
 
 system_test(
     name = "query_stats_above_threshold",
-    env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -48,7 +45,6 @@ system_test(
 
 system_test(
     name = "query_stats_https_outcalls",
-    env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

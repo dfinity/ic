@@ -1,11 +1,12 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
-use attestation::attestation_package::generate_attestation_package;
-use attestation::custom_data::DerEncodedCustomData;
+use attestation::attestation_package::{
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+};
 use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
-use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
+use guest_upgrade_shared::STORE_DEVICE;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_client::DiskEncryptionKeyExchangeServiceClient;
 use guest_upgrade_shared::api::{GetDiskEncryptionKeyRequest, SignalStatusRequest};
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
@@ -16,13 +17,12 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
-use ic_sev::guest::firmware::SevGuestFirmware;
 use rcgen::CertifiedKey;
 use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
-use sev::firmware::guest::AttestationReport;
-use sev::parser::ByteParser;
+use sev_guest::attestation_package::generate_attestation_package;
+use sev_guest::firmware::SevGuestFirmware;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -101,13 +101,13 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // (We still have to call signal_status, since the server is expecting us to signal
         // success)
         let can_open_store = (self.can_open_store)(
-            Path::new("/dev/vda10"),
+            Path::new(STORE_DEVICE),
             &self.previous_key_path,
             self.sev_firmware.as_mut(),
         )?;
 
         let retrieve_status = if can_open_store {
-            println!("/dev/vda10 can be opened with our derived key, no need to run exchange");
+            println!("{STORE_DEVICE} can be opened with our derived key, no need to run exchange");
             Ok(())
         } else {
             self.retrieve_disk_encryption_key(
@@ -135,12 +135,12 @@ impl DiskEncryptionKeyExchangeClientAgent {
         my_public_key_der: &[u8],
         server_public_key_der: &[u8],
     ) -> Result<()> {
-        let custom_data = DerEncodedCustomData(GetDiskEncryptionKeyTokenCustomData {
+        let custom_data = GetDiskEncryptionKeyTokenCustomData {
             client_tls_public_key: OctetStringRef::new(my_public_key_der)
                 .expect("Could not encode public key"),
             server_tls_public_key: OctetStringRef::new(server_public_key_der)
                 .expect("Could not encode server public key"),
-        });
+        };
         let my_attestation_package = generate_attestation_package(
             self.sev_firmware.as_mut(),
             self.guestos_config
@@ -151,17 +151,11 @@ impl DiskEncryptionKeyExchangeClientAgent {
         )
         .context("Failed to generate attestation package")?;
 
-        let my_attestation_report = AttestationReport::from_bytes(
-            my_attestation_package
-                .attestation_report
-                .as_ref()
-                .context("My attestation report is missing")?,
-        )
-        .context("Failed to parse my attestation report")?;
+        let my_attestation_report = *my_attestation_package.attestation_report();
 
         let get_key_response = upgrade_service_client
             .get_disk_encryption_key(GetDiskEncryptionKeyRequest {
-                sev_attestation_package: Some(my_attestation_package),
+                sev_attestation_package: Some(my_attestation_package.into()),
             })
             .await
             .context("Call to get_disk_encryption_key failed")?
@@ -179,13 +173,13 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // trusted source. Without this check, an attacker could start with a malicious GuestOS,
         // inject malicious files into the data partition then trigger an upgrade to a
         // legit version. The malicious data would remain on the data partition.
-        verify_attestation_package(
-            &server_attestation_package,
+        ParsedSevAttestationPackage::parse(
+            server_attestation_package,
             self.sev_root_certificate_verification,
-            &blessed_measurements,
-            &custom_data,
-            Some(my_attestation_report.chip_id.as_ref()),
         )
+        .verify_measurement(&blessed_measurements)
+        .verify_custom_data(&custom_data)
+        .verify_chip_id(&[my_attestation_report.chip_id])
         .context("Server attestation report verification failed")?;
 
         let disk_encryption_key = get_key_response

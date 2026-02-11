@@ -1,6 +1,6 @@
 #![allow(clippy::all)]
 use candid::{Int, Nat};
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
 use std::collections::{BTreeMap, HashMap};
@@ -405,6 +405,16 @@ pub struct Motion {
     /// The text of the motion. Maximum 100kib.
     pub motion_text: String,
 }
+/// Take a snapshot of the state of a canister.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct TakeCanisterSnapshot {
+    /// The canister being snapshotted.
+    pub canister_id: Option<PrincipalId>,
+    /// If set, the existing snapshot with this content will be replaced.
+    pub replace_snapshot: Option<Vec<u8>>,
+}
 /// For all Neurons controlled by the given principals, set their
 /// KYC status to `kyc_verified=true`.
 #[derive(
@@ -641,6 +651,10 @@ pub mod proposal {
         /// back to a healthy state, to recover from some kind of disaster, like
         /// a boot loop, or something like that.
         BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
+        /// Take a canister snapshot.
+        TakeCanisterSnapshot(super::TakeCanisterSnapshot),
+        /// Load a canister snapshot.
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1399,6 +1413,8 @@ pub enum ProposalActionRequest {
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
+    TakeCanisterSnapshot(TakeCanisterSnapshot),
+    LoadCanisterSnapshot(LoadCanisterSnapshot),
 }
 
 #[derive(
@@ -2432,6 +2448,7 @@ pub mod create_service_nervous_system {
         pub neuron_maximum_age_for_age_bonus: Option<::ic_nervous_system_proto::pb::v1::Duration>,
         pub neuron_maximum_age_bonus: Option<::ic_nervous_system_proto::pb::v1::Percentage>,
         pub voting_reward_parameters: Option<governance_parameters::VotingRewardParameters>,
+        pub custom_proposal_criticality: Option<governance_parameters::CustomProposalCriticality>,
     }
     /// Nested message and enum types in `GovernanceParameters`.
     pub mod governance_parameters {
@@ -2449,6 +2466,18 @@ pub mod create_service_nervous_system {
             pub final_reward_rate: Option<::ic_nervous_system_proto::pb::v1::Percentage>,
             pub reward_rate_transition_duration:
                 Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            Clone,
+            PartialEq,
+            Debug,
+            Default,
+        )]
+        pub struct CustomProposalCriticality {
+            pub additional_critical_native_action_ids: Option<Vec<u64>>,
         }
     }
 }
@@ -2708,6 +2737,18 @@ pub struct GuestLaunchMeasurement {
 )]
 pub struct GuestLaunchMeasurementMetadata {
     pub kernel_cmdline: Option<String>,
+}
+
+/// Loads a snapshot of the canister.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct LoadCanisterSnapshot {
+    /// The ID of the canister to load the snapshot into.
+    pub canister_id: Option<PrincipalId>,
+    /// The ID of the snapshot to load.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub snapshot_id: Option<Vec<u8>>,
 }
 
 /// This represents the whole NNS governance system. It contains all
@@ -3404,143 +3445,6 @@ pub mod settle_neurons_fund_participation_response {
     pub enum Result {
         Err(super::GovernanceError),
         Ok(Ok),
-    }
-}
-/// Audit events in order to leave an audit trail for certain operations.
-#[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-)]
-pub struct AuditEvent {
-    /// The timestamp of the event.
-    pub timestamp_seconds: u64,
-    pub payload: Option<audit_event::Payload>,
-}
-/// Nested message and enum types in `AuditEvent`.
-pub mod audit_event {
-    #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-    )]
-    pub struct ResetAging {
-        /// The neuron id whose aging was reset.
-        pub neuron_id: u64,
-        /// The aging_since_timestamp_seconds before reset.
-        pub previous_aging_since_timestamp_seconds: u64,
-        /// The aging_since_timestamp_seconds after reset.
-        pub new_aging_since_timestamp_seconds: u64,
-        /// Neuron's stake at the time of reset.
-        pub neuron_stake_e8s: u64,
-        /// Neuron's dissolve state at the time of reset.
-        pub neuron_dissolve_state: Option<reset_aging::NeuronDissolveState>,
-    }
-    /// Nested message and enum types in `ResetAging`.
-    pub mod reset_aging {
-        /// Neuron's dissolve state at the time of reset.
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug,
-        )]
-        pub enum NeuronDissolveState {
-            WhenDissolvedTimestampSeconds(u64),
-            DissolveDelaySeconds(u64),
-        }
-    }
-    #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-    )]
-    pub struct RestoreAging {
-        /// The neuron id whose aging was restored.
-        pub neuron_id: Option<u64>,
-        /// The aging_since_timestamp_seconds before restore.
-        pub previous_aging_since_timestamp_seconds: Option<u64>,
-        /// The aging_since_timestamp_seconds after restore.
-        pub new_aging_since_timestamp_seconds: Option<u64>,
-        /// Neuron's stake at the time of restore.
-        pub neuron_stake_e8s: Option<u64>,
-        /// Neuron's dissolve state at the time of restore.
-        pub neuron_dissolve_state: Option<restore_aging::NeuronDissolveState>,
-    }
-    /// Nested message and enum types in `RestoreAging`.
-    pub mod restore_aging {
-        /// Neuron's dissolve state at the time of restore.
-        #[derive(
-            candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug,
-        )]
-        pub enum NeuronDissolveState {
-            WhenDissolvedTimestampSeconds(u64),
-            DissolveDelaySeconds(u64),
-        }
-    }
-    #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-    )]
-    pub struct NormalizeDissolveStateAndAge {
-        /// The neuron id whose dissolve state and age were normalized.
-        pub neuron_id: Option<u64>,
-        /// Which legacy case the neuron falls into.
-        pub neuron_legacy_case: i32,
-        /// Previous when_dissolved_timestamp_seconds if the neuron was dissolving or dissolved.
-        pub previous_when_dissolved_timestamp_seconds: Option<u64>,
-        /// Previous aging_since_timestamp_seconds.
-        pub previous_aging_since_timestamp_seconds: Option<u64>,
-    }
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-    )]
-    #[repr(i32)]
-    pub enum NeuronLegacyCase {
-        Unspecified = 0,
-        /// Neuron is dissolving or dissolved but with a non-zero age.
-        DissolvingOrDissolved = 1,
-        /// Neuron is dissolved with DissolveDelaySeconds(0).
-        Dissolved = 2,
-        /// Neuron has a None dissolve state.
-        NoneDissolveState = 3,
-    }
-    impl NeuronLegacyCase {
-        /// String value of the enum field names used in the ProtoBuf definition.
-        ///
-        /// The values are not transformed in any way and thus are considered stable
-        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-        pub fn as_str_name(&self) -> &'static str {
-            match self {
-                NeuronLegacyCase::Unspecified => "NEURON_LEGACY_CASE_UNSPECIFIED",
-                NeuronLegacyCase::DissolvingOrDissolved => {
-                    "NEURON_LEGACY_CASE_DISSOLVING_OR_DISSOLVED"
-                }
-                NeuronLegacyCase::Dissolved => "NEURON_LEGACY_CASE_DISSOLVED",
-                NeuronLegacyCase::NoneDissolveState => "NEURON_LEGACY_CASE_NONE_DISSOLVE_STATE",
-            }
-        }
-        /// Creates an enum from field names used in the ProtoBuf definition.
-        pub fn from_str_name(value: &str) -> Option<Self> {
-            match value {
-                "NEURON_LEGACY_CASE_UNSPECIFIED" => Some(Self::Unspecified),
-                "NEURON_LEGACY_CASE_DISSOLVING_OR_DISSOLVED" => Some(Self::DissolvingOrDissolved),
-                "NEURON_LEGACY_CASE_DISSOLVED" => Some(Self::Dissolved),
-                "NEURON_LEGACY_CASE_NONE_DISSOLVE_STATE" => Some(Self::NoneDissolveState),
-                _ => None,
-            }
-        }
-    }
-    #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug,
-    )]
-    pub enum Payload {
-        /// Reset aging timestamps (<https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26>).
-        ResetAging(ResetAging),
-        /// Restore aging timestamp that were incorrectly reset (<https://forum.dfinity.org/t/restore-neuron-age-in-proposal-129394/29840>).
-        RestoreAging(RestoreAging),
-        /// Normalize neuron dissolve state and age (<https://forum.dfinity.org/t/simplify-neuron-state-age/30527>)
-        NormalizeDissolveStateAndAge(NormalizeDissolveStateAndAge),
     }
 }
 /// The summary of the restore aging event.
@@ -4567,8 +4471,58 @@ pub enum SelfDescribingValue {
     Text(String),
     Nat(Nat),
     Int(Int),
+    Null,
     Array(Vec<SelfDescribingValue>),
     Map(HashMap<String, SelfDescribingValue>),
+    Bool(bool),
+}
+
+impl From<String> for SelfDescribingValue {
+    fn from(value: String) -> Self {
+        SelfDescribingValue::Text(value)
+    }
+}
+
+impl From<&str> for SelfDescribingValue {
+    fn from(value: &str) -> Self {
+        SelfDescribingValue::Text(value.to_string())
+    }
+}
+
+impl From<u64> for SelfDescribingValue {
+    fn from(value: u64) -> Self {
+        SelfDescribingValue::Nat(Nat::from(value))
+    }
+}
+
+impl From<u32> for SelfDescribingValue {
+    fn from(value: u32) -> Self {
+        SelfDescribingValue::Nat(Nat::from(value))
+    }
+}
+
+impl From<Vec<u8>> for SelfDescribingValue {
+    fn from(value: Vec<u8>) -> Self {
+        SelfDescribingValue::Blob(value)
+    }
+}
+
+impl From<PrincipalId> for SelfDescribingValue {
+    fn from(value: PrincipalId) -> Self {
+        SelfDescribingValue::Text(value.to_string())
+    }
+}
+
+impl From<CanisterId> for SelfDescribingValue {
+    fn from(value: CanisterId) -> Self {
+        SelfDescribingValue::Text(value.to_string())
+    }
+}
+
+impl From<bool> for SelfDescribingValue {
+    fn from(value: bool) -> Self {
+        SelfDescribingValue::Bool(value)
+    }
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]

@@ -1,11 +1,11 @@
 use crate::service::DiskEncryptionKeyExchangeServiceImpl;
+use attestation::attestation_package::SevRootCertificateVerification;
 use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
-use attestation::verification::SevRootCertificateVerification;
 use config_types::TrustedExecutionEnvironmentConfig;
 use guest_upgrade_shared::DEFAULT_SERVER_PORT;
 use ic_interfaces_registry::RegistryClient;
-use ic_sev::guest::firmware::SevGuestFirmware;
 use server::DiskEncryptionKeyExchangeServer;
+use sev_guest::firmware::SevGuestFirmware;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;

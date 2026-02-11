@@ -68,15 +68,21 @@ pub(crate) fn check_replica_version_invariants(
         "Blessed an empty version ID."
     );
 
-    // Check whether release package URLs (iso image) and corresponding hash is well-formed.
-    // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
     for version in blessed_set {
         let r = get_replica_version_record(snapshot, version);
+
+        // Check whether release package URLs (update image) and corresponding hash are well-formed.
+        // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
         assert_valid_urls_and_hash(
             &r.release_package_urls,
             &r.release_package_sha256_hex,
             false, // allow_file_url
         );
+
+        // Check that all measured versions are valid
+        if let Some(Err(defects)) = r.guest_launch_measurements.map(|v| v.validate()) {
+            panic!("guest_launch_measurements are not valid. Defects: {defects:?}");
+        }
     }
 
     Ok(())
@@ -259,7 +265,7 @@ mod tests {
             release_package_urls: urls,
             guest_launch_measurements: Some(GuestLaunchMeasurements {
                 guest_launch_measurements: vec![GuestLaunchMeasurement {
-                    measurement: vec![0x01, 0x02, 0x03],
+                    measurement: vec![0x42; 48],
                     metadata: Some(GuestLaunchMeasurementMetadata {
                         kernel_cmdline: Some("foo=bar".to_string()),
                     }),
@@ -294,6 +300,25 @@ mod tests {
     #[should_panic(expected = "Hash contains at least one invalid character")]
     fn panic_when_hash_is_invalid() {
         check_replica_version("XYZ", vec![MOCK_URL.into()]);
+    }
+
+    #[test]
+    #[should_panic(expected = "guest_launch_measurements must not be empty")]
+    fn panic_when_measurements_are_empty() {
+        let registry = invariant_compliant_registry(0);
+
+        let key = make_replica_version_key(ReplicaVersion::default());
+        let value = ReplicaVersionRecord {
+            release_package_sha256_hex: MOCK_HASH.into(),
+            release_package_urls: vec![MOCK_URL.into()],
+            guest_launch_measurements: Some(GuestLaunchMeasurements {
+                guest_launch_measurements: vec![],
+            }),
+        }
+        .encode_to_vec();
+
+        let mutation = vec![upsert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
     }
 
     #[test]

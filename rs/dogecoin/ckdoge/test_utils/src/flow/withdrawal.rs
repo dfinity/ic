@@ -5,12 +5,11 @@ use crate::{Setup, into_outpoint, parse_dogecoin_address};
 use assert_matches::assert_matches;
 use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
-use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
 use ic_ckdoge_minter::event::RetrieveDogeRequest;
 use ic_ckdoge_minter::fees::DogecoinFeeEstimator;
 use ic_ckdoge_minter::{
-    BurnMemo, MIN_RESUBMISSION_DELAY, Txid, WithdrawalReimbursementReason,
+    BurnMemo, MIN_RESUBMISSION_DELAY, Txid, Utxo, WithdrawalReimbursementReason,
     address::DogecoinAddress,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
@@ -165,7 +164,10 @@ where
 
         let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
 
-        assert_eq!(balance_before - balance_after, self.withdrawal_amount);
+        assert_eq!(
+            balance_before - balance_after,
+            self.withdrawal_amount as u128
+        );
 
         DogecoinWithdrawalTransactionFlow {
             setup: self.setup,
@@ -209,15 +211,20 @@ impl<S> DogecoinWithdrawalTransactionFlow<S>
 where
     S: AsRef<Setup>,
 {
-    pub fn dogecoin_await_transaction(self) -> WithdrawalFlowEnd<S> {
+    pub fn dogecoin_await_transaction_in_mempool(self) -> WithdrawalFlowEnd<S> {
         let minter = self.setup.as_ref().minter();
-        let txid = minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index);
-        let mut mempool = self.setup.as_ref().dogecoin().mempool();
-        let tx = mempool
-            .remove(&txid)
-            .expect("the mempool does not contain the withdrawal transaction");
+        let txid =
+            minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index, |_| true);
+        let dogecoin = self.setup.as_ref().dogecoind();
+        let tx = dogecoin.get_raw_transaction_from_mempool(txid);
 
-        let (request_block_indices, change_amount, withdrawal_fee, used_utxos) = {
+        let (
+            request_block_indices,
+            change_amount,
+            effective_fee_per_vbyte,
+            withdrawal_fee,
+            used_utxos,
+        ) = {
             let sent_tx_event = minter
                 .assert_that_events()
                 .extract_exactly_one(
@@ -230,12 +237,13 @@ where
                     utxos,
                     change_output,
                     submitted_at: _,
-                    fee_per_vbyte: _,
+                    effective_fee_per_byte: effective_fee_per_vbyte,
                     withdrawal_fee,
                     signed_tx: _,
                 } => (
                     request_block_indices,
                     change_output.expect("BUG: missing change output").value,
+                    effective_fee_per_vbyte.expect("BUG: missing effective_fee_per_vbyte"),
                     withdrawal_fee.expect("BUG: missing withdrawal fee"),
                     utxos,
                 ),
@@ -248,6 +256,10 @@ where
                 "BUG: failed to estimate withdrawal fee, even though transaction is expected"
             ),
             "BUG: withdrawal fee from event does not match fees retrieved from endpoint"
+        );
+        assert_eq!(
+            (withdrawal_fee.dogecoin_fee * 1_000).div_ceil(tx.total_size() as u64),
+            effective_fee_per_vbyte
         );
         assert!(request_block_indices.contains(&self.retrieve_doge_id.block_index));
 
@@ -309,8 +321,6 @@ where
         WithdrawalFlowEnd {
             setup: self.setup,
             retrieve_doge_id: self.retrieve_doge_id,
-            change_amount,
-            minter_address,
             sent_transactions: vec![tx],
         }
     }
@@ -339,7 +349,7 @@ where
             matches!(tx_status, RetrieveDogeStatus::Reimbursed(_))
         });
 
-        let mempool = self.setup.as_ref().dogecoin().mempool();
+        let mempool = self.setup.as_ref().dogecoind().mempool();
         assert_eq!(
             mempool.len(),
             0,
@@ -381,7 +391,7 @@ where
 
         assert_eq!(
             ledger.icrc1_balance_of(self.account),
-            balance_after_withdrawal + reimbursement_amount
+            balance_after_withdrawal + (reimbursement_amount as u128)
         );
     }
 }
@@ -390,8 +400,6 @@ where
 pub struct WithdrawalFlowEnd<S> {
     setup: S,
     retrieve_doge_id: RetrieveDogeOk,
-    change_amount: u64,
-    minter_address: bitcoin::dogecoin::Address,
     sent_transactions: Vec<bitcoin::Transaction>,
 }
 
@@ -435,17 +443,6 @@ where
             .env
             .advance_time(MIN_CONFIRMATIONS * BLOCK_TIME + Duration::from_secs(1));
         let txid_bytes: [u8; 32] = txid.to_byte_array();
-        self.setup.as_ref().dogecoin().push_utxo(
-            Utxo {
-                value: self.change_amount,
-                height: 0,
-                outpoint: OutPoint {
-                    txid: txid_bytes.into(),
-                    vout: 1,
-                },
-            },
-            self.minter_address.to_string(),
-        );
 
         assert_eq!(
             minter.await_finalized_doge_transaction(self.retrieve_doge_id.block_index),
@@ -466,29 +463,106 @@ where
         );
         let setup = self.setup.as_ref();
         let minter = setup.minter();
-        let dogecoin = setup.dogecoin();
-        let mempool_before = dogecoin.mempool();
+        let dogecoin = setup.dogecoind();
         setup
             .env
             .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
-        let mut mempool_after =
-            dogecoin.await_mempool(|mempool| mempool.len() > mempool_before.len());
 
         let old_transaction = self.sent_transactions.last().unwrap();
         let old_txid = Txid::from(old_transaction.compute_txid().to_byte_array());
-        let new_txid = minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index);
-        let _replaced_tx_event = minter
+        let new_txid = minter
+            .await_submitted_doge_transaction(self.retrieve_doge_id.block_index, |txid| {
+                txid != &old_txid
+            });
+        self.ensure_fee_rate_increase(&old_txid, &new_txid);
+        let new_tx = dogecoin.get_raw_transaction_from_mempool(new_txid);
+        assert_replacement_transaction(old_transaction, &new_tx);
+        self.sent_transactions.push(new_tx);
+        self
+    }
+
+    fn ensure_fee_rate_increase(&self, old_txid: &Txid, new_txid: &Txid) {
+        let minter = self.setup.as_ref().minter();
+
+        let sent_old_tx_event = minter.assert_that_events().extract_exactly_one(|event| {
+            matches!(
+                event,
+                CkDogeMinterEventType::SentDogeTransaction {txid, ..} | //old_txid is the first transaction and not a replacement one
+                CkDogeMinterEventType::ReplacedDogeTransaction {new_txid: txid, ..} //old_txid is already a replacement transaction
+                if txid == old_txid
+            )
+        });
+        let old_effective_fee_per_vbyte = match sent_old_tx_event {
+            CkDogeMinterEventType::SentDogeTransaction {
+                effective_fee_per_byte: effective_fee_per_vbyte,
+                ..
+            } => effective_fee_per_vbyte.expect("BUG: missing effective fee per vbyte"),
+            CkDogeMinterEventType::ReplacedDogeTransaction {
+                effective_fee_per_byte: effective_fee_per_vbyte,
+                ..
+            } => effective_fee_per_vbyte,
+            _ => unreachable!(),
+        };
+
+        let replaced_tx_event = minter
             .assert_that_events()
             .extract_exactly_one(
                 |event| matches!(event,
                     CkDogeMinterEventType::ReplacedDogeTransaction {old_txid: event_old_txid, new_txid: event_new_txid, ..}
-                    if event_old_txid == &old_txid && event_new_txid == &new_txid),
+                    if event_old_txid == old_txid && event_new_txid == new_txid),
             );
-        let new_tx = mempool_after
-            .remove(&new_txid)
-            .expect("BUG: did not find resubmit transaction");
-        assert_replacement_transaction(old_transaction, &new_tx);
-        self.sent_transactions.push(new_tx);
+        let new_effective_fee_per_vbyte = match replaced_tx_event {
+            CkDogeMinterEventType::ReplacedDogeTransaction {
+                effective_fee_per_byte: effective_fee_per_vbyte,
+                ..
+            } => effective_fee_per_vbyte,
+            _ => unreachable!(),
+        };
+
+        assert!(new_effective_fee_per_vbyte >= old_effective_fee_per_vbyte);
+    }
+
+    /// Try to drop a transaction from the mempool.
+    ///
+    /// There doesn't seem to be an easy way to do this.
+    /// Resubmitted transactions use higher fees according to the RBF rule and automatically evict conflicting transactions with lower fees.
+    /// The only way to test scenarios where the original transaction is actually mined is:
+    /// 1) manually decrease the priority of the resubmitted transaction
+    /// 2) re-send the other transactions to the mempool
+    pub fn dogecoin_drop_transaction_in_mempool<F>(self, selector: F) -> Self
+    where
+        F: FnOnce(&[bitcoin::Transaction]) -> &bitcoin::Transaction,
+    {
+        let tx_to_drop = selector(&self.sent_transactions);
+        let txid_to_drop = tx_to_drop.compute_txid();
+        let dogecoin = self.setup.as_ref().dogecoind();
+
+        dogecoin.deprioritize_transaction_from_mempool(&txid_to_drop);
+
+        self.sent_transactions
+            .iter()
+            .filter(|tx| tx != &tx_to_drop)
+            .for_each(|tx| {
+                println!(
+                    "[dogecoin_drop_transaction_in_mempool] Re-add transaction {} to the mempool",
+                    tx.compute_txid()
+                );
+                dogecoin.await_ok(|d| d.send_raw_transaction(&bitcoin::consensus::serialize(tx)));
+            });
+
+        let mempool = dogecoin.await_ok(|d| d.get_raw_mempool());
+        assert!(
+            !mempool.contains(&txid_to_drop),
+            "BUG: failed to drop transaction {txid_to_drop}"
+        );
+        self
+    }
+
+    pub fn dogecoin_mine_blocks(self, num_blocks: impl Into<u64>) -> Self {
+        self.setup
+            .as_ref()
+            .dogecoind()
+            .mine_blocks(num_blocks.into());
         self
     }
 }

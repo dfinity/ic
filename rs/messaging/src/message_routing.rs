@@ -1,6 +1,8 @@
 use crate::state_machine::{StateMachine, StateMachineImpl};
 use crate::{routing, scheduling};
-use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
+use ic_config::execution_environment::{
+    BitcoinConfig, Config as HypervisorConfig, DEFAULT_MAX_NUMBER_OF_CANISTERS,
+};
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
@@ -11,7 +13,7 @@ use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKe
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::{SMALL_APP_SUBNET_MAX_SIZE, SYSTEM_SUBNET_STREAM_MSG_LIMIT};
 use ic_logger::{ReplicaLogger, debug, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
@@ -704,6 +706,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             subnet_id,
             max_stream_messages,
             target_stream_size_bytes,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
@@ -868,7 +871,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let node_public_keys = self.try_to_populate_node_public_keys(&nodes, registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
-        let max_number_of_canisters = subnet_record.max_number_of_canisters;
+        let max_number_of_canisters = if subnet_record.max_number_of_canisters == 0 {
+            DEFAULT_MAX_NUMBER_OF_CANISTERS
+        } else {
+            subnet_record.max_number_of_canisters
+        };
 
         let chain_key_settings = if let Some(chain_key_config) = subnet_record.chain_key_config {
             let chain_key_config = ChainKeyConfig::try_from(chain_key_config).map_err(|err| {
@@ -910,15 +917,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
-        let canister_cycles_cost_schedule = CanisterCyclesCostSchedule::from(
-            CanisterCyclesCostScheduleProto::try_from(subnet_record.canister_cycles_cost_schedule)
-                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
-        );
-
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
             .subnet_info
-            .with_label_values(&[&own_subnet_id.to_string(), own_subnet_type.as_ref()])
+            .with_label_values(&[own_subnet_id.to_string().as_str(), own_subnet_type.as_ref()])
             .set(1);
         self.metrics.subnet_size.set(subnet_size as i64);
         self.metrics
@@ -962,7 +964,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 subnet_size,
                 node_ids: nodes,
                 registry_version,
-                canister_cycles_cost_schedule,
             },
             node_public_keys,
             api_boundary_nodes,
@@ -1373,6 +1374,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             node_public_keys,
             api_boundary_nodes,
         );
+        // Prune any orphaned canister priorities.
+        state_after_round.garbage_collect_subnet_schedule();
         // Garbage collect empty canister queue pairs before checkpointing.
         if certification_scope == CertificationScope::Full {
             state_after_round.garbage_collect_canister_queues();
@@ -1600,6 +1603,7 @@ impl MessageRoutingImpl {
             subnet_id,
             MAX_STREAM_MESSAGES,
             TARGET_STREAM_SIZE_BYTES,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(

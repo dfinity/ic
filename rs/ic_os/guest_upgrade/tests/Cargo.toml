@@ -5,18 +5,19 @@ edition = "2021"
 [lib]
 
 [dependencies]
-attestation = { path = "../../attestation" }
-attestation_testing = { path = "../../attestation/testing" }
+anyhow = { workspace = true }
+attestation = { path = "../../sev/attestation" }
+attestation_testing = { path = "../../sev/attestation/testing" }
 futures = { workspace = true }
 guest_upgrade_client = { path = "../client" }
 guest_upgrade_server = { path = "../server" }
 guest_upgrade_shared = { path = "../shared" }
 tokio = { workspace = true }
 vsock_lib = { path = "../../vsock/vsock_lib" }
-config_types = { path = "../../config_types" }
+config_types = { path = "../../config/types" }
 ic-protobuf = { path = "../../../protobuf" }
-ic_sev = { path = "../../sev" }
+sev_guest = { path = "../../sev/guest" }
+sev_guest_testing = { path = "../../sev/guest/testing" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
 tempfile = { workspace = true }
 rustls = { workspace = true }
-anyhow = "1.0.95"

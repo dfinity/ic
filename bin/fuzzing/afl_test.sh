@@ -20,11 +20,13 @@ if [[ "$1" == *"wasmtime"* ]] || [[ "$1" == *"wasm_executor"* ]]; then
     HANDLE_SIGILL=0
     HANDLE_SEGV=1
     HANDLE_SIGFPE=1
+    DETECT_STACK_USE_AFTER_RETURN=0
 else
     ALLOW_USER_SEGV_HANDLER=0
     HANDLE_SIGILL=2
     HANDLE_SEGV=2
     HANDLE_SIGFPE=2
+    DETECT_STACK_USE_AFTER_RETURN=1
 fi
 
 ASAN_OPTIONS="abort_on_error=1:\
@@ -35,7 +37,7 @@ ASAN_OPTIONS="abort_on_error=1:\
             check_malloc_usable_size=0:\
             detect_leaks=0:\
             detect_odr_violation=0:\
-            detect_stack_use_after_return=1:\
+            detect_stack_use_after_return=$DETECT_STACK_USE_AFTER_RETURN:\
             fast_unwind_on_fatal=0:\
             handle_abort=2:\
             handle_segv=$HANDLE_SEGV:\
@@ -47,7 +49,7 @@ ASAN_OPTIONS="abort_on_error=1:\
             print_summary=1:\
             print_suppressions=0:\
             quarantine_size_mb=64:\
-            redzone=512:\
+            redzone=16:\
             strict_memcmp=1:\
             symbolize=0:\
             use_sigaltstack=1"

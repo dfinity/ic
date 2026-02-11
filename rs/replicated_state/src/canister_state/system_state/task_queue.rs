@@ -47,6 +47,10 @@ impl TaskQueue {
         })
     }
 
+    pub fn has_paused_or_aborted_task(&self) -> bool {
+        self.paused_or_aborted_task.is_some()
+    }
+
     pub fn remove(&mut self, task: ExecutionTask) {
         match task {
             ExecutionTask::OnLowWasmMemory => {

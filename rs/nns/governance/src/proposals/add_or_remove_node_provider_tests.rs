@@ -279,11 +279,9 @@ fn test_to_self_describing_value() {
                 .to_self_describing_value()
         ),
         SelfDescribingValue::Map(hashmap! {
-            "to_add".to_string() => SelfDescribingValue::Map(hashmap! {
-                "id".to_string() => SelfDescribingValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string()),
-                "reward_account".to_string() => SelfDescribingValue::Array(vec![
-                    SelfDescribingValue::Text(account.to_hex())
-                ])
+            "ToAdd".to_string() => SelfDescribingValue::Map(hashmap! {
+                "id".to_string() => SelfDescribingValue::from("6fyp7-3ibaa-aaaaa-aaaap-4ai"),
+                "reward_account".to_string() => SelfDescribingValue::from(account.to_hex())
             })
         })
     );
@@ -302,8 +300,8 @@ fn test_to_self_describing_value() {
                 .to_self_describing_value()
         ),
         SelfDescribingValue::Map(hashmap! {
-            "to_remove".to_string() => SelfDescribingValue::Map(hashmap! {
-                "id".to_string() => SelfDescribingValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string())
+            "ToRemove".to_string() => SelfDescribingValue::Map(hashmap! {
+                "id".to_string() => SelfDescribingValue::from("6fyp7-3ibaa-aaaaa-aaaap-4ai")
             })
         })
     );

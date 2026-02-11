@@ -145,7 +145,7 @@ fn can_make_a_checkpoint() {
         let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
 
         // Ensure that checkpoint data is now available via layout API.
-        assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
+        assert_eq!(layout.verified_checkpoint_heights().unwrap(), vec![HEIGHT]);
         let checkpoint = layout.checkpoint_verified(HEIGHT).unwrap();
         assert_eq!(checkpoint.canister_ids().unwrap(), vec![canister_id]);
         assert!(

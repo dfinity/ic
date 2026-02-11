@@ -648,7 +648,7 @@ mod chain_key_enabled_subnet_lists {
                             name: "vetkd_key".to_string(),
                         })),
                     }),
-                    pre_signatures_to_create_in_advance: Some(0),
+                    pre_signatures_to_create_in_advance: None,
                     max_queue_size: Some(100),
                 },
             ],
@@ -690,7 +690,7 @@ mod chain_key_enabled_subnet_lists {
 
     #[test]
     #[should_panic(
-        expected = "`pre_signatures_to_create_in_advance` for key ecdsa:Secp256k1:ecdsa_key of subnet ya35z-hhham-aaaaa-aaaap-yai cannot be zero."
+        expected = "pre_signatures_to_create_in_advance for key ecdsa:Secp256k1:ecdsa_key of subnet ya35z-hhham-aaaaa-aaaap-yai must be non-zero"
     )]
     fn should_fail_if_pre_signatures_is_zero_for_key_that_requires_pre_signatures() {
         let mut config = invariant_compliant_chain_key_config();

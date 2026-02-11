@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{
     fs,
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::Path,
     time::Duration,
 };
@@ -19,8 +19,9 @@ use crate::{
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
-            AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasPublicApiUrl,
-            HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession, get_dependency_path,
+            AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasPublicApiUrl, HasTestEnv,
+            HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
+            get_dependency_path_from_env,
         },
         test_setup::InfraProvider,
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
@@ -32,7 +33,6 @@ use crate::{
 // Constants
 pub const IC_GATEWAY_VM_NAME: &str = "ic-gateway";
 const IC_GATEWAY_VM_FILE: &str = "vm.json";
-const IMAGE_PATH: &str = "rs/tests/ic_gateway_uvm_config_image.zst";
 const IC_GATEWAY_VMS_DIR: &str = "ic_gateway_vms";
 const PLAYNET_URL_FILE: &str = "playnet_url.json";
 const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_aaaa_records_created_event";
@@ -49,6 +49,7 @@ pub struct IcGatewayVm {
 /// Represents a deployed IC HTTP Gateway VM.
 #[derive(Debug)]
 pub struct DeployedIcGatewayVm {
+    env: TestEnv,
     vm: AllocatedVm,
     https_url: Url,
 }
@@ -64,6 +65,18 @@ impl DeployedIcGatewayVm {
     }
 }
 
+impl HasTestEnv for DeployedIcGatewayVm {
+    fn test_env(&self) -> TestEnv {
+        self.env.clone()
+    }
+}
+
+impl SshSession for DeployedIcGatewayVm {
+    fn get_host_ip(&self) -> Result<IpAddr> {
+        Ok(self.get_vm().ipv6.into())
+    }
+}
+
 impl Default for IcGatewayVm {
     fn default() -> Self {
         Self::new(IC_GATEWAY_VM_NAME)
@@ -74,7 +87,9 @@ impl IcGatewayVm {
     /// Creates a new IC Gateway VM with the specified name.
     pub fn new(name: &str) -> Self {
         let universal_vm = UniversalVm::new(name.to_string())
-            .with_config_img(get_dependency_path(IMAGE_PATH))
+            .with_config_img(get_dependency_path_from_env(
+                "IC_GATEWAY_UVM_CONFIG_IMAGE_PATH",
+            ))
             .enable_ipv4();
         Self { universal_vm }
     }
@@ -112,7 +127,7 @@ impl IcGatewayVm {
 
         let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
         let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();
-        block_on(self.configure_dns_records(env, &playnet, &ic_gateway_fqdn))?;
+        self.configure_dns_records(env, &playnet, &ic_gateway_fqdn)?;
 
         // Emit log events for A and AAAA records
         emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &playnet);
@@ -184,7 +199,7 @@ impl IcGatewayVm {
     }
 
     /// Configures DNS records based on infrastructure provider.
-    async fn configure_dns_records(
+    fn configure_dns_records(
         &self,
         env: &TestEnv,
         playnet: &Playnet,
@@ -223,7 +238,7 @@ impl IcGatewayVm {
         let base_domain = env.create_playnet_dns_records(records);
 
         // Wait for DNS propagation by checking a random subdomain
-        await_dns_propagation(&env.logger(), &base_domain).await?;
+        block_on(await_dns_propagation(&env.logger(), &base_domain))?;
 
         Ok(())
     }
@@ -373,12 +388,13 @@ impl HasIcGatewayVm for TestEnv {
             .then(|| playnet_url.clone())
             .context("Expected a TLS URL")?;
 
-        let vm = self
+        let uvm = self
             .get_deployed_universal_vm(name)
-            .context("Failed to retrieve deployed universal VM")?
-            .get_vm()?;
+            .context("Failed to retrieve deployed universal VM")?;
+        let env = uvm.test_env();
+        let vm = uvm.get_vm()?;
 
-        Ok(DeployedIcGatewayVm { vm, https_url })
+        Ok(DeployedIcGatewayVm { env, vm, https_url })
     }
 
     fn get_deployed_ic_gateways(&self) -> Result<Vec<DeployedIcGatewayVm>> {

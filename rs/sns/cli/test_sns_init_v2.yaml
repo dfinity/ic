@@ -29,6 +29,9 @@ Proposals:
     rejection_fee: 1 token
     initial_voting_period: 4d
     maximum_wait_for_quiet_deadline_extension: 1 day
+    additional_critical_native_action_ids:
+        - UpgradeSnsControlledCanister
+        - AddGenericNervousSystemFunction
 
 Neurons:
     minimum_creation_stake: 61800 e8s

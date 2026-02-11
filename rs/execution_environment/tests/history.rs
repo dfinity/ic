@@ -216,7 +216,7 @@ fn test_invalid_transitions() {
             })
             .collect::<HashSet<(IngressStatus, IngressStatus)>>();
 
-        let all_statuses = vec![Unknown, received(), processing(), completed(), failed()];
+        let all_statuses = [Unknown, received(), processing(), completed(), failed()];
         // creates the cartesian product of all states and filters out the valid
         // transitions
 

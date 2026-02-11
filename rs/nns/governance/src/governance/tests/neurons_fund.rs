@@ -6,7 +6,7 @@ use crate::{
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
-use ic_nns_governance_api as pb_api;
+use ic_nns_governance_api as api;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
 
@@ -77,7 +77,7 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
             })
             .unwrap();
         let neurons = (0..num_neurons_fund_neurons)
-            .map(|id| pb_api::Neuron {
+            .map(|id| api::Neuron {
                 id: Some(NeuronId { id }),
                 ..proto_neuron.clone()
             })

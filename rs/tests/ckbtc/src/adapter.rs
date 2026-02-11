@@ -216,7 +216,7 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
     }
 }
 
-pub fn fund_with_btc<T: RpcClientType>(
+pub fn fund_with_tokens<T: RpcClientType>(
     to_fund_client: &RpcClient<T>,
     to_fund_address: &T::Address,
 ) -> ListUnspentResultEntry {

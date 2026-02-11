@@ -429,10 +429,7 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
             try_from_option_field(item.effective_canister_id, "Ingress::effective_canister_id")
                 .ok();
         Ok(Self {
-            source: crate::user_id_try_from_protobuf(try_from_option_field(
-                item.source,
-                "Ingress::source",
-            )?)?,
+            source: crate::user_id_try_from_option(item.source, "Ingress::source")?,
             receiver: try_from_option_field(item.receiver, "Ingress::receiver")?,
             effective_canister_id,
             method_name: item.method_name,
@@ -583,6 +580,7 @@ pub fn extract_effective_canister_id(
         | Ok(Method::SetupInitialDKG)
         | Ok(Method::DepositCycles)
         | Ok(Method::HttpRequest)
+        | Ok(Method::FlexibleHttpRequest)
         | Ok(Method::RawRand)
         | Ok(Method::ECDSAPublicKey)
         | Ok(Method::SignWithECDSA)

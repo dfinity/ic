@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::Priority;
+use crate::{Priority, tx};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -25,6 +25,7 @@ use crate::reimbursement::{
 };
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::state::utxos::UtxoSet;
+use crate::tx::FeeRate;
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
     ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
@@ -183,8 +184,9 @@ pub struct SubmittedBtcTransaction {
     pub submitted_at: u64,
     /// The tx output from the submitted transaction that the minter owns.
     pub change_output: Option<ChangeOutput>,
-    /// Fee per vbyte in millisatoshi.
-    pub fee_per_vbyte: Option<u64>,
+    /// The effective fee per vbyte (in millisatoshi) that was used for the transaction.
+    /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
+    pub effective_fee_per_vbyte: Option<FeeRate>,
     /// Include both the fee paid for the transaction and the minter fee.
     pub withdrawal_fee: Option<WithdrawalFee>,
     /// Signed transaction if included.
@@ -269,8 +271,6 @@ pub enum FinalizedStatus {
 pub enum InFlightStatus {
     /// Awaiting signatures for transaction inputs.
     Signing,
-    /// Awaiting the Bitcoin canister to accept the transaction.
-    Sending { txid: Txid },
 }
 
 /// The status of a retrieve_btc request.
@@ -447,6 +447,9 @@ pub struct CkBtcMinterState {
     /// Per-account lock for retrieve_btc
     pub retrieve_btc_accounts: BTreeSet<Account>,
 
+    /// Minimum amount of bitcoin that can be deposited
+    pub deposit_btc_min_amount: u64,
+
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
 
@@ -536,10 +539,10 @@ pub struct CkBtcMinterState {
     /// The mode in which the minter runs.
     pub mode: Mode,
 
-    pub last_fee_per_vbyte: Vec<u64>,
+    pub last_fee_per_vbyte: Vec<FeeRate>,
 
     /// The last median fee per vbyte computed from `last_fee_per_vbyte`.
-    pub last_median_fee_per_vbyte: Option<u64>,
+    pub last_median_fee_per_vbyte: Option<FeeRate>,
 
     /// The fee for a single Bitcoin check request.
     pub check_fee: u64,
@@ -615,6 +618,7 @@ impl CkBtcMinterState {
         InitArgs {
             btc_network,
             ecdsa_key_name,
+            deposit_btc_min_amount,
             retrieve_btc_min_amount,
             ledger_id,
             max_time_in_queue_nanos,
@@ -631,6 +635,7 @@ impl CkBtcMinterState {
     ) {
         self.btc_network = btc_network;
         self.ecdsa_key_name = ecdsa_key_name;
+        self.deposit_btc_min_amount = deposit_btc_min_amount.unwrap_or_default();
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.ledger_id = ledger_id;
@@ -670,6 +675,7 @@ impl CkBtcMinterState {
     pub fn upgrade(
         &mut self,
         UpgradeArgs {
+            deposit_btc_min_amount,
             retrieve_btc_min_amount,
             max_time_in_queue_nanos,
             min_confirmations,
@@ -683,6 +689,9 @@ impl CkBtcMinterState {
             max_num_inputs_in_transaction,
         }: UpgradeArgs,
     ) {
+        if let Some(deposit_btc_min_amount) = deposit_btc_min_amount {
+            self.deposit_btc_min_amount = deposit_btc_min_amount;
+        }
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
             self.retrieve_btc_min_amount = retrieve_btc_min_amount;
             self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
@@ -858,7 +867,6 @@ impl CkBtcMinterState {
         if let Some(status) = self.requests_in_flight.get(&block_index).cloned() {
             return match status {
                 InFlightStatus::Signing => RetrieveBtcStatus::Signing,
-                InFlightStatus::Sending { txid } => RetrieveBtcStatus::Sending { txid },
             };
         }
 
@@ -1410,7 +1418,7 @@ impl CkBtcMinterState {
     fn ensure_reason_consistent_with_state(&self, utxo: &Utxo, reason: SuspendedReason) {
         match reason {
             SuspendedReason::ValueTooSmall => {
-                assert!(utxo.value <= self.check_fee);
+                assert!(utxo.value < self.deposit_btc_min_amount || utxo.value <= self.check_fee);
             }
             SuspendedReason::Quarantined => {}
         }
@@ -1578,6 +1586,16 @@ impl CkBtcMinterState {
             self.ecdsa_key_name,
             other.ecdsa_key_name,
             "ecdsa_key_name does not match"
+        );
+        ensure_eq!(
+            self.retrieve_btc_min_amount,
+            other.retrieve_btc_min_amount,
+            "retrieve_btc_min_amount does not match"
+        );
+        ensure_eq!(
+            self.deposit_btc_min_amount,
+            other.deposit_btc_min_amount,
+            "deposit_btc_min_amount does not match"
         );
         ensure_eq!(
             self.min_confirmations,
@@ -1774,6 +1792,34 @@ impl CkBtcMinterState {
             "BUG: Reimbursement of withdrawal {reimbursement:?} was already completed!"
         );
     }
+
+    /// Find all accounts used for the transaction previous output points.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the `output_account` map does not have an entry for
+    /// at least one of the transaction previous output points.
+    pub fn find_all_accounts(&self, tx: &tx::UnsignedTransaction) -> Vec<Account> {
+        let mut accounts = Vec::with_capacity(tx.inputs.len());
+        for input in &tx.inputs {
+            accounts.push(
+                self.outpoint_account
+                    .get(&input.previous_output)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        panic!("BUG: no account for outpoint {:?}", &input.previous_output)
+                    }),
+            )
+        }
+        accounts
+    }
+
+    /// Compute the minimum BTC amount that can be deposited.
+    /// UTXOs with a lower value will be ignored.
+    pub fn effective_deposit_min_btc_amount(&self) -> u64 {
+        self.deposit_btc_min_amount
+            .max(self.check_fee.saturating_add(1))
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Default)]
@@ -1950,6 +1996,7 @@ impl From<InitArgs> for CkBtcMinterState {
             max_time_in_queue_nanos: args.max_time_in_queue_nanos,
             update_balance_accounts: Default::default(),
             retrieve_btc_accounts: Default::default(),
+            deposit_btc_min_amount: args.deposit_btc_min_amount.unwrap_or_default(),
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             fee_based_retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),
@@ -1977,8 +2024,8 @@ impl From<InitArgs> for CkBtcMinterState {
             is_timer_running: false,
             is_distributing_fee: false,
             mode: args.mode,
-            last_fee_per_vbyte: vec![1; 100],
-            last_median_fee_per_vbyte: Some(1),
+            last_fee_per_vbyte: vec![FeeRate::from_millis_per_byte(1); 100],
+            last_median_fee_per_vbyte: Some(FeeRate::from_millis_per_byte(1)),
             check_fee: args
                 .check_fee
                 .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),

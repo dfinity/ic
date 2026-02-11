@@ -17,6 +17,10 @@ type InitArgs = record {
     // E.g., "dfx_test_key" on the local replica.
     ecdsa_key_name : text;
 
+    // The minimal amount of DOGE that can be converted to ckDOGE.
+    // UTXOs with lower values will be ignored.
+    deposit_doge_min_amount : opt nat64;
+
     // The minimal amount of ckDOGE that can be converted to DOGE.
     retrieve_doge_min_amount : nat64;
 
@@ -43,6 +47,10 @@ type InitArgs = record {
 
 // The upgrade parameters of the minter canister.
 type UpgradeArgs = record {
+    // The minimal amount of DOGE that can be converted to ckDOGE.
+    // UTXOs with lower values will be ignored.
+    deposit_doge_min_amount : opt nat64;
+
     // The minimal amount of ckDOGE that can be converted to DOGE.
     retrieve_doge_min_amount : opt nat64;
 
@@ -70,8 +78,6 @@ type UpgradeArgs = record {
 type Network = variant {
     // The public Dogecoin mainnet.
     Mainnet;
-    // The public Dogecoin testnet.
-    Testnet;
     // A local Dogecoin regtest installation.
     Regtest;
 };
@@ -172,10 +178,9 @@ type SuspendedUtxo = record {
 };
 
 type SuspendedReason = variant {
-    // The minter ignored this UTXO because UTXO's value is too small to pay
-    // the check fees.
+    // The minter ignored this UTXO because the UTXO's value is considered too small.
     ValueTooSmall;
-    // The Dogecoin checker considered this UTXO to be tainted.
+    // The UTXO is considered to be tainted.
     Quarantined;
 };
 
@@ -263,6 +268,10 @@ type MinterInfo = record {
     // The minimum number of confirmations required for the minter to
     // accept a Dogecoin transaction.
     min_confirmations : nat32;
+
+    // Minimal amount of DOGE that can be deposited to be converted into ckDOGE.
+    // UTXOs with lower values will be ignored.
+    deposit_doge_min_amount : nat64;
 
     // This amount is based on the `retrieve_doge_min_amount` setting during canister
     // initialization or upgrades, but may vary according to current network fees.
@@ -386,6 +395,7 @@ type EventType = variant {
         utxo : Utxo;
         account : Account;
     };
+    suspended_utxo : record { utxo: Utxo; account: Account; reason: SuspendedReason };
     accepted_retrieve_doge_request : RetrieveDogeRequest;
     removed_retrieve_doge_request : record {
         block_index : nat64;

@@ -4,42 +4,40 @@ use super::*;
 use ic_base_types::NumSeconds;
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_error_types::RejectCode;
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_management_canister_types_private::Method;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
+use ic_replicated_state::testing::{
+    CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting,
 };
+use ic_replicated_state::{CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     MetricVec, fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec,
     nonzero_values,
 };
 use ic_test_utilities_state::{new_canister_state, register_callback};
-use ic_test_utilities_types::{
-    ids::{SUBNET_27, SUBNET_42, canister_test_id, user_test_id},
-    messages::RequestBuilder,
+use ic_test_utilities_types::ids::{
+    SUBNET_3, SUBNET_4, SUBNET_5, SUBNET_27, SUBNET_42, canister_test_id, user_test_id,
 };
-use ic_types::{
-    CanisterId, Cycles, SubnetId, Time,
-    messages::{
-        CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE, Payload, RejectContext,
-        Request, RequestOrResponse, Response, StreamMessage,
-    },
-    time::{CoarseTime, UNIX_EPOCH},
-    xnet::{StreamIndex, StreamIndexedQueue},
+use ic_test_utilities_types::messages::RequestBuilder;
+use ic_types::messages::{
+    CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE, Payload, Refund,
+    RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
+use ic_types::{CanisterId, Cycles, SubnetId, Time};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
+use proptest::prelude::*;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use std::{
-    collections::{BTreeMap, VecDeque},
-    convert::TryFrom,
-    mem::size_of,
-};
+use std::collections::{BTreeMap, VecDeque};
+use std::convert::TryFrom;
+use std::mem::size_of;
 
 const LOCAL_SUBNET: SubnetId = SUBNET_27;
 const REMOTE_SUBNET: SubnetId = SUBNET_42;
@@ -53,7 +51,7 @@ lazy_static! {
 }
 
 #[test]
-fn test_signals_end_metric_exported() {
+fn test_signals_metrics_exported() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut state, metrics_registry) = new_fixture(&log);
 
@@ -66,6 +64,10 @@ fn test_signals_end_metric_exported() {
 
         stream_builder.build_streams(state);
 
+        assert_eq!(
+            metric_vec(&[(&[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())], 42)]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_SIGNALS)
+        );
         assert_eq!(
             metric_vec(&[(
                 &[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())],
@@ -95,7 +97,7 @@ fn reject_local_request() {
 
         // With a reservation on an input queue.
         let payment = Cycles::new(100);
-        let callback_id = register_callback(&mut canister_state, sender, receiver, NO_DEADLINE);
+        let callback_id = register_callback(&mut canister_state, receiver, NO_DEADLINE);
         let msg = generate_message_for_test(
             sender,
             receiver,
@@ -239,6 +241,10 @@ fn build_streams_success() {
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN)
         );
         assert_eq!(
+            metric_vec(&[(&[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())], 0)]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_SIGNALS)
+        );
+        assert_eq!(
             metric_vec(&[(
                 &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
                 expected_signals_end
@@ -337,22 +343,26 @@ fn build_streams_local_canisters() {
 }
 
 #[test]
-fn build_streams_impl_at_message_limit_leaves_state_untouched() {
-    build_streams_impl_at_limit_leaves_state_untouched_impl(0, usize::MAX);
+fn build_streams_at_message_limit_leaves_state_untouched() {
+    build_streams_at_limit_leaves_state_untouched_impl(0, usize::MAX);
 }
 
 #[test]
-fn build_streams_impl_at_memory_limit_leaves_state_untouched() {
-    build_streams_impl_at_limit_leaves_state_untouched_impl(usize::MAX, 0);
+fn build_streams_at_memory_limit_leaves_state_untouched() {
+    build_streams_at_limit_leaves_state_untouched_impl(usize::MAX, 0);
 }
 
-fn build_streams_impl_at_limit_leaves_state_untouched_impl(
+fn build_streams_at_limit_leaves_state_untouched_impl(
     max_stream_messages: usize,
     target_stream_size_bytes: usize,
 ) {
     with_test_replica_logger(|log| {
-        let (stream_builder, mut provided_state, metrics_registry) =
-            new_fixture_with_limits(&log, max_stream_messages, target_stream_size_bytes);
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture_with_limits(
+            &log,
+            max_stream_messages,
+            target_stream_size_bytes,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
+        );
         provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
@@ -374,7 +384,7 @@ fn build_streams_impl_at_limit_leaves_state_untouched_impl(
         let expected_state = provided_state.clone();
 
         // Act.
-        let result_state = stream_builder.build_streams_impl(provided_state.clone());
+        let result_state = stream_builder.build_streams(provided_state.clone());
         assert_eq!(result_state, expected_state);
 
         assert_eq!(
@@ -410,15 +420,15 @@ fn build_streams_impl_at_limit_leaves_state_untouched_impl(
     });
 }
 
-/// Helper for testing `build_streams_impl()` with various message or byte size
+/// Helper for testing `build_streams()` with various message or byte size
 /// limits.
 ///
-/// `max_stream_messages` is passed to `build_streams_impl()` as the parameter
+/// `max_stream_messages` is passed to `build_streams()` as the parameter
 /// of the same name. `max_stream_messages_by_byte_size` is multiplied by the
 /// generated message size and passed as the `target_stream_size_bytes`
 /// parameter. `expected_messages` is the number of messages expected to have
 /// been routed.
-fn build_streams_impl_respects_limits(
+fn build_streams_respects_limits(
     max_stream_messages: usize,
     max_stream_messages_by_byte_size: usize,
     expected_messages: u64,
@@ -436,8 +446,12 @@ fn build_streams_impl_respects_limits(
         let target_stream_size_bytes =
             size_of::<Stream>() + (max_stream_messages_by_byte_size - 1) * msg_size as usize + 1;
 
-        let (stream_builder, mut provided_state, metrics_registry) =
-            new_fixture_with_limits(&log, max_stream_messages, target_stream_size_bytes);
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture_with_limits(
+            &log,
+            max_stream_messages,
+            target_stream_size_bytes,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
+        );
         provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
@@ -477,7 +491,7 @@ fn build_streams_impl_respects_limits(
         });
 
         // Act.
-        let result_state = stream_builder.build_streams_impl(provided_state);
+        let result_state = stream_builder.build_streams(provided_state);
 
         assert_eq!(expected_state.canister_states, result_state.canister_states);
         assert_eq!(expected_state.metadata, result_state.metadata);
@@ -520,13 +534,13 @@ fn build_streams_impl_respects_limits(
 }
 
 #[test]
-fn build_streams_impl_respects_byte_size_limit() {
-    build_streams_impl_respects_limits(1_000_000, 4, 4);
+fn build_streams_respects_byte_size_limit() {
+    build_streams_respects_limits(1_000_000, 4, 4);
 }
 
 #[test]
-fn build_streams_impl_respects_message_limit() {
-    build_streams_impl_respects_limits(4, 1_000_000, 4);
+fn build_streams_respects_message_limit() {
+    build_streams_respects_limits(4, 1_000_000, 4);
 }
 
 // Tests that messages addressed to canisters not mapped to a known subnet
@@ -760,6 +774,250 @@ fn build_streams_with_best_effort_messages() {
     }
 }
 
+/// Given a stream with some (potentially zero) initial refunds and canister
+/// messages, tests that `build_streams()` respects the various limits when
+/// routing additional refunds and canister messages:
+///
+///  * Maximum stream size (set to 10 in this test).
+///  * Maximum refunds per stream (half the maximum stream size).
+///  * For system subnets, at most `2 * system_subnet_stream_msg_limit` canister
+///    messages per stream.
+///  * None of the above limits apply to the loopback stream.
+///
+/// The negative lower bounds in the strategies (that are then clamped to zero)
+/// aim to make it less likely that we start off with an already full stream; or
+/// that the stream fills up before any canister messages can be routed.
+#[test_strategy::proptest]
+fn build_streams_with_refunds(
+    // Stream may have up to 5 initial refunds.
+    #[strategy(-5..=5isize)] initial_refunds: isize,
+    // And up to 10 total initial messages (canister plus refund).
+    #[strategy(-5..=10-#initial_refunds.max(0))] initial_messages: isize,
+
+    // Up to 10 refunds to be routed.
+    #[strategy(-5..=10isize)] refunds_to_route: isize,
+    // Plus up to 10 canister messages to be routed.
+    #[strategy(-5..=10isize)] messages_to_route: isize,
+
+    #[strategy(proptest::sample::select(&[
+        SubnetType::Application,
+        SubnetType::VerifiedApplication,
+        SubnetType::System,
+    ]))]
+    subnet_type: SubnetType,
+    // Set the system subnet stream message limit so that it's sometimes relevant
+    // (for system subnets) and sometimes not.
+    #[strategy(1..=6usize)] system_subnet_stream_msg_limit: usize,
+) {
+    // Maximum stream messages. Also the number of canisters per subnet, as the pool
+    // may only hold one refund per canister.
+    const N: usize = 10;
+
+    let initial_refunds = initial_refunds.max(0) as usize;
+    let mut initial_messages = initial_messages.max(0) as usize;
+    let mut refunds_to_route = refunds_to_route.max(0) as usize;
+    let messages_to_route = messages_to_route.max(0) as usize;
+
+    // Have at least something to route.
+    if refunds_to_route == 0 && messages_to_route == 0 {
+        refunds_to_route = 1;
+    }
+    // Ensure that the `2 * system_subnet_stream_msg_limit` is initially respected
+    // on system subnets.
+    if subnet_type == SubnetType::System && initial_messages > 2 * system_subnet_stream_msg_limit {
+        initial_messages = 2 * system_subnet_stream_msg_limit;
+    }
+
+    let local_canister = |i| canister_test_id(i);
+    let remote_canister = |i| canister_test_id(N as u64 + i);
+    let first_local_canister = local_canister(0);
+    let last_local_canister = local_canister(N as u64 - 1);
+    let first_remote_canister = remote_canister(0);
+    let last_remote_canister = remote_canister(N as u64 - 1);
+
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture_with_limits(
+            &log,
+            N,
+            TARGET_STREAM_SIZE_BYTES,
+            system_subnet_stream_msg_limit,
+        );
+
+        // Set the type of both subnets.
+        provided_state.metadata.network_topology.subnets = btreemap! {
+            LOCAL_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
+            REMOTE_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
+        };
+
+        // Map local canisters to `LOCAL_SUBNET`, remote canisters to `REMOTE_SUBNET`.
+        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
+            btreemap! {
+                CanisterIdRange{ start: first_local_canister, end: last_local_canister } => LOCAL_SUBNET,
+                CanisterIdRange{ start: first_remote_canister, end: last_remote_canister } => REMOTE_SUBNET,
+            },
+        ).unwrap());
+
+        // Loopback and remote streams pre-populated with `initial_refunds` and
+        // `initial_messages` each.
+        let mut local_stream = Stream::new(
+            StreamIndexedQueue::with_begin(13.into()),
+            Default::default(),
+        );
+        let mut remote_stream = Stream::new(
+            StreamIndexedQueue::with_begin(169.into()),
+            Default::default(),
+        );
+        for i in 0..initial_refunds as u64 {
+            local_stream.push(Refund::anonymous(local_canister(i), (i + 1).into()).into());
+            remote_stream.push(Refund::anonymous(remote_canister(i), (i + 1).into()).into());
+        }
+        for i in 0..initial_messages as u64 {
+            local_stream.push(
+                RequestBuilder::new()
+                    .sender(first_local_canister)
+                    .receiver(local_canister(i))
+                    .build()
+                    .into(),
+            );
+            remote_stream.push(
+                RequestBuilder::new()
+                    .sender(first_local_canister)
+                    .receiver(remote_canister(i))
+                    .build()
+                    .into(),
+            );
+        }
+        provided_state
+            .with_streams(btreemap![LOCAL_SUBNET => local_stream, REMOTE_SUBNET => remote_stream]);
+
+        // Pool `refunds_to_route` refunds for local canisters; plus `refunds_to_route`
+        // refunds for remote canisters.
+        for i in 0..refunds_to_route as u64 {
+            provided_state.add_refund(local_canister(i), (1_000_000 - i).into());
+            provided_state.add_refund(remote_canister(i), (1_000_000 - i).into());
+        }
+        // Plus a refund to a canister not mapped in the routing table.
+        provided_state.add_refund(canister_test_id(2 * N as u64), 1_000_000_u64.into());
+
+        // Set up local canister with `messages_to_route` local and `messages_to_route`
+        // remote requests in its output queues.
+        let mut msgs = Vec::new();
+        for i in 0..messages_to_route as u64 {
+            msgs.push(
+                RequestBuilder::new()
+                    .sender(first_local_canister)
+                    .receiver(local_canister(i))
+                    .sender_reply_callback(CallbackId::from(2 * i + 1))
+                    .build(),
+            );
+            msgs.push(
+                RequestBuilder::new()
+                    .sender(first_local_canister)
+                    .receiver(remote_canister(i))
+                    .sender_reply_callback(CallbackId::from(2 * i + 2))
+                    .build(),
+            );
+        }
+        let provided_canister_states = canister_states_with_outputs(msgs);
+        provided_state.put_canister_states(provided_canister_states);
+
+        // Act.
+        let result_state = stream_builder.build_streams(provided_state);
+
+        // All local refunds and local messages were routed into the loopback stream.
+        let loopback_stream = result_state.streams().get(&LOCAL_SUBNET).unwrap();
+        let local_routed_refunds = refunds_to_route;
+        prop_assert_eq!(
+            initial_refunds + local_routed_refunds,
+            loopback_stream.refund_count()
+        );
+        let local_routed_messages = messages_to_route;
+        prop_assert_eq!(
+            initial_refunds + local_routed_refunds + initial_messages + local_routed_messages,
+            loopback_stream.messages().len()
+        );
+
+        let remote_stream = result_state.streams().get(&REMOTE_SUBNET).unwrap();
+        // From a maximum of `initial_refunds + refunds_to_route`, up to `N / 2` refunds
+        //  are in the remote stream; while respecting the maximum stream size.
+        let remote_stream_refunds = (initial_refunds + refunds_to_route)
+            .min(N / 2)
+            .min(N - initial_messages);
+        let remote_routed_refunds = remote_stream_refunds - initial_refunds;
+        prop_assert_eq!(remote_stream_refunds, remote_stream.refund_count());
+        let remote_stream_messages = match subnet_type {
+            // On application subnets, there can be at most `N - refunds` canister messages.
+            SubnetType::Application | SubnetType::VerifiedApplication => {
+                (initial_messages + messages_to_route).min(N - remote_stream_refunds)
+            }
+            // On system subnets, also apply the `2 * system_subnet_stream_msg_limit` limit.
+            SubnetType::System => (initial_messages + messages_to_route)
+                .min(N - remote_stream_refunds)
+                .min(2 * system_subnet_stream_msg_limit),
+        };
+        let remote_routed_messages = remote_stream_messages - initial_messages;
+        prop_assert_eq!(
+            remote_stream_refunds + remote_stream_messages,
+            remote_stream.messages().len()
+        );
+
+        // All local refunds have been routed. Any remote refunds that were not routed
+        // should have been left in the pool.
+        prop_assert_eq!(
+            refunds_to_route - remote_routed_refunds,
+            result_state.refunds().len()
+        );
+
+        prop_assert_eq!(
+            metric_vec(&[
+                (
+                    &[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())],
+                    (initial_refunds
+                        + local_routed_refunds
+                        + initial_messages
+                        + local_routed_messages) as u64
+                ),
+                (
+                    &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
+                    (remote_stream_refunds + remote_stream_messages) as u64
+                ),
+            ]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
+        );
+        assert_routed_messages_eq(
+            metric_vec(&[
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_REFUND),
+                        (LABEL_STATUS, LABEL_VALUE_STATUS_SUCCESS),
+                    ],
+                    (local_routed_refunds + remote_routed_refunds) as u64,
+                ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                        (LABEL_STATUS, LABEL_VALUE_STATUS_SUCCESS),
+                    ],
+                    (local_routed_messages + remote_routed_messages) as u64,
+                ),
+                // The refund that could not be routed is accounted for.
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_REFUND),
+                        (LABEL_STATUS, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND),
+                    ],
+                    1,
+                ),
+            ]),
+            &metrics_registry,
+        );
+
+        // Critical error recorded for the refund that could not be routed.
+        assert_eq_critical_errors(0, 1, &metrics_registry);
+        Ok(())
+    })?;
+}
+
 // Tests that remote requests and all responses with oversized payloads are rejected.
 #[test]
 fn build_streams_with_oversized_payloads() {
@@ -968,12 +1226,218 @@ fn build_streams_with_oversized_payloads() {
     });
 }
 
+/// Local subnet is splitting: a canister is migrating from local subnet to
+/// subnet B.
+#[test]
+fn test_observe_misrouted_messages_on_splitting_subnet() {
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut state, metrics_registry) = new_fixture(&log);
+
+        // Subnets and canisters.
+        const REMOTE_SUBNET_B: SubnetId = SUBNET_4; // Destination of migration.
+        const REMOTE_SUBNET_Z: SubnetId = SUBNET_5; // Other subnet, no migration.
+
+        let local_canister = canister_test_id(100);
+        // Migrating but not yet migrated canister.
+        let migrating_canister = canister_test_id(200);
+        // Already migrated canister.
+        let migrated_canister = canister_test_id(300);
+        let canister_on_b = canister_test_id(400);
+        let canister_on_z = canister_test_id(500);
+
+        // Routing table: `migrating_canister` is still hosted by the local subnet;
+        // `migrated_canister` has already migrated from the local subnet to B.
+        state.metadata.network_topology.routing_table = Arc::new(
+            RoutingTable::try_from(btreemap! {
+                CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
+                CanisterIdRange{ start: migrating_canister, end: migrating_canister } => LOCAL_SUBNET,
+                CanisterIdRange{ start: migrated_canister, end: migrated_canister } => REMOTE_SUBNET_B,
+                CanisterIdRange{ start: canister_on_b, end: canister_on_b } => REMOTE_SUBNET_B,
+                CanisterIdRange{ start: canister_on_z, end: canister_on_z } => REMOTE_SUBNET_Z,
+            })
+            .unwrap(),
+        );
+
+        // Canister migrations: both `migrating_canister` and `migrated_canister` are
+        // migrating from the local subnet to B.
+        state.metadata.network_topology.canister_migrations = Arc::new(
+            CanisterMigrations::try_from(btreemap! {
+                CanisterIdRange{ start: migrating_canister, end: migrating_canister } => vec![LOCAL_SUBNET, REMOTE_SUBNET_B],
+                CanisterIdRange{ start: migrated_canister, end: migrated_canister } => vec![LOCAL_SUBNET, REMOTE_SUBNET_B],
+            })
+            .unwrap(),
+        );
+
+        let message_to = |receiver: CanisterId| {
+            RequestBuilder::default()
+                .sender(local_canister)
+                .receiver(receiver)
+                .build()
+                .into()
+        };
+        let message = |sender: CanisterId, receiver: CanisterId| {
+            RequestBuilder::default()
+                .sender(sender)
+                .receiver(receiver)
+                .build()
+                .into()
+        };
+
+        // Loopback stream, with messages to and from all canisters hosted by subnet A
+        // at any given time. The 3 messages to/from `migrated_canister` are misrouted.
+        let mut loopback_stream = Stream::default();
+        loopback_stream.push(message_to(local_canister));
+        loopback_stream.push(message_to(migrated_canister));
+        loopback_stream.push(message_to(migrating_canister));
+        loopback_stream.push(message(migrated_canister, local_canister));
+        loopback_stream.push(message(migrated_canister, migrated_canister));
+        loopback_stream.push(message(migrating_canister, local_canister));
+        loopback_stream.push(message(migrating_canister, migrating_canister));
+
+        // Stream to subnet B, with messages to all canisters potentially hosted by
+        // subnet B at any given time.
+        //
+        // The 2 messages from the migrated canister and the 2 messages to the migrating
+        // canister are misrouted.
+        let mut stream_to_subnet_b = Stream::default();
+        stream_to_subnet_b.push(message_to(canister_on_b));
+        stream_to_subnet_b.push(message_to(migrated_canister));
+        stream_to_subnet_b.push(message_to(migrating_canister));
+        stream_to_subnet_b.push(message(migrated_canister, canister_on_b));
+        stream_to_subnet_b.push(message(migrated_canister, migrated_canister));
+        stream_to_subnet_b.push(message(migrating_canister, canister_on_b));
+        stream_to_subnet_b.push(message(migrating_canister, migrating_canister));
+
+        // Stream to subnet Z: one message from each currently or previously hosted
+        // canister. The message from `migrated_canister` is misrouted.
+        let mut stream_to_subnet_z = Stream::default();
+        stream_to_subnet_z.push(message_to(canister_on_z));
+        stream_to_subnet_z.push(message(migrated_canister, canister_on_z));
+        stream_to_subnet_z.push(message(migrating_canister, canister_on_z));
+
+        state.modify_streams(|streams| {
+            *streams = btreemap! {
+                LOCAL_SUBNET => loopback_stream,
+                REMOTE_SUBNET_B => stream_to_subnet_b,
+                REMOTE_SUBNET_Z => stream_to_subnet_z,
+            }
+        });
+
+        // Act.
+        stream_builder.observe_misrouted_messages(&state);
+
+        // Assert.
+        assert_eq!(
+            metric_vec(&[
+                (&[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())], 3),
+                (&[(LABEL_REMOTE, &REMOTE_SUBNET_B.to_string())], 4),
+                (&[(LABEL_REMOTE, &REMOTE_SUBNET_Z.to_string())], 1)
+            ]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MISROUTED_MESSAGES)
+        );
+    });
+}
+
+/// A canister is migrating between remote subnets A and B.
+#[test]
+fn test_observe_misrouted_messages_on_third_party_subnet() {
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut state, metrics_registry) = new_fixture(&log);
+
+        // Subnets and canisters.
+        const REMOTE_SUBNET_A: SubnetId = SUBNET_3; // Source of migration.
+        const REMOTE_SUBNET_B: SubnetId = SUBNET_4; // Destination of migration.
+        const REMOTE_SUBNET_Z: SubnetId = SUBNET_5; // Other subnet, no migration.
+
+        let local_canister = canister_test_id(100);
+        let canister_on_a = canister_test_id(200);
+        let migrated_canister = canister_test_id(300);
+        let migrating_canister = canister_test_id(400);
+        let canister_on_b = canister_test_id(500);
+        let canister_on_z = canister_test_id(600);
+
+        // Routing table: `migrating_canister` is still hosted by subnet A;
+        // `migrated_canister` has already migrated from A to B.
+        state.metadata.network_topology.routing_table = Arc::new(
+            RoutingTable::try_from(btreemap! {
+                CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
+                CanisterIdRange{ start: canister_on_a, end: canister_on_a } => REMOTE_SUBNET_A,
+                CanisterIdRange{ start: migrating_canister, end: migrating_canister } => REMOTE_SUBNET_A,
+                CanisterIdRange{ start: migrated_canister, end: migrated_canister } => REMOTE_SUBNET_B,
+                CanisterIdRange{ start: canister_on_b, end: canister_on_b } => REMOTE_SUBNET_B,
+                CanisterIdRange{ start: canister_on_z, end: canister_on_z } => REMOTE_SUBNET_Z,
+            })
+            .unwrap(),
+        );
+
+        // Canister migrations: both `migrating_canister` and `migrated_canister` are
+        // migrating from A to B.
+        state.metadata.network_topology.canister_migrations = Arc::new(
+            CanisterMigrations::try_from(btreemap! {
+                CanisterIdRange{ start: migrated_canister, end: migrated_canister } => vec![REMOTE_SUBNET_A, REMOTE_SUBNET_B],
+                CanisterIdRange{ start: migrating_canister, end: migrating_canister } => vec![REMOTE_SUBNET_A, REMOTE_SUBNET_B],
+            })
+            .unwrap(),
+        );
+
+        let message_to = |receiver: CanisterId| {
+            RequestBuilder::default()
+                .sender(local_canister)
+                .receiver(receiver)
+                .build()
+                .into()
+        };
+
+        // Stream to subnet A with messages to all the canisters it hosted at one time
+        // or another. Only the message to `migrated_canister` is misrouted.
+        let mut stream_to_subnet_a = Stream::default();
+        stream_to_subnet_a.push(message_to(canister_on_a));
+        stream_to_subnet_a.push(message_to(migrated_canister));
+        stream_to_subnet_a.push(message_to(migrating_canister));
+
+        // Stream to subnet B with messages to all the canisters it could potentially
+        // have hosted. Only the message to `migrating_canister` is misrouted.
+        let mut stream_to_subnet_b = Stream::default();
+        stream_to_subnet_b.push(message_to(canister_on_b));
+        stream_to_subnet_b.push(message_to(migrated_canister));
+        stream_to_subnet_b.push(message_to(migrating_canister));
+
+        // Contents of both the loopback stream and the stream to subnet Z. It enqueues
+        // one misrouted message (e.g. due to a manual canister migration). Not counted
+        // because neither the local subnet nor Z are on any migration trace.
+        let mut other_stream = Stream::default();
+        other_stream.push(message_to(canister_on_a));
+
+        state.modify_streams(|streams| {
+            *streams = btreemap! {
+                REMOTE_SUBNET_A => stream_to_subnet_a,
+                REMOTE_SUBNET_B => stream_to_subnet_b,
+                REMOTE_SUBNET_Z => other_stream.clone(),
+                LOCAL_SUBNET => other_stream,
+            }
+        });
+
+        // Act.
+        stream_builder.observe_misrouted_messages(&state);
+
+        // Assert.
+        assert_eq!(
+            metric_vec(&[
+                (&[(LABEL_REMOTE, &REMOTE_SUBNET_A.to_string())], 1),
+                (&[(LABEL_REMOTE, &REMOTE_SUBNET_B.to_string())], 1)
+            ]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MISROUTED_MESSAGES)
+        );
+    });
+}
+
 /// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
 /// be used by a test using specific stream limits.
 fn new_fixture_with_limits(
     log: &ReplicaLogger,
     max_stream_messages: usize,
     target_stream_size_bytes: usize,
+    system_subnet_stream_msg_limit: usize,
 ) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
     let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
     state.metadata.batch_time = Time::from_nanos_since_unix_epoch(5);
@@ -982,6 +1446,7 @@ fn new_fixture_with_limits(
         LOCAL_SUBNET,
         max_stream_messages,
         target_stream_size_bytes,
+        system_subnet_stream_msg_limit,
         &metrics_registry,
         &MessageRoutingMetrics::new(&metrics_registry),
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
@@ -996,7 +1461,12 @@ fn new_fixture_with_limits(
 /// Sets up the `StreamHandlerImpl`, `ReplicatedState` and `MetricsRegistry` to
 /// be used by a test using default stream limits.
 fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, MetricsRegistry) {
-    new_fixture_with_limits(log, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
+    new_fixture_with_limits(
+        log,
+        MAX_STREAM_MESSAGES,
+        TARGET_STREAM_SIZE_BYTES,
+        SYSTEM_SUBNET_STREAM_MSG_LIMIT,
+    )
 }
 
 /// Simulates routing the given requests into a `StreamIndexedQueue` with the
@@ -1119,8 +1589,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
 
         match msg {
             RequestOrResponse::Request(req) => {
-                let callback_id =
-                    register_callback(canister_state, req.sender, req.receiver, req.deadline);
+                let callback_id = register_callback(canister_state, req.receiver, req.deadline);
                 // Check the implicit assumption that the test messages were generated with a
                 // `sender_reply_callback` that is consistent with the callback IDs that the
                 // `CallContextManager` generates and registers.
@@ -1176,7 +1645,7 @@ fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
 /// match for the given statuses and are zero for all other statuses.
 fn assert_routed_messages_eq(expected: MetricVec<u64>, metrics_registry: &MetricsRegistry) {
     assert_eq!(
-        expected,
+        nonzero_values(expected),
         nonzero_values(fetch_int_counter_vec(
             metrics_registry,
             METRIC_ROUTED_MESSAGES

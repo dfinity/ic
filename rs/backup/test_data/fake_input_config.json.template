@@ -22,5 +22,6 @@
         "cold_storage_dir": "/tmp/cold_storage",
         "versions_hot": 2
     },
+    "max_logs_age_to_keep_days": 7,
     "subnets": []
 }

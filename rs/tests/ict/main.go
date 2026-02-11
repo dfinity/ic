@@ -14,7 +14,7 @@ func AssembleAllCmds() *cobra.Command {
 	testCmd.AddCommand(cmd.NewTestListCmd()) // command + subcommand
 	var testnetCmd = cmd.NewTestnetCmd()
 	testnetCmd.AddCommand(cmd.NewTestnetCreateCmd()) // command + subcommand
-	testnetCmd.AddCommand(cmd.NewTestnetListCmd()) // command + subcommand
+	testnetCmd.AddCommand(cmd.NewTestnetListCmd())   // command + subcommand
 	var rootCmd = cmd.NewRootCmd()
 	rootCmd.AddCommand(testCmd)
 	rootCmd.AddCommand(testnetCmd)

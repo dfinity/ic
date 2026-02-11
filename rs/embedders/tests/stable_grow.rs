@@ -26,7 +26,7 @@ fn run_memory_grows(grows: &[GrowCommand]) {
 
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(LARGE_INSTRUCTION_LIMIT)
-        .with_instruction_limit_without_dts(LARGE_INSTRUCTION_LIMIT)
+        .with_instruction_limit_per_query_message(LARGE_INSTRUCTION_LIMIT)
         .with_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .build();
     let canister_id = test.create_canister(Cycles::from(1_u128 << 64));

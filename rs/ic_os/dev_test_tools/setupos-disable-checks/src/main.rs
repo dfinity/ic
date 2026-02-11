@@ -1,10 +1,12 @@
-use anyhow::{Context, Error};
+use anyhow::{Context, Result};
 use clap::Parser;
+use linux_kernel_command_line::KernelCommandLine;
 use regex::Regex;
 use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tempfile::NamedTempFile;
 
 use partition_tools::{Partition, ext::ExtPartition};
@@ -15,14 +17,9 @@ struct Cli {
     #[arg(long, default_value = "disk.img")]
     /// Path to SetupOS disk image; its GRUB boot partition will be modified.
     image_path: PathBuf,
-
-    // TODO: Remove with NODE-1791
-    #[arg(long)]
-    /// Disable old flags for temporary backwards compatibility
-    compat: bool,
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
     let boot_args_path = Path::new("/boot_args");
 
@@ -36,10 +33,7 @@ fn main() -> Result<(), Error> {
     let temp_boot_args = NamedTempFile::new()?;
     fs::write(
         temp_boot_args.path(),
-        process_cmdline(
-            std::str::from_utf8(&bootfs.read_file(boot_args_path)?)?,
-            cli.compat,
-        ),
+        process_cmdline(std::str::from_utf8(&bootfs.read_file(boot_args_path)?)?)?,
     )
     .context("failed to write temporary boot args")?;
     fs::set_permissions(temp_boot_args.path(), Permissions::from_mode(0o755))?;
@@ -55,7 +49,7 @@ fn main() -> Result<(), Error> {
 }
 
 /// Disable checks from the kernel command line
-fn process_cmdline(input: &str, compat: bool) -> String {
+fn process_cmdline(input: &str) -> Result<String> {
     let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
 
     let left;
@@ -82,25 +76,14 @@ fn process_cmdline(input: &str, compat: bool) -> String {
         }
     };
 
-    let requires_space = !boot_args.is_empty();
-    let mut boot_args = format!(
-        "{boot_args}{sep}ic.setupos.run_checks=0",
-        sep = if requires_space { " " } else { "" }
-    );
+    let mut cmdline = KernelCommandLine::from_str(boot_args)?;
+    cmdline.ensure_single_argument("ic.setupos.run_checks", Some("0"))?;
 
-    // TODO: Remove with NODE-1791
-    // Disable old flags for temporary backwards compatibility
-    if compat {
-        boot_args = format!(
-            "{boot_args} ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0",
-        );
-    }
-
-    format!(
-        "# This file has been modified by setupos-disable-checks.\n{file_start}{indent}BOOT_ARGS=\"{boot_args}\"{tail}{file_end}",
+    Ok(format!(
+        "# This file has been modified by setupos-disable-checks.\n{file_start}{indent}BOOT_ARGS=\"{cmdline}\"{tail}{file_end}",
         file_start = &input[..left],
         file_end = &input[right..],
-    )
+    ))
 }
 
 #[cfg(test)]
@@ -108,7 +91,7 @@ mod tests {
     use super::*;
 
     fn test(input: &str, expected: &str) {
-        let result = process_cmdline(input, false);
+        let result = process_cmdline(input).unwrap();
 
         assert_eq!(
             expected,

@@ -9,7 +9,6 @@ use candid::{CandidType, Deserialize, Principal};
 use canlog::log;
 use ic_cdk::bitcoin_canister;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
-use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{ScopeGuard, guard};
@@ -22,11 +21,12 @@ use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
 use crate::state::eventlog::{CkBtcEventLogger, EventLogger};
 use crate::state::utxos::UtxoSet;
 use crate::state::{CkBtcMinterState, mutate_state, read_state};
+use crate::tx::{BitcoinTransactionSigner, FeeRate, SignedRawTransaction, UnsignedTransaction};
 use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_checker::{CheckAddressArgs, CheckAddressResponse};
-pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
+pub use ic_btc_interface::{OutPoint, Page, Satoshi, Txid, Utxo};
 
 pub mod address;
 pub mod dashboard;
@@ -87,6 +87,7 @@ pub struct MinterInfo {
     // Serialize to the old name to be backward compatible in Candid.
     #[serde(rename = "kyt_fee")]
     pub check_fee: u64,
+    pub deposit_btc_min_amount: Option<u64>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -164,6 +165,7 @@ struct SignTxRequest {
     network: Network,
     ecdsa_public_key: ECDSAPublicKey,
     unsigned_tx: tx::UnsignedTransaction,
+    accounts: Vec<Account>,
     change_output: state::ChangeOutput,
     requests: state::SubmittedWithdrawalRequests,
     utxos: Vec<Utxo>,
@@ -222,9 +224,7 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
-pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
-    runtime: &R,
-) -> Option<MillisatoshiPerByte> {
+pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(runtime: &R) -> Option<FeeRate> {
     let btc_network = state::read_state(|s| s.btc_network);
     match runtime
         .get_current_fee_percentiles(&bitcoin_canister::GetCurrentFeePercentilesRequest {
@@ -240,7 +240,7 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
                         fee_estimator.fee_based_minimum_withdrawal_amount(median_fee);
                     log!(
                         Priority::Debug,
-                        "[estimate_fee_per_vbyte]: update median fee per vbyte to {median_fee} and fee-based minimum retrieve amount to {fee_based_retrieve_btc_min_amount} with {fees:?}"
+                        "[estimate_fee_per_vbyte]: update median fee per vbyte to {median_fee:?} and fee-based minimum retrieve amount to {fee_based_retrieve_btc_min_amount} with {fees:?}"
                     );
                     mutate_state(|s| {
                         s.last_fee_per_vbyte = fees;
@@ -256,6 +256,32 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
             log!(
                 Priority::Info,
                 "[estimate_fee_per_vbyte]: failed to get median fee per vbyte: {}",
+                err
+            );
+            None
+        }
+    }
+}
+
+/// Returns an estimate for transaction fees in the 25th percentile in millisatoshi per vbyte. Returns
+/// None if the Bitcoin canister is unavailable or does not have enough data for
+/// an estimate yet.
+pub async fn estimate_25th_fee_per_vbyte<R: CanisterRuntime>(runtime: &R) -> Option<FeeRate> {
+    let btc_network = state::read_state(|s| s.btc_network);
+    match runtime
+        .get_current_fee_percentiles(&bitcoin_canister::GetCurrentFeePercentilesRequest {
+            network: btc_network.into(),
+        })
+        .await
+    {
+        Ok(fees) => {
+            let fee_estimator = state::read_state(|s| runtime.fee_estimator(s));
+            fee_estimator.estimate_nth_fee(&fees, 25)
+        }
+        Err(err) => {
+            log!(
+                Priority::Info,
+                "[estimate_25th_fee_per_vbyte]: failed to get 25th percentile fee per vbyte: {}",
                 err
             );
             None
@@ -362,6 +388,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     ecdsa_public_key,
                     change_output,
                     network: s.btc_network,
+                    accounts: s.find_all_accounts(&unsigned_tx),
                     unsigned_tx,
                     requests: state::SubmittedWithdrawalRequests::ToConfirm {
                         requests: batch.into_iter().collect(),
@@ -460,13 +487,12 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         }
     });
     if let Some((req, total_fee)) = maybe_sign_request {
-        let _ = sign_and_submit_request(req, fee_millisatoshi_per_vbyte, total_fee, runtime).await;
+        let _ = sign_and_submit_request(req, total_fee, runtime).await;
     }
 }
 
 async fn sign_and_submit_request<R: CanisterRuntime>(
     req: SignTxRequest,
-    fee_millisatoshi_per_vbyte: u64,
     total_fee: WithdrawalFee,
     runtime: &R,
 ) -> Result<Txid, CallError> {
@@ -483,41 +509,70 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
     });
 
     // This guard ensures that we return pending requests and UTXOs back to
-    // the state if the signing or sending of a transaction fails or panics.
+    // the state if the signing of a transaction fails or panics.
     let requests_guard = guard((req.requests, req.utxos), |(reqs, utxos)| {
         undo_withdrawal_request(reqs, utxos);
     });
 
-    let txid = req.unsigned_tx.txid();
-    let signed_tx = sign_transaction(
-        req.key_name,
-        &req.ecdsa_public_key,
-        |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
-        req.unsigned_tx,
-        runtime,
-    )
-    .await
-    .inspect_err(|err| {
-        log!(
-            Priority::Info,
-            "[sign_and_submit_request]: failed to sign a Bitcoin transaction: {}",
-            err
-        );
-    })?;
+    let signed_tx = runtime
+        .sign_transaction(
+            req.key_name,
+            req.ecdsa_public_key,
+            req.unsigned_tx,
+            req.accounts,
+        )
+        .await
+        .inspect_err(|err| {
+            log!(
+                Priority::Info,
+                "[sign_and_submit_request]: failed to sign a Bitcoin transaction: {}",
+                err
+            );
+        })?;
+    // Defuse the guard because we signed the transaction successfully.
+    // At this point it does not matter whether the transaction can be sent successfully;
+    // since all nodes in this subnet know the signed transaction,
+    // it is safer to assume that it is public.
+    let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
 
-    state::mutate_state(|s| {
-        for block_index in requests_guard.0.iter_block_index() {
-            s.push_in_flight_request(block_index, state::InFlightStatus::Sending { txid });
-        }
-    });
+    let txid = signed_tx.txid();
+    let fee_rate = signed_tx.fee_rate();
 
     log!(
         Priority::Info,
         "[sign_and_submit_request]: sending a signed transaction {}",
-        hex::encode(tx::encode_into(&signed_tx, Vec::new()))
+        hex::encode(&signed_tx)
     );
+    let signed_tx_bytes = signed_tx.into_bytes();
+
+    // Only fill signed_tx when it is a consolidation transaction.
+    let signed_tx = match requests {
+        state::SubmittedWithdrawalRequests::ToConsolidate { .. } => Some(signed_tx_bytes.clone()),
+        _ => None,
+    };
+
+    // Sending is seen as a one-shot operation.
+    // If it fails, the minter will try to resubmit later.
+    state::mutate_state(|s| {
+        s.last_transaction_submission_time_ns = Some(runtime.time());
+        state::audit::sent_transaction(
+            s,
+            state::SubmittedBtcTransaction {
+                requests,
+                txid,
+                used_utxos,
+                change_output: Some(req.change_output),
+                submitted_at: runtime.time(),
+                effective_fee_per_vbyte: Some(fee_rate),
+                withdrawal_fee: Some(total_fee),
+                signed_tx,
+            },
+            runtime,
+        );
+    });
+
     runtime
-        .send_transaction(&signed_tx, req.network)
+        .send_raw_transaction(signed_tx_bytes, req.network)
         .await
         .inspect_err(|err| {
             log!(
@@ -532,33 +587,6 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
         &txid,
     );
 
-    // Defuse the guard because we sent the transaction
-    // successfully.
-    let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
-
-    // Only fill signed_tx when it is a consolidation transaction.
-    let signed_tx = match requests {
-        state::SubmittedWithdrawalRequests::ToConsolidate { .. } => Some(signed_tx.serialize()),
-        _ => None,
-    };
-
-    state::mutate_state(|s| {
-        s.last_transaction_submission_time_ns = Some(runtime.time());
-        state::audit::sent_transaction(
-            s,
-            state::SubmittedBtcTransaction {
-                requests,
-                txid,
-                used_utxos,
-                change_output: Some(req.change_output),
-                submitted_at: runtime.time(),
-                fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
-                withdrawal_fee: Some(total_fee),
-                signed_tx,
-            },
-            runtime,
-        );
-    });
     Ok(txid)
 }
 
@@ -659,7 +687,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
     }
 
     let main_account = Account {
-        owner: ic_cdk::api::canister_self(),
+        owner: runtime.id(),
         subaccount: None,
     };
 
@@ -698,7 +726,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
     // one confirmation.
     let main_utxos_zero_confirmations = match management::get_utxos(
         btc_network,
-        &main_address.display(btc_network),
+        &main_address_str,
         /*min_confirmations=*/ 0,
         management::CallSource::Minter,
         runtime,
@@ -759,7 +787,6 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
         btc_network,
         state::read_state(|s| s.retrieve_btc_min_amount),
         maybe_finalized_transactions,
-        |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
         |old_txid, new_tx, reason| {
             state::mutate_state(|s| {
                 state::audit::replace_transaction(s, old_txid, new_tx, reason, runtime);
@@ -773,18 +800,16 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
 
 pub async fn resubmit_transactions<
     R: CanisterRuntime,
-    F: Fn(&OutPoint) -> Option<Account>,
     G: Fn(Txid, state::SubmittedBtcTransaction, state::eventlog::ReplacedReason),
     Fee: FeeEstimator,
 >(
     key_name: &str,
-    fee_per_vbyte: u64,
+    fee_rate: FeeRate,
     main_address: BitcoinAddress,
     ecdsa_public_key: ECDSAPublicKey,
     btc_network: Network,
     retrieve_btc_min_amount: u64,
     transactions: BTreeMap<Txid, state::SubmittedBtcTransaction>,
-    lookup_outpoint_account: F,
     replace_transaction: G,
     runtime: &R,
     fee_estimator: &Fee,
@@ -832,13 +857,19 @@ pub async fn resubmit_transactions<
             }
             continue;
         }
-        let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
-            Some(prev_fee) => {
-                // Ensure that the fee is at least min relay fee higher than the previous
-                // transaction fee to comply with BIP-125 (https://en.bitcoin.it/wiki/BIP_0125).
-                fee_per_vbyte.max(prev_fee + Fee::MIN_RELAY_FEE_RATE_INCREASE)
+        let tx_fee_per_vbyte = match submitted_tx.effective_fee_per_vbyte {
+            Some(prev_fee_rate) => {
+                // There are 2 requirements on the fee of a replacement transaction:
+                // 1) The fee rate strictly increases. Although not required from [BIP-125](https://en.bitcoin.it/wiki/BIP_0125),
+                // it is actually required by the [implementation](https://github.com/bitcoin/bitcoin/blob/d2ecd6815d89c9b089b55bc96fdf93b023be8dda/src/policy/rbf.cpp#L149).
+                // 2) The total fee of the replacement transaction must be at least as high as the previous transaction fee plus the minimum relay fee.
+                //
+                // To satisfy both conditions, we choose the new fee rate to be the previous one plus the minimum relay fee rate increase.
+                // This will satisfy 2) because the computed total fee of a transaction is not dependent on the variable signature sizes
+                // (see `FeeEstimator::evaluate_transaction_fee` and `fake_sign`)
+                fee_rate.max(prev_fee_rate + Fee::MIN_RELAY_FEE_RATE_INCREASE)
             }
-            None => fee_per_vbyte,
+            None => fee_rate,
         };
 
         let outputs = match &submitted_tx.requests {
@@ -900,7 +931,7 @@ pub async fn resubmit_transactions<
                     outputs,
                     &main_address,
                     max_num_inputs_in_transaction,
-                    fee_per_vbyte, // Use normal fee
+                    fee_rate, // Use normal fee
                     fee_estimator,
                 )
             }
@@ -921,15 +952,15 @@ pub async fn resubmit_transactions<
             }
         };
 
-        let new_txid = unsigned_tx.txid();
-        let maybe_signed_tx = sign_transaction(
-            key_name.to_string(),
-            &ecdsa_public_key,
-            &lookup_outpoint_account,
-            unsigned_tx,
-            runtime,
-        )
-        .await;
+        let accounts = read_state(|s| s.find_all_accounts(&unsigned_tx));
+        let maybe_signed_tx = runtime
+            .sign_transaction(
+                key_name.to_string(),
+                ecdsa_public_key.clone(),
+                unsigned_tx,
+                accounts,
+            )
+            .await;
 
         let signed_tx = match maybe_signed_tx {
             Ok(tx) => tx,
@@ -942,8 +973,14 @@ pub async fn resubmit_transactions<
                 continue;
             }
         };
+        let new_txid = signed_tx.txid();
+        let fee_rate = signed_tx.fee_rate();
 
-        match runtime.send_transaction(&signed_tx, btc_network).await {
+        let signed_tx_hex = hex::encode(&signed_tx);
+        match runtime
+            .send_raw_transaction(signed_tx.into_bytes(), btc_network)
+            .await
+        {
             Ok(()) => {
                 if old_txid == new_txid {
                     // DEFENSIVE: We should never take this branch because we increase fees for
@@ -952,18 +989,16 @@ pub async fn resubmit_transactions<
                     // equality in case the fee computation rules change in the future.
                     log!(
                         Priority::Info,
-                        "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
+                        "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {signed_tx_hex}",
                         &new_txid,
-                        hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                     );
                     continue;
                 }
                 log!(
                     Priority::Info,
-                    "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
+                    "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {signed_tx_hex}",
                     &new_txid,
                     &old_txid,
-                    hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
                 let new_tx = state::SubmittedBtcTransaction {
                     requests: new_tx_requests,
@@ -971,7 +1006,7 @@ pub async fn resubmit_transactions<
                     txid: new_txid,
                     submitted_at: runtime.time(),
                     change_output: Some(change_output),
-                    fee_per_vbyte: Some(tx_fee_per_vbyte),
+                    effective_fee_per_vbyte: Some(fee_rate),
                     withdrawal_fee: Some(total_fee),
                     // Do not fill signed_tx because this is not a consolidation transaction
                     signed_tx: None,
@@ -981,8 +1016,7 @@ pub async fn resubmit_transactions<
             Err(err) => {
                 log!(
                     Priority::Info,
-                    "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
-                    hex::encode(tx::encode_into(&signed_tx, Vec::new())),
+                    "[finalize_requests]: failed to send transaction bytes {signed_tx_hex} to replace stuck transaction {}: {}",
                     &old_txid,
                     err,
                 );
@@ -1063,59 +1097,6 @@ fn greedy(target: u64, available_utxos: &mut UtxoSet) -> Vec<Utxo> {
     debug_assert!(solution.is_empty() || solution.iter().map(|u| u.value).sum::<u64>() >= target);
 
     solution
-}
-
-/// Gathers ECDSA signatures for all the inputs in the specified unsigned
-/// transaction.
-///
-/// # Panics
-///
-/// This function panics if the `output_account` map does not have an entry for
-/// at least one of the transaction previous output points.
-pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option<Account>>(
-    key_name: String,
-    ecdsa_public_key: &ECDSAPublicKey,
-    lookup_outpoint_account: F,
-    unsigned_tx: tx::UnsignedTransaction,
-    runtime: &R,
-) -> Result<tx::SignedTransaction, CallError> {
-    use crate::address::{derivation_path, derive_public_key_from_account};
-
-    let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
-    let sighasher = tx::TxSigHasher::new(&unsigned_tx);
-    for input in &unsigned_tx.inputs {
-        let outpoint = &input.previous_output;
-
-        let account = lookup_outpoint_account(outpoint)
-            .unwrap_or_else(|| panic!("bug: no account for outpoint {outpoint:?}"));
-
-        let path = derivation_path(&account);
-        let pubkey =
-            ByteBuf::from(derive_public_key_from_account(ecdsa_public_key, &account).public_key);
-        let pkhash = tx::hash160(&pubkey);
-
-        let sighash = sighasher.sighash(input, &pkhash);
-
-        let sec1_signature = management::sign_with_ecdsa(
-            key_name.clone(),
-            DerivationPath::new(path),
-            sighash,
-            runtime,
-        )
-        .await?;
-
-        signed_inputs.push(tx::SignedInput {
-            signature: signature::EncodedSignature::from_sec1(&sec1_signature),
-            pubkey,
-            previous_output: outpoint.clone(),
-            sequence: input.sequence,
-        });
-    }
-    Ok(tx::SignedTransaction {
-        inputs: signed_inputs,
-        outputs: unsigned_tx.outputs,
-        lock_time: unsigned_tx.lock_time,
-    })
 }
 
 pub fn fake_sign(unsigned_tx: &tx::UnsignedTransaction) -> tx::SignedTransaction {
@@ -1206,7 +1187,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: &BitcoinAddress,
     max_num_inputs_in_transaction: usize,
-    fee_per_vbyte: u64,
+    fee_rate: FeeRate,
     fee_estimator: &F,
 ) -> Result<
     (
@@ -1228,7 +1209,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
         outputs,
         main_address,
         max_num_inputs_in_transaction,
-        fee_per_vbyte,
+        fee_rate,
         fee_estimator,
     ) {
         Ok((tx, change, total_fee)) => Ok((tx, change, total_fee, inputs)),
@@ -1247,7 +1228,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: &BitcoinAddress,
     max_num_inputs_in_transaction: usize,
-    fee_per_vbyte: u64,
+    fee_rate: FeeRate,
     fee_estimator: &F,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
     #[cfg(feature = "canbench-rs")]
@@ -1320,7 +1301,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
         lock_time: 0,
     };
 
-    let fee = fee_estimator.evaluate_transaction_fee(&unsigned_tx, fee_per_vbyte);
+    let fee = fee_estimator.evaluate_transaction_fee(&unsigned_tx, fee_rate);
 
     if fee + minter_fee > amount {
         return Err(BuildTxError::AmountTooLow);
@@ -1403,7 +1384,7 @@ pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
 pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     available_utxos: &mut UtxoSet,
     withdrawal_amount: u64,
-    median_fee_millisatoshi_per_vbyte: u64,
+    median_fee_millisatoshi_per_vbyte: FeeRate,
     max_num_inputs_in_transaction: usize,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
@@ -1485,8 +1466,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
 
     let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
 
-    // TODO DEFI-2552: use 25% percentile
-    let fee_millisatoshi_per_vbyte = estimate_fee_per_vbyte(runtime)
+    let fee_millisatoshi_per_vbyte = estimate_25th_fee_per_vbyte(runtime)
         .await
         .ok_or(ConsolidateUtxosError::EstimateFeeNotAvailable)?;
 
@@ -1556,12 +1536,13 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         ecdsa_public_key,
         change_output,
         network: s.btc_network,
+        accounts: s.find_all_accounts(&unsigned_tx),
         unsigned_tx,
         requests: state::SubmittedWithdrawalRequests::ToConsolidate { request },
         utxos,
     });
 
-    sign_and_submit_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
+    sign_and_submit_request(request, total_fee, runtime)
         .await
         .map_err(ConsolidateUtxosError::SubmitRequest)
 }
@@ -1641,7 +1622,7 @@ pub trait CanisterRuntime {
     async fn get_current_fee_percentiles(
         &self,
         request: &GetCurrentFeePercentilesRequest,
-    ) -> Result<Vec<u64>, CallError>;
+    ) -> Result<Vec<FeeRate>, CallError>;
 
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified network.
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
@@ -1660,18 +1641,20 @@ pub trait CanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError>;
 
+    async fn sign_transaction(
+        &self,
+        key_name: String,
+        ecdsa_public_key: ECDSAPublicKey,
+        unsigned_tx: UnsignedTransaction,
+        accounts: Vec<Account>,
+    ) -> Result<SignedRawTransaction, CallError>;
+
     async fn sign_with_ecdsa(
         &self,
         key_name: String,
         derivation_path: Vec<Vec<u8>>,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError>;
-
-    async fn send_transaction(
-        &self,
-        transaction: &tx::SignedTransaction,
-        network: Network,
-    ) -> Result<(), CallError>;
 
     async fn send_raw_transaction(
         &self,
@@ -1711,7 +1694,7 @@ impl CanisterRuntime for IcCanisterRuntime {
     async fn get_current_fee_percentiles(
         &self,
         request: &GetCurrentFeePercentilesRequest,
-    ) -> Result<Vec<u64>, CallError> {
+    ) -> Result<Vec<FeeRate>, CallError> {
         management::bitcoin_get_current_fee_percentiles(request).await
     }
 
@@ -1739,6 +1722,17 @@ impl CanisterRuntime for IcCanisterRuntime {
         updates::update_balance::mint(amount, to, memo).await
     }
 
+    async fn sign_transaction(
+        &self,
+        key_name: String,
+        ecdsa_public_key: ECDSAPublicKey,
+        unsigned_tx: UnsignedTransaction,
+        accounts: Vec<Account>,
+    ) -> Result<SignedRawTransaction, CallError> {
+        let signer = BitcoinTransactionSigner::new(key_name, ecdsa_public_key);
+        signer.sign_transaction(unsigned_tx, accounts, self).await
+    }
+
     async fn sign_with_ecdsa(
         &self,
         key_name: String,
@@ -1756,14 +1750,6 @@ impl CanisterRuntime for IcCanisterRuntime {
         .await
         .map(|result| result.signature)
         .map_err(CallError::from_sign_error)
-    }
-
-    async fn send_transaction(
-        &self,
-        transaction: &tx::SignedTransaction,
-        network: Network,
-    ) -> Result<(), CallError> {
-        management::send_transaction(transaction, network).await
     }
 
     async fn send_raw_transaction(

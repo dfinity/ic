@@ -1,5 +1,6 @@
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, threshold_sig::IcRootOfTrust};
 
+mod algorithm_identifiers;
 mod sign_utils;
 
 pub use sign_utils::{
@@ -10,43 +11,92 @@ pub use sign_utils::{
 pub fn verify_basic_sig_by_public_key(
     algorithm_id: AlgorithmId,
     msg: &[u8],
-    signature: &[u8],
-    public_key: &[u8],
+    sig: &[u8],
+    pk_bytes: &[u8],
 ) -> CryptoResult<()> {
-    use ic_crypto_sha2::Sha256;
+    let (public_key_bytes, signature_bytes) = (pk_bytes.to_vec(), sig.to_vec());
 
-    let (public_key_bytes, signature_bytes) = (public_key.to_vec(), signature.to_vec());
     match algorithm_id {
         AlgorithmId::Ed25519 => {
-            use ic_crypto_internal_basic_sig_ed25519 as ed25519;
+            let pk = ic_ed25519::PublicKey::deserialize_raw(pk_bytes).map_err(|e| {
+                CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::Ed25519,
+                    key_bytes: Some(pk_bytes.to_vec()),
+                    internal_error: e.to_string(),
+                }
+            })?;
 
-            let public_key = ed25519::types::PublicKeyBytes::try_from(public_key_bytes)?;
-            let signature = ed25519::types::SignatureBytes::try_from(signature_bytes)?;
-            ed25519::verify(&signature, msg, &public_key)
+            if sig.len() != ic_ed25519::SIGNATURE_BYTES {
+                return Err(CryptoError::MalformedSignature {
+                    algorithm: AlgorithmId::Ed25519,
+                    sig_bytes: sig.to_vec(),
+                    internal_error: "Invalid length".to_string(),
+                });
+            }
+
+            pk.verify_signature(msg, sig)
+                .map_err(|e| CryptoError::SignatureVerification {
+                    algorithm: AlgorithmId::Ed25519,
+                    public_key_bytes: pk.serialize_raw().to_vec(),
+                    sig_bytes: sig.to_vec(),
+                    internal_error: e.to_string(),
+                })
         }
         AlgorithmId::EcdsaP256 => {
-            use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
+            let pk = ic_secp256r1::PublicKey::deserialize_sec1(pk_bytes).map_err(|e| {
+                CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::EcdsaP256,
+                    key_bytes: Some(pk_bytes.to_vec()),
+                    internal_error: format!("{e:?}"),
+                }
+            })?;
 
-            let public_key = ecdsa_secp256r1::types::PublicKeyBytes(public_key_bytes);
-            let signature = ecdsa_secp256r1::types::SignatureBytes::try_from(signature_bytes)?;
+            if sig.len() != 64 {
+                return Err(CryptoError::MalformedSignature {
+                    algorithm: AlgorithmId::EcdsaP256,
+                    sig_bytes: sig.to_vec(),
+                    internal_error: "Invalid length".to_string(),
+                });
+            }
 
-            // ECDSA CLib impl. does not hash the message (as hash algorithm can vary
-            // in ECDSA), so we do it here with SHA256, which is the only
-            // supported hash currently.
-            let msg_hash = Sha256::hash(msg);
-            ecdsa_secp256r1::verify(&signature, &msg_hash, &public_key)
+            if pk.verify_signature(msg, sig) {
+                Ok(())
+            } else {
+                Err(CryptoError::SignatureVerification {
+                    algorithm: AlgorithmId::EcdsaP256,
+                    public_key_bytes: pk.serialize_sec1(false).to_vec(),
+                    sig_bytes: sig.to_vec(),
+                    internal_error: "Invalid signature".to_string(),
+                })
+            }
         }
         AlgorithmId::EcdsaSecp256k1 => {
-            use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
+            let pk = ic_secp256k1::PublicKey::deserialize_sec1(pk_bytes).map_err(|e| {
+                CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::EcdsaSecp256k1,
+                    key_bytes: Some(pk_bytes.to_vec()),
+                    internal_error: format!("{e:?}"),
+                }
+            })?;
 
-            let public_key = ecdsa_secp256k1::types::PublicKeyBytes(public_key_bytes);
-            let signature = ecdsa_secp256k1::types::SignatureBytes::try_from(signature_bytes)?;
+            if sig.len() != 64 {
+                return Err(CryptoError::MalformedSignature {
+                    algorithm: AlgorithmId::EcdsaSecp256k1,
+                    sig_bytes: sig.to_vec(),
+                    internal_error: "Invalid length".to_string(),
+                });
+            }
 
-            // ECDSA CLib impl. does not hash the message (as hash algorithm can vary
-            // in ECDSA), so we do it here with SHA256, which is the only
-            // supported hash currently.
-            let msg_hash = Sha256::hash(msg);
-            ecdsa_secp256k1::verify(&signature, &msg_hash, &public_key)
+            if pk.verify_signature(msg, sig) {
+                Ok(())
+            } else {
+                Err(CryptoError::SignatureVerification {
+                    algorithm: AlgorithmId::EcdsaSecp256k1,
+                    public_key_bytes: pk.serialize_sec1(false).to_vec(),
+                    sig_bytes: sig.to_vec(),
+                    internal_error: "Invalid signature".to_string(),
+                })
+            }
         }
         AlgorithmId::RsaSha256 => {
             use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;

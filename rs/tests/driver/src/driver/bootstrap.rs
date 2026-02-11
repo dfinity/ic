@@ -1,6 +1,6 @@
 use crate::driver::ic_gateway_vm::HasIcGatewayVm;
 use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
-use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
+use crate::driver::test_env_api::get_guestos_launch_measurements;
 use crate::driver::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
@@ -21,8 +21,8 @@ use crate::driver::{
     test_setup::InfraProvider,
 };
 use anyhow::{Context, Result, bail};
-use config::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config::setupos::{
+use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config_tool::setupos::{
     config_ini::ConfigIniSettings,
     deployment_json::{self, DeploymentSettings},
 };
@@ -185,7 +185,7 @@ pub fn init_ic(
     let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
         get_guestos_initial_update_img_sha256(),
         get_guestos_initial_update_img_url(),
-        get_guestos_initial_launch_measurements(),
+        get_guestos_launch_measurements(),
     );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
@@ -674,7 +674,6 @@ fn create_setupos_config_image(
                 deployment_environment: DeploymentEnvironment::Testnet,
                 mgmt_mac: Some(mac.to_string()),
             },
-            logging: deployment_json::Logging::default(),
             nns: deployment_json::Nns {
                 urls: vec![nns_url.clone()],
             },

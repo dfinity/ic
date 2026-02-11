@@ -19,8 +19,8 @@ use ic_nns_constants::{
 use ic_sns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
-        Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
-        VotingRewardsParameters,
+        CustomProposalCriticality, Governance, NervousSystemParameters, Neuron,
+        NeuronPermissionList, NeuronPermissionType, VotingRewardsParameters,
         governance::{SnsMetadata, Version},
     },
 };
@@ -32,7 +32,10 @@ use ic_sns_swap::{
         NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
     },
 };
-use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue, icrc::metadata_key::MetadataKey,
+    icrc1::account::Account,
+};
 use isocountry::CountryCode;
 use maplit::btreemap;
 use pb::v1::DappCanisters;
@@ -49,7 +52,15 @@ pub mod distributions;
 pub mod pb;
 
 /// The maximum count of dapp canisters that can be initially decentralized.
-pub const MAX_DAPP_CANISTERS_COUNT: usize = 25;
+///
+/// How this value was chosen: An SNS that has more than this many dapp
+/// canisters is "very likely" going to be difficult to review, but that's up to
+/// people who involve themselves with the SNS. Other than that, there is no
+/// (known) technical reason that this shouldn't be higher (e.g. 1000 would
+/// probably technically still be safe). This used to be 25, but later, there
+/// was a desire to create an SNS with 60 or so dapp canisters (onicai). Hence,
+/// this was increased to 100.
+pub const MAX_DAPP_CANISTERS_COUNT: usize = 100;
 
 /// The maximum number of characters allowed for confirmation text.
 pub const MAX_CONFIRMATION_TEXT_LENGTH: usize = 1_000;
@@ -77,7 +88,7 @@ pub const MIN_SNS_NEURONS_PER_BASKET: u64 = 2;
 /// Maximum allowed number of SNS neurons per neuron basket.
 pub const MAX_SNS_NEURONS_PER_BASKET: u64 = 10;
 
-pub const ICRC1_TOKEN_LOGO_KEY: &str = "icrc1:logo";
+pub const ICRC1_TOKEN_LOGO_KEY: &str = MetadataKey::ICRC1_LOGO;
 
 enum MinDirectParticipationThresholdValidationError {
     // This value must be specified.
@@ -423,6 +434,11 @@ impl SnsInitPayload {
             nns_proposal_id: None,
             neurons_fund_participation_constraints: None,
             neurons_fund_participation: None,
+            custom_proposal_criticality: nervous_system_parameters_default
+                .custom_proposal_criticality
+                .map(|c| crate::pb::v1::CustomProposalCriticality {
+                    additional_critical_native_action_ids: c.additional_critical_native_action_ids,
+                }),
         }
     }
 
@@ -603,7 +619,7 @@ impl SnsInitPayload {
 
         if let Some(token_logo) = &self.token_logo {
             payload_builder = payload_builder.with_metadata_entry(
-                ICRC1_TOKEN_LOGO_KEY.to_string(),
+                ICRC1_TOKEN_LOGO_KEY,
                 MetadataValue::Text(token_logo.clone()),
             );
         }
@@ -780,6 +796,7 @@ impl SnsInitPayload {
             token_logo: _,
             neurons_fund_participation_constraints: _,
             neurons_fund_participation: _,
+            custom_proposal_criticality,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
@@ -803,6 +820,11 @@ impl SnsInitPayload {
             max_age_bonus_percentage,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
+            custom_proposal_criticality: custom_proposal_criticality.map(|c| {
+                CustomProposalCriticality {
+                    additional_critical_native_action_ids: c.additional_critical_native_action_ids,
+                }
+            }),
             ..nervous_system_parameters
         }
     }
@@ -2203,6 +2225,7 @@ neurons_fund_participation_constraints:
     intercept_icp_e8s: 0
   ideal_matched_participation_function:
     serialized_representation: '{\"t_1\":\"33300.000000000\",\"t_2\":\"99900.000000000\",\"t_3\":\"166500.000000000\",\"t_4\":\"200000.0000000000\",\"cap\":\"100000.000000000\"}'
+custom_proposal_criticality: null
 initial_token_distribution: !FractionalDeveloperVotingPower
   developer_distribution:
     developer_neurons:

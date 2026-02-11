@@ -45,7 +45,7 @@ use ic_system_test_driver::{
     systest,
     util::{MessageCanister, block_on, runtime_from_url},
 };
-use ic_types::{Height, consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE};
+use ic_types::Height;
 use slog::info;
 
 const MAX_PARALLEL_PRE_SIGNATURES: u32 = 10;
@@ -63,8 +63,10 @@ fn setup(env: TestEnv) {
                     key_configs: key_ids
                         .into_iter()
                         .map(|key_id| KeyConfig {
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(20),
                             key_id,
-                            pre_signatures_to_create_in_advance: 20,
                             max_queue_size: 20,
                         })
                         .collect(),
@@ -157,9 +159,6 @@ fn test(test_env: TestEnv) {
 }
 
 fn main() -> Result<()> {
-    if !STORE_PRE_SIGNATURES_IN_STATE {
-        return Ok(());
-    }
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))

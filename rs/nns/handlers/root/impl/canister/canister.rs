@@ -30,7 +30,8 @@ use ic_nns_handler_root::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
+    LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse, TakeCanisterSnapshotRequest,
+    TakeCanisterSnapshotResponse, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
 
@@ -146,7 +147,7 @@ fn change_nns_canister(request: ChangeCanisterRequest) {
     // Because change_canister is async, and because we can't directly use
     // `await`, we need to use the `spawn` trick.
     let future = async move {
-        let change_canister_result = change_canister::<CdkRuntime>(request).await;
+        let change_canister_result = change_canister(request).await;
         match change_canister_result {
             Ok(()) => {
                 println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
@@ -222,6 +223,34 @@ async fn update_canister_settings(
     check_caller_is_governance();
     canister_management::update_canister_settings(
         update_settings,
+        &mut new_management_canister_client(),
+    )
+    .await
+}
+
+/// Takes a snapshot of a canister controlled by NNS Root. Only callable by NNS
+/// Governance.
+#[update]
+async fn take_canister_snapshot(
+    take_canister_snapshot_request: TakeCanisterSnapshotRequest,
+) -> TakeCanisterSnapshotResponse {
+    check_caller_is_governance();
+    ic_nervous_system_root::take_canister_snapshot::take_canister_snapshot(
+        take_canister_snapshot_request,
+        &mut new_management_canister_client(),
+    )
+    .await
+}
+
+/// Loads a snapshot of a canister controlled by NNS Root. Only callable by NNS
+/// Governance.
+#[update]
+async fn load_canister_snapshot(
+    load_canister_snapshot_request: LoadCanisterSnapshotRequest,
+) -> LoadCanisterSnapshotResponse {
+    check_caller_is_governance();
+    ic_nervous_system_root::load_canister_snapshot::load_canister_snapshot(
+        load_canister_snapshot_request,
         &mut new_management_canister_client(),
     )
     .await

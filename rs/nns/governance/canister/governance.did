@@ -22,6 +22,8 @@ type Action = variant {
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
+  TakeCanisterSnapshot : TakeCanisterSnapshot;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
 };
 
 type AddHotKey = record {
@@ -401,6 +403,7 @@ type GovernanceParameters = record {
   proposal_initial_voting_period : opt Duration;
   proposal_rejection_fee : opt Tokens;
   voting_reward_parameters : opt VotingRewardParameters;
+  custom_proposal_criticality : opt CustomProposalCriticality;
 };
 
 type IdealMatchedParticipationFunction = record {
@@ -467,6 +470,11 @@ type LedgerParameters = record {
 
 type ListKnownNeuronsResponse = record {
   known_neurons : vec KnownNeuron;
+};
+
+type LoadCanisterSnapshot = record {
+  canister_id : opt principal;
+  snapshot_id : opt blob;
 };
 
 // Parameters of the list_neurons method.
@@ -1031,6 +1039,8 @@ type ProposalActionRequest = variant {
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
+  TakeCanisterSnapshot : TakeCanisterSnapshot;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1099,6 +1109,10 @@ type GuestLaunchMeasurementMetadata = record {
   kernel_cmdline : opt text;
 };
 
+type TakeCanisterSnapshot = record {
+  canister_id : opt principal;
+  replace_snapshot : opt blob;
+};
 
 type ProposalData = record {
   id : opt ProposalId;
@@ -1385,6 +1399,10 @@ type VotingRewardParameters = record {
   final_reward_rate : opt Percentage;
 };
 
+type CustomProposalCriticality = record {
+  additional_critical_native_action_ids : opt vec nat64;
+};
+
 type WaitForQuietState = record {
   current_deadline_timestamp_seconds : nat64;
 };
@@ -1476,10 +1494,12 @@ type SelfDescribingProposalAction = record {
 type SelfDescribingValue = variant {
   Blob : blob;
   Text : text;
+  Bool : bool;
   Nat : nat;
   Int : int;
   Array : vec SelfDescribingValue;
   Map : vec record { text; SelfDescribingValue };
+  Null;
 };
 
 type GetPendingProposalsRequest = record {

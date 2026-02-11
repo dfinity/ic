@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/p2p/quic_transport",
     "//rs/types/types",
@@ -19,7 +18,6 @@ DEPENDENCIES = [
     "@crate_index//:backoff",
     "@crate_index//:bytes",
     "@crate_index//:prometheus",
-    "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:slog",
     "@crate_index//:thiserror",
@@ -70,6 +68,7 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":artifact_downloader",
+        "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/interfaces",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",

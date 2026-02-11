@@ -22,7 +22,7 @@ use ic_replicated_state::{
         },
     },
     page_map::PageMap,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
 use ic_test_utilities_types::{
     arbitrary,
@@ -33,16 +33,13 @@ use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
     SubnetId, Time,
-    batch::RawQueryStats,
+    batch::{CanisterCyclesCostSchedule, RawQueryStats},
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
+    methods::{Callback, WasmClosure},
     nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
-};
-use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    methods::{Callback, WasmClosure},
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -341,7 +338,9 @@ impl CanisterStateBuilder {
         };
 
         system_state.memory_allocation = self.memory_allocation;
+        system_state.compute_allocation = self.compute_allocation;
         system_state.certified_data = self.certified_data;
+        system_state.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
@@ -383,11 +382,7 @@ impl CanisterStateBuilder {
         CanisterState {
             system_state,
             execution_state,
-            scheduler_state: SchedulerState {
-                compute_allocation: self.compute_allocation,
-                time_of_last_allocation_charge: self.time_of_last_allocation_charge,
-                ..SchedulerState::default()
-            },
+            scheduler_state: SchedulerState::default(),
         }
     }
 }
@@ -823,7 +818,6 @@ pub fn new_canister_state_with_execution(
 /// Helper function to register a callback.
 pub fn register_callback(
     canister_state: &mut CanisterState,
-    originator: CanisterId,
     respondent: CanisterId,
     deadline: CoarseTime,
 ) -> CallbackId {
@@ -841,7 +835,6 @@ pub fn register_callback(
         .system_state
         .register_callback(Callback::new(
             call_context_id,
-            originator,
             respondent,
             Cycles::zero(),
             Cycles::new(42),
@@ -876,16 +869,16 @@ pub fn insert_dummy_canister(
 prop_compose! {
     /// Produces a strategy that generates arbitrary stream signals.
     ///
-    /// Signals start at `signal_start` from which there are `signal_count` signals.
+    /// Signals start at `signals_begin` from which there are `signal_count` signals.
     /// Of these signals, `ceil(sqrt(signal_count))` are randomly distributed reject signals.
     ///
-    /// `signals_end` comes after the signal range, i.e. `signal_start + signal_count + 1`.
+    /// `signals_end` comes after the signal range, i.e. `signals_begin + signal_count + 1`.
     pub fn arb_stream_signals(
         signal_start_range: RangeInclusive<u64>,
         signal_count_range: RangeInclusive<usize>,
         with_reject_reasons: Vec<RejectReason>
     )(
-        signal_start in signal_start_range,
+        signals_begin in signal_start_range,
         (signal_count, reject_signals_map) in signal_count_range
             .prop_flat_map(move |signal_count| {
                 let reject_signals_count = (signal_count as f64).sqrt().ceil() as usize;
@@ -898,13 +891,13 @@ prop_compose! {
                     ),
                 )
             })
-    ) -> (StreamIndex, VecDeque<RejectSignal>) {
+    ) -> (StreamIndex, StreamIndex, VecDeque<RejectSignal>) {
         let reject_signals = reject_signals_map
             .into_iter()
-            .map(|(index, reason)| RejectSignal::new(reason, (index as u64 + signal_start).into()))
+            .map(|(index, reason)| RejectSignal::new(reason, (index as u64 + signals_begin).into()))
             .collect::<VecDeque<RejectSignal>>();
-        let signals_end = (signal_start + signal_count as u64 + 1).into();
-        (signals_end, reject_signals)
+        let signals_end = (signals_begin + signal_count as u64 + 1).into();
+        (signals_begin.into(), signals_end, reject_signals)
     }
 }
 
@@ -925,7 +918,7 @@ prop_compose! {
             arbitrary::stream_message_with_config(true),
             size_range,
         ),
-        (signals_end, reject_signals) in arb_stream_signals(
+        (signals_begin, signals_end, reject_signals) in arb_stream_signals(
             signal_start_range,
             signal_count_range,
             with_reject_reasons,
@@ -937,7 +930,7 @@ prop_compose! {
             messages.push(m)
         }
 
-        let mut stream = Stream::with_signals(messages, signals_end, reject_signals);
+        let mut stream = Stream::with_signals(messages, signals_begin, signals_end, reject_signals);
         stream.set_reverse_stream_flags(StreamFlags {
             deprecated_responses_only: responses_only_flag,
         });
@@ -989,7 +982,7 @@ prop_compose! {
     )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
-        (signals_end, reject_signals) in arb_stream_signals(
+        (_signals_begin, signals_end, reject_signals) in arb_stream_signals(
             0..=10000,
             min_signal_count..=max_signal_count,
             with_reject_reasons,

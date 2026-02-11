@@ -7,9 +7,9 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-base64 = { workspace = true }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types/" }
 ic-types = { path = "../../../types/types" }
+pem = { workspace = true }
 simple_asn1 = { workspace = true }
 thiserror = { workspace = true }
 
