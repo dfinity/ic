@@ -7,5 +7,7 @@ malicious_binary(
     visibility = [
         # On purpose we don't use a package_group here in order to restrict the visibility to minimum
         "//ic-os/guestos/envs/dev-malicious:__pkg__",
+	# NOTE: Temporary to allow "uploading" the binary
+        "//rs/tests/quick_upgrades:__pkg__",
     ],
 )

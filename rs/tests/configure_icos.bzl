@@ -141,7 +141,8 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     elif guestos_update == "test":
         guestos_update_local("dev", test = True)
     elif guestos_update == "malicious":
-        guestos_update_local("dev-malicious")
+        # NOTE: Add a suffix so the version is different
+        guestos_update_local("dev-malicious", test = True)
     elif guestos_update == "mainnet_latest":
         guestos_update_mainnet(MAINNET_LATEST, "@mainnet_latest_guestos_images")
     elif guestos_update == "mainnet_latest_dev":

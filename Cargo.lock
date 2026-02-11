@@ -20404,6 +20404,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick_upgrades"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "futures",
+ "ic-agent 0.40.1",
+ "ic-canister-client",
+ "ic-management-canister-types-private",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-utils 0.40.1",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "regex",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
