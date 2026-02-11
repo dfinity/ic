@@ -11,7 +11,7 @@ use crate::{
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
-    upgrade::{OrchestratorControlFlow, Upgrade},
+    upgrade::{Upgrade, UpgradeCheckResult},
 };
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
@@ -247,15 +247,12 @@ impl Orchestrator {
                 Arc::clone(&registry_client),
             );
 
-        let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
-
         let upgrade = Some(
             Upgrade::new(
                 Arc::clone(&registry),
                 Arc::clone(&metrics),
                 Arc::clone(&replica_process),
                 Arc::clone(&cup_provider),
-                Arc::clone(&subnet_assignment),
                 replica_version.clone(),
                 args.replica_config_file.clone(),
                 node_id,
@@ -329,6 +326,8 @@ impl Orchestrator {
             logger.clone(),
         );
 
+        let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
+
         let orchestrator_dashboard = Some(OrchestratorDashboard::new(
             Arc::clone(&registry),
             node_id,
@@ -382,6 +381,7 @@ impl Orchestrator {
     ///    to do the rotation and attempt to register the rotated key.
     pub async fn start_tasks(&mut self, cancellation_token: CancellationToken) {
         async fn upgrade_checks(
+            subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             mut upgrade: Upgrade,
             cancellation_token: CancellationToken,
             log: ReplicaLogger,
@@ -390,25 +390,35 @@ impl Orchestrator {
             // in case it gets stuck in an unexpected situation for longer than 15 minutes.
             const UPGRADE_TIMEOUT: Duration = Duration::from_secs(60 * 15);
 
-            // Since the orchestrator is just starting, the last flow must have been a `Stop`
-            let mut last_flow = OrchestratorControlFlow::Stop;
+            // Since the orchestrator is just starting, the last upgrade check must have been a `Stop`
+            let mut last_upgrade_result = UpgradeCheckResult::Stop;
 
             loop {
                 match tokio::time::timeout(UPGRADE_TIMEOUT, upgrade.check_for_upgrade()).await {
-                    Ok(Ok(control_flow)) => {
+                    Ok(upgrade_result) => {
+                        // Update the subnet assignment based on the latest upgrade result.
+                        *subnet_assignment.write().unwrap() = upgrade_result.as_subnet_assignment();
+
+                        if let Err(err) = upgrade_result.as_result() {
+                            warn!(log, "Check for upgrade failed: {err}");
+                            upgrade.metrics.failed_consecutive_upgrade_checks.inc();
+                            continue;
+                        }
+
+                        // Starting from here, the upgrade check was successful.
                         upgrade.metrics.failed_consecutive_upgrade_checks.reset();
 
-                        if matches!(control_flow, OrchestratorControlFlow::Stop) {
+                        if matches!(upgrade_result, UpgradeCheckResult::Stop) {
                             // Wake up all orchestrator tasks and instruct them to stop.
                             cancellation_token.cancel();
                             break;
                         }
 
                         let node_id = upgrade.node_id();
-                        match (&last_flow, &control_flow) {
+                        match (&last_upgrade_result, &upgrade_result) {
                             (
-                                OrchestratorControlFlow::Assigned(subnet_id),
-                                OrchestratorControlFlow::Leaving(_),
+                                UpgradeCheckResult::Assigned(subnet_id),
+                                UpgradeCheckResult::Leaving(_),
                             ) => {
                                 UtilityCommand::notify_host(
                                     &format!(
@@ -421,8 +431,8 @@ impl Orchestrator {
                                 );
                             }
                             (
-                                OrchestratorControlFlow::Leaving(subnet_id),
-                                OrchestratorControlFlow::Unassigned,
+                                UpgradeCheckResult::Leaving(subnet_id),
+                                UpgradeCheckResult::Unassigned,
                             ) => {
                                 UtilityCommand::notify_host(
                                     &format!(
@@ -434,11 +444,7 @@ impl Orchestrator {
                             // Other transitions are not important at the moment.
                             _ => {}
                         }
-                        last_flow = control_flow;
-                    }
-                    Ok(Err(err)) => {
-                        warn!(log, "Check for upgrade failed: {err}");
-                        upgrade.metrics.failed_consecutive_upgrade_checks.inc();
+                        last_upgrade_result = upgrade_result;
                     }
                     Err(err) => {
                         warn!(log, "Check for upgrade timed out: {err}");
@@ -575,7 +581,12 @@ impl Orchestrator {
         if let Some(upgrade) = self.upgrade.take() {
             self.task_tracker.spawn(
                 "GuestOS_upgrade",
-                upgrade_checks(upgrade, cancellation_token.clone(), self.logger.clone()),
+                upgrade_checks(
+                    Arc::clone(&self.subnet_assignment),
+                    upgrade,
+                    cancellation_token.clone(),
+                    self.logger.clone(),
+                ),
             );
         }
 
