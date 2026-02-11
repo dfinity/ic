@@ -564,7 +564,7 @@ mod upgrade {
     use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusType};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-    use proptest::prelude::Rng;
+    use rand::Rng;
 
     #[test]
     fn should_have_two_different_orchestrator_versions_embedding_two_different_ledgers() {

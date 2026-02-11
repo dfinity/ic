@@ -48,5 +48,6 @@ maplit = "1"
 mockall = { workspace = true }
 paste = { workspace = true }
 proptest = { workspace = true }
+rand = { workspace = true }
 scraper = "0.17.1"
 tokio = { workspace = true }
