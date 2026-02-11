@@ -54,7 +54,8 @@ impl MessageRouting for FakeMessageRouting {
             *next_batch_height = batch.batch_number.increment();
             self.batches.write().unwrap().push(batch.clone());
             if let Some(state_manager) = &self.state_manager {
-                let (_height, state) = state_manager.take_tip();
+                let (height, state) = state_manager.take_tip();
+                assert_eq!(expected_height, height.increment());
                 state_manager.commit_and_certify(state, scope, batch.batch_summary);
             }
             return Ok(());

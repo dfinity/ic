@@ -243,8 +243,9 @@ impl StateManager for FakeStateManager {
         _batch_summary: Option<BatchSummary>,
     ) {
         let height = {
-            let h = self.tip_height.write().unwrap();
-            h.increment()
+            let mut h = self.tip_height.write().unwrap();
+            *h = h.increment();
+            *h
         };
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         self.states.write().unwrap().push(Snapshot {
