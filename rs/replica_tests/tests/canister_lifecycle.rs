@@ -803,7 +803,7 @@ fn can_get_canister_information() {
                     0u128,
                     0u128,
                     0u128,
-                    Some(TEST_DEFAULT_LOG_MEMORY_USAGE),
+                    Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                     0u64,
                     Default::default(),
                 ),
