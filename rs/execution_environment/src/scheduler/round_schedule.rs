@@ -414,18 +414,19 @@ impl RoundSchedule {
         let is_reset_round = current_round
             .get()
             .is_multiple_of(accumulated_priority_reset_interval.get());
-
-        // Collect the priority of the canisters for this round.
-        let mut accumulated_priority_invariant = AccumulatedPriority::default();
-        let mut accumulated_priority_deviation = 0.0;
-        for (&canister_id, canister) in canister_states.iter_mut() {
-            if is_reset_round {
+        if is_reset_round {
+            for (_, canister) in canister_states.iter_mut() {
                 // By default, each canister accumulated priority is set to its compute allocation.
                 canister.scheduler_state.accumulated_priority =
                     (canister.compute_allocation().as_percent() as i64 * multiplier).into();
                 canister.scheduler_state.priority_credit = Default::default();
             }
+        }
 
+        // Collect the priority of the canisters for this round.
+        let mut accumulated_priority_invariant = AccumulatedPriority::default();
+        let mut accumulated_priority_deviation = 0.0;
+        for (&canister_id, canister) in canister_states.iter_mut() {
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
 
