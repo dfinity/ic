@@ -5,7 +5,9 @@ use crate::common::{
     install_icrc3_test_ledger, install_index_ng, install_ledger, ledger_get_all_blocks,
     parse_index_logs, transfer, wait_until_sync_is_completed,
 };
-use candid::{Decode, Encode, Nat, Principal};
+#[cfg(not(feature = "icrc3_disabled"))]
+use candid::Principal;
+use candid::{Decode, Encode, Nat};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::blocks::generic_block_to_encoded_block;

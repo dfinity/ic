@@ -1,5 +1,7 @@
+#[cfg(not(feature = "icrc3_disabled"))]
+use crate::common::FEE;
 use crate::common::{
-    FEE, account, approve, default_archive_options, get_fee_collectors_ranges, icrc1_balance_of,
+    account, approve, default_archive_options, get_fee_collectors_ranges, icrc1_balance_of,
     icrc2_transfer_from, index_init_arg_without_interval, install_icrc3_test_ledger,
     install_index_ng, install_ledger, install_ledger_with_wasm, ledger_mainnet_v5_wasm,
     ledger_wasm, transfer, wait_until_sync_is_completed, wait_until_sync_is_completed_or_error,
@@ -21,6 +23,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
+#[cfg(not(feature = "icrc3_disabled"))]
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
