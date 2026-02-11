@@ -28,17 +28,15 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     CallOrigin, CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology,
-    NumWasmPages, ReplicatedState,
+    ReplicatedState,
     canister_state::{
         NextExecution, execution_state::NextScheduledMethod, system_state::CyclesUseCase,
     },
-    num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MAX_WASM_MEMORY_IN_BYTES,
-    MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId, Randomness,
-    ReplicaVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
+    NumInstructions, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
     messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage},
@@ -1103,37 +1101,7 @@ impl SchedulerImpl {
                 self.abort_paused_executions_above_limit(state);
             }
         }
-        self.initialize_wasm_memory_limit(state);
         self.check_dts_invariants(state, current_round_type);
-    }
-
-    fn initialize_wasm_memory_limit(&self, state: &mut ReplicatedState) {
-        fn compute_default_wasm_memory_limit(default: NumBytes, usage: NumBytes) -> NumBytes {
-            // Returns the larger of the two:
-            // - the default value
-            // - the average between the current usage and the hard limit.
-            default.max(NumBytes::new(
-                MAX_WASM_MEMORY_IN_BYTES.saturating_add(usage.get()) / 2,
-            ))
-        }
-
-        let default_wasm_memory_limit = self.exec_env.default_wasm_memory_limit();
-        for canister in state.canisters_iter_mut() {
-            if canister.system_state.wasm_memory_limit.is_none() {
-                let num_wasm_pages = canister
-                    .execution_state
-                    .as_ref()
-                    .map_or_else(|| NumWasmPages::new(0), |es| es.wasm_memory.size);
-                if let Ok(wasm_memory_usage) = num_bytes_try_from(num_wasm_pages) {
-                    let canister = Arc::make_mut(canister);
-                    canister.system_state.wasm_memory_limit =
-                        Some(compute_default_wasm_memory_limit(
-                            default_wasm_memory_limit,
-                            wasm_memory_usage,
-                        ));
-                }
-            }
-        }
     }
 
     /// Checks the deterministic time slicing invariant after round execution.
