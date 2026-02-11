@@ -85,7 +85,8 @@ async fn dashboard(
         &ic_replicated_state::CanisterState,
         &ic_replicated_state::CanisterPriority,
     )> = state
-        .canisters_iter()
+        .canister_states()
+        .values()
         .map(|canister| (canister, state.canister_priority(&canister.canister_id())))
         .collect();
 

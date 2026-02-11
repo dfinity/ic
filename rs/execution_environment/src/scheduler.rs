@@ -260,7 +260,7 @@ impl SchedulerImpl {
     ) -> ReplicatedState {
         let ongoing_long_install_code =
             state
-                .canister_states
+                .canister_states()
                 .iter()
                 .any(|(_canister_id, canister)| match canister.next_execution() {
                     NextExecution::None | NextExecution::StartNew | NextExecution::ContinueLong => {
@@ -275,7 +275,7 @@ impl SchedulerImpl {
                 if can_execute_subnet_msg(
                     &msg,
                     ongoing_long_install_code,
-                    &state.canister_states,
+                    state.canister_states(),
                     round_limits,
                 ) {
                     available_subnet_messages = true;
@@ -831,11 +831,10 @@ impl SchedulerImpl {
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
     ) {
         let current_time = state.time();
-        let not_expired_yet = |ingress: &Arc<Ingress>| ingress.expiry_time >= current_time;
+        let not_expired_yet = |ingress: &Ingress| ingress.expiry_time >= current_time;
         let mut expired_ingress_messages =
             state.filter_subnet_queues_ingress_messages(not_expired_yet);
-        let mut canisters = state.take_canister_states();
-        for canister in canisters.values_mut() {
+        for canister in state.canisters_iter_mut() {
             expired_ingress_messages.extend(
                 canister
                     .system_state
@@ -863,7 +862,6 @@ impl SchedulerImpl {
             );
             canister_ingress_latencies.on_ingress_status_changed(old_status);
         }
-        state.put_canister_states(canisters);
     }
 
     // Observe different Canister metrics
@@ -999,7 +997,7 @@ impl SchedulerImpl {
         // This is because we cannot hold an immutable reference to the map
         // while trying to simultaneously mutate it.
         let canisters_with_outputs: Vec<CanisterId> = state
-            .canister_states
+            .canister_states()
             .iter()
             .filter(|(_, canister)| canister.has_output())
             .map(|(canister_id, _)| *canister_id)
@@ -1041,12 +1039,13 @@ impl SchedulerImpl {
             source_canister
                 .system_state
                 .output_queues_for_each(|canister_id, msg| {
-                    match state.canister_states.get_mut(canister_id) {
+                    let own_subnet_type = state.metadata.own_subnet_type;
+                    match state.canister_state_mut(canister_id) {
                         Some(dest_canister) => dest_canister
                             .push_input(
                                 (*msg).clone(),
                                 &mut subnet_available_guaranteed_response_memory,
-                                state.metadata.own_subnet_type,
+                                own_subnet_type,
                                 InputQueueType::LocalSubnet,
                             )
                             .map(|_| ())
@@ -1090,7 +1089,7 @@ impl SchedulerImpl {
         canister_ids: &BTreeSet<CanisterId>,
     ) -> bool {
         for canister_id in canister_ids {
-            let canister = state.canister_states.get(canister_id).unwrap();
+            let canister = state.canister_state(canister_id).unwrap();
 
             if let Err(err) = canister.check_invariants(&self.hypervisor_config) {
                 let msg = format!(
@@ -1116,7 +1115,8 @@ impl SchedulerImpl {
     /// Aborts paused execution above `max_paused_executions` based on scheduler priority.
     fn abort_paused_executions_above_limit(&self, state: &mut ReplicatedState) {
         let mut paused_round_states = state
-            .canisters_iter()
+            .canister_states()
+            .values()
             .filter_map(|canister| {
                 if canister.has_paused_execution() {
                     let canister_priority = state.canister_priority(&canister.canister_id());
@@ -1139,7 +1139,7 @@ impl SchedulerImpl {
             .iter()
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
-                let canister = state.canister_states.get_mut(&rs.canister_id).unwrap();
+                let canister = state.canister_state_mut(&rs.canister_id).unwrap();
                 self.exec_env.abort_canister(canister, &self.log);
             });
     }
@@ -1174,7 +1174,7 @@ impl SchedulerImpl {
         current_round_type: ExecutionRoundType,
     ) {
         let canisters_with_tasks = state
-            .canister_states
+            .canister_states()
             .iter()
             .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
 
@@ -1236,7 +1236,7 @@ impl Scheduler for SchedulerImpl {
             );
 
             long_running_canister_ids = state
-                .canister_states
+                .canister_states()
                 .iter()
                 .filter_map(|(&canister_id, canister)| match canister.next_execution() {
                     NextExecution::None | NextExecution::StartNew => None,
@@ -1461,8 +1461,7 @@ impl Scheduler for SchedulerImpl {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
 
             RoundSchedule::apply_scheduling_strategy(
-                &mut state.canister_states,
-                &mut state.metadata.subnet_schedule,
+                &mut state,
                 self.config.scheduler_cores,
                 current_round,
                 self.config.accumulated_priority_reset_interval,
@@ -1646,18 +1645,14 @@ impl Scheduler for SchedulerImpl {
                     .num_canister_snapshots
                     .set(final_state.canister_snapshots.count() as i64);
             }
-            round_schedule.finish_round(
-                &final_state.canister_states,
-                &mut final_state.metadata.subnet_schedule,
-                fully_executed_canister_ids,
-            );
+            round_schedule.finish_round(&mut final_state, fully_executed_canister_ids);
             self.finish_round(&mut final_state, current_round_type);
             final_state
                 .metadata
                 .subnet_metrics
                 .update_transactions_total += root_measurement_scope.messages().get();
             final_state.metadata.subnet_metrics.num_canisters =
-                final_state.canister_states.len() as u64;
+                final_state.canister_states().len() as u64;
             final_state
         }
     }
@@ -1967,7 +1962,7 @@ fn observe_replicated_state_metrics(
         BTreeMap::<MasterPublicKeyId, u32>::new();
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
-    state.canisters_iter().for_each(|canister| {
+    state.canister_states().values().for_each(|canister| {
         match canister.system_state.get_status() {
             CanisterStatus::Running { .. } => num_running_canisters += 1,
             CanisterStatus::Stopping { stop_contexts, .. } => {

@@ -4299,7 +4299,8 @@ impl Operation for DashboardRequest {
             .map(|(state, subnet_id)| {
                 state
                     .get_ref()
-                    .canisters_iter()
+                    .canister_states()
+                    .values()
                     .map(|canister| {
                         (
                             canister,
