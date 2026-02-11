@@ -112,7 +112,7 @@ fn setup_minimal_registry_snapshot_for_check_subnet_invariants(
 }
 
 fn assert_non_compliant_record(snapshot: &RegistrySnapshot, error_msg: &str) {
-    let Err(err) = check_subnet_invariants(&snapshot) else {
+    let Err(err) = check_subnet_invariants(snapshot) else {
         panic!("Expected Err, but got Ok!");
     };
     let message = err.msg.to_lowercase();
