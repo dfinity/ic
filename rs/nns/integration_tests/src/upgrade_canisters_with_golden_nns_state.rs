@@ -255,6 +255,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     // TODO: Use PocketIc instead of StateMachine.
     let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
+    state_machine.reject_remote_callbacks();
+
     // Step 1.2: Create a super powerful Neuron.
     println!("Creating super powerful Neuron.");
     let neuron_controller = PrincipalId::new_self_authenticating(&[1, 2, 3, 4]);
@@ -334,6 +336,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     *canister_id,
                     wasm_hash,
                     nns_canister_upgrade.controller_principal_id(),
+                    true,
                 );
                 println!(
                     "Attempt {repetition_number} to upgrade {nns_canister_name} was successful."
