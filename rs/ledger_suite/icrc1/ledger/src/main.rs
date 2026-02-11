@@ -1053,6 +1053,14 @@ async fn icrc107_set_fee_collector(arg: SetFeeCollectorArgs) -> Result<Nat, SetF
         ));
     }
 
+    if let Some(fee_collector) = arg.fee_collector
+        && fee_collector.owner == Principal::anonymous()
+    {
+        return Err(SetFeeCollectorError::InvalidAccount(
+            "The fee collector cannot be set to an anonymous account".to_string(),
+        ));
+    }
+
     let tx = Transaction {
         operation: Operation::FeeCollector {
             fee_collector: arg.fee_collector,

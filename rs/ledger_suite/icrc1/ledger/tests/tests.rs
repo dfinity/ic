@@ -776,6 +776,14 @@ fn test_fee_collector_107_minting_account() {
 }
 
 #[test]
+fn test_fee_collector_107_anonymous() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_anonymous(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_fee_collector_107_smoke() {
     ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_smoke(
         ledger_wasm(),
