@@ -9015,14 +9015,14 @@ fn take_tip_hashes_with_optimization() {
 fn get_state_hash_at() {
     state_manager_test(|metrics, sm| {
         // update `fast_forward_height` to enable optimization
-        sm.update_fast_forward_height(Height::new(500));
-        assert_eq!(sm.fast_forward_height(), 500);
+        sm.update_fast_forward_height(Height::new(100));
+        assert_eq!(sm.fast_forward_height(), 100);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // future checkpoints yield transient error
-        let checkpoint_height = Height::new(500);
+        let checkpoint_height = Height::new(100);
         assert_eq!(
             sm.get_state_hash_at(checkpoint_height),
             Err(StateHashError::Transient(
@@ -9031,12 +9031,12 @@ fn get_state_hash_at() {
         );
 
         // optimization triggers every multiple of 10
-        let no_opt_height = Height::new(480);
+        let no_opt_height = Height::new(80);
         for _ in 0..no_opt_height.get() {
             let state = sm.take_tip().1;
             sm.commit_and_certify(state, CertificationScope::Metadata, None);
         }
-        assert_eq!(no_state_clone_count(metrics), 432); // 432 = 480 - 48, every 10th.
+        assert_eq!(no_state_clone_count(metrics), 72); // 72 = 80 - 8, every 10th.
         assert_eq!(
             sm.get_state_hash_at(checkpoint_height),
             Err(StateHashError::Transient(
@@ -9045,7 +9045,7 @@ fn get_state_hash_at() {
         );
 
         // optimization triggers every multiple of 10
-        for _ in no_opt_height.get()..499 {
+        for _ in no_opt_height.get()..99 {
             let state = sm.take_tip().1;
             sm.commit_and_certify(state, CertificationScope::Metadata, None);
         }
@@ -9053,7 +9053,7 @@ fn get_state_hash_at() {
         // optimization does not trigger on checkpoint height
         let state = sm.take_tip().1;
         sm.commit_and_certify(state, CertificationScope::Full, None);
-        assert_eq!(no_state_clone_count(metrics), 450);
+        assert_eq!(no_state_clone_count(metrics), 90);
 
         // finally hash for checkpoint height is available
         wait_for_checkpoint(&sm, checkpoint_height);
