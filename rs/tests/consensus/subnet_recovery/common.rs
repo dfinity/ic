@@ -471,8 +471,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     // Only check that the pre-signature stash is purged in one test case (chain keys + recoverable
     // corrupt CUP)
-    let check_pre_signature_stash_is_purged = cfg.chain_key
-        && matches!(cfg.corrupt_cup, CupCorruption::CorruptedWithValidNiDkgId);
+    let check_pre_signature_stash_is_purged =
+        cfg.chain_key && matches!(cfg.corrupt_cup, CupCorruption::CorruptedWithValidNiDkgId);
     if check_pre_signature_stash_is_purged {
         // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
         await_pre_signature_stash_size(
