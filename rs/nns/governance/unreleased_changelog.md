@@ -26,6 +26,8 @@ on the process that this file is part of, see
   to get this new behavior).
 - This field is backfilled for existing proposals.
 
+* Added support for recalling replica versions for subnets.
+
 ## Changed
 
 - Change the minimum requirement for maturity disbursement from ~1.06 to 1 (ICP equivalent).
