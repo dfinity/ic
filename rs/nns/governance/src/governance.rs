@@ -617,7 +617,7 @@ impl ProposalData {
         // slightly different, because yes needs a majority to succeed, while
         // no only needs a tie.
         let current_deadline = wait_for_quiet_state.current_deadline_timestamp_seconds;
-        let deciding_amount_yes = new_tally.total / 2 + 1;
+        let deciding_amount_yes = (new_tally.total / 2).saturating_add(1);
         let deciding_amount_no = new_tally.total.div_ceil(2);
         if new_tally.yes >= deciding_amount_yes
             || new_tally.no >= deciding_amount_no
@@ -674,6 +674,9 @@ impl ProposalData {
             now_seconds.saturating_add(required_margin),
         );
 
+        // The way `new_deadline` is calculated above, it assures
+        // the `new_deadline` is never less than `current_deadline`.
+        // Hence, no chance of underflow.
         if new_deadline != current_deadline {
             println!(
                 "{}Updating WFQ deadline for proposal: {:?}. Old: {}, New: {}, Ext: {}",
@@ -764,6 +767,8 @@ impl ProposalData {
             // are 'no'. The conditions are described as below to avoid
             // overflow. In the absence of overflow, the below is
             // equivalent to (2 * yes > total) || (2 * no >= total).
+            // As both `yes` and `no` are smaller than `total`,
+            // there is no chance of underflow.
             let majority =
                 (tally.yes > tally.total - tally.yes) || (tally.no >= tally.total - tally.no);
             let can_accept_votes = self.accepts_vote(now_seconds, voting_period_seconds);
@@ -863,8 +868,8 @@ mod test_wait_for_quiet {
             };
             let new_tally = Tally {
                 timestamp_seconds: now_seconds,
-                yes: old_yes + yes_votes,
-                no: old_no + no_votes,
+                yes: old_yes.saturating_add(yes_votes),
+                no: old_no.saturating_add(no_votes),
                 total: old_total,
             };
             proposal.evaluate_wait_for_quiet(
@@ -1499,6 +1504,8 @@ impl Governance {
         // New neurons are not allowed when the heap is too large.
         self.check_heap_can_grow()?;
 
+        // This is cannot cause an overflow, as before the length of
+        // `neuron_store` reaches usize::Max - 1, canister runs out of memory.
         if self.neuron_store.len() + 1 > MAX_NUMBER_OF_NEURONS {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
@@ -1845,12 +1852,21 @@ impl Governance {
 
         let recipient_account_identifier = neuron_subaccount(recipient_subaccount);
 
-        let transfer_amount_doms = donor_cached_neuron_stake_e8s - transaction_fee;
+        let Some(transfer_amount_e8s) = donor_cached_neuron_stake_e8s.checked_sub(transaction_fee)
+        else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Donor neuron stake of {} e8s is too small to cover the transaction fee of {} e8s",
+                    donor_cached_neuron_stake_e8s, transaction_fee
+                ),
+            ));
+        };
 
         let _ = self
             .ledger
             .transfer_funds(
-                transfer_amount_doms,
+                transfer_amount_e8s,
                 transaction_fee,
                 Some(donor_subaccount),
                 recipient_account_identifier,
@@ -1862,7 +1878,9 @@ impl Governance {
         self.remove_neuron(donor_neuron)?;
 
         self.with_neuron_mut(recipient_neuron_id, |recipient_neuron| {
-            recipient_neuron.cached_neuron_stake_e8s += transfer_amount_doms;
+            recipient_neuron.cached_neuron_stake_e8s = recipient_neuron
+                .cached_neuron_stake_e8s
+                .saturating_add(transfer_amount_e8s);
         })?;
 
         Ok(())
@@ -2048,7 +2066,7 @@ impl Governance {
             .await?;
 
         self.with_neuron_mut(id, |neuron| {
-            let to_deduct = disburse_amount_e8s + transaction_fee_e8s;
+            let to_deduct = disburse_amount_e8s.saturating_add(transaction_fee_e8s);
             // The transfer was successful we can change the stake of the neuron.
             neuron.cached_neuron_stake_e8s =
                 neuron.cached_neuron_stake_e8s.saturating_sub(to_deduct);
@@ -2095,7 +2113,7 @@ impl Governance {
         )?;
 
         let &manage_neuron::Split {
-            amount_e8s: split_amount_e8s,
+            amount_e8s: _,
             memo,
         } = split;
 
@@ -2124,22 +2142,20 @@ impl Governance {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
         }
 
-        if split_amount_e8s < min_stake + transaction_fee_e8s {
+        let min_split_amount = min_stake.saturating_add(transaction_fee_e8s);
+        if split.amount_e8s < min_split_amount {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
                     "Trying to split a neuron with argument {} e8s. This is too little: \
                       at the minimum, one needs the minimum neuron stake, which is {} e8s, \
                       plus the transaction fee, which is {}. Hence the minimum split amount is {}.",
-                    split_amount_e8s,
-                    min_stake,
-                    transaction_fee_e8s,
-                    min_stake + transaction_fee_e8s
+                    split.amount_e8s, min_stake, transaction_fee_e8s, min_split_amount
                 ),
             ));
         }
 
-        if minted_stake_e8s < min_stake + split_amount_e8s {
+        if minted_stake_e8s < min_stake.saturating_add(split.amount_e8s) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -2147,7 +2163,7 @@ impl Governance {
                      This is not allowed, because the parent has stake {} e8s. \
                      If the requested amount was subtracted from it, there would be less than \
                      the minimum allowed stake, which is {} e8s. ",
-                    split_amount_e8s, id.id, minted_stake_e8s, min_stake
+                    split.amount_e8s, id.id, minted_stake_e8s, min_stake
                 ),
             ));
         }
@@ -2177,7 +2193,7 @@ impl Governance {
             command: Some(InFlightCommand::Split(*split)),
         };
 
-        let staked_amount = split_amount_e8s - transaction_fee_e8s;
+        let staked_amount = split.amount_e8s.saturating_sub(transaction_fee_e8s);
 
         // Make sure the parent neuron is not already undergoing a ledger
         // update.
@@ -2220,12 +2236,12 @@ impl Governance {
         self.neuron_store.with_neuron_mut(id, |parent_neuron| {
             parent_neuron.cached_neuron_stake_e8s = parent_neuron
                 .cached_neuron_stake_e8s
-                .checked_sub(split_amount_e8s)
+                .checked_sub(split.amount_e8s)
                 .expect("Subtracting neuron stake underflows");
         })?;
 
         let now = self.env.now();
-        tla_log_locals! { sn_amount : split_amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
+        tla_log_locals! { sn_amount : split.amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2245,7 +2261,7 @@ impl Governance {
                 .with_neuron_mut(id, |parent_neuron| {
                     parent_neuron.cached_neuron_stake_e8s = parent_neuron
                         .cached_neuron_stake_e8s
-                        .checked_add(split_amount_e8s)
+                        .checked_add(split.amount_e8s)
                         .expect("Neuron stake overflows");
                 })
                 .expect("Expected the parent neuron to exist");
@@ -2291,7 +2307,7 @@ impl Governance {
             transfer_maturity_e8s,
             transfer_staked_maturity_e8s,
         } = calculate_split_neuron_effect(
-            split_amount_e8s,
+            split.amount_e8s,
             minted_stake_e8s,
             parent_maturity_e8s,
             parent_staked_maturity_e8s,
@@ -2628,7 +2644,7 @@ impl Governance {
 
         let created_timestamp_seconds = self.env.now();
         let dissolve_and_spawn_at_timestamp_seconds =
-            created_timestamp_seconds + economics.neuron_spawn_dissolve_delay_seconds;
+            created_timestamp_seconds.saturating_add(economics.neuron_spawn_dissolve_delay_seconds);
 
         // Lock both parent and child neurons so that it cannot interleave with other async
         // operations on those neurons and spawn doesn't happen while the parent is in a corrupted
@@ -2834,7 +2850,8 @@ impl Governance {
         }
 
         let min_stake = economics.neuron_minimum_stake_e8s;
-        if disburse_to_neuron.amount_e8s < min_stake + transaction_fee_e8s {
+        let min_disburse_amount = min_stake.saturating_add(transaction_fee_e8s);
+        if disburse_to_neuron.amount_e8s < min_disburse_amount {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -2844,13 +2861,15 @@ impl Governance {
                     disburse_to_neuron.amount_e8s,
                     min_stake,
                     transaction_fee_e8s,
-                    min_stake + transaction_fee_e8s
+                    min_disburse_amount
                 ),
             ));
         }
 
         if parent_neuron.minted_stake_e8s()
-            < economics.neuron_minimum_stake_e8s + disburse_to_neuron.amount_e8s
+            < economics
+                .neuron_minimum_stake_e8s
+                .saturating_add(disburse_to_neuron.amount_e8s)
         {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
@@ -2963,7 +2982,9 @@ impl Governance {
         // Add the child neuron to the set of neurons undergoing ledger updates.
         let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
 
-        let staked_amount = disburse_to_neuron.amount_e8s - transaction_fee_e8s;
+        let staked_amount = disburse_to_neuron
+            .amount_e8s
+            .saturating_sub(transaction_fee_e8s);
 
         // Do the transfer from the parent neuron's subaccount to the child neuron's
         // subaccount.
@@ -3593,10 +3614,12 @@ impl Governance {
             return 0;
         }
 
-        (now - genesis_timestamp_seconds) // Duration since genesis (in seconds).
-            / REWARD_DISTRIBUTION_PERIOD_SECONDS // This is where the truncation happens. Whole number of rounds.
-            * REWARD_DISTRIBUTION_PERIOD_SECONDS // Convert back into seconds.
-            + self.heap_data.genesis_timestamp_seconds // Convert from duration to back to instant.
+        (now.saturating_sub(genesis_timestamp_seconds) // Duration since genesis (in seconds).
+            / REWARD_DISTRIBUTION_PERIOD_SECONDS    // This is where the truncation happens. Whole number of rounds.
+                                                    // No need for safe arithmethics, as `REWARD_DISTRIBUTION_PERIOD_SECONDS` is not 0.
+            * REWARD_DISTRIBUTION_PERIOD_SECONDS) // Convert back into seconds.
+            // No need for safe arithmethics, as we already devided by `REWARD_DISTRIBUTION_PERIOD_SECONDS`.
+            .saturating_add(self.heap_data.genesis_timestamp_seconds) // Convert from duration to back to instant.
     }
 
     pub fn num_ready_to_be_settled_proposals(&self) -> usize {
@@ -4730,7 +4753,7 @@ impl Governance {
             .proposals
             .iter()
             .next_back()
-            .map_or(1, |(k, _)| k + 1)
+            .map_or(1, |(k, _)| k.saturating_add(1))
     }
 
     fn validate_proposal(
@@ -5234,14 +5257,18 @@ impl Governance {
         // - It reduces the voting power of the submitter so that for every proposal
         //   outstanding the submitter will have less voting power to get it approved.
         self.with_neuron_mut(proposer_id, |neuron| {
-            neuron.neuron_fees_e8s += proposal_submission_fee;
+            neuron.neuron_fees_e8s = neuron
+                .neuron_fees_e8s
+                .saturating_add(proposal_submission_fee);
         })
         .expect("Proposer not found.");
 
         // Finally, add this proposal as an open proposal.
         let voting_period_seconds = self.voting_period_seconds()(proposal_data.topic());
         self.closest_proposal_deadline_timestamp_seconds = std::cmp::min(
-            proposal_data.proposal_timestamp_seconds + voting_period_seconds,
+            proposal_data
+                .proposal_timestamp_seconds
+                .saturating_add(voting_period_seconds),
             self.closest_proposal_deadline_timestamp_seconds,
         );
         self.heap_data.proposals.insert(proposal_num, proposal_data);
@@ -6177,7 +6204,8 @@ impl Governance {
         let last_updated = self
             .heap_data
             .maturity_modulation_last_updated_at_timestamp_seconds;
-        last_updated.is_none() || last_updated.unwrap() + ONE_DAY_SECONDS <= now_seconds
+        last_updated.is_none()
+            || last_updated.unwrap().saturating_add(ONE_DAY_SECONDS) <= now_seconds
     }
 
     async fn update_maturity_modulation(&mut self) {
@@ -6602,7 +6630,8 @@ impl Governance {
                     // NOTE: This is the only reason we are checking the existence of neurons
                     // at this stage. Otherwise, we could defer until we distribute them in the
                     // schedule task.
-                    actually_distributed_e8s_equivalent += reward;
+                    actually_distributed_e8s_equivalent =
+                        actually_distributed_e8s_equivalent.saturating_add(reward);
                 } else {
                     println!(
                         "{}Cannot find neuron {}, despite having voted with power {} \
@@ -7761,7 +7790,10 @@ impl Governance {
 
         // Round down to nearest multiple of 15 min.
         let remainder_seconds = time_of_day_seconds % (15 * 60);
-        let seconds_after_utc_midnight = Some(time_of_day_seconds - remainder_seconds);
+        // as `remaineder_seconds` is the residue of `time_of_day_seconds` over a natural number,
+        // can never be bigger than that. Therefore, no risk of underflow.
+        let seconds_after_utc_midnight =
+            Some(time_of_day_seconds.saturating_sub(remainder_seconds));
 
         GlobalTimeOfDay {
             seconds_after_utc_midnight,
@@ -8215,9 +8247,9 @@ pub struct TimeWarp {
 impl TimeWarp {
     pub fn apply(&self, timestamp_s: u64) -> u64 {
         if self.delta_s >= 0 {
-            timestamp_s + (self.delta_s as u64)
+            timestamp_s.saturating_add(self.delta_s as u64)
         } else {
-            timestamp_s - ((-self.delta_s) as u64)
+            timestamp_s.saturating_sub((-self.delta_s) as u64)
         }
     }
 }
