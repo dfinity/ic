@@ -259,5 +259,5 @@ pub trait ProposalPayload<T: CandidType> {
 
 #[async_trait]
 pub trait ProposalAction {
-    async fn action(&self) -> ProposalActionRequest;
+    async fn action(&self, agent: &Agent) -> ProposalActionRequest;
 }

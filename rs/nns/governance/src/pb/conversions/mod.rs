@@ -2733,7 +2733,7 @@ impl From<api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestOsVe
     }
 }
 
-fn convert_guest_launch_measurements_from_pb_to_api(
+pub fn convert_guest_launch_measurements_from_pb_to_api(
     item: PbGuestLaunchMeasurements,
 ) -> api::GuestLaunchMeasurements {
     api::GuestLaunchMeasurements {
