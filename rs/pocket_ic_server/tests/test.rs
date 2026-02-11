@@ -131,9 +131,11 @@ fn test_creation_of_instance_extended() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state: None,
         initial_time: None,
+        mainnet_nns_subnet_id: None,
     };
     let response = client
         .post(url.join("instances").unwrap())

@@ -9,10 +9,10 @@
 //   a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 10 TiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/container/container-run.sh
-//   $ ict testnet create io_perf_benchmark --verbose --lifetime-mins=1440 --output-dir=./test_tmpdir -- --test_tmpdir=./test_tmpdir --test_env=SSH_AUTH_SOCK --test_env NUM_PERF_HOSTS=1
+//   $ NUM_PERF_HOSTS=1 ict testnet create io_perf_benchmark --verbose --output-dir=./test_tmpdir -- --test_tmpdir=./test_tmpdir
 //
 // Note: The `./test_tmpdir` directory is included in `.gitignore`.
 //
@@ -54,12 +54,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
-use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
+use ic_system_test_driver::driver::ic_gateway_vm::IcGatewayVm;
 use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     group::SystemTestGroup,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
@@ -82,7 +81,9 @@ fn main() -> Result<()> {
         .ok()
         .and_then(|s| s.parse::<u64>().ok());
 
-    let config = Config::new(perf_hosts, num_hosts);
+    let hostuser = std::env::var("HOSTUSER").expect("HOSTUSER environment variable must be set");
+
+    let config = Config::new(perf_hosts, num_hosts, hostuser);
 
     SystemTestGroup::new()
         .with_setup(config.build())
@@ -91,7 +92,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn switch_to_ssd(log: &Logger, hostname: &str) {
+fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
     let script = r##"
         #!/bin/bash
         set -e
@@ -178,7 +179,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
     let mut ssh = Command::new("ssh")
         .arg("-o")
         .arg("StrictHostKeyChecking=no")
-        .arg("farm@".to_owned() + hostname)
+        .arg(hostuser.to_owned() + "@" + hostname)
         .arg(script)
         .stdout(Stdio::piped())
         .spawn()
@@ -197,11 +198,16 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 pub struct Config {
     hosts: Option<Vec<String>>,
     num_hosts: Option<u64>,
+    hostuser: String,
 }
 
 impl Config {
-    pub fn new(hosts: Option<Vec<String>>, num_hosts: Option<u64>) -> Config {
-        Config { hosts, num_hosts }
+    pub fn new(hosts: Option<Vec<String>>, num_hosts: Option<u64>, hostuser: String) -> Config {
+        Config {
+            hosts,
+            num_hosts,
+            hostuser,
+        }
     }
 
     /// Builds the IC instance.
@@ -211,12 +217,6 @@ impl Config {
 }
 
 pub fn setup(env: TestEnv, config: Config) {
-    // start p8s for metrics and dashboards
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
@@ -279,7 +279,10 @@ pub fn setup(env: TestEnv, config: Config) {
                 "Node {} is allocated to host: {}", node_id, hostname
             );
             let log = logger.clone();
-            switch_to_ssd_handles.push(std::thread::spawn(move || switch_to_ssd(&log, &hostname)));
+            let hostuser = config.hostuser.clone();
+            switch_to_ssd_handles.push(std::thread::spawn(move || {
+                switch_to_ssd(&log, &hostname, &hostuser)
+            }));
         }
     }
     for handle in switch_to_ssd_handles {
@@ -303,8 +306,4 @@ pub fn setup(env: TestEnv, config: Config) {
             .start(&env)
             .expect("failed to setup ic-gateway");
     }
-    let ic_gateway = env.get_deployed_ic_gateway("ic-gateway-0").unwrap();
-    let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
 }

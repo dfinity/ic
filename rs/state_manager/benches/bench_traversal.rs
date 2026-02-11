@@ -21,7 +21,7 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    Cycles,
+    Cycles, Height,
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,
     xnet::StreamIndex,
@@ -120,28 +120,31 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
             5 => Unknown,
             _ => unreachable!(),
         };
-        state.set_ingress_status(message_test_id(i), status, NumBytes::from(u64::MAX));
+        state.set_ingress_status(message_test_id(i), status, NumBytes::from(u64::MAX), |_| {});
     }
 
+    let height = Height::new(0);
     assert_eq!(
-        hash_state(&state).digest(),
-        hash_lazy_tree(&replicated_state_as_lazy_tree(&state))
+        hash_state(&state, height).digest(),
+        hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height))
             .unwrap()
             .root_hash(),
     );
 
     c.bench_function("traverse/hash_tree", |b| {
-        b.iter(|| black_box(hash_state(&state)));
+        b.iter(|| black_box(hash_state(&state, height)));
     });
 
     c.bench_function("traverse/hash_tree_new", |b| {
-        b.iter(|| black_box(hash_lazy_tree(&replicated_state_as_lazy_tree(&state)).unwrap()))
+        b.iter(|| {
+            black_box(hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap())
+        })
     });
 
     c.bench_function("traverse/hash_tree_direct", |b| {
         b.iter(|| {
             black_box(crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(
-                &state,
+                &state, height,
             )))
         })
     });
@@ -150,6 +153,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
         b.iter(|| {
             black_box(encode_stream_slice(
                 &state,
+                height,
                 subnet_test_id(2),
                 StreamIndex::from(0),
                 StreamIndex::from(100),
@@ -159,7 +163,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     c.bench_function("traverse/build_witness_gen", |b| {
-        let labeled_tree = traverse(&state, LabeledTreeVisitor::default());
+        let labeled_tree = traverse(&state, height, LabeledTreeVisitor::default());
         b.iter(|| {
             black_box(build_witness_gen(&labeled_tree));
         })
@@ -168,7 +172,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     c.bench_function("traverse/certify_response/1", |b| {
         use LabeledTree::*;
 
-        let labeled_tree = traverse(&state, LabeledTreeVisitor::default());
+        let labeled_tree = traverse(&state, height, LabeledTreeVisitor::default());
         let witness_gen = build_witness_gen(&labeled_tree);
 
         let data_tree = SubTree(flatmap! {
@@ -208,7 +212,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     };
 
     c.bench_function("traverse/certify_response/100", |b| {
-        let labeled_tree = traverse(&state, LabeledTreeVisitor::default());
+        let labeled_tree = traverse(&state, height, LabeledTreeVisitor::default());
         let witness_gen = build_witness_gen(&labeled_tree);
 
         b.iter(|| {
@@ -221,7 +225,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     c.bench_function("traverse/certify_response/100/new", |b| {
-        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state)).unwrap();
+        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap();
         b.iter(|| {
             black_box(
                 hash_tree
@@ -246,20 +250,24 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     c.bench_function("traverse/hash_custom_sections/100", |b| {
         b.iter(|| {
             black_box(
-                hash_lazy_tree(&replicated_state_as_lazy_tree(&state_100_custom_sections)).unwrap(),
+                hash_lazy_tree(&replicated_state_as_lazy_tree(
+                    &state_100_custom_sections,
+                    height,
+                ))
+                .unwrap(),
             )
         });
     });
 
     let mut group = c.benchmark_group("drop_tree");
     group.bench_function(BenchmarkId::new("crypto::HashTree", NUM_STATUSES), |b| {
-        let hash_tree = hash_state(&state);
+        let hash_tree = hash_state(&state, height);
         b.iter_batched(|| hash_tree.clone(), std::mem::drop, BatchSize::LargeInput)
     });
     group.bench_function(
         BenchmarkId::new("canonical_state::HashTree", NUM_STATUSES),
         |b| {
-            let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state)).unwrap();
+            let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap();
             b.iter_batched(|| hash_tree.clone(), std::mem::drop, BatchSize::LargeInput)
         },
     );

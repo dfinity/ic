@@ -8,9 +8,11 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::{KeyManager, NiDkgAlgorithm, ThresholdSigner};
+use ic_logger::ReplicaLogger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{
     NiDkgConfig, NiDkgConfigData, NiDkgThreshold,
@@ -193,7 +195,6 @@ pub fn dummy_transcript_for_tests_with_params(
     // - We cannot use the functions in this `ic-crypto-test-utils-ni-dkg` crate from the `ic-types`
     //   crate even just for tests, due to the quasi-circular dependency that it would introduce.
     // Since the code is not very complex and a dozen lines, duplicating it is not a big issue.
-    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
     NiDkgTranscript {
         dkg_id: NiDkgId {
             start_block_height: Height::from(0),
@@ -206,17 +207,23 @@ pub fn dummy_transcript_for_tests_with_params(
         committee: NiDkgReceivers::new(committee.into_iter().collect())
             .expect("Couldn't create non-interactive DKG committee"),
         registry_version: RegistryVersion::from(registry_version),
-        internal_csp_transcript: CspNiDkgTranscript::Groth20_Bls12_381(
-            ni_dkg_groth20_bls12_381::Transcript {
-                public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
-                    // the following public key matches the one used in StateMachine tests
-                    coefficients: vec![PublicKeyBytes(hex::decode("adf65638a53056b2222c91bb2457b0274bca95198a5acbdadfe7fd72178f069bdea8d99e9479d8087a2686fc81bf3c4b11fe275570d481f1698f79d468afe0e57acc1e298f8b69798da7a891bbec197093ec5f475909923d48bfed6843dbed1f").unwrap().try_into().unwrap())],
-                },
-                receiver_data: BTreeMap::new(),
-            },
-        ),
+        internal_csp_transcript: dummy_csp_transcript(),
     }
 }
+
+pub fn dummy_csp_transcript() -> CspNiDkgTranscript {
+    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+    CspNiDkgTranscript::Groth20_Bls12_381(
+        ni_dkg_groth20_bls12_381::Transcript {
+            public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
+                // the following public key matches the one used in StateMachine tests
+                coefficients: vec![PublicKeyBytes(hex::decode("adf65638a53056b2222c91bb2457b0274bca95198a5acbdadfe7fd72178f069bdea8d99e9479d8087a2686fc81bf3c4b11fe275570d481f1698f79d468afe0e57acc1e298f8b69798da7a891bbec197093ec5f475909923d48bfed6843dbed1f").unwrap().try_into().unwrap())],
+            },
+            receiver_data: BTreeMap::new(),
+        },
+    )
+}
+
 pub fn dummy_transcript_for_tests() -> NiDkgTranscript {
     dummy_transcript_for_tests_with_params(
         vec![NodeId::from(PrincipalId::new_node_test_id(0))],
@@ -224,6 +231,12 @@ pub fn dummy_transcript_for_tests() -> NiDkgTranscript {
         1,
         0,
     )
+}
+
+pub fn dummy_dealing(seed: u8) -> NiDkgDealing {
+    NiDkgDealing {
+        internal_dealing: ni_dkg_csp_dealing(seed),
+    }
 }
 
 pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {
@@ -686,34 +699,52 @@ pub struct NiDkgTestEnvironment {
     pub registry_data: Arc<ProtoRegistryDataProvider>,
     pub registry: Arc<FakeRegistryClient>,
     use_remote_vault: bool,
+    use_inmem_logger: bool,
+    pub loggers: BTreeMap<NodeId, InMemoryReplicaLogger>,
 }
 
 impl NiDkgTestEnvironment {
     /// Creates a new empty test environment.
     /// The crypto components are initialized with local vaults.
     pub fn new() -> Self {
-        Self::new_impl(false)
+        Self::new_impl(false, false)
     }
 
     pub fn new_with_remote_vault() -> Self {
-        Self::new_impl(true)
+        Self::new_impl(true, false)
     }
 
-    fn new_impl(use_remote_vault: bool) -> Self {
+    pub fn new_with_remote_vault_and_inmem_logger() -> Self {
+        Self::new_impl(true, true)
+    }
+
+    fn new_impl(use_remote_vault: bool, use_inmem_logger: bool) -> Self {
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
         Self {
             crypto_components: BTreeMap::new(),
             registry_data,
             registry,
             use_remote_vault,
+            use_inmem_logger,
+            loggers: BTreeMap::new(),
         }
     }
 
     /// Creates a new test environment appropriate for the given config.
     /// The crypto components are initialized with local vaults.
     pub fn new_for_config<R: Rng + CryptoRng>(config: &NiDkgConfig, rng: &mut R) -> Self {
-        Self::new_for_config_impl(config, false, rng)
+        Self::new_for_config_impl(config, false, false, rng)
+    }
+
+    /// Creates a new test environment appropriate for the given config.
+    /// The crypto components are initialized with local vaults.
+    pub fn new_for_config_with_inmem_logger<R: Rng + CryptoRng>(
+        config: &NiDkgConfig,
+        rng: &mut R,
+    ) -> Self {
+        Self::new_for_config_impl(config, false, true, rng)
     }
 
     /// Creates a new test environment appropriate for the given config.
@@ -722,15 +753,16 @@ impl NiDkgTestEnvironment {
         config: &NiDkgConfig,
         rng: &mut R,
     ) -> Self {
-        Self::new_for_config_impl(config, true, rng)
+        Self::new_for_config_impl(config, true, false, rng)
     }
 
     fn new_for_config_impl<R: Rng + CryptoRng>(
         config: &NiDkgConfig,
         use_remote_vault: bool,
+        use_inmem_logger: bool,
         rng: &mut R,
     ) -> Self {
-        let mut env = Self::new_impl(use_remote_vault);
+        let mut env = Self::new_impl(use_remote_vault, use_inmem_logger);
         env.update_for_config(config, rng);
         env
     }
@@ -753,6 +785,7 @@ impl NiDkgTestEnvironment {
                 ni_dkg_config,
                 node_id,
                 self.use_remote_vault,
+                self.use_inmem_logger,
                 rng,
             );
         }
@@ -779,7 +812,7 @@ impl NiDkgTestEnvironment {
     /// Note that this only works if the environment was originally serialized
     /// using `save_to_dir`.
     pub fn new_from_dir<R: Rng + CryptoRng>(toplevel_path: &Path, rng: &mut R) -> Self {
-        Self::new_from_dir_impl(toplevel_path, false, rng)
+        Self::new_from_dir_impl(toplevel_path, false, false, rng)
     }
 
     /// Deserializes a new `NiDkgTestEnvironment` from disk.
@@ -791,12 +824,13 @@ impl NiDkgTestEnvironment {
         toplevel_path: &Path,
         rng: &mut R,
     ) -> Self {
-        Self::new_from_dir_impl(toplevel_path, true, rng)
+        Self::new_from_dir_impl(toplevel_path, true, false, rng)
     }
 
     fn new_from_dir_impl<R: Rng + CryptoRng>(
         toplevel_path: &Path,
         use_remote_vault: bool,
+        use_inmem_logger: bool,
         rng: &mut R,
     ) -> Self {
         fn node_ids_from_dir_names(toplevel_path: &Path) -> BTreeMap<NodeId, PathBuf> {
@@ -826,6 +860,8 @@ impl NiDkgTestEnvironment {
             registry_data,
             registry,
             use_remote_vault,
+            use_inmem_logger,
+            loggers: BTreeMap::new(),
         };
         for (node_id, crypto_root) in node_ids_from_dir_names(toplevel_path) {
             let crypto_component_builder = TempCryptoComponent::builder()
@@ -861,6 +897,7 @@ impl NiDkgTestEnvironment {
         ni_dkg_config: &NiDkgConfig,
         node_id: NodeId,
         use_remote_vault: bool,
+        use_inmem_logger: bool,
         rng: &mut R,
     ) {
         // Insert TempCryptoComponent
@@ -878,6 +915,17 @@ impl NiDkgTestEnvironment {
         } else {
             temp_crypto_builder
         };
+        let temp_crypto_builder = if use_inmem_logger {
+            self.loggers.insert(node_id, InMemoryReplicaLogger::new());
+            let logger_ref = self
+                .loggers
+                .get(&node_id)
+                .expect("BTreeMap lost the logger");
+            temp_crypto_builder.with_logger(ReplicaLogger::from(logger_ref))
+        } else {
+            temp_crypto_builder
+        };
+
         let temp_crypto = temp_crypto_builder.build();
         let dkg_dealing_encryption_pubkey = temp_crypto
             .current_node_public_keys()

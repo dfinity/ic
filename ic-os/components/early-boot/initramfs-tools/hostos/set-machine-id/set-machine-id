@@ -20,7 +20,7 @@ esac
 
 # Mount the config partition
 mkdir -p /mnt
-mount -t ext4 /dev/vda3 /mnt
+mount -t ext4 /dev/hostlvm/config /mnt
 
 # If it contains a saved machine-id, then use it. Bind-mount it over the rootfs
 # that we are about to boot, systemd will take it as the given machine-id.

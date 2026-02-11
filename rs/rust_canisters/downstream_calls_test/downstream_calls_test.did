@@ -1,3 +1,0 @@
-service : {
-  reply_or_defer : (vec blob, nat64, nat64, nat64) -> (text);
-}

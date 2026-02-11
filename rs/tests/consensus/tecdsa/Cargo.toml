@@ -53,6 +53,10 @@ name = "ic-systest-tecdsa-key-rotation"
 path = "tecdsa_key_rotation_test.rs"
 
 [[bin]]
+name = "ic-systest-pre-signature-stash-management"
+path = "pre_signature_stash_management_test.rs"
+
+[[bin]]
 name = "ic-systest-tecdsa-remove-nodes"
 path = "tecdsa_remove_nodes_test.rs"
 

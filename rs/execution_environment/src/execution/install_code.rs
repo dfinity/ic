@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::execution::common::log_dirty_pages;
+use crate::execution::common::{log_dirty_pages, validate_controller};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::{
@@ -11,7 +11,7 @@ use ic_embedders::{
     wasmtime_embedder::system_api::ExecutionParameters,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, SubnetAvailableExecutionMemoryChange,
+    HypervisorError, HypervisorResult, MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
     SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
@@ -20,11 +20,11 @@ use ic_management_canister_types_private::{
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::{CanisterState, ExecutionState, MessageMemoryUsage, num_bytes_try_from};
+use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time, funds::Cycles,
+    CanisterLog, CanisterTimer, Cycles, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
 use ic_wasm_types::WasmHash;
@@ -161,7 +161,7 @@ impl InstallCodeHelper {
 
     pub fn bump_canister_version(&mut self) {
         self.steps.push(InstallCodeStep::BumpCanisterVersion);
-        self.canister.system_state.canister_version += 1;
+        self.canister.system_state.bump_canister_version();
     }
 
     pub fn add_canister_change(
@@ -487,7 +487,7 @@ impl InstallCodeHelper {
         self.steps.push(InstallCodeStep::ValidateInput);
 
         let config = &original.config;
-        let id = self.canister.system_state.canister_id;
+        let id = self.canister.canister_id();
 
         validate_controller(&self.canister, &original.sender)?;
 
@@ -558,17 +558,6 @@ impl InstallCodeHelper {
         self.canister.execution_state = Some(execution_state);
 
         let new_memory_usage = self.canister.memory_usage();
-        match self.canister.memory_allocation() {
-            MemoryAllocation::Reserved(reserved_bytes) => {
-                if new_memory_usage > reserved_bytes {
-                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                        memory_allocation_given: memory_allocation,
-                        memory_usage_needed: new_memory_usage,
-                    });
-                }
-            }
-            MemoryAllocation::BestEffort => (),
-        }
         self.update_allocated_bytes(
             old_memory_usage,
             old_wasm_custom_sections_memory_used,
@@ -588,8 +577,8 @@ impl InstallCodeHelper {
         new_wasm_custom_sections_memory_used: NumBytes,
         memory_allocation: MemoryAllocation,
     ) {
-        let old_bytes = memory_allocation.bytes().max(old_memory_usage);
-        let new_bytes = memory_allocation.bytes().max(new_memory_usage);
+        let old_bytes = memory_allocation.allocated_bytes(old_memory_usage);
+        let new_bytes = memory_allocation.allocated_bytes(new_memory_usage);
         if old_bytes <= new_bytes {
             self.allocated_bytes += new_bytes - old_bytes;
         } else {
@@ -606,7 +595,7 @@ impl InstallCodeHelper {
 
     /// Takes the canister log.
     pub(crate) fn take_canister_log(&mut self) -> CanisterLog {
-        std::mem::take(&mut self.canister.system_state.canister_log)
+        self.canister.system_state.canister_log.take()
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
@@ -731,14 +720,13 @@ impl InstallCodeHelper {
             execution_state.wasm_memory = wasm_memory;
             execution_state.stable_memory = stable_memory;
             execution_state.exported_globals = globals;
-            match self.canister.system_state.memory_allocation {
-                MemoryAllocation::Reserved(_) => {}
-                MemoryAllocation::BestEffort => {
-                    self.allocated_bytes += output.allocated_bytes;
-                    self.allocated_guaranteed_response_message_bytes +=
-                        output.allocated_guaranteed_response_message_bytes;
-                }
-            }
+            self.allocated_bytes += output.allocated_bytes;
+            debug_assert_eq!(
+                output.allocated_guaranteed_response_message_bytes,
+                NumBytes::new(0)
+            ); // no messages can be created during `install_code`
+            self.allocated_guaranteed_response_message_bytes +=
+                output.allocated_guaranteed_response_message_bytes;
             self.total_heap_delta +=
                 NumBytes::new((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64);
         }
@@ -822,20 +810,6 @@ pub(crate) struct OriginalContext {
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
     pub wasm_execution_mode: WasmExecutionMode,
-}
-
-pub(crate) fn validate_controller(
-    canister: &CanisterState,
-    controller: &PrincipalId,
-) -> Result<(), CanisterManagerError> {
-    if !canister.controllers().contains(controller) {
-        return Err(CanisterManagerError::CanisterInvalidController {
-            canister_id: canister.canister_id(),
-            controllers_expected: canister.system_state.controllers.clone(),
-            controller_provided: *controller,
-        });
-    }
-    Ok(())
 }
 
 pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {

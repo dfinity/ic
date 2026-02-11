@@ -3,7 +3,7 @@
 
 use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
-use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
@@ -34,10 +34,10 @@ use wirm::{
         },
         types::{Body, Value},
     },
-    wasmparser::{ExternalKind, Operator, TypeRef, ValType},
+    wasmparser::{ExternalKind, Operator, RefType, TypeRef, ValType},
 };
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use crate::WASM_PAGE_SIZE;
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
@@ -64,7 +64,7 @@ pub const WASM_VALID_SYSTEM_FUNCTIONS: [&str; 7] = [
 
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
-pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 11 * 1024 * 1024;
+pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -793,6 +793,16 @@ fn get_valid_system_apis_common(
             )],
         ),
         (
+            "cost_http_request_v2",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "cost_sign_with_ecdsa",
             vec![(
                 API_VERSION_IC0,
@@ -1141,6 +1151,18 @@ fn validate_export_section(
                 total_length: sum_exported_function_name_lengths,
                 allowed: max_sum_exported_function_name_lengths,
             });
+        }
+    }
+    Ok(())
+}
+
+fn validate_table_section(module: &Module) -> Result<(), WasmValidationError> {
+    for table in module.tables.iter() {
+        if table.ty.element_type != RefType::FUNCREF {
+            return Err(WasmValidationError::InvalidTableSection(format!(
+                "Table element type must be funcref, got {:?}",
+                table.ty.element_type
+            )));
         }
     }
     Ok(())
@@ -1600,7 +1622,7 @@ fn validate_code_section(
 }
 
 /// Returns a Wasmtime config that is used for Wasm validation.
-pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtime::Config {
+pub fn wasmtime_validation_config(_embedders_config: &EmbeddersConfig) -> wasmtime::Config {
     let mut config = wasmtime::Config::default();
 
     // Keep this in the alphabetical order to simplify comparison with new
@@ -1615,7 +1637,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     config.generate_address_map(false);
     // The signal handler uses Posix signals, not Mach ports on MacOS.
     config.macos_use_mach_ports(false);
-    config.wasm_backtrace(embedders_config.feature_flags.canister_backtrace == FlagStatus::Enabled);
+    config.wasm_backtrace(false);
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
     config.wasm_bulk_memory(true);
     config.wasm_function_references(false);
@@ -1720,6 +1742,7 @@ pub(super) fn validate_wasm_binary<'a>(
         config.max_number_exported_functions,
         config.max_sum_exported_function_name_lengths,
     )?;
+    validate_table_section(&module)?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;

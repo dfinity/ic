@@ -157,7 +157,7 @@ class BazelRustDependencyManager(DependencyManager):
         )
 
     def has_dependencies_changed(self) -> typing.Dict[str, bool]:
-        external_crates_bzl = (self.root / "bazel" / "external_crates.bzl").as_posix()
+        external_crates_bzl = (self.root / "bazel" / "rust.MODULE.bazel").as_posix()
         cargo_lock_toml = (self.root / "Cargo.Bazel.toml.lock").as_posix()
 
         dependency_changes = {"external_crates_bzl": False, "cargo_lock_toml": False}

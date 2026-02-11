@@ -4,8 +4,8 @@
     "sha256": "5bf34cb029e437c4ccb990b1595876d4c869566d66b8b58059d0ee742891c219"
   },
   "bitcoin_testnet": {
-    "sha256": "42af59ae4fd5041f30f8ac12f324e3a93533de0cb89cd2278100c2389cbfff65",
-    "tag": "release/2025-07-02"
+    "sha256": "ee669a352fbca79f21aa6d0b7190f4daae74ef203b0ccf8d7fb82123dfd2d6a6",
+    "tag": "release/2025-12-03"
   },
   "ck_btc_archive": {
     "rev": "512cf412f33d430b79f42330518166d14fc6884e",
@@ -22,14 +22,6 @@
   "ck_btc_ledger_v1": {
     "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
     "sha256": "a170bfdce5d66e751a3cc03747cb0f06b450af500e75e15976ec08a3f5691f4c"
-  },
-  "ck_btc_ledger_v2": {
-    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
-    "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
-  },
-  "ck_btc_ledger_v2_noledgerversion": {
-    "rev": "aba60ffbc46acfc8990bf4d5685c1360bd7026b9",
-    "sha256": "67cfcbabb79e683b6fc855450d9972c9efaa7a1cd28c6387965616fbead191ea"
   },
   "ck_btc_ledger_v3": {
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
@@ -51,105 +43,109 @@
     "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
     "sha256": "e6072806ae22868ee09c07923d093b1b0b687dba540d22cfc1e1a5392bfcca46"
   },
-  "ck_eth_ledger_v2": {
-    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
-    "sha256": "98a7b7391608dc4a554d6964bad24157b6aaf890a05bbaad3fcc92033d9c7b02"
-  },
-  "ck_eth_ledger_v2_noledgerversion": {
-    "rev": "aba60ffbc46acfc8990bf4d5685c1360bd7026b9",
-    "sha256": "73d0c5f057aaf33004218ce588780e1b454c717c702b1cf47532f32c23515f1e"
-  },
   "ck_eth_ledger_v3": {
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",
-    "sha256": "da7dfd088371dc538c0bbde1a2f3e4e3795d2cb58dc16f6c7bf67247b9e51254"
+    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
+    "sha256": "40a204bf4abc14bd61553b2b56413709a2fc7175227253d2809ffdb977c934de"
   },
   "cycles_ledger": {
     "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
     "tag": "cycles-ledger-v1.0.6"
   },
   "cycles_ledger_index": {
-    "rev": "83923a194d39835e8a7d9549f9f0831b962a60c2",
-    "sha256": "6c406b9dc332f3dc58b823518ab2b2c481467307ad9e540122f17bd9b926c123"
+    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
+    "sha256": "8df72887ab235f4533ee613b1bc7293ec8d62c866525b1425934cf992ef894a7"
+  },
+  "dogecoin": {
+    "sha256": "2efd5a5b28315a3d4896419df14a4aad8a346174f53cc7727a63b37ec086b3ac",
+    "tag": "release/2025-12-10"
   },
   "genesis-token": {
-    "rev": "02571e8215fa3e77da791e693cc238b2de3beae9",
-    "sha256": "f897870b7b6d6c15f657496bc731b0e341c34468ddbb8fa0722ec7beb6b51cee"
+    "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
+    "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "51dd253fd8b301f849dfc26f77cff6d15acd04c1",
-    "sha256": "59672f1cb908142456a37676b997468d5313941c0d3077ace1bca1e79d9e9a59"
+    "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
+    "sha256": "be458c6b8a5168c26865ed437e0b2e988dd77c145e50a7fa918ddc4c80789060"
   },
   "governance-canister_test": {
-    "rev": "51dd253fd8b301f849dfc26f77cff6d15acd04c1",
-    "sha256": "0f8645b1e5419a0c298e8be782dcecf27ae5ede809c00b04d8530f6609313eb0"
+    "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
+    "sha256": "b68d1e8ac88323b05fb99916df35b6ca83077bce1e71bad88b06efacf63e3cc5"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "01d02df2fd171660283f6a084cb15badf09079241579bc531a2fd16e9c618fe0",
-    "tag": "release-2025-10-14-3"
+    "sha256": "b54127064a6792ee419bfe41c9909c370817d9e02768383028aefc39c16b1d67",
+    "tag": "release-2026-02-06"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
     "sha256": "51f4be010f23064137defacd627ffbec024c5133210c68ca3b80ab8f257101d6"
   },
   "lifeline": {
-    "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
-    "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
+    "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
+    "sha256": "0d9221e28781e8b627c0e0696b16c0301424d4387514ed5fdae4fa74ad4b696b"
+  },
+  "migration": {
+    "rev": "789e5a187985cedc654988f0f337467d6d5b3dcb",
+    "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
   },
   "nns_dapp_test": {
-    "sha256": "f1c12473fbce087ee54837ef6223ba378091f6148fa815e4b14c454baf27293e",
-    "tag": "proposal-138910"
+    "sha256": "93f3614c96ba8427a34d0f6fc8a8148766e11657fd34674f3febd1d119ceab38",
+    "tag": "proposal-140184"
   },
   "node-rewards": {
-    "rev": "ca959ab71539b277af5f9880e6a4c5779e135cad",
-    "sha256": "095d056ef137d3a9b6c387756de2e9701c81dda43bfac94b2be628c8ebe43baa"
+    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
+    "sha256": "4511bdb31e19a1ab304d897075abba82f46cc0629e6bc0f036f364f1fd7b26b7"
   },
   "registry": {
-    "rev": "51dd253fd8b301f849dfc26f77cff6d15acd04c1",
-    "sha256": "cfeaeae45097df10d9816384e34e4782cbb06adce20f22ade8e9594ae49dc914"
+    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
+    "sha256": "3f04216742318f1ac9648b10cce5e459e83720abb523966374be5e2be3a2d02b"
   },
   "root": {
-    "rev": "2407385056dbcd1d5eb15b84a9c0cd5f511ff997",
-    "sha256": "b296fa62644f46cd30f852835a562a47b9bcf79e5772aa26625ba7e1d878613b"
+    "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
+    "sha256": "ff1c24eb7467c048a4cbc11d043e74f8aaf7652188e4a9986ec367a06bcb065b"
   },
   "sns-wasm": {
-    "rev": "ff761f361981cff6a760b7d181f696551878b92a",
-    "sha256": "5906d35741e4c69690b7a881073a7075dfb2525878b82017a92648e40fe3c934"
+    "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
+    "sha256": "c7a86ae13ffdfefc659873345ba1839e0cad8c63105094e9c84a6ea13b70d49c"
   },
   "sns_aggregator_test": {
-    "sha256": "f4af69470afc76f50bbb845d001f42c135f4a7976c70bff9fe3ea4d86d2216aa",
-    "tag": "proposal-137283-agg"
+    "sha256": "58f3cdf3320adb0864ff2e7d880af5c9b75e056240ff47a9f3e6eda3b17066f1",
+    "tag": "proposal-138924-agg"
   },
   "sns_archive": {
-    "rev": "3f3d9bfac750f82f424185ac5b32a756cfd45ad9",
-    "sha256": "cb3f2ecc540f3b4c073f1a4de1fc4a9cef11cb1901405f49f9ef855a53b69e1c"
+    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
+    "sha256": "186697235c7072e94fa04e5c51a06af8500e8b36835420a9284912b977ae21a9"
   },
   "sns_governance": {
-    "rev": "ca94383ba3df22dacf7a005186b67303548eb144",
-    "sha256": "78e522df253097189e91b97cc169a7fea6de4588884c37394fc80896884270db"
+    "rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
+    "sha256": "12e2af5c3c6b0211365b5360c17bc1261a97adc0c917f618308f6bb1cb3f76e6"
   },
   "sns_index": {
-    "rev": "3f3d9bfac750f82f424185ac5b32a756cfd45ad9",
-    "sha256": "73eb5d98d6e7020cd99a3430ef1284c05e2a708ae5274ca0387deca7551265e5"
+    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
+    "sha256": "cf3bf8f87dc908be156f314fae3b83aae56d1f63e74a63c32994c4e02babdb2d"
   },
   "sns_ledger": {
-    "rev": "3f3d9bfac750f82f424185ac5b32a756cfd45ad9",
-    "sha256": "24e6b0b09ba44b1123453877994bb59ce75555c2e33f19f58163a3e0c6e62bd1"
+    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
+    "sha256": "71c27c5dc10034a1175296892b37827df0265d0ae072f5c59e99b8a1f6c45c76"
   },
   "sns_ledger_v2": {
     "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
     "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
   },
   "sns_root": {
-    "rev": "6ab18899e82ac202fea4a549dcc6c5a5191e4992",
-    "sha256": "8ec6c66366c2cce843ae12dc0077a6a748724f848c37ddf8f1b670c99da818ad"
+    "rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
+    "sha256": "d26b930d8756bb75b6caa5195346499b18bbd6448810386e1b8f2f1f808ade86"
+  },
+  "subnet_rental": {
+    "sha256": "f18e2effe4a0495c3b08b546bb4c63428dac9852ad7dd4316afb5daf210c4ab5",
+    "tag": "0.4.0"
   },
   "swap": {
     "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",

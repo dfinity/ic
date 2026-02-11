@@ -1,11 +1,11 @@
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_test_utils_vetkd::*;
 use ic_vetkeys::{EncryptedVetKey, MasterPublicKey, TransportSecretKey};
 use rand::Rng;
-use rand_chacha::rand_core::SeedableRng;
 
 #[test]
 fn should_generate_valid_bls_signature() {
-    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(42);
+    let rng = &mut ReproducibleRng::new();
 
     let pk = PrivateKey::generate(&rng.r#gen::<[u8; 32]>());
 

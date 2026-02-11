@@ -1,10 +1,12 @@
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
-    logs::INFO,
+    logs::{ERROR, INFO},
     pb::{
         sns_root_types::{
-            CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
-            RegisterExtensionRequest, RegisterExtensionResponse, register_extension_response,
+            CanisterCallError, CleanUpFailedRegisterExtensionRequest,
+            CleanUpFailedRegisterExtensionResponse, ListSnsCanistersRequest,
+            ListSnsCanistersResponse, RegisterExtensionRequest, RegisterExtensionResponse,
+            clean_up_failed_register_extension_response, register_extension_response,
         },
         v1 as pb,
         v1::{
@@ -54,6 +56,63 @@ thread_local! {
             topic: Topic::TreasuryAssetManagement,
             extension_type: ExtensionType::TreasuryManager,
     }});
+}
+
+#[cfg(any(test, feature = "test"))]
+lazy_static! {
+    static ref TEST_HASH_TO_EXTENSION_SPEC: BTreeMap<[u8; 32], ExtensionSpec> = {
+        // KongSwap v1 hash from integration test
+        let v1_hash: [u8; 32] = [
+            103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167,
+            144, 31, 212, 229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
+        ];
+
+        // KongSwap v2 hash from integration test
+        let v2_hash: [u8; 32] = [
+            128, 15, 128, 73, 49, 167, 207, 220, 204, 215, 20, 218, 174, 6, 171, 203,
+            196, 247, 243, 160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123, 231,
+        ];
+
+        // This is the SHA-256 has of SMALLEST_VALID_WASM_BYTES in
+        // ic_nervous_system_common_test_utils::wasm_helpers. Depending on that
+        // crate creates problems (namely, that it makes the resulting WASM
+        // assume that bindgen is available, which only happens in browsers, not
+        // the ICP). To work around that, we copy the value of
+        // SMALLEST_VALID_WASM_HASH here.
+        let smallest_valid_wasm_hash: [u8; 32] = [
+            147, 164, 75, 187, 150, 199, 81, 33, 142, 76, 0, 212, 121, 228, 193, 67,
+            88, 18, 42, 56, 154, 204, 161, 98, 5, 177, 228, 208, 220, 95, 148, 118,
+        ];
+
+        let mut additional = btreemap! {
+            v1_hash => ExtensionSpec {
+                name: "My Test Extension".to_string(),
+                version: ExtensionVersion(1),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+
+            v2_hash => ExtensionSpec {
+                name: "My Test Extension".to_string(),
+                version: ExtensionVersion(2),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+
+            smallest_valid_wasm_hash => ExtensionSpec {
+                name: "Does Nothing Except Explode in Tests".to_string(),
+                version: ExtensionVersion(123),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+        };
+
+        ALLOWED_EXTENSIONS.with(|base| {
+            let mut result = base.borrow().clone();
+            result.append(&mut additional);
+            result
+        })
+    };
 }
 
 #[cfg(feature = "test")]
@@ -450,64 +509,93 @@ pub struct ValidatedRegisterExtension {
 
 impl ValidatedRegisterExtension {
     pub async fn execute(self, governance: &Governance) -> Result<(), GovernanceError> {
-        let context = governance.treasury_manager_deposit_context().await?;
+        let main = async || {
+            let context = governance.treasury_manager_deposit_context().await?;
 
-        let ValidatedRegisterExtension {
-            spec,
-            init,
-            extension_canister_id,
-            wasm,
-        } = self;
-
-        governance
-            .register_extension_with_root(extension_canister_id)
-            .await?;
-
-        // Before granting any SNS capabilities to the extension, we must ensure that old code
-        // could not have snuck in between proposal (re-)validation and the SNS assuming control.
-        governance
-            .ensure_no_code_is_installed(extension_canister_id)
-            .await?;
-
-        // This needs to happen before the canister code is installed.
-        let init_blob = match init {
-            ValidatedExtensionInit::TreasuryManager(ValidatedDepositOperationArg {
-                treasury_allocation_sns_e8s,
-                treasury_allocation_icp_e8s,
-                original,
-            }) => {
-                let init_blob = construct_treasury_manager_init_payload(context.clone(), original)
-                    .map_err(|err| {
-                        GovernanceError::new_with_message(
-                            ErrorType::InvalidProposal,
-                            format!("Error constructing TreasuryManagerInit payload: {err}"),
-                        )
-                    })?;
-
-                governance
-                    .approve_treasury_manager(
-                        extension_canister_id,
-                        treasury_allocation_sns_e8s,
-                        treasury_allocation_icp_e8s,
-                    )
-                    .await?;
-
-                init_blob
-            }
-        };
-
-        governance
-            .upgrade_non_root_canister(
+            let ValidatedRegisterExtension {
+                spec,
+                init,
                 extension_canister_id,
                 wasm,
-                init_blob,
-                CanisterInstallMode::Install,
-            )
-            .await?;
+            } = self;
 
-        cache_registered_extension(extension_canister_id, spec);
+            governance
+                .register_extension_with_root(extension_canister_id)
+                .await?;
 
-        Ok(())
+            // Before granting any SNS capabilities to the extension, we must ensure that old code
+            // could not have snuck in between proposal (re-)validation and the SNS assuming control.
+            governance
+                .ensure_no_code_is_installed(extension_canister_id)
+                .await?;
+
+            // This needs to happen before the canister code is installed.
+            let init_blob = match init {
+                ValidatedExtensionInit::TreasuryManager(ValidatedDepositOperationArg {
+                    treasury_allocation_sns_e8s,
+                    treasury_allocation_icp_e8s,
+                    original,
+                }) => {
+                    let init_blob =
+                        construct_treasury_manager_init_payload(context.clone(), original)
+                            .map_err(|err| {
+                                GovernanceError::new_with_message(
+                                    ErrorType::InvalidProposal,
+                                    format!(
+                                        "Error constructing TreasuryManagerInit payload: {err}"
+                                    ),
+                                )
+                            })?;
+
+                    governance
+                        .approve_treasury_manager(
+                            extension_canister_id,
+                            treasury_allocation_sns_e8s,
+                            treasury_allocation_icp_e8s,
+                        )
+                        .await?;
+
+                    init_blob
+                }
+            };
+
+            governance
+                .upgrade_non_root_canister(
+                    extension_canister_id,
+                    wasm,
+                    init_blob,
+                    CanisterInstallMode::Install,
+                )
+                .await?;
+
+            let extension_name = spec.name.clone();
+            cache_registered_extension(extension_canister_id, spec);
+
+            // Inject fault, i.e. when there is a test that tries to force us to
+            // explode, return Err.
+            if cfg!(any(test, feature = "test")) && extension_name.contains("Explode in Test") {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    "Something has gone terribly terribly wrong. Actually, this is just \
+                     an injected fault. This would only appear in tests."
+                        .to_string(),
+                ));
+            }
+
+            Ok(())
+        };
+
+        let main_result = main().await;
+
+        // Try to clean up if main_result is Err. Cleaning up consists of
+        // calling the Root canister's clean_up_failed_register_extension method.
+        if main_result.is_err() {
+            governance
+                .clean_up_failed_register_extension(self.extension_canister_id)
+                .await;
+        }
+
+        main_result
     }
 }
 
@@ -627,6 +715,68 @@ impl Governance {
         );
 
         Ok(())
+    }
+
+    // Currently, this just consists of calling Root's
+    // clean_up_failed_register_extension method, but maybe, in the future, this
+    // would do more (locally, in this SNS Governance canister).
+    async fn clean_up_failed_register_extension(&self, extension_canister_id: CanisterId) {
+        let main = async || -> Result<(), String> {
+            let request = Encode!(&CleanUpFailedRegisterExtensionRequest {
+                canister_id: Some(extension_canister_id.get()),
+            })
+            .map_err(|err| {
+                format!("Could not encode Root.clean_up_failed_register_extension request: {err:?}")
+            })?;
+
+            // Call clean_up_failed_register_extension method of the SNS Root canister.
+            let reply = self
+                .env
+                .call_canister(
+                    self.proto.root_canister_id_or_panic(),
+                    "clean_up_failed_register_extension",
+                    request,
+                )
+                .await
+                .map_err(|err| {
+                    format!("Failed to call Root.clean_up_failed_register_extension: {err:?}")
+                })?;
+
+            // Make sure reply does not indicate any problems.
+            let CleanUpFailedRegisterExtensionResponse { result } =
+                Decode!(&reply, CleanUpFailedRegisterExtensionResponse).map_err(|err| {
+                    format!(
+                        "Failed to decode Root.clean_up_failed_register_extension response: {err:?}"
+                    )
+                })?;
+            if let Some(clean_up_failed_register_extension_response::Result::Err(
+                CanisterCallError { code, description },
+            )) = result
+            {
+                let code = if let Some(code) = code {
+                    code.to_string()
+                } else {
+                    "<no code>".to_string()
+                };
+
+                return Err(format!(
+                    "Root.clean_up_failed_register_extension failed with code {code}: {description}"
+                ));
+            }
+
+            Ok(())
+        };
+
+        if let Err(err) = main().await {
+            log!(ERROR, "{err}");
+            return;
+        }
+
+        log!(
+            INFO,
+            "Root.clean_up_failed_register_extension succeeded for canister {}",
+            extension_canister_id.get()
+        );
     }
 
     async fn approve_treasury_manager(
@@ -782,15 +932,13 @@ pub fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec,
         ));
     }
 
-    if cfg!(test) {
-        let test_allowed = create_test_allowed_extensions();
-        validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
-    } else {
-        validate_extension_wasm_with_allowed(
-            wasm_module_hash,
-            &ALLOWED_EXTENSIONS.with_borrow(|map| map.clone()),
-        )
-    }
+    validate_extension_wasm_with_allowed(
+        wasm_module_hash,
+        #[cfg(any(test, feature = "test"))]
+        &TEST_HASH_TO_EXTENSION_SPEC,
+        #[cfg(not(any(test, feature = "test")))]
+        &ALLOWED_EXTENSIONS.with_borrow(|map| map.clone()),
+    )
 }
 
 /// Validates an extension WASM against a provided set of allowed extensions.
@@ -1644,36 +1792,6 @@ pub async fn get_sns_token_symbol(
         })??;
 
     Ok(symbol)
-}
-
-fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
-    // KongSwap v1 hash from integration test
-    let v1_hash: [u8; 32] = [
-        103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167, 144, 31, 212,
-        229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
-    ];
-
-    // KongSwap v2 hash from integration test
-    let v2_hash: [u8; 32] = [
-        128, 15, 128, 73, 49, 167, 207, 220, 204, 215, 20, 218, 174, 6, 171, 203, 196, 247, 243,
-        160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123, 231,
-    ];
-
-    btreemap! {
-
-        v1_hash => ExtensionSpec {
-            name: "My Test Extension".to_string(),
-            version: ExtensionVersion(1),
-            topic: Topic::TreasuryAssetManagement,
-            extension_type: ExtensionType::TreasuryManager,
-        },
-        v2_hash => ExtensionSpec {
-            name: "My Test Extension".to_string(),
-            version: ExtensionVersion(2),
-            topic: Topic::TreasuryAssetManagement,
-            extension_type: ExtensionType::TreasuryManager,
-        }
-    }
 }
 
 // ============================================================================

@@ -64,22 +64,24 @@ pub async fn download_binary(
 }
 
 /// If auto-retry is set to false, the user will be prompted for retries on rsync failures.
-pub fn rsync_with_retries(
+pub fn rsync_with_retries<S, T>(
     logger: &Logger,
-    excludes: Vec<&str>,
-    src: &str,
-    target: &str,
+    src: S,
+    target: T,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
     auto_retry: bool,
     max_retries: usize,
-) -> RecoveryResult<Option<String>> {
+) -> RecoveryResult<Option<String>>
+where
+    S: AsRef<Path>,
+    T: AsRef<Path>,
+{
     for _ in 0..max_retries {
         match rsync(
             logger,
-            excludes.clone(),
-            src,
-            target,
+            src.as_ref(),
+            target.as_ref(),
             require_confirmation,
             key_file,
         ) {
@@ -101,30 +103,77 @@ pub fn rsync_with_retries(
     Err(RecoveryError::RsyncFailed)
 }
 
-/// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options `--delete`, `-acP`.
-/// File and directory names part of the `excludes` vector are discarded.
-pub fn rsync<I>(
+/// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options
+/// `--archive --checksum --delete --partial --progress --no-g`.
+pub fn rsync<S, T>(
     logger: &Logger,
-    excludes: I,
-    src: &str,
-    target: &str,
+    src: S,
+    target: T,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
 ) -> RecoveryResult<Option<String>>
 where
-    I: IntoIterator,
-    I::Item: std::fmt::Display,
+    S: AsRef<Path>,
+    T: AsRef<Path>,
 {
-    let mut rsync = get_rsync_command(excludes, src, target, key_file);
+    let rsync_cmd = get_rsync_command(vec![src], target, key_file);
+    exec_rsync(logger, rsync_cmd, require_confirmation)
+}
 
+/// Copy the specified includes from src to target using [rsync](https://linux.die.net/man/1/rsync).
+pub fn rsync_includes<I, S, T>(
+    logger: &Logger,
+    includes: I,
+    src: S,
+    target: T,
+    require_confirmation: bool,
+    key_file: Option<&PathBuf>,
+) -> RecoveryResult<Option<String>>
+where
+    I: IntoIterator<Item: AsRef<Path>>,
+    S: AsRef<Path>,
+    T: AsRef<Path>,
+{
+    let mut rsync_cmd = get_rsync_command(
+        includes
+            .into_iter()
+            // Note the added "." in paths, together with the `--relative` flag below.
+            //
+            // Example if `includes` is vec!["file1", "dir1/dir2"]:
+            // The naive command
+            // `rsync src/file1 src/dir1/dir2 target`
+            // would copy `file1` into `target/file1`, but `dir2` (and its contents)
+            // into `target/dir2`, losing the `dir1` parent directory.
+            //
+            // Instead, we add the `--relative` flag and a `./` prefix to each include path:
+            // `rsync --relative src/./file1 src/./dir1/dir2 target`
+            // This way, rsync preserves the paths relative to the `./` marker:
+            //     - `file1` into `target/file1`,
+            //     - `dir2` into `target/dir1/dir2`.
+            //
+            // See rsync manual at --relative for more details.
+            .map(|include| src.as_ref().join(".").join(include.as_ref())),
+        target,
+        key_file,
+    );
+    rsync_cmd.arg("--relative");
+
+    exec_rsync(logger, rsync_cmd, require_confirmation)
+}
+
+fn exec_rsync(
+    logger: &Logger,
+    mut rsync_cmd: Command,
+    require_confirmation: bool,
+) -> RecoveryResult<Option<String>> {
     info!(logger, "");
     info!(logger, "About to execute:");
-    info!(logger, "{:?}", rsync);
+    info!(logger, "{:?}", rsync_cmd);
     if require_confirmation {
         wait_for_confirmation(logger);
     }
     info!(logger, "Starting transfer, waiting for output...");
-    match exec_cmd(&mut rsync) {
+    match exec_cmd(&mut rsync_cmd) {
         Err(RecoveryError::CommandError(Some(24), msg)) => {
             warn!(logger, "Masking rsync warning (code 24)");
             info!(logger, "{}", msg);
@@ -138,15 +187,23 @@ where
     }
 }
 
-fn get_rsync_command<I>(excludes: I, src: &str, target: &str, key_file: Option<&PathBuf>) -> Command
+fn get_rsync_command<S, T>(srcs: S, target: T, key_file: Option<&PathBuf>) -> Command
 where
-    I: IntoIterator,
-    I::Item: std::fmt::Display,
+    S: IntoIterator<Item: AsRef<Path>>,
+    T: AsRef<Path>,
 {
     let mut rsync = Command::new("rsync");
-    rsync.arg("--delete").arg("-acP").arg("--no-g");
-    rsync.args(excludes.into_iter().map(|e| format!("--exclude={e}")));
-    rsync.arg(src).arg(target);
+    rsync
+        .arg("--archive")
+        .arg("--checksum")
+        .arg("--delete")
+        .arg("--partial")
+        .arg("--progress")
+        .arg("--no-g");
+    for src in srcs {
+        rsync.arg(src.as_ref());
+    }
+    rsync.arg(target.as_ref());
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
 
     rsync
@@ -235,8 +292,7 @@ mod tests {
     #[test]
     fn get_rsync_command_test() {
         let rsync = get_rsync_command(
-            ["exclude1", "exclude2"],
-            "/tmp/src",
+            vec!["/tmp/src/file1", "/tmp/src/file2", "/tmp/src/dir1"],
             "/tmp/target",
             Some(&PathBuf::from("/tmp/key_file")),
         );
@@ -245,12 +301,15 @@ mod tests {
         assert_eq!(
             rsync.get_args().collect::<Vec<_>>(),
             vec![
+                "--archive",
+                "--checksum",
                 "--delete",
-                "-acP",
+                "--partial",
+                "--progress",
                 "--no-g",
-                "--exclude=exclude1",
-                "--exclude=exclude2",
-                "/tmp/src",
+                "/tmp/src/file1",
+                "/tmp/src/file2",
+                "/tmp/src/dir1",
                 "/tmp/target",
                 "-e",
                 "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A -i \"/tmp/key_file\""

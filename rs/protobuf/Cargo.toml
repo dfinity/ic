@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 bincode = { workspace = true }
 candid = { workspace = true }
+comparable = { workspace = true }
 erased-serde = "0.3.11"
 ic-error-types = { path = "../../packages/ic-error-types" }
 prost = { workspace = true }

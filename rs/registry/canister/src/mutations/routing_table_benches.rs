@@ -24,7 +24,7 @@ fn setup_subnets(registry: &mut Registry) {
 
 fn migrate_canisters_to_subnets(registry: &mut Registry, num_migrations: u64, rng: &mut impl Rng) {
     assert!(
-        num_migrations % NUM_SUBNETS == 0,
+        num_migrations.is_multiple_of(NUM_SUBNETS),
         "Please choose a number of migrations that is divisible by the number of subnets"
     );
     let num_canisters_per_subnet = num_migrations / NUM_SUBNETS;

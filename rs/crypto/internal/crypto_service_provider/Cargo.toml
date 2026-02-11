@@ -33,6 +33,7 @@ ic-crypto-secrets-containers = { path = "../../secrets_containers" }
 ic-crypto-sha2 = { path = "../../sha2" }
 ic-crypto-standalone-sig-verifier = { path = "../../standalone-sig-verifier" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
+ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-metrics = { path = "../../../monitoring/metrics" }

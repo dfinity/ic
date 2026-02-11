@@ -8,8 +8,8 @@ use ic_nns_test_utils::registry::{
     new_node_keys_and_node_id,
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_protobuf::registry::node::v1::NodeRecord;
+use ic_protobuf::registry::node::v1::{IPv4InterfaceConfig, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -22,7 +22,6 @@ use ic_registry_transport::pb::v1::{
 use ic_registry_transport::{insert, upsert};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::ReplicaVersion;
-use maplit::btreemap;
 use prost::Message;
 use std::collections::BTreeMap;
 
@@ -135,6 +134,7 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
                 node_operator_id: node_operator_id.into_vec(),
                 // Preset this field to Some(), in order to allow seamless creation of ApiBoundaryNodeRecord if needed.
                 domain: Some(format!("node{effective_id}.example.com")),
+                node_reward_type: Some(NodeRewardType::Type1 as i32),
                 ..Default::default()
             };
             mutations.append(&mut make_add_node_registry_mutations(
@@ -182,7 +182,7 @@ pub fn registry_create_subnet_with_nodes(
 pub fn registry_add_node_operator_for_node(
     registry: &mut Registry,
     node_id: NodeId,
-    node_allowance: u64,
+    max_rewardable_nodes: BTreeMap<NodeRewardType, u32>,
 ) -> PrincipalId {
     let node_operator_id =
         PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
@@ -196,8 +196,11 @@ pub fn registry_add_node_operator_for_node(
         .is_none()
     {
         let node_operator_record = NodeOperatorRecord {
-            node_allowance,
-            rewardable_nodes: btreemap! { "type0".to_string() => 0, "type1".to_string() => 28 },
+            node_operator_principal_id: node_operator_id.to_vec(),
+            max_rewardable_nodes: max_rewardable_nodes
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect(),
             ..Default::default()
         };
 

@@ -130,7 +130,6 @@ impl<T> TryFrom<&CombinedThresholdSigOf<T>> for CspSignature {
     }
 }
 
-// TODO (DFN-1186): Implement From instead of TryFrom once types are simplified
 impl<T> TryFrom<CspSignature> for ThresholdSigShareOf<T> {
     type Error = CryptoError;
 
@@ -140,7 +139,6 @@ impl<T> TryFrom<CspSignature> for ThresholdSigShareOf<T> {
     }
 }
 
-// TODO (DFN-1186): Implement From instead of TryFrom once types are simplified
 impl<T> TryFrom<CspSignature> for CombinedThresholdSigOf<T> {
     type Error = CryptoError;
 

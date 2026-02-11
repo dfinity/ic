@@ -1,12 +1,10 @@
-use std::collections::BTreeMap;
-
 use dfn_candid::candid;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
+    itest_helpers::{set_up_registry_canister, state_machine_test_on_nns_subnet},
     registry::{
         get_committee_signing_key, get_dkg_dealing_key, get_node_operator_record, get_node_record,
         get_node_signing_key, get_transport_tls_certificate,
@@ -19,25 +17,28 @@ use ic_registry_transport::pb::v1::{
     RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
 use ic_types::NodeId;
+use maplit::btreemap;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use std::collections::BTreeMap;
 
 #[test]
 fn node_is_created_on_receiving_the_request() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a Node Operator record and make it callable
         // by anyone
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type3".to_string() => 100 },
+                ))
                 .build(),
         )
         .await;
 
-        let (mut payload, node_pks) = prepare_add_node_payload(1);
-        payload.node_reward_type = Some("type3".to_string());
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type3);
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -95,7 +96,10 @@ fn node_is_created_on_receiving_the_request() {
             get_node_operator_record(&registry, *TEST_NEURON_1_OWNER_PRINCIPAL)
                 .await
                 .unwrap();
-        assert_eq!(node_operator_record.node_allowance, 99);
+        assert_eq!(
+            node_operator_record.max_rewardable_nodes,
+            btreemap! { "type3".to_string() => 100 }
+        );
 
         Ok(())
     });
@@ -103,19 +107,21 @@ fn node_is_created_on_receiving_the_request() {
 
 #[test]
 fn node_is_not_created_with_invalid_type() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a Node Operator record and make it callable
         // by anyone
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 100 },
+                ))
                 .build(),
         )
         .await;
 
-        let (mut payload, node_pks) = prepare_add_node_payload(1);
+        let (mut payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_reward_type = Some("type0.11".to_string());
         let node_id = node_pks.node_id();
 
@@ -149,19 +155,21 @@ fn node_is_not_created_with_invalid_type() {
 
 #[test]
 fn node_is_not_created_on_wrong_principal() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a Node Operator record and make it callable
         // by anyone
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 100 },
+                ))
                 .build(),
         )
         .await;
 
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -189,18 +197,20 @@ fn node_is_not_created_on_wrong_principal() {
 
 #[test]
 fn node_is_not_created_when_above_capacity() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a DC record and make it callable by anyone
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(1))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 1 },
+                ))
                 .build(),
         )
         .await;
 
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -219,7 +229,7 @@ fn node_is_not_created_when_above_capacity() {
         assert!(response.is_ok());
 
         // Try to add another node
-        let (payload, node_pks) = prepare_add_node_payload(2);
+        let (payload, node_pks) = prepare_add_node_payload(2, NodeRewardType::Type1);
         let node_id = node_pks.node_id();
 
         // Ensure there is no value for this new node
@@ -247,19 +257,21 @@ fn node_is_not_created_when_above_capacity() {
 
 #[test]
 fn duplicated_nodes_are_removed_on_join() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a DC record.
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(10))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 10 },
+                ))
                 .build(),
         )
         .await;
 
         // Create a new node to join.
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         let first_node_id = node_pks.node_id();
 
         // Ensure this node does not already exist.
@@ -279,7 +291,7 @@ fn duplicated_nodes_are_removed_on_join() {
 
         // Then, try to add another node.
         // Use the same ID so we can "duplicate" this node.
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         let second_node_id = node_pks.node_id();
 
         // Ensure this node does not already exist.
@@ -311,19 +323,21 @@ fn duplicated_nodes_are_removed_on_join() {
 
 #[test]
 fn join_with_duplicate_is_allowed_when_at_capacity() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // First prepare the registry with a DC record.
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(1))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 1 },
+                ))
                 .build(),
         )
         .await;
 
         // Create a new node to join.
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         let first_node_id = node_pks.node_id();
 
         // Ensure this node does not already exist.
@@ -343,7 +357,7 @@ fn join_with_duplicate_is_allowed_when_at_capacity() {
 
         // Then, try to add another node.
         // Use the same ID so we can "duplicate" this node.
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         let second_node_id = node_pks.node_id();
 
         // Ensure this node does not already exist.
@@ -373,16 +387,18 @@ fn join_with_duplicate_is_allowed_when_at_capacity() {
     });
 }
 
-fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutateRequest {
+fn init_mutation_with_max_rewardable_nodes(
+    max_rewardable_nodes: BTreeMap<String, u32>,
+) -> RegistryAtomicMutateRequest {
     let node_operator_record = NodeOperatorRecord {
         node_operator_principal_id: TEST_NEURON_1_OWNER_PRINCIPAL.to_vec(),
-        node_allowance,
+        node_allowance: 0,
         // This doesn't go through Governance validation
         node_provider_principal_id: vec![],
         dc_id: "".into(),
         rewardable_nodes: BTreeMap::new(),
         ipv6: None,
-        max_rewardable_nodes: BTreeMap::new(),
+        max_rewardable_nodes,
     };
     RegistryAtomicMutateRequest {
         mutations: vec![RegistryMutation {

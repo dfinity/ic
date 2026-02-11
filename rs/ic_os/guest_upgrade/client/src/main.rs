@@ -1,6 +1,6 @@
-use anyhow::{Context, Result, bail};
-use attestation::verification::SevRootCertificateVerification;
-use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
+use anyhow::{Context, Result};
+use attestation::attestation_package::SevRootCertificateVerification;
+use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{GuestOSConfig, GuestVMType};
 use guest_disk::DEFAULT_PREVIOUS_SEV_KEY_PATH;
 use guest_upgrade_client::create_nns_registry_client;
@@ -26,11 +26,9 @@ pub async fn main() -> Result<()> {
         shutdown();
         Err(err)
     } else {
+        println!("Key exchange successful. Requesting shutdown.");
         shutdown();
-        bail!(
-            "Key exchange successful. VM shutting down. Returning error so that dependent systemd \
-            services are no longer started."
-        )
+        Ok(())
     }
 }
 

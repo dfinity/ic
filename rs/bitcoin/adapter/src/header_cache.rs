@@ -10,7 +10,7 @@ use bitcoin::{
     consensus::{Decodable, Encodable, encode},
     io,
 };
-use ic_logger::{ReplicaLogger, error};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
 use lmdb::{
     Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
@@ -21,9 +21,8 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use thiserror::Error;
 
-/// The max size (in bytes) of a LMDB cache, also know as the LMDB map
-/// size. It is a constant because it cannot be changed once DB is created.
-const MAX_LMDB_CACHE_SIZE: usize = 0x2_0000_0000; // 8GB
+/// The max size (in bytes) of the LMDB cache, also known as the LMDB map size.
+const MAX_LMDB_CACHE_SIZE: usize = 0x4_0000_0000; // 16GB
 
 /// Database key used to store tip header.
 const TIP_KEY: &str = "TIP";
@@ -257,21 +256,23 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
     }
 }
 
-fn create_db_env(path: &Path) -> Environment {
+fn create_db_env(path: &Path, map_size: usize) -> Environment {
     let mut builder = Environment::new();
     let builder_flags = EnvironmentFlags::NO_TLS;
     let permission = 0o644;
     builder.set_flags(builder_flags);
     builder.set_max_dbs(1);
-    builder.set_map_size(MAX_LMDB_CACHE_SIZE);
-    builder
+    builder.set_map_size(map_size);
+    let env = builder
         .open_with_permissions(path, permission)
         .unwrap_or_else(|err| {
             panic!(
                 "Error opening LMDB environment with permissions at {:?}: {:?}",
                 path, err
             )
-        })
+        });
+    debug_assert_eq!(env.info().unwrap().map_size(), map_size);
+    env
 }
 
 #[derive(Error, Debug)]
@@ -332,7 +333,7 @@ impl LMDBHeaderCache {
         std::fs::create_dir_all(path).unwrap_or_else(|err| {
             panic!("Error creating DB directory {}: {}", path.display(), err)
         });
-        let db_env = create_db_env(path);
+        let db_env = create_db_env(path, MAX_LMDB_CACHE_SIZE);
         let headers = db_env
             .create_db(Some("HEADERS"), DatabaseFlags::empty())
             .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
@@ -354,8 +355,17 @@ impl LMDBHeaderCache {
                 Err(err) => Err(err),
             }),
             cache.log,
-            "iniialize genesis"
+            "initialize genesis"
         )?;
+        let start = std::time::Instant::now();
+        let (key_bytes, val_bytes) = cache.total_header_bytes()?;
+        info!(
+            cache.log,
+            "LMDB header scanned ({} ms), key_bytes = {} val_bytes = {}",
+            start.elapsed().as_millis(),
+            key_bytes,
+            val_bytes
+        );
         Ok(cache)
     }
 
@@ -445,6 +455,22 @@ impl LMDBHeaderCache {
         let last_page = info.last_pgno() + 1; // page number is 0-based
         let used_pages = last_page - freelist;
         Ok(used_pages * page_size as usize)
+    }
+
+    fn total_header_bytes(&self) -> Result<(usize, usize), LMDBCacheError> {
+        use lmdb::Cursor;
+
+        let mut key_bytes = 0;
+        let mut val_bytes = 0;
+        self.run_ro_txn(|tx| {
+            let mut cursor = tx.open_ro_cursor(self.headers)?;
+            let mut iter = cursor.iter_start();
+            while let Some(Ok((key, val))) = iter.next() {
+                key_bytes += key.len();
+                val_bytes += val.len();
+            }
+            Ok((key_bytes, val_bytes))
+        })
     }
 }
 
@@ -605,6 +631,9 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
     ) -> Result<(), LMDBCacheError> {
         if let Some(on_disk) = &self.on_disk {
             let to_persist = self.in_memory.get_ancestor_chain(anchor);
+            self.metrics
+                .headers_pruned_from_memory
+                .observe(to_persist.len() as f64);
             // Only persist when there are more than 1 header because
             // get_ancestor_chain always returns at least 1 header.
             if to_persist.len() > 1 {
@@ -736,6 +765,14 @@ pub(crate) mod test {
             assert_eq!(node.data.height, 0);
             assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(cache.get_active_chain_tip().header, genesis_block_header);
+
+            // key_bytes = 35 = 32 + 3
+            //     where 3 is key "TIP", 32 is the genesis hash len.
+            // val_bytes = 149, obtained after running this test.
+            assert!(matches!(
+                cache.on_disk.as_ref().unwrap().total_header_bytes(),
+                Ok((35, 149))
+            ));
             // Check initial metrics
             assert_eq!(cache.metrics.in_memory_elements.get(), 1);
             assert_eq!(cache.metrics.on_disk_elements.get(), 1);
@@ -754,6 +791,7 @@ pub(crate) mod test {
             }
             assert_eq!(cache.metrics.in_memory_elements.get(), 7);
             assert_eq!(cache.metrics.on_disk_elements.get(), 1);
+
             // Add more headers
             let intermediate = cache.get_active_chain_tip();
             let intermediate_hash = intermediate.header.block_hash();
@@ -843,11 +881,67 @@ pub(crate) mod test {
             assert_eq!(cache.metrics.on_disk_elements.get(), 4);
             assert_eq!(cache.metrics.in_memory_elements.get(), 1);
 
+            // key_bytes = 131 = 32 * 4 + 3
+            //     where 3 is key "TIP", and 4 is on_disk_elements.
+            // val_bytes = 596, obtained after running this test.
+            assert!(matches!(
+                cache.on_disk.as_ref().unwrap().total_header_bytes(),
+                Ok((131, 596))
+            ));
+
             assert!(cache.get_header(genesis_block_hash).is_some());
             let tips = get_tips_of(&cache, genesis_block_hash);
             assert_eq!(tips.len(), 1);
             assert_eq!(tips[0], cache.get_active_chain_tip());
             assert_eq!(tips[0].height, 3);
         });
+    }
+
+    #[test]
+    fn test_db_size_limit_increase() {
+        const INITIAL_MAP_SIZE: usize = 0x8000;
+        const INCREASED_MAP_SIZE: usize = 0x10000;
+
+        let dir = tempdir().unwrap();
+        let path = dir.path();
+        std::fs::create_dir_all(path).unwrap();
+        let write_to_limit = |map_size, init_value| {
+            let env = create_db_env(path, map_size);
+            let db = env.create_db(Some("DB"), DatabaseFlags::empty()).unwrap();
+            let mut i = init_value;
+            let err = loop {
+                let mut tx = env.begin_rw_txn().unwrap();
+                let bytes = [i; 32];
+                if let Err(err) = tx
+                    .put(db, &bytes, &bytes, WriteFlags::empty())
+                    .and_then(|_| tx.commit())
+                {
+                    break err;
+                };
+                i += 1;
+            };
+            assert_eq!(err, lmdb::Error::MapFull);
+            i
+        };
+        // 1. Create a DB and write to it until MapFull error.
+        let idx = write_to_limit(INITIAL_MAP_SIZE, 0);
+
+        // 2. Open the same DB and read it, no error. Write additional data, got MapFull.
+        {
+            let env = create_db_env(path, INITIAL_MAP_SIZE);
+            let db = env.create_db(Some("DB"), DatabaseFlags::empty()).unwrap();
+            let mut tx = env.begin_rw_txn().unwrap();
+            let bytes = [0; 32];
+            assert_eq!(tx.get(db, &bytes).unwrap(), bytes);
+            let bytes = [idx; 32];
+            assert_eq!(
+                tx.put(db, &bytes, &bytes, WriteFlags::empty()),
+                Err(lmdb::Error::MapFull)
+            );
+        }
+
+        // 3. Open the same DB with bigger size limit, no problem writing more data to it.
+        let new_idx = write_to_limit(INCREASED_MAP_SIZE, idx);
+        assert!(new_idx > idx);
     }
 }

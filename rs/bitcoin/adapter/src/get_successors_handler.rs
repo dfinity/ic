@@ -121,9 +121,16 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
         &self,
         request: GetSuccessorsRequest,
     ) -> Result<GetSuccessorsResponse<Network::Header>, Status> {
+        let start_time = std::time::Instant::now();
+
         self.metrics
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
+
+        let anchor_height = self
+            .state
+            .get_cached_header(&request.anchor)
+            .map_or(0, |cached| cached.data.height);
 
         // Spawn persist-to-disk task without waiting for it to finish, and make sure there
         // is only one task running at a time.
@@ -133,6 +140,9 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
             .map(|handle| handle.is_finished())
             .unwrap_or(true);
         if is_finished {
+            self.metrics
+                .prune_headers_anchor_height
+                .set(anchor_height as i64);
             *handle = Some(
                 self.state
                     .persist_and_prune_headers_below_anchor(request.anchor),
@@ -140,11 +150,6 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
         }
 
         let (blocks, next, obsolete_blocks) = {
-            let anchor_height = self
-                .state
-                .get_cached_header(&request.anchor)
-                .map_or(0, |cached| cached.data.height);
-
             let allow_multiple_blocks = self.network.are_multiple_blocks_allowed(anchor_height);
             let blocks = get_successor_blocks(
                 &self.state,
@@ -216,6 +221,20 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
                 obsolete_blocks,
             ))
             .ok();
+
+        // Record response metrics
+        let blocks_size: usize = response.blocks.iter().map(|b| b.len()).sum();
+        self.metrics
+            .response_blocks_size
+            .observe(blocks_size as f64);
+        let empty_label = match response.blocks.is_empty() {
+            true => "true",
+            false => "false",
+        };
+        self.metrics
+            .response_build_duration
+            .with_label_values(&[empty_label])
+            .observe(start_time.elapsed().as_secs_f64());
 
         Ok(response)
     }

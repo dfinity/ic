@@ -2,10 +2,10 @@
 //   one 4-node System and one 4-node Application subnets, one unassigned node, single API boundary node, single ic-gateway and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create medium --lifetime-mins=180 --output-dir=./medium -- --test_tmpdir=./medium
+//   $ ict testnet create medium -output-dir=./medium -- --test_tmpdir=./medium
 //
 // The --output-dir=./medium will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./medium will store the remaining test output in the specified directory.
@@ -53,8 +53,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
-    ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
 };
@@ -67,9 +66,6 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
@@ -84,8 +80,4 @@ pub fn setup(env: TestEnv) {
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(&env)
         .expect("failed to setup ic-gateway");
-    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
-    let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
 }

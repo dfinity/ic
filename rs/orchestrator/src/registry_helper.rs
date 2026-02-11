@@ -23,7 +23,7 @@ use std::{convert::TryFrom, net::IpAddr, sync::Arc};
 #[derive(Clone)]
 pub(crate) struct RegistryHelper {
     node_id: NodeId,
-    pub(crate) registry_client: Arc<dyn RegistryClient>,
+    registry_client: Arc<dyn RegistryClient>,
     logger: ReplicaLogger,
 }
 
@@ -59,6 +59,11 @@ impl RegistryHelper {
         self.registry_client.get_latest_version()
     }
 
+    /// Return the underlying `RegistryClient`
+    pub(crate) fn get_registry_client(&self) -> &dyn RegistryClient {
+        self.registry_client.as_ref()
+    }
+
     /// Return the `SubnetId` this node belongs to (i.e. the Subnet that
     /// contains `self.node_id`) iff the node belongs to a subnet and that
     /// subnet does not have the `start_as_nns`-flag set.
@@ -86,6 +91,19 @@ impl RegistryHelper {
         match self.registry_client.get_subnet_record(subnet_id, version) {
             Ok(Some(record)) => Ok(record),
             _ => Err(OrchestratorError::SubnetMissingError(subnet_id, version)),
+        }
+    }
+
+    /// Return the root `SubnetId`
+    pub(crate) fn get_root_subnet_id(
+        &self,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<SubnetId> {
+        match self.registry_client.get_root_subnet_id(version)? {
+            Some(subnet_id) => Ok(subnet_id),
+            None => Err(OrchestratorError::UpgradeError(
+                "Root subnet ID missing in registry".to_string(),
+            )),
         }
     }
 
@@ -193,10 +211,6 @@ impl RegistryHelper {
             .map_err(OrchestratorError::RegistryClientError)
     }
 
-    pub(crate) fn get_registry_client(&self) -> Arc<dyn RegistryClient> {
-        Arc::clone(&self.registry_client)
-    }
-
     /// Get the replica version of the given subnet in the given registry
     /// version
     pub(crate) fn get_replica_version(
@@ -207,6 +221,28 @@ impl RegistryHelper {
         let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
         ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
             .map_err(OrchestratorError::ReplicaVersionParseError)
+    }
+
+    /// Get the recalled replica versions of the given subnet in the given registry
+    /// version
+    pub(crate) fn get_recalled_replica_versions(
+        &self,
+        _subnet_id: SubnetId,
+        _registry_version: RegistryVersion,
+    ) -> OrchestratorResult<Vec<ReplicaVersion>> {
+        // TODO(NODE-1754): Remove this placeholder and replace with the commented code below once
+        // registry changes were merged
+        Ok(vec![])
+
+        // let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
+        // subnet_record
+        //     .recalled_replica_version_ids
+        //     .iter()
+        //     .map(|version_str| {
+        //         ReplicaVersion::try_from(version_str.as_ref())
+        //             .map_err(OrchestratorError::ReplicaVersionParseError)
+        //     })
+        //     .collect()
     }
 
     pub(crate) fn get_expected_replica_version(

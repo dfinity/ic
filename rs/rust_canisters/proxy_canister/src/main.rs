@@ -10,15 +10,15 @@ use candid::Principal;
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::time;
+use ic_cdk::api::{data_certificate, in_replicated_execution, time};
 use ic_cdk::{caller, spawn};
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
 };
 use proxy_canister::{
-    RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest, RemoteHttpStressResponse,
-    ResponseWithRefundedCycles,
+    FlexibleRemoteHttpRequest, RemoteHttpRequest, RemoteHttpResponse, RemoteHttpStressRequest,
+    RemoteHttpStressResponse, ResponseWithRefundedCycles,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -30,6 +30,21 @@ thread_local! {
 }
 
 const MAX_TRANSFORM_SIZE: usize = 2_000_000;
+
+#[update]
+async fn send_flexible_request(
+    request: FlexibleRemoteHttpRequest,
+) -> Result<Vec<u8>, (RejectionCode, String)> {
+    let FlexibleRemoteHttpRequest { request, cycles } = request;
+
+    ic_cdk::api::call::call_raw(
+        Principal::management_canister(),
+        "flexible_http_request",
+        &request.encode(),
+        cycles,
+    )
+    .await
+}
 
 #[update]
 async fn send_requests_in_parallel(
@@ -116,6 +131,7 @@ async fn send_request_with_refund_callback(
     let RemoteHttpRequest { request, cycles } = request;
     let request_url = request.url.clone();
     println!("send_request making IC call.");
+
     let result = match ic_cdk::api::call::call_raw(
         Principal::management_canister(),
         "http_request",
@@ -267,6 +283,25 @@ fn very_large_but_allowed_transform(raw: TransformArgs) -> CanisterHttpResponseP
     transformed.body = vec![0; MAX_TRANSFORM_SIZE - overhead];
 
     transformed
+}
+
+#[query]
+fn data_certificate_in_transform(_raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let data_certificate_present = data_certificate().is_some();
+    CanisterHttpResponsePayload {
+        status: 200,
+        body: vec![],
+        headers: vec![
+            HttpHeader {
+                name: "data_certificate_present".to_string(),
+                value: data_certificate_present.to_string(),
+            },
+            HttpHeader {
+                name: "in_replicated_execution".to_string(),
+                value: in_replicated_execution().to_string(),
+            },
+        ],
+    }
 }
 
 fn main() {}

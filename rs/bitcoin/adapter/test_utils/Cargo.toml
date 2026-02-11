@@ -17,4 +17,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-jsonrpc = { version = "0.18.0", features = ["minreq_http"] }
+jsonrpc = { workspace = true }

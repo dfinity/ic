@@ -1,4 +1,4 @@
-use crate::io::retry_if_busy;
+use crate::io::retry_if_io_error;
 use anyhow::{Context, Result, ensure};
 use devicemapper::{
     DM, DevId, Device, DmName, DmOptions, LinearDevTargetParams, LinearDevTargetTable,
@@ -163,7 +163,7 @@ impl TempDevice {
 
         let temp_path = temp_file.into_temp_path();
 
-        let loop_device = LoopDeviceWrapper::attach_to_next_free(&temp_path)
+        let loop_device = LoopDeviceWrapper::attach_to_next_free(&temp_path, 0)
             .context("Temp loopback creation failed")?;
 
         let minor = loop_device
@@ -201,14 +201,26 @@ pub struct LoopDeviceWrapper(pub LoopDevice);
 
 impl LoopDeviceWrapper {
     /// Opens a loop device and attaches it to the specified file.
-    pub fn attach_to_next_free(path: &Path) -> Result<Self> {
+    ///
+    /// * `path` - Path to the backing file
+    /// * `offset` - Offset in bytes from the start of the backing file the data will start at.
+    pub fn attach_to_next_free(path: &Path, offset: u64) -> Result<Self> {
+        let loop_control = loopdev::LoopControl::open()?;
         // next_free() will return the same loop device until a file is attached to it, so
         // it can happen that a parallel process gets the same loop device and attaches a file
-        // to it before we do. In this case attach_file will fail with ResourceBusy.
+        // to it before we do. In this case attach_file will fail with EBUSY.
         // We solve this by retrying the operation.
-        retry_if_busy(|| {
-            let loop_device = Self(loopdev::LoopControl::open()?.next_free()?);
-            loop_device.attach_file(path)?;
+        retry_if_io_error(nix::Error::EBUSY, || {
+            // next_free returns ENOENT if there are no free loop devices
+            let loop_device = Self(retry_if_io_error(nix::Error::ENOENT, || {
+                loop_control.next_free()
+            })?);
+            loop_device
+                .with()
+                .autoclear(true)
+                .offset(offset)
+                .attach(path)?;
+
             Ok(loop_device)
         })
         .context("Failed to attach loop device")

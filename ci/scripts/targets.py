@@ -134,8 +134,11 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
         if any(len(fnmatch.filter(modified_files, glob)) > 0 for glob in ALL_TARGETS_BLOBS)
         # Note that modified_files may contain files not depended upon by any bazel target.
         # `bazel query --keep_going` will ignore those but will return the special exit code 3
-        # in case this happens which we check for below.
-        else f"rdeps(//..., set({mfiles}))"
+        # in case this happens which we check for below. rdeps includes generated file targets
+        # which we want to exclude. Including the generated file targets is unnecessary and
+        # causes problems with tag exclusion because tags only apply to the rules that generate
+        # the files and not the generated files.
+        else f"kind(rule, rdeps(//..., set({mfiles})))"
     )
 
     # The targets returned by this script will be passed to `bazel test` by the caller (in case there are any).

@@ -15,7 +15,7 @@ load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "upgrade_image")
 
 def icos_build(
         name,
@@ -262,6 +262,13 @@ def icos_build(
             )
 
         if image_deps.get("generate_launch_measurements", False):
+            # The vCPU count in the launch measurement must match the GuestOS VM configuration.
+            #
+            # For dev images, we generate measurements for multiple vCPU configurations to support
+            # different common deployment scenarios:
+            # - 16 vCPUs: local dev testing (per deployment.json.template dev_vm_resources.nr_of_vcpus)
+            # - 64 vCPUs: production-like environments
+            vcpu_configs = "16 64" if "dev" in mode else "64"
             native.genrule(
                 name = "generate-" + launch_measurements,
                 outs = [launch_measurements],
@@ -272,14 +279,16 @@ def icos_build(
                 cmd = r"""
                     source $(execpath """ + boot_args + """)
                     # Create GuestLaunchMeasurements JSON
-                    (for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
-                        hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus 64 --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" --vcpu-type=EPYC-v4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
-                        # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
-                        measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
-                        jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
-                          measurement: ($$m | split("\n") | map(tonumber)),
-                          metadata: {kernel_cmdline: $$cmd}
-                        }'
+                    (for vcpus in """ + vcpu_configs + """; do
+                        for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
+                            hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" --vcpu-type=EPYC-v4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                            # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
+                            measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
+                            jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
+                              measurement: ($$m | split("\n") | map(tonumber)),
+                              metadata: {kernel_cmdline: $$cmd}
+                            }'
+                        done
                     done) | jq -sc "{guest_launch_measurements: .}" > $@
                 """,
             )
@@ -336,17 +345,6 @@ def icos_build(
         ],
     )
 
-    # Disk images just for testing.
-    disk_image_no_tar(
-        name = "disk.img",
-        layout = image_deps["partition_table"],
-        partitions = partitions,
-        expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual", "no-cache"],
-        target_compatible_with = ["@platforms//os:linux"],
-        visibility = visibility,
-    )
-
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = [":disk-img.tar"],
@@ -383,12 +381,12 @@ def icos_build(
             name = "vuln-scan",
             srcs = ["//ic-os:vuln-scan/vuln-scan.sh"],
             data = [
-                "@trivy//:trivy",
+                "//:trivy",
                 ":rootfs-tree.tar",
                 "//ic-os:vuln-scan/vuln-scan.html",
             ],
             env = {
-                "trivy_path": "$(rootpath @trivy//:trivy)",
+                "trivy_path": "$(rootpath //:trivy)",
                 "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
                 "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
             },

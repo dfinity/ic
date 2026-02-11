@@ -326,9 +326,10 @@ fn init_timers() {
     });
 
     if requires_periodic_tasks {
-        let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
-            ic_cdk::spawn(run_periodic_tasks())
-        });
+        let new_timer_id =
+            ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, async || {
+                run_periodic_tasks().await
+            });
         TIMER_ID.with(|saved_timer_id| {
             let mut saved_timer_id = saved_timer_id.borrow_mut();
             if let Some(saved_timer_id) = *saved_timer_id {

@@ -1,5 +1,4 @@
 use std::{
-    cell::Ref,
     collections::{HashMap, HashSet},
     convert::TryFrom,
     fs::File,
@@ -26,11 +25,13 @@ use ic_replicated_state::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
+    CanisterId, NumBytes, NumInstructions, NumOsPages,
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
+use memory_tracker::{
+    DirtyPageTracking, MemoryLimits, MissingPageHandlerKind, SigsegvMemoryTracker,
+};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -247,9 +248,9 @@ impl WasmtimeEmbedder {
 
     pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<Module> {
         let module = wasmtime::Module::new(&self.create_engine()?, wasm_binary.as_slice())
-            .map_err(|e| {
+            .map_err(|_| {
                 HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
-                    format!("{e:?}"),
+                    "Error in Wasm compilation".to_string(),
                 ))
             })?;
         Ok(module)
@@ -417,6 +418,21 @@ impl WasmtimeEmbedder {
             ),
         };
 
+        let stable_memory_limits = MemoryLimits {
+            max_memory_size: self.config.max_stable_memory_size,
+            max_accessed_pages: current_accessed_limit,
+            max_dirty_pages: current_dirty_page_limit,
+        };
+        let max_heap_memory_size = self
+            .config
+            .max_wasm_memory_size
+            .max(self.config.max_wasm64_memory_size);
+        let heap_memory_limits = MemoryLimits {
+            max_memory_size: max_heap_memory_size,
+            max_accessed_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
+            max_dirty_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
+        };
+
         let mut store = Store::new(
             instance_pre.module().engine(),
             StoreData {
@@ -424,11 +440,10 @@ impl WasmtimeEmbedder {
                 num_instructions_global: None,
                 log: self.log.clone(),
                 limits: StoreLimitsBuilder::new()
-                    .memory_size(MAX_STABLE_MEMORY_IN_BYTES as usize)
+                    .memory_size(self.config.max_stable_memory_size.get() as usize)
                     .tables(MAX_STORE_TABLES)
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
-                canister_backtrace: self.config.feature_flags.canister_backtrace,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -526,14 +541,28 @@ impl WasmtimeEmbedder {
 
         let mut memories = HashMap::new();
         for mem_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory) {
-            if let Err(e) =
-                self.instantiate_memory(mem_info, &instance, &mut store, &mut memories, canister_id)
-            {
+            let memory_limits = match mem_info.memory_type {
+                CanisterMemoryType::Heap => &heap_memory_limits,
+                CanisterMemoryType::Stable => &stable_memory_limits,
+            };
+            if let Err(e) = self.instantiate_memory(
+                mem_info,
+                &instance,
+                &mut store,
+                &mut memories,
+                canister_id,
+                memory_limits,
+            ) {
                 return Err((e, store.into_data().system_api));
             }
         }
 
-        let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
+        let memory_trackers = sigsegv_memory_tracker(
+            memories,
+            &mut store,
+            self.log.clone(),
+            self.config.feature_flags.deterministic_memory_tracker,
+        );
 
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
@@ -557,7 +586,6 @@ impl WasmtimeEmbedder {
             log: self.log.clone(),
             instance_stats: InstanceStats::default(),
             store,
-            canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
             dirty_page_overhead,
             #[cfg(debug_assertions)]
@@ -574,6 +602,7 @@ impl WasmtimeEmbedder {
         mut store: &mut Store<StoreData>,
         memories_to_track: &mut HashMap<CanisterMemoryType, MemorySigSegvInfo>,
         canister_id: CanisterId,
+        memory_limits: &MemoryLimits,
     ) -> HypervisorResult<()> {
         if let Some(instance_memory) = instance.get_memory(&mut store, memory_info.name) {
             let current_size = instance_memory.size(&store);
@@ -608,6 +637,7 @@ impl WasmtimeEmbedder {
                     current_memory_size_in_pages: current_size,
                     page_map: memory_info.memory.page_map.clone(),
                     dirty_page_tracking: memory_info.dirty_page_tracking,
+                    memory_limits: *memory_limits,
                 },
             );
 
@@ -685,13 +715,19 @@ pub struct MemorySigSegvInfo {
     current_memory_size_in_pages: MemoryPageSize,
     page_map: PageMap,
     dirty_page_tracking: DirtyPageTracking,
+    memory_limits: MemoryLimits,
 }
 
 fn sigsegv_memory_tracker<S>(
     memories: HashMap<CanisterMemoryType, MemorySigSegvInfo>,
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
+    deterministic_memory_tracker: FlagStatus,
 ) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
+    let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
+        FlagStatus::Enabled => Some(MissingPageHandlerKind::Deterministic),
+        FlagStatus::Disabled => None,
+    };
     let mut tracked_memories = vec![];
     let mut result = HashMap::new();
     for (
@@ -701,6 +737,7 @@ fn sigsegv_memory_tracker<S>(
             current_memory_size_in_pages,
             page_map,
             dirty_page_tracking,
+            memory_limits,
         },
     ) in memories
     {
@@ -711,10 +748,10 @@ fn sigsegv_memory_tracker<S>(
             // For both SIGSEGV and in the future UFFD memory tracking we need
             // the base address of the heap and its size
             let base = base as *mut libc::c_void;
-            if base as usize % PAGE_SIZE != 0 {
+            if !(base as usize).is_multiple_of(PAGE_SIZE) {
                 fatal!(log, "[EXC-BUG] Memory tracker - Heap must be page aligned.");
             }
-            if size % PAGE_SIZE != 0 {
+            if !size.is_multiple_of(PAGE_SIZE) {
                 fatal!(
                     log,
                     "[EXC-BUG] Memory tracker - Heap size must be a multiple of page size."
@@ -722,12 +759,14 @@ fn sigsegv_memory_tracker<S>(
             }
 
             Arc::new(Mutex::new(
-                SigsegvMemoryTracker::new(
+                memory_tracker::new(
                     base,
                     NumBytes::new(size as u64),
                     log.clone(),
                     dirty_page_tracking,
                     page_map,
+                    maybe_missing_page_handler_kind,
+                    memory_limits,
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
@@ -750,7 +789,6 @@ pub struct StoreData {
     pub num_instructions_global: Option<wasmtime::Global>,
     pub log: ReplicaLogger,
     pub limits: StoreLimits,
-    pub canister_backtrace: FlagStatus,
 }
 
 impl StoreData {
@@ -818,8 +856,6 @@ pub struct WasmtimeInstance {
     log: ReplicaLogger,
     instance_stats: InstanceStats,
     store: wasmtime::Store<StoreData>,
-    #[allow(unused)]
-    canister_backtrace: FlagStatus,
     modification_tracking: ModificationTracking,
     dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]
@@ -905,7 +941,7 @@ impl WasmtimeInstance {
                 ModificationTracking::Ignore => vec![],
             };
 
-            let wasm_sigsegv_handler_duration = wasm_tracker.sigsegv_handler_duration();
+            let wasm_sigsegv_handler_duration = wasm_tracker.metrics().sigsegv_handler_duration();
 
             // We don't have a tracker for stable memory.
             if !self
@@ -919,12 +955,12 @@ impl WasmtimeInstance {
                     wasm_dirty_wasm_pages_count,
                     wasm_accessed_os_pages_count,
                     wasm_accessed_wasm_pages_count,
-                    wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
-                    wasm_direct_write_count: wasm_tracker.direct_write_count(),
-                    wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
-                    wasm_mmap_count: wasm_tracker.mmap_count(),
-                    wasm_mprotect_count: wasm_tracker.mprotect_count(),
-                    wasm_copy_page_count: wasm_tracker.copy_page_count(),
+                    wasm_read_before_write_count: wasm_tracker.metrics().read_before_write_count(),
+                    wasm_direct_write_count: wasm_tracker.metrics().direct_write_count(),
+                    wasm_sigsegv_count: wasm_tracker.metrics().sigsegv_count(),
+                    wasm_mmap_count: wasm_tracker.metrics().mmap_count(),
+                    wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
+                    wasm_copy_page_count: wasm_tracker.metrics().copy_page_count(),
                     wasm_sigsegv_handler_duration,
                     stable_dirty_pages,
                     stable_accessed_pages,
@@ -939,7 +975,8 @@ impl WasmtimeInstance {
                 .lock()
                 .unwrap();
 
-            let stable_sigsegv_handler_duration = stable_tracker.sigsegv_handler_duration();
+            let stable_sigsegv_handler_duration =
+                stable_tracker.metrics().sigsegv_handler_duration();
 
             Ok(PageAccessResults {
                 wasm_dirty_pages,
@@ -948,21 +985,21 @@ impl WasmtimeInstance {
                 wasm_dirty_wasm_pages_count,
                 wasm_accessed_os_pages_count,
                 wasm_accessed_wasm_pages_count,
-                wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
-                wasm_direct_write_count: wasm_tracker.direct_write_count(),
-                wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
-                wasm_mmap_count: wasm_tracker.mmap_count(),
-                wasm_mprotect_count: wasm_tracker.mprotect_count(),
-                wasm_copy_page_count: wasm_tracker.copy_page_count(),
+                wasm_read_before_write_count: wasm_tracker.metrics().read_before_write_count(),
+                wasm_direct_write_count: wasm_tracker.metrics().direct_write_count(),
+                wasm_sigsegv_count: wasm_tracker.metrics().sigsegv_count(),
+                wasm_mmap_count: wasm_tracker.metrics().mmap_count(),
+                wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
+                wasm_copy_page_count: wasm_tracker.metrics().copy_page_count(),
                 wasm_sigsegv_handler_duration,
                 stable_dirty_pages,
                 stable_accessed_pages,
-                stable_read_before_write_count: stable_tracker.read_before_write_count(),
-                stable_direct_write_count: stable_tracker.direct_write_count(),
-                stable_sigsegv_count: stable_tracker.sigsegv_count(),
-                stable_mmap_count: stable_tracker.mmap_count(),
-                stable_mprotect_count: stable_tracker.mprotect_count(),
-                stable_copy_page_count: stable_tracker.copy_page_count(),
+                stable_read_before_write_count: stable_tracker.metrics().read_before_write_count(),
+                stable_direct_write_count: stable_tracker.metrics().direct_write_count(),
+                stable_sigsegv_count: stable_tracker.metrics().sigsegv_count(),
+                stable_mmap_count: stable_tracker.metrics().mmap_count(),
+                stable_mprotect_count: stable_tracker.metrics().mprotect_count(),
+                stable_copy_page_count: stable_tracker.metrics().copy_page_count(),
                 stable_sigsegv_handler_duration,
             })
         }
@@ -1116,8 +1153,6 @@ impl WasmtimeInstance {
                     error: "No memory tracker for stable memory".to_string(),
                 })?;
             let tracker = tracker.lock().unwrap();
-            let page_map = tracker.page_map();
-            let accessed_pages = tracker.accessed_pages().borrow();
             let heap_memory = heap_memory.data(&self.store);
 
             fn handle_bytemap_entry(
@@ -1125,8 +1160,7 @@ impl WasmtimeInstance {
                 result: &mut Vec<PageIndex>,
                 page_index: usize,
                 heap_memory: &[u8],
-                page_map: &PageMap,
-                accessed_pages: &Ref<PageBitmap>,
+                tracker: &SigsegvMemoryTracker,
                 written: u8,
             ) -> HypervisorResult<()> {
                 let index = PageIndex::new(page_index as u64);
@@ -1141,7 +1175,7 @@ impl WasmtimeInstance {
                         // execution before trying to read it because if it
                         // wasn't accessed then it will still be mapped
                         // `PROT_NONE` and trying to read it will segfault.
-                        if *previous_page_marked_written && accessed_pages.is_marked(index) {
+                        if *previous_page_marked_written && tracker.is_accessed(index) {
                             // An unaligned V128 write to the previous page may
                             // have written as many as 15 bytes into this page.
                             // So even if we didn't see a write here we need to
@@ -1149,8 +1183,7 @@ impl WasmtimeInstance {
                             // modified to be sure it isn't dirty.
                             let first_bytes = &heap_memory[PAGE_SIZE * page_index
                                 ..PAGE_SIZE * page_index + size_of::<u128>() - 1];
-                            let previous_bytes =
-                                &page_map.get_page(index)[0..size_of::<u128>() - 1];
+                            let previous_bytes = &tracker.get_page(index)[0..size_of::<u128>() - 1];
                             if first_bytes != previous_bytes {
                                 result.push(index);
                             }
@@ -1180,8 +1213,7 @@ impl WasmtimeInstance {
                     &mut result,
                     page_index,
                     heap_memory,
-                    page_map,
-                    &accessed_pages,
+                    &tracker,
                     *written,
                 )?;
                 page_index += 1;
@@ -1194,8 +1226,7 @@ impl WasmtimeInstance {
                             &mut result,
                             page_index + group_index,
                             heap_memory,
-                            page_map,
-                            &accessed_pages,
+                            &tracker,
                             *written,
                         )?;
                     }
@@ -1208,8 +1239,7 @@ impl WasmtimeInstance {
                     &mut result,
                     page_index,
                     heap_memory,
-                    page_map,
-                    &accessed_pages,
+                    &tracker,
                     *written,
                 )?;
                 page_index += 1;

@@ -5,6 +5,7 @@ This module contains utilities to work with fuzz tests.
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 # These are rustc flags that can be used with the Rust nightly toolchain to build fuzz tests for libfuzzer.
+# NOTE: make sure this stays in sync with bazel/rust.MODULE.bazel
 DEFAULT_RUSTC_FLAGS = [
     "-Cpasses=sancov-module",
     "-Cllvm-args=-sanitizer-coverage-level=4",
@@ -21,18 +22,21 @@ DEFAULT_RUSTC_FLAGS = [
     "-Ccodegen-units=1",
     "-Zextra-const-ub-checks",
     "-Zstrict-init-checks",
+    "-Cforce-frame-pointers=yes",
     # TODO(PSEC): Add configuration to enable only during profiling
     # "-Cinstrument-coverage",
 ]
 
+# NOTE: make sure this stays in sync with bazel/rust.MODULE.bazel
 DEFAULT_SANITIZERS = [
     "-Zsanitizer=address",
     # zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
     "-Zexternal-clangrt",
-    "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
+    "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
 ]
 
 # This flag will be used by third party crates and internal rust_libraries during fuzzing
+# NOTE: make sure this stays in sync with bazel/rust.MODULE.bazel
 DEFAULT_RUSTC_FLAGS_FOR_FUZZING = DEFAULT_RUSTC_FLAGS + DEFAULT_SANITIZERS
 
 def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_features = [], proc_macro_deps = [], deps = [], allow_main = False, **kwargs):
@@ -99,7 +103,7 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
 
     RUSTC_FLAGS_AFL = DEFAULT_RUSTC_FLAGS + [
         "-Cllvm-args=-sanitizer-coverage-trace-pc-guard",
-        "-Clink-arg=-fuse-ld=gold",
+        "-Clink-arg=-fuse-ld=lld",
         "-Clink-arg=-fsanitize=fuzzer",
         "-Clink-arg=-fsanitize=address",
     ]

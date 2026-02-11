@@ -55,6 +55,12 @@ impl std::str::FromStr for Hash {
     }
 }
 
+impl From<Hash> for evm_rpc_types::Hex32 {
+    fn from(hash: Hash) -> Self {
+        evm_rpc_types::Hex32::from(hash.0)
+    }
+}
+
 /// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Topic {

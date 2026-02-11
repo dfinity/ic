@@ -22,6 +22,7 @@ exports_files(
         "//ic-os/guestos:__subpackages__",
         "//ic-os/hostos:__subpackages__",
         "//ic-os/setupos:__subpackages__",
+        "//ic-os/testing:__subpackages__",
     ],
 )
 
@@ -31,7 +32,7 @@ write_info_file_var(
     varname = "STABLE_COMMIT_TIMESTAMP",
 )
 
-used_components = guestos_component_files | hostos_component_files | setupos_component_files
+used_components = guestos_component_files("dev") | guestos_component_files("prod") | hostos_component_files | setupos_component_files
 
 REPO_COMPONENTS = glob(
     ["**/*"],
@@ -51,6 +52,12 @@ ignored_repo_components = [
     "misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service",
     "guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.fc",
     "guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.te",
+    "misc/console-getty@/hostos-dev/override.conf",
+    "misc/console-getty@/hostos-prod/override.conf",
+    "misc/serial-getty@/guestos-dev/override.conf",
+    "misc/serial-getty@/guestos-prod/override.conf",
+    "hostos/misc/grub-upgrader/grub-upgrader.sh",
+    "hostos/misc/grub-upgrader/grub-upgrader.service",
 ]
 
 check_unused_components_test(

@@ -38,6 +38,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::Runtime;
+use tokio::time::sleep;
 
 lazy_static! {
     pub static ref TEST_IDENTITY: Arc<BasicIdentity> = Arc::new(test_identity());
@@ -1434,7 +1435,7 @@ fn test_refresh_voting_power() {
                         neuron.voting_power_refreshed_timestamp_seconds.unwrap();
 
                     // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    sleep(std::time::Duration::from_secs(1)).await;
 
                     let hotkey_caller_identity = Arc::new(hot_key_identity);
                     TransactionOperationResults::try_from(
@@ -1463,7 +1464,7 @@ fn test_refresh_voting_power() {
                         neuron.voting_power_refreshed_timestamp_seconds.unwrap();
 
                     // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    sleep(std::time::Duration::from_secs(1)).await;
                     TransactionOperationResults::try_from(
                         env.rosetta_client
                             .refresh_voting_power(
@@ -1577,7 +1578,7 @@ fn test_disburse_maturity() {
         for _ in 0..10 {
             // We have to tick a few more times so that inter canister calls get completed.
             env.pocket_ic
-                .advance_time(std::time::Duration::from_secs(1))
+                .advance_time(std::time::Duration::from_secs(60))
                 .await;
             env.pocket_ic.tick().await;
         }

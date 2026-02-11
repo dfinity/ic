@@ -1,0 +1,13 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+rust_library(
+    name = "firmware",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "sev_guest_firmware",
+    deps = [
+        "@crate_index//:mockall",
+        "@crate_index//:sev",
+    ],
+)

@@ -496,7 +496,10 @@ where
                 self.fee_collector = Some(fee_collector);
             }
             match &block.transaction.operation {
-                Operation::Mint { to, amount } => self.process_mint(to, amount),
+                Operation::Mint { to, amount, fee } => {
+                    assert!(fee.is_none());
+                    self.process_mint(to, amount);
+                }
                 Operation::Transfer {
                     from,
                     to,
@@ -514,7 +517,11 @@ where
                     from,
                     spender,
                     amount,
-                } => self.process_burn(from, spender, amount, index),
+                    fee,
+                } => {
+                    assert!(fee.is_none());
+                    self.process_burn(from, spender, amount, index);
+                }
                 Operation::Approve {
                     from,
                     spender,
@@ -531,6 +538,9 @@ where
                     &fee.clone().or(block.effective_fee.clone()),
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
+                Operation::FeeCollector { .. } => {
+                    panic!("FeeCollector107 not implemented")
+                }
             }
         }
         self.post_process_ledger_blocks(blocks);

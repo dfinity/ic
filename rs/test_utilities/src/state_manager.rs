@@ -5,11 +5,14 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateReader, TransientStateHashError::*,
+    StateHashError, StateHashMetadata, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{
+    ReplicatedState,
+    page_map::{PageAllocatorFileDescriptor, TestPageAllocatorFileDescriptorImpl},
+};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
@@ -28,6 +31,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, VecDeque};
+use std::path::Path;
 use std::sync::{Arc, Barrier, RwLock};
 
 #[derive(Clone)]
@@ -53,9 +57,10 @@ impl Snapshot {
 pub struct FakeStateManager {
     states: Arc<RwLock<Vec<Snapshot>>>,
     tip: Arc<RwLock<Option<(Height, ReplicatedState)>>>,
-    _tempdir: Arc<tempfile::TempDir>,
+    tempdir: Arc<tempfile::TempDir>,
     /// Size 1 by default (no op).
     pub encode_certified_stream_slice_barrier: Arc<RwLock<Barrier>>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 impl Default for FakeStateManager {
@@ -70,9 +75,10 @@ impl FakeStateManager {
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         let partial_hash = CryptoHashOf::from(fake_hash);
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
+        let state = initial_state().take();
         let snapshot = Snapshot {
             height,
-            state: initial_state().take(),
+            state: state.clone(),
             partial_hash,
             root_hash: CryptoHashOf::from(fake_hash),
             certification: None,
@@ -80,13 +86,19 @@ impl FakeStateManager {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         Self {
             states: Arc::new(RwLock::new(vec![snapshot])),
-            tip: Arc::new(RwLock::new(Some((
-                height,
-                ReplicatedState::new(subnet_test_id(169), SubnetType::Application),
-            )))),
-            _tempdir: Arc::new(tmpdir),
+            tip: Arc::new(RwLock::new(Some((height, (*state).clone())))),
+            tempdir: Arc::new(tmpdir),
             encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
+            fd_factory: Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         }
+    }
+
+    pub fn tmp(&self) -> &Path {
+        self.tempdir.path()
+    }
+
+    pub fn get_fd_factory(&self) -> Arc<dyn PageAllocatorFileDescriptor> {
+        Arc::clone(&self.fd_factory)
     }
 }
 
@@ -95,7 +107,7 @@ fn initial_state() -> Labeled<Arc<ReplicatedState>> {
     Labeled::new(
         INITIAL_STATE_HEIGHT,
         Arc::new(ReplicatedState::new(
-            subnet_test_id(1),
+            subnet_test_id(169),
             SubnetType::Application,
         )),
     )
@@ -171,13 +183,16 @@ impl StateManager for FakeStateManager {
         });
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.states
             .read()
             .unwrap()
             .iter()
             .filter(|s| s.height > Height::from(0) && s.certification.is_none())
-            .map(|s| (s.height, s.partial_hash.clone()))
+            .map(|s| StateHashMetadata {
+                height: s.height,
+                hash: s.partial_hash.clone(),
+            })
             .collect()
     }
 
@@ -204,6 +219,10 @@ impl StateManager for FakeStateManager {
         _extra_heights_to_keep: &BTreeSet<Height>,
     ) {
         // All heights are checkpoints
+    }
+
+    fn update_fast_forward_height(&self, _height: Height) {
+        // `FakeStateManager` does not implement fast-forwarding.
     }
 
     fn commit_and_certify(
@@ -269,6 +288,11 @@ impl StateReader for FakeStateManager {
             .map_or_else(initial_state, |snap| snap.make_labeled_state())
     }
 
+    // No certification support in FakeStateManager
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        None
+    }
+
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
         if height == Height::new(0) {
             return Ok(initial_state());
@@ -321,7 +345,7 @@ impl From<&StreamMessage> for SerializableStreamMessage {
         match msg {
             StreamMessage::Request(req) => SerializableStreamMessage::Request((**req).clone()),
             StreamMessage::Response(rep) => SerializableStreamMessage::Response((**rep).clone()),
-            StreamMessage::Refund(refund) => SerializableStreamMessage::Refund((**refund).clone()),
+            StreamMessage::Refund(refund) => SerializableStreamMessage::Refund(**refund),
         }
     }
 }
@@ -669,7 +693,7 @@ impl StateManager for RefMockStateManager {
             .fetch_state(height, root_hash, cup_interval_length)
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.mock.read().unwrap().list_state_hashes_to_certify()
     }
 
@@ -682,6 +706,10 @@ impl StateManager for RefMockStateManager {
 
     fn remove_states_below(&self, height: Height) {
         self.mock.read().unwrap().remove_states_below(height)
+    }
+
+    fn update_fast_forward_height(&self, height: Height) {
+        self.mock.read().unwrap().update_fast_forward_height(height)
     }
 
     fn remove_inmemory_states_below(
@@ -726,6 +754,10 @@ impl StateReader for RefMockStateManager {
 
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>> {
         self.mock.read().unwrap().get_latest_state()
+    }
+
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        self.mock.read().unwrap().get_latest_certified_state()
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {

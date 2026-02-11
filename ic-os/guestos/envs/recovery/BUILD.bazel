@@ -52,9 +52,7 @@ artifact_bundle(
     name = "bundle-update",
     inputs = [
         icos_images.update_image,
-        icos_images.update_image_test,
         icos_images.launch_measurements,
-        icos_images.launch_measurements_test,
     ],
     prefix = "guest-os/update-img-recovery",
     tags = [

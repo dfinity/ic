@@ -20,5 +20,6 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_root_of_trust",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )

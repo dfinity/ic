@@ -12,6 +12,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-heap-bytes",
+        "@crate_index//:regex-lite",
         "@crate_index//:serde",
         "@crate_index//:strum",
     ],

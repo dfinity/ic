@@ -1,4 +1,5 @@
 use super::*;
+use ic_base_types::subnet_id_try_from_option;
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
@@ -12,6 +13,7 @@ use ic_protobuf::{
     },
     types::v1 as pb_types,
 };
+use ic_types::subnet_id_try_from_protobuf;
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
     fn from(item: &NetworkTopology) -> Self {
@@ -59,18 +61,13 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
         let mut subnets = BTreeMap::new();
         for entry in item.subnets {
             subnets.insert(
-                subnet_id_try_from_protobuf(try_from_option_field(
-                    entry.subnet_id,
-                    "NetworkTopology::subnets::K",
-                )?)?,
+                subnet_id_try_from_option(entry.subnet_id, "NetworkTopology::subnets::K")?,
                 try_from_option_field(entry.subnet_topology, "NetworkTopology::subnets::V")?,
             );
         }
 
-        let nns_subnet_id = subnet_id_try_from_protobuf(try_from_option_field(
-            item.nns_subnet_id,
-            "NetworkTopology::nns_subnet_id",
-        )?)?;
+        let nns_subnet_id =
+            subnet_id_try_from_option(item.nns_subnet_id, "NetworkTopology::nns_subnet_id")?;
 
         let mut chain_key_enabled_subnets = BTreeMap::new();
         for entry in item.chain_key_enabled_subnets {
@@ -290,6 +287,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 .collect(),
             network_topology: Some((&item.network_topology).into()),
             subnet_call_context_manager: Some((&item.subnet_call_context_manager).into()),
+            subnet_split_from: item.subnet_split_from.map(subnet_id_into_protobuf),
             state_sync_version: item.state_sync_version as u32,
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
@@ -328,9 +326,6 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
-            canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
-                item.cost_schedule,
-            )),
         }
     }
 }
@@ -346,10 +341,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
             streams.insert(
-                subnet_id_try_from_protobuf(try_from_option_field(
-                    entry.subnet_id,
-                    "SystemMetadata::streams::K",
-                )?)?,
+                subnet_id_try_from_option(entry.subnet_id, "SystemMetadata::streams::K")?,
                 try_from_option_field(entry.subnet_stream, "SystemMetadata::streams::V")?,
             );
         }
@@ -408,16 +400,11 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             );
         }
 
-        let cost_schedule = CanisterCyclesCostSchedule::from(
-            CanisterCyclesCostScheduleProto::try_from(item.canister_cycles_cost_schedule)
-                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
-        );
-
         Ok(Self {
-            own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
+            own_subnet_id: subnet_id_try_from_option(
                 item.own_subnet_id,
                 "SystemMetadata::own_subnet_id",
-            )?)?,
+            )?,
             // WARNING! Setting to the default value which can be incorrect. We do not store the
             // actual value when we serialize SystemMetadata. We rely on `load_checkpoint()` to
             // properly set this value.
@@ -428,6 +415,10 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,
+            subnet_split_from: item
+                .subnet_split_from
+                .map(subnet_id_try_from_protobuf)
+                .transpose()?,
             canister_allocation_ranges,
             last_generated_canister_id,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
@@ -464,7 +455,6 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 None => BlockmakerMetricsTimeSeries::default(),
             },
             unflushed_checkpoint_ops: Default::default(),
-            cost_schedule,
         })
     }
 }
@@ -486,6 +476,7 @@ impl From<&Stream> for pb_queues::Stream {
                 .iter()
                 .map(|(_, message)| message.into())
                 .collect(),
+            signals_begin: item.signals_begin().get(),
             signals_end: item.signals_end.get(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
@@ -505,7 +496,9 @@ impl TryFrom<pb_queues::Stream> for Stream {
         }
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
+        let refund_count = Self::calculate_refund_count(&messages);
 
+        let signals_begin = item.signals_begin.into();
         let signals_end = item.signals_end.into();
         let reject_signals = item
             .reject_signals
@@ -520,11 +513,11 @@ impl TryFrom<pb_queues::Stream> for Stream {
             })
             .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?;
 
-        // Check reject signals are sorted and below `signals_end`.
+        // Check that reject signals are sorted and below `signals_end`.
         let iter = reject_signals.iter().map(|signal| signal.index);
         for (index, next_index) in iter
             .clone()
-            .zip(iter.skip(1).chain(std::iter::once(item.signals_end.into())))
+            .zip(iter.skip(1).chain(std::iter::once(signals_end)))
         {
             if index >= next_index {
                 return Err(ProxyDecodeError::Other(format!(
@@ -533,11 +526,27 @@ impl TryFrom<pb_queues::Stream> for Stream {
             }
         }
 
+        // Check that `signals_begin` is before `signals_end` and all reject signals.
+        if signals_begin > signals_end {
+            return Err(ProxyDecodeError::Other(format!(
+                "signals_begin {signals_begin:?} after signals_end {signals_end:?}",
+            )));
+        }
+        if let Some(first_reject_signal) = reject_signals.front()
+            && first_reject_signal.index < signals_begin
+        {
+            return Err(ProxyDecodeError::Other(format!(
+                "first reject signal {first_reject_signal:?} before signals_begin {signals_begin:?}",
+            )));
+        }
+
         Ok(Self {
             messages,
+            signals_begin,
             signals_end,
             reject_signals,
             messages_size_bytes,
+            refund_count,
             reverse_stream_flags: item
                 .reverse_stream_flags
                 .map(|flags| StreamFlags {

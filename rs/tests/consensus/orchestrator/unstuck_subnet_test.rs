@@ -71,14 +71,14 @@ fn test(test_env: TestEnv) {
 
     // Note: we're pulling a wrong URL on purpose to simulate a failed upgrade
     let upgrade_url = get_guestos_initial_update_img_url();
-    let sha256 = get_guestos_update_img_sha256();
-    let guest_launch_measurements = get_guestos_initial_launch_measurements();
+    let expected_sha256 = get_guestos_update_img_sha256();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
         &logger,
-        sha256,
-        guest_launch_measurements,
+        expected_sha256.clone(),
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
 
@@ -128,15 +128,20 @@ fn test(test_env: TestEnv) {
     }
 
     info!(logger, "Download and save the proper image file...");
+    let guestos_update_img_url = get_guestos_update_img_url();
     let command = format!(
         r#"set -e
         sudo chmod 777 /var/lib/ic/data/images
         cd /var/lib/ic/data/images/
-        sudo curl {} -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500 --fail
+        sudo curl {guestos_update_img_url} -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500 --fail
+        SHA256SUM="$(sha256sum image.bin | cut -d' ' -f1)"
+        if [ "$SHA256SUM" != "{expected_sha256}" ]; then
+            echo "Downloaded image.bin has SHA256 hash: $SHA256SUM but expected {expected_sha256}!"
+            exit 1
+        fi
         sudo chmod --reference=. image.bin
         sudo chown --reference=. image.bin
         "#,
-        get_guestos_update_img_url(),
     );
     for n in &nodes {
         let s = n

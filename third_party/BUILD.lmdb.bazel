@@ -1,0 +1,37 @@
+# A module defining the lmdb native library used by the replica for persistence
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["lmdb.h"])
+
+# A copy of just the static archive, which can be used with `$(location ...)` in
+# builds that need it.
+genrule(
+    name = "liblmdb",
+    srcs = [":lmdb"],
+    outs = ["single/liblmdb.a"],
+
+    # Just iterate over the outputs of `cc_library` until we find the lib we want
+    cmd = """
+    for src in $(SRCS); do
+        if [[ $$src =~ liblmdb.a$$ ]]; then
+            cp "$$src" "$@"
+            break
+        fi
+    done
+    """,
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "lmdb",
+    srcs = [
+        "mdb.c",
+        "midl.c",
+        "midl.h",
+    ],
+    hdrs = ["lmdb.h"],
+    linkstatic = True,
+)

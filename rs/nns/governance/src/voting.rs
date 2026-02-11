@@ -212,12 +212,7 @@ impl Governance {
         };
 
         while !machine.is_completely_finished() {
-            machine.continue_processing(
-                &mut self.neuron_store,
-                ballots,
-                is_over_soft_limit,
-                self.heap_data.first_proposal_id_to_record_voting_history,
-            );
+            machine.continue_processing(&mut self.neuron_store, ballots, is_over_soft_limit);
 
             if is_over_soft_limit() {
                 break;
@@ -513,8 +508,6 @@ impl ProposalVotingStateMachine {
         neuron_store: &mut NeuronStore,
         ballots: &mut HashMap<u64, Ballot>,
         is_over_instructions_limit: fn() -> bool,
-        // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
-        first_proposal_id_to_record_voting_history: ProposalId,
     ) {
         let voting_finished = self.is_voting_finished();
 
@@ -558,13 +551,8 @@ impl ProposalVotingStateMachine {
             }
         } else {
             while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
-                match neuron_store.record_neuron_vote(
-                    neuron_id,
-                    self.topic,
-                    self.proposal_id,
-                    vote,
-                    first_proposal_id_to_record_voting_history,
-                ) {
+                match neuron_store.record_neuron_vote(neuron_id, self.topic, self.proposal_id, vote)
+                {
                     Ok(_) => {}
                     Err(e) => {
                         // This is a bad inconsistency, but there is
@@ -969,12 +957,7 @@ mod test {
         );
 
         state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
-        state_machine.continue_processing(
-            &mut neuron_store,
-            &mut ballots,
-            || false,
-            ProposalId { id: 0 },
-        );
+        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
 
         assert_eq!(
             ballots,
@@ -988,12 +971,7 @@ mod test {
         assert!(!state_machine.is_voting_finished());
 
         // Now we see voting finished but not recording recent ballots finished
-        state_machine.continue_processing(
-            &mut neuron_store,
-            &mut ballots,
-            || false,
-            ProposalId { id: 0 },
-        );
+        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
         assert!(!state_machine.is_completely_finished());
         assert!(state_machine.is_voting_finished());
 
@@ -1014,12 +992,7 @@ mod test {
             None
         );
 
-        state_machine.continue_processing(
-            &mut neuron_store,
-            &mut ballots,
-            || false,
-            ProposalId { id: 0 },
-        );
+        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
         assert!(state_machine.is_completely_finished());
 
         assert_eq!(
@@ -1110,24 +1083,9 @@ mod test {
 
         // We assert it is done after checking both sets of followers
         state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
-        state_machine.continue_processing(
-            &mut neuron_store,
-            &mut ballots,
-            || false,
-            ProposalId { id: 0 },
-        );
-        state_machine.continue_processing(
-            &mut neuron_store,
-            &mut ballots,
-            || false,
-            ProposalId { id: 0 },
-        );
-        state_machine.continue_processing(
-            &mut neuron_store,
-            &mut ballots,
-            || false,
-            ProposalId { id: 0 },
-        );
+        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
+        state_machine.continue_processing(&mut neuron_store, &mut ballots, || false);
         assert!(state_machine.is_completely_finished());
     }
 
@@ -1370,6 +1328,7 @@ mod test {
                 action: Some(Action::Motion(Motion {
                     motion_text: "".to_string(),
                 })),
+                self_describing_action: None,
             }),
             ..Default::default()
         };
@@ -1434,8 +1393,8 @@ mod test {
         assert_eq!(proposal.decided_timestamp_seconds, 1234);
     }
 
-    #[test]
-    fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
+    #[tokio::test]
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
         let now = 1733433219;
         let topic = Topic::Governance;
         let environment = MockEnvironment::new(
@@ -1471,6 +1430,7 @@ mod test {
                 action: Some(Action::Motion(Motion {
                     motion_text: "".to_string(),
                 })),
+                self_describing_action: None,
             }),
             wait_for_quiet_state: Some(WaitForQuietState {
                 current_deadline_timestamp_seconds: now - 100,
@@ -1544,7 +1504,7 @@ mod test {
         set_governance_for_tests(governance);
         let governance = governance_mut();
         governance.distribute_voting_rewards_to_neurons(Tokens::from_e8s(100_000_000));
-        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2).await;
 
         assert_eq!(
             governance
@@ -1563,7 +1523,7 @@ mod test {
             .unwrap();
         governance.distribute_voting_rewards_to_neurons(Tokens::from_e8s(100_000_000));
         // Now rewards should be able to be distributed
-        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2).await;
 
         assert_eq!(
             governance

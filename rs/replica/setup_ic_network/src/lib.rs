@@ -10,7 +10,9 @@ use ic_artifact_pool::{
     ingress_pool::IngressPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
-use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
+use ic_consensus::consensus::{
+    ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
+};
 use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
@@ -63,13 +65,6 @@ use std::{
 };
 use tokio::sync::{mpsc::Sender, watch};
 use tower_http::trace::TraceLayer;
-
-/// [IC-1718]: Whether the `hashes-in-blocks` feature is enabled. If the flag is set to `true`, we
-/// will strip all ingress messages from blocks, before sending them to peers. On a receiver side,
-/// we will reconstruct the blocks by looking up the referenced ingress messages in the ingress
-/// pool or, if they are not there, by fetching missing ingress messages from peers who are
-/// advertising the blocks.
-const HASHES_IN_BLOCKS_FEATURE_ENABLED: bool = true;
 
 /// This limit is used to protect against a malicious peer advertising many ingress messages.
 /// If no malicious peers are present the ingress pools are bounded by a separate limit.
@@ -223,12 +218,13 @@ impl AbortableBroadcastChannels {
                 metrics_registry.clone(),
             );
 
-        let consensus = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
+        let consensus = if ic_consensus_features::HASHES_IN_BLOCKS_ENABLED {
             let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
                 consensus_pool.clone(),
                 artifact_pools.ingress_pool.clone(),
+                artifact_pools.idkg_pool.clone(),
                 bouncers.consensus,
                 metrics_registry.clone(),
                 node_id,
@@ -337,7 +333,7 @@ pub fn setup_consensus_and_p2p(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -349,7 +345,7 @@ pub fn setup_consensus_and_p2p(
     message_router: Arc<dyn MessageRouting>,
     consensus_crypto: Arc<dyn ConsensusCrypto + Send + Sync>,
     certifier_crypto: Arc<dyn CertificationCrypto + Send + Sync>,
-    ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_sig_crypto: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     cycles_account_manager: Arc<CyclesAccountManager>,
@@ -479,7 +475,7 @@ fn start_consensus(
     // not downcast traits.
     consensus_crypto: Arc<dyn ConsensusCrypto>,
     certifier_crypto: Arc<dyn CertificationCrypto>,
-    ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_sig_crypto: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -502,6 +498,7 @@ fn start_consensus(
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let consensus_time = consensus_pool.read().unwrap().get_consensus_time();
+    let consensus_thread_pool = build_thread_pool(MAX_CONSENSUS_THREADS);
     // --------------- PAYLOAD BUILDERS WITH ARTIFACT POOLS FOLLOW ---------------------------------
     let ingress_manager = Arc::new(IngressManager::new(
         time_source.clone(),
@@ -536,6 +533,7 @@ fn start_consensus(
         consensus_pool_cache.clone(),
         consensus_crypto.clone(),
         state_reader.clone(),
+        consensus_thread_pool.clone(),
         subnet_id,
         registry_client.clone(),
         metrics_registry,
@@ -569,6 +567,7 @@ fn start_consensus(
         Arc::clone(&dkg_key_manager) as Arc<_>,
         message_router.clone(),
         Arc::clone(&state_manager) as Arc<_>,
+        consensus_thread_pool,
         Arc::clone(&time_source) as Arc<_>,
         registry_poll_delay_duration_ms,
         malicious_flags.clone(),

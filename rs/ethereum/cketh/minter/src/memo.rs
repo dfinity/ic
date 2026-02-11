@@ -1,6 +1,10 @@
 #[cfg(test)]
 mod tests;
 
+use crate::endpoints::{
+    self, DecodeLedgerMemoArgs, DecodeLedgerMemoError, DecodeLedgerMemoResult, DecodedMemo,
+    MemoType,
+};
 use crate::erc20::CkTokenSymbol;
 use crate::eth_logs::ReceivedEvent;
 use crate::eth_rpc::Hash;
@@ -127,5 +131,31 @@ impl From<ReimbursementRequest> for MintMemo {
 impl From<ReimbursementRequest> for Memo {
     fn from(reimbursement_request: ReimbursementRequest) -> Self {
         Memo::from(MintMemo::from(reimbursement_request))
+    }
+}
+
+pub fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
+    args.validate_input()
+        .map_err(DecodeLedgerMemoError::InvalidMemo)?;
+
+    match args.memo_type {
+        MemoType::Burn => match minicbor::decode::<BurnMemo>(&args.encoded_memo) {
+            Ok(burn_memo) => Ok(Some(DecodedMemo::Burn(Some(endpoints::BurnMemo::from(
+                burn_memo,
+            ))))),
+            Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+                "Error decoding BurnMemo: {}",
+                err
+            )))),
+        },
+        MemoType::Mint => match minicbor::decode::<MintMemo>(&args.encoded_memo) {
+            Ok(mint_memo) => Ok(Some(DecodedMemo::Mint(Some(endpoints::MintMemo::from(
+                mint_memo,
+            ))))),
+            Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+                "Error decoding MintMemo: {}",
+                err
+            )))),
+        },
     }
 }

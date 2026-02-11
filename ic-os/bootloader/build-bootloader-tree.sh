@@ -4,13 +4,17 @@
 # the /boot/grub and /boot/efi portions. From this, the grub and
 # efi partitions of the disk image can be built.
 
-set -exo pipefail
+set -euo pipefail
+
+# when set, cleanup() will `rm -f` it
+CONTAINER_NAME=
 
 cleanup() {
-    sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"
-    rm -rf "${TMPDIR}"
-    sudo umount "${TMPFS}"
-    rm -rf "${TMPFS}"
+    if [ -n "${CONTAINER_NAME:-}" ]; then
+        echo >&2 "warning: have to force delete container"
+        podman rm -f "$CONTAINER_NAME"
+    fi
+    rm -rf "${TMP_DIR}"
 }
 trap cleanup EXIT
 
@@ -26,14 +30,12 @@ while getopts "o:" OPT; do
     esac
 done
 
-TMPFS=$(mktemp -d /tmp/mytempdir.XXXXXX)
-sudo mount -t tmpfs tmpfs-podman "${TMPFS}"
-
-TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
+TMP_DIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
 BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
-sudo podman --root "${TMPFS}" build --iidfile "${TMPDIR}/iidfile" - <<<"
+echo >&2 "building container"
+podman build --no-cache --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
     RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
@@ -50,9 +52,14 @@ sudo podman --root "${TMPFS}" build --iidfile "${TMPDIR}/iidfile" - <<<"
         echo read ls cat png jpeg halt reboot loadenv lvm
 "
 
-IMAGE_ID=$(cut -d':' -f2 <"${TMPDIR}/iidfile")
+IMAGE_ID=$(cut -d':' -f2 <"${TMP_DIR}/iidfile")
 
-CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d "${IMAGE_ID}")
-
-sudo podman --root "${TMPFS}" export "${CONTAINER}" | tar --strip-components=1 -C "${TMPDIR}" -x build
-tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
+echo >&2 "exporting container /build/boot"
+# track container with unique name in case  `podman rm -f` is needed
+# (we use TMP_DIR to avoid a dependency on uuidgen & co)
+CONTAINER_NAME=$(md5sum <<<"$TMP_DIR" | cut -d' ' -f1)
+# run the container which will print a deterministic tarball of /build/boot to stdout
+podman run --rm --name "$CONTAINER_NAME" "${IMAGE_ID}" \
+    tar cf - --sort=name --owner=root:0 --group=root:0 '--mtime=UTC 1970-01-01 00:00:00' -C /build boot \
+    >"${OUT_FILE:?out file missing}"
+CONTAINER_NAME= # unset CONTAINER_NAME so that cleanup() doesn't try to rm it

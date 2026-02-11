@@ -63,12 +63,7 @@ mock! {
     pub LocalCspVault {}
 
     impl BasicSignatureCspVault for LocalCspVault {
-        fn sign(
-            &self,
-            algorithm_id: AlgorithmId,
-            message: Vec<u8>,
-            key_id: KeyId,
-        ) -> Result<CspSignature, CspBasicSignatureError>;
+        fn sign(&self, message: Vec<u8>) -> Result<CspSignature, CspBasicSignatureError>;
 
         fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
     }
@@ -115,7 +110,16 @@ mock! {
             threshold: NumberOfNodes,
             epoch: Epoch,
             receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-            maybe_resharing_secret: Option<KeyId>,
+        ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError>;
+
+        fn create_resharing_dealing(
+            &self,
+            algorithm_id: AlgorithmId,
+            dealer_index: NodeIndex,
+            threshold: NumberOfNodes,
+            epoch: Epoch,
+            receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+            resharing_secret: KeyId,
         ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError>;
 
         fn load_threshold_signing_key(

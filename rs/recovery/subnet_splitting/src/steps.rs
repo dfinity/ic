@@ -1,7 +1,7 @@
 use crate::{
     agent_helper::AgentHelper,
     layout::Layout,
-    state_tool_helper::StateToolHelper,
+    state_tool_helper,
     target_subnet::TargetSubnet,
     utils::{find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_state_hash},
     validation::validate_artifacts,
@@ -10,10 +10,10 @@ use crate::{
 use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
 use ic_recovery::{
-    CUPS_DIR, IC_REGISTRY_LOCAL_STORE, Recovery,
+    Recovery,
     cli::consent_given,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::rsync,
+    file_sync_helper::rsync_includes,
     registry_helper::VersionedRecoveryResult,
     steps::Step,
     util::parse_hex_str,
@@ -25,32 +25,34 @@ use ic_types::Height;
 use slog::{Logger, error, info};
 use url::Url;
 
-use std::net::IpAddr;
+use std::{net::IpAddr, path::PathBuf};
 
 pub(crate) struct CopyWorkDirStep {
     pub(crate) layout: Layout,
     pub(crate) logger: Logger,
+    pub(crate) data_includes: Vec<PathBuf>,
 }
 
 impl Step for CopyWorkDirStep {
     fn descr(&self) -> String {
         format!(
-            "Copying {} to {}. Excluding cups and registry local store",
+            "Copying {} from {} to {}.",
+            self.data_includes
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<String>>()
+                .join(", "),
             self.layout.work_dir(TargetSubnet::Source).display(),
             self.layout.work_dir(TargetSubnet::Destination).display(),
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        rsync(
+        rsync_includes(
             &self.logger,
-            vec![CUPS_DIR, IC_REGISTRY_LOCAL_STORE],
-            &format!("{}/", self.layout.work_dir(TargetSubnet::Source).display()),
-            &self
-                .layout
-                .work_dir(TargetSubnet::Destination)
-                .display()
-                .to_string(),
+            &self.data_includes,
+            self.layout.work_dir(TargetSubnet::Source),
+            self.layout.work_dir(TargetSubnet::Destination).join(""),
             /*require_confirmation=*/ false,
             /*key_file=*/ None,
         )
@@ -135,11 +137,11 @@ impl Step for SplitStateStep {
         let latest_checkpoint_dir = self.layout.latest_checkpoint_dir(self.target_subnet)?;
         let manifest_path = self.layout.actual_manifest_file(self.subnet_id);
 
-        StateToolHelper::compute_manifest(&latest_checkpoint_dir, &manifest_path)?;
+        state_tool_helper::compute_manifest(&latest_checkpoint_dir, &manifest_path)?;
 
         // 3. Validate the manifest
         info!(self.logger, "Validating the manifest");
-        StateToolHelper::verify_manifest(&manifest_path)
+        state_tool_helper::verify_manifest(&manifest_path)
             .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
 
         let expected_state_hash = find_expected_state_hash_for_subnet_id(
@@ -173,7 +175,6 @@ impl Step for SplitStateStep {
 }
 
 pub(crate) struct ComputeExpectedManifestsStep {
-    pub(crate) state_tool_helper: StateToolHelper,
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) destination_subnet_id: SubnetId,
     pub(crate) canister_id_ranges_to_move: Vec<CanisterIdRange>,
@@ -194,7 +195,7 @@ impl Step for ComputeExpectedManifestsStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        self.state_tool_helper.split_manifest(
+        state_tool_helper::split_manifest(
             self.layout.original_state_manifest_file(),
             self.source_subnet_id,
             self.destination_subnet_id,
@@ -241,7 +242,7 @@ impl Step for ValidateCUPStep {
         info!(self.logger, "Computing the state manifest");
         let latest_checkpoint_dir = self.layout.latest_checkpoint_dir(TargetSubnet::Source)?;
 
-        StateToolHelper::compute_manifest(
+        state_tool_helper::compute_manifest(
             &latest_checkpoint_dir,
             self.layout.original_state_manifest_file(),
         )?;

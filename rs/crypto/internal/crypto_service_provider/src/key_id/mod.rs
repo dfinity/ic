@@ -5,7 +5,7 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
 };
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
-use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::AlgorithmId;
 use std::fmt;
@@ -106,21 +106,19 @@ impl<B: AsRef<[u8]>> From<(AlgorithmId, &B)> for KeyId {
 
 impl From<&CspPublicKey> for KeyId {
     fn from(public_key: &CspPublicKey) -> Self {
-        KeyId::from((public_key.algorithm_id(), &public_key.pk_bytes()))
+        KeyId::from((AlgorithmId::from(public_key), public_key))
     }
 }
 
-impl TryFrom<&MEGaPublicKey> for KeyId {
-    type Error = String;
+impl From<&MEGaPublicKey> for KeyId {
+    fn from(public_key: &MEGaPublicKey) -> Self {
+        let alg = match public_key.curve_type() {
+            EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
+            EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
+            EccCurveType::Ed25519 => AlgorithmId::ThresholdEd25519,
+        };
 
-    fn try_from(public_key: &MEGaPublicKey) -> Result<Self, Self::Error> {
-        match public_key.curve_type() {
-            EccCurveType::K256 => Ok(KeyId::from((
-                AlgorithmId::ThresholdEcdsaSecp256k1,
-                &public_key.serialize(),
-            ))),
-            c => Err(format!("unsupported curve: {c:?}")),
-        }
+        KeyId::from((alg, &public_key.serialize()))
     }
 }
 

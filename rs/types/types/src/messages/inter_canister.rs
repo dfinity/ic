@@ -1,5 +1,5 @@
 use crate::{
-    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
+    CanisterId, CountBytes, Cycles, NumBytes, Time,
     ingress::WasmResult,
     time::{CoarseTime, UNIX_EPOCH},
 };
@@ -25,6 +25,7 @@ use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::Reverse,
     convert::{From, TryFrom, TryInto},
     hash::{Hash, Hasher},
     mem::size_of,
@@ -257,6 +258,7 @@ impl Request {
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
+            | Ok(Method::FlexibleHttpRequest)
             | Ok(Method::RawRand)
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
@@ -418,7 +420,7 @@ impl Payload {
     }
 
     /// Returns the size of this `Payload` in bytes.
-    fn size_bytes(&self) -> NumBytes {
+    pub fn size_bytes(&self) -> NumBytes {
         match self {
             Payload::Data(data) => NumBytes::from(data.len() as u64),
             Payload::Reject(context) => context.size_bytes(),
@@ -547,7 +549,10 @@ impl Hash for Response {
 /// refunds for best-effort calls.
 ///
 /// Represents an _anonymous refund_.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
+///
+/// Refunds are ordered by amount (larger amounts first). Ties are broken by
+/// canister ID (smaller IDs first).
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Refund {
     /// Whom this refund is to be delivered to.
@@ -571,6 +576,19 @@ impl Refund {
 
     pub fn amount(&self) -> Cycles {
         self.amount
+    }
+}
+
+impl PartialOrd for Refund {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Refund {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Order by amount decreasing, then by recipient increasing.
+        (Reverse(self.amount), &self.recipient).cmp(&(Reverse(other.amount), &other.recipient))
     }
 }
 
@@ -788,7 +806,6 @@ impl From<&RequestMetadata> for pb_queues::RequestMetadata {
         Self {
             call_tree_depth: metadata.call_tree_depth,
             call_tree_start_time_nanos: metadata.call_tree_start_time.as_nanos_since_unix_epoch(),
-            call_subtree_deadline_nanos: None,
         }
     }
 }
@@ -799,7 +816,6 @@ impl From<&Request> for pb_queues::Request {
             receiver: Some(pb_types::CanisterId::from(req.receiver)),
             sender: Some(pb_types::CanisterId::from(req.sender)),
             sender_reply_callback: req.sender_reply_callback.get(),
-            payment: Some((&Funds::new(req.payment)).into()),
             method_name: req.method_name.clone(),
             method_payload: req.method_payload.clone(),
             cycles_payment: Some((req.payment).into()),
@@ -824,19 +840,11 @@ impl TryFrom<pb_queues::Request> for Request {
     type Error = ProxyDecodeError;
 
     fn try_from(req: pb_queues::Request) -> Result<Self, Self::Error> {
-        // To maintain backwards compatibility we fall back to reading from `payment` if
-        // `cycles_payment` is not set.
-        let payment = match try_from_option_field(req.cycles_payment, "Request::cycles_payment") {
-            Ok(res) => res,
-            Err(_) => try_from_option_field::<_, Funds, _>(req.payment, "Request::payment")
-                .map(|mut res| res.take_cycles())?,
-        };
-
         Ok(Self {
             receiver: try_from_option_field(req.receiver, "Request::receiver")?,
             sender: try_from_option_field(req.sender, "Request::sender")?,
             sender_reply_callback: req.sender_reply_callback.into(),
-            payment,
+            payment: try_from_option_field(req.cycles_payment, "Request::cycles_payment")?,
             method_name: req.method_name,
             method_payload: req.method_payload,
             metadata: req.metadata.map_or_else(Default::default, From::from),
@@ -876,7 +884,6 @@ impl From<&Response> for pb_queues::Response {
             originator: Some(pb_types::CanisterId::from(rep.originator)),
             respondent: Some(pb_types::CanisterId::from(rep.respondent)),
             originator_reply_callback: rep.originator_reply_callback.get(),
-            refund: Some((&Funds::new(rep.refund)).into()),
             response_payload: Some(pb_queues::response::ResponsePayload::from(
                 &rep.response_payload,
             )),
@@ -890,19 +897,11 @@ impl TryFrom<pb_queues::Response> for Response {
     type Error = ProxyDecodeError;
 
     fn try_from(rep: pb_queues::Response) -> Result<Self, Self::Error> {
-        // To maintain backwards compatibility we fall back to reading from `refund` if
-        // `cycles_refund` is not set.
-        let refund = match try_from_option_field(rep.cycles_refund, "Response::cycles_refund") {
-            Ok(res) => res,
-            Err(_) => try_from_option_field::<_, Funds, _>(rep.refund, "Response::refund")
-                .map(|mut res| res.take_cycles())?,
-        };
-
         Ok(Self {
             originator: try_from_option_field(rep.originator, "Response::originator")?,
             respondent: try_from_option_field(rep.respondent, "Response::respondent")?,
             originator_reply_callback: rep.originator_reply_callback.into(),
-            refund,
+            refund: try_from_option_field(rep.cycles_refund, "Response::cycles_refund")?,
             response_payload: try_from_option_field(
                 rep.response_payload,
                 "Response::response_payload",

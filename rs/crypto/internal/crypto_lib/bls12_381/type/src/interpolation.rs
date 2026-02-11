@@ -170,10 +170,7 @@ impl LagrangeCoefficients {
     /// polynomial `f`, and some elliptic curve point `g`, returns `f(value) * g`.
     ///
     /// See: <https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach>
-    pub fn interpolate_g1<T: AsRef<G1Affine>>(
-        &self,
-        y: &[T],
-    ) -> Result<G1Affine, InterpolationError> {
+    pub fn interpolate_g1(&self, y: &[G1Affine]) -> Result<G1Affine, InterpolationError> {
         if y.len() != self.coefficients.len() {
             return Err(InterpolationError::WrongSampleCount);
         } else if y.is_empty() {
@@ -187,10 +184,7 @@ impl LagrangeCoefficients {
     /// polynomial `f`, and some elliptic curve point `g`, returns `f(value) * g`.
     ///
     /// See: <https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach>
-    pub fn interpolate_g2<T: AsRef<G2Affine>>(
-        &self,
-        y: &[T],
-    ) -> Result<G2Affine, InterpolationError> {
+    pub fn interpolate_g2(&self, y: &[G2Affine]) -> Result<G2Affine, InterpolationError> {
         if y.len() != self.coefficients.len() {
             return Err(InterpolationError::WrongSampleCount);
         } else if y.is_empty() {

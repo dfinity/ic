@@ -19,7 +19,7 @@ use bitcoin::{
     },
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
-use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
+use ic_logger::{ReplicaLogger, debug, info, trace, warn};
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
@@ -27,12 +27,6 @@ use std::{
     time::{Duration, Instant},
 };
 use thiserror::Error;
-
-/// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
-const GETDATA_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
-const GETHEADERS_REQUEST_TIMEOUT_SECS: u64 = 30;
 
 /// This constant represents the maximum size of `headers` messages.
 /// https://developer.bitcoin.org/reference/p2p_networking.html#headers
@@ -118,9 +112,9 @@ impl GetHeadersRequest {
         }
     }
 
-    fn has_timed_out(&self) -> bool {
+    fn has_timed_out(&self, timeout: Duration) -> bool {
         match self.sent_at {
-            Some(sent_at) => sent_at.elapsed().as_secs() >= GETHEADERS_REQUEST_TIMEOUT_SECS,
+            Some(sent_at) => sent_at.elapsed() >= timeout,
             None => true,
         }
     }
@@ -174,6 +168,7 @@ pub struct BlockchainManager<Network: BlockchainNetwork> {
     /// This field contains a logger for the blockchain manager's use.
     logger: ReplicaLogger,
     metrics: RouterMetrics,
+    request_timeout: Duration,
 }
 
 impl<Network: BlockchainNetwork> BlockchainManager<Network>
@@ -185,6 +180,7 @@ where
     /// BTC network.
     pub fn new(
         blockchain: Arc<BlockchainState<Network>>,
+        request_timeout: Duration,
         logger: ReplicaLogger,
         metrics: RouterMetrics,
     ) -> Self {
@@ -201,6 +197,7 @@ where
             block_sync_queue: LinkedHashSet::new(),
             logger,
             metrics,
+            request_timeout,
         }
     }
 
@@ -516,7 +513,7 @@ where
             .getheaders_requests
             .iter()
             .filter_map(|(addr, request)| {
-                if request.has_timed_out() {
+                if request.has_timed_out(self.request_timeout) {
                     Some(addr)
                 } else {
                     None
@@ -537,7 +534,7 @@ where
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
             match request.sent_at {
                 Some(sent_at) => {
-                    if sent_at.elapsed() > GETDATA_REQUEST_TIMEOUT {
+                    if sent_at.elapsed() > self.request_timeout {
                         retry_queue.insert(*block_hash);
                     }
                 }
@@ -793,6 +790,8 @@ pub mod test {
     use std::net::SocketAddr;
     use std::str::FromStr;
 
+    const TEST_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
     type TestChannel = crate::common::test_common::TestChannel<BlockHeader, Block>;
 
     fn create_blockchain_manager<Network: BlockchainNetwork>(
@@ -807,6 +806,7 @@ pub mod test {
             blockchain_state.genesis(),
             BlockchainManager::new(
                 Arc::new(blockchain_state),
+                TEST_REQUEST_TIMEOUT,
                 no_op_logger(),
                 RouterMetrics::new(&MetricsRegistry::default()),
             ),
@@ -1197,9 +1197,7 @@ pub mod test {
             .getdata_request_info
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
-        assert!(
-            request.sent_at.expect("should be some instant").elapsed() < GETDATA_REQUEST_TIMEOUT
-        );
+        assert!(request.sent_at.expect("should be some instant").elapsed() < TEST_REQUEST_TIMEOUT);
         let getdata_command = channel
             .pop_back()
             .expect("there should `getdata` request in the channel");
@@ -1250,9 +1248,7 @@ pub mod test {
             .getdata_request_info
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
-        assert!(
-            request.sent_at.expect("should be some instant").elapsed() < GETDATA_REQUEST_TIMEOUT
-        );
+        assert!(request.sent_at.expect("should be some instant").elapsed() < TEST_REQUEST_TIMEOUT);
         assert_eq!(request.socket, addr2);
         let getdata_command = channel
             .pop_back()

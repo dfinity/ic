@@ -4,8 +4,8 @@ use dfn_candid::candid_one;
 use ic_nns_test_utils::registry::get_value;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
@@ -18,7 +18,7 @@ use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 #[test]
 fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -58,7 +58,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
         // .. And no change should have happened to the node rewards table
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert!(table.is_none());
+        assert!(table.unwrap().table.is_empty());
 
         // Go through an upgrade cycle, and verify that it still works the same
         registry.upgrade_to_self_binary(vec![]).await.unwrap();
@@ -73,7 +73,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
 
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert!(table.is_none());
+        assert!(table.unwrap().table.is_empty());
 
         Ok(())
     });
@@ -81,7 +81,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rewards_table() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the Governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -130,7 +130,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rew
 
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert!(table.is_none());
+        assert!(table.unwrap().table.is_empty());
 
         Ok(())
     });
@@ -138,7 +138,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rew
 
 #[test]
 fn test_the_governance_canister_can_update_the_node_rewards_table() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()

@@ -107,7 +107,7 @@ struct ConnectionManager {
     connect_queue: DelayQueue<NodeId>,
 
     // Authentication
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
 
     // Shared state
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
@@ -182,7 +182,7 @@ pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt: &Handle,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
     registry_client: Arc<dyn RegistryClient>,
     node_id: NodeId,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,

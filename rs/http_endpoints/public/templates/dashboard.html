@@ -126,7 +126,7 @@
                     <h3>Scheduler state</h3>
                     <table>
                         <tr><td>last_full_execution_round</td><td>{{ c.scheduler_state.last_full_execution_round }}</td></tr>
-                        <tr><td>compute_allocation</td><td>{{ c.scheduler_state.compute_allocation }}</td></tr>
+                        <tr><td>compute_allocation</td><td>{{ c.compute_allocation() }}</td></tr>
                         <tr><td>freeze_threshold (seconds)</td><td>{{ c.system_state.freeze_threshold }}</td></tr>
                         <tr><td>memory_usage</td><td>{{ c.memory_usage() }}</td></tr>
                         <tr><td>accumulated_priority</td><td>{{ c.scheduler_state.accumulated_priority.get() }} </td></tr>

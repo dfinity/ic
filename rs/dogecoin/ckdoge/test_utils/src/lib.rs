@@ -1,41 +1,102 @@
+mod dogecoin;
+mod events;
+pub mod flow;
+mod ledger;
 mod minter;
 
+use crate::dogecoin::DogecoinDaemon;
+use crate::flow::{deposit::DepositFlowStart, withdrawal::WithdrawalFlowStart};
+use crate::ledger::LedgerCanister;
+pub use crate::{dogecoin::DogecoinUsers, minter::MinterCanister};
+use bitcoin::TxOut;
+use bitcoin::dogecoin::Network as DogeNetwork;
 use candid::{Encode, Principal};
-use ic_ckdoge_minter::lifecycle::init::Mode;
-use ic_ckdoge_minter::lifecycle::init::{InitArgs, MinterArg, Network};
+use ic_btc_adapter_test_utils::bitcoind::Daemon;
+use ic_ckdoge_minter::{
+    Txid,
+    lifecycle::{
+        MinterArg,
+        init::{InitArgs, Mode, Network},
+    },
+};
 use ic_icrc1_ledger::ArchiveOptions;
 use ic_management_canister_types::{CanisterId, CanisterSettings};
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::ErrorCode;
 use pocket_ic::RejectCode;
+use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig};
 use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::time::Duration;
-
-pub use crate::minter::MinterCanister;
+use std::time::{Duration, SystemTime};
 
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
-pub const DOGECOIN_CANISTER: Principal =
-    Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
 pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
-pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
+pub const DOGE: u64 = 100_000_000;
+pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 50 * DOGE;
+pub const DEPOSIT_DOGE_MIN_AMOUNT: u64 = DOGE;
+/// Realistic median transaction fee in millikoinus/byte.
+///
+/// [Average transaction fee](https://bitinfocharts.com/dogecoin/)
+/// was around `0.00084 DOGE/byte` on 26.11.2025 which translates to
+/// * `84_000 koinus/byte`
+/// * `84_000_000 millikoinus/byte`
+pub const MEDIAN_TRANSACTION_FEE: u64 = 50_000_000;
+// 0.01 DOGE, ca 0.002 USD (2025.09.06)
+pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
+const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
+pub const MIN_CONFIRMATIONS: u32 = 60;
+pub const BLOCK_TIME: Duration = Duration::from_secs(60);
 
 pub struct Setup {
-    env: Arc<PocketIc>,
+    pub env: Arc<PocketIc>,
+    doge_network: Network,
     minter: CanisterId,
-    _ledger: CanisterId,
+    ledger: CanisterId,
+    dogecoind: Option<Arc<Daemon<DogeNetwork>>>,
 }
 
 impl Setup {
-    pub fn new() -> Self {
-        let env = Arc::new(
-            PocketIcBuilder::new()
-                .with_bitcoin_subnet()
-                .with_fiduciary_subnet()
-                .build(),
-        );
+    pub fn new(doge_network: Network) -> Self {
+        let dogecoind = match doge_network {
+            Network::Mainnet => None,
+            Network::Regtest => {
+                let dogecoind_path = std::env::var("DOGECOIND_BIN")
+                    .expect("Missing DOGECOIND_BIN (path to dogecoind executable) in env.");
+                Some(Arc::new(Daemon::new(
+                    &dogecoind_path,
+                    DogeNetwork::Regtest,
+                    ic_btc_adapter_test_utils::bitcoind::Conf {
+                        p2p: true,
+                        ..Default::default()
+                    },
+                )))
+            }
+        };
+        let env = match &dogecoind {
+            Some(daemon) => {
+                let icp_features = IcpFeatures {
+                    dogecoin: Some(IcpFeaturesConfig::DefaultConfig),
+                    ..Default::default()
+                };
+                let pic = PocketIcBuilder::new()
+                    .with_bitcoin_subnet()
+                    .with_fiduciary_subnet()
+                    .with_dogecoind_addrs(vec![daemon.p2p_socket().unwrap().into()])
+                    .with_icp_features(icp_features)
+                    .build();
+                pic.set_time(SystemTime::now().into());
+                Arc::new(pic)
+            }
+            None => Arc::new(
+                PocketIcBuilder::new()
+                    .with_bitcoin_subnet()
+                    .with_fiduciary_subnet()
+                    .build(),
+            ),
+        };
+
         let fiduciary_subnet = env.topology().get_fiduciary().unwrap();
 
         let minter = env.create_canister_on_subnet(
@@ -60,14 +121,17 @@ impl Setup {
 
         {
             let minter_init_args = MinterArg::Init(InitArgs {
-                doge_network: Network::Mainnet,
+                doge_network,
                 ecdsa_key_name: "key_1".into(),
+                deposit_doge_min_amount: Some(DEPOSIT_DOGE_MIN_AMOUNT),
                 retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
                 ledger_id: ledger,
-                max_time_in_queue_nanos: Duration::from_secs(10).as_nanos() as u64,
-                min_confirmations: Some(60),
+                max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
+                min_confirmations: Some(MIN_CONFIRMATIONS),
                 mode: Mode::GeneralAvailability,
                 get_utxos_cache_expiration_seconds: Some(Duration::from_secs(60).as_secs()),
+                utxo_consolidation_threshold: Some(10_000),
+                max_num_inputs_in_transaction: Some(500),
             });
             env.install_canister(
                 minter,
@@ -81,15 +145,14 @@ impl Setup {
             let ledger_init_args = ic_icrc1_ledger::InitArgs {
                 minting_account: minter.into(),
                 fee_collector_account: Some(Account {
-                    owner: DOGECOIN_CANISTER,
+                    owner: minter,
                     subaccount: Some([
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0x0f, 0xee,
                     ]),
                 }),
                 initial_balances: vec![],
-                // 0.1 DOGE, ca 0.02 USD (2025.09.06)
-                transfer_fee: 10_000_000_u32.into(),
+                transfer_fee: LEDGER_TRANSFER_FEE.into(),
                 decimals: Some(8),
                 token_name: "ckDOGE".to_string(),
                 token_symbol: "ckDOGE".to_string(),
@@ -118,8 +181,21 @@ impl Setup {
 
         Self {
             env,
+            doge_network,
             minter,
-            _ledger: ledger,
+            ledger,
+            dogecoind,
+        }
+    }
+
+    pub fn dogecoind(&self) -> DogecoinDaemon {
+        DogecoinDaemon {
+            env: self.env.clone(),
+            daemon: self
+                .dogecoind
+                .as_ref()
+                .expect("BUG: Dogecoind not available for Mainnet")
+                .clone(),
         }
     }
 
@@ -129,11 +205,50 @@ impl Setup {
             id: self.minter,
         }
     }
+
+    pub fn ledger(&self) -> LedgerCanister {
+        LedgerCanister {
+            env: self.env.clone(),
+            id: self.ledger,
+        }
+    }
+
+    pub fn network(&self) -> Network {
+        self.doge_network
+    }
+
+    pub fn deposit_flow(&self) -> DepositFlowStart<&Setup> {
+        DepositFlowStart::new(self)
+    }
+
+    pub fn withdrawal_flow(&self) -> WithdrawalFlowStart<&Setup> {
+        WithdrawalFlowStart::new(self)
+    }
+
+    pub fn parse_dogecoin_address(&self, address: impl Into<String>) -> bitcoin::dogecoin::Address {
+        let address = address.into();
+        address
+            .parse::<bitcoin::dogecoin::Address<_>>()
+            .unwrap()
+            .require_network(into_rust_dogecoin_network(self.network()))
+            .unwrap()
+    }
+
+    pub fn with_doge_balance(self) -> Self {
+        self.dogecoind().setup_user_with_balance();
+        self
+    }
 }
 
 impl Default for Setup {
     fn default() -> Self {
-        Self::new()
+        Self::new(Network::Regtest)
+    }
+}
+
+impl AsRef<Setup> for Setup {
+    fn as_ref(&self) -> &Setup {
+        self
     }
 }
 
@@ -157,12 +272,48 @@ pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
     );
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::DOGECOIN_CANISTER;
+pub fn txid(bytes: [u8; 32]) -> Txid {
+    Txid::from(bytes)
+}
 
-    #[test]
-    fn should_have_correct_principal() {
-        assert_eq!(DOGECOIN_CANISTER.to_string(), "gordg-fyaaa-aaaan-aaadq-cai");
+pub fn into_outpoint(
+    value: ic_ckdoge_minter::OutPoint,
+) -> bitcoin::blockdata::transaction::OutPoint {
+    use bitcoin::hashes::Hash;
+
+    bitcoin::blockdata::transaction::OutPoint {
+        txid: bitcoin::blockdata::transaction::Txid::from_slice(value.txid.as_ref()).unwrap(),
+        vout: value.vout,
     }
+}
+
+pub fn parse_dogecoin_address(network: Network, tx_out: &TxOut) -> bitcoin::dogecoin::Address {
+    bitcoin::dogecoin::Address::from_script(
+        tx_out.script_pubkey.as_script(),
+        into_rust_dogecoin_network(network),
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "BUG: invalid Dogecoin address from script '{}': {e}",
+            tx_out.script_pubkey
+        )
+    })
+}
+
+pub fn into_rust_dogecoin_network(network: Network) -> bitcoin::dogecoin::Network {
+    match network {
+        Network::Mainnet => bitcoin::dogecoin::Network::Dogecoin,
+        Network::Regtest => bitcoin::dogecoin::Network::Regtest,
+    }
+}
+
+/// Expect exactly one element on anything that can be turn into an iterator.
+pub fn only_one<T, I: IntoIterator<Item = T>>(iter: I) -> T {
+    let mut iter = iter.into_iter();
+    let result = iter.next().expect("BUG: expected exactly one item, got 0.");
+    assert!(
+        iter.next().is_none(),
+        "BUG: expected exactly one item, got at least 2"
+    );
+    result
 }

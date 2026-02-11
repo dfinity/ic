@@ -9,6 +9,7 @@ use std::path::Path;
 
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::NeuronId;
+#[cfg(not(target_arch = "wasm32"))]
 use ic_nns_governance_api::Visibility;
 use ic_nns_governance_api::{
     Governance, NetworkEconomics, Neuron, XdrConversionRate as XdrConversionRatePb,

@@ -13,9 +13,9 @@ use pocket_ic::{
     PocketIcState, RejectCode, StartServerParams, Time,
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
-        CreateInstanceResponse, HttpGatewayDetails, HttpsConfig, IcpFeatures, IcpFeaturesConfig,
-        InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
-        RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
+        CanisterIdRange, CreateInstanceResponse, HttpGatewayDetails, HttpsConfig, IcpFeatures,
+        IcpFeaturesConfig, InitialTime, InstanceConfig, InstanceHttpGatewayConfig,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
     nonblocking::PocketIc as PocketIcAsync,
     query_candid, start_server, update_candid,
@@ -30,13 +30,11 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
-#[cfg(windows)]
-use wslpath::windows_to_wsl;
 
 mod common;
 
-// 2T cycles
-const INIT_CYCLES: u128 = 2_000_000_000_000;
+// 3T cycles
+const INIT_CYCLES: u128 = 3_000_000_000_000;
 
 #[derive(CandidType, Deserialize, Debug)]
 enum RejectionCode {
@@ -49,7 +47,7 @@ enum RejectionCode {
     Unknown,
 }
 
-// Create a counter canister and charge it with 2T cycles.
+// Create a counter canister and charge it with initial cycles.
 fn deploy_counter_canister(pic: &PocketIc) -> Principal {
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -106,10 +104,7 @@ fn counter_wasm() -> Vec<u8> {
 
 #[test]
 fn test_create_canister_with_id() {
-    let pic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_ii_subnet()
-        .build();
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
     // goes on NNS
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
     let actual_canister_id = pic
@@ -120,16 +115,26 @@ fn test_create_canister_with_id() {
         pic.get_subnet(canister_id).unwrap(),
         pic.topology().get_nns().unwrap()
     );
-    // goes on II
+    // goes on II which is created dynamically with its ICP mainnet canister ranges
     let canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
     let actual_canister_id = pic
         .create_canister_with_id(None, None, canister_id)
         .unwrap();
     assert_eq!(actual_canister_id, canister_id);
-    assert_eq!(
-        pic.get_subnet(canister_id).unwrap(),
-        pic.topology().get_ii().unwrap()
-    );
+    let topology = pic.topology();
+    let ii_subnet_id = topology.get_ii().unwrap();
+    assert_eq!(pic.get_subnet(canister_id).unwrap(), ii_subnet_id);
+    // The II canister ID is a singleton range.
+    let ii_canister_ranges = &topology
+        .subnet_configs
+        .get(&ii_subnet_id)
+        .unwrap()
+        .canister_ranges;
+    let ii_canister_range = CanisterIdRange {
+        start: canister_id.into(),
+        end: canister_id.into(),
+    };
+    assert!(ii_canister_ranges.contains(&ii_canister_range));
 }
 
 #[test]
@@ -179,7 +184,7 @@ fn test_create_canister_with_used_id_fails() {
 
 #[test]
 #[should_panic(
-    expected = "The binary representation 04 of effective canister ID 2vxsx-fae should consist of 10 bytes."
+    expected = "The effective canister ID 2vxsx-fae does not belong to an existing subnet and it is not a mainnet canister ID."
 )]
 fn test_create_canister_with_not_contained_id_panics() {
     let pic = PocketIc::new();
@@ -188,7 +193,7 @@ fn test_create_canister_with_not_contained_id_panics() {
 
 #[test]
 #[should_panic(
-    expected = "The effective canister ID rwlgt-iiaaa-aaaaa-aaaaa-cai belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
+    expected = "The effective canister ID rwlgt-iiaaa-aaaaa-aaaaa-cai belongs to the NNS subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
 )]
 fn test_create_canister_with_special_mainnet_id_panics() {
     let pic = PocketIc::new();
@@ -794,7 +799,7 @@ async fn test_create_and_drop_instances_async() {
 async fn test_counter_canister_async() {
     let pic = pocket_ic::nonblocking::PocketIc::new().await;
 
-    // Create a counter canister and charge it with 2T cycles.
+    // Create a counter canister and charge it with initial cycles.
     let canister_id = pic.create_canister().await;
     pic.add_cycles(canister_id, INIT_CYCLES).await;
     pic.install_canister(canister_id, counter_wasm(), vec![], None)
@@ -846,7 +851,7 @@ fn install_very_large_wasm() {
     // Create a canister.
     let canister_id = pic.create_canister();
 
-    // Charge the canister with 2T cycles.
+    // Charge the canister with cycles.
     pic.add_cycles(canister_id, 100 * INIT_CYCLES);
 
     // Install the very large canister wasm on the canister.
@@ -1314,18 +1319,7 @@ fn test_vetkd() {
     }
 }
 
-#[test]
-fn test_canister_http() {
-    let pic = PocketIc::new();
-
-    // Create a canister and charge it with 2T cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the test canister wasm file on the canister.
-    let test_wasm = test_canister_wasm();
-    pic.install_canister(canister_id, test_wasm, vec![], None);
-
+fn test_canister_http(pic: &PocketIc, canister_id: Principal) {
     // Submit an update call to the test canister making a canister http outcall
     // and mock a canister http outcall response.
     let call_id = pic
@@ -1371,10 +1365,52 @@ fn test_canister_http() {
 }
 
 #[test]
+fn test_canister_http_on_fresh_and_resumed_instance() {
+    // create an empty PocketIC state to be used:
+    // - initially by a fresh PocketIC instance;
+    // - later by a PocketIC instance resumed from that state.
+    let state = PocketIcState::new();
+
+    // create a fresh PocketIC instance with two application subnets
+    // so that the latest registry version is different
+    // from the registry version at which one of the subnets was created
+    // (this scenario led to a bug in PocketIC canister http outcalls)
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+
+    // create a test canister on every subnet
+    let topology = pic.topology();
+    let mut canisters = vec![];
+    for app_subnet in topology.get_app_subnets() {
+        let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+        canisters.push(canister_id);
+    }
+    // ensure that canister http outcalls work on every subnet
+    for canister_id in &canisters {
+        test_canister_http(&pic, *canister_id);
+    }
+
+    // drop the first PocketIC instance and serialize its state
+    let state = pic.drop_and_take_state().unwrap();
+
+    // create the second PocketIC instance resuming from the existing state
+    let pic = PocketIcBuilder::new().with_state(state).build();
+    // ensure that canister http outcalls still work on every subnet
+    for canister_id in &canisters {
+        test_canister_http(&pic, *canister_id);
+    }
+}
+
+#[test]
 fn test_canister_http_with_transform() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1434,7 +1470,7 @@ fn test_canister_http_with_transform() {
 fn test_canister_http_with_diverging_responses() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1497,7 +1533,7 @@ fn test_canister_http_with_diverging_responses() {
 fn test_canister_http_with_one_additional_response() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1545,7 +1581,7 @@ fn test_canister_http_with_one_additional_response() {
 fn test_canister_http_timeout() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -2233,7 +2269,7 @@ fn call_ingress_expiry() {
     let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
     pic.set_certified_time(time);
     let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
-    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id, "v2");
     assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
 
     // execute a round on the PocketIC instance to process that update call
@@ -2254,7 +2290,7 @@ fn call_ingress_expiry() {
         .unwrap()
         .as_nanos() as u64
         + 240_000_000_000;
-    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id, "v2");
     assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
     let err = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert!(
@@ -2266,6 +2302,7 @@ fn call_request(
     pic: &PocketIc,
     ingress_expiry: u64,
     canister_id: Principal,
+    version: &str,
 ) -> (reqwest::blocking::Response, [u8; 32]) {
     let content = Call {
         nonce: None,
@@ -2288,8 +2325,9 @@ fn call_request(
     envelope.serialize(&mut serializer).unwrap();
 
     let endpoint = format!(
-        "instances/{}/api/v2/canister/{}/call",
+        "instances/{}/api/{}/canister/{}/call",
         pic.instance_id(),
+        version,
         canister_id.to_text()
     );
     let client = reqwest::blocking::Client::new();
@@ -2300,6 +2338,30 @@ fn call_request(
         .send()
         .unwrap();
     (resp, *content.to_request_id())
+}
+
+#[test]
+fn call_request_versions() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_auto_progress()
+        .build();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    // submit an update call via /api/<version>/canister/.../call
+    for version in ["v2", "v3", "v4"] {
+        let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
+        let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id, version);
+        let status = resp.status();
+        if version == "v2" {
+            assert_eq!(status, reqwest::StatusCode::ACCEPTED);
+        } else {
+            assert_eq!(status, reqwest::StatusCode::OK);
+        }
+    }
 }
 
 #[test]
@@ -2670,14 +2732,23 @@ fn stack_overflow() {
 }
 
 fn test_specified_id(pic: &PocketIc) {
-    // We define a "specified" canister ID that exists on the IC mainnet,
+    // We define a "specified" canister ID that belongs to the canister ranges of a mainnet subnet,
     // but belongs to the canister ranges of no subnet on the PocketIC instance.
-    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+    // Its hexadecimal representation is `0000000001CFFFFF0101` and thus
+    // this is the last canister ID in the default canister ranges of the `0x1C`-th subnet.
+    let specified_id = Principal::from_text("jujpo-eqaaa-aaaao-p777q-cai").unwrap();
 
     let canister_id = pic
         .create_canister_with_id(None, None, specified_id)
         .unwrap();
     assert_eq!(canister_id, specified_id);
+
+    let subnet_id = pic.get_subnet(canister_id).unwrap();
+    assert_eq!(
+        subnet_id,
+        Principal::from_text("o3ow2-2ipam-6fcjo-3j5vt-fzbge-2g7my-5fz2m-p4o2t-dwlc4-gt2q7-5ae")
+            .unwrap()
+    );
 }
 
 #[test]
@@ -2710,12 +2781,7 @@ fn test_specified_id_on_resumed_state() {
 #[should_panic(expected = "is not a (subnet state) directory")]
 fn with_subnet_state_file() {
     let state_file = NamedTempFile::new().unwrap();
-    #[cfg(not(windows))]
     let state_file_path_buf = state_file.path().to_path_buf();
-    #[cfg(windows)]
-    let state_file_path_buf = windows_to_wsl(state_file.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let _pic = PocketIcBuilder::new()
         .with_subnet_state(SubnetKind::Application, state_file_path_buf)
@@ -2726,12 +2792,7 @@ fn with_subnet_state_file() {
 #[should_panic(expected = "Provided an empty state directory at path")]
 fn with_empty_subnet_state() {
     let state_dir = TempDir::new().unwrap();
-    #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();
-    #[cfg(windows)]
-    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let _pic = PocketIcBuilder::new()
         .with_subnet_state(SubnetKind::Application, state_dir_path_buf)
@@ -2930,9 +2991,11 @@ async fn with_http_gateway_config_invalid_instance_config() {
         icp_config: None,
         log_level: Some("invalid".to_string()),
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+        mainnet_nns_subnet_id: None,
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
 
@@ -2993,9 +3056,11 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+        mainnet_nns_subnet_id: None,
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
 
@@ -3043,9 +3108,11 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+        mainnet_nns_subnet_id: None,
     };
     assert_create_instance_failure(
         &server_url,
@@ -3112,10 +3179,6 @@ fn canister_not_found() {
             .unwrap();
 
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-        assert!(
-            bytes.contains("canister_not_found\ndetails: The specified canister does not exist.")
-        );
     }
 
     // API requests for subnet via /instances API and proxied through HTTP gateway.
@@ -3139,8 +3202,6 @@ fn canister_not_found() {
             .unwrap();
 
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-        assert!(bytes.contains("subnet_not_found\ndetails: The specified subnet cannot be found."));
     }
 
     // Frontend request for canister via HTTP gateway.
@@ -3148,8 +3209,6 @@ fn canister_not_found() {
     let resp = client.get(url).send().unwrap();
 
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-    assert!(bytes.contains("404 - canister not found"));
 }
 
 #[test]
@@ -3159,17 +3218,58 @@ fn deterministic_registry() {
         let state_dir = TempDir::new().unwrap();
         let state_dir_path_buf = state_dir.path().to_path_buf();
 
-        let _pocket_ic = PocketIcBuilder::new()
+        let pocket_ic = PocketIcBuilder::new()
             .with_state_dir(state_dir_path_buf.clone())
             .with_nns_subnet()
             .with_ii_subnet()
             .with_fiduciary_subnet()
             .with_application_subnet()
             .build();
+        // On WSL, the registry file is only available after the PocketIC instance is dropped.
+        drop(pocket_ic);
 
         let registry_proto_path = state_dir_path_buf.join("registry.proto");
         std::fs::read(registry_proto_path).unwrap()
     };
 
     assert_eq!(registry_bytes(), registry_bytes());
+}
+
+#[test]
+fn fiduciary_subnet_id() {
+    let pic = PocketIcBuilder::new().with_fiduciary_subnet().build();
+
+    let subnet_id = pic.topology().get_fiduciary().unwrap();
+    assert_eq!(
+        subnet_id,
+        Principal::from_text("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
+            .unwrap()
+    );
+}
+
+#[test]
+fn default_nns_subnet_id() {
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
+
+    let subnet_id = pic.topology().get_nns().unwrap();
+    assert_ne!(
+        subnet_id,
+        Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap()
+    );
+}
+
+#[test]
+fn mainnet_nns_subnet_id() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_mainnet_nns_subnet_id()
+        .build();
+
+    let subnet_id = pic.topology().get_nns().unwrap();
+    assert_eq!(
+        subnet_id,
+        Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap()
+    );
 }

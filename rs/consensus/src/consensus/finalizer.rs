@@ -17,7 +17,7 @@
 //! into a complete finalization, at which point the block and its ancestors
 //! become finalized.
 use crate::consensus::{
-    batch_delivery::deliver_batches,
+    batch_delivery::deliver_batches_with_result_processor,
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
 };
 use ic_consensus_utils::{
@@ -38,14 +38,14 @@ use ic_types::{
 };
 use std::{cell::RefCell, sync::Arc, time::Instant};
 
-pub struct Finalizer {
-    pub(crate) replica_config: ReplicaConfig,
+pub(crate) struct Finalizer {
+    replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
     membership: Arc<Membership>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     message_routing: Arc<dyn MessageRouting>,
     ingress_selector: Arc<dyn IngressSelector>,
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     metrics: FinalizerMetrics,
     prev_finalized_height: RefCell<Height>,
     last_batch_delivered_at: RefCell<Option<Instant>>,
@@ -95,7 +95,7 @@ impl Finalizer {
         }
 
         // Try to deliver finalized batches to messaging
-        let _ = deliver_batches(
+        let _ = deliver_batches_with_result_processor(
             &*self.message_routing,
             &self.membership,
             pool,
@@ -116,7 +116,6 @@ impl Finalizer {
     }
 
     /// Write logs, report metrics depending on the batch deliver result.
-    #[allow(clippy::too_many_arguments)]
     fn process_batch_delivery_result(
         &self,
         result: &Result<(), MessageRoutingError>,

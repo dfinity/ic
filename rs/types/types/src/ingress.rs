@@ -322,10 +322,10 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         "IngressStatus::Received::receiver",
                     )?,
                     time: Time::from_nanos_since_unix_epoch(r.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         r.user_id,
                         "IngressStatus::Received::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Received,
                 },
                 Status::Completed(c) => IngressStatus::Known {
@@ -334,10 +334,10 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         "IngressStatus::Completed::receiver",
                     )?,
                     time: Time::from_nanos_since_unix_epoch(c.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         c.user_id,
                         "IngressStatus::Completed::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Completed(try_from_option_field(
                         c.wasm_result,
                         "IngressStatus::Completed::wasm_result",
@@ -346,10 +346,10 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                 Status::Failed(f) => IngressStatus::Known {
                     receiver: try_from_option_field(f.receiver, "IngressStatus::Failed::receiver")?,
                     time: Time::from_nanos_since_unix_epoch(f.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         f.user_id,
                         "IngressStatus::Failed::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Failed(UserError::from_proto(
                         ErrorCode::try_from(pb_ingress::ErrorCode::try_from(f.err_code).map_err(
                             |_| ProxyDecodeError::ValueOutOfRange {
@@ -366,19 +366,19 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         "IngressStatus::Processing::receiver",
                     )?,
                     time: Time::from_nanos_since_unix_epoch(p.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         p.user_id,
                         "IngressStatus::Processing::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Processing,
                 },
                 Status::Done(p) => IngressStatus::Known {
                     receiver: try_from_option_field(p.receiver, "IngressStatus::Done::receiver")?,
                     time: Time::from_nanos_since_unix_epoch(p.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         p.user_id,
                         "IngressStatus::Done::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Done,
                 },
                 Status::Unknown(_) => IngressStatus::Unknown,

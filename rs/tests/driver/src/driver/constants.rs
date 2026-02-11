@@ -59,3 +59,5 @@ pub fn kibana_link(infra_group_name: &str) -> String {
 
 pub const PANIC_LOG_PREFIX: &str = "[Function panicked]: ";
 pub const SUBREPORT_LOG_PREFIX: &str = "[SubReport]: ";
+
+pub const COLOCATE_CONTAINER_NAME: &str = "system_test";

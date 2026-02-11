@@ -1,6 +1,6 @@
 //! Wrapper to read the consensus pool
 
-use crate::registry_version_at_height;
+use crate::{range_len, registry_version_at_height};
 use ic_interfaces::batch_payload::PastPayload;
 use ic_interfaces::consensus_pool::*;
 use ic_types::{
@@ -9,6 +9,13 @@ use ic_types::{
 use std::cmp::Ordering;
 use std::time::Instant;
 
+/// An error to be returned if the number of payloads found in the pool
+/// doesn't match the expected amount.
+#[derive(Debug)]
+pub struct UnexpectedChainLength {
+    pub expected: usize,
+    pub returned: usize,
+}
 /// A struct and corresponding impl with helper methods to obtain particular
 /// artifacts/messages from the artifact pool.
 ///
@@ -84,11 +91,23 @@ impl<'a> PoolReader<'a> {
         &self,
         start: Height,
         target: Block,
-    ) -> Vec<(Height, Time, Payload)> {
-        self.chain_iterator(target)
+    ) -> Result<Vec<(Height, Time, Payload)>, UnexpectedChainLength> {
+        let expected_len = range_len(start, target.height);
+        let payloads = self
+            .chain_iterator(target)
             .take_while(|block| block.height >= start)
             .map(|block| (block.height, block.context.time, block.payload))
-            .collect()
+            .collect::<Vec<_>>();
+        let payloads_len = payloads.len();
+
+        if payloads_len != expected_len {
+            return Err(UnexpectedChainLength {
+                expected: expected_len,
+                returned: payloads_len,
+            });
+        }
+
+        Ok(payloads)
     }
 
     /// Returns the parent of the given block if there exists one.

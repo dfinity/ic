@@ -214,16 +214,17 @@ pub struct RemoveNodeDirectlyPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_helpers::prepare_registry_with_nodes_and_node_operator_id;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
     use crate::{
         common::test_helpers::{
             invariant_compliant_registry, prepare_registry_with_nodes,
-            prepare_registry_with_nodes_and_node_operator_id, registry_add_node_operator_for_node,
-            registry_create_subnet_with_nodes,
+            registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
         },
         mutations::common::test::TEST_NODE_ID,
     };
     use ic_base_types::{NodeId, PrincipalId};
+    use ic_protobuf::registry::node::v1::NodeRewardType;
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
     };
@@ -255,11 +256,9 @@ mod tests {
         let payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(node_operator_id),
             node_provider_principal_id: Some(node_provider_id),
-            node_allowance: 0,
             dc_id: "DC1".to_string(),
-            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
             ipv6: Some("bar".to_string()),
-            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+            ..Default::default()
         };
 
         registry.do_add_node_operator(payload);
@@ -616,7 +615,11 @@ mod tests {
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
-        let node_operator_id = registry_add_node_operator_for_node(&mut registry, node_ids[0], 0);
+        let node_operator_id = registry_add_node_operator_for_node(
+            &mut registry,
+            node_ids[0],
+            btreemap! { NodeRewardType::Type1 => 1 },
+        );
 
         // Create a subnet with the first node
         let _subnet_id =
@@ -640,7 +643,11 @@ mod tests {
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
         let node_ids = node_ids_and_dkg_pks.keys().cloned().collect::<Vec<_>>();
-        let node_operator_id = registry_add_node_operator_for_node(&mut registry, node_ids[0], 0);
+        let node_operator_id = registry_add_node_operator_for_node(
+            &mut registry,
+            node_ids[0],
+            btreemap! { NodeRewardType::Type1 => 1 },
+        );
 
         // Create a subnet with the first node
         let subnet_id =

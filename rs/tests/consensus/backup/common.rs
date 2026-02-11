@@ -78,12 +78,9 @@ pub fn setup(env: TestEnv) {
                         .into_iter()
                         .map(|key_id| KeyConfig {
                             max_queue_size: 20,
-                            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures()
-                            {
-                                7
-                            } else {
-                                0
-                            },
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(7),
                             key_id,
                         })
                         .collect(),
@@ -103,19 +100,19 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
     info!(log, "Elect the target replica version");
-    let binary_version = get_current_branch_version();
+    let binary_version = get_ic_build_version();
     let target_version = get_guestos_update_img_version();
 
     // Bless target version
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
         &log,
         sha256,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
     info!(log, "TARGET_VERSION: {}", target_version);
@@ -150,28 +147,22 @@ pub fn test(env: TestEnv) {
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
     copy_file(
-        &get_dependency_path(std::env::var("IC_REPLAY_PATH").expect("IC_REPLAY_PATH not set")),
+        &get_dependency_path_from_env("IC_REPLAY_PATH"),
         &backup_binaries_dir,
         "ic-replay",
     );
     copy_file(
-        &get_dependency_path(
-            std::env::var("SANDBOX_LAUNCHER_PATH").expect("SANDBOX_LAUNCHER_PATH not set"),
-        ),
+        &get_dependency_path_from_env("SANDBOX_LAUNCHER_PATH"),
         &backup_binaries_dir,
         "sandbox_launcher",
     );
     copy_file(
-        &get_dependency_path(
-            std::env::var("CANISTER_SANDBOX_PATH").expect("CANISTER_SANDBOX_PATH not set"),
-        ),
+        &get_dependency_path_from_env("CANISTER_SANDBOX_PATH"),
         &backup_binaries_dir,
         "canister_sandbox",
     );
     copy_file(
-        &get_dependency_path(
-            std::env::var("COMPILER_SANDBOX_PATH").expect("COMPILER_SANDBOX_PATH not set"),
-        ),
+        &get_dependency_path_from_env("COMPILER_SANDBOX_PATH"),
         &backup_binaries_dir,
         "compiler_sandbox",
     );
@@ -255,6 +246,7 @@ pub fn test(env: TestEnv) {
         root_dir: backup_dir.clone(),
         excluded_dirs: vec![],
         ssh_private_key: private_key_path,
+        max_logs_age_to_keep_days: None,
         hot_disk_resource_threshold_percentage: 75,
         cold_disk_resource_threshold_percentage: 95,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
@@ -270,8 +262,7 @@ pub fn test(env: TestEnv) {
     write!(f, "{config_str}").expect("Should be able to write the config file");
 
     info!(log, "Start the backup process in a separate thread");
-    let ic_backup_path =
-        &get_dependency_path(std::env::var("IC_BACKUP_PATH").expect("IC_BACKUP_PATH not set"));
+    let ic_backup_path = &get_dependency_path_from_env("IC_BACKUP_PATH");
     let mut command = Command::new(ic_backup_path);
     command
         .arg("--config-file")
@@ -393,28 +384,32 @@ pub fn test(env: TestEnv) {
     let mut hash_mismatch = false;
     for i in 0..60 {
         info!(log, "Checking logs for hash mismatch...");
-        if let Ok(dirs) = fs::read_dir(backup_dir.join("logs")) {
-            for en in dirs {
-                info!(log, "DirEntry in logs: {:?}", en);
-                match en {
-                    Ok(d) => {
-                        let contents = fs::read_to_string(d.path())
-                            .expect("Should have been able to read the log file");
-                        if i == 15 {
-                            println!("{}", contents);
-                        }
+        match fs::read_dir(backup_dir.join("logs")) {
+            Ok(dirs) => {
+                for en in dirs {
+                    info!(log, "DirEntry in logs: {:?}", en);
+                    match en {
+                        Ok(d) => {
+                            let contents = fs::read_to_string(d.path())
+                                .expect("Should have been able to read the log file");
+                            if i == 15 {
+                                println!("{}", contents);
+                            }
 
-                        if contents.contains(DIVERGENCE_LOG_STR) {
-                            hash_mismatch = true;
-                            break;
+                            if contents.contains(DIVERGENCE_LOG_STR) {
+                                hash_mismatch = true;
+                                break;
+                            }
                         }
+                        Err(e) => error!(log, "Error opening log file: {:?}", e),
                     }
-                    Err(e) => error!(log, "Error opening log file: {:?}", e),
                 }
             }
-        } else {
-            error!(log, "Error reading log file directory")
+            Err(err) => {
+                error!(log, "Error reading log file directory: {err}");
+            }
         }
+
         if hash_mismatch {
             break;
         }

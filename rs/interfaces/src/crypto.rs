@@ -38,7 +38,9 @@ use ic_types::{
 
 /// The functionality offered by the crypto component
 pub trait Crypto:
-    KeyManager
+    Send
+    + Sync
+    + KeyManager
     // Block
     + BasicSigner<BlockMetadata>
     + BasicSigVerifier<BlockMetadata>

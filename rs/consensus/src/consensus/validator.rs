@@ -9,11 +9,12 @@ use crate::consensus::{
 use ic_consensus_dkg as dkg;
 use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
-    RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
+    MINIMUM_CHAIN_LENGTH, RoundRobin, active_high_threshold_nidkg_id,
+    active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
+    pool_reader::{PoolReader, UnexpectedChainLength},
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
@@ -27,6 +28,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{ReplicaLogger, trace, warn};
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
@@ -64,7 +66,7 @@ const LOG_EVERY_N_SECONDS: i32 = 60;
 
 /// The time, after which we will load a CUP even if we
 /// where holding it back before, to give recomputation a chance during catch up.
-const CATCH_UP_HOLD_OF_TIME: Duration = Duration::from_secs(150);
+const CATCH_UP_HOLD_OFF_TIME: Duration = Duration::from_secs(150);
 
 /// Possible transient validation failures.
 #[derive(Debug)]
@@ -86,6 +88,7 @@ enum ValidationFailure {
     FailedToGetRegistryVersion,
     ValidationContextNotReached(ValidationContext, ValidationContext),
     CatchUpHeightNegligible,
+    MissingPastPayloads,
 }
 
 /// Possible reasons for invalid artifacts.
@@ -704,7 +707,7 @@ impl Validator {
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         thread_pool: Arc<ThreadPool>,
         log: ReplicaLogger,
-        metrics: ValidatorMetrics,
+        metrics_registry: &MetricsRegistry,
         time_source: Arc<dyn TimeSource>,
     ) -> Validator {
         Validator {
@@ -718,7 +721,7 @@ impl Validator {
             dkg_pool,
             thread_pool,
             log,
-            metrics,
+            metrics: ValidatorMetrics::new(metrics_registry),
             schedule: RoundRobin::default(),
             time_source,
         }
@@ -1260,10 +1263,26 @@ impl Validator {
         }
 
         // Below are all the payload validations
-        let payloads = pool_reader.get_payloads_from_height(
-            proposal.context.certified_height.increment(),
-            parent.clone(),
-        );
+        let start_height = proposal.context.certified_height.increment();
+        let past_payloads = match pool_reader.get_payloads_from_height(start_height, parent.clone())
+        {
+            Ok(past_payloads) => past_payloads,
+            Err(UnexpectedChainLength { expected, returned }) => {
+                // Defer validation if there are some past payloads missing.
+                // This means that we already have a CUP and this block should be verified
+                // using the notarization fast path.
+                warn!(
+                    every_n_seconds => 10,
+                    self.log,
+                    "Missing past payloads when attempting to validate batch payload at height {}. \
+                    Certified height: {}, expected past payloads len: {}, real past payloads len: {}",
+                    proposal.height(), proposal.context.certified_height, expected, returned
+                );
+                return Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ));
+            }
+        };
 
         self.payload_builder
             .validate_payload(
@@ -1273,7 +1292,7 @@ impl Validator {
                     validation_context: &proposal.context,
                 },
                 &proposal.payload,
-                &payloads,
+                &past_payloads,
             )
             .map_err(|err| {
                 err.map(
@@ -1864,16 +1883,13 @@ impl Validator {
             .get()
             .saturating_sub(self.state_manager.latest_state_height().get())
             < Self::get_next_interval_length(catch_up_package).get() / 4
-            // Check that the finalized height is higher than this cup
-            // In order to validate the finalization of height `h` we need to have
-            // a valid random beacon of height `h-1` and a valid block of height `h`.
-            // In order to have a valid block of height `h` you need to have
-            // a valid block of height `h-1`.
-            // The same is true for the random beacon.
-            // Thus, if this condition is true, we know that we have all blocks and random beacons
-            // between the latest CUP height and finalized height and are therefore
-            // able to recompute.
-            && pool_reader.get_finalized_height() >= cup_height
+            // Check that our local finalized height has at least reached the MINIMUM_CHAIN_LENGTH
+            // below the new CUP height. MINIMUM_CHAIN_LENGTH is the number of blocks that all
+            // nodes keep below their latest CUP height. If we have not reached this height, then
+            // we *should* validate the CUP, as there is no guarantee that we can obtain all the
+            // necessary artifacts needed for recomputation from other nodes, as they may have
+            // already been purged.
+            && pool_reader.get_finalized_height().get() >= cup_height.get().saturating_sub(MINIMUM_CHAIN_LENGTH)
             // If the state height exceeded the cup height, we can validate the cup, as it won't
             // trigger the state sync.
             && self.state_manager.latest_state_height() < cup_height
@@ -1887,12 +1903,12 @@ impl Validator {
                 .unvalidated()
                 .get_timestamp(&catch_up_package.get_id())
             {
-                Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OF_TIME => {
+                Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OFF_TIME => {
                     warn!(
                         self.log,
                         "Validating CUP at height {} after holding it back for {} seconds",
                         cup_height,
-                        CATCH_UP_HOLD_OF_TIME.as_secs()
+                        CATCH_UP_HOLD_OFF_TIME.as_secs()
                     );
                     Ok(())
                 }
@@ -1928,6 +1944,7 @@ pub mod test {
         Dependencies, RefMockPayloadBuilder, dependencies_with_subnet_params,
         dependencies_with_subnet_records_with_raw_state_manager,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
@@ -1939,7 +1956,7 @@ pub mod test {
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::{
         assert_changeset_matches_pattern,
         fake::*,
@@ -1964,7 +1981,10 @@ pub mod test {
             RandomBeaconContent, RandomTapeContent, SummaryPayload, dkg::DkgDataPayload,
             idkg::PreSigId,
         },
-        crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        crypto::{
+            BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
+            CombinedThresholdSigOf, CryptoHash,
+        },
         messages::CallbackId,
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
@@ -2019,7 +2039,7 @@ pub mod test {
                 dependencies.dkg_pool.clone(),
                 build_thread_pool(MAX_CONSENSUS_THREADS),
                 no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
+                &MetricsRegistry::new(),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
             );
             Self {
@@ -2043,13 +2063,21 @@ pub mod test {
         pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
         node_ids: &[NodeId],
     ) -> ValidatorAndDependencies {
+        setup_dependencies_with_dkg_interval_length(pool_config, node_ids, 9)
+    }
+
+    fn setup_dependencies_with_dkg_interval_length(
+        pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
+        node_ids: &[NodeId],
+        dkg_interval_length: u64,
+    ) -> ValidatorAndDependencies {
         ValidatorAndDependencies::new(dependencies_with_subnet_params(
             pool_config,
             subnet_test_id(0),
             vec![(
                 1,
                 SubnetRecordBuilder::from(node_ids)
-                    .with_dkg_interval_length(9)
+                    .with_dkg_interval_length(dkg_interval_length)
                     .build(),
             )],
         ))
@@ -2802,6 +2830,105 @@ pub mod test {
     }
 
     #[test]
+    // Construct a proposal block with a non-notarized parent and make sure we're
+    // not validating this block until the parent gets notarized.
+    fn test_block_validation_with_missing_past_payload() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let certified_height = Height::from(1);
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
+                state_manager,
+                mut pool,
+                time_source,
+                ..
+            } = setup_dependencies(pool_config, &committee);
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(certified_height);
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
+
+            pool.advance_round_normal_operation_n(8);
+
+            // Make block at height 9
+            let next_proposal = pool.make_next_block();
+            assert_eq!(next_proposal.height().get(), 9);
+            // Make and insert beacon at height 9
+            let next_beacon = pool.make_next_beacon();
+            pool.insert_validated(next_beacon.clone());
+            // Make and insert beacon at height 10
+            let summary_beacon = RandomBeacon::from_parent(&next_beacon);
+            pool.insert_validated(summary_beacon.clone());
+            // Make summary at height 10
+            let summary =
+                pool.make_next_block_from_parent(next_proposal.content.get_value(), Rank(0));
+            let cup = CatchUpPackage {
+                content: CatchUpContent::new(
+                    HashedBlock::new(
+                        ic_types::crypto::crypto_hash,
+                        summary.content.get_value().clone(),
+                    ),
+                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, summary_beacon.clone()),
+                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    None,
+                ),
+                signature: ThresholdSignature {
+                    signer: summary_beacon.signature.signer.clone(),
+                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+                },
+            };
+
+            // Insert the Summary before the next proposal
+            pool.notarize(&summary);
+            pool.insert_validated(summary);
+
+            let test_block = pool.make_next_block();
+            assert_eq!(test_block.height().get(), 11);
+            // Forward time correctly
+            time_source
+                .set_time(test_block.content.as_ref().context.time)
+                .unwrap();
+
+            // Validation should fail, since the payload at height 9 is missing
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(
+                result,
+                Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ))
+            );
+
+            // Insert the missing proposal at height 9, the payload should be validated as expected
+            pool.insert_validated(next_proposal);
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(result, Ok(()));
+
+            // Insert the cup at height 10, the payload validation should fail
+            // Since payloads below the CUP are not returned
+            pool.insert_validated(cup);
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(
+                result,
+                Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ))
+            );
+        });
+    }
+
+    #[test]
     fn test_block_validation_with_registry_versions() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let certified_height = Height::from(1);
@@ -3160,49 +3287,145 @@ pub mod test {
     }
 
     #[test]
-    fn test_should_validate_catch_up_package_state_behind_the_cup_height() {
-        test_validate_catch_up_package(
-            /*state_height=*/ Height::new(1),
-            /*held_back_duration*/ Duration::from_secs(0),
-            /*expected_to_validate*/ true,
-        );
+    fn test_maybe_hold_back_cup() {
+        const DKG_INTERVAL_LENGTH: u64 = 59;
+        const CUP_HEIGHT: u64 = DKG_INTERVAL_LENGTH + 1;
+
+        #[derive(Debug)]
+        enum Decision {
+            Validate,
+            HoldBack,
+        }
+
+        struct TestCase {
+            state_height: u64,
+            finalized_height: u64,
+            expected_decision: Decision,
+        }
+
+        let test_cases = [
+            // State height reached the CUP height (always validate)
+            TestCase {
+                state_height: CUP_HEIGHT,
+                finalized_height: CUP_HEIGHT,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT,
+                finalized_height: CUP_HEIGHT - 1,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH - 1,
+                expected_decision: Decision::Validate,
+            },
+            // State height is one block behind the CUP height and finalized height
+            // reached the minimum chain length (hold back)
+            TestCase {
+                state_height: CUP_HEIGHT - 1,
+                finalized_height: CUP_HEIGHT,
+                expected_decision: Decision::HoldBack,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - 1,
+                finalized_height: CUP_HEIGHT - 1,
+                expected_decision: Decision::HoldBack,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - 1,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH,
+                expected_decision: Decision::HoldBack,
+            },
+            // Finalized height did not reach the minimum chain length (validate)
+            TestCase {
+                state_height: CUP_HEIGHT - 1,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH - 1,
+                expected_decision: Decision::Validate,
+            },
+            // State height is within the last quarter of the DKG interval and finalized height
+            // reached the minimum chain length (hold back)
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4 + 1,
+                finalized_height: CUP_HEIGHT,
+                expected_decision: Decision::HoldBack,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4 + 1,
+                finalized_height: CUP_HEIGHT - 1,
+                expected_decision: Decision::HoldBack,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4 + 1,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH,
+                expected_decision: Decision::HoldBack,
+            },
+            // Finalized height did not reach the minimum chain length (validate)
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4 + 1,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH - 1,
+                expected_decision: Decision::Validate,
+            },
+            // State height is outside the last quarter of the DKG interval (always validate)
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4,
+                finalized_height: CUP_HEIGHT,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4,
+                finalized_height: CUP_HEIGHT - 1,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH - 1,
+                expected_decision: Decision::Validate,
+            },
+        ];
+
+        for test_case in test_cases {
+            println!(
+                "state_height: {}, finalized_height: {}, decision: {:?}",
+                test_case.state_height, test_case.finalized_height, test_case.expected_decision
+            );
+            test_validate_catch_up_package_with_height_60(
+                /*state_height=*/ Height::new(test_case.state_height),
+                /*finalized_height=*/ Height::new(test_case.finalized_height),
+                /*held_back_duration*/ Duration::from_secs(0),
+                matches!(test_case.expected_decision, Decision::Validate),
+            );
+
+            // The CUP should always be validated if it was held back for too long
+            test_validate_catch_up_package_with_height_60(
+                /*state_height=*/ Height::new(test_case.state_height),
+                /*finalized_height=*/ Height::new(test_case.finalized_height),
+                /*held_back_duration*/ CATCH_UP_HOLD_OFF_TIME + Duration::from_secs(1),
+                /*expected_to_validate=*/ true,
+            );
+        }
     }
 
-    #[test]
-    fn test_should_not_validate_catch_up_package_when_state_close_to_the_cup_height() {
-        test_validate_catch_up_package(
-            /*state_height=*/ Height::new(9),
-            /*held_back_duration*/ Duration::from_secs(0),
-            /*expected_to_validate*/ false,
-        );
-    }
-
-    #[test]
-    fn test_should_validate_catch_up_package_when_held_back_for_too_long() {
-        test_validate_catch_up_package(
-            /*state_height=*/ Height::new(9),
-            /*held_back_duration*/ CATCH_UP_HOLD_OF_TIME + Duration::from_secs(1),
-            /*expected_to_validate*/ true,
-        );
-    }
-
-    #[test]
-    fn test_should_validate_catch_up_package_when_state_exceeds_the_cup_height() {
-        test_validate_catch_up_package(
-            /*state_height=*/ Height::new(10),
-            /*held_back_duration*/ Duration::from_secs(0),
-            /*expected_to_validate=*/ true,
-        );
-    }
-
-    /// Tests whether we can validate a CUP at height `10`.
-    fn test_validate_catch_up_package(
+    /// Tests whether we can validate a CUP at height `60`.
+    fn test_validate_catch_up_package_with_height_60(
         state_height: Height,
+        finalized_height: Height,
         // How long has the CUP been in the pool
         held_back_duration: Duration,
         expected_to_validate: bool,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let cup_height = Height::from(60);
             // Setup validator dependencies.
             let ValidatorAndDependencies {
                 validator,
@@ -3210,14 +3433,47 @@ pub mod test {
                 mut pool,
                 time_source,
                 ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            } = setup_dependencies_with_dkg_interval_length(
+                pool_config,
+                &(0..4).map(node_test_id).collect::<Vec<_>>(),
+                cup_height.get() - 1,
+            );
 
-            pool.advance_round_normal_operation_n(9);
-            // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
-            pool.prepare_round().dont_add_catch_up_package().advance();
+            pool.advance_round_normal_operation_no_cup_n(finalized_height.get());
 
-            let finalization = pool.validated().finalization().get_highest().unwrap();
-            let catch_up_package = pool.make_catch_up_package(finalization.height());
+            let fake_block = Block::new(
+                CryptoHashOf::from(CryptoHash(vec![])),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload::fake()),
+                ),
+                cup_height,
+                Rank(0),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(99),
+                    certified_height: Height::from(42),
+                    time: ic_types::time::UNIX_EPOCH,
+                },
+            );
+            let fake_beacon = RandomBeacon::fake(RandomBeaconContent {
+                version: ReplicaVersion::default(),
+                height: cup_height,
+                parent: CryptoHashOf::from(CryptoHash(vec![])),
+            });
+            let pool_reader = PoolReader::new(&pool);
+
+            let block = pool_reader
+                .get_finalized_block(cup_height)
+                .unwrap_or(fake_block);
+            let beacon = pool_reader
+                .get_random_beacon(cup_height)
+                .unwrap_or(fake_beacon);
+            let catch_up_package = CatchUpPackage::fake(CatchUpContent::new(
+                HashedBlock::new(ic_types::crypto::crypto_hash, block),
+                HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon),
+                CryptoHashOf::from(CryptoHash(vec![])),
+                None,
+            ));
             pool.insert_unvalidated(catch_up_package.clone());
 
             state_manager
@@ -3531,10 +3787,7 @@ pub mod test {
         block.content.as_mut().payload = Payload::new(
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
-                batch: BatchPayload {
-                    ingress: IngressPayload::from(vec![]),
-                    ..BatchPayload::default()
-                },
+                batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),

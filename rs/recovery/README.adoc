@@ -1,7 +1,7 @@
 # ic-recovery
 
 The goal of `ic-recovery` is to combine functionality needed by recovery tests and actual recovery conducted on an IC subnet in a single, maintainable place.
-To this end it provides a library of functions useful for recovery operations, such as `ic-admin` proposals, state up- and download, creation of recovery CUPs, etc. 
+To this end it provides a library of functions useful for recovery operations, such as `ic-admin` proposals, state up- and download, creation of recovery CUPs, etc.
 
 Using the same library functions, it additionally offers a command line interface guiding operators through the process of subnet recovery. Therein, required operations may be conducted by the tool automatically.
 
@@ -11,3 +11,10 @@ Using the same library functions, it additionally offers a command line interfac
 3. Optionally specify more parameters (if known ahead of time), see: `ic-recovery app-subnet-recovery --help`
 4. During execution **manually** ensure that nodes are halted/unhalted when prompted.
 5. Similarly, ensure replicas have restarted on the new version before uploading the new state.
+
+## NNS Subnet Recovery On Same Nodes
+1. Prepare `NNS_URL`, `SUBNET_ID` of the NNS subnet.
+2. Before going forward, **manually** ensure that the NNS nodes are halted/that the NNS subnet is stalled.
+3. Execute the tool using `ic-recovery --nns-url <NNS_URL> --dir <recovery_directory> [--test] nns-recovery-same-nodes --subnet-id <SUBNET_ID>`.
+4. Optionally specify more parameters (if known ahead of time), see: `ic-recovery nns-recovery-same-nodes --help`
+5. After going through all steps, upload the recovery artifacts (CUP and registry local store) to a well-known location and inform the Node Providers to restart their machines and run the GuestOS Recovery Upgrader.

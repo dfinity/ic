@@ -4,6 +4,7 @@ pub mod canister_heartbeat;
 pub mod canister_lifecycle;
 pub mod cycles_transfer;
 pub mod ingress_rate_limiting;
+pub mod input_deduplication;
 pub mod malicious_input;
 pub mod nns_shielding;
 pub mod queries;

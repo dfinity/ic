@@ -2,14 +2,17 @@ use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::node::await_node_certified_height;
+use ic_management_canister_types_private::{
+    BoundedVec, CanisterHttpRequestArgs, HttpMethod, Payload, TransformContext, TransformFunc,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
 };
-use ic_types::{Height, epoch_from_height};
-use ic_universal_canister::wasm;
+use ic_types::{Cycles, Height, epoch_from_height};
+use ic_universal_canister::{call_args, wasm};
 use itertools::Itertools;
 use slog::{Logger, info};
 use std::time::Duration;
@@ -93,4 +96,54 @@ pub(crate) async fn round_robin_query_call(canister: &Principal, agents: &[Agent
     if !equals {
         panic!("Nodes returned different values in round robin query call");
     }
+}
+
+pub(crate) async fn single_https_outcall(canister: &Principal, agents: &[Agent]) {
+    agents
+        .first()
+        .unwrap()
+        .update(canister, "update")
+        .with_arg(
+            wasm()
+                .set_transform(wasm().message_payload().append_and_reply())
+                .reply(),
+        )
+        .call_and_wait()
+        .await
+        .unwrap();
+
+    let arg = CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: None,
+        method: HttpMethod::GET,
+        headers: BoundedVec::new(vec![]),
+        body: None,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                method: "transform".to_string(),
+                principal: *canister,
+            }),
+            context: vec![],
+        }),
+        is_replicated: None,
+        pricing_version: None,
+    };
+
+    agents
+        .first()
+        .unwrap()
+        .update(canister, "update")
+        .with_arg(
+            wasm()
+                .call_with_cycles(
+                    Principal::management_canister(),
+                    "http_request",
+                    call_args().other_side(arg.encode()),
+                    Cycles::new(10_000_000_000),
+                )
+                .reply(),
+        )
+        .call_and_wait()
+        .await
+        .unwrap();
 }

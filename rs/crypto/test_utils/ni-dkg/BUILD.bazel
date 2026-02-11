@@ -9,11 +9,13 @@ DEPENDENCIES = [
     "//rs/crypto/temp_crypto",
     "//rs/interfaces",
     "//rs/interfaces/registry",
+    "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/registry/fake",
     "//rs/registry/helpers",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
+    "//rs/test_utilities/in_memory_logger",
     "//rs/types/types",
     "@crate_index//:hex",
     "@crate_index//:rand",
@@ -42,6 +44,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_ni_dkg",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

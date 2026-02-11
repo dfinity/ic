@@ -1,10 +1,10 @@
+use crate::Priority;
 use crate::{
     ECDSAPublicKey,
-    logs::P1,
     state::{CkBtcMinterState, mutate_state, read_state},
 };
 use candid::{CandidType, Deserialize, Principal};
-use ic_canister_log::log;
+use canlog::log;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use serde::Serialize;
@@ -54,13 +54,17 @@ pub async fn init_ecdsa_public_key() -> ECDSAPublicKey {
         return key;
     };
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    log!(P1, "Fetching the ECDSA public key {}", &key_name);
+    log!(
+        Priority::Debug,
+        "Fetching the ECDSA public key {}",
+        &key_name
+    );
     let ecdsa_public_key =
         crate::management::ecdsa_public_key(key_name, DerivationPath::new(vec![]))
             .await
             .unwrap_or_else(|e| ic_cdk::trap(format!("failed to retrieve ECDSA public key: {e}")));
     log!(
-        P1,
+        Priority::Debug,
         "ECDSA public key set to {}, chain code to {}",
         hex::encode(&ecdsa_public_key.public_key),
         hex::encode(&ecdsa_public_key.chain_code)

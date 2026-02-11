@@ -1,8 +1,15 @@
+load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
+
+# Just for testing if the Motoko code is correct.
+motoko_binary(
+    name = "counter_canister",
+    entry = "canisters/counter.mo",
+)
 
 rust_library(
     name = "sdk-system-tests",
@@ -24,23 +31,17 @@ rust_library(
     ],
 )
 
-RUNTIME_DEPS = [
-    "@dfx",
-]
-
 system_test_nns(
     name = "dfx_smoke_test",
-    tags = [
-        "long_test",  # since it takes longer than 5 minutes.
-    ],
-    runtime_deps = RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["@nns_dapp_canister//file"],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "DFX_PATH": "//:dfx",
+    },
     deps = [
         # Keep sorted.
         "sdk-system-tests",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
@@ -48,12 +49,10 @@ system_test_nns(
 
 system_test(
     name = "dfx_check_old_wallet_version_test",
-    env = {
-        "WALLET_CANISTER_0_7_2_WASM": "$(rootpath @wallet_canister_0.7.2//file)",
+    runtime_deps = {
+        "WALLET_CANISTER_0_7_2_WASM": "@wallet_canister_0.7.2//file",
+        "DFX_PATH": "//:dfx",
     },
-    runtime_deps = RUNTIME_DEPS + [
-        "@wallet_canister_0.7.2//file",
-    ],
     deps = [
         # Keep sorted.
         "sdk-system-tests",

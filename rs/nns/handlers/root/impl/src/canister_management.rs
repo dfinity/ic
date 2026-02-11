@@ -20,7 +20,7 @@ use ic_nervous_system_root::change_canister::{
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_common::{
     registry::{get_value, mutate_registry},
-    types::CallCanisterProposal,
+    types::CallCanisterRequest,
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
@@ -172,13 +172,13 @@ pub async fn stop_or_start_nns_canister(
     }
 }
 
-pub async fn call_canister(proposal: CallCanisterProposal) {
+pub async fn call_canister(proposal: CallCanisterRequest) {
     print(format!(
         "Calling {}::{}...",
         proposal.canister_id, proposal.method_name,
     ));
 
-    let CallCanisterProposal {
+    let CallCanisterRequest {
         canister_id,
         method_name,
         payload,

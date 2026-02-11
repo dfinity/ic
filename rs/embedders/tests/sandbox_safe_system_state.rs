@@ -3,7 +3,7 @@ use ic_config::execution_environment::SUBNET_CALLBACK_SOFT_LIMIT;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasmtime_embedder::system_api::SystemApiImpl;
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
-use ic_interfaces::execution_environment::{HypervisorResult, SystemApi};
+use ic_interfaces::execution_environment::{HypervisorResult, MessageMemoryUsage, SystemApi};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
@@ -14,20 +14,19 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::{MessageMemoryUsage, NetworkTopology, SystemState};
+use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
-use ic_test_utilities_types::{
-    ids::{canister_test_id, subnet_test_id, user_test_id},
-    messages::{RequestBuilder, ResponseBuilder},
+use ic_test_utilities_types::ids::{
+    call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE};
+use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
-use ic_types::{
-    ComputeAllocation, Cycles, NumInstructions,
-    messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    time::UNIX_EPOCH,
-};
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{ComputeAllocation, Cycles, NumInstructions};
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::convert::From;
@@ -303,7 +302,7 @@ fn correct_charging_source_canister_for_a_request() {
     let refund_cycles = cycles_account_manager.refund_for_response_transmission(
         &no_op_logger(),
         &no_op_counter,
-        &response,
+        &response.response_payload,
         prepayment_for_response_transmission,
         SMALL_APP_SUBNET_MAX_SIZE,
         cost_schedule,
@@ -516,11 +515,11 @@ fn call_increases_cycles_consumed_metric() {
             &no_op_logger(),
         )
         .unwrap();
-    assert!(system_state.canister_metrics.consumed_cycles.get() > 0);
+    assert!(system_state.canister_metrics().consumed_cycles().get() > 0);
     assert_ne!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap(),
         NominalCycles::from(0)
@@ -566,13 +565,6 @@ fn test_inter_canister_call(
         CanisterCyclesCostSchedule::Normal,
     );
 
-    let request = RequestBuilder::default()
-        .sender(sender)
-        .receiver(recv)
-        .method_name(method_name)
-        .method_payload(arg)
-        .build();
-
     let prepayment_for_response_execution = cycles_account_manager
         .prepayment_for_response_execution(
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -584,6 +576,30 @@ fn test_inter_canister_call(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
         );
+
+    // Register a callback for the response.
+    let callback = Callback::new(
+        call_context_test_id(0),
+        recv,
+        Cycles::zero(),
+        prepayment_for_response_execution,
+        prepayment_for_response_transmission,
+        WasmClosure::new(0, 0),
+        WasmClosure::new(0, 0),
+        None,
+        NO_DEADLINE,
+    );
+    let callback_id = sandbox_safe_system_state
+        .register_callback(callback)
+        .unwrap();
+
+    let request = RequestBuilder::default()
+        .sender(sender)
+        .receiver(recv)
+        .method_name(method_name)
+        .method_payload(arg)
+        .sender_reply_callback(callback_id)
+        .build();
 
     // Enqueue the Request.
     sandbox_safe_system_state
@@ -700,10 +716,10 @@ fn assert_failed_call(
     expected_message: String,
 ) {
     match system_state.pop_input().unwrap() {
-        CanisterMessage::Response(resp) => {
-            assert_eq!(resp.originator, originator);
-            assert_eq!(resp.respondent, respondent);
-            match &resp.response_payload {
+        CanisterMessage::Response { response, .. } => {
+            assert_eq!(response.originator, originator);
+            assert_eq!(response.respondent, respondent);
+            match &response.response_payload {
                 ic_types::messages::Payload::Reject(ctxt) => {
                     assert_eq!(ctxt.message(), &expected_message)
                 }

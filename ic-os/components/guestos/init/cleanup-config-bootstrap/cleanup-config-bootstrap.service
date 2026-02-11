@@ -1,0 +1,11 @@
+[Unit]
+Description=Clean up config bootstrap files after boot
+After=multi-user.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=rm -rf /run/config/bootstrap

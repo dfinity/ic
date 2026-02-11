@@ -1,12 +1,10 @@
 use candid::Encode;
-use ic_config::{
-    execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
-    subnet_config::SubnetConfig,
-};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, Cycles, PrincipalId};
+use regex_lite::RegexBuilder;
 
 const B: u128 = 1_000 * 1_000 * 1_000;
 
@@ -15,7 +13,7 @@ const OTHER1: PrincipalId = PrincipalId::new(29, [0xab; 29]);
 const OTHER2: PrincipalId = PrincipalId::new(29, [0xbc; 29]);
 
 const UNREACHABLE_BACKTRACE: &str = r#"unreachable
-Canister Backtrace:
+Canister Backtrace:.*
 _wasm_backtrace_canister::unreachable::inner_2
 _wasm_backtrace_canister::unreachable::inner
 _wasm_backtrace_canister::unreachable::outer
@@ -25,31 +23,19 @@ const IC0_TRAP_ERROR: &str =
     r#"Panicked at 'uh oh', rs/rust_canisters/backtrace_canister/src/main.rs:47:5"#;
 
 const IC0_TRAP_BACKTRACE: &str = r#"
-Canister Backtrace:
-ic_cdk_executor::set_panic_hook::{{closure}}::{{closure}}
-std::panicking::rust_panic_with_hook
-std::panicking::begin_panic_handler::{{closure}}
-std::sys::backtrace::__rust_end_short_backtrace
-__rustc::rust_begin_unwind
-core::panicking::panic_fmt
+Canister Backtrace:.*
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
-ic_cdk_executor::in_executor_context
-canister_update ic0_trap
+_wasm_backtrace_canister::ic0_trap
 "#;
 
 fn env_with_backtrace_canister_and_visibility(
-    feature_enabled: FlagStatus,
     visibility: LogVisibilityV2,
     canister_name: &str,
 ) -> (StateMachine, CanisterId) {
     let wasm = canister_test::Project::cargo_bin_maybe_from_env(canister_name, &[]);
-    let mut hypervisor_config = HypervisorConfig::default();
-    hypervisor_config
-        .embedders_config
-        .feature_flags
-        .canister_backtrace = feature_enabled;
+    let hypervisor_config = HypervisorConfig::default();
     let subnet_type = SubnetType::Application;
 
     let env = StateMachineBuilder::new()
@@ -77,12 +63,8 @@ fn env_with_backtrace_canister_and_visibility(
     (env, canister_id)
 }
 
-fn env_with_backtrace_canister(feature_enabled: FlagStatus) -> (StateMachine, CanisterId) {
-    env_with_backtrace_canister_and_visibility(
-        feature_enabled,
-        LogVisibilityV2::Controllers,
-        "backtrace_canister",
-    )
+fn env_with_backtrace_canister() -> (StateMachine, CanisterId) {
+    env_with_backtrace_canister_and_visibility(LogVisibilityV2::Controllers, "backtrace_canister")
 }
 
 /// Check that calling `method` returns an error with code `code`, `message` and
@@ -98,18 +80,24 @@ fn assert_error(
     let result = env
         .execute_ingress_as(CONTROLLER, canister_id, method, Encode!(&()).unwrap())
         .unwrap_err();
-    result.assert_contains(code, &format!("{message}{backtrace}"));
+    result.assert_matches(code, &format!("{message}.*{backtrace}.*"));
     let logs = env.canister_log(canister_id);
     let last_error = std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
+    let backtrace_regex = RegexBuilder::new(&format!(".*{backtrace}.*"))
+        .dot_matches_new_line(true)
+        .build()
+        .unwrap();
     assert!(
-        last_error.contains(backtrace),
-        "Last log: {last_error} doesn't contain backtrace: {backtrace}"
+        backtrace_regex.is_match(last_error),
+        "Last log:\n----------\n{last_error}\n----------\ndoesn't match backtrace regex: {backtrace}"
     );
 }
 
+// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
+#[ignore]
 fn unreachable_instr_backtrace() {
-    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Enabled);
+    let (env, canister_id) = env_with_backtrace_canister();
     assert_error(
         env,
         canister_id,
@@ -120,40 +108,11 @@ fn unreachable_instr_backtrace() {
     );
 }
 
+// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
-fn no_backtrace_without_feature() {
-    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Disabled);
-    let result = env
-        .execute_ingress_as(
-            CONTROLLER,
-            canister_id,
-            "unreachable",
-            Encode!(&()).unwrap(),
-        )
-        .unwrap_err();
-    result.assert_contains(
-        ErrorCode::CanisterTrapped,
-        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: unreachable",
-    );
-    assert!(
-        !result.description().contains("Backtrace"),
-        "Result message: {} cointains unexpected 'Backtrace'",
-        result.description(),
-    );
-    let logs = env.canister_log(canister_id);
-    for log in logs.records() {
-        let log = std::str::from_utf8(&log.content).unwrap();
-        assert!(
-            !log.contains("Backtrace"),
-            "Canister log: {log} cointains unexpected 'Backtrace'",
-        );
-    }
-}
-
-#[test]
+#[ignore]
 fn no_backtrace_without_name_section() {
     let (env, canister_id) = env_with_backtrace_canister_and_visibility(
-        FlagStatus::Enabled,
         LogVisibilityV2::Controllers,
         "backtrace_canister_without_names",
     );
@@ -184,9 +143,11 @@ fn no_backtrace_without_name_section() {
     }
 }
 
+// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
+#[ignore]
 fn oob_backtrace() {
-    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Enabled);
+    let (env, canister_id) = env_with_backtrace_canister();
     assert_error(
         env,
         canister_id,
@@ -194,7 +155,7 @@ fn oob_backtrace() {
         ErrorCode::CanisterTrapped,
         "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: ",
         r#"heap out of bounds
-Canister Backtrace:
+Canister Backtrace:.*
 _wasm_backtrace_canister::oob::inner_2
 _wasm_backtrace_canister::oob::inner
 _wasm_backtrace_canister::oob::outer
@@ -202,9 +163,11 @@ _wasm_backtrace_canister::oob::outer
     )
 }
 
+// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
+#[ignore]
 fn backtrace_test_ic0_trap() {
-    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Enabled);
+    let (env, canister_id) = env_with_backtrace_canister();
     assert_error(
         env,
         canister_id,
@@ -217,9 +180,11 @@ fn backtrace_test_ic0_trap() {
     );
 }
 
+// TODO(DSM): Re-enable when backtraces are enabled again.
 #[test]
+#[ignore]
 fn backtrace_test_stable_oob() {
-    let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Enabled);
+    let (env, canister_id) = env_with_backtrace_canister();
     assert_error(
         env,
         canister_id,
@@ -227,7 +192,7 @@ fn backtrace_test_stable_oob() {
         ErrorCode::CanisterTrapped,
         "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: ",
         r#"stable memory out of bounds
-Canister Backtrace:
+Canister Backtrace:.*
 stable64_write
 _wasm_backtrace_canister::stable_oob::inner_2
 _wasm_backtrace_canister::stable_oob::inner
@@ -251,11 +216,12 @@ mod visibility {
         error_code: ErrorCode,
         backtrace: &str,
     ) {
-        let (env, canister_id) = env_with_backtrace_canister_and_visibility(
-            FlagStatus::Enabled,
-            visibility,
-            "backtrace_canister",
-        );
+        let backtrace_regex = RegexBuilder::new(&format!(".*{backtrace}.*"))
+            .dot_matches_new_line(true)
+            .build()
+            .unwrap();
+        let (env, canister_id) =
+            env_with_backtrace_canister_and_visibility(visibility, "backtrace_canister");
         // Call from anonymous principal
         let result = env
             .execute_ingress_as(caller, canister_id, method, Encode!(&()).unwrap())
@@ -266,7 +232,7 @@ mod visibility {
         );
         if backtrace_should_be_visible {
             assert!(
-                result.description().contains(backtrace),
+                backtrace_regex.is_match(result.description()),
                 "Result message: {} doesn't contain backtrace: {}",
                 result.description(),
                 backtrace
@@ -274,7 +240,7 @@ mod visibility {
         } else {
             // There should be no backtrace in the error.
             assert!(
-                !result.description().contains("Backtrace"),
+                !backtrace_regex.is_match(result.description()),
                 "Result message: {} cointains unexpected 'Backtrace'",
                 result.description(),
             );
@@ -284,12 +250,14 @@ mod visibility {
         let last_error =
             std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
         assert!(
-            last_error.contains(backtrace),
-            "Last log: {last_error} doesn't contain backtrace: {backtrace}"
+            backtrace_regex.is_match(last_error),
+            "Last log:\n----------\n{last_error}\n----------\ndoesn't contain backtrace: {backtrace}"
         );
     }
 
+    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
+    #[ignore]
     fn unreachable_non_controller_and_private() {
         check_visibility(
             OTHER1,
@@ -301,7 +269,9 @@ mod visibility {
         );
     }
 
+    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
+    #[ignore]
     fn unreachable_not_in_viewer_list() {
         check_visibility(
             OTHER1,
@@ -313,7 +283,9 @@ mod visibility {
         );
     }
 
+    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
+    #[ignore]
     fn unreachable_in_viewer_list() {
         check_visibility(
             OTHER2,
@@ -325,7 +297,9 @@ mod visibility {
         );
     }
 
+    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
+    #[ignore]
     fn unreachale_public() {
         check_visibility(
             OTHER1,
@@ -337,7 +311,9 @@ mod visibility {
         );
     }
 
+    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
+    #[ignore]
     fn ic0_non_controller_and_private() {
         check_visibility(
             OTHER1,
@@ -349,7 +325,9 @@ mod visibility {
         );
     }
 
+    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
+    #[ignore]
     fn ic0_not_in_viewer_list() {
         check_visibility(
             OTHER1,
@@ -361,7 +339,9 @@ mod visibility {
         );
     }
 
+    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
+    #[ignore]
     fn ic0_in_viewer_list() {
         check_visibility(
             OTHER2,
@@ -373,7 +353,9 @@ mod visibility {
         );
     }
 
+    // TODO(DSM): Re-enable when backtraces are enabled again.
     #[test]
+    #[ignore]
     fn ic0_public() {
         check_visibility(
             OTHER1,

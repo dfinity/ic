@@ -20,8 +20,6 @@ use axum::{
 use bytes::Bytes;
 use candid::Principal;
 use http::header::{CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-#[cfg(not(test))]
-use ic_bn_lib::http::ConnInfo;
 use ic_bn_lib::{
     http::headers::{CONTENT_TYPE_CBOR, X_CONTENT_TYPE_OPTIONS_NO_SNIFF, X_FRAME_OPTIONS_DENY},
     pubsub::{Broker, Subscriber},
@@ -72,7 +70,7 @@ impl LogsState {
 /// Handles websocket requests for canister logs
 pub async fn logs_canister(
     ws: WebSocketUpgrade,
-    #[cfg(not(test))] Extension(conn_info): Extension<Arc<ConnInfo>>,
+    #[cfg(not(test))] Extension(conn_info): Extension<Arc<ic_bn_lib_common::types::http::ConnInfo>>,
     #[cfg(test)] ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(canister_id): Path<CanisterId>,
     State(state): State<Arc<LogsState>>,
@@ -273,8 +271,8 @@ pub async fn handle_subnet(
 mod test {
     use axum::{Router, routing::any};
     use futures_util::StreamExt;
-    use ic_bn_lib::principal;
     use ic_bn_lib::pubsub::BrokerBuilder;
+    use ic_bn_lib_common::principal;
     use tokio_tungstenite::tungstenite;
 
     use super::*;

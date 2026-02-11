@@ -11,10 +11,12 @@ use ic_embedders::{
         SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
     },
 };
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
+use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_execution_environment::bytes_and_logging_cost;

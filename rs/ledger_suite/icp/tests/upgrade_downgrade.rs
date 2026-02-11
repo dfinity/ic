@@ -1,25 +1,25 @@
-use candid::Encode;
+use candid::{Encode, Nat};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_test_utils::pocket_ic_helpers::index::{
-    LEDGER_INDEX_CANISTER_ID, get_blocks, wait_until_sync_is_completed,
-};
+use ic_ledger_test_utils::pocket_ic_helpers::index::{get_blocks, wait_until_sync_is_completed};
 use ic_ledger_test_utils::pocket_ic_helpers::install_canister;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::{
     account_balance, archives, query_blocks, query_encoded_blocks, transfer,
 };
-use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_management_canister_types::CanisterSettings;
 use icp_ledger::CandidOperation::Mint;
 use icp_ledger::{
-    AccountIdentifier, CandidBlock, CandidTransaction, DEFAULT_TRANSFER_FEE,
-    LedgerCanisterInitPayload, LedgerCanisterUpgradePayload, Memo, Subaccount, TransferArgs,
+    AccountIdentifier, CandidBlock, CandidTransaction, DEFAULT_TRANSFER_FEE, LEDGER_CANISTER_ID,
+    LEDGER_INDEX_CANISTER_ID, LedgerCanisterInitPayload, LedgerCanisterUpgradePayload, Memo,
+    Subaccount, TransferArgs,
 };
 use maplit::hashmap;
 use pocket_ic::{PocketIc, PocketIcBuilder};
+use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime};
 
 const ARCHIVE_NUM_BLOCKS_TO_ARCHIVE: usize = 5;
@@ -57,6 +57,63 @@ struct Setup {
     user1: User,
     user2: User,
     ledger_blocks_created: u64,
+}
+
+#[derive(Debug)]
+struct CanisterHashes {
+    ledger: Vec<u8>,
+    index: Vec<u8>,
+    archive: BTreeMap<candid::Principal, Vec<u8>>,
+}
+
+impl CanisterHashes {
+    fn assert_changed(&self, other: &CanisterHashes) {
+        assert_ne!(
+            &self.ledger, &other.ledger,
+            "Ledger canister hash did not change"
+        );
+        assert_ne!(
+            &self.index, &other.index,
+            "Index canister hash did not change"
+        );
+        assert_eq!(self.archive.len(), other.archive.len());
+        for (archive_id, module_hash) in &self.archive {
+            let other_module_hash = other
+                .archive
+                .get(archive_id)
+                .expect("Archive canister missing after upgrade");
+            assert_ne!(
+                module_hash, other_module_hash,
+                "Archive canister hash did not change for archive {}",
+                archive_id
+            );
+        }
+    }
+
+    /// Assert that the canister hashes are the same, allowing for more archives
+    /// to have been created after upgrade/downgrade.
+    fn assert_same(&self, other: &CanisterHashes) {
+        assert_eq!(
+            &self.ledger, &other.ledger,
+            "Ledger canister hash did not change"
+        );
+        assert_eq!(
+            &self.index, &other.index,
+            "Index canister hash did not change"
+        );
+        assert!(self.archive.len() <= other.archive.len());
+        for (archive_id, module_hash) in &self.archive {
+            let other_module_hash = other
+                .archive
+                .get(archive_id)
+                .expect("Archive canister missing after upgrade");
+            assert_eq!(
+                module_hash, other_module_hash,
+                "Archive canister hash did not change for archive {}",
+                archive_id
+            );
+        }
+    }
 }
 
 impl Setup {
@@ -221,19 +278,21 @@ impl Setup {
     }
 
     fn upgrade_index_canister(&self, upgrade_to_version: UpgradeToVersion) {
-        let index_wasm_bytes = match upgrade_to_version {
-            UpgradeToVersion::MainNet => {
+        let (index_wasm_bytes, upgrade_arg) = match upgrade_to_version {
+            UpgradeToVersion::MainNet => (
                 std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
-                    .expect("Could not read mainnet index wasm")
-            }
-            UpgradeToVersion::Latest => {
+                    .expect("Could not read mainnet index wasm"),
+                vec![],
+            ),
+            UpgradeToVersion::Latest => (
                 std::fs::read(std::env::var("IC_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
-                    .expect("Could not read index wasm")
-            }
+                    .expect("Could not read index wasm"),
+                Encode!(&None::<ic_icp_index::UpgradeArg>).unwrap(),
+            ),
         };
         let canister_id = candid::Principal::from(LEDGER_INDEX_CANISTER_ID);
         self.pocket_ic
-            .upgrade_canister(canister_id, index_wasm_bytes, vec![], None)
+            .upgrade_canister(canister_id, index_wasm_bytes, upgrade_arg, None)
             .unwrap();
         let expected_module_hash = mainnet_index_canister_sha256sum();
         self.assert_canister_module_hash(
@@ -241,6 +300,45 @@ impl Setup {
             &expected_module_hash,
             upgrade_to_version == UpgradeToVersion::MainNet,
         );
+    }
+
+    fn canister_hashes(&self) -> CanisterHashes {
+        let ledger_canister_id = candid::Principal::from(LEDGER_CANISTER_ID);
+        let index_canister_id = candid::Principal::from(LEDGER_INDEX_CANISTER_ID);
+        let ledger_canister_status = self
+            .pocket_ic
+            .canister_status(ledger_canister_id, None)
+            .unwrap();
+        let index_canister_status = self
+            .pocket_ic
+            .canister_status(index_canister_id, None)
+            .unwrap();
+        let archive_canister_ids: Vec<candid::Principal> = archives(&self.pocket_ic)
+            .iter()
+            .map(|archive| candid::Principal::from(archive.canister_id))
+            .collect();
+        let mut archive_hashes = BTreeMap::new();
+        for archive_canister_id in archive_canister_ids {
+            let archive_canister_status = self
+                .pocket_ic
+                .canister_status(archive_canister_id, None)
+                .unwrap();
+            archive_hashes.insert(
+                archive_canister_id,
+                archive_canister_status
+                    .module_hash
+                    .expect("Archive canister should have a module hash"),
+            );
+        }
+        CanisterHashes {
+            ledger: ledger_canister_status
+                .module_hash
+                .expect("Ledger canister should have a module hash"),
+            index: index_canister_status
+                .module_hash
+                .expect("Index canister should have a module hash"),
+            archive: archive_hashes,
+        }
     }
 }
 
@@ -290,6 +388,7 @@ impl SetupBuilder {
             .unwrap();
         let index_canister_init_args = ic_icp_index::InitArg {
             ledger_id: candid::Principal::from(LEDGER_CANISTER_ID),
+            retrieve_blocks_from_ledger_interval_seconds: None,
         };
 
         let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
@@ -298,6 +397,10 @@ impl SetupBuilder {
         let ledger_wasm_bytes =
             std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap())
                 .expect("Could not read mainnet ledger wasm");
+        let canister_settings = Some(CanisterSettings {
+            memory_allocation: Some(Nat::from(4 * 1024 * 1024 * 1024u64)), // 4 GiB
+            ..Default::default()
+        });
         install_canister(
             &pocket_ic,
             "ICP Ledger",
@@ -305,6 +408,7 @@ impl SetupBuilder {
             Encode!(&ledger_canister_init_payload).unwrap(),
             ledger_wasm_bytes,
             None,
+            canister_settings,
         );
 
         let index_wasm_bytes =
@@ -316,6 +420,7 @@ impl SetupBuilder {
             LEDGER_INDEX_CANISTER_ID,
             Encode!(&index_canister_init_args).unwrap(),
             index_wasm_bytes,
+            None,
             None,
         );
 
@@ -470,15 +575,29 @@ fn should_upgrade_and_downgrade_canister_suite() {
     let mut setup = Setup::builder().build();
     setup.create_icp_transfers_until_archive_is_spawned();
 
+    // The archive spawned by the ledger may not have the same hash as the mainnet archive canister.
+    setup.upgrade_archive_canisters(UpgradeToVersion::MainNet);
+    let initial_canister_hashes = setup.canister_hashes();
+
     setup.upgrade_index_canister(UpgradeToVersion::Latest);
     setup.upgrade_ledger_canister(UpgradeToVersion::Latest, true);
     setup.upgrade_archive_canisters(UpgradeToVersion::Latest);
 
+    let upgraded_canister_hashes = setup.canister_hashes();
+    initial_canister_hashes.assert_changed(&upgraded_canister_hashes);
+
+    setup.assert_index_ledger_parity(true);
+    setup.create_icp_transfers_until_archive_is_spawned();
     setup.assert_index_ledger_parity(true);
 
     setup.upgrade_index_canister(UpgradeToVersion::MainNet);
     setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, true);
     setup.upgrade_archive_canisters(UpgradeToVersion::MainNet);
 
+    let downgraded_canister_hashes = setup.canister_hashes();
+    initial_canister_hashes.assert_same(&downgraded_canister_hashes);
+
+    setup.assert_index_ledger_parity(true);
+    setup.create_icp_transfers_until_archive_is_spawned();
     setup.assert_index_ledger_parity(true);
 }

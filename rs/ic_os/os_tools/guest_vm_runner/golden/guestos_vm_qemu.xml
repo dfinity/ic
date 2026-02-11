@@ -6,15 +6,15 @@
       <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
     </libosinfo:libosinfo>
   </metadata>
-  <memory unit='GiB'>486</memory>
-  <currentMemory unit='GiB'>486</currentMemory>
+  <memory unit='GiB'>12</memory>
+  <currentMemory unit='GiB'>12</currentMemory>
   <vcpu placement='static'>56</vcpu>
   <cpu mode='host-model'/>
   <resource>
     <partition>/machine</partition>
   </resource>
   <os type='efi'>
-    <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
+    <type arch='x86_64' machine='pc-q35-10.2'>hvm</type>
     <boot dev='hd'/>
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
@@ -40,7 +40,7 @@
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='/dev/guest_disk' index='1'/>
@@ -139,7 +139,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
-      <log file='/var/log/libvirt/qemu/guestos-serial.log' append='off'/>
+      <log file='/var/serial/console.txt' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

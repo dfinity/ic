@@ -55,6 +55,22 @@ const HTTP_HEADERS_TOTAL_MAX_SIZE: usize = 48 * KIB;
 /// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
 const HTTP_HEADERS_ELEMENT_MAX_SIZE: usize = 16 * KIB; // name + value = 8KiB + 8KiB
 
+/// The numeric representation for the Legacy pricing version.
+pub const PRICING_VERSION_LEGACY: u32 = 1;
+/// The numeric representation for the Pay-As-You-Go pricing version.
+pub const PRICING_VERSION_PAY_AS_YOU_GO: u32 = 2;
+
+/// The default pricing version for HTTP outcalls.
+///
+/// If the field is missing, this is the version that will be assumed by the replica.
+/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+pub const DEFAULT_HTTP_OUTCALLS_PRICING_VERSION: u32 = PRICING_VERSION_LEGACY;
+
+/// A set of all allowed pricing versions for HTTP outcalls.
+///
+/// If the pricing version provided in the request is not in this set, the request will use the default pricing version.
+pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS: &[u32] = &[PRICING_VERSION_LEGACY];
+
 /// HTTP headers bounded by total size.
 pub type BoundedHttpHeaders = BoundedVec<
     HTTP_HEADERS_MAX_NUMBER,
@@ -76,6 +92,7 @@ pub type BoundedHttpHeaders = BoundedVec<
 ///     context : blob;
 ///   };
 ///   is_replicated : opt bool;
+///   pricing_version : opt nat32;
 /// }
 /// ```
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
@@ -88,6 +105,7 @@ pub struct CanisterHttpRequestArgs {
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
     pub is_replicated: Option<bool>,
+    pub pricing_version: Option<u32>,
 }
 
 impl Payload<'_> for CanisterHttpRequestArgs {}
@@ -100,6 +118,52 @@ impl CanisterHttpRequestArgs {
             .as_ref()
             .map(|transform_context| PrincipalId::from(transform_context.function.0.principal))
     }
+}
+
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   url : text;
+///   headers : vec http_header;
+///   method : variant { get; head; post };
+///   body : opt blob;
+///   transform : opt record {
+///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
+///     context : blob;
+///   };
+///  replication: opt record {
+///     min_responses: nat32;
+///     max_responses: nat32;
+///     total_requests: nat32;
+///   };
+/// }
+/// ```s
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+pub struct FlexibleCanisterHttpRequestArgs {
+    pub url: String,
+    pub headers: BoundedHttpHeaders,
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub body: Option<Vec<u8>>,
+    pub method: HttpMethod,
+    pub transform: Option<TransformContext>,
+    pub replication: Option<ReplicationCounts>,
+}
+
+impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
+
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///     min_responses: nat32;
+///     max_responses: nat32;
+///     total_requests: nat32;
+///   };
+/// ```
+#[derive(CandidType, Deserialize, Debug, Clone, Default, PartialEq)]
+pub struct ReplicationCounts {
+    pub total_requests: u32,
+    pub min_responses: u32,
+    pub max_responses: u32,
 }
 
 #[test]
@@ -123,6 +187,7 @@ fn test_http_headers_max_number() {
             method: HttpMethod::GET,
             transform: None,
             is_replicated: None,
+            pricing_version: None,
         };
 
         // Act.
@@ -176,6 +241,7 @@ fn test_http_headers_max_total_size() {
             method: HttpMethod::GET,
             transform: None,
             is_replicated: None,
+            pricing_version: None,
         };
 
         // Act.
@@ -223,6 +289,7 @@ fn test_http_headers_max_element_size() {
             method: HttpMethod::GET,
             transform: None,
             is_replicated: None,
+            pricing_version: None,
         };
 
         // Act.

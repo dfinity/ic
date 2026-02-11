@@ -1,10 +1,11 @@
 use crate::{
     logs::{ERROR, INFO},
     pb::v1::{
-        CanisterCallError, Extensions, ListSnsCanistersResponse, ManageDappCanisterSettingsRequest,
-        ManageDappCanisterSettingsResponse, RegisterDappCanistersRequest,
-        RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
-        SnsRootCanister, set_dapp_controllers_response,
+        CanisterCallError, CleanUpFailedRegisterExtensionRequest,
+        CleanUpFailedRegisterExtensionResponse, Extensions, ListSnsCanistersResponse,
+        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
+        RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
+        SetDappControllersResponse, SnsRootCanister, set_dapp_controllers_response,
     },
     types::{Environment, RejectCode},
 };
@@ -600,6 +601,60 @@ impl SnsRootCanister {
         });
 
         Ok(())
+    }
+
+    pub async fn clean_up_failed_register_extension(
+        self_ref: &'static LocalKey<RefCell<Self>>,
+        management_canister_client: &impl ManagementCanisterClient,
+        request: CleanUpFailedRegisterExtensionRequest,
+    ) -> CleanUpFailedRegisterExtensionResponse {
+        let main = async || -> Result<(), CanisterCallError> {
+            // Unpack request.
+            let CleanUpFailedRegisterExtensionRequest {
+                canister_id: extension_canister_id,
+            } = request;
+            let Some(extension_canister_id) = extension_canister_id else {
+                return Err(CanisterCallError {
+                    code: Some(RejectCode::CanisterReject as i32),
+                    description: "Request lacks canister_id.".to_string(),
+                });
+            };
+
+            // Remove extension_canister_id from self.extensions.
+            //
+            // (This might result in no actual changes. In that case, we still
+            // power through with the rest of this method.)
+            self_ref.with_borrow_mut(|state| {
+                let Some(extensions) = state.extensions.as_mut() else {
+                    return;
+                };
+
+                extensions
+                    .extension_canister_ids
+                    .retain(|prior_extension_canister_id| {
+                        prior_extension_canister_id != &extension_canister_id
+                    });
+            });
+
+            // Prepare to call stop_canister and delete_canister (by wrapping
+            // extension_canister_id in a couple extra layers).
+            let extension_canister_id =
+                CanisterIdRecord::from(CanisterId::unchecked_from_principal(extension_canister_id));
+
+            // Prepare to delete the canister by stopping it first.
+            management_canister_client
+                .stop_canister(extension_canister_id)
+                .await?;
+
+            // Delete the canister.
+            management_canister_client
+                .delete_canister(extension_canister_id)
+                .await?;
+
+            Ok(())
+        };
+
+        CleanUpFailedRegisterExtensionResponse::from(main().await)
     }
 
     /// Register a single canister.

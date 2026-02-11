@@ -2,10 +2,10 @@ use anyhow::Result;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use sns_system_test_lib::sns_deployment::{
-    add_one_participant, initiate_token_swap_with_oc_parameters, sns_setup,
-    workload_rps400_get_state_query, workload_rps400_refresh_buyer_tokens,
-    workload_rps800_get_state_query, workload_rps800_refresh_buyer_tokens,
-    workload_rps1200_get_state_query, workload_rps1200_refresh_buyer_tokens,
+    add_one_participant, sns_setup_fast, workload_rps400_get_state_query,
+    workload_rps400_refresh_buyer_tokens, workload_rps800_get_state_query,
+    workload_rps800_refresh_buyer_tokens, workload_rps1200_get_state_query,
+    workload_rps1200_refresh_buyer_tokens,
 };
 use std::time::Duration;
 
@@ -19,8 +19,7 @@ use std::time::Duration;
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(30 * 60)) // 30 min
-        .with_setup(sns_setup)
-        .add_test(systest!(initiate_token_swap_with_oc_parameters))
+        .with_setup(sns_setup_fast)
         .add_test(systest!(workload_rps400_get_state_query))
         .add_test(systest!(workload_rps800_get_state_query))
         .add_test(systest!(workload_rps1200_get_state_query))

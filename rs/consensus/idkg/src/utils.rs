@@ -4,7 +4,7 @@ use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
-use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader};
+use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader, range_len};
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain,
@@ -32,17 +32,15 @@ use ic_types::{
         },
     },
     crypto::{
-        ExtendedDerivationPath,
         canister_threshold_sig::{
             MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
             idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
         },
-        vetkd::{VetKdArgs, VetKdDerivationContext},
+        vetkd::{VetKdArgs, VetKdDerivationContextRef},
     },
     messages::CallbackId,
     registry::RegistryClientError,
 };
-use phantom_newtype::Id;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     cell::RefCell,
@@ -140,10 +138,10 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             })
     }
 
-    fn transcript(
+    fn transcript_as_ref(
         &self,
         transcript_ref: &TranscriptRef,
-    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+    ) -> Result<&IDkgTranscript, TranscriptLookupError> {
         let idkg_payload = match self.chain.get_block_by_height(transcript_ref.height) {
             Ok(block) => {
                 if let Some(idkg_payload) = block.payload.as_ref().as_idkg() {
@@ -167,7 +165,6 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .ok_or(format!(
                 "transcript(): missing idkg_transcript: {transcript_ref:?}"
             ))
-            .cloned()
     }
 
     fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
@@ -207,7 +204,7 @@ pub(super) fn block_chain_cache(
     end: Block,
 ) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
     let end_height = end.height();
-    let expected_len = (end_height.get() - start_height.get() + 1) as usize;
+    let expected_len = range_len(start_height, end_height);
     let chain = pool_reader.pool().build_block_chain(start_height, end);
     let chain_len = chain.len();
     if chain_len == expected_len {
@@ -230,10 +227,10 @@ pub(super) fn block_chain_cache(
 }
 
 /// Helper to build threshold signature inputs from the context
-pub(super) fn build_signature_inputs(
+pub(super) fn build_signature_inputs<'a>(
     callback_id: CallbackId,
-    context: &SignWithThresholdContext,
-) -> Result<(RequestId, ThresholdSigInputs), BuildSignatureInputsError> {
+    context: &'a SignWithThresholdContext,
+) -> Result<(RequestId, ThresholdSigInputs<'a>), BuildSignatureInputsError> {
     match &context.args {
         ThresholdArguments::Ecdsa(args) => {
             let matched_data = args
@@ -244,21 +241,18 @@ pub(super) fn build_signature_inputs(
                 callback_id,
                 height: matched_data.height,
             };
-            let nonce = Id::from(
-                context
-                    .nonce
-                    .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
-            );
+            let nonce_ref = context
+                .nonce
+                .as_ref()
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
             let inputs = ThresholdSigInputs::Ecdsa(
                 ThresholdEcdsaSigInputs::new(
-                    &ExtendedDerivationPath {
-                        caller: context.request.sender.into(),
-                        derivation_path: context.derivation_path.to_vec(),
-                    },
+                    context.request.sender.get_ref(),
+                    &context.derivation_path,
                     &args.message_hash,
-                    nonce,
-                    matched_data.pre_signature.as_ref().clone(),
-                    matched_data.key_transcript.as_ref().clone(),
+                    nonce_ref,
+                    matched_data.pre_signature.as_ref(),
+                    matched_data.key_transcript.as_ref(),
                 )
                 .map_err(BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError)?,
             );
@@ -273,22 +267,19 @@ pub(super) fn build_signature_inputs(
                 callback_id,
                 height: matched_data.height,
             };
-            let nonce = Id::from(
-                context
-                    .nonce
-                    .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
-            );
+            let nonce_ref = context
+                .nonce
+                .as_ref()
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
             let inputs = ThresholdSigInputs::Schnorr(
                 ThresholdSchnorrSigInputs::new(
-                    &ExtendedDerivationPath {
-                        caller: context.request.sender.into(),
-                        derivation_path: context.derivation_path.to_vec(),
-                    },
+                    context.request.sender.get_ref(),
+                    &context.derivation_path,
                     &args.message,
-                    args.taproot_tree_root.as_ref().map(|v| &***v),
-                    nonce,
-                    matched_data.pre_signature.as_ref().clone(),
-                    matched_data.key_transcript.as_ref().clone(),
+                    args.taproot_tree_root.as_ref().map(|v| v.as_slice()),
+                    nonce_ref,
+                    matched_data.pre_signature.as_ref(),
+                    matched_data.key_transcript.as_ref(),
                 )
                 .map_err(BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError)?,
             );
@@ -299,14 +290,16 @@ pub(super) fn build_signature_inputs(
                 callback_id,
                 height: args.height,
             };
+            debug_assert_eq!(context.derivation_path.len(), 1);
+            const EMPTY_VEC_REF: &Vec<u8> = &vec![];
             let inputs = ThresholdSigInputs::VetKd(VetKdArgs {
-                context: VetKdDerivationContext {
-                    caller: context.request.sender.into(),
-                    context: context.derivation_path.iter().flatten().cloned().collect(),
+                context: VetKdDerivationContextRef {
+                    caller: context.request.sender.get_ref(),
+                    context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
                 },
-                ni_dkg_id: args.ni_dkg_id.clone(),
-                input: args.input.to_vec(),
-                transport_public_key: args.transport_public_key.clone(),
+                ni_dkg_id: &args.ni_dkg_id,
+                input: &args.input,
+                transport_public_key: &args.transport_public_key,
             });
             Ok((request_id, inputs))
         }
@@ -443,7 +436,12 @@ pub fn get_idkg_chain_key_config_if_enabled(
             // Skip keys that don't need to run IDKG protocol
             .filter(|key_config| key_config.key_id.is_idkg_key())
             // A key that has `presignatures_to_create_in_advance` set to 0 is not active
-            .filter(|key_config| key_config.pre_signatures_to_create_in_advance != 0)
+            .filter(|key_config| {
+                key_config
+                    .pre_signatures_to_create_in_advance
+                    .unwrap_or_default()
+                    != 0
+            })
             .count();
 
         if num_active_key_ids == 0 {
@@ -630,6 +628,7 @@ mod tests {
         IDkgPayloadTestHelper, create_available_pre_signature_with_key_transcript_and_height,
         set_up_idkg_payload,
     };
+    use assert_matches::assert_matches;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -638,7 +637,7 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::no_op_logger;
-    use ic_management_canister_types_private::{EcdsaKeyId, SchnorrKeyId};
+    use ic_management_canister_types_private::{EcdsaKeyId, SchnorrKeyId, VetKdKeyId};
     use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_subnet_features::KeyConfig;
@@ -842,7 +841,7 @@ mod tests {
                     key_id: MasterPublicKeyId::Ecdsa(
                         EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                     ),
-                    pre_signatures_to_create_in_advance: 1,
+                    pre_signatures_to_create_in_advance: Some(1),
                     max_queue_size: 3,
                 }],
                 ..ChainKeyConfig::default()
@@ -866,14 +865,14 @@ mod tests {
                 key_id: MasterPublicKeyId::Ecdsa(
                     EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap(),
                 ),
-                pre_signatures_to_create_in_advance: 1,
+                pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: 3,
             };
             let key_config_2 = KeyConfig {
                 key_id: MasterPublicKeyId::Schnorr(
                     SchnorrKeyId::from_str("Ed25519:some_key_2").unwrap(),
                 ),
-                pre_signatures_to_create_in_advance: 1,
+                pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: 3,
             };
 
@@ -907,7 +906,7 @@ mod tests {
                     key_id: MasterPublicKeyId::Ecdsa(
                         EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                     ),
-                    pre_signatures_to_create_in_advance: 0,
+                    pre_signatures_to_create_in_advance: Some(0),
                     max_queue_size: 3,
                 }],
                 ..ChainKeyConfig::default()
@@ -920,6 +919,83 @@ mod tests {
                     .expect("Should successfully get the config");
 
             assert!(config.is_none());
+        })
+    }
+
+    #[test]
+    fn test_get_chain_key_config_if_enabled_malformed_with_pre_sigs_to_create_for_ecdsa_being_none()
+    {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let malformed_chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(
+                        EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                    ),
+                    pre_signatures_to_create_in_advance: None,
+                    max_queue_size: 3,
+                }],
+                ..ChainKeyConfig::default()
+            };
+            let (subnet_id, registry, version) =
+                set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
+
+            let result =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
+
+            assert_matches!(result, Err(RegistryClientError::DecodeError{ error })
+              if error.contains("\
+                   failed with Missing required struct field: \
+                   KeyConfig::pre_signatures_to_create_in_advance\
+              ")
+            );
+        })
+    }
+
+    #[test]
+    fn test_get_chain_key_config_if_enabled_malformed_with_pre_sigs_to_create_for_vetkd_being_some_0()
+     {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let malformed_chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::VetKd(
+                        VetKdKeyId::from_str("Bls12_381_G2:some_key").unwrap(),
+                    ),
+                    pre_signatures_to_create_in_advance: Some(0),
+                    max_queue_size: 3,
+                }],
+                ..ChainKeyConfig::default()
+            };
+            let (subnet_id, registry, version) =
+                set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
+
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
+
+            assert_matches!(config, Ok(None));
+        })
+    }
+
+    #[test]
+    fn test_get_chain_key_config_if_enabled_malformed_with_pre_sigs_to_create_for_vetkd_being_some_1()
+     {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let malformed_chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::VetKd(
+                        VetKdKeyId::from_str("Bls12_381_G2:some_key").unwrap(),
+                    ),
+                    pre_signatures_to_create_in_advance: Some(1),
+                    max_queue_size: 3,
+                }],
+                ..ChainKeyConfig::default()
+            };
+            let (subnet_id, registry, version) =
+                set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
+
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
+
+            assert_matches!(config, Ok(None));
         })
     }
 

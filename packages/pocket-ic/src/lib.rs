@@ -57,8 +57,8 @@ use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
         HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawTime, SubnetId,
-        SubnetKind, SubnetSpec, Topology,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawSubnetBlockmakers,
+        RawTickConfigs, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -102,9 +102,11 @@ pub mod nonblocking;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
-const MIN_SERVER_VERSION: &str = "10.0.0";
-const LATEST_SERVER_VERSION: &str = "10.0.0";
-const MAX_SERVER_VERSION: &str = "11";
+const MIN_SERVER_VERSION: &str = "12.0.0";
+const MAX_SERVER_VERSION: &str = "13";
+
+/// Public to facilitate downloading the PocketIC server.
+pub const LATEST_SERVER_VERSION: &str = "12.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -167,8 +169,10 @@ pub struct PocketIcBuilder {
     icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    dogecoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
     initial_time: Option<InitialTime>,
+    mainnet_nns_subnet_id: Option<bool>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -185,8 +189,10 @@ impl PocketIcBuilder {
             icp_config: IcpConfig::default(),
             log_level: None,
             bitcoind_addr: None,
+            dogecoind_addr: None,
             icp_features: IcpFeatures::default(),
             initial_time: None,
+            mainnet_nns_subnet_id: None,
         }
     }
 
@@ -207,9 +213,11 @@ impl PocketIcBuilder {
             self.icp_config,
             self.log_level,
             self.bitcoind_addr,
+            self.dogecoind_addr,
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
+            self.mainnet_nns_subnet_id,
         )
     }
 
@@ -224,9 +232,11 @@ impl PocketIcBuilder {
             self.icp_config,
             self.log_level,
             self.bitcoind_addr,
+            self.dogecoind_addr,
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
+            self.mainnet_nns_subnet_id,
         )
         .await
     }
@@ -284,6 +294,13 @@ impl PocketIcBuilder {
         }
     }
 
+    pub fn with_dogecoind_addrs(self, dogecoind_addrs: Vec<SocketAddr>) -> Self {
+        Self {
+            dogecoind_addr: Some(dogecoind_addrs),
+            ..self
+        }
+    }
+
     /// Add an empty NNS subnet unless an NNS subnet has already been added.
     pub fn with_nns_subnet(mut self) -> Self {
         let mut config = self.config.unwrap_or_default();
@@ -330,7 +347,11 @@ impl PocketIcBuilder {
     ///  `-- tmp
     pub fn with_subnet_state(mut self, subnet_kind: SubnetKind, path_to_state: PathBuf) -> Self {
         let mut config = self.config.unwrap_or_default();
-        let subnet_spec = SubnetSpec::default().with_state_dir(path_to_state);
+        #[cfg(not(windows))]
+        let state_dir = path_to_state;
+        #[cfg(windows)]
+        let state_dir = wsl_path(&path_to_state, "subnet state").into();
+        let subnet_spec = SubnetSpec::default().with_state_dir(state_dir);
         match subnet_kind {
             SubnetKind::NNS => config.nns = Some(subnet_spec),
             SubnetKind::SNS => config.sns = Some(subnet_spec),
@@ -466,6 +487,11 @@ impl PocketIcBuilder {
         self.http_gateway_config = Some(http_gateway_config);
         self
     }
+
+    pub fn with_mainnet_nns_subnet_id(mut self) -> Self {
+        self.mainnet_nns_subnet_id = Some(true);
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -570,6 +596,7 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Option<Url>,
@@ -580,9 +607,11 @@ impl PocketIc {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
+        mainnet_nns_subnet_id: Option<bool>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -605,9 +634,11 @@ impl PocketIc {
                 icp_config,
                 log_level,
                 bitcoind_addr,
+                dogecoind_addr,
                 icp_features,
                 initial_time,
                 http_gateway_config,
+                mainnet_nns_subnet_id,
             )
             .await
         });
@@ -723,7 +754,7 @@ impl PocketIc {
     /// Make the IC produce and progress by one block with custom
     /// configs for the round.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub fn tick_with_configs(&self, configs: crate::common::rest::TickConfigs) {
+    pub fn tick_with_configs(&self, configs: TickConfigs) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.tick_with_configs(configs).await })
     }
@@ -785,7 +816,7 @@ impl PocketIc {
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub async fn make_live_with_params(
+    pub fn make_live_with_params(
         &mut self,
         ip_addr: Option<IpAddr>,
         listen_at: Option<u16>,
@@ -1434,6 +1465,44 @@ impl PocketIc {
                 .await
         })
     }
+
+    /// Download a canister snapshot to a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// The snapshot directory must be empty if it exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn canister_snapshot_download(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        snapshot_id: Vec<u8>,
+        snapshot_dir: PathBuf,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .canister_snapshot_download(canister_id, sender, snapshot_id, snapshot_dir)
+                .await
+        })
+    }
+
+    /// Upload a canister snapshot from a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// Returns the snapshot ID of the uploaded snapshot.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn canister_snapshot_upload(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        replace_snapshot: Option<Vec<u8>>,
+        snapshot_dir: PathBuf,
+    ) -> Vec<u8> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .canister_snapshot_upload(canister_id, sender, replace_snapshot, snapshot_dir)
+                .await
+        })
+    }
 }
 
 impl Default for PocketIc {
@@ -1837,6 +1906,45 @@ pub enum IngressStatusResult {
     Success(Result<Vec<u8>, RejectResponse>),
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct TickConfigs {
+    pub blockmakers: Option<Vec<SubnetBlockmakers>>,
+}
+
+impl From<TickConfigs> for RawTickConfigs {
+    fn from(tick_configs: TickConfigs) -> Self {
+        Self {
+            blockmakers: tick_configs.blockmakers.map(|blockmakers| {
+                blockmakers
+                    .into_iter()
+                    .map(|blockmaker| blockmaker.into())
+                    .collect()
+            }),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SubnetBlockmakers {
+    pub subnet: Principal,
+    pub blockmaker: Principal,
+    pub failed_blockmakers: Vec<Principal>,
+}
+
+impl From<SubnetBlockmakers> for RawSubnetBlockmakers {
+    fn from(blockmaker: SubnetBlockmakers) -> Self {
+        Self {
+            subnet: blockmaker.subnet.into(),
+            blockmaker: blockmaker.blockmaker.into(),
+            failed_blockmakers: blockmaker
+                .failed_blockmakers
+                .into_iter()
+                .map(|p| p.into())
+                .collect(),
+        }
+    }
+}
+
 #[cfg(windows)]
 fn wsl_path(path: &PathBuf, desc: &str) -> String {
     windows_to_wsl(
@@ -2164,25 +2272,25 @@ mod test {
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic 10.0.0")
+            check_pocketic_server_version("pocket-ic 12.0.0")
                 .unwrap_err()
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 10 0 0")
+            check_pocketic_server_version("pocket-ic-server 12 0 0")
                 .unwrap_err()
                 .contains("Failed to parse PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 9.0.0")
+            check_pocketic_server_version("pocket-ic-server 11.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
-        check_pocketic_server_version("pocket-ic-server 10.0.0").unwrap();
-        check_pocketic_server_version("pocket-ic-server 10.0.1").unwrap();
-        check_pocketic_server_version("pocket-ic-server 10.1.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 12.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 12.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 12.1.0").unwrap();
         assert!(
-            check_pocketic_server_version("pocket-ic-server 11.0.0")
+            check_pocketic_server_version("pocket-ic-server 13.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );

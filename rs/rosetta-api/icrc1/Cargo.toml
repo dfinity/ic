@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.2.6"
+version = "1.2.9"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -41,7 +41,8 @@ rand = { workspace = true }
 reqwest = { workspace = true }
 rolling-file = "0.2.0"
 rosetta-core = { path = "../common/rosetta_core" }
-rusqlite = { version = "~0.28.0", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+tokio-rusqlite = "0.7"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

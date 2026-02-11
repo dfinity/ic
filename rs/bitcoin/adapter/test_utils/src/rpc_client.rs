@@ -87,16 +87,6 @@ pub enum RpcError {
     AddressNotAvailable,
 }
 
-impl RpcError {
-    pub fn is_resource_temporarily_unavailable(&self) -> bool {
-        if let RpcError::JsonRpc(jsonrpc::error::Error::Transport(err)) = self {
-            err.to_string().contains("Resource temporarily unavailable")
-        } else {
-            false
-        }
-    }
-}
-
 impl From<BtcAddressParseError> for RpcError {
     fn from(e: BtcAddressParseError) -> Self {
         Self::InvalidBtcAddress(e)
@@ -248,8 +238,16 @@ impl<T: RpcClientType> RpcClient<T> {
     /// Create a RPC client using the given [Network], url and [Auth].
     pub fn new(network: T, url: &str, auth: Auth) -> Result<Self> {
         let (user, pass) = auth.get_user_pass()?;
-        let client = jsonrpc::client::Client::simple_http(url, user, pass)
+        let transport = jsonrpc::simple_http::Builder::new()
+            .timeout(std::time::Duration::from_secs(60))
+            .url(url)
             .map_err(|e| RpcError::JsonRpc(e.into()))?;
+        let transport = if let Some(user) = user {
+            transport.auth(user, pass)
+        } else {
+            transport
+        };
+        let client = jsonrpc::client::Client::with_transport(transport.build());
         let client = Arc::new(client);
         Ok(RpcClient {
             network,
@@ -348,6 +346,12 @@ impl<T: RpcClientType> RpcClient<T> {
         let raw_tx = self.create_raw_transaction(&inputs, &outputs)?;
         let tx = self.sign_raw_transaction(&raw_tx, None)?;
         self.send_raw_transaction::<&[u8]>(tx.hex.as_ref())
+    }
+
+    /// Adds a private key (as returned by `dumpprivkey`) to your wallet.
+    pub fn import_private_key(&self, private_key: &str, label: &str) -> Result<()> {
+        let args = [into_json(private_key)?, into_json(label)?];
+        self.call("importprivkey", &args)
     }
 
     fn create_wallet(
@@ -516,6 +520,29 @@ impl<T: RpcClientType> RpcClient<T> {
 
     pub fn get_mempool_entry(&self, txid: &Txid) -> Result<T::GetMempoolEntryResult> {
         self.call("getmempoolentry", &[into_json(txid)?])
+    }
+
+    pub fn get_raw_transaction_from_mempool(&self, txid: &Txid) -> Result<Transaction> {
+        let result: String = self.call("getrawtransaction", &[into_json(txid)?])?;
+        let tx_hex = hex::decode(result).expect("BUG: invalid hex string");
+        Ok(bitcoin::consensus::deserialize(&tx_hex)
+            .expect("BUG: Failed to deserialize transaction"))
+    }
+
+    pub fn set_transaction_priority_in_mempool(
+        &self,
+        txid: &Txid,
+        priority_delta: i32,
+        fee_delta: i32,
+    ) -> Result<bool> {
+        self.call(
+            "prioritisetransaction",
+            &[
+                into_json(txid)?,
+                into_json(priority_delta)?,
+                into_json(fee_delta)?,
+            ],
+        )
     }
 
     pub fn add_node(&self, addr: &str) -> Result<()> {

@@ -3,13 +3,12 @@
     "deployment_environment": "DEPLOYMENT_ENVIRONMENT",
     "mgmt_mac": null
   },
-  "logging": {},
   "nns": {
     "urls": NNS_URLS
   },
-  "vm_resources": {
-    "memory": "490",
+  "dev_vm_resources": {
+    "memory": "16",
     "cpu": "kvm",
-    "nr_of_vcpus": 64
+    "nr_of_vcpus": 16
   }
 }

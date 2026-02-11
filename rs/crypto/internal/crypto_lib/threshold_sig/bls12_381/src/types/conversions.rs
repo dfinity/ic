@@ -29,16 +29,14 @@ impl From<PublicKey> for PublicKeyBytes {
 }
 
 impl PublicKey {
-    /// Deserializes a `PublicKey` from a *trusted* source.
+    /// Deserializes a `PublicKey` with caching
     ///
-    /// # Security Notice
-    /// This uses the "unchecked" G2 deserialization (no subgroup check),
-    /// so should only be used on `PublicKeyBytes` obtained
-    /// from a known, trusted source.
-    pub fn from_trusted_bytes(
+    /// This is useful if it is expected that the same point will
+    /// be seen again, for example a peer's public key
+    pub fn deserialize_cached(
         bytes: &PublicKeyBytes,
     ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
-        G2Projective::deserialize_unchecked(&bytes.0)
+        G2Affine::deserialize_cached(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
@@ -50,7 +48,7 @@ impl PublicKey {
 impl TryFrom<&PublicKeyBytes> for PublicKey {
     type Error = ThresholdSigPublicKeyBytesConversionError;
     fn try_from(bytes: &PublicKeyBytes) -> Result<Self, Self::Error> {
-        G2Projective::deserialize(&bytes.0)
+        G2Affine::deserialize(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
@@ -94,7 +92,7 @@ impl From<IndividualSignature> for IndividualSignatureBytes {
 impl TryFrom<&IndividualSignatureBytes> for IndividualSignature {
     type Error = CryptoError;
     fn try_from(bytes: &IndividualSignatureBytes) -> Result<IndividualSignature, CryptoError> {
-        G1Projective::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Affine::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
             sig_bytes: bytes.0.to_vec(),
             internal_error: "Invalid individual signature".to_string(),
@@ -115,7 +113,7 @@ impl From<CombinedSignature> for CombinedSignatureBytes {
 impl TryFrom<&CombinedSignatureBytes> for CombinedSignature {
     type Error = CryptoError;
     fn try_from(bytes: &CombinedSignatureBytes) -> Result<CombinedSignature, CryptoError> {
-        G1Projective::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Affine::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
             sig_bytes: bytes.0.to_vec(),
             internal_error: "Invalid combined signature".to_string(),

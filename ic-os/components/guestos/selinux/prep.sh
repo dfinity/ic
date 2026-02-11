@@ -12,9 +12,5 @@ sed -e 's/detected_mods := \(.*\)/detected_mods := $(sort \1)/' -i /usr/share/se
 # Build SELinux modules
 make -f /usr/share/selinux/devel/Makefile
 
-# Force unsharing of directory -- seems to be a docker bug
-mv /var/lib/selinux/default/active /var/lib/selinux/default/active.unshare
-mv /var/lib/selinux/default/active.unshare /var/lib/selinux/default/active
-
 # Install them
 semodule -i *.pp

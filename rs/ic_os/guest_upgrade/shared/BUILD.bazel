@@ -13,12 +13,11 @@ cargo_build_script(
     },
     data = [
         "proto/api.proto",
-        "//rs/ic_os/attestation:proto/attestation.proto",
+        "//rs/ic_os/sev/attestation:proto/attestation.proto",
         "@com_google_protobuf//:protoc",
         "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
     deps = [
-        "@crate_index//:prost-build",
         "@crate_index//:tonic-build",
     ],
 )
@@ -27,12 +26,9 @@ rust_library(
     name = "shared",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "guest_upgrade_shared",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
     deps = [
         ":build_script",
-        "//rs/ic_os/attestation",
+        "//rs/ic_os/sev/attestation",
         "@crate_index//:anyhow",
         "@crate_index//:der",
         "@crate_index//:prost",
@@ -46,7 +42,4 @@ rust_library(
 rust_test(
     name = "shared_test",
     crate = ":shared",
-    deps = [
-        "@crate_index//:tonic-build",
-    ],
 )

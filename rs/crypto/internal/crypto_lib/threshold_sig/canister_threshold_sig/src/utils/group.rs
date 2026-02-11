@@ -1,4 +1,5 @@
 use crate::*;
+use ic_crypto_sha2::Sha256;
 use ic_types::NodeIndex;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -312,42 +313,32 @@ impl EccScalar {
     pub fn hash_to_scalar(
         curve: EccCurveType,
         input: &[u8],
-        domain_separator: &[u8],
+        dst: &[u8],
     ) -> CanisterThresholdResult<Self> {
-        let h = Self::hash_to_several_scalars(curve, 1, input, domain_separator)?;
-        Ok(h[0].clone())
+        match curve {
+            EccCurveType::Ed25519 | EccCurveType::K256 | EccCurveType::P256 => {
+                const XMD_LEN: usize = 48; // "L" in RFC 9380 for this curve
+                let ub = ic_crypto_internal_seed::xmd::<XMD_LEN, Sha256>(input, dst);
+                EccScalar::from_bytes_wide(curve, &ub)
+            }
+        }
     }
 
     /// Hash an input into multiple Scalar values
-    pub fn hash_to_several_scalars(
+    pub fn hash_to_two_scalars(
         curve: EccCurveType,
-        count: usize,
         input: &[u8],
-        domain_separator: &[u8],
-    ) -> CanisterThresholdResult<Vec<Self>> {
-        let s_bits = curve.scalar_bits();
-        let security_level = curve.security_level();
-
-        let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
-        let len_in_bytes = count * field_len;
-
-        let uniform_bytes = ic_crypto_internal_seed::xmd::<ic_crypto_sha2::Sha256>(
-            input,
-            domain_separator,
-            len_in_bytes,
-        )?;
-
-        let mut out = Vec::with_capacity(count);
-
-        for i in 0..count {
-            let s = EccScalar::from_bytes_wide(
-                curve,
-                &uniform_bytes[i * field_len..(i + 1) * field_len],
-            )?;
-            out.push(s);
+        dst: &[u8],
+    ) -> CanisterThresholdResult<(Self, Self)> {
+        match curve {
+            EccCurveType::Ed25519 | EccCurveType::K256 | EccCurveType::P256 => {
+                const XMD_LEN: usize = 48; // "L" in RFC 9380 for this curve
+                let ub = ic_crypto_internal_seed::xmd::<{ 2 * XMD_LEN }, Sha256>(input, dst);
+                let s0 = EccScalar::from_bytes_wide(curve, &ub[..XMD_LEN])?;
+                let s1 = EccScalar::from_bytes_wide(curve, &ub[XMD_LEN..])?;
+                Ok((s0, s1))
+            }
         }
-
-        Ok(out)
     }
 
     /// Deserialize a scalar value (with tag)
@@ -531,11 +522,113 @@ impl<'de> Deserialize<'de> for EccScalar {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub enum EccScalarBytes {
     K256(Box<[u8; 32]>),
     P256(Box<[u8; 32]>),
     Ed25519(Box<[u8; 32]>),
+}
+
+// Helper enum for serialization
+//
+// TODO add #[serde(with = "serde_bytes")] once we are sure
+// that all existing nodes are upgraded to be able to
+// understand both formats.
+#[derive(Serialize)]
+enum EccScalarBytesSerializeHelper<'a> {
+    K256(&'a [u8; 32]),
+    P256(#[serde(with = "serde_bytes")] &'a [u8; 32]),
+    Ed25519(&'a [u8; 32]),
+}
+
+// TODO after a sufficient amount of time using bytes as the default
+// serialization, remove the explicit Serialize and Deserialize traits
+// so that going forward only bytes are supported for decoding
+impl Serialize for EccScalarBytes {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::K256(bytes) => {
+                EccScalarBytesSerializeHelper::K256(bytes.as_ref()).serialize(serializer)
+            }
+            Self::P256(bytes) => {
+                EccScalarBytesSerializeHelper::P256(bytes.as_ref()).serialize(serializer)
+            }
+            Self::Ed25519(bytes) => {
+                EccScalarBytesSerializeHelper::Ed25519(bytes.as_ref()).serialize(serializer)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for EccScalarBytes {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::{self, MapAccess, SeqAccess, Visitor};
+        /// Visitor that can handle both CBOR byte string and array formats
+        struct BytesOrArrayVisitor;
+        impl<'de> Visitor<'de> for BytesOrArrayVisitor {
+            type Value = Box<[u8; 32]>;
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a byte string or array of 32 bytes")
+            }
+            // New efficient format: CBOR byte string
+            fn visit_bytes<E: de::Error>(self, v: &[u8]) -> Result<Self::Value, E> {
+                if v.len() != 32 {
+                    return Err(E::invalid_length(v.len(), &"32 bytes"));
+                }
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(v);
+                Ok(Box::new(arr))
+            }
+            // Old format: CBOR array of integers
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut arr = [0u8; 32];
+                for (i, byte) in arr.iter_mut().enumerate() {
+                    *byte = seq
+                        .next_element()?
+                        .ok_or_else(|| de::Error::invalid_length(i, &"32 elements"))?;
+                }
+                Ok(Box::new(arr))
+            }
+        }
+
+        struct BytesOrArrayScalar;
+        impl<'de> de::DeserializeSeed<'de> for BytesOrArrayScalar {
+            type Value = Box<[u8; 32]>;
+            fn deserialize<D2: Deserializer<'de>>(
+                self,
+                deserializer: D2,
+            ) -> Result<Self::Value, D2::Error> {
+                deserializer.deserialize_any(BytesOrArrayVisitor)
+            }
+        }
+
+        struct EccScalarBytesVisitor;
+
+        impl<'de> Visitor<'de> for EccScalarBytesVisitor {
+            type Value = EccScalarBytes;
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("EccScalarBytes enum with K256, P256, or Ed25519 variant")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let curve_str: String = map
+                    .next_key()?
+                    .ok_or_else(|| de::Error::custom("Expected curve name"))?;
+                // Use BytesOrArrayScalar, which uses deserialize_any, to handle both bytes and seq
+                let bytes: Box<[u8; 32]> = map.next_value_seed(BytesOrArrayScalar)?;
+                match curve_str.as_str() {
+                    "K256" => Ok(EccScalarBytes::K256(bytes)),
+                    "P256" => Ok(EccScalarBytes::P256(bytes)),
+                    "Ed25519" => Ok(EccScalarBytes::Ed25519(bytes)),
+                    other => Err(de::Error::unknown_variant(
+                        other,
+                        &["K256", "P256", "Ed25519"],
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_map(EccScalarBytesVisitor)
+    }
 }
 
 impl EccScalarBytes {
@@ -850,7 +943,7 @@ impl EccPoint {
     /// and performs one step for the scalar-point multiplication.
     /// This function must be called as many times as the length of
     /// the NAF representation of the scalar.
-    ///     
+    ///
     /// Warning: this function leaks information about the scalars via
     /// side channels. Do not use this function with secret scalars.
     fn scalar_mul_step_vartime(
@@ -990,7 +1083,7 @@ impl EccPoint {
         let mut mul_states: Vec<SlidingWindowMulState> = point_scalar_pairs
             .iter()
             .zip(luts.iter())
-            .map(|(&(_p, s), lut)| (SlidingWindowMulState::new(s, lut.window_size)))
+            .map(|(&(_p, s), lut)| SlidingWindowMulState::new(s, lut.window_size))
             .collect();
 
         let mut accum = EccPoint::identity(point_scalar_pairs[0].0.curve_type());
@@ -1060,6 +1153,7 @@ impl EccPoint {
 
         let mut buckets: Vec<EccPoint> = (0..Window::MAX).map(|_| id.clone()).collect();
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..num_windows {
             for j in 0..point_scalar_pairs.len() {
                 let bucket_index = windows[j][i] as usize;

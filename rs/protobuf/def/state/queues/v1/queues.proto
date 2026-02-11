@@ -41,11 +41,12 @@ message StreamFlags {
 message Stream {
   uint64 messages_begin = 1;
   repeated StreamMessage messages = 2;
+  uint64 signals_begin = 4;
   uint64 signals_end = 5;
   repeated RejectSignal reject_signals = 8;
   StreamFlags reverse_stream_flags = 7;
-  reserved 3, 4, 6;
-  reserved "signals_begin", "signals", "deprecated_reject_signals";
+  reserved 3, 6;
+  reserved "signals", "deprecated_reject_signals";
 }
 
 message StreamEntry {
@@ -56,21 +57,15 @@ message StreamEntry {
 message RequestMetadata {
   uint64 call_tree_depth = 1;
   uint64 call_tree_start_time_nanos = 2;
-  // A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded
-  // its lifecycle on the IC. Unlike `call_tree_depth` and `call_tree_start_time`, the deadline
-  // does not have to be a constant for the whole call tree. Rather it's valid only for the subtree of
-  // downstream calls at any point in the tree, i.e. it is allowed and desirable for a subtree to have
-  // a tighter deadline than the tree as whole.
-  //
-  // Reserved for future use (guaranteed replies won't be affected).
-  optional uint64 call_subtree_deadline_nanos = 3;
 }
 
 message Request {
+  reserved 4;
+  reserved "payment";
+
   types.v1.CanisterId receiver = 1;
   types.v1.CanisterId sender = 2;
   uint64 sender_reply_callback = 3;
-  Funds payment = 4;
   string method_name = 5;
   bytes method_payload = 6;
   Cycles cycles_payment = 7;
@@ -87,10 +82,12 @@ message RejectContext {
 }
 
 message Response {
+  reserved 4;
+  reserved "refund";
+
   types.v1.CanisterId originator = 1;
   types.v1.CanisterId respondent = 2;
   uint64 originator_reply_callback = 3;
-  Funds refund = 4;
   oneof response_payload {
     bytes data = 5;
     RejectContext reject = 6;
@@ -110,6 +107,10 @@ message RequestOrResponse {
 message Refund {
   types.v1.CanisterId recipient = 1;
   Cycles amount = 2;
+}
+
+message Refunds {
+  repeated Refund refunds = 1;
 }
 
 message StreamMessage {

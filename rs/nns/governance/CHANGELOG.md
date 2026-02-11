@@ -11,6 +11,121 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-01-23: Proposal 140099
+
+http://dashboard.internetcomputer.org/proposal/140099
+
+## Added
+
+* Enabled BlessAlternativeGuestOsVersion, which would generally be used to
+  recover a subnet where a) orchestrator is not working for whatever reason, and
+  b) SEV is enabled and/or there is no DFINITY node in the subnet.
+
+* Proposal types for taking and loading a snapshot of a canister controlled by the NNS Root canister.
+
+## Changed
+
+* Allow creating a service nervous system with up to 100 dapp canisters, instead of just 25.
+
+
+# 2026-01-16: Proposal 140012
+
+http://dashboard.internetcomputer.org/proposal/140012
+
+A "maintenance" release. That is, new code for upcoming features, but no new
+(enabled) behaviors.
+
+
+# 2026-01-05: Proposal 139940
+
+http://dashboard.internetcomputer.org/proposal/139940
+
+Just a maintenance release. That is, no new features, and no bug fixes.
+Just newer code, much of which is inactive now, but will be active later.
+
+
+# 2026-01-05: Proposal 139922
+
+http://dashboard.internetcomputer.org/proposal/139922
+
+## Added
+
+* Enabled performance-based node provider rewards. See the motion proposal
+  [NNS Proposal 135054](https://dashboard.internetcomputer.org/proposal/135054)
+  for details about how the performance-based algorithm works. More details can also be found in the forum post
+  [Performance Based Node Rewards](https://forum.dfinity.org/t/performance-based-node-rewards/35208)
+
+
+# 2025-12-05: Proposal 139678
+
+http://dashboard.internetcomputer.org/proposal/139678
+
+## Fixed
+
+- Typo in error message about obsolete proposal type SetDefaultFollowees.
+
+
+# 2025-11-28: Proposal 139575
+
+http://dashboard.internetcomputer.org/proposal/139575
+
+##  Fixed
+
+- Add default case for start_date fetching in Performance Based Rewards. This is done to ensure that a valid start date
+  is always returned, even when no previous rewards exist.
+  
+- Added `algorithm_version` field to node provider rewards.
+
+
+# 2025-11-07: Proposal 139313
+
+http://dashboard.internetcomputer.org/proposal/139313
+
+## Fixed
+
+* Previously, a lock was released only in the happy case (during minting node
+  provider rewards). Now, it is released no matter how the function returns.
+
+
+# 2025-10-24: Proposal 139086
+
+http://dashboard.internetcomputer.org/proposal/139086
+
+## Added
+
+* New proposal types:
+
+    * `PauseCanisterMigrations` & `UnpauseCanisterMigrations`
+
+    * `SetSubnetOperationalLevel`
+
+        * Mainly, this sets the `is_halted` field in `SubnetRecord`.
+
+        * This also sets a couple other things:
+            * `ssh_readonly_access` - Also in `SubnetRecord`.
+            * `ssh_node_state_write_access` - In `NodeRecord` (not `SubnetRecord`!).
+
+        * Motivation: This will be used in a slightly enhanced subnet recovery
+          procedure. This is needed before we can fully enable SEV.
+
+* A new API function `get_neuron_index` is added. It accepts an exclusive lower bound on the neuron ID and a page size, and returns all neurons whose IDs are greater than the specified lower bound.
+
+# 2025-10-17: Proposal 138991
+
+https://dashboard.internetcomputer.org/proposal/138991
+
+## Added
+
+* `PauseCanisterMigrations` & `UnpauseCanisterMigrations`
+
+## Changed
+
+* Following private neurons is now generally disallowed. There are some exceptions to this though: 
+    * A private neuron P can be followed by another neuron N, if either they share a controller or N's controller is listed as P's hotkey.
+    * Following private neurons on the topic `NeuronManagement` is not a subject of this limitation. Furthermore, following public neurons is always allowed.
+
+* Following non-existing Neuron IDs is disallowed as well.
+
 # 2025-10-10: Proposal 138913
 
 http://dashboard.internetcomputer.org/proposal/138913

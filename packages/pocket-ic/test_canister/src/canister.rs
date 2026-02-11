@@ -10,6 +10,7 @@ use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpMethod, HttpResponse, TransformArgs, TransformContext,
     TransformFunc, http_request as canister_http_outcall,
 };
+use ic_cdk::api::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
 use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -510,6 +511,24 @@ async fn deposit_cycles_to_cycles_ledger(beneficiary: Principal, cycles: u128) {
     )
     .await
     .unwrap();
+}
+
+#[query]
+fn stable_size() -> u64 {
+    raw_stable_size()
+}
+
+#[update]
+fn stable_grow_and_fill(pages: u64) {
+    let offset = stable_size();
+    stable_grow(pages).unwrap();
+    let mut content = vec![0_u8; 1 << 16];
+    for (i, elem) in content.iter_mut().enumerate() {
+        *elem = (i % 256) as u8;
+    }
+    for i in 0..pages {
+        stable_write((offset + i) << 16, &content);
+    }
 }
 
 fn main() {}

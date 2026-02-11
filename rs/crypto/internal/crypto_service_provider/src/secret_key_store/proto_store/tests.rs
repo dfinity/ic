@@ -388,15 +388,15 @@ fn should_be_idempotent_when_opening_secret_key_store() {
 
 #[test]
 fn should_fail_to_write_to_read_only_secret_key_store_directory() {
+    let rng = &mut reproducible_rng();
     let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
         &SecretKeyStoreVersion::V2,
         CryptoMetrics::none(),
         None,
     );
-    let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
     ));
 
     // make the crypto root directory non-writeable, causing the subsequent call to insert a
@@ -423,10 +423,10 @@ fn should_fail_to_write_to_secret_key_store_directory_without_execute_permission
         CryptoMetrics::none(),
         None,
     );
-    let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
+    let rng = &mut reproducible_rng();
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
     ));
 
     // make the crypto root directory non-executable, causing the subsequent call to insert a
@@ -453,10 +453,10 @@ fn should_fail_to_write_to_secret_key_store_directory_without_write_permissions(
         CryptoMetrics::none(),
         None,
     );
-    let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
+    let rng = &mut reproducible_rng();
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
     ));
 
     // make the crypto root directory non-writeable, causing the subsequent call to insert a
@@ -485,10 +485,10 @@ fn should_successfully_write_to_secret_key_store_directory_with_write_and_execut
     );
     fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700))
         .expect("Could not set the permissions of the temp dir.");
-    let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
+    let rng = &mut reproducible_rng();
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
     ));
     assert_matches!(secret_key_store.insert(key_id, key, None), Ok(()));
 }
@@ -568,11 +568,11 @@ mod retain {
         assert_eq!(key_store.retain(|_, _| true, selected_scope), Ok(()));
         assert_eq!(key_store.retain(|_, _| false, selected_scope), Ok(()));
         assert_eq!(
-            key_store.retain(move |id, _| (id == &id_to_retain), selected_scope),
+            key_store.retain(move |id, _| id == &id_to_retain, selected_scope),
             Ok(())
         );
         assert_eq!(
-            key_store.retain(move |_, value| (value == &value_to_retain), selected_scope),
+            key_store.retain(move |_, value| value == &value_to_retain, selected_scope),
             Ok(())
         );
     }
@@ -591,7 +591,7 @@ mod retain {
         let initial_modified_time = file_modified_time_in_nanoseconds(&file);
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id), selected_scope),
+            key_store.retain(move |id, _| id == &key_id, selected_scope),
             Ok(())
         );
         assert!(key_store.contains(&key_id));
@@ -615,7 +615,7 @@ mod retain {
             .expect("insert should succeed");
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id_to_retain), selected_scope),
+            key_store.retain(move |id, _| id == &key_id_to_retain, selected_scope),
             Ok(())
         );
         assert!(!key_store.contains(&key_id));
@@ -636,7 +636,7 @@ mod retain {
 
         assert_eq!(
             key_store.retain(
-                move |_, value| (value == &key_value_to_retain),
+                move |_, value| value == &key_value_to_retain,
                 selected_scope
             ),
             Ok(())
@@ -658,7 +658,7 @@ mod retain {
             .expect("insert should succeed");
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id), different_scope),
+            key_store.retain(move |id, _| id == &key_id, different_scope),
             Ok(())
         );
         assert!(key_store.contains(&key_id));
@@ -757,10 +757,10 @@ mod retain_would_modify_keystore {
         assert!(!key_store.retain_would_modify_keystore(|_, _| false, selected_scope));
         assert!(
             !key_store
-                .retain_would_modify_keystore(move |id, _| (id == &id_to_retain), selected_scope)
+                .retain_would_modify_keystore(move |id, _| id == &id_to_retain, selected_scope)
         );
         assert!(!key_store.retain_would_modify_keystore(
-            move |_, value| (value == &value_to_retain),
+            move |_, value| value == &value_to_retain,
             selected_scope
         ));
     }
@@ -779,10 +779,8 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(
-            key_store.retain_would_modify_keystore(
-                move |id, _| (id == &key_id_to_retain),
-                selected_scope
-            )
+            key_store
+                .retain_would_modify_keystore(move |id, _| id == &key_id_to_retain, selected_scope)
         );
     }
 
@@ -800,7 +798,7 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(key_store.retain_would_modify_keystore(
-            move |_, value| (value == &key_value_to_retain),
+            move |_, value| value == &key_value_to_retain,
             selected_scope
         ));
     }
@@ -819,7 +817,7 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(
-            !key_store.retain_would_modify_keystore(move |id, _| (id == &key_id), different_scope)
+            !key_store.retain_would_modify_keystore(move |id, _| id == &key_id, different_scope)
         );
     }
 

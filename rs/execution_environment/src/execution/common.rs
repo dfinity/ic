@@ -2,7 +2,10 @@
 // TODO(RUN-60): Move helper functions here.
 
 use crate::execution_environment::ExecutionResponse;
-use crate::{ExecuteMessageResult, RoundLimits, as_round_instructions, metrics::CallTreeMetrics};
+use crate::{
+    ExecuteMessageResult, RoundLimits, as_round_instructions,
+    canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
+};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
@@ -28,9 +31,10 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::time::CoarseTime;
-use ic_types::{Cycles, NumInstructions, Time, UserId};
+use ic_types::{Cycles, NumInstructions, PrincipalId, Time, UserId};
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -45,20 +49,6 @@ const LOG_ONE_SYSTEM_TASK_OUT_OF: u64 = 100;
 /// How many first system task messages to log unconditionally.
 const LOG_FIRST_N_SYSTEM_TASKS: u64 = 50;
 
-pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
-    if CanisterStatusType::Running != canister.status() {
-        let canister_id = canister.canister_id();
-        let err_code = match canister.status() {
-            CanisterStatusType::Running => unreachable!(),
-            CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
-            CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
-        };
-        let err_msg = format!("Canister {canister_id} is not running");
-        return Err(UserError::new(err_code, err_msg));
-    }
-    Ok(())
-}
-
 pub(crate) fn action_to_response(
     canister: &CanisterState,
     action: CallContextAction,
@@ -68,7 +58,7 @@ pub(crate) fn action_to_response(
     ingress_with_cycles_error: &IntCounter,
 ) -> ExecutionResponse {
     match call_origin {
-        CallOrigin::Ingress(user_id, message_id) => action_to_ingress_response(
+        CallOrigin::Ingress(user_id, message_id, _method_name) => action_to_ingress_response(
             &canister.canister_id(),
             user_id,
             action,
@@ -77,10 +67,10 @@ pub(crate) fn action_to_response(
             log,
             ingress_with_cycles_error,
         ),
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline, _method_name) => {
             action_to_request_response(canister, action, caller_canister_id, callback_id, deadline)
         }
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => fatal!(
             log,
             "The update path should not have created a callback with a query origin",
         ),
@@ -243,10 +233,10 @@ pub(crate) fn wasm_result_to_query_response(
     refund: Cycles,
 ) -> ExecutionResponse {
     match call_origin {
-        CallOrigin::Ingress(user_id, message_id) => {
+        CallOrigin::Ingress(user_id, message_id, _method_name) => {
             wasm_result_to_ingress_response(result, canister, user_id, message_id, time)
         }
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline, _method_name) => {
             let response = Response {
                 originator: caller_canister_id,
                 respondent: canister.canister_id(),
@@ -257,7 +247,7 @@ pub(crate) fn wasm_result_to_query_response(
             };
             ExecutionResponse::Request(response)
         }
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
             fatal!(log, "The update path should not have a query origin",)
         }
         CallOrigin::SystemTask => {
@@ -336,74 +326,106 @@ pub(crate) fn validate_message(
     Ok(())
 }
 
-// Helper function that extracts the corresponding callback and call context
-// from the `CallContextManager` without changing its state.
-pub fn get_call_context_and_callback(
+pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
+    if CanisterStatusType::Running != canister.status() {
+        let canister_id = canister.canister_id();
+        let err_code = match canister.status() {
+            CanisterStatusType::Running => unreachable!(),
+            CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
+            CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
+        };
+        let err_msg = format!("Canister {canister_id} is not running");
+        return Err(UserError::new(err_code, err_msg));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_controller(
     canister: &CanisterState,
+    controller: &PrincipalId,
+) -> Result<(), CanisterManagerError> {
+    if !canister.controllers().contains(controller) {
+        return Err(CanisterManagerError::CanisterInvalidController {
+            canister_id: canister.canister_id(),
+            controllers_expected: canister.system_state.controllers.clone(),
+            controller_provided: *controller,
+        });
+    }
+    Ok(())
+}
+
+/// Unregisters the callback corresponding to the given response.
+//
+// TODO(DSM-95): Consider making this only apply to non-replicated call origins.
+pub fn unregister_callback(
+    canister: &mut CanisterState,
     response: &Response,
     logger: &ReplicaLogger,
     unexpected_response_error: &IntCounter,
-) -> Option<(Callback, CallbackId, CallContext, CallContextId)> {
-    debug_assert_ne!(canister.status(), CanisterStatusType::Stopped);
-    let call_context_manager = match canister.status() {
-        CanisterStatusType::Stopped => {
-            // A canister by definition can only be stopped when no open call contexts.
-            // Hence, if we receive a response for a stopped canister then that is
-            // a either a bug in the code or potentially a faulty (or
-            // malicious) subnet generating spurious messages.
-            unexpected_response_error.inc();
-            error!(
-                logger,
-                "[EXC-BUG] Stopped canister got a response.  originator {} respondent {}.",
-                response.originator,
-                response.respondent,
-            );
-            return None;
-        }
-        CanisterStatusType::Running | CanisterStatusType::Stopping => {
-            // We are sure there's a call context manager since the canister isn't stopped.
-            canister.system_state.call_context_manager().unwrap()
-        }
-    };
+) -> Option<Arc<Callback>> {
+    match canister
+        .system_state
+        .unregister_callback(response.originator_reply_callback)
+    {
+        Ok(callback) => callback,
 
-    let callback_id = response.originator_reply_callback;
-
-    debug_assert!(call_context_manager.callback(callback_id).is_some());
-    let callback = match call_context_manager.callback(callback_id) {
-        Some(callback) => callback.clone(),
-        None => {
+        Err(e) => {
             // Received an unknown callback ID. Nothing to do.
             unexpected_response_error.inc();
             error!(
                 logger,
-                "[EXC-BUG] Canister got a response with unknown callback ID {}.  originator {} respondent {}.",
-                response.originator_reply_callback,
+                "[EXC-BUG] Canister got unexpected response: {e}.  originator {} respondent {}, deadline {:?}.",
                 response.originator,
                 response.respondent,
+                response.deadline,
             );
-            return None;
+            debug_assert!(false);
+            None
         }
-    };
+    }
+}
+
+/// Retrieves the call context corresponding to the given callback.
+pub fn get_call_context(
+    canister: &CanisterState,
+    callback: &Callback,
+    logger: &ReplicaLogger,
+    unexpected_response_error: &IntCounter,
+) -> Option<(CallContext, CallContextId)> {
+    let call_context_manager = canister.system_state.call_context_manager().or_else(|| {
+        // A canister by definition can only be stopped when no open call contexts.
+        // Hence, if we receive a response for a stopped canister then that is
+        // a either a bug in the code or potentially a faulty (or
+        // malicious) subnet generating spurious messages.
+        unexpected_response_error.inc();
+        error!(
+            logger,
+            "[EXC-BUG] Stopped canister got a response.  originator {} respondent {} deadline {:?}.",
+            canister.canister_id(),
+            callback.respondent,
+            callback.deadline,
+        );
+        debug_assert!(false);
+        None
+    })?;
 
     let call_context_id = callback.call_context_id;
-    debug_assert!(call_context_manager.call_context(call_context_id).is_some());
-    let call_context = match call_context_manager.call_context(call_context_id) {
-        Some(call_context) => call_context.clone(),
+    match call_context_manager.call_context(call_context_id) {
+        Some(call_context) => Some((call_context.clone(), call_context_id)),
         None => {
             // Unknown call context. Nothing to do.
             unexpected_response_error.inc();
             error!(
                 logger,
-                "[EXC-BUG] Canister got a response for unknown request.  originator {} respondent {} callback id {}.",
-                response.originator,
-                response.respondent,
-                response.originator_reply_callback,
+                "[EXC-BUG] Canister got a response for unknown request.  originator {} respondent {} deadline {:?}.",
+                canister.canister_id(),
+                callback.respondent,
+                callback.deadline,
             );
-            return None;
+            debug_assert!(false);
+            None
         }
-    };
-
-    Some((callback, callback_id, call_context, call_context_id))
+    }
 }
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
@@ -574,7 +596,7 @@ pub(crate) fn finish_call_with_error(
                 // We could improve the rate limiting using some kind of exponential backoff.
                 let log_count = SYSTEM_TASK_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
                 if log_count < LOG_FIRST_N_SYSTEM_TASKS
-                    || log_count % LOG_ONE_SYSTEM_TASK_OUT_OF == 0
+                    || log_count.is_multiple_of(LOG_ONE_SYSTEM_TASK_OUT_OF)
                 {
                     warn!(
                         log,
@@ -619,13 +641,10 @@ mod test {
     use crate::ExecutionResponse;
     use ic_base_types::{CanisterId, NumSeconds};
     use ic_error_types::UserError;
-    use ic_logger::LoggerImpl;
-    use ic_logger::ReplicaLogger;
+    use ic_logger::{LoggerImpl, ReplicaLogger};
     use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
-    use ic_types::Cycles;
-    use ic_types::Time;
-    use ic_types::messages::CallbackId;
-    use ic_types::messages::NO_DEADLINE;
+    use ic_types::messages::{CallbackId, NO_DEADLINE};
+    use ic_types::{Cycles, Time};
 
     #[test]
     fn test_wasm_result_to_query_response_refunds_correctly() {
@@ -651,6 +670,7 @@ mod test {
                 CanisterId::from(123u64),
                 CallbackId::new(2),
                 NO_DEADLINE,
+                String::from(""),
             ),
             &log,
             Cycles::from(1000u128),

@@ -17,9 +17,10 @@ pub use self::http::{
     HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
     SignedDelegation,
 };
+use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{Cycles, Funds, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_protobuf};
+use crate::{Cycles, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
@@ -199,7 +200,6 @@ impl From<&StopCanisterContext> for pb::StopCanisterContext {
                         sender: Some(pb_types::CanisterId::from(*sender)),
                         reply_callback: reply_callback.get(),
                         call_id: call_id.map(|id| id.get()),
-                        funds: Some((&Funds::new(*cycles)).into()),
                         cycles: Some((*cycles).into()),
                         deadline_seconds: deadline.as_secs_since_unix_epoch(),
                     },
@@ -221,10 +221,10 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         call_id,
                     },
                 ) => StopCanisterContext::Ingress {
-                    sender: user_id_try_from_protobuf(try_from_option_field(
+                    sender: user_id_try_from_option(
                         sender,
                         "StopCanisterContext::Ingress::sender",
-                    )?)?,
+                    )?,
                     message_id: MessageId::try_from(message_id.as_slice())?,
                     call_id: call_id.map(StopCanisterCallId::from),
                 },
@@ -233,38 +233,16 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         sender,
                         reply_callback,
                         call_id,
-                        funds,
                         cycles,
                         deadline_seconds,
                     },
-                ) => {
-                    // To maintain backwards compatibility we fall back to reading from `funds` if
-                    // `cycles` is not set.
-                    let cycles = match try_from_option_field(
-                        cycles,
-                        "StopCanisterContext::Canister::cycles",
-                    ) {
-                        Ok(cycles) => cycles,
-                        Err(_) => {
-                            let mut funds: Funds = try_from_option_field(
-                                funds,
-                                "StopCanisterContext::Canister::funds",
-                            )?;
-                            funds.take_cycles()
-                        }
-                    };
-
-                    StopCanisterContext::Canister {
-                        sender: try_from_option_field(
-                            sender,
-                            "StopCanisterContext::Canister::sender",
-                        )?,
-                        reply_callback: CallbackId::from(reply_callback),
-                        call_id: call_id.map(StopCanisterCallId::from),
-                        cycles,
-                        deadline: CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
-                    }
-                }
+                ) => StopCanisterContext::Canister {
+                    sender: try_from_option_field(sender, "StopCanisterContext::Canister::sender")?,
+                    reply_callback: CallbackId::from(reply_callback),
+                    call_id: call_id.map(StopCanisterCallId::from),
+                    cycles: try_from_option_field(cycles, "StopCanisterContext::Canister::cycles")?,
+                    deadline: CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
+                },
             };
         Ok(stop_canister_context)
     }
@@ -331,22 +309,16 @@ impl SignedRequestBytes {
 }
 
 /// A wrapper around ingress messages and canister requests/responses.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterMessage {
-    Response(Arc<Response>),
+    /// A response as an input for Execution consists of the response itself plus
+    /// its associated callback.
+    Response {
+        response: Arc<Response>,
+        callback: Arc<Callback>,
+    },
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
-}
-
-impl CanisterMessage {
-    /// Helper function to extract the effective canister id.
-    pub fn effective_canister_id(&self) -> Option<CanisterId> {
-        match &self {
-            CanisterMessage::Ingress(ingress) => ingress.effective_canister_id,
-            CanisterMessage::Request(request) => request.extract_effective_canister_id(),
-            CanisterMessage::Response(_) => None,
-        }
-    }
 }
 
 impl Display for CanisterMessage {
@@ -358,16 +330,30 @@ impl Display for CanisterMessage {
             CanisterMessage::Request(request) => {
                 write!(f, "Request, method name {},", request.method_name)
             }
-            CanisterMessage::Response(_) => write!(f, "Response"),
+            CanisterMessage::Response { .. } => write!(f, "Response"),
         }
     }
 }
 
-impl From<RequestOrResponse> for CanisterMessage {
-    fn from(msg: RequestOrResponse) -> Self {
-        match msg {
-            RequestOrResponse::Request(request) => CanisterMessage::Request(request),
-            RequestOrResponse::Response(response) => CanisterMessage::Response(response),
+/// A wrapper around ingress messages and canister requests/responses as
+/// management canister inputs.
+///
+/// As opposed to `CanisterMessage`, there is no `Callback` associated with
+/// a `Response`, as the management canister manages its own callbacks.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum SubnetMessage {
+    Request(Arc<Request>),
+    Response(Arc<Response>),
+    Ingress(Arc<Ingress>),
+}
+
+impl SubnetMessage {
+    /// Helper function to extract the effective canister id.
+    pub fn effective_canister_id(&self) -> Option<CanisterId> {
+        match &self {
+            SubnetMessage::Ingress(ingress) => ingress.effective_canister_id,
+            SubnetMessage::Request(request) => request.extract_effective_canister_id(),
+            SubnetMessage::Response { .. } => None,
         }
     }
 }
@@ -409,6 +395,14 @@ impl CanisterCall {
         }
     }
 
+    /// Deducts the specified fee from the payment of this message.
+    pub fn deduct_cycles(&mut self, fee: Cycles) {
+        match self {
+            CanisterCall::Request(request) => Arc::make_mut(request).payment -= fee,
+            CanisterCall::Ingress(_) => {} // Ingress messages don't have payments
+        }
+    }
+
     /// Extracts the cycles received with this message.
     pub fn take_cycles(&mut self) -> Cycles {
         match self {
@@ -443,7 +437,7 @@ impl TryFrom<CanisterMessage> for CanisterCall {
         match msg {
             CanisterMessage::Request(msg) => Ok(CanisterCall::Request(msg)),
             CanisterMessage::Ingress(msg) => Ok(CanisterCall::Ingress(msg)),
-            CanisterMessage::Response(_) => Err(()),
+            CanisterMessage::Response { .. } => Err(()),
         }
     }
 }
@@ -506,7 +500,7 @@ impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
 }
 
 /// A wrapper around canister messages and tasks.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterMessageOrTask {
     Message(CanisterMessage),
     Task(CanisterTask),

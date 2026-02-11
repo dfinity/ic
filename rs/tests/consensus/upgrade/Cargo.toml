@@ -23,6 +23,7 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 ic-utils = { workspace = true }
+regex = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 

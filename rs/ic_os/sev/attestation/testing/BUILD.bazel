@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "testing",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "attestation_testing",
+    deps = [
+        "//rs/ic_os/sev/attestation",
+        "//rs/interfaces/registry/mocks",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/types/types",
+        "@crate_index//:der",
+        "@crate_index//:mockall",
+        "@crate_index//:p384",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:rsa",
+        "@crate_index//:sev",
+        "@crate_index//:sha2",
+        "@crate_index//:x509-cert",
+    ],
+)

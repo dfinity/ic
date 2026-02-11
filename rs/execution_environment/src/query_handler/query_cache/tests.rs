@@ -32,6 +32,7 @@ const MORE_THAN_DATA_CERTIFICATE_EXPIRY_TIME: Duration = Duration::from_secs(3);
 const ITERATIONS: usize = 5;
 const REPLY_SIZE: usize = 10_000;
 const BIG_REPLY_SIZE: usize = 1_000_000;
+use more_asserts::{assert_gt, assert_lt};
 
 const QUERY_CACHE_WAT: &str = r#"
 (module
@@ -207,8 +208,8 @@ fn query_cache_reports_evicted_entries_and_memory_bytes_metrics() {
     // We can't match the size exactly, as it includes the key and the captured environment.
     // But we can assert that the sum of the sizes should be:
     // REPLY_SIZE < memory_bytes < REPLY_SIZE * 2
-    assert!(REPLY_SIZE < memory_bytes);
-    assert!(REPLY_SIZE * 2 * QUERY_CACHE_SIZE > memory_bytes);
+    assert_lt!(REPLY_SIZE, memory_bytes);
+    assert_gt!(REPLY_SIZE * 2 * QUERY_CACHE_SIZE, memory_bytes);
 }
 
 #[test]
@@ -228,7 +229,7 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
     assert_eq!(0, m.hits.get());
     assert_eq!(0, m.misses.get());
     let initial_memory_bytes = m.count_bytes.get();
-    assert!((initial_memory_bytes as usize) < BIG_REPLY_SIZE);
+    assert_lt!((initial_memory_bytes as usize), BIG_REPLY_SIZE);
 
     // Push a big result into the cache.
     let big_result = Ok(WasmResult::Reply(vec![0; BIG_REPLY_SIZE]));
@@ -246,10 +247,15 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
     assert_eq!(0, m.hits.get());
     assert_eq!(1, m.misses.get());
     let memory_bytes = m.count_bytes.get();
-    assert!(((memory_bytes - initial_memory_bytes) as usize) > BIG_REPLY_SIZE);
+    assert_gt!(
+        ((memory_bytes - initial_memory_bytes) as usize),
+        BIG_REPLY_SIZE
+    );
 
     // Bump up the version
-    test.canister_state_mut(a_id).system_state.canister_version += 1;
+    test.canister_state_mut(a_id)
+        .system_state
+        .bump_canister_version();
 
     // Invalidate and pop the result.
     let query_cache = &query_handler(&test).query_cache;
@@ -258,7 +264,7 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
     assert_eq!(0, m.hits.get());
     assert_eq!(1, m.misses.get());
     let final_memory_bytes = m.count_bytes.get();
-    assert!((final_memory_bytes as usize) < BIG_REPLY_SIZE);
+    assert_lt!((final_memory_bytes as usize), BIG_REPLY_SIZE);
 }
 
 #[test]
@@ -682,7 +688,9 @@ fn query_cache_returns_different_results_for_different_canister_versions() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Bump up the version
-        test.canister_state_mut(b_id).system_state.canister_version += 1;
+        test.canister_state_mut(b_id)
+            .system_state
+            .bump_canister_version();
 
         let res_2 = test.non_replicated_query(a_id, method, q);
         let m = query_cache_metrics(&test);
@@ -774,7 +782,9 @@ fn query_cache_returns_different_results_on_combined_invalidation() {
 
         // Change the batch time more than the max expiry time.
         test.state_mut().metadata.batch_time += MORE_THAN_MAX_EXPIRY_TIME;
-        test.canister_state_mut(b_id).system_state.canister_version += 1;
+        test.canister_state_mut(b_id)
+            .system_state
+            .bump_canister_version();
         test.canister_state_mut(b_id)
             .system_state
             .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
@@ -811,7 +821,7 @@ fn query_cache_frees_memory_after_invalidated_entries() {
 
     let heap_bytes = query_cache(&test).heap_bytes();
     // Initially the cache should be empty, i.e. less than 1MB.
-    assert!(heap_bytes < BIG_RESPONSE_SIZE);
+    assert_lt!(heap_bytes, BIG_RESPONSE_SIZE);
 
     // The 1MB result will be cached internally.
     let res = test
@@ -820,7 +830,7 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     assert_eq!(BIG_RESPONSE_SIZE, res.deterministic_heap_bytes());
     let heap_bytes = query_cache(&test).heap_bytes();
     // After the first reply, the cache should have more than 1MB of data.
-    assert!(heap_bytes > BIG_RESPONSE_SIZE);
+    assert_gt!(heap_bytes, BIG_RESPONSE_SIZE);
 
     // Set the canister balance to 42, so the second reply will have just 42 bytes.
     test.canister_state_mut(id).system_state.remove_cycles(
@@ -835,8 +845,8 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     assert_eq!(SMALL_RESPONSE_SIZE, res.deterministic_heap_bytes());
     let heap_bytes = query_cache(&test).heap_bytes();
     // The second 42 reply should invalidate and replace the first 1MB reply in the cache.
-    assert!(heap_bytes > SMALL_RESPONSE_SIZE);
-    assert!(heap_bytes < BIG_RESPONSE_SIZE);
+    assert_gt!(heap_bytes, SMALL_RESPONSE_SIZE);
+    assert_lt!(heap_bytes, BIG_RESPONSE_SIZE);
 }
 
 #[test]
@@ -848,7 +858,7 @@ fn query_cache_respects_cache_capacity() {
 
     // Initially the cache should be empty, i.e. less than REPLY_SIZE.
     let heap_bytes = query_cache(&test).heap_bytes();
-    assert!(heap_bytes < REPLY_SIZE);
+    assert_lt!(heap_bytes, REPLY_SIZE);
 
     // All replies should hit the same cache entry.
     for _ in 0..ITERATIONS {
@@ -857,8 +867,8 @@ fn query_cache_respects_cache_capacity() {
             test.non_replicated_query(id, "query", wasm().reply_data(&[1; REPLY_SIZE / 2]).build());
         // Now there should be only one reply in the cache.
         let heap_bytes = query_cache(&test).heap_bytes();
-        assert!(heap_bytes > REPLY_SIZE);
-        assert!(heap_bytes < QUERY_CACHE_CAPACITY);
+        assert_gt!(heap_bytes, REPLY_SIZE);
+        assert_lt!(heap_bytes, QUERY_CACHE_CAPACITY);
     }
 
     // Now the replies should hit another entry.
@@ -867,8 +877,8 @@ fn query_cache_respects_cache_capacity() {
             test.non_replicated_query(id, "query", wasm().reply_data(&[2; REPLY_SIZE / 2]).build());
         // Now there should be two replies in the cache.
         let heap_bytes = query_cache(&test).heap_bytes();
-        assert!(heap_bytes > REPLY_SIZE * 2);
-        assert!(heap_bytes < QUERY_CACHE_CAPACITY);
+        assert_gt!(heap_bytes, REPLY_SIZE * 2);
+        assert_lt!(heap_bytes, QUERY_CACHE_CAPACITY);
     }
 
     // Now the replies should evict the first entry.
@@ -877,8 +887,8 @@ fn query_cache_respects_cache_capacity() {
             test.non_replicated_query(id, "query", wasm().reply_data(&[3; REPLY_SIZE / 2]).build());
         // There should be still just two replies in the cache.
         let heap_bytes = query_cache(&test).heap_bytes();
-        assert!(heap_bytes > REPLY_SIZE * 2);
-        assert!(heap_bytes < QUERY_CACHE_CAPACITY);
+        assert_gt!(heap_bytes, REPLY_SIZE * 2);
+        assert_lt!(heap_bytes, QUERY_CACHE_CAPACITY);
     }
 }
 
@@ -1466,10 +1476,10 @@ fn query_cache_supports_query_stats() {
         let b_stats_1 = test.query_stats_for_testing(&b_id).unwrap();
         assert_eq!(a_stats_1.num_calls, 1);
         assert_eq!(b_stats_1.num_calls, 1);
-        assert!(a_stats_1.num_instructions > 0);
-        assert!(b_stats_1.num_instructions > 0);
-        assert!(a_stats_1.ingress_payload_size > 0);
-        assert!(b_stats_1.ingress_payload_size > 0);
+        assert_gt!(a_stats_1.num_instructions, 0);
+        assert_gt!(b_stats_1.num_instructions, 0);
+        assert_gt!(a_stats_1.ingress_payload_size, 0);
+        assert_gt!(b_stats_1.ingress_payload_size, 0);
 
         // Do not change balance or time.
 
@@ -1529,6 +1539,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CostCall
         | SystemApiCallId::CostCreateCanister
         | SystemApiCallId::CostHttpRequest
+        | SystemApiCallId::CostHttpRequestV2
         | SystemApiCallId::CostSignWithEcdsa
         | SystemApiCallId::CostSignWithSchnorr
         | SystemApiCallId::CostVetkdDeriveKey

@@ -13,7 +13,7 @@ tar cf "${TMPDIR}/data.tar" -C "${DATA_DIR}" .
 
 truncate -s 10M "${OUTPUT_IMAGE}"
 
-mkfs.vfat "${OUTPUT_IMAGE}"
+/usr/sbin/mkfs.vfat "${OUTPUT_IMAGE}"
 
 mlabel -i "${OUTPUT_IMAGE}" ::OVERRIDE
 

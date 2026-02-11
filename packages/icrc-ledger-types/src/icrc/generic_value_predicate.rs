@@ -2,7 +2,7 @@
 #[cfg(test)]
 use assert_matches::assert_matches;
 #[cfg(test)]
-use candid::{Int, Nat};
+use candid::{Int, Nat, Principal};
 use num_bigint::BigInt;
 #[cfg(test)]
 use std::collections::BTreeMap;
@@ -283,6 +283,18 @@ pub fn is(expected: Value) -> ValuePredicate {
     })
 }
 
+pub fn is_not(value: Value) -> ValuePredicate {
+    use ValuePredicateFailures as Fail;
+
+    Arc::new(move |v: Cow<Value>| {
+        if v.as_ref() == &value {
+            Err(Fail::new(format!("should not be {value}")))
+        } else {
+            Ok(())
+        }
+    })
+}
+
 fn value_to_num(v: Value) -> Option<BigInt> {
     match v {
         Value::Blob(_) | Value::Text(_) | Value::Array(_) | Value::Map(_) => None,
@@ -382,6 +394,140 @@ pub fn element(idx: usize, p: ValuePredicate) -> ValuePredicate {
             ))),
         },
     })
+}
+
+pub fn is_principal() -> ValuePredicate {
+    and(vec![is_blob(), len(is_less_or_equal_to(29))])
+}
+
+#[test]
+fn test_is_principal() {
+    for value in [
+        Value::text("foobar"),
+        Value::Int(Int::from(0)),
+        Value::Nat(Nat::from(0_u8)),
+        Value::Nat64(0),
+        Value::Array(vec![]),
+        Value::Map(BTreeMap::new()),
+    ] {
+        assert_matches!(is_principal()(Cow::Owned(value)), Err(_));
+    }
+
+    for len in 0..Principal::MAX_LENGTH_IN_BYTES + 1 {
+        assert_eq!(
+            is_principal()(Cow::Owned(Value::blob(vec![0u8; len]))),
+            Ok(())
+        );
+    }
+    assert_matches!(
+        is_principal()(Cow::Owned(Value::blob(vec![
+            0u8;
+            Principal::MAX_LENGTH_IN_BYTES
+                + 1
+        ]))),
+        Err(_)
+    );
+}
+
+pub fn is_subaccount() -> ValuePredicate {
+    and(vec![is_blob(), len(is_equal_to(32))])
+}
+
+#[test]
+fn test_is_subaccount() {
+    for value in [
+        Value::text("foobar"),
+        Value::Int(Int::from(0)),
+        Value::Nat(Nat::from(0_u8)),
+        Value::Nat64(0),
+        Value::Array(vec![]),
+        Value::Map(BTreeMap::new()),
+    ] {
+        assert_matches!(is_principal()(Cow::Owned(value)), Err(_));
+    }
+
+    for len in 31..34 {
+        if len == 32 {
+            assert_eq!(
+                is_subaccount()(Cow::Owned(Value::blob(vec![0u8; len]))),
+                Ok(())
+            );
+        } else {
+            assert_matches!(
+                is_subaccount()(Cow::Owned(Value::blob(vec![0u8; len]))),
+                Err(_)
+            );
+        }
+    }
+}
+
+pub fn is_account() -> ValuePredicate {
+    and(vec![
+        is_array(),
+        element(0, is_principal()),
+        or(vec![
+            len(is_equal_to(1)),
+            and(vec![len(is_equal_to(2)), element(1, is_subaccount())]),
+        ]),
+    ])
+}
+
+#[test]
+fn test_is_account() {
+    for value in [
+        Value::text("foobar"),
+        Value::Int(Int::from(0)),
+        Value::Nat(Nat::from(0_u8)),
+        Value::Nat64(0),
+        Value::blob(vec![]),
+        Value::Map(BTreeMap::new()),
+    ] {
+        assert_matches!(is_account()(Cow::Owned(value)), Err(_));
+    }
+    // empty array
+    assert_matches!(is_account()(Cow::Owned(Value::Array(vec![]))), Err(_));
+    // wrong types
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![
+            Value::text("foobar"),
+            Value::Int(Int::from(0))
+        ]))),
+        Err(_)
+    );
+    let principal = Value::blob([1u8; 20]);
+    let subaccount = Value::blob([1u8; 32]);
+    // wrong order
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![
+            subaccount.clone(),
+            principal.clone()
+        ]))),
+        Err(_)
+    );
+    // only subaccount
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![subaccount.clone()]))),
+        Err(_)
+    );
+    // 2 subaccounts
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![
+            principal.clone(),
+            subaccount.clone(),
+            subaccount.clone()
+        ]))),
+        Err(_)
+    );
+    // only principal
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![principal.clone()]))),
+        Ok(())
+    );
+    // principal and subaccount
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![principal, subaccount]))),
+        Ok(())
+    );
 }
 
 #[derive(Clone, Debug, PartialEq)]

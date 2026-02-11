@@ -186,9 +186,6 @@ To test the proposals with a testnet that uses the same canister IDs as in the p
 The simplest is to tweak the setup from [small](https://sourcegraph.com/github.com/dfinity/ic@7313a15e21d8fb06fa119ef3ab9371da47c2cddc/-/blob/rs/tests/idx/testnets/small.rs?L62)
 ```rust
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
     let mut ic = InternetComputer::new().add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
     for _ in 0..36 {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
@@ -200,14 +197,13 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    env.sync_with_prometheus();
 }
 ```
 
-and then spin up the dynamic testnet with a generous lifetime
+and then spin up the dynamic testnet:
 ```shell
 ./ci/container/container-run.sh
-ict testnet create small --lifetime-mins=880 --output-dir=./small -- --test_tmpdir=./small
+ict testnet create small --output-dir=./small -- --test_tmpdir=./small
 ```
 
 Once the testnet is up and running, extract the external url of the HTTP Gateway (`ic-gateway`) from the logs, which should have the following format `https://ic<x>.farm.dfinity.systems`. In the following we will use `https://ic1.farm.dfinity.systems`.

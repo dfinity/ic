@@ -31,7 +31,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
-use ic_types::time::CoarseTime;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CountBytes, Cycles, Time};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
@@ -49,6 +49,7 @@ fn default_input_request(deadline: CoarseTime) -> RequestOrResponse {
         .sender(OTHER_CANISTER_ID)
         .receiver(CANISTER_ID)
         .deadline(deadline)
+        .payment(Cycles::new(2))
         .build()
         .into()
 }
@@ -59,6 +60,7 @@ fn default_input_response(callback_id: CallbackId, deadline: CoarseTime) -> Resp
         .respondent(OTHER_CANISTER_ID)
         .originator_reply_callback(callback_id)
         .deadline(deadline)
+        .refund(Cycles::new(1))
         .build()
 }
 
@@ -67,6 +69,7 @@ fn default_output_request() -> Arc<Request> {
         RequestBuilder::default()
             .sender(CANISTER_ID)
             .receiver(OTHER_CANISTER_ID)
+            .payment(Cycles::new(3))
             .build(),
     )
 }
@@ -103,7 +106,12 @@ impl CanisterStateFixture {
             .canister_state
             .system_state
             .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
+                CallOrigin::CanisterUpdate(
+                    CANISTER_ID,
+                    CallbackId::from(1),
+                    NO_DEADLINE,
+                    String::from(""),
+                ),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 Default::default(),
@@ -113,7 +121,6 @@ impl CanisterStateFixture {
             .system_state
             .register_callback(Callback::new(
                 call_context_id,
-                CANISTER_ID,
                 respondent,
                 Cycles::zero(),
                 Cycles::new(42),
@@ -157,13 +164,11 @@ impl CanisterStateFixture {
         self.with_input_slot_reservation();
 
         // Enqueue the response.
-        let response = RequestOrResponse::from(default_input_response(
-            self.make_callback(deadline),
-            deadline,
-        ));
+        let response = default_input_response(self.make_callback(deadline), deadline);
+        let message = RequestOrResponse::Response(Arc::new(response.clone()));
         assert!(
             self.push_input(
-                response.clone(),
+                message.clone(),
                 SubnetType::Application,
                 InputQueueType::RemoteSubnet,
             )
@@ -171,19 +176,20 @@ impl CanisterStateFixture {
         );
 
         // Pop the response and make it into a paused response execution task.
-        assert_eq!(
-            Some(response.clone().into()),
-            self.canister_state.pop_input()
+        let canister_message = self.canister_state.pop_input().unwrap();
+        assert_matches!(
+            &canister_message,
+            CanisterMessage::Response{ response: r, .. } if r.as_ref() == &response
         );
         self.canister_state
             .system_state
             .task_queue
             .enqueue(ExecutionTask::PausedExecution {
                 id: PausedExecutionId(13),
-                input: CanisterMessageOrTask::Message(response.clone().into()),
+                input: CanisterMessageOrTask::Message(canister_message),
             });
 
-        response
+        message
     }
 }
 
@@ -270,9 +276,10 @@ fn canister_state_push_input_best_effort_response_no_reserved_slot() {
             .unwrap()
     );
     // Only one response was enqueued.
-    assert_eq!(
-        Some(CanisterMessage::Response(response.into())),
-        fixture.canister_state.pop_input()
+    let canister_message = fixture.canister_state.pop_input().unwrap();
+    assert_matches!(
+        &canister_message,
+        CanisterMessage::Response{ response: r, .. } if r.as_ref() == &response
     );
     assert!(!fixture.canister_state.has_input());
 }
@@ -473,20 +480,36 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
         .receiver(CANISTER_ID)
         .sender_reply_callback(callback_id)
         .deadline(deadline)
+        .payment(Cycles::new(2))
         .build();
     let response = ResponseBuilder::default()
         .originator(CANISTER_ID)
         .respondent(CANISTER_ID)
         .originator_reply_callback(callback_id)
         .deadline(deadline)
+        .refund(Cycles::new(1))
         .build();
 
-    // Make an input queue slot reservation.
-    fixture
-        .canister_state
-        .push_output_request(request.clone().into(), UNIX_EPOCH)
-        .unwrap();
-    fixture.pop_output().unwrap();
+    // Make two input queue slot reservations (for response and duplicate).
+    for _ in 0..2 {
+        fixture
+            .canister_state
+            .push_output_request(request.clone().into(), UNIX_EPOCH)
+            .unwrap();
+        fixture.pop_output().unwrap();
+    }
+
+    // And an output queue slot reservation, for the duplicate.
+    assert!(
+        fixture
+            .push_input(
+                request.clone().into(),
+                SubnetType::Application,
+                InputQueueType::LocalSubnet,
+            )
+            .unwrap()
+    );
+    fixture.canister_state.pop_input().unwrap();
 
     // Enqueue the inbound response.
     assert!(
@@ -499,11 +522,11 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
             .unwrap()
     );
 
-    // Pop the response and make it into a paused response execution task.
-    let response_canister_message = CanisterMessage::Response(response.clone().into());
-    assert_eq!(
-        Some(response_canister_message.clone()),
-        fixture.canister_state.pop_input()
+    // Pop the response and pause its execution.
+    let response_canister_message = fixture.canister_state.pop_input().unwrap();
+    assert_matches!(
+        &response_canister_message,
+        CanisterMessage::Response{ response: r, .. } if r.as_ref() == &response
     );
     fixture
         .canister_state
@@ -514,23 +537,12 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
             input: CanisterMessageOrTask::Message(response_canister_message),
         });
 
-    // Make an output queue slot reservation.
-    assert!(
-        fixture
-            .push_input(
-                request.clone().into(),
-                SubnetType::Application,
-                InputQueueType::LocalSubnet,
-            )
-            .unwrap()
-    );
-    fixture.canister_state.pop_input().unwrap();
-
-    // Emqueue the response in the output queue.
+    // Enqueue the duplicate response into the output queue.
     fixture
         .canister_state
         .push_output_response(response.clone().into());
 
+    // Attempt to induct the duplicate response.
     fixture.canister_state.induct_messages_to_self(
         &mut SUBNET_AVAILABLE_MEMORY.clone(),
         SubnetType::Application,
@@ -670,7 +682,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     let input_queue_type = InputQueueType::RemoteSubnet;
 
     // Tiny explicit allocation, not enough for a request.
-    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::new(13));
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::new(13));
     // And an execution state with non-zero size.
     canister_state.execution_state = Some(ExecutionState::new(
         Default::default(),
@@ -844,13 +856,13 @@ fn canister_state_ingress_induction_cycles_debit() {
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
+        system_state.canister_metrics().consumed_cycles(),
         ingress_induction_debit.into()
     );
     assert_eq!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
         ingress_induction_debit.into()
@@ -861,15 +873,26 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 #[test]
 fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
-    let initial_consumed_cycles = NominalCycles::from(1000);
-    system_state.canister_metrics.consumed_cycles = initial_consumed_cycles;
+    let initial_consumed_cycles = Cycles::new(1000);
+    system_state.remove_cycles(initial_consumed_cycles, CyclesUseCase::Memory);
+    assert_eq!(
+        system_state.balance(),
+        INITIAL_CYCLES - initial_consumed_cycles
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::from(initial_consumed_cycles)
+    );
 
     let cycles = Cycles::new(100);
     system_state.add_cycles(cycles, CyclesUseCase::Memory);
-    assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
     assert_eq!(
-        system_state.canister_metrics.consumed_cycles,
-        initial_consumed_cycles - NominalCycles::from(cycles)
+        system_state.balance(),
+        INITIAL_CYCLES - initial_consumed_cycles + cycles
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        NominalCycles::from(initial_consumed_cycles - cycles)
     );
 }
 
@@ -887,8 +910,8 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     );
     assert_eq!(
         *system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)
             .unwrap(),
         NominalCycles::from(cycles_to_consume - cycles_to_add)
@@ -901,7 +924,6 @@ fn canister_state_callback_round_trip() {
 
     let minimal_callback = Callback::new(
         CallContextId::new(1),
-        CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::zero(),
         Cycles::zero(),
@@ -913,7 +935,6 @@ fn canister_state_callback_round_trip() {
     );
     let maximal_callback = Callback::new(
         CallContextId::new(1),
-        CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::new(21),
         Cycles::new(42),
@@ -925,7 +946,6 @@ fn canister_state_callback_round_trip() {
     );
     let u64_callback = Callback::new(
         CallContextId::new(u64::MAX - 1),
-        CanisterId::from_u64(u64::MAX - 2),
         CanisterId::from_u64(u64::MAX - 3),
         Cycles::new(u128::MAX - 4),
         Cycles::new(u128::MAX - 5),
@@ -1257,7 +1277,7 @@ fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
     let mut call_context_manager = CallContextManager::default();
     call_context_manager.with_call_context(CallContext::new(
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
         false,
         Cycles::from(0u128),

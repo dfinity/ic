@@ -4,7 +4,9 @@ use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
+use ic_consensus::consensus::{
+    ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
+};
 use ic_consensus_idkg::IDkgImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
@@ -42,6 +44,7 @@ use ic_types::{
     time::{Time, UNIX_EPOCH},
 };
 use rand_chacha::ChaChaRng;
+use rayon::ThreadPool;
 use std::{
     cell::{RefCell, RefMut},
     cmp::Ordering,
@@ -179,6 +182,7 @@ pub struct ConsensusDependencies {
     pub canister_http_pool: Arc<RwLock<canister_http_pool::CanisterHttpPoolImpl>>,
     pub message_routing: Arc<FakeMessageRouting>,
     pub state_manager: Arc<FakeStateManager>,
+    pub thread_pool: Arc<ThreadPool>,
     pub replica_config: ReplicaConfig,
     pub metrics_registry: MetricsRegistry,
     pub registry_client: Arc<dyn RegistryClient>,
@@ -233,6 +237,7 @@ impl ConsensusDependencies {
             query_stats_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             vetkd_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             state_manager,
+            thread_pool: build_thread_pool(MAX_CONSENSUS_THREADS),
             metrics_registry,
             replica_config,
         }

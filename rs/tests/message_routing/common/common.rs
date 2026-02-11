@@ -3,10 +3,11 @@ use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use futures::{Future, future::join_all};
 use ic_management_canister_types::CanisterId;
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::get_dependency_path;
+use ic_system_test_driver::driver::{
+    test_env::TestEnv, test_env_api::get_dependency_path_from_env,
+};
 use slog::info;
-use std::{convert::TryFrom, env};
+use std::convert::TryFrom;
 use xnet_test::StartArgs;
 
 /// Concurrently calls `start` on all canisters in `canisters` with the
@@ -62,9 +63,7 @@ pub async fn install_canisters(
     canisters_per_subnet: usize,
 ) -> Vec<Vec<Canister<'_>>> {
     let logger = env.logger();
-    let wasm = Wasm::from_file(get_dependency_path(
-        env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set"),
-    ));
+    let wasm = Wasm::from_file(get_dependency_path_from_env("XNET_TEST_CANISTER_WASM_PATH"));
 
     // Install canisters in batches to avoid running into HTTP endpoint rate limits.
     const BATCH_SIZE: usize = 40;

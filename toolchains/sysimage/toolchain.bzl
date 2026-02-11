@@ -123,8 +123,6 @@ def _build_container_filesystem_impl(ctx):
         args.extend(["--base-image-tar-file-tag", ctx.attr.base_image_tar_file_tag])
         inputs.append(ctx.file.base_image_tar_file)
 
-    args.extend(["--no-cache"])
-
     _run_with_icos_wrapper(
         ctx,
         executable = ctx.executable._tool.path,
@@ -437,64 +435,6 @@ disk_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             default = "//rs/ic_os/build_tools/dflate",
-            executable = True,
-            cfg = "exec",
-        ),
-    },
-)
-
-# I had to copy pasta this from above because I did not know how
-# to genericize the tools and the dflate argument being empty.
-# this really shouldn't be two separate things, but rather one
-# thing that produces the image and another that tars it.
-def _disk_image_no_tar_impl(ctx):
-    args = []
-    inputs = []
-    outputs = []
-
-    # Output file is the name given to the target
-    output_file = ctx.actions.declare_file(ctx.label.name)
-    args.extend(["-o", output_file.path])
-    outputs.append(output_file)
-
-    args.extend(["-p", ctx.files.layout[0].path])
-    inputs.extend(ctx.files.layout)
-
-    if ctx.attr.expanded_size:
-        args.extend(["-s", ctx.attr.expanded_size])
-
-    if ctx.attr.populate_b_partitions:
-        args.extend(["--populate-b-partitions"])
-
-    for partition_file in ctx.files.partitions:
-        args.append(partition_file.path)
-    inputs.extend(ctx.files.partitions)
-
-    _run_with_icos_wrapper(
-        ctx,
-        executable = ctx.executable._tool.path,
-        arguments = args,
-        inputs = inputs,
-        outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run],
-    )
-
-    return [DefaultInfo(files = depset(outputs))]
-
-disk_image_no_tar = _icos_build_rule(
-    implementation = _disk_image_no_tar_impl,
-    attrs = {
-        "layout": attr.label(
-            allow_single_file = True,
-            mandatory = True,
-        ),
-        "partitions": attr.label_list(
-            allow_files = True,
-        ),
-        "expanded_size": attr.string(),
-        "populate_b_partitions": attr.bool(default = False),
-        "_tool": attr.label(
-            default = "//toolchains/sysimage:build_disk_image",
             executable = True,
             cfg = "exec",
         ),

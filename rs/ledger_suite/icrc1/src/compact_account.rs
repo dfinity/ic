@@ -14,7 +14,7 @@ use serde_bytes::ByteBuf;
 /// ```
 #[derive(Deserialize, Serialize)]
 #[serde(transparent)]
-pub struct CompactAccount(Vec<ByteBuf>);
+pub(crate) struct CompactAccount(Vec<ByteBuf>);
 
 impl From<Account> for CompactAccount {
     fn from(acc: Account) -> Self {
@@ -60,32 +60,17 @@ impl TryFrom<CompactAccount> for Account {
     }
 }
 
-pub fn serialize<S>(acc: &Account, s: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::ser::Serializer,
-{
-    CompactAccount::from(*acc).serialize(s)
-}
-
-pub fn deserialize<'de, D>(d: D) -> Result<Account, D::Error>
-where
-    D: serde::de::Deserializer<'de>,
-{
-    let compact_account = CompactAccount::deserialize(d)?;
-    Account::try_from(compact_account).map_err(D::Error::custom)
-}
-
-pub mod opt {
+pub(crate) mod opt {
     use super::*;
 
-    pub fn serialize<S>(acc: &Option<Account>, s: S) -> Result<S::Ok, S::Error>
+    pub(crate) fn serialize<S>(acc: &Option<Account>, s: S) -> Result<S::Ok, S::Error>
     where
         S: serde::ser::Serializer,
     {
         acc.map(CompactAccount::from).serialize(s)
     }
 
-    pub fn deserialize<'de, D>(d: D) -> Result<Option<Account>, D::Error>
+    pub(crate) fn deserialize<'de, D>(d: D) -> Result<Option<Account>, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {

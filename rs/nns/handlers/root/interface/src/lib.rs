@@ -3,6 +3,18 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_clients::update_settings::CanisterSettings;
 use serde::Deserialize;
 
+#[doc(inline)]
+pub use ic_nervous_system_root::take_canister_snapshot::{
+    TakeCanisterSnapshotError, TakeCanisterSnapshotOk, TakeCanisterSnapshotRequest,
+    TakeCanisterSnapshotResponse,
+};
+
+#[doc(inline)]
+pub use ic_nervous_system_root::load_canister_snapshot::{
+    LoadCanisterSnapshotError, LoadCanisterSnapshotOk, LoadCanisterSnapshotRequest,
+    LoadCanisterSnapshotResponse,
+};
+
 pub mod client;
 
 /// The request structure to the `change_canister_controllers` API.

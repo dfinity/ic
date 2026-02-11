@@ -7,7 +7,7 @@ use super::super::types::{
 };
 use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
-use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices, Scalar};
+use ic_crypto_internal_bls12_381_type::{LagrangeCoefficients, NodeIndices, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::error::InvalidArgumentError;
@@ -19,6 +19,7 @@ use rand_chacha::ChaChaRng;
 
 pub mod util {
     use super::*;
+    use ic_crypto_internal_bls12_381_type::G2Projective;
     use ic_crypto_internal_seed::Seed;
 
     // A public key as computed by the holder of the private key is the same as the
@@ -161,11 +162,19 @@ pub mod util {
         message: &[u8],
     ) {
         // Sum public_coefficients and secret keys.
-        let public_coefficients = &generations
-            .iter()
-            .cloned()
-            .map(|(public_coefficients, _)| public_coefficients)
-            .sum::<PublicCoefficients>();
+        let public_coefficients = {
+            let len = generations[0].0.coefficients.len();
+            let mut accum = vec![G2Projective::identity(); len];
+
+            for (pc, _) in generations.iter() {
+                for (i, val) in accum.iter_mut().enumerate() {
+                    *val += &pc.coefficients[i].0;
+                }
+            }
+
+            let affine = G2Projective::batch_normalize(&accum);
+            PublicCoefficients::new(affine.iter().cloned().map(PublicKey).collect())
+        };
 
         let mut secret_keys = Polynomial::zero();
 
@@ -175,7 +184,13 @@ pub mod util {
 
         let secret_keys = secret_keys.coefficients().to_vec();
 
-        test_valid_public_coefficients(public_coefficients, &secret_keys, threshold, seed, message);
+        test_valid_public_coefficients(
+            &public_coefficients,
+            &secret_keys,
+            threshold,
+            seed,
+            message,
+        );
     }
 }
 
@@ -186,7 +201,7 @@ fn test_distinct_messages_yield_distinct_hashes() {
     let number_of_messages = 100;
     let points: HashSet<_> = (0..number_of_messages as u32)
         .map(|number| {
-            let g1 = hash_message_to_g1(&number.to_be_bytes()[..]);
+            let g1 = hash_message_to_g1(&number.to_be_bytes()[..]).to_affine();
             let bytes = g1.serialize();
             // It suffices to prove that the first 32 bytes are distinct.  More requires a
             // custom hash implementation.
@@ -306,218 +321,6 @@ proptest! {
             let actual_public_key = PublicKey::from(&public_coefficients);
             assert_eq!(expected_public_key, actual_public_key);
         }
-}
-
-mod resharing_util {
-    use super::*;
-
-    pub type ToyDealing = (PublicCoefficients, Vec<SecretKey>);
-
-    /// For each resharing dealer, generate keys.
-    ///
-    /// # Arguments
-    /// * `rng` is the entropy source for key generation.
-    /// * `original_receiver_shares` are the pre-existing secret threshold keys
-    ///   of the resharing dealers.
-    /// * `new_threshold` is the minimum number of signatures that will be
-    ///   needed to create a valid threshold signature in the new threshold
-    ///   system.
-    /// * `new_receivers` indicates how many receivers get a new share
-    pub fn multiple_keygen(
-        rng: &mut ChaChaRng,
-        original_receiver_shares: &[SecretKey],
-        new_threshold: NumberOfNodes,
-        new_receivers: NumberOfNodes,
-    ) -> Vec<ToyDealing> {
-        original_receiver_shares
-            .iter()
-            .map(|key| {
-                crypto::threshold_share_secret_key(
-                    Seed::from_rng(rng),
-                    new_threshold,
-                    new_receivers,
-                    key,
-                )
-                .expect("Reshare keygen failed")
-            })
-            .collect()
-    }
-
-    /// Given multiple secret keys (y values) at different indices (which give x
-    /// values) interpolate the value at zero.
-    pub fn interpolate_secret_key(shares: &[SecretKey]) -> SecretKey {
-        let node_ids = (0..shares.len() as NodeIndex).collect::<Vec<_>>();
-        let interp = LagrangeCoefficients::at_zero(&NodeIndices::from_slice(&node_ids).unwrap());
-        interp.interpolate_scalar(shares).unwrap()
-    }
-
-    /// Given multiple public keys (y values) at different points (which give x
-    /// values) interpolate the value at zero.
-    pub fn interpolate_public_key(shares: &[PublicKey]) -> PublicKey {
-        let shares: Vec<(NodeIndex, G2Projective)> = shares
-            .iter()
-            .enumerate()
-            .map(|(index, share)| ((index as NodeIndex), share.0.clone()))
-            .collect();
-        PublicKey(PublicCoefficients::interpolate_g2(&shares).unwrap())
-    }
-
-    /// For each active new receiver, this provides a single encrypted secret
-    /// threshold key.
-    pub fn compute_combined_encrypted_shares(
-        receivers: NumberOfNodes,
-        dealings: &[ToyDealing],
-    ) -> Vec<SecretKey> {
-        (0..receivers.get() as usize)
-            .map(|new_receiver_index| {
-                let new_receiver_shares: Vec<SecretKey> = dealings
-                    .iter()
-                    .map(|dealing| dealing.1[new_receiver_index].clone())
-                    .collect();
-                resharing_util::interpolate_secret_key(&new_receiver_shares)
-            })
-            .collect()
-    }
-
-    // Computes the new public coefficients by combining the public coefficients in
-    // the dealings.
-    pub fn compute_new_public_coefficients(
-        new_threshold: NumberOfNodes,
-        dealings: &[ToyDealing],
-    ) -> PublicCoefficients {
-        PublicCoefficients {
-            coefficients: (0..new_threshold.get() as usize)
-                .map(|coefficient_index| {
-                    let new_receiver_shares: Vec<PublicKey> = dealings
-                        .iter()
-                        .map(|dealing| {
-                            dealing
-                                .0
-                                .coefficients
-                                .get(coefficient_index)
-                                .cloned()
-                                .unwrap()
-                        })
-                        .collect();
-                    resharing_util::interpolate_public_key(&new_receiver_shares)
-                })
-                .collect(),
-        }
-    }
-}
-
-/// Demonstrates how resharing works from the perspective of just the threshold
-/// keys.
-///
-/// A complication that is omitted is the encryption of the key shares.
-#[test]
-fn simplified_resharing_should_preserve_the_threshold_key() {
-    let original_threshold = NumberOfNodes::from(3);
-    let original_receivers = NumberOfNodes::from(5);
-    let new_threshold = NumberOfNodes::from(4);
-    let new_receivers = NumberOfNodes::from(7);
-
-    let rng = &mut ChaChaRng::from_seed([9u8; 32]);
-
-    let (original_public_coefficients, original_receiver_shares) =
-        crypto::generate_threshold_key(Seed::from_rng(rng), original_threshold, original_receivers)
-            .expect("Original keygen failed");
-    let reshares = resharing_util::multiple_keygen(
-        rng,
-        &original_receiver_shares,
-        new_threshold,
-        new_receivers,
-    );
-    let new_receiver_shares: Vec<SecretKey> =
-        resharing_util::compute_combined_encrypted_shares(new_receivers, &reshares);
-    assert_eq!(
-        resharing_util::interpolate_secret_key(&original_receiver_shares),
-        resharing_util::interpolate_secret_key(&new_receiver_shares),
-        "New secret doesn't match old"
-    );
-    let new_public_coefficients: PublicCoefficients =
-        resharing_util::compute_new_public_coefficients(new_threshold, &reshares);
-    assert_eq!(
-        original_public_coefficients.coefficients[0], new_public_coefficients.coefficients[0],
-        "New public key doesn't match old"
-    );
-}
-
-/// Demonstrates how resharing works from the perspective of just the threshold
-/// keys.
-///
-/// This adds encryption of key shares to the simpler test above.
-#[test]
-fn resharing_with_encryption_should_preserve_the_threshold_key() {
-    /// This represents the DiffieHellman key encryption key used to encrypt key
-    /// shares.
-    ///
-    /// Note: The original receiver is the new dealer.
-    fn dh_stub(original_receiver_index: NodeIndex, new_receiver_index: NodeIndex) -> SecretKey {
-        let mut hash = ic_crypto_sha2::Sha256::new();
-        hash.write(&(original_receiver_index as NodeIndex).to_be_bytes()[..]);
-        hash.write(&(new_receiver_index as NodeIndex).to_be_bytes()[..]);
-        // This reduces modulo the group order which would introduce a slight bias, which
-        // would be dangerous in production code but is acceptable in a test.
-        SecretKey::deserialize_unchecked(&hash.finish())
-    }
-    let original_threshold = NumberOfNodes::from(3);
-    let original_receivers = NumberOfNodes::from(5);
-    let new_threshold = NumberOfNodes::from(5);
-    let new_receivers = NumberOfNodes::from(7);
-    let rng = &mut ChaChaRng::from_seed([9u8; 32]);
-    let (original_public_coefficients, original_receiver_shares) =
-        crypto::generate_threshold_key(Seed::from_rng(rng), original_threshold, original_receivers)
-            .expect("Original keygen failed");
-    let unencrypted_reshares = resharing_util::multiple_keygen(
-        rng,
-        &original_receiver_shares,
-        new_threshold,
-        new_receivers,
-    );
-    let reshares = {
-        let mut reshares = unencrypted_reshares;
-        // Encrypt all shares with the stub DiffieHellman.
-        for (original_receiver_index, dealings) in reshares.iter_mut().enumerate() {
-            for (new_receiver_index, key) in dealings.1.iter_mut().enumerate() {
-                *key += dh_stub(
-                    original_receiver_index as NodeIndex,
-                    new_receiver_index as NodeIndex,
-                );
-            }
-        }
-        reshares
-    };
-    let new_combined_encrypted_receiver_shares: Vec<SecretKey> =
-        resharing_util::compute_combined_encrypted_shares(new_receivers, &reshares);
-    let new_public_coefficients: PublicCoefficients =
-        resharing_util::compute_new_public_coefficients(new_threshold, &reshares);
-    assert_eq!(
-        original_public_coefficients.coefficients[0], new_public_coefficients.coefficients[0],
-        "New public key doesn't match old"
-    );
-    let new_combined_receiver_shares: Vec<SecretKey> = new_combined_encrypted_receiver_shares
-        .iter()
-        .enumerate()
-        .map(|(new_receiver_index, new_encrypted_share)| {
-            let dh_keys: Vec<SecretKey> = (0..original_receivers.get())
-                .map(|original_receiver_index| {
-                    dh_stub(
-                        original_receiver_index as NodeIndex,
-                        new_receiver_index as NodeIndex,
-                    )
-                })
-                .collect();
-            let dh_key = resharing_util::interpolate_secret_key(&dh_keys);
-            new_encrypted_share - &dh_key
-        })
-        .collect();
-
-    assert_eq!(
-        resharing_util::interpolate_secret_key(&original_receiver_shares),
-        resharing_util::interpolate_secret_key(&new_combined_receiver_shares),
-        "New secret doesn't match old"
-    );
 }
 
 #[test]

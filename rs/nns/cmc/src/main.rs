@@ -16,11 +16,9 @@ use ic_crypto_tree_hash::{
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
-// TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types_private::{
-    BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, IC_00,
-    Method,
+    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    CreateCanisterArgs, IC_00, Method,
 };
 use ic_nervous_system_common::{
     NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS, serve_metrics,
@@ -488,7 +486,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 /// Set the list of subnets in which a principal is allowed to create
 /// canisters. If `subnets` is empty, remove the mapping for a
 /// principal. If `who` is None, set the default list of subnets.
-#[update(hidden = true)]
+#[update]
 fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
     let SetAuthorizedSubnetworkListArgs { who, subnets } = arg;
     with_state_mut(|state| {
@@ -535,7 +533,7 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
     });
 }
 
-#[update(hidden = true, manual_reply = true)]
+#[update(manual_reply = true)]
 fn update_subnet_type(args: UpdateSubnetTypeArgs) {
     match do_update_subnet_type(args) {
         Ok(response) => ManualReply::<()>::one(response),
@@ -606,7 +604,7 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
     })
 }
 
-#[update(hidden = true, manual_reply = true)]
+#[update(manual_reply = true)]
 fn change_subnet_type_assignment(args: ChangeSubnetTypeAssignmentArgs) {
     match do_change_subnet_type_assignment(args) {
         Ok(response) => ManualReply::<()>::one(response),
@@ -2253,11 +2251,9 @@ async fn do_create_canister(
             settings
         })
         .unwrap_or_else(|| {
-            CanisterSettingsArgs::from(
-                Ic00CanisterSettingsArgsBuilder::new()
-                    .with_controllers(vec![controller_id])
-                    .build(),
-            )
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller_id])
+                .build()
         });
 
     for subnet_id in subnets {
@@ -2265,7 +2261,7 @@ async fn do_create_canister(
             subnet_id.get().0,
             &Method::CreateCanister.to_string(),
             (CreateCanisterArgs {
-                settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
+                settings: Some(canister_settings.clone()),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
             },),
             u128::from(cycles),

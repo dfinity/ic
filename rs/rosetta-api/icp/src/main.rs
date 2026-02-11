@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_crypto_utils_threshold_sig_der::{
-    parse_threshold_sig_key, parse_threshold_sig_key_from_der,
+    parse_threshold_sig_key_from_der, parse_threshold_sig_key_from_pem_file,
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
@@ -9,6 +9,7 @@ use ic_rosetta_api::{DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL, ledger_client};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use rosetta_core::metrics::RosettaMetrics;
+use std::sync::atomic::AtomicBool;
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, error, info, warn};
@@ -99,7 +100,7 @@ impl ParsedNetworkConfig {
 
         let root_key = match config.root_key {
             Some(root_key_path) => Some(
-                parse_threshold_sig_key(root_key_path.as_path())
+                parse_threshold_sig_key_from_pem_file(root_key_path.as_path())
                     .map_err(|e| format!("Unable to parse root key from file: {e}"))?,
             ),
             None => {
@@ -397,7 +398,13 @@ async fn main() -> std::io::Result<()> {
     let ledger = Arc::new(client);
     let canister_id_str = canister_config.ledger_canister_id.to_string();
     let rosetta_metrics = RosettaMetrics::new("ICP".to_string(), canister_id_str);
-    let req_handler = RosettaRequestHandler::new(blockchain, ledger.clone(), rosetta_metrics);
+    let initial_sync_complete = Arc::new(AtomicBool::new(offline));
+    let req_handler = RosettaRequestHandler::new(
+        blockchain,
+        ledger.clone(),
+        rosetta_metrics,
+        Arc::clone(&initial_sync_complete),
+    );
 
     info!("Network id: {:?}", req_handler.network_id());
     info!(
@@ -411,6 +418,7 @@ async fn main() -> std::io::Result<()> {
         opt.server.port_file,
         expose_metrics,
         watchdog_timeout_seconds,
+        initial_sync_complete,
     )
     .expect("Error creating RosettaApiServer");
 

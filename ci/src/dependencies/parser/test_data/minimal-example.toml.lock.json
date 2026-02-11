@@ -1,0 +1,11 @@
+{
+   "name":"test_data/minimal-example.toml.lock",
+   "file":{
+      "source_location":"test_data/minimal-example.toml.lock"
+   },
+   "resolved":{
+      "pkg:cargo/abnf@0.12.0":{
+         "package_url":"pkg:cargo/abnf@0.12.0"
+      }
+   }
+}

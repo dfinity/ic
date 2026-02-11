@@ -10,7 +10,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
     ReplicaVersion, Time,
-    batch::{CanisterCyclesCostSchedule, ChainKeyData},
+    batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
     messages::{
         CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
@@ -21,7 +21,8 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{Infallible, TryFrom},
     fmt,
-    sync::Arc,
+    ops::{AddAssign, SubAssign},
+    sync::{Arc, atomic::AtomicU64},
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -184,6 +185,8 @@ pub enum SystemApiCallId {
     CostCreateCanister,
     /// Tracker for `ic0.cost_http_request()`
     CostHttpRequest,
+    /// Tracker for `ic0.cost_http_request_v2()`
+    CostHttpRequestV2,
     /// Tracker for `ic0.cost_sign_with_ecdsa()`
     CostSignWithEcdsa,
     /// Tracker for `ic0.cost_sign_with_schnorr()`
@@ -540,10 +543,24 @@ pub enum ExecutionMode {
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
+/// Errors that can occur when filtering out ingress messages that
+/// the canister is not willing to accept.
+#[derive(Debug, Error)]
+pub enum IngressFilterError {
+    #[error("Certified state is not available yet")]
+    CertifiedStateUnavailable,
+}
+
+/// The response type to a `call()` request in [`IngressFilterService`].
+pub type IngressFilterResponse = Result<Result<(), UserError>, IngressFilterError>;
+
+/// The input type to a `call()` request in [`IngressFilterService`].
+pub type IngressFilterInput = (ProvisionalWhitelist, SignedIngress);
+
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
 pub type IngressFilterService =
-    BoxCloneService<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>, Infallible>;
+    BoxCloneService<IngressFilterInput, IngressFilterResponse, Infallible>;
 
 /// Errors that can occur when handling a query execution request.
 #[derive(Debug, Error)]
@@ -568,6 +585,18 @@ pub struct QueryExecutionInput {
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
     BoxCloneService<QueryExecutionInput, QueryExecutionResponse, Infallible>;
+
+/// The input type to a `call()` request in [`TransformExecutionService`].
+#[derive(Debug)]
+pub struct TransformExecutionInput {
+    pub query: Query,
+    pub instruction_observation: Arc<AtomicU64>,
+    pub max_instructions: NumInstructions,
+}
+
+/// Interface for the component to execute canister http transform.
+pub type TransformExecutionService =
+    BoxCloneService<TransformExecutionInput, QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -1303,6 +1332,14 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
+    fn ic0_cost_http_request_v2(
+        &self,
+        params_src: usize,
+        params_size: usize,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// This system call indicates the cycle cost of signing with ecdsa,
     /// i.e., the management canister's `sign_with_ecdsa`, for the key
     /// (whose name is given by textual representation at heap location `src`
@@ -1420,14 +1457,13 @@ pub struct RegistryExecutionSettings {
     pub subnet_size: usize,
     pub node_ids: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
-    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
 }
 
 /// Chain key configuration of execution that comes from the registry.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
-    pub pre_signatures_to_create_in_advance: u32,
+    pub pre_signatures_to_create_in_advance: Option<u32>,
 }
 
 pub trait Scheduler: Send {
@@ -1491,6 +1527,81 @@ pub trait Scheduler: Send {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
+
+    /// Code to be executed in a checkpoint round, iff `execute_round()` was not
+    /// called (e.g. during a subnet split).
+    ///
+    /// This aborts all paused executions and resets transient state (such as heap
+    /// delta estimate and compiled Wasms).
+    fn checkpoint_round_with_no_execution(&self, state: &mut Self::State);
+}
+
+/// Combination of memory used by and reserved for guaranteed response messages
+/// and memory used by best-effort messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct MessageMemoryUsage {
+    /// Memory used by and reserved for guaranteed response canister messages, in
+    /// bytes.
+    pub guaranteed_response: NumBytes,
+
+    /// Memory used by best-effort canister messages, in bytes.
+    pub best_effort: NumBytes,
+}
+
+impl MessageMemoryUsage {
+    pub const ZERO: MessageMemoryUsage = MessageMemoryUsage {
+        guaranteed_response: NumBytes::new(0),
+        best_effort: NumBytes::new(0),
+    };
+
+    /// Returns the total memory used by all canister messages (guaranteed response
+    /// or best-effort).
+    pub fn total(&self) -> NumBytes {
+        self.guaranteed_response + self.best_effort
+    }
+
+    /// Calculates `self` + `rhs`.
+    ///
+    /// Returns a tuple of the addition along with a boolean indicating whether an
+    /// arithmetic overflow would occur on either field. If an overflow would have
+    /// occurred then the wrapped value is returned.
+    pub fn overflowing_add(&self, rhs: &Self) -> (Self, bool) {
+        let (guaranteed_response, overflow1) = self
+            .guaranteed_response
+            .get()
+            .overflowing_add(rhs.guaranteed_response.get());
+        let (best_effort, overflow2) = self
+            .best_effort
+            .get()
+            .overflowing_add(rhs.best_effort.get());
+        (
+            Self {
+                guaranteed_response: guaranteed_response.into(),
+                best_effort: best_effort.into(),
+            },
+            overflow1 || overflow2,
+        )
+    }
+
+    /// Returns `true` iff both fields of `self` are greater than or equal to the
+    /// corresponding fields of `rhs`.
+    pub fn ge(&self, rhs: Self) -> bool {
+        self.guaranteed_response >= rhs.guaranteed_response && self.best_effort >= rhs.best_effort
+    }
+}
+
+impl AddAssign<MessageMemoryUsage> for MessageMemoryUsage {
+    fn add_assign(&mut self, rhs: MessageMemoryUsage) {
+        self.guaranteed_response += rhs.guaranteed_response;
+        self.best_effort += rhs.best_effort;
+    }
+}
+
+impl SubAssign<MessageMemoryUsage> for MessageMemoryUsage {
+    fn sub_assign(&mut self, rhs: MessageMemoryUsage) {
+        self.guaranteed_response -= rhs.guaranteed_response;
+        self.best_effort -= rhs.best_effort;
+    }
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -1499,6 +1610,8 @@ pub struct WasmExecutionOutput {
     pub num_instructions_left: NumInstructions,
     pub allocated_bytes: NumBytes,
     pub allocated_guaranteed_response_message_bytes: NumBytes,
+    pub new_memory_usage: Option<NumBytes>,
+    pub new_message_memory_usage: Option<MessageMemoryUsage>,
     pub instance_stats: InstanceStats,
     /// How many times each tracked System API call was invoked.
     pub system_api_call_counters: SystemApiCallCounters,

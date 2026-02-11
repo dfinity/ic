@@ -164,7 +164,7 @@ impl SshAccessManager {
                 // If it is not an API boundary node, it is an unassigned node
                 Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)) => match self
                     .registry
-                    .registry_client
+                    .get_registry_client()
                     .get_unassigned_nodes_config(version)
                     .map_err(OrchestratorError::RegistryClientError)
                 {

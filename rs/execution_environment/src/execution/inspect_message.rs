@@ -11,7 +11,7 @@ use ic_replicated_state::{CanisterState, NetworkTopology};
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::SignedIngressContent;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{NumInstructions, Time};
+use ic_types::{NumBytes, NumInstructions, Time};
 use prometheus::IntCounter;
 
 /// Executes the system method `canister_inspect_message`.
@@ -72,6 +72,7 @@ pub fn execute_inspect_message(
         subnet_available_callbacks: 0,
         // Ignore compute allocation
         compute_allocation_used: 0,
+        subnet_memory_reservation: NumBytes::from(0),
     };
     let inspect_message_timer = ingress_filter_metrics
         .inspect_message_duration_seconds

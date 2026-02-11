@@ -1,16 +1,20 @@
 use ic_metrics::buckets::decimal_buckets;
-use prometheus::{Histogram, IntCounterVec, IntGauge};
+use prometheus::{
+    Histogram, IntCounterVec, IntGauge,
+    core::{AtomicU64, GenericGauge},
+};
 
 pub const PROMETHEUS_HTTP_PORT: u16 = 9092;
 
 #[derive(Clone)]
-pub struct RegistryreplicatorMetrics {
+pub struct RegistryReplicatorMetrics {
     pub poll_duration: Histogram,
     pub poll_count: IntCounterVec,
     pub registry_version: IntGauge,
+    pub latest_certified_time: GenericGauge<AtomicU64>,
 }
 
-impl RegistryreplicatorMetrics {
+impl RegistryReplicatorMetrics {
     pub fn new(metrics_registry: &ic_metrics::MetricsRegistry) -> Self {
         Self {
             poll_duration: metrics_registry.histogram(
@@ -28,6 +32,13 @@ impl RegistryreplicatorMetrics {
             registry_version: metrics_registry.int_gauge(
                 "replicator_registry_version",
                 "Latest registry version pulled",
+            ),
+            latest_certified_time: metrics_registry.register(
+                GenericGauge::new(
+                    "replicator_latest_certified_time",
+                    "Highest certified time of the responses received from the registry, measured after the replicator successfully replicated the advertised latest registry version",
+                )
+                .unwrap(),
             ),
         }
     }

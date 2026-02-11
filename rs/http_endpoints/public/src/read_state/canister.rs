@@ -73,7 +73,7 @@ pub struct CanisterReadStateServiceBuilder {
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Option<Arc<dyn TimeSource>>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_verifier: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
     nns_subnet_id: SubnetId,
     version: Version,
@@ -93,7 +93,7 @@ impl CanisterReadStateServiceBuilder {
         log: ReplicaLogger,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_verifier: Arc<dyn IngressSigVerifier>,
         nns_delegation_reader: NNSDelegationReader,
         nns_subnet_id: SubnetId,
         version: Version,
@@ -429,7 +429,8 @@ mod test {
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        CanisterQueues, ReplicatedState, SystemMetadata, canister_snapshots::CanisterSnapshots,
+        CanisterQueues, RefundPool, ReplicatedState, SystemMetadata,
+        canister_snapshots::CanisterSnapshots,
     };
     use ic_test_utilities_state::insert_dummy_canister;
     use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, canister_test_id, user_test_id};
@@ -556,6 +557,7 @@ mod test {
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
+            RefundPool::default(),
             RawQueryStats::default(),
             CanisterSnapshots::default(),
         )

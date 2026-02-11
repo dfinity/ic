@@ -50,8 +50,12 @@ where
 
     let router_metrics = RouterMetrics::new(metrics_registry);
 
-    let mut blockchain_manager =
-        BlockchainManager::new(blockchain_state, logger.clone(), router_metrics.clone());
+    let mut blockchain_manager = BlockchainManager::new(
+        blockchain_state,
+        config.request_timeout(),
+        logger.clone(),
+        router_metrics.clone(),
+    );
     let mut transaction_manager = TransactionStore::new(logger.clone(), metrics_registry);
     let mut connection_manager = ConnectionManager::new(
         config,
@@ -82,9 +86,12 @@ where
                 },
                 network_message = network_message_receiver.recv() => {
                     let (address, message) = network_message.unwrap();
+                    let message_type = message.cmd();
+                    let start_time = std::time::Instant::now();
+
                     router_metrics
                         .bitcoin_messages_received
-                        .with_label_values(&[message.cmd()])
+                        .with_label_values(&[message_type])
                         .inc();
                     if let Err(ProcessNetworkMessageError::InvalidMessage) =
                         connection_manager.process_bitcoin_network_message(address, &message) {
@@ -97,6 +104,11 @@ where
                     if let Err(ProcessNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
                         connection_manager.discard(&address);
                     }
+
+                    router_metrics
+                        .message_processing_duration
+                        .with_label_values(&[message_type])
+                        .observe(start_time.elapsed().as_secs_f64());
                 },
                 result = blockchain_manager_rx.recv() => {
                     let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");

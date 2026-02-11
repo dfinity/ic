@@ -16,6 +16,9 @@ pub enum TargetCanister {
     CkBtcIndex,
     CkBtcLedger,
     CkBtcMinter,
+    CkDogeIndex,
+    CkDogeLedger,
+    CkDogeMinter,
     CkEthArchive,
     CkEthIndex,
     CkEthLedger,
@@ -34,6 +37,8 @@ pub enum TargetCanister {
     SolRpc,
     Bitcoin,
     BtcWatchdog,
+    Dogecoin,
+    DogeWatchdog,
 }
 
 impl TargetCanister {
@@ -44,6 +49,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -62,9 +70,10 @@ impl TargetCanister {
                 "https://github.com/dfinity/exchange-rate-canister.git"
             }
             TargetCanister::SolRpc => "https://github.com/dfinity/sol-rpc-canister.git",
-            TargetCanister::Bitcoin | TargetCanister::BtcWatchdog => {
-                "https://github.com/dfinity/bitcoin-canister.git"
-            }
+            TargetCanister::Bitcoin
+            | TargetCanister::BtcWatchdog
+            | TargetCanister::DogeWatchdog => "https://github.com/dfinity/bitcoin-canister.git",
+            TargetCanister::Dogecoin => "https://github.com/dfinity/dogecoin-canister.git",
         }
     }
 
@@ -77,15 +86,21 @@ impl TargetCanister {
                 PathBuf::from("rs/ledger_suite/icrc1/archive/archive.did")
             }
             TargetCanister::CkBtcIndex
+            | TargetCanister::CkDogeIndex
             | TargetCanister::CkEthIndex
             | TargetCanister::CyclesIndex => {
                 PathBuf::from("rs/ledger_suite/icrc1/index-ng/index-ng.did")
             }
-            TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => {
+            TargetCanister::CkBtcLedger
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkEthLedger => {
                 PathBuf::from("rs/ledger_suite/icrc1/ledger/ledger.did")
             }
             TargetCanister::CkBtcMinter => {
                 PathBuf::from("rs/bitcoin/ckbtc/minter/ckbtc_minter.did")
+            }
+            TargetCanister::CkDogeMinter => {
+                PathBuf::from("rs/dogecoin/ckdoge/minter/ckdoge_minter.did")
             }
             TargetCanister::CkEthMinter => {
                 PathBuf::from("rs/ethereum/cketh/minter/cketh_minter.did")
@@ -106,7 +121,10 @@ impl TargetCanister {
             TargetCanister::ExchangeRateCanister => PathBuf::from("src/xrc/xrc.did"),
             TargetCanister::SolRpc => PathBuf::from("canister/sol_rpc_canister.did"),
             TargetCanister::Bitcoin => PathBuf::from("canister/candid.did"),
-            TargetCanister::BtcWatchdog => PathBuf::from("watchdog/candid.did"),
+            TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => {
+                PathBuf::from("watchdog/candid.did")
+            }
+            TargetCanister::Dogecoin => PathBuf::from("canister/candid.did"),
         }
     }
 
@@ -117,6 +135,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -136,7 +157,9 @@ impl TargetCanister {
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc
             | TargetCanister::Bitcoin
-            | TargetCanister::BtcWatchdog => None,
+            | TargetCanister::BtcWatchdog
+            | TargetCanister::DogeWatchdog
+            | TargetCanister::Dogecoin => None,
         }
     }
 
@@ -188,6 +211,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -198,7 +224,10 @@ impl TargetCanister {
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc => self.repo_dir().into_iter().collect(),
             TargetCanister::Bitcoin => vec![PathBuf::from("canister")],
-            TargetCanister::BtcWatchdog => vec![PathBuf::from("watchdog")],
+            TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => {
+                vec![PathBuf::from("watchdog")]
+            }
+            TargetCanister::Dogecoin => vec![PathBuf::from("canister")],
         }
     }
 
@@ -209,6 +238,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -227,7 +259,9 @@ impl TargetCanister {
             | TargetCanister::CyclesLedger
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::Bitcoin
-            | TargetCanister::BtcWatchdog => PathBuf::from(self.artifact_file_name()),
+            | TargetCanister::BtcWatchdog
+            | TargetCanister::DogeWatchdog
+            | TargetCanister::Dogecoin => PathBuf::from(self.artifact_file_name()),
             TargetCanister::SolRpc => PathBuf::from("wasms").join(self.artifact_file_name()),
         }
     }
@@ -239,11 +273,14 @@ impl TargetCanister {
             TargetCanister::CkBtcIndex => "ic-icrc1-index-ng.wasm.gz",
             TargetCanister::CkBtcLedger => "ic-icrc1-ledger.wasm.gz",
             TargetCanister::CkBtcMinter => "ic-ckbtc-minter.wasm.gz",
+            TargetCanister::CkDogeMinter => "ic-ckdoge-minter.wasm.gz",
             TargetCanister::CkEthArchive => "ic-icrc1-archive-u256.wasm.gz",
-            TargetCanister::CkEthIndex | TargetCanister::CyclesIndex => {
-                "ic-icrc1-index-ng-u256.wasm.gz"
+            TargetCanister::CkEthIndex
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CyclesIndex => "ic-icrc1-index-ng-u256.wasm.gz",
+            TargetCanister::CkDogeLedger | TargetCanister::CkEthLedger => {
+                "ic-icrc1-ledger-u256.wasm.gz"
             }
-            TargetCanister::CkEthLedger => "ic-icrc1-ledger-u256.wasm.gz",
             TargetCanister::CkEthMinter => "ic-cketh-minter.wasm.gz",
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
@@ -259,7 +296,8 @@ impl TargetCanister {
             TargetCanister::ExchangeRateCanister => "xrc.wasm.gz",
             TargetCanister::SolRpc => "sol_rpc_canister.wasm.gz",
             TargetCanister::Bitcoin => "ic-btc-canister.wasm.gz",
-            TargetCanister::BtcWatchdog => "watchdog.wasm.gz",
+            TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => "watchdog.wasm.gz",
+            TargetCanister::Dogecoin => "ic-doge-canister.wasm.gz",
         }
     }
 
@@ -270,6 +308,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -294,9 +335,14 @@ impl TargetCanister {
                 cmd.arg("ic-btc-canister");
                 cmd
             }
-            TargetCanister::BtcWatchdog => {
+            TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => {
                 let mut cmd = Command::new("./scripts/docker-build");
                 cmd.arg("watchdog");
+                cmd
+            }
+            TargetCanister::Dogecoin => {
+                let mut cmd = Command::new("./scripts/docker-build");
+                cmd.arg("ic-doge-canister");
                 cmd
             }
             TargetCanister::ExchangeRateCanister => {
@@ -318,6 +364,9 @@ impl TargetCanister {
             TargetCanister::CkBtcIndex => "n5wcd-faaaa-aaaar-qaaea-cai",
             TargetCanister::CkBtcLedger => "mxzaz-hqaaa-aaaar-qaada-cai",
             TargetCanister::CkBtcMinter => "mqygn-kiaaa-aaaar-qaadq-cai",
+            TargetCanister::CkDogeIndex => "ecnej-3aaaa-aaaar-qb3wq-cai",
+            TargetCanister::CkDogeLedger => "efmc5-wyaaa-aaaar-qb3wa-cai",
+            TargetCanister::CkDogeMinter => "eqltq-xqaaa-aaaar-qb3vq-cai",
             TargetCanister::CkEthArchive => "xob7s-iqaaa-aaaar-qacra-cai",
             TargetCanister::CkEthIndex => "s3zol-vqaaa-aaaar-qacpa-cai",
             TargetCanister::CkEthLedger => "ss2fx-dyaaa-aaaar-qacoq-cai",
@@ -336,6 +385,8 @@ impl TargetCanister {
             TargetCanister::SolRpc => "tghme-zyaaa-aaaar-qarca-cai",
             TargetCanister::Bitcoin => "ghsi2-tqaaa-aaaan-aaaca-cai",
             TargetCanister::BtcWatchdog => "gatoo-6iaaa-aaaan-aaacq-cai",
+            TargetCanister::DogeWatchdog => "he6b4-hiaaa-aaaan-aaaeq-cai",
+            TargetCanister::Dogecoin => "gordg-fyaaa-aaaan-aaadq-cai",
         };
         Principal::from_text(principal).unwrap()
     }
@@ -360,6 +411,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -369,7 +423,9 @@ impl TargetCanister {
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc
             | TargetCanister::Bitcoin
-            | TargetCanister::BtcWatchdog => "",
+            | TargetCanister::BtcWatchdog
+            | TargetCanister::DogeWatchdog
+            | TargetCanister::Dogecoin => "",
             TargetCanister::CyclesLedger
             | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
@@ -394,6 +450,9 @@ impl FromStr for TargetCanister {
             ["ckbtc", "index"] => Ok(TargetCanister::CkBtcIndex),
             ["ckbtc", "ledger"] => Ok(TargetCanister::CkBtcLedger),
             ["ckbtc", "minter"] => Ok(TargetCanister::CkBtcMinter),
+            ["ckdoge", "index"] => Ok(TargetCanister::CkDogeIndex),
+            ["ckdoge", "ledger"] => Ok(TargetCanister::CkDogeLedger),
+            ["ckdoge", "minter"] => Ok(TargetCanister::CkDogeMinter),
             ["cketh", "archive"] => Ok(TargetCanister::CkEthArchive),
             ["cketh", "index"] => Ok(TargetCanister::CkEthIndex),
             ["cketh", "ledger"] => Ok(TargetCanister::CkEthLedger),
@@ -412,6 +471,8 @@ impl FromStr for TargetCanister {
             ["sol", "rpc"] => Ok(TargetCanister::SolRpc),
             ["bitcoin"] => Ok(TargetCanister::Bitcoin),
             ["btc", "watchdog"] => Ok(TargetCanister::BtcWatchdog),
+            ["doge", "watchdog"] => Ok(TargetCanister::DogeWatchdog),
+            ["dogecoin"] => Ok(TargetCanister::Dogecoin),
             _ => Err(format!("Unknown canister name: {canister}")),
         }
     }
@@ -425,6 +486,9 @@ impl Display for TargetCanister {
             TargetCanister::CkBtcIndex => write!(f, "ckBTC index"),
             TargetCanister::CkBtcLedger => write!(f, "ckBTC ledger"),
             TargetCanister::CkBtcMinter => write!(f, "ckBTC minter"),
+            TargetCanister::CkDogeIndex => write!(f, "ckDOGE index"),
+            TargetCanister::CkDogeLedger => write!(f, "ckDOGE ledger"),
+            TargetCanister::CkDogeMinter => write!(f, "ckDOGE minter"),
             TargetCanister::CkEthArchive => write!(f, "ckETH archive"),
             TargetCanister::CkEthIndex => write!(f, "ckETH index"),
             TargetCanister::CkEthLedger => write!(f, "ckETH ledger"),
@@ -443,6 +507,8 @@ impl Display for TargetCanister {
             TargetCanister::SolRpc => write!(f, "SOL RPC"),
             TargetCanister::Bitcoin => write!(f, "Bitcoin canister"),
             TargetCanister::BtcWatchdog => write!(f, "Bitcoin watchdog"),
+            TargetCanister::DogeWatchdog => write!(f, "Dogecoin watchdog"),
+            TargetCanister::Dogecoin => write!(f, "Dogecoin canister"),
         }
     }
 }

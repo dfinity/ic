@@ -1,13 +1,13 @@
 use anyhow::anyhow;
 use anyhow::bail;
-use candid::CandidType;
-use candid::Nat;
-use candid::{Decode, Encode};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::EncodedBlock;
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use icrc_ledger_types::{
     icrc::generic_value::Value,
     icrc1::{account::Account, transfer::Memo},
@@ -134,10 +134,11 @@ impl RosettaBlock {
         Ok(self
             .get_effective_fee()
             .or(match self.get_transaction().operation {
-                IcrcOperation::Mint { .. } => None,
+                IcrcOperation::Mint { fee, .. } => fee,
                 IcrcOperation::Transfer { fee, .. } => fee,
                 IcrcOperation::Approve { fee, .. } => fee,
-                IcrcOperation::Burn { .. } => None,
+                IcrcOperation::Burn { fee, .. } => fee,
+                IcrcOperation::FeeCollector { .. } => None,
             }))
     }
 
@@ -182,6 +183,7 @@ pub struct IcrcBlock {
     pub timestamp: u64,
     pub fee_collector: Option<Account>,
     pub fee_collector_block_index: Option<u64>,
+    pub btype: Option<String>,
 }
 
 impl IcrcBlock {
@@ -204,7 +206,9 @@ impl TryFrom<Value> for IcrcBlock {
 
     fn try_from(value: Value) -> anyhow::Result<Self> {
         // The base of all fields is a BTreeMap that holds all the other fields from the ICRC-3 standard
-        let map = value.as_map().map_err(|err| anyhow!("{:?}", err))?;
+        let map = value
+            .as_map()
+            .map_err(|err| anyhow!("The block top level element should be map: {:?}", err))?;
 
         // Now we can try to extract every field that corresponds to a Block object from the map
         let parent_hash = get_opt_field::<Vec<u8>>(&map, &[], "phash")?
@@ -215,10 +219,11 @@ impl TryFrom<Value> for IcrcBlock {
             .transpose()?;
         let timestamp = get_field::<u64>(&map, &[], "ts")?;
         let effective_fee = get_opt_field::<Nat>(&map, &[], "fee")?;
+        let btype = get_opt_field::<String>(&map, &[], "btype")?;
         let fee_collector = get_opt_field::<Account>(&map, &[], "fee_col")?;
         let fee_collector_block_index = get_opt_field::<u64>(&map, &[], "fee_col_block")?;
         let transaction = map.get("tx").ok_or(anyhow!("Missing field 'tx'"))?.clone();
-        let transaction = IcrcTransaction::try_from(transaction)?;
+        let transaction = IcrcTransaction::try_from((btype.clone(), transaction))?;
 
         Ok(Self {
             parent_hash,
@@ -227,6 +232,7 @@ impl TryFrom<Value> for IcrcBlock {
             timestamp,
             fee_collector,
             fee_collector_block_index,
+            btype,
         })
     }
 }
@@ -246,6 +252,9 @@ impl From<IcrcBlock> for Value {
         map.insert("ts".to_string(), Value::Nat(Nat::from(block.timestamp)));
         if let Some(fee_col) = block.fee_collector {
             map.insert("fee_col".to_string(), Value::from(fee_col));
+        }
+        if let Some(btype) = block.btype {
+            map.insert("btype".to_string(), Value::Text(btype));
         }
         if let Some(fee_col_block) = block.fee_collector_block_index {
             map.insert(
@@ -296,16 +305,19 @@ impl IcrcTransaction {
     }
 }
 
-impl TryFrom<Value> for IcrcTransaction {
+impl TryFrom<(Option<String>, Value)> for IcrcTransaction {
     type Error = anyhow::Error;
 
-    fn try_from(value: Value) -> anyhow::Result<Self> {
+    fn try_from(btype_and_tx: (Option<String>, Value)) -> anyhow::Result<Self> {
         const FIELD_PREFIX: &[&str] = &["tx"];
-        let map = value.as_map().map_err(|err| anyhow!("{:?}", err))?;
+        let map = btype_and_tx
+            .1
+            .as_map()
+            .map_err(|err| anyhow!("{:?}", err))?;
 
         let created_at_time = get_opt_field::<u64>(&map, FIELD_PREFIX, "ts")?;
         let memo = get_opt_field::<ByteBuf>(&map, FIELD_PREFIX, "memo")?.map(Memo);
-        let operation = IcrcOperation::try_from(map)?;
+        let operation = IcrcOperation::try_from((btype_and_tx.0, map))?;
         Ok(Self {
             operation,
             created_at_time,
@@ -338,6 +350,7 @@ pub enum IcrcOperation {
     Mint {
         to: Account,
         amount: Nat,
+        fee: Option<Nat>,
     },
     Transfer {
         from: Account,
@@ -350,6 +363,7 @@ pub enum IcrcOperation {
         from: Account,
         spender: Option<Account>,
         amount: Nat,
+        fee: Option<Nat>,
     },
     Approve {
         from: Account,
@@ -359,61 +373,96 @@ pub enum IcrcOperation {
         expires_at: Option<u64>,
         fee: Option<Nat>,
     },
+    FeeCollector {
+        fee_collector: Option<Account>,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+    },
 }
 
-impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
+impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
     type Error = anyhow::Error;
 
-    fn try_from(map: BTreeMap<String, Value>) -> anyhow::Result<Self> {
+    fn try_from(btype_and_map: (Option<String>, BTreeMap<String, Value>)) -> anyhow::Result<Self> {
         const FIELD_PREFIX: &[&str] = &["tx"];
-        let amount: Nat = get_field(&map, FIELD_PREFIX, "amt")?;
+        let map = btype_and_map.1;
+        let amount: Option<Nat> = get_opt_field(&map, FIELD_PREFIX, "amt")?;
         let fee: Option<Nat> = get_opt_field(&map, FIELD_PREFIX, "fee")?;
-        match get_field::<String>(&map, FIELD_PREFIX, "op")?.as_str() {
-            "burn" => {
-                let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
-                let spender: Option<Account> = get_opt_field(&map, FIELD_PREFIX, "spender")?;
-                Ok(Self::Burn {
-                    from,
-                    spender,
-                    amount,
-                })
+        let op = if let Some(tx_op) = get_opt_field::<String>(&map, FIELD_PREFIX, "op")? {
+            Some(tx_op)
+        } else {
+            btype_and_map.0
+        };
+        if let Some(op) = op {
+            match op.as_str() {
+                "burn" => {
+                    let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
+                    let spender: Option<Account> = get_opt_field(&map, FIELD_PREFIX, "spender")?;
+                    Ok(Self::Burn {
+                        from,
+                        spender,
+                        amount: amount
+                            .ok_or_else(|| anyhow!("Missing field 'amt' for Burn operation"))?,
+                        fee,
+                    })
+                }
+                "mint" => {
+                    let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
+                    Ok(Self::Mint {
+                        to,
+                        amount: amount
+                            .ok_or_else(|| anyhow!("Missing field 'amt' for Mint operation"))?,
+                        fee,
+                    })
+                }
+                "xfer" => {
+                    let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
+                    let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
+                    let spender: Option<Account> = get_opt_field(&map, FIELD_PREFIX, "spender")?;
+                    Ok(Self::Transfer {
+                        from,
+                        to,
+                        spender,
+                        amount: amount
+                            .ok_or_else(|| anyhow!("Missing field 'amt' for Transfer operation"))?,
+                        fee,
+                    })
+                }
+                "approve" => {
+                    let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
+                    let spender: Account = get_field(&map, FIELD_PREFIX, "spender")?;
+                    let expected_allowance: Option<Nat> =
+                        get_opt_field(&map, FIELD_PREFIX, "expected_allowance")?;
+                    let expires_at = get_opt_field::<u64>(&map, FIELD_PREFIX, "expires_at")?;
+                    Ok(Self::Approve {
+                        from,
+                        spender,
+                        amount: amount
+                            .ok_or_else(|| anyhow!("Missing field 'amt' for Approve operation"))?,
+                        fee,
+                        expected_allowance,
+                        expires_at,
+                    })
+                }
+                BTYPE_107 => {
+                    let fee_collector: Option<Account> =
+                        get_opt_field(&map, FIELD_PREFIX, "fee_collector")?;
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    Ok(Self::FeeCollector {
+                        fee_collector,
+                        caller,
+                        mthd,
+                    })
+                }
+                found => {
+                    bail!(
+                        "Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}"
+                    )
+                }
             }
-            "mint" => {
-                let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
-                Ok(Self::Mint { to, amount })
-            }
-            "xfer" => {
-                let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
-                let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
-                let spender: Option<Account> = get_opt_field(&map, FIELD_PREFIX, "spender")?;
-                Ok(Self::Transfer {
-                    from,
-                    to,
-                    spender,
-                    amount,
-                    fee,
-                })
-            }
-            "approve" => {
-                let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
-                let spender: Account = get_field(&map, FIELD_PREFIX, "spender")?;
-                let expected_allowance: Option<Nat> =
-                    get_opt_field(&map, FIELD_PREFIX, "expected_allowance")?;
-                let expires_at = get_opt_field::<u64>(&map, FIELD_PREFIX, "expires_at")?;
-                Ok(Self::Approve {
-                    from,
-                    spender,
-                    amount,
-                    fee,
-                    expected_allowance,
-                    expires_at,
-                })
-            }
-            found => {
-                bail!(
-                    "Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}"
-                )
-            }
+        } else {
+            bail!("Operation type not specified as block type or 'op' field")
         }
     }
 }
@@ -452,6 +501,7 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 from,
                 spender,
                 amount,
+                fee,
             } => {
                 map.insert("op".to_string(), Value::text("burn"));
                 map.insert("from".to_string(), Value::from(from));
@@ -459,11 +509,17 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                     map.insert("spender".to_string(), Value::from(spender));
                 }
                 map.insert("amt".to_string(), Value::Nat(amount));
+                if let Some(fee) = fee {
+                    map.insert("fee".to_string(), Value::Nat(fee));
+                }
             }
-            Op::Mint { to, amount } => {
+            Op::Mint { to, amount, fee } => {
                 map.insert("op".to_string(), Value::text("mint"));
                 map.insert("to".to_string(), Value::from(to));
                 map.insert("amt".to_string(), Value::Nat(amount));
+                if let Some(fee) = fee {
+                    map.insert("fee".to_string(), Value::Nat(fee));
+                }
             }
             Op::Transfer {
                 from,
@@ -481,6 +537,21 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 map.insert("amt".to_string(), Value::Nat(amount));
                 if let Some(fee) = fee {
                     map.insert("fee".to_string(), Value::Nat(fee));
+                }
+            }
+            Op::FeeCollector {
+                fee_collector,
+                caller,
+                mthd,
+            } => {
+                if let Some(fee_collector) = fee_collector {
+                    map.insert("fee_collector".to_string(), Value::from(fee_collector));
+                }
+                if let Some(caller) = caller {
+                    map.insert("caller".to_string(), Value::from(caller));
+                }
+                if let Some(mthd) = mthd {
+                    map.insert("mthd".to_string(), Value::text(mthd));
                 }
             }
         }
@@ -531,11 +602,11 @@ pub struct MetadataEntry {
 }
 
 impl MetadataEntry {
-    pub fn from_metadata_value(key: &str, value: &MetadataValue) -> anyhow::Result<Self> {
+    pub fn from_metadata_value(key: &MetadataKey, value: &MetadataValue) -> anyhow::Result<Self> {
         let value = candid::encode_one(value)?;
 
         Ok(Self {
-            key: key.to_string(),
+            key: key.as_str().to_string(),
             value,
         })
     }
@@ -571,14 +642,17 @@ where
                 from,
                 spender,
                 amount,
+                fee,
             } => Self::Burn {
                 from,
                 spender,
                 amount: amount.into(),
+                fee: fee.map(Into::into),
             },
-            Op::Mint { to, amount } => Self::Mint {
+            Op::Mint { to, amount, fee } => Self::Mint {
                 to,
                 amount: amount.into(),
+                fee: fee.map(Into::into),
             },
             Op::Transfer {
                 from,
@@ -592,6 +666,15 @@ where
                 spender,
                 amount: amount.into(),
                 fee: fee.map(Into::into),
+            },
+            Op::FeeCollector {
+                fee_collector,
+                caller,
+                mthd,
+            } => Self::FeeCollector {
+                fee_collector,
+                caller,
+                mthd,
             },
         }
     }
@@ -627,22 +710,24 @@ mod tests {
     use icrc_ledger_types::icrc::generic_value::Value;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
+    use icrc_ledger_types::icrc107::schema::SET_FEE_COL_107;
     use num_bigint::BigUint;
     use proptest::collection::vec;
-    use proptest::prelude::any;
+    use proptest::prelude::{Just, any};
     use proptest::prop_assert_eq;
     use proptest::{option, prop_oneof, proptest, strategy::Strategy};
     use serde_bytes::ByteBuf;
     use std::collections::BTreeMap;
 
+    fn arb_principal() -> impl Strategy<Value = Principal> {
+        (vec(any::<u8>(), 0..30)).prop_map(|principal| Principal::from_slice(principal.as_slice()))
+    }
+
     fn arb_account() -> impl Strategy<Value = Account> {
-        (vec(any::<u8>(), 0..30), option::of(vec(any::<u8>(), 32))).prop_map(
-            |(owner, subaccount)| {
-                let owner = Principal::from_slice(owner.as_slice());
-                let subaccount = subaccount.map(|v| v.try_into().unwrap());
-                Account { owner, subaccount }
-            },
-        )
+        (arb_principal(), option::of(vec(any::<u8>(), 32))).prop_map(|(owner, subaccount)| {
+            let subaccount = subaccount.map(|v| v.try_into().unwrap());
+            Account { owner, subaccount }
+        })
     }
 
     fn arb_nat() -> impl Strategy<Value = Nat> {
@@ -677,20 +762,23 @@ mod tests {
             arb_account(),             // from
             option::of(arb_account()), // spender
             arb_nat(),                 // amount
+            option::of(arb_nat()),     // fee
         )
-            .prop_map(|(from, spender, amount)| IcrcOperation::Burn {
+            .prop_map(|(from, spender, amount, fee)| IcrcOperation::Burn {
                 from,
                 spender,
                 amount,
+                fee,
             })
     }
 
     fn arb_mint() -> impl Strategy<Value = IcrcOperation> {
         (
-            arb_account(), // to
-            arb_nat(),     // amount
+            arb_account(),         // to
+            arb_nat(),             // amount
+            option::of(arb_nat()), // fee
         )
-            .prop_map(|(to, amount)| IcrcOperation::Mint { to, amount })
+            .prop_map(|(to, amount, fee)| IcrcOperation::Mint { to, amount, fee })
     }
 
     fn arb_transfer() -> impl Strategy<Value = IcrcOperation> {
@@ -710,8 +798,34 @@ mod tests {
             })
     }
 
+    fn arb_fee_collector() -> impl Strategy<Value = IcrcOperation> {
+        (
+            option::of(arb_account()),   // fee_collector
+            option::of(arb_principal()), // caller
+            prop_oneof![
+                Just(None),
+                Just(Some(BTYPE_107.to_string())),
+                Just(Some(SET_FEE_COL_107.to_string())),
+                Just(Some("other_mthd".to_string()))
+            ],
+        )
+            .prop_map(
+                |(fee_collector, caller, mthd)| IcrcOperation::FeeCollector {
+                    fee_collector,
+                    caller,
+                    mthd,
+                },
+            )
+    }
+
     fn arb_op() -> impl Strategy<Value = IcrcOperation> {
-        prop_oneof![arb_approve(), arb_burn(), arb_mint(), arb_transfer(),]
+        prop_oneof![
+            arb_approve(),
+            arb_burn(),
+            arb_mint(),
+            arb_transfer(),
+            arb_fee_collector(),
+        ]
     }
 
     fn arb_memo() -> impl Strategy<Value = Memo> {
@@ -747,11 +861,19 @@ mod tests {
                     fee_collector_block_index,
                 )| IcrcBlock {
                     parent_hash,
-                    transaction,
+                    transaction: transaction.clone(),
                     effective_fee,
                     timestamp,
                     fee_collector,
                     fee_collector_block_index,
+                    btype: match transaction.operation {
+                        IcrcOperation::FeeCollector {
+                            fee_collector: _,
+                            caller: _,
+                            mthd: _,
+                        } => Some(BTYPE_107.to_string()),
+                        _ => None,
+                    },
                 },
             )
     }
@@ -759,7 +881,11 @@ mod tests {
     #[test]
     fn test_operation_value_codec() {
         proptest!(|(op in arb_op().no_shrink())| {
-            let actual_op = match IcrcOperation::try_from(BTreeMap::from(op.clone())) {
+            let btype = match op {
+                IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                _ => None,
+            };
+            let actual_op = match IcrcOperation::try_from((btype, BTreeMap::from(op.clone()))) {
                 Ok(actual_op) => actual_op,
                 Err(err) => panic!("{err:?}"),
             };
@@ -770,7 +896,11 @@ mod tests {
     #[test]
     fn test_transaction_value_codec() {
         proptest!(|(tx in arb_transaction().no_shrink())| {
-            let actual_tx = match IcrcTransaction::try_from(Value::from(tx.clone())) {
+            let btype = match tx.operation {
+                IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                _ => None,
+            };
+            let actual_tx = match IcrcTransaction::try_from((btype, Value::from(tx.clone()))) {
                 Ok(actual_tx) => actual_tx,
                 Err(err) => panic!("{err:?}"),
             };
@@ -903,26 +1033,31 @@ mod tests {
                     from,
                     spender,
                     amount,
+                    fee,
                 },
                 IcrcOperation::Burn {
                     from: rosetta_from,
                     spender: rosetta_spender,
                     amount: rosetta_amount,
+                    fee: rosetta_fee,
                 },
             ) => {
                 assert_eq!(from, rosetta_from, "from");
                 assert_eq!(spender, rosetta_spender, "spender");
                 assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(fee.map(|t| t.into()), rosetta_fee, "fee");
             }
             (
-                ic_icrc1::Operation::Mint { to, amount },
+                ic_icrc1::Operation::Mint { to, amount, fee },
                 IcrcOperation::Mint {
                     to: rosetta_to,
                     amount: rosetta_amount,
+                    fee: rosetta_fee,
                 },
             ) => {
                 assert_eq!(to, rosetta_to, "to");
                 assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(fee.map(|t| t.into()), rosetta_fee, "fee");
             }
             (
                 ic_icrc1::Operation::Transfer {
@@ -945,6 +1080,22 @@ mod tests {
                 assert_eq!(spender, rosetta_spender, "spender");
                 assert_eq!(amount.into(), rosetta_amount, "amount");
                 assert_eq!(fee.map(|t| t.into()), rosetta_fee, "fee");
+            }
+            (
+                ic_icrc1::Operation::FeeCollector {
+                    fee_collector,
+                    caller,
+                    mthd,
+                },
+                IcrcOperation::FeeCollector {
+                    fee_collector: rosetta_fee_collector,
+                    caller: rosetta_caller,
+                    mthd: rosetta_mthd,
+                },
+            ) => {
+                assert_eq!(fee_collector, rosetta_fee_collector, "fee_collector");
+                assert_eq!(caller, rosetta_caller, "caller");
+                assert_eq!(mthd, rosetta_mthd, "mthd");
             }
             (l, r) => panic!(
                 "Found different type of operations. Operation:{l:?} rosetta's Operation:{r:?}"

@@ -21,7 +21,6 @@ ic-base-types = { path = "../../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-config = { path = "../../config" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-http-utils = { path = "../../http_utils" }
@@ -53,7 +52,6 @@ ic-registry-subnet-features = { path = "../subnet_features" }
 ic-registry-subnet-type = { path = "../subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-sns-init = { path = "../../sns/init" }
-ic-sns-swap = { path = "../../sns/swap" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-types = { path = "../../types/types" }
 indexmap = "2.2.6"                                                                        # TODO: consider using the std's BTreeMap instead

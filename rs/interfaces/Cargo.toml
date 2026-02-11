@@ -11,16 +11,13 @@ ic-base-types = { path = "../types/base_types" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-heap-bytes = { path = "../../packages/ic-heap-bytes" }
 ic-error-types = { path = "../../packages/ic-error-types" }
-ic-interfaces-state-manager = { path = "./state_manager" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-wasm-types = { path = "../types/wasm_types" }
 phantom_newtype = { path = "../phantom_newtype" }
-prost = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }

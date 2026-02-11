@@ -214,15 +214,11 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     let p_sub_s = Scalar::from_usize(ss).neg();
 
     // y0 <- getRandomG1
-    let y0 = G1Affine::hash(
-        b"ic-crypto-nizk-chunking-proof-y0",
-        &rng.r#gen::<[u8; 32]>(),
-    );
+    let y0 = G1Affine::hash("ic-crypto-nizk-chunking-proof-y0", &rng.r#gen::<[u8; 32]>());
 
     let g1 = &instance.g1_gen;
 
-    let y0_g1_tbl =
-        G1Projective::compute_mul2_tbl(&G1Projective::from(&y0), &G1Projective::from(g1));
+    let y0_g1_tbl = G1Projective::compute_mul2_affine_tbl(&y0, g1);
 
     let beta = Scalar::batch_random_array::<NUM_ZK_REPETITIONS, R>(rng);
     let bb = g1.batch_mul_array(&beta);
@@ -376,7 +372,7 @@ pub fn verify_chunking(
         rhs = g1 ^ z_r_i | i <- [1..n]]
          */
 
-        let rhs = g1.batch_mul(&nizk.z_r);
+        let rhs = g1.batch_mul_vartime(&nizk.z_r);
 
         let lhs = {
             let mut lhs = Vec::with_capacity(e.len());
@@ -404,7 +400,7 @@ pub fn verify_chunking(
         // Verify: product [bb_k ^ x^k | k <- [1..l]] * dd_0 == g1 ^ z_beta
         let lhs = G1Projective::muln_affine_vartime(&nizk.bb, &xpowers) + &nizk.dd[0];
 
-        let rhs = g1 * &nizk.z_beta;
+        let rhs = g1.mul_vartime(&nizk.z_beta);
         if lhs != rhs {
             return Err(ZkProofChunkingError::InvalidProof);
         }
@@ -442,12 +438,7 @@ pub fn verify_chunking(
         let acc = Scalar::muln_vartime(&nizk.z_s, &xpowers);
 
         let rhs = G1Projective::muln_affine_vartime(&instance.public_keys, &nizk.z_r)
-            + G1Projective::mul2(
-                &G1Projective::from(&nizk.y0),
-                &nizk.z_beta,
-                &G1Projective::from(g1),
-                &acc,
-            );
+            + G1Projective::mul2_affine_vartime(&nizk.y0, &nizk.z_beta, g1, &acc);
 
         if lhs != rhs {
             return Err(ZkProofChunkingError::InvalidProof);

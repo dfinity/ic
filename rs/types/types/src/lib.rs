@@ -69,7 +69,7 @@ pub mod canister_http;
 pub mod canister_log;
 pub mod consensus;
 pub mod crypto;
-pub mod funds;
+pub mod cycles;
 pub mod hostos_version;
 pub mod ingress;
 pub mod malicious_behavior;
@@ -89,10 +89,13 @@ pub mod xnet;
 #[cfg(test)]
 pub mod exhaustive;
 
-pub use crate::canister_log::{CanisterLog, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE};
+pub use crate::canister_log::{
+    CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
+    MAX_DELTA_LOG_MEMORY_LIMIT,
+};
+pub use crate::cycles::Cycles;
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
-pub use funds::*;
 pub use ic_base_types::{
     CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,
     PrincipalIdBlobParseError, PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
@@ -125,13 +128,16 @@ pub fn user_id_into_protobuf(id: UserId) -> pb::UserId {
     }
 }
 
-/// From its protobuf definition convert to a UserId.  Normally, we would
+/// From an optional protobuf definition convert to a UserId.  Normally, we would
 /// use `impl TryFrom<pb::UserId> for UserId` here however we cannot as
 /// both `Id` and `pb::UserId` are defined in other crates.
-pub fn user_id_try_from_protobuf(value: pb::UserId) -> Result<UserId, PrincipalIdBlobParseError> {
-    // All fields in Protobuf definition are required hence they are encoded in
-    // `Option`.  We simply treat them as required here though.
-    let principal_id = PrincipalId::try_from(value.principal_id.unwrap())?;
+pub fn user_id_try_from_option(
+    value: Option<pb::UserId>,
+    field_name: &'static str,
+) -> Result<UserId, ProxyDecodeError> {
+    let value: pb::UserId = value.ok_or(ProxyDecodeError::MissingField(field_name))?;
+    let principal_id: PrincipalId =
+        try_from_option_field(value.principal_id, "UserId::principal_id")?;
     Ok(UserId::from(principal_id))
 }
 
@@ -450,68 +456,30 @@ pub enum LongExecutionMode {
     Prioritized = 1,
 }
 
-/// Represents the memory allocation of a canister.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
-pub enum MemoryAllocation {
-    /// A reserved number of bytes between 0 and 2^48 inclusively that is
-    /// guaranteed to be available to the canister. Charging happens based on
-    /// the reserved amount of memory, regardless of how much of it is in use.
-    Reserved(NumBytes),
-    /// Memory growth of the canister happens dynamically and is subject to the
-    /// available memory of the subnet. The canister will be charged for the
-    /// memory it's using at any given time.
-    #[default]
-    BestEffort,
-}
+/// Represents the memory allocation of a canister: a pre-allocated number of bytes
+/// between 0 and 2^48 inclusively that is guaranteed to be available to the canister.
+/// Memory growth of the canister beyond the pre-allocated number of bytes
+/// happens dynamically and is subject to the available memory of the subnet.
+/// Charging happens based on the maximum of pre-allocated and actually used amount of memory.
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Debug, Default, Deserialize, Serialize)]
+pub struct MemoryAllocation(NumBytes);
 
 impl MemoryAllocation {
-    /// Returns the number of bytes associated with this memory allocation.
-    pub fn bytes(&self) -> NumBytes {
-        match self {
-            MemoryAllocation::Reserved(bytes) => *bytes,
-            // A best-effort memory allocation is equivalent to a zero memory allocation per the
-            // interface spec.
-            MemoryAllocation::BestEffort => NumBytes::from(0),
-        }
+    /// Returns the number of pre-allocated bytes.
+    pub fn pre_allocated_bytes(&self) -> NumBytes {
+        self.0
     }
 
     /// Returns the number of actually allocated bytes considering both
     /// the memory allocation and the memory usage of the canister.
     pub fn allocated_bytes(&self, memory_usage: NumBytes) -> NumBytes {
-        match self {
-            MemoryAllocation::Reserved(bytes) => (*bytes).max(memory_usage),
-            MemoryAllocation::BestEffort => memory_usage,
-        }
+        self.0.max(memory_usage)
     }
 }
 
 impl fmt::Display for MemoryAllocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MemoryAllocation::Reserved(bytes) => write!(f, "{}", bytes.display()),
-            MemoryAllocation::BestEffort => write!(f, "best-effort"),
-        }
-    }
-}
-
-impl PartialOrd for MemoryAllocation {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        // The ordering corresponds to how much memory the canister is
-        // reserving:
-        // - `BestEffort < Reserved(n)` for all `n`.
-        // - `Reserved(n) < Reserved(n + 1)` for all `n`.
-        match (&self, other) {
-            (MemoryAllocation::Reserved(a), MemoryAllocation::Reserved(b)) => a.partial_cmp(b),
-            (MemoryAllocation::Reserved(_), MemoryAllocation::BestEffort) => {
-                Some(std::cmp::Ordering::Greater)
-            }
-            (MemoryAllocation::BestEffort, MemoryAllocation::Reserved(_)) => {
-                Some(std::cmp::Ordering::Less)
-            }
-            (MemoryAllocation::BestEffort, MemoryAllocation::BestEffort) => {
-                Some(std::cmp::Ordering::Equal)
-            }
-        }
+        write!(f, "{}", self.0.display())
     }
 }
 
@@ -534,13 +502,7 @@ pub const MAX_WASM64_MEMORY_IN_BYTES: u64 = 6 * GIB;
 
 impl From<NumBytes> for MemoryAllocation {
     fn from(bytes: NumBytes) -> Self {
-        // A memory allocation of 0 means that the canister's memory growth will be
-        // best-effort.
-        if bytes.get() == 0 {
-            MemoryAllocation::BestEffort
-        } else {
-            MemoryAllocation::Reserved(bytes)
-        }
+        Self(bytes)
     }
 }
 

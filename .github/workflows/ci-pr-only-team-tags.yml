@@ -1,7 +1,7 @@
 name: Tag Team Reviewers
 
 on:
-  pull_request:
+  pull_request_target:
     # Only tag PRs on the branches for which we have protection rules / rulesets
     branches:
       - master
@@ -27,9 +27,6 @@ jobs:
     if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Get Requested Reviewers
         id: requested_reviewers
         shell: bash
@@ -53,9 +50,9 @@ jobs:
         run: |
           set -exuo pipefail
           for TEAM in ${{ env.requested_teams }}; do
-            if ! gh label list --limit 100 | grep -w "$TEAM"; then
+            if ! gh label list --repo "$REPO" --limit 100 | grep -w "$TEAM"; then
               echo "Creating label: $TEAM"
-              gh label create "$TEAM" --color "d4af37"
+              gh label create "$TEAM" --repo "$REPO" --color "d4af37"
             else
               echo "Label $TEAM already exists."
             fi
@@ -69,7 +66,7 @@ jobs:
         run: |
           set -exuo pipefail
           for TEAM in ${{ env.requested_teams }}; do
-            gh pr edit ${{ github.event.pull_request.number }} --add-label "$TEAM"
+            gh pr edit ${{ github.event.pull_request.number }} --repo "$REPO" --add-label "$TEAM"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

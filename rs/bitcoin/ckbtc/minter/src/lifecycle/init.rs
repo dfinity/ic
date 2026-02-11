@@ -24,6 +24,9 @@ pub struct InitArgs {
     /// a testing key for testnet and mainnet
     pub ecdsa_key_name: String,
 
+    /// Minimum amount of bitcoin that can be deposited
+    pub deposit_btc_min_amount: Option<u64>,
+
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
 
@@ -68,9 +71,24 @@ pub struct InitArgs {
     /// the get_utxos cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_utxos_cache_expiration_seconds: Option<u64>,
+
+    /// The minimum number of available UTXOs required to trigger a consolidation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utxo_consolidation_threshold: Option<u64>,
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_num_inputs_in_transaction: Option<u64>,
 }
 
 pub fn init<R: CanisterRuntime>(args: InitArgs, runtime: &R) {
+    use crate::logs::Priority;
+    use canlog::log;
+
+    log!(
+        Priority::Info,
+        "[init]: Initializing canister with args {args:?}"
+    );
     let state: CkBtcMinterState = CkBtcMinterState::from(args);
     runtime.validate_config(&state);
     replace_state(state);

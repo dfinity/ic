@@ -78,9 +78,7 @@ impl AdapterMetrics {
                         let mut mf = MetricFamily::parse_from_bytes(b).unwrap_or_default();
                         // Prepend unique adapter prefix to avoid prometheus duplicate.
                         // I.e adapter_btc_requests
-                        mf.set_name(
-                            ADAPTER_PREFIX.to_owned() + "_" + self.name + "_" + mf.get_name(),
-                        );
+                        mf.set_name(ADAPTER_PREFIX.to_owned() + "_" + self.name + "_" + mf.name());
                         mf
                     })
                     .collect();

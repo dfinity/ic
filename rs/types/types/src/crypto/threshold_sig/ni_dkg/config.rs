@@ -4,9 +4,11 @@ use crate::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
 use core::fmt;
 use dealers::NiDkgDealers;
 use errors::{NiDkgConfigValidationError, NiDkgThresholdZeroError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use receivers::NiDkgReceivers;
 use serde::{Deserialize, Serialize};
+use serde::{Deserializer, de::Error};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::num::TryFromIntError;
@@ -21,7 +23,7 @@ pub mod receivers;
 /// A validated configuration for non-interactive DKG. This configuration can
 /// only exist if all configuration invariants are satisfied. See
 /// `NiDkgConfig::new` for a description of the invariants.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize)]
 pub struct NiDkgConfig {
     pub(crate) dkg_id: NiDkgId,
     max_corrupt_dealers: NumberOfNodes,
@@ -65,40 +67,68 @@ impl From<&NiDkgConfig> for pb::NiDkgConfig {
 }
 
 impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(config: pb::NiDkgConfig) -> Result<Self, Self::Error> {
-        Ok(Self {
-            dkg_id: NiDkgId::from_option_protobuf(config.dkg_id, "NiDkgConfig")?,
+        let data = NiDkgConfigData {
+            dkg_id: try_from_option_field(config.dkg_id, "NiDkgConfig::dkg_id")?,
             max_corrupt_dealers: NumberOfNodes::from(config.max_corrupt_dealers),
-            dealers: NiDkgDealers::new(
-                config
-                    .dealers
-                    .into_iter()
-                    .map(|dealer| crate::node_id_try_from_option(Some(dealer)))
-                    .collect::<Result<BTreeSet<_>, _>>()
-                    .map_err(|err| format!("Problem loading dealers in NiDkgConfig: {err:?}"))?,
-            )
-            .map_err(|e| format!("{e:?}"))?,
+            dealers: config
+                .dealers
+                .into_iter()
+                .map(|dealer| crate::node_id_try_from_option(Some(dealer)))
+                .collect::<Result<BTreeSet<_>, _>>()?,
             max_corrupt_receivers: NumberOfNodes::from(config.max_corrupt_receivers),
-            receivers: NiDkgReceivers::new(
-                config
-                    .receivers
-                    .into_iter()
-                    .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
-                    .collect::<Result<BTreeSet<_>, _>>()
-                    .map_err(|err| format!("Problem loading receivers in NiDkgConfig: {err:?}"))?,
-            )
-            .map_err(|e| format!("{e:?}"))?,
-            threshold: NiDkgThreshold::new(NumberOfNodes::from(config.threshold))
-                .map_err(|e| format!("threshold error {e:?}"))?,
+            receivers: config
+                .receivers
+                .into_iter()
+                .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
+                .collect::<Result<BTreeSet<_>, _>>()?,
+            threshold: NumberOfNodes::from(config.threshold),
             registry_version: RegistryVersion::from(config.registry_version),
             resharing_transcript: config
                 .resharing_transcript
-                .map(|transcript| {
-                    NiDkgTranscript::try_from(&transcript)
-                        .map_err(|e| format!("Converting resharing transcript failed: {e:?}"))
-                })
+                .map(|transcript| NiDkgTranscript::try_from(&transcript))
                 .transpose()?,
+        };
+
+        NiDkgConfig::new(data).map_err(|e| {
+            ProxyDecodeError::Other(format!(
+                "Invariant check failed while constructing NiDkgConfig: {e:?}"
+            ))
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for NiDkgConfig {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct NiDkgConfigUnchecked {
+            dkg_id: NiDkgId,
+            max_corrupt_dealers: NumberOfNodes,
+            dealers: NiDkgDealers,
+            max_corrupt_receivers: NumberOfNodes,
+            receivers: NiDkgReceivers,
+            threshold: NiDkgThreshold,
+            registry_version: RegistryVersion,
+            resharing_transcript: Option<NiDkgTranscript>,
+        }
+        let unchecked = NiDkgConfigUnchecked::deserialize(deserializer)?;
+
+        let config_data = NiDkgConfigData {
+            dkg_id: unchecked.dkg_id,
+            max_corrupt_dealers: unchecked.max_corrupt_dealers,
+            dealers: unchecked.dealers.get().clone(),
+            max_corrupt_receivers: unchecked.max_corrupt_receivers,
+            receivers: unchecked.receivers.get().clone(),
+            threshold: unchecked.threshold.get(),
+            registry_version: unchecked.registry_version,
+            resharing_transcript: unchecked.resharing_transcript,
+        };
+
+        NiDkgConfig::new(config_data).map_err(|e| {
+            D::Error::custom(format!(
+                "Invariant check failed while constructing NiDkgConfig: {e:?}"
+            ))
         })
     }
 }

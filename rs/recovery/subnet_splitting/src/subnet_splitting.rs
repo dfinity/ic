@@ -5,7 +5,6 @@ use crate::{
         get_propose_to_reroute_canister_ranges_command,
     },
     layout::Layout,
-    state_tool_helper::StateToolHelper,
     steps::{
         ComputeExpectedManifestsStep, CopyWorkDirStep, ReadRegistryStep, SplitStateStep,
         StateSplitStrategy, ValidateCUPStep, WaitForCUPStep,
@@ -18,14 +17,15 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
-    IC_CONSENSUS_POOL_PATH, IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs,
+    CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
     get_node_heights_from_metrics,
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
-    steps::{AdminStep, Step, UploadAndRestartStep},
+    ssh_helper::SshHelper,
+    steps::{AdminStep, Step, UploadStateAndRestartStep},
     util::{DataLocation, SshUser},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -130,7 +130,6 @@ pub struct SubnetSplitting {
     recovery_args: RecoveryArgs,
     neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
-    state_tool_helper: StateToolHelper,
     layout: Layout,
     logger: Logger,
     subnet_type: SubnetType,
@@ -152,13 +151,6 @@ impl SubnetSplitting {
         )
         .expect("Failed to initialize recovery");
 
-        let state_tool_helper = StateToolHelper::new(
-            recovery.binary_dir.clone(),
-            recovery_args.replica_version.clone(),
-            logger.clone(),
-        )
-        .expect("Failed to initialize state tool helper");
-
         let subnet_type = Self::check_subnets_preconditions(
             &recovery,
             subnet_splitting_args.source_subnet_id,
@@ -173,7 +165,6 @@ impl SubnetSplitting {
             neuron_args,
             layout: Layout::new(&recovery),
             recovery,
-            state_tool_helper,
             logger,
             subnet_type,
         }
@@ -296,10 +287,6 @@ impl SubnetSplitting {
         Ok(subnet_record)
     }
 
-    pub fn get_recovery_api(&self) -> &Recovery {
-        &self.recovery
-    }
-
     fn split_state_step(&self, target_subnet: TargetSubnet) -> SplitStateStep {
         let state_split_strategy = match target_subnet {
             TargetSubnet::Source => {
@@ -346,12 +333,12 @@ impl SubnetSplitting {
         )
     }
 
-    fn upload_and_restart_step(
+    fn upload_state_and_restart_step(
         &self,
         target_subnet: TargetSubnet,
     ) -> RecoveryResult<impl Step + use<>> {
         match self.upload_node(target_subnet) {
-            Some(node_ip) => Ok(UploadAndRestartStep {
+            Some(node_ip) => Ok(UploadStateAndRestartStep {
                 logger: self.recovery.logger.clone(),
                 upload_method: DataLocation::Remote(node_ip),
                 work_dir: self.layout.work_dir(target_subnet),
@@ -587,31 +574,34 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 let Some(node_ip) = self.params.download_node_source else {
                     return Err(RecoveryError::StepSkipped);
                 };
-
                 let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
                     (SshUser::Readonly, self.params.readonly_key_file.clone())
                 } else {
                     (SshUser::Admin, self.recovery.admin_key_file.clone())
                 };
+                let ssh_helper = SshHelper::new(
+                    self.recovery.logger.clone(),
+                    ssh_user,
+                    node_ip,
+                    self.recovery.ssh_confirmation,
+                    key_file,
+                );
+                let mut includes = Recovery::get_ic_state_includes(Some(&ssh_helper))?;
+                includes.push(PathBuf::from(CUPS_DIR));
 
                 self.recovery
-                    .get_download_state_step(
-                        node_ip,
-                        ssh_user,
-                        key_file,
+                    .get_download_data_step(
+                        ssh_helper,
                         self.params.keep_downloaded_state == Some(true),
-                        /*additional_excludes=*/
-                        vec![
-                            "orchestrator",
-                            IC_CONSENSUS_POOL_PATH,
-                            IC_REGISTRY_LOCAL_STORE,
-                        ],
-                    )
+                        includes,
+                        /*include_config=*/ true,
+                    )?
                     .into()
             }
             StepType::CopyDir => CopyWorkDirStep {
                 layout: self.layout.clone(),
                 logger: self.recovery.logger.clone(),
+                data_includes: vec![PathBuf::from(IC_STATE_DIR)],
             }
             .into(),
 
@@ -621,14 +611,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             }
 
             StepType::ProposeCupForSourceSubnet => self.propose_cup(TargetSubnet::Source)?.into(),
-            StepType::UploadStateToSourceSubnet => {
-                self.upload_and_restart_step(TargetSubnet::Source)?.into()
-            }
+            StepType::UploadStateToSourceSubnet => self
+                .upload_state_and_restart_step(TargetSubnet::Source)?
+                .into(),
             StepType::ProposeCupForDestinationSubnet => {
                 self.propose_cup(TargetSubnet::Destination)?.into()
             }
             StepType::UploadStateToDestinationSubnet => self
-                .upload_and_restart_step(TargetSubnet::Destination)?
+                .upload_state_and_restart_step(TargetSubnet::Destination)?
                 .into(),
             StepType::WaitForCUPOnSourceSubnet => {
                 self.wait_for_cup_step(TargetSubnet::Source)?.into()
@@ -653,7 +643,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             StepType::Cleanup => self.recovery.get_cleanup_step().into(),
             StepType::ComputeExpectedManifestsStep => ComputeExpectedManifestsStep {
                 layout: self.layout.clone(),
-                state_tool_helper: self.state_tool_helper.clone(),
                 source_subnet_id: self.params.source_subnet_id,
                 destination_subnet_id: self.params.destination_subnet_id,
                 canister_id_ranges_to_move: self.params.canister_id_ranges_to_move.clone(),

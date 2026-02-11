@@ -1,16 +1,12 @@
 use candid::types::number::Nat;
-use ic_base_types::CanisterId;
 use ic_icp_index::Status;
 use ic_ledger_core::block::BlockType;
-use icp_ledger::MAX_BLOCKS_PER_REQUEST;
+use icp_ledger::{LEDGER_INDEX_CANISTER_ID, MAX_BLOCKS_PER_REQUEST};
 use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use pocket_ic::PocketIc;
 use std::time::Duration;
 
-const LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 11;
-pub const LEDGER_INDEX_CANISTER_ID: CanisterId =
-    CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);
 
 pub fn get_blocks(pocket_ic: &PocketIc) -> Vec<icp_ledger::Block> {

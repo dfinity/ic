@@ -73,6 +73,7 @@ pub fn nns_dapp_customizations() -> NnsCustomizations {
         ledger_balances: Some(ledger_balances),
         neurons: None,
         install_at_ids: false,
+        registry_canister_init_payload: Default::default(),
     }
 }
 

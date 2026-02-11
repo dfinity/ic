@@ -42,10 +42,10 @@ use ic_nns_governance_api::{
     self as nns_governance_pb, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
     GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest,
     ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfoRequest,
     ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
     ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
+    ProposalActionRequest, ProposalInfo, ProposalStatus, RewardNodeProviders, Vote,
     manage_neuron::{
         self, AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse,
         DisburseMaturity, Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
@@ -1496,7 +1496,7 @@ pub fn nns_set_auto_stake_maturity(
 
 pub fn nns_list_proposals(
     state_machine: &StateMachine,
-    request: ListProposalInfo,
+    request: ListProposalInfoRequest,
 ) -> ListProposalInfoResponse {
     let result = state_machine
         .execute_ingress(
@@ -1515,13 +1515,13 @@ pub fn nns_list_proposals(
 }
 
 /// Return the monthly Node Provider rewards
-pub fn nns_get_monthly_node_provider_rewards(
+pub fn nns_get_node_provider_rewards(
     state_machine: &StateMachine,
 ) -> Result<RewardNodeProviders, GovernanceError> {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
-            "get_monthly_node_provider_rewards",
+            "get_node_provider_rewards",
             Encode!(&()).unwrap(),
         )
         .unwrap();
@@ -1715,21 +1715,31 @@ pub fn list_neurons_by_principal(
 /// Returns when the proposal has been executed. A proposal is considered to be
 /// executed when executed_timestamp_seconds > 0.
 pub fn nns_wait_for_proposal_execution(machine: &StateMachine, proposal_id: u64) {
-    // We create some blocks until the proposal has finished executing (machine.tick())
-    let mut attempt_count = 0;
+    // Wait for the proposal to reach Executed status.
     let mut last_proposal = None;
-    while attempt_count < 50 {
-        attempt_count += 1;
-
+    for _ in 0..50 {
         machine.tick();
         let proposal = nns_governance_get_proposal_info_as_anonymous(machine, proposal_id);
-        if proposal.executed_timestamp_seconds > 0 {
+
+        let status = proposal.status;
+        if status == ProposalStatus::Open as i32 || status == ProposalStatus::Adopted as i32 {
+            // Keep trying
+        } else if status == ProposalStatus::Unspecified as i32
+            || status == ProposalStatus::Rejected as i32
+            || status == ProposalStatus::Failed as i32
+        {
+            // No chance of later success.
+            panic!("{proposal:#?}");
+        } else if status == ProposalStatus::Executed as i32
+            && proposal.executed_timestamp_seconds > 0
+        {
+            assert_eq!(proposal.failure_reason, None, "{proposal:#?}",);
+            // Yay!
             return;
+        } else {
+            // WTF?
+            panic!("{proposal:#?}");
         }
-        assert_eq!(
-            proposal.failure_reason, None,
-            "Proposal execution failed: {proposal:#?}"
-        );
 
         last_proposal = Some(proposal);
         machine.advance_time(Duration::from_millis(100));
@@ -1857,10 +1867,11 @@ pub fn icrc1_token_symbol(machine: &StateMachine, ledger_id: CanisterId) -> Stri
 pub fn icrc1_token_logo(machine: &StateMachine, ledger_id: CanisterId) -> Option<String> {
     let result = query(machine, ledger_id, "icrc1_metadata", Encode!(&()).unwrap()).unwrap();
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
-    Decode!(&result, Vec<(String, MetadataValue)>)
+    use icrc_ledger_types::icrc::metadata_key::MetadataKey;
+    Decode!(&result, Vec<(MetadataKey, MetadataValue)>)
         .unwrap()
         .into_iter()
-        .find(|(key, _)| key == "icrc1:logo")
+        .find(|(key, _)| key.as_str() == MetadataKey::ICRC1_LOGO)
         .map(|(_key, value)| match value {
             MetadataValue::Text(s) => s,
             m => panic!("Unexpected metadata value {m:?}"),

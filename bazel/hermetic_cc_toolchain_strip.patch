@@ -1,0 +1,122 @@
+# Strip debug_info off every target for determinism
+# (https://github.com/ziglang/zig/issues/23821, https://github.com/ziglang/zig/issues/23823).
+diff --git a/MODULE.bazel b/MODULE.bazel
+index cfca164..9f258cc 100644
+--- a/MODULE.bazel
++++ b/MODULE.bazel
+@@ -60,3 +60,21 @@ register_toolchains(
+     "@zig_sdk//toolchain:zig",
+     dev_dependency = True,
+ )
++
++
++bazel_dep(name = "bazel_skylib", version = "1.7.1")
++
++new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
++new_local_repository(
++    name = "strip",
++    build_file_content = """
++load("@bazel_skylib//rules:native_binary.bzl", "native_binary")
++
++native_binary(
++name = "strip_bin",
++src = ":strip",
++visibility = ["//visibility:public"],
++)
++""",
++    path = "/usr/bin",
++)
+diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
+index b90b93b..88978ee 100644
+--- a/toolchain/defs.bzl
++++ b/toolchain/defs.bzl
+@@ -320,6 +320,7 @@ def declare_files(os):
+                 ":zig",
+                 ":{}_includes".format(target_config.zigtarget),
+                 cxx_tool_label,
++                "@strip//:strip_bin",
+             ],
+         )
+
+@@ -329,6 +330,7 @@ def declare_files(os):
+                 ":zig",
+                 ":{}_includes".format(target_config.zigtarget),
+                 cxx_tool_label,
++                "@strip//:strip_bin",
+                 ":tools/ld.lld{}".format(exe),
+             ] + native.glob([
+                 "lib/libc/{}/**".format(target_config.libc),
+diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
+index 5584f44..42f84d5 100644
+--- a/toolchain/zig-wrapper.zig
++++ b/toolchain/zig-wrapper.zig
+@@ -132,7 +132,7 @@ pub fn main() u8 {
+             if (builtin.os.tag == .windows)
+                 return spawnWindows(arena, params)
+             else
+-                return execUnix(arena, params);
++                return spawnAndStripUnix(arena, params);
+         },
+     }
+ }
+@@ -152,13 +152,53 @@ fn spawnWindows(arena: mem.Allocator, params: ExecParams) u8 {
+     }
+ }
+
+-fn execUnix(arena: mem.Allocator, params: ExecParams) u8 {
+-    const err = process.execve(arena, params.args.items, &params.env);
+-    std.debug.print(
+-        "error execing {s}: {s}\n",
+-        .{ params.args.items[0], @errorName(err) },
+-    );
+-    return 1;
++fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
++    // Build a strip command
++    const strip_cmd = blk: {
++        var list = ArrayListUnmanaged([]const u8){};
++        list.appendSlice(arena, &[_][]const u8{ "strip", "-S" }) catch |err| {
++            return fatal("error building strip cmd: {s}\n", .{@errorName(err)});
++        };
++
++        // Find any output targets
++        var next = false;
++        for (params.args.items) |param| {
++            if (mem.eql(u8, param, "-o")) {
++                next = true;
++            } else if (next) {
++                list.append(arena, param) catch |err| {
++                    return fatal("error adding output target: {s}\n", .{@errorName(err)});
++                };
++                break;
++            }
++        }
++        break :blk list;
++    };
++
++    // Run the intended zig process
++    var proc = ChildProcess.init(params.args.items, arena);
++    proc.env_map = &params.env;
++
++    const ret = proc.spawnAndWait() catch |err| {
++        return fatal("error spawning {s}: {s}\n", .{ params.args.items[0], @errorName(err) });
++    };
++
++    const code = switch (ret) {
++        .Exited => |code| code,
++        else => |other| return fatal("abnormal exit: {any}\n", .{other}),
++    };
++
++    // Run strip command, ignore output
++    var strip_proc = ChildProcess.init(strip_cmd.items, arena);
++    strip_proc.env_map = &params.env;
++    strip_proc.stdout_behavior = .Ignore;
++    strip_proc.stderr_behavior = .Ignore;
++
++    _ = strip_proc.spawnAndWait() catch |err| {
++        return fatal("running strip: {s}\n", .{@errorName(err)});
++    };
++
++    return code;
+ }
+
+ // argv_it is an object that has such method:

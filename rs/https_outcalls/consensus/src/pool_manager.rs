@@ -205,11 +205,9 @@ impl CanisterHttpPoolManagerImpl {
             SubnetType::System => self
                 .registry_client
                 .get_system_api_boundary_node_ids(latest_registry_version),
-            SubnetType::Application | SubnetType::VerifiedApplication => {
-                //TODO(BOUN-1467): For now, only system subnets are allowed to use API BNs are proxies.
-                // An empty list of boundary nodes will cause the adapter to use socks5.ic0.app instead.
-                Ok(vec![])
-            }
+            SubnetType::Application | SubnetType::VerifiedApplication => self
+                .registry_client
+                .get_app_api_boundary_node_ids(latest_registry_version),
         };
 
         allowed_boundary_nodes
@@ -748,6 +746,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -854,6 +854,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 // NOTE: We need at least some context in the state, otherwise next_callback_id will be 0 and no
@@ -967,6 +969,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1099,6 +1103,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1237,6 +1243,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -1340,6 +1348,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1452,6 +1462,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1633,6 +1645,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1744,6 +1758,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -1867,6 +1883,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -1998,6 +2016,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -2120,6 +2140,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -2236,6 +2258,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -2384,6 +2408,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -2482,6 +2508,8 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus::default(),
                 };
 
                 // Expect times to be called exactly once to check that already

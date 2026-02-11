@@ -1045,13 +1045,14 @@ mod tests {
     use crate::backup::{BackupAge, PurgingError};
 
     use super::*;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::p2p::consensus::UnvalidatedArtifact;
     use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities::state_manager::FakeStateManager;
     use ic_test_utilities_consensus::{fake::*, make_genesis};
     use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
@@ -1560,16 +1561,16 @@ mod tests {
                 prometheus::default_registry()
                 .gather()
                 .iter()
-                .find(|m| m.get_name() == "artifact_pool_consensus_count_per_height")
+                .find(|m| m.name() == "artifact_pool_consensus_count_per_height")
                 .expect("articact_pool_consensus_count_per_heigfht metric not registered")
                 .get_metric()
                 .iter()
                 .find(|m|
                     m.get_label().iter().any(|label| {
-                        label.get_name() == "pool_type" && label.get_value() == "validated"
+                        label.name() == "pool_type" && label.value() == "validated"
                     }) &&
                     m.get_label().iter().any(|label| {
-                        label.get_name() == "type" && label.get_value() == "notarization"
+                        label.name() == "type" && label.value() == "notarization"
                     }))
                 .expect(
                     "metric with pool_type = unvalidated and type = notarization not registered",

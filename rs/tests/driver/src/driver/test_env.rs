@@ -46,7 +46,7 @@ impl TestEnv {
     pub fn new<P: AsRef<Path>>(path: P, logger: Logger) -> Result<TestEnv> {
         let base_path = PathBuf::from(path.as_ref());
         let log_file = append_and_lock_exclusive(base_path.join("test.log"))?;
-        let file_drain = slog_term::FullFormat::new(slog_term::PlainSyncDecorator::new(log_file))
+        let file_drain = slog_term::FullFormat::new(slog_term::PlainDecorator::new(log_file))
             .build()
             .fuse();
         let file_drain = slog_async::Async::new(file_drain)
@@ -194,6 +194,9 @@ where
 {
     /// An attribute name is used as a name of a file where the attribute is stored.
     fn attribute_name() -> String;
+    fn attribute_exists(env: &TestEnv) -> bool {
+        env.get_json_path(Self::attribute_name()).exists()
+    }
     fn write_attribute(&self, env: &TestEnv) {
         env.write_json_object(Self::attribute_name(), self)
             .unwrap_or_else(|e| panic!("cannot write {} to TestEnv: {}", Self::attribute_name(), e))

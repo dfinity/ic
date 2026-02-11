@@ -3,14 +3,14 @@ use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::api::caller;
-use ic_cdk::{init, post_upgrade, query};
+use ic_cdk::{init, post_upgrade, query, trap};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, InitArg, Log, LogEntry,
-    Priority, SettledTransaction, SettledTransactionWithId, Status,
+    GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, IndexArg, InitArg, Log,
+    LogEntry, Priority, SettledTransaction, SettledTransactionWithId, Status, UpgradeArg,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -27,7 +27,7 @@ use icp_ledger::{
 };
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
-use scopeguard::{ScopeGuard, guard};
+use scopeguard::guard;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -44,8 +44,7 @@ const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNTIDENTIFIER_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNTIDENTIFIER_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
-const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
-const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
+const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;
@@ -85,6 +84,13 @@ thread_local! {
     static ACCOUNTIDENTIFIER_DATA: RefCell<AccountIdentifierDataMap> = with_memory_manager(|memory_manager| {
         RefCell::new(AccountIdentifierDataMap::init(memory_manager.get(ACCOUNTIDENTIFIER_DATA_MEMORY_ID)))
     });
+
+    /// The ID of the block sync timer.
+    static TIMER_ID: RefCell<TimerId> = RefCell::new(TimerId::default());
+}
+
+fn default_last_wait_time() -> Duration {
+    DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
@@ -96,7 +102,23 @@ struct State {
     ledger_id: Principal,
 
     // Last wait time in nanoseconds.
+    #[deprecated]
+    #[serde(default = "default_last_wait_time")]
+    // TODO(DEFI-1144): Also add `#[serde(skip_serializing)]` annotation once the above `default` annotation has been deployed to mainnet.
+    // TODO(DEFI-1144): Remove the `last_wait_time` field once the above `skip_serializing` annotation has been deployed to mainnet.
     pub last_wait_time: Duration,
+
+    /// The interval for retrieving blocks from the ledger and archive(s) for (re)building the
+    /// index. Lower values will result in a more responsive UI, but higher costs due to increased
+    /// cycle burn for the index, ledger and archive(s).
+    retrieve_blocks_from_ledger_interval: Option<Duration>,
+}
+
+impl State {
+    pub fn retrieve_blocks_from_ledger_interval(&self) -> Duration {
+        self.retrieve_blocks_from_ledger_interval
+            .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL)
+    }
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -107,6 +129,7 @@ impl Default for State {
             is_build_index_running: false,
             ledger_id: Principal::management_canister(),
             last_wait_time: Duration::from_secs(0),
+            retrieve_blocks_from_ledger_interval: None,
         }
     }
 }
@@ -233,19 +256,57 @@ fn balance_key(account_identifier: AccountIdentifier) -> (AccountIdentifierDataT
 }
 
 #[init]
-fn init(init_arg: InitArg) {
+fn init(index_arg: Option<IndexArg>) {
+    let InitArg {
+        ledger_id,
+        retrieve_blocks_from_ledger_interval_seconds,
+    } = match index_arg {
+        Some(IndexArg::Init(arg)) => arg,
+        _ => trap("Index initialization must take in input an InitArg argument"),
+    };
     // stable memory initialization
     mutate_state(|state| {
-        state.ledger_id = init_arg.ledger_id;
+        state.ledger_id = ledger_id;
+        state.retrieve_blocks_from_ledger_interval =
+            retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
     });
 
     // set the first build_index to be called after init
-    set_build_index_timer(Duration::from_secs(1));
+    set_build_index_timer(with_state(|state| {
+        state.retrieve_blocks_from_ledger_interval()
+    }));
 }
 
 #[post_upgrade]
-fn post_upgrade() {
-    set_build_index_timer(Duration::from_secs(1));
+fn post_upgrade(index_arg: Option<IndexArg>) {
+    match index_arg {
+        Some(IndexArg::Upgrade(upgrade)) => {
+            log!(P1, "Possible upgrade configuration changes: {:#?}", upgrade,);
+
+            let UpgradeArg {
+                ledger_id,
+                retrieve_blocks_from_ledger_interval_seconds,
+            } = upgrade;
+
+            mutate_state(|state| {
+                if let Some(new_value) = ledger_id {
+                    state.ledger_id = new_value;
+                }
+
+                if let Some(new_value) = retrieve_blocks_from_ledger_interval_seconds {
+                    state.retrieve_blocks_from_ledger_interval =
+                        Some(Duration::from_secs(new_value));
+                }
+            });
+        }
+        Some(IndexArg::Init(..)) => trap("Index upgrade argument cannot be of variant Init"),
+        _ => (),
+    };
+
+    // set the first build_index to be called after upgrade
+    set_build_index_timer(with_state(|state| {
+        state.retrieve_blocks_from_ledger_interval()
+    }));
 }
 
 async fn get_blocks_from_ledger(start: u64) -> Result<QueryEncodedBlocksResponse, String> {
@@ -290,12 +351,9 @@ async fn get_blocks_from_archive(
     Ok(blocks)
 }
 
-pub async fn build_index() -> Result<(), String> {
+pub async fn build_index() -> Option<()> {
     if with_state(|state| state.is_build_index_running) {
-        return Err(
-            "[build_index]: could not start build index --> build index is already running"
-                .to_string(),
-        );
+        return None;
     }
     mutate_state(|state| {
         state.is_build_index_running = true;
@@ -305,17 +363,19 @@ pub async fn build_index() -> Result<(), String> {
             state.is_build_index_running = false;
         });
     });
-    let failure_guard = guard((), |_| {
-        log!(
-            P1,
-            "[build_index]: failure guard triggered --> reset build index timer to {:?}",
-            DEFAULT_RETRY_WAIT_TIME
-        );
-        set_build_index_timer(DEFAULT_RETRY_WAIT_TIME);
-    });
     let next_txid = with_blocks(|blocks| blocks.len());
     log!(P0, "[build_index]: next transaction id is {:?}", next_txid);
-    let res = get_blocks_from_ledger(next_txid).await?;
+    let res = match get_blocks_from_ledger(next_txid).await {
+        Ok(res) => res,
+        Err(err) => {
+            log!(
+                P0,
+                "[build_index]: failed to get blocks from ledger: {}",
+                err
+            );
+            return Some(());
+        }
+    };
     log!(
         P0,
         "[build_index]: received {} blocks from ledger",
@@ -331,11 +391,27 @@ pub async fn build_index() -> Result<(), String> {
                 length: remaining,
                 callback: archived.callback.clone(),
             };
-            let candid_blocks = get_blocks_from_archive(&archived).await?;
+            let candid_blocks = match get_blocks_from_archive(&archived).await {
+                Ok(blocks) => blocks,
+                Err(err) => {
+                    log!(
+                        P0,
+                        "[build_index]: failed to get blocks from archive: {}",
+                        err
+                    );
+                    return Some(());
+                }
+            };
             next_archived_txid += candid_blocks.len() as u64;
             tx_indexed_count += candid_blocks.len();
             remaining -= candid_blocks.len() as u64;
-            append_blocks(candid_blocks)?;
+            if let Err(err) = append_blocks(candid_blocks) {
+                log!(P0, "[build_index]: failed to append blocks: {}", err);
+                log!(P0, "[build_index]: Stopping the indexing timer.");
+                ic_cdk::eprintln!("Stopping the indexing timer.");
+                clear_build_index_timer();
+                return Some(());
+            }
         }
     }
     log!(
@@ -345,44 +421,34 @@ pub async fn build_index() -> Result<(), String> {
     );
     tx_indexed_count += res.blocks.len();
     log!(P0, "[build_index]: received {} blocks", tx_indexed_count);
-    append_blocks(res.blocks)?;
-    let wait_time = compute_wait_time(tx_indexed_count);
+    if let Err(err) = append_blocks(res.blocks) {
+        log!(P0, "[build_index]: failed to append blocks: {}", err);
+        log!(P0, "[build_index]: Stopping the indexing timer.");
+        ic_cdk::eprintln!("Stopping the indexing timer.");
+        clear_build_index_timer();
+        return Some(());
+    }
+    let retrieve_blocks_from_ledger_interval =
+        with_state(|state| state.retrieve_blocks_from_ledger_interval());
     log!(
         P1,
         "[build_index]: Indexed: {} waiting : {:?}",
         tx_indexed_count,
-        wait_time
+        retrieve_blocks_from_ledger_interval
     );
-    mutate_state(|state| state.last_wait_time = wait_time);
-    ScopeGuard::into_inner(failure_guard);
-    set_build_index_timer(wait_time);
-    Ok(())
+    Some(())
 }
 
-fn set_build_index_timer(after: Duration) -> TimerId {
-    ic_cdk_timers::set_timer(after, || {
-        ic_cdk::spawn(async {
-            let _ = build_index().await.map_err(|err| {
-                log!(
-                    P0,
-                    "[set_build_index_timer]: received error while building index: {}",
-                    err
-                );
-                err
-            });
-        })
-    })
+fn set_build_index_timer(after: Duration) {
+    let timer_id = ic_cdk_timers::set_timer_interval(after, || async {
+        let _ = build_index().await;
+    });
+    TIMER_ID.with(|tid| *tid.borrow_mut() = timer_id);
 }
 
-/// Compute the waiting time before next indexing
-pub fn compute_wait_time(indexed_tx_count: usize) -> Duration {
-    if indexed_tx_count >= DEFAULT_MAX_BLOCKS_PER_RESPONSE {
-        // If we indexed more than max_blocks_per_response,
-        // we index again on the next build_index call.
-        return Duration::ZERO;
-    }
-    let numerator = 1f64 - (indexed_tx_count as f64 / DEFAULT_MAX_BLOCKS_PER_RESPONSE as f64);
-    DEFAULT_MAX_WAIT_TIME * (100f64 * numerator) as u32 / 100
+fn clear_build_index_timer() {
+    let timer_id = TIMER_ID.with(|tid| *tid.borrow());
+    ic_cdk_timers::clear_timer(timer_id);
 }
 
 fn append_blocks(new_blocks: Vec<EncodedBlock>) -> Result<(), String> {
@@ -558,13 +624,6 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         "index_number_of_blocks",
         with_blocks(|blocks| blocks.len()) as f64,
         "Total number of blocks stored in the stable memory.",
-    )?;
-    w.encode_gauge(
-        "index_last_wait_time",
-        with_state(|state| state.last_wait_time)
-            .as_nanos()
-            .min(f64::MAX as u128) as f64,
-        "Last amount of time waited between two transactions fetch.",
     )?;
     Ok(())
 }

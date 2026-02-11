@@ -5,10 +5,10 @@ use ic_identity_hsm::HardwareIdentity;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{
-    ManageNeuron, ManageNeuronResponse, Motion, Proposal,
-    manage_neuron::{Command, NeuronIdOrSubaccount},
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    Motion, ProposalActionRequest,
+    manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::{self, MakeProposalResponse},
-    proposal::Action,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -122,7 +122,7 @@ fn handle_response(response: Vec<u8>) {
 /// Reads the file, which is formatted according to the --proposal-file file,
 /// parses it, and constructs a proposal creation request that can be sent to
 /// the NNS Governance canister via the manage_neuron canister method.
-fn load_proposal(proposal_file_path: &str, neuron_id: u64, verbose: bool) -> ManageNeuron {
+fn load_proposal(proposal_file_path: &str, neuron_id: u64, verbose: bool) -> ManageNeuronRequest {
     let proposal_file_content = std::fs::read_to_string(proposal_file_path).unwrap();
 
     let divider = "-".repeat(80) + "\n";
@@ -148,18 +148,18 @@ fn load_proposal(proposal_file_path: &str, neuron_id: u64, verbose: bool) -> Man
     let title = Some(title);
     let summary = summary.to_string();
 
-    ManageNeuron {
+    ManageNeuronRequest {
         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: neuron_id })),
-
-        command: Some(Command::MakeProposal(Box::new(Proposal {
-            title,
-            url,
-            summary,
-            action: Some(Action::Motion(Motion {
-                motion_text: "See the proposal summary.".to_string(),
-            })),
-        }))),
-
+        command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+            MakeProposalRequest {
+                title,
+                url,
+                summary,
+                action: Some(ProposalActionRequest::Motion(Motion {
+                    motion_text: "See the proposal summary.".to_string(),
+                })),
+            },
+        ))),
         id: None,
     }
 }

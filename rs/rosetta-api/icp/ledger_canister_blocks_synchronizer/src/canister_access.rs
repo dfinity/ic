@@ -88,7 +88,7 @@ impl CanisterAccess {
         canister_id: CanisterId,
         root_key: Option<Vec<u8>>,
     ) -> Result<Self, AgentError> {
-        let agent = make_agent(url, Some(Duration::from_secs(1u64)), root_key).await?;
+        let agent = make_agent(url, Some(Duration::from_secs(10u64)), root_key).await?;
 
         Ok(Self {
             agent,

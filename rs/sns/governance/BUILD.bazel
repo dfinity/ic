@@ -24,9 +24,10 @@ exports_files(
 )
 
 canister_test_did(
-    name = "canister/governance_test.did",
+    name = "test_did",
     canister_did = "canister/governance.did",
     canister_test_did_patch = "canister/governance_test.did.patch",
+    output_path = "canister/governance_test.did",
 )
 
 DEPENDENCIES = [
@@ -193,12 +194,14 @@ rust_canister(
 
 rust_canister(
     name = "sns-governance-canister-test",
+    testonly = True,
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
-    compile_data = [":canister/governance_test.did"],
+    compile_data = [":test_did"],
     crate_features = ["test"],
+    did_check = False,  # we don't check in the did so can't meaningfully check
     proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":canister/governance_test.did",
+    service_file = ":test_did",
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
@@ -237,7 +240,7 @@ rust_test(
 rust_test(
     name = "canister_test_unit_test",
     srcs = glob(["canister/**/*.rs"]),
-    compile_data = [":canister/governance_test.did"],
+    compile_data = [":test_did"],
     crate_features = ["test"],
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

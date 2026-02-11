@@ -144,7 +144,7 @@ impl QuicTransport {
         log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         rt: &tokio::runtime::Handle,
-        tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        tls_config: Arc<dyn TlsConfig>,
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
         // The receiver is passed here mainly to be consistent with other managers that also

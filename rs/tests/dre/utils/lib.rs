@@ -5,7 +5,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Node, Subnet},
     node_software_version::NodeSoftwareVersion,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
 };
@@ -14,7 +13,6 @@ use ic_types::ReplicaVersion;
 use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
-use std::time::Duration;
 use url::Url;
 
 pub mod defs;
@@ -25,12 +23,12 @@ const GUESTOS_DISK_IMG_URL: &str = "ENV_DEPS__GUESTOS_DISK_IMG_URL";
 const GUESTOS_DISK_IMG_HASH: &str = "ENV_DEPS__GUESTOS_DISK_IMG_HASH";
 const GUESTOS_INITIAL_UPDATE_IMG_URL: &str = "ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL";
 const GUESTOS_INITIAL_UPDATE_IMG_HASH: &str = "ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH";
-const GUESTOS_INITIAL_UPDATE_IMG_MEASUREMENTS_FILE: &str =
-    "ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE";
+const GUESTOS_LAUNCH_MEASUREMENTS_FILE: &str = "ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE";
 const GUESTOS_UPDATE_IMG_VERSION: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION";
 const GUESTOS_UPDATE_IMG_URL: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_URL";
 const GUESTOS_UPDATE_IMG_HASH: &str = "ENV_DEPS__GUESTOS_UPDATE_IMG_HASH";
-const GUESTOS_UPDATE_IMG_MEASUREMENTS_FILE: &str = "ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE";
+const GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE: &str =
+    "ENV_DEPS__GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE";
 
 pub const IC_CONFIG: &str = "IC_CONFIG";
 
@@ -72,10 +70,6 @@ pub fn setup(env: TestEnv, config: IcConfig) {
                 .for_each(|un| ic = ic.clone().with_api_boundary_node(un)),
         }
     }
-
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
 
@@ -83,8 +77,6 @@ pub fn setup(env: TestEnv, config: IcConfig) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-
-    env.sync_with_prometheus();
 }
 
 #[derive(Deserialize, Debug)]
@@ -147,23 +139,12 @@ pub fn mock_env_variables(config: &IcConfig) {
                     block_on(fetch_update_file_sha256_with_retry(v)),
                     GUESTOS_INITIAL_UPDATE_IMG_HASH,
                 ),
+                (
+                    block_on(fetch_launch_measurements_with_retry(v)).display().to_string(),
+                    GUESTOS_LAUNCH_MEASUREMENTS_FILE,
+                ),
             ],
         );
-
-        // TODO(NODE-1679): Simplify this check once the measurements are available in the repo.
-        match block_on(fetch_update_file_measurements_with_retry(v)) {
-            Ok(measurements) => {
-                update_env_variables(vec![(
-                    measurements.display().to_string(),
-                    GUESTOS_INITIAL_UPDATE_IMG_MEASUREMENTS_FILE,
-                )]);
-            }
-            _ => {
-                eprintln!(
-                    "Unable to set launch measurements, they may not be provided, yet. (NODE-1652)"
-                );
-            }
-        }
     }
 
     update_env_variables(vec![
@@ -182,24 +163,13 @@ pub fn mock_env_variables(config: &IcConfig) {
             block_on(fetch_update_file_sha256_with_retry(&config.target_version)),
             GUESTOS_UPDATE_IMG_HASH,
         ),
+        (
+            block_on(fetch_launch_measurements_with_retry(&config.target_version))
+                .display()
+                .to_string(),
+            GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE,
+        ),
     ]);
-
-    // TODO(NODE-1679): Simplify this check once the measurements are available in the repo.
-    match block_on(fetch_update_file_measurements_with_retry(
-        &config.target_version,
-    )) {
-        Ok(measurements) => {
-            update_env_variables(vec![(
-                measurements.display().to_string(),
-                GUESTOS_UPDATE_IMG_MEASUREMENTS_FILE,
-            )]);
-        }
-        _ => {
-            eprintln!(
-                "Unable to set launch measurements, they may not be provided, yet. (NODE-1652)"
-            );
-        }
-    }
 }
 
 fn update_env_variables(pairs: Vec<(String, &str)>) {
@@ -218,7 +188,7 @@ fn get_public_update_image_sha_url(git_revision: &ReplicaVersion) -> String {
     )
 }
 
-pub fn get_public_update_image_guest_launch_measurements(git_revision: &ReplicaVersion) -> String {
+pub fn get_public_guest_launch_measurements(git_revision: &ReplicaVersion) -> String {
     format!(
         "http://download.proxy-global.dfinity.network:8080/ic/{git_revision}/guest-os/update-img/launch-measurements.json"
     )
@@ -266,35 +236,33 @@ async fn fetch_update_file_sha256(version: &ReplicaVersion) -> Result<String, St
     Err(format!("SHA256 hash is not found in {sha_url}"))
 }
 
-async fn fetch_update_file_measurements_with_retry(
-    version: &ReplicaVersion,
-) -> Result<PathBuf, String> {
+async fn fetch_launch_measurements_with_retry(version: &ReplicaVersion) -> PathBuf {
     // NOTE: Throw away internal logs here, as we don't yet have a logger and
     // don't bother making a new one.
     let log_null = slog::Logger::root(slog::Discard, slog::o!());
 
     ic_system_test_driver::retry_with_msg_async!(
-        format!("fetch update file measurements of version {}", version),
+        format!("fetch launch measurements of version {}", version),
         &log_null,
-        Duration::from_secs(30), // Note: Lower the timeout from READY_WAIT_TIMEOUT until measurements are always published. TODO(NODE-1652)
+        READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            match fetch_update_file_measurements(version).await {
+            match fetch_launch_measurements(version).await {
                 Err(err) => bail!(err),
                 Ok(measurements) => Ok(measurements),
             }
         }
     )
     .await
-    .map_err(|err| format!("Failed to fetch measurements file: {err}"))
+    .expect("Failed to fetch measurements file.")
 }
 
-async fn fetch_update_file_measurements(version: &ReplicaVersion) -> Result<PathBuf, String> {
+async fn fetch_launch_measurements(version: &ReplicaVersion) -> Result<PathBuf, String> {
     let tmpfile =
         tempfile::NamedTempFile::new().map_err(|err| format!("Unable to create tmpfile: {err}"))?;
     FileDownloader::new(None)
         .download_file(
-            &get_public_update_image_guest_launch_measurements(version),
+            &get_public_guest_launch_measurements(version),
             tmpfile.path(),
             None,
         )

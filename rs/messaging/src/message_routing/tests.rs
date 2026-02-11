@@ -25,6 +25,7 @@ use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDa
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::Stream;
+use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
@@ -668,7 +669,6 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         subnet_size: 0,
         node_ids: BTreeSet::new(),
         registry_version: RegistryVersion::default(),
-        canister_cycles_cost_schedule: ic_types::batch::CanisterCyclesCostSchedule::Normal,
     }));
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),
@@ -734,7 +734,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                             curve: EcdsaCurve::Secp256k1,
                             name: "ecdsa key 1".to_string(),
                         }),
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                         max_queue_size: 891,
                     },
                     KeyConfig {
@@ -742,7 +742,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                             curve: EcdsaCurve::Secp256k1,
                             name: "ecdsa key 2".to_string(),
                         }),
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                         max_queue_size: 891,
                     },
                 ],
@@ -1029,13 +1029,15 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
             batch_summary: None,
-            requires_full_state_hash: false,
-            messages: BatchMessages::default(),
+            content: BatchContent::Data {
+                batch_messages: BatchMessages::default(),
+                consensus_responses: Vec::new(),
+                chain_key_data: Default::default(),
+                requires_full_state_hash: false,
+            },
             randomness: Randomness::new([123; 32]),
-            chain_key_data: Default::default(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
-            consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version: ReplicaVersion::default(),
         });
@@ -1701,7 +1703,7 @@ fn process_batch_updates_subnet_metrics() {
                             name: "ecdsa key 1".to_string(),
                         }),
                         max_queue_size: 891,
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                     },
                     KeyConfig {
                         key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
@@ -1709,7 +1711,7 @@ fn process_batch_updates_subnet_metrics() {
                             name: "ecdsa key 2".to_string(),
                         }),
                         max_queue_size: 891,
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                     },
                 ],
                 ..Default::default()
@@ -1816,13 +1818,15 @@ fn process_batch_updates_subnet_metrics() {
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
             batch_summary: None,
-            requires_full_state_hash: false,
-            messages: BatchMessages::default(),
+            content: BatchContent::Data {
+                batch_messages: BatchMessages::default(),
+                consensus_responses: Vec::new(),
+                chain_key_data: Default::default(),
+                requires_full_state_hash: false,
+            },
             randomness: Randomness::new([123; 32]),
-            chain_key_data: Default::default(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
-            consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version: ReplicaVersion::default(),
         });
@@ -1837,6 +1841,70 @@ fn process_batch_updates_subnet_metrics() {
             latest_state.metadata.subnet_metrics.canister_state_bytes,
             canister_state
         );
+    });
+}
+
+#[test]
+fn process_batch_resets_split_marker() {
+    with_test_replica_logger(|log| {
+        use Integrity::*;
+
+        let own_subnet_id = subnet_test_id(13);
+        let other_subnet_id = subnet_test_id(17);
+        let nns_subnet_id = subnet_test_id(42);
+
+        let own_transcript = dummy_transcript_for_tests_with_params(
+            vec![node_test_id(123)], // committee
+            NiDkgTag::HighThreshold, // dkg_tag
+            2,                       // threshold
+            3,                       // registry_version
+        );
+
+        let fixture = RegistryFixture::new();
+        fixture
+            .write_test_records(&TestRecords {
+                subnet_ids: Valid([own_subnet_id]),
+                subnet_records: [Valid(&SubnetRecord::default())],
+                ni_dkg_transcripts: [Valid(Some(&own_transcript))],
+                nns_subnet_id: Valid(nns_subnet_id),
+                chain_key_enabled_subnets: &BTreeMap::default(),
+                provisional_whitelist: Valid(&ProvisionalWhitelist::All),
+                routing_table: Valid(&RoutingTable::new()),
+                canister_migrations: Valid(&CanisterMigrations::new()),
+                node_public_keys: &BTreeMap::default(),
+                api_boundary_node_records: &BTreeMap::default(),
+                node_records: &BTreeMap::default(),
+            })
+            .unwrap();
+
+        // Reading from the registry must succeed for fully specified records.
+        let (batch_processor, _metrics, state_manager, _registry_settings) =
+            make_batch_processor(fixture.registry.clone(), log);
+        let (mut height, mut state) = state_manager.take_tip();
+        state.metadata.own_subnet_id = own_subnet_id;
+        state.metadata.subnet_split_from = Some(other_subnet_id);
+        height.inc_assign();
+        state_manager.commit_and_certify(state, height, CertificationScope::Metadata, None);
+
+        batch_processor.process_batch(Batch {
+            batch_number: height.increment(),
+            batch_summary: None,
+            content: BatchContent::Data {
+                batch_messages: BatchMessages::default(),
+                consensus_responses: Vec::new(),
+                chain_key_data: Default::default(),
+                requires_full_state_hash: false,
+            },
+            randomness: Randomness::new([123; 32]),
+            registry_version: fixture.registry.get_latest_version(),
+            time: Time::from_nanos_since_unix_epoch(1),
+            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
+        });
+
+        // The subnet split marker was reset.
+        let latest_state = state_manager.get_latest_state().take();
+        assert_eq!(None, latest_state.metadata.subnet_split_from);
     });
 }
 

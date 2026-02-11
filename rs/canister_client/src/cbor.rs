@@ -216,8 +216,8 @@ fn sign_query(
 mod tests {
     use super::*;
     use ic_canister_client_sender::{Ed25519KeyPair, ed25519_public_key_to_der};
+    use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
-    use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::messages::{HttpCanisterUpdate, HttpRequest, HttpUserQuery, Query};
     use ic_types::time::current_time;

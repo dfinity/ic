@@ -14,8 +14,6 @@ hyper-rustls = { workspace = true }
 hyper-util = { workspace = true }
 http-body-util = { workspace = true }
 ic-canister-client-sender = { path = "./sender" }
-ic-canonical-state = { path = "../canonical_state" }
-ic-certification = { path = "../certification" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-protobuf = { path = "../protobuf" }
@@ -25,11 +23,9 @@ ic-types = { path = "../types/types" }
 itertools = { workspace = true }
 prost = { workspace = true }
 rustls = { workspace = true }
-serde = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-tree-deserializer = { path = "../tree_deserializer" }
 url = { workspace = true }
 
 [dev-dependencies]
@@ -38,7 +34,7 @@ ic-certification-test-utils = { path = "../certification/test-utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trust" }
 ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
-ic-test-utilities = { path = "../test_utilities" }
+ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-validator = { path = "../validator" }
 rand = { workspace = true }

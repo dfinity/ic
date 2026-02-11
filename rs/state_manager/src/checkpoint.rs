@@ -6,7 +6,6 @@ use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
-use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
 use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
     CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
@@ -22,7 +21,7 @@ use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::convert::{TryFrom, identity};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -77,7 +76,13 @@ pub(crate) fn make_unvalidated_checkpoint(
     tip_channel
         .send(TipRequest::FilterTipCanisters {
             height,
-            ids: state.canister_states.keys().copied().collect(),
+            canister_ids: state.canister_states.keys().copied().collect(),
+            snapshot_ids: state
+                .canister_snapshots
+                .iter()
+                .map(|(k, _v)| k)
+                .copied()
+                .collect(),
         })
         .unwrap();
 
@@ -368,47 +373,26 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
         }
     }
 
+    for (snapshot_id, canister_snapshot) in tip_state.canister_snapshots.iter_mut() {
+        let new_snapshot = Arc::make_mut(canister_snapshot);
+
+        add_to_pagemaps_and_strip(
+            PageMapType::SnapshotWasmChunkStore(*snapshot_id),
+            new_snapshot.chunk_store_mut().page_map_mut(),
+        );
+        add_to_pagemaps_and_strip(
+            PageMapType::SnapshotWasmMemory(*snapshot_id),
+            &mut new_snapshot.execution_snapshot_mut().wasm_memory.page_map,
+        );
+        add_to_pagemaps_and_strip(
+            PageMapType::SnapshotStableMemory(*snapshot_id),
+            &mut new_snapshot.execution_snapshot_mut().stable_memory.page_map,
+        );
+    }
+
     // Take all snapshot operations that happened since the last flush and clear the list stored in `tip_state`.
     // This way each operation is executed exactly once, independent of how many times `flush_page_maps` is called.
     let unflushed_checkpoint_ops = tip_state.metadata.unflushed_checkpoint_ops.take();
-
-    // Because of `UploadCanisterSnapshotData`, the same snapshot ID may be present many times in the list above.
-    // So for efficiency, we deduplicate using this set.
-    let mut processed_snapshots: HashSet<SnapshotId> = HashSet::new();
-
-    for op in &unflushed_checkpoint_ops {
-        // Only CanisterSnapshots that are new since the last flush and CanisterSnapshots that have had binary data uploaded
-        // will have PageMaps that need to be flushed. They will have a corresponding `CreateSnapshot` or `UploadSnapshotData`
-        // in the unflushed operations list.
-        if let UnflushedCheckpointOp::TakeSnapshot(.., snapshot_id)
-        | UnflushedCheckpointOp::UploadSnapshotData(snapshot_id)
-        | UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id) = op
-        {
-            // If we can't find the CanisterSnapshot they must have been already deleted again. Nothing to flush in this case.
-            if let Some(canister_snapshot) = tip_state.canister_snapshots.get_mut(*snapshot_id) {
-                if processed_snapshots.contains(snapshot_id) {
-                    continue;
-                } else {
-                    processed_snapshots.insert(*snapshot_id);
-                }
-
-                let new_snapshot = Arc::make_mut(canister_snapshot);
-
-                add_to_pagemaps_and_strip(
-                    PageMapType::SnapshotWasmChunkStore(*snapshot_id),
-                    new_snapshot.chunk_store_mut().page_map_mut(),
-                );
-                add_to_pagemaps_and_strip(
-                    PageMapType::SnapshotWasmMemory(*snapshot_id),
-                    &mut new_snapshot.execution_snapshot_mut().wasm_memory.page_map,
-                );
-                add_to_pagemaps_and_strip(
-                    PageMapType::SnapshotStableMemory(*snapshot_id),
-                    &mut new_snapshot.execution_snapshot_mut().stable_memory.page_map,
-                );
-            }
-        }
-    }
 
     tip_channel
         .send(TipRequest::FlushPageMapDelta {
@@ -486,6 +470,20 @@ impl CheckpointLoader {
             &self.metrics as &dyn CheckpointLoadingMetrics,
         ))
         .map_err(|err| self.map_to_checkpoint_error("CanisterQueues".into(), err))
+    }
+
+    fn load_refunds(&self) -> Result<ic_replicated_state::RefundPool, CheckpointError> {
+        let _timer = self
+            .metrics
+            .load_checkpoint_step_duration
+            .with_label_values(&["refunds"])
+            .start_timer();
+
+        ic_replicated_state::RefundPool::try_from((
+            self.checkpoint_layout.refunds().deserialize()?,
+            &self.metrics as &dyn CheckpointLoadingMetrics,
+        ))
+        .map_err(|err| self.map_to_checkpoint_error("RefundPool".into(), err))
     }
 
     fn load_epoch_query_stats(&self) -> Result<RawQueryStats, CheckpointError> {
@@ -654,6 +652,7 @@ pub fn load_checkpoint(
         checkpoint_loader.load_canister_states(&mut thread_pool)?,
         checkpoint_loader.load_system_metadata()?,
         checkpoint_loader.load_subnet_queues()?,
+        checkpoint_loader.load_refunds()?,
         checkpoint_loader.load_epoch_query_stats()?,
         checkpoint_loader.load_canister_snapshots(&mut thread_pool)?,
     ))
@@ -698,6 +697,7 @@ fn validate_eq_checkpoint_internal(
         canister_states,
         metadata,
         subnet_queues,
+        refunds,
         consensus_queue,
         epoch_query_stats,
         canister_snapshots,
@@ -722,6 +722,10 @@ fn validate_eq_checkpoint_internal(
         .load_subnet_queues()
         .unwrap()
         .validate_eq(subnet_queues)?;
+    checkpoint_loader
+        .load_refunds()
+        .unwrap()
+        .validate_eq(refunds)?;
     if checkpoint_loader.load_epoch_query_stats().unwrap() != *epoch_query_stats {
         return Err("query_stats has diverged.".to_string());
     }
@@ -844,8 +848,8 @@ pub fn load_canister_state(
     durations.insert("canister_queues", starting_time.elapsed());
 
     let canister_metrics = CanisterMetrics::new(
+        canister_state_bits.rounds_scheduled,
         canister_state_bits.scheduled_as_first,
-        canister_state_bits.skipped_round_due_to_no_messages,
         canister_state_bits.executed,
         canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles,
@@ -866,12 +870,15 @@ pub fn load_canister_state(
         *canister_id,
         queues,
         canister_state_bits.memory_allocation,
+        canister_state_bits.compute_allocation,
         canister_state_bits.wasm_memory_threshold,
         canister_state_bits.freeze_threshold,
         canister_state_bits.status,
         canister_state_bits.certified_data,
         canister_metrics,
+        canister_state_bits.total_query_stats,
         canister_state_bits.cycles_balance,
+        Time::from_nanos_since_unix_epoch(canister_state_bits.time_of_last_allocation_charge_nanos),
         canister_state_bits.cycles_debit,
         canister_state_bits.reserved_balance,
         canister_state_bits.reserved_balance_limit,
@@ -882,6 +889,7 @@ pub fn load_canister_state(
         wasm_chunk_store_data,
         canister_state_bits.wasm_chunk_store_metadata,
         canister_state_bits.log_visibility,
+        canister_state_bits.log_memory_limit,
         canister_state_bits.canister_log,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
@@ -895,16 +903,11 @@ pub fn load_canister_state(
         execution_state,
         scheduler_state: SchedulerState {
             last_full_execution_round: canister_state_bits.last_full_execution_round,
-            compute_allocation: canister_state_bits.compute_allocation,
             accumulated_priority: canister_state_bits.accumulated_priority,
             priority_credit: canister_state_bits.priority_credit,
             long_execution_mode: canister_state_bits.long_execution_mode,
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
-            time_of_last_allocation_charge: Time::from_nanos_since_unix_epoch(
-                canister_state_bits.time_of_last_allocation_charge_nanos,
-            ),
-            total_query_stats: canister_state_bits.total_query_stats,
         },
     };
 

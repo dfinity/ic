@@ -7,7 +7,7 @@
 //! execution.
 use crate::{
     cli::wait_for_confirmation, file_sync_helper::remove_dir, registry_helper::RegistryHelper,
-    util::SshUser,
+    ssh_helper::SshHelper, util::SshUser,
 };
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
@@ -16,6 +16,7 @@ use file_sync_helper::{create_dir, download_binary, read_dir};
 use futures::future::join_all;
 use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
+use ic_protobuf::registry::replica_version::v1::{GuestLaunchMeasurements, ReplicaVersionRecord};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
     cmd::{AddRegistryContentCmd, SubCommand, UpgradeSubnetToReplicaVersionCmd},
@@ -25,7 +26,6 @@ use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
-use ssh_helper::SshHelper;
 use std::{env, io::ErrorKind};
 use std::{
     net::IpAddr,
@@ -53,7 +53,7 @@ pub mod recovery_iterator;
 pub mod recovery_state;
 pub mod registry_helper;
 pub mod replay_helper;
-pub(crate) mod ssh_helper;
+pub mod ssh_helper;
 pub mod steps;
 pub mod util;
 
@@ -65,24 +65,11 @@ pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_CONSENSUS_POOL_PATH: &str = "ic_consensus_pool";
 pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
-pub const IC_STATE_EXCLUDES: &[&str] = &[
-    "images",
-    "tip",
-    "backups",
-    "fs_tmp",
-    "recovery",
-    // The page_deltas/ directory should not be copied over on rsync as well,
-    // it is a new directory used for storing the files backing up the
-    // page deltas. We do not need to copy page deltas when nodes are re-assigned.
-    "page_deltas",
-    "node_operator_private_key.pem",
-    "ic_adapter",
-    IC_REGISTRY_LOCAL_STORE,
-];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
 pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
+pub const STATES_METADATA: &str = "states_metadata.pbuf";
 pub const CHECKPOINTS: &str = "checkpoints";
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -131,7 +118,7 @@ pub struct Recovery {
     pub registry_helper: RegistryHelper,
 
     pub admin_key_file: Option<PathBuf>,
-    ssh_confirmation: bool,
+    pub ssh_confirmation: bool,
 
     pub logger: Logger,
 }
@@ -146,7 +133,11 @@ impl Recovery {
         registry_nns_url: Url,
         registry_polling_strategy: RegistryPollingStrategy,
     ) -> RecoveryResult<Self> {
-        let ssh_confirmation = !args.test_mode;
+        //  If `args.test_mode` is false, we are in production mode and should always ask for
+        //  confirmation for SSH operations (even if `args.skip_prompts` is true), as production
+        //  Yubikeys need physical confirmation.
+        //  Otherwise, then rely on `args.skip_prompts`.
+        let ssh_confirmation = !args.test_mode || !args.skip_prompts;
         let recovery_dir = args.dir.join(RECOVERY_DIRECTORY_NAME);
         let binary_dir = if args.use_local_binaries {
             PathBuf::from_str("/opt/ic/bin/").expect("bad file path string")
@@ -192,26 +183,41 @@ impl Recovery {
             wait_for_confirmation(&logger);
         }
 
-        if !args.use_local_binaries && !binary_dir.join("ic-admin").exists() {
-            if let Some(version) = args.replica_version {
-                block_on(download_binary(
-                    &logger,
-                    &version,
-                    String::from("ic-admin"),
-                    &binary_dir,
-                ))?;
-            } else {
-                info!(logger, "No ic-admin version provided, skipping download.");
-            }
-        } else {
-            info!(logger, "ic-admin exists, skipping download.");
-        }
+        let ic_admin = match env::var("IC_ADMIN_PATH") {
+            // if IC_ADMIN_PATH is set, use that
+            Ok(ic_admin_path) => PathBuf::from(ic_admin_path),
+            // Otherwise, either download ic-admin or use the one from 'binary_dir'
+            Err(std::env::VarError::NotPresent) => {
+                let local_ic_admin_path = binary_dir.join("ic-admin");
 
-        let ic_admin = if args.use_local_binaries {
-            PathBuf::from(env::var("IC_ADMIN_BIN").unwrap_or("ic-admin".to_string()))
-        } else {
-            binary_dir.join("ic-admin")
+                if local_ic_admin_path.exists() {
+                    // env var not set, but local ic admin was found, so use that
+                    local_ic_admin_path
+                } else if let Some(version) = args.replica_version {
+                    block_on(download_binary(
+                        &logger,
+                        &version,
+                        String::from("ic-admin"),
+                        &binary_dir,
+                    ))?;
+
+                    // we expect 'download_binary' to download the binary to
+                    // <binary_dir>/ic-admin
+                    local_ic_admin_path
+                } else {
+                    // the env var is not set, the binary does not exist locally and we have no version
+                    // to download.
+                    info!(
+                        logger,
+                        "No ic-admin version provided, file may not exist: '{:?}'",
+                        local_ic_admin_path
+                    );
+                    local_ic_admin_path
+                }
+            }
+            Err(e) => panic!("Could not read IC_ADMIN_PATH: {:?}", e),
         };
+
         let admin_helper = AdminHelper::new(ic_admin, args.nns_url, neuron_args);
 
         Ok(Self {
@@ -274,22 +280,6 @@ impl Recovery {
         }
     }
 
-    /// Executes the given SSH command.
-    pub fn execute_admin_ssh_command(
-        &self,
-        node_ip: IpAddr,
-        commands: &str,
-    ) -> RecoveryResult<Option<String>> {
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            SshUser::Admin.to_string(),
-            node_ip,
-            self.ssh_confirmation,
-            self.admin_key_file.clone(),
-        );
-        ssh_helper.ssh(commands.to_string())
-    }
-
     // Execute an `ic-admin` command, log the output.
     fn exec_admin_cmd(logger: &Logger, ic_admin_cmd: &IcAdmin) -> RecoveryResult<()> {
         let mut cmd = AdminHelper::to_system_command(ic_admin_cmd);
@@ -331,30 +321,130 @@ impl Recovery {
         }
     }
 
-    /// Return a [DownloadIcStateStep] downloading the ic_state of the given
-    /// node to the recovery data directory using the given account.
+    /// Return a [DownloadIcDataStep] downloading the consensus pool of the given node.
+    /// Certifications are only included if they do not already exist in the work directory.
+    pub fn get_download_consensus_pool_step(
+        &self,
+        node_ip: IpAddr,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            ssh_user,
+            node_ip,
+            self.ssh_confirmation,
+            key_file.clone(),
+        );
+
+        let consensus_pool_path = PathBuf::from(IC_CONSENSUS_POOL_PATH);
+        let mut includes = vec![
+            consensus_pool_path.join("replica_version"),
+            consensus_pool_path.join("consensus"),
+        ];
+
+        // If we already have some certifications, we do not download them again.
+        if !self
+            .work_dir
+            .join("data")
+            .join(IC_CERTIFICATIONS_PATH)
+            .exists()
+        {
+            includes.push(consensus_pool_path.join("certification"));
+        }
+
+        self.get_download_data_step(
+            ssh_helper, /*keep_downloaded_data=*/ false, includes,
+            /*include_config=*/ false,
+        )
+    }
+
+    /// Return the list of paths to include when downloading a node's "production" state (i.e. at
+    /// /var/lib/ic/data) with rsync.
+    /// One of them is the latest checkpoint, which is looked up remotely via ssh if an `ssh_helper`
+    /// is given, or locally on disk otherwise.
+    pub fn get_ic_state_includes(ssh_helper: Option<&SshHelper>) -> RecoveryResult<Vec<PathBuf>> {
+        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
+        let latest_checkpoint_name = if let Some(ssh_helper) = ssh_helper {
+            Self::get_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
+        } else {
+            Self::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?.0
+        };
+
+        Ok(
+            Self::get_state_includes_with_given_checkpoint(&latest_checkpoint_name)
+                .iter()
+                .map(|p| PathBuf::from(IC_STATE).join(p))
+                .collect(),
+        )
+    }
+
+    /// Return the list of paths to include when downloading/uploading the state with rsync.
+    ///
+    /// This function must be updated if the state layout ever changes.
+    pub fn get_state_includes_with_given_checkpoint(checkpoint_name: &str) -> Vec<PathBuf> {
+        vec![
+            PathBuf::from(STATES_METADATA),
+            PathBuf::from(CHECKPOINTS).join(checkpoint_name),
+        ]
+    }
+
+    /// Return a [DownloadIcDataStep] downloading the ic_state of the given node.
     pub fn get_download_state_step(
         &self,
         node_ip: IpAddr,
         ssh_user: SshUser,
         key_file: Option<PathBuf>,
         keep_downloaded_state: bool,
-        additional_excludes: Vec<&str>,
-    ) -> impl Step + use<> {
-        DownloadIcStateStep {
-            logger: self.logger.clone(),
+    ) -> RecoveryResult<impl Step + use<>> {
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
             ssh_user,
             node_ip,
-            target: self.data_dir.display().to_string(),
-            keep_downloaded_state,
-            working_dir: self.work_dir.display().to_string(),
-            require_confirmation: self.ssh_confirmation,
+            self.ssh_confirmation,
             key_file,
-            additional_excludes: additional_excludes
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect(),
+        );
+
+        let includes = Self::get_ic_state_includes(Some(&ssh_helper))?;
+
+        self.get_download_data_step(
+            ssh_helper,
+            keep_downloaded_state,
+            includes,
+            /*include_config=*/ true,
+        )
+    }
+
+    /// Return a [DownloadIcDataStep] downloading some data of the given node to the recovery data
+    /// directory using the given account, or with admin access if the latter cannot connect.
+    pub fn get_download_data_step(
+        &self,
+        mut ssh_helper: SshHelper,
+        keep_downloaded_data: bool,
+        data_includes: Vec<PathBuf>,
+        include_config: bool,
+    ) -> RecoveryResult<impl Step + use<>> {
+        if ssh_helper.wait_for_access().is_err() {
+            ssh_helper.ssh_user = SshUser::Admin;
+            if !ssh_helper.can_connect() {
+                return Err(RecoveryError::invalid_output_error("SSH access denied"));
+            }
         }
+
+        info!(
+            self.logger,
+            "Continuing with account: {}", ssh_helper.ssh_user
+        );
+
+        Ok(DownloadIcDataStep {
+            logger: self.logger.clone(),
+            ssh_helper,
+            backup_dir: self.data_dir.clone(),
+            keep_downloaded_data,
+            working_dir: self.work_dir.clone(),
+            data_includes,
+            include_config,
+        })
     }
 
     /// Return a [CopyLocalIcStateStep] copying the ic_state of the current
@@ -362,7 +452,7 @@ impl Recovery {
     pub fn get_copy_local_state_step(&self) -> impl Step + use<> {
         CopyLocalIcStateStep {
             logger: self.logger.clone(),
-            working_dir: self.work_dir.display().to_string(),
+            working_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
         }
     }
@@ -395,31 +485,37 @@ impl Recovery {
     pub fn get_replay_with_upgrade_step(
         &self,
         subnet_id: SubnetId,
-        upgrade_version: ReplicaVersion,
+        upgrade_version: &ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        guest_launch_measurements: GuestLaunchMeasurements,
         add_and_bless_replica_version: bool,
         replay_until_height: Option<u64>,
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
-        let version_record = format!(
-            r#"{{ "release_package_sha256_hex": "{sha256}", "release_package_urls": ["{upgrade_url}"] }}"#
-        );
+        let version_record = ReplicaVersionRecord {
+            release_package_sha256_hex: sha256,
+            release_package_urls: vec![upgrade_url.to_string()],
+            guest_launch_measurements: Some(guest_launch_measurements),
+        };
+
         Ok(self.get_replay_step(
             subnet_id,
             Some(ReplaySubCmd {
                 cmd: SubCommand::UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd {
                     replica_version_id: upgrade_version.to_string(),
-                    replica_version_value: version_record.clone(),
+                    replica_version_record: version_record.clone(),
                     add_and_bless_replica_version,
                 }),
                 descr: format!(
-                    r#" upgrade-subnet-to-replica-version{} "{upgrade_version}" {version_record}"#,
+                    r#" upgrade-subnet-to-replica-version{} "{}" "{}""#,
                     if add_and_bless_replica_version {
                         " --add-and-bless-replica-version"
                     } else {
                         ""
                     },
+                    upgrade_version,
+                    serde_json::to_string(&version_record).unwrap()
                 ),
             }),
             None,
@@ -476,6 +572,25 @@ impl Recovery {
         Ok(res)
     }
 
+    /// Get the name of the latest checkpoint currently on the remote node
+    pub fn get_latest_checkpoint_name_remotely(
+        ssh_helper: &SshHelper,
+        checkpoints_path: &Path,
+    ) -> RecoveryResult<String> {
+        ssh_helper
+            .ssh(format!(
+                "ls -1 {} | sort | tail -n 1",
+                checkpoints_path.display()
+            ))
+            .and_then(|output| {
+                output
+                    .map(|output| output.trim().to_string())
+                    .ok_or_else(|| {
+                        RecoveryError::invalid_output_error("No checkpoints found on remote node")
+                    })
+            })
+    }
+
     /// Get the name and the height of the latest checkpoint currently on disk
     ///
     /// Returns an error when there are no checkpoints.
@@ -515,10 +630,13 @@ impl Recovery {
         }
     }
 
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
+    /// Return an [UploadStateAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, upload_method: DataLocation) -> impl Step + use<> {
-        UploadAndRestartStep {
+    pub fn get_upload_state_and_restart_step(
+        &self,
+        upload_method: DataLocation,
+    ) -> impl Step + use<> {
+        UploadStateAndRestartStep {
             logger: self.logger.clone(),
             upload_method,
             work_dir: self.work_dir.clone(),
@@ -529,22 +647,37 @@ impl Recovery {
         }
     }
 
-    /// Lookup the image [Url] and sha hash of the given [ReplicaVersion]
-    pub fn get_img_url_and_sha(version: &ReplicaVersion) -> RecoveryResult<(Url, String)> {
+    /// Lookup the image [Url], and sha256 hash and guest launch measurements of the
+    /// given [ReplicaVersion].
+    pub fn get_img_url_sha_and_measurements(
+        version: &ReplicaVersion,
+    ) -> RecoveryResult<(Url, String, GuestLaunchMeasurements)> {
         let version_string = version.to_string();
         let url_base =
             format!("https://download.dfinity.systems/ic/{version_string}/guest-os/update-img/");
-
         let image_name = "update-img.tar.zst";
-        let upgrade_url_string = format!("{url_base}{image_name}");
         let invalid_url =
             |url, e| RecoveryError::invalid_output_error(format!("Invalid Url string: {url}, {e}"));
+
+        let upgrade_url_string = format!("{url_base}{image_name}");
         let upgrade_url =
             Url::parse(&upgrade_url_string).map_err(|e| invalid_url(upgrade_url_string, e))?;
 
         let sha_url_string = format!("{url_base}SHA256SUMS");
         let sha_url = Url::parse(&sha_url_string).map_err(|e| invalid_url(sha_url_string, e))?;
 
+        let sha256 = Self::get_img_sha256(&sha_url, image_name)?;
+
+        let measurements_url_string = format!("{url_base}launch-measurements.json");
+        let measurements_url = Url::parse(&measurements_url_string)
+            .map_err(|e| invalid_url(measurements_url_string, e))?;
+
+        let guest_launch_measurements = Self::get_img_measurements(&measurements_url)?;
+
+        Ok((upgrade_url, sha256, guest_launch_measurements))
+    }
+
+    fn get_img_sha256(sha_url: &Url, image_name: &str) -> RecoveryResult<String> {
         // fetch the `SHA256SUMS` file
         let mut curl = Command::new("curl");
         curl.arg(sha_url.to_string());
@@ -553,14 +686,14 @@ impl Recovery {
         // split the content into lines, then split each line into a pair (<hash>, <image_name>)
         let hashes = output
             .split('\n')
-            .map(|line| line.split(" *").collect::<Vec<_>>())
+            .map(|line| line.split(' ').collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
         // return the hash for the selected image name
         for pair in hashes.iter() {
             match pair.as_slice() {
                 &[sha256, name] if name == image_name => {
-                    return Ok((upgrade_url, sha256.to_string()));
+                    return Ok(sha256.to_string());
                 }
                 _ => {}
             }
@@ -571,6 +704,18 @@ impl Recovery {
         )))
     }
 
+    fn get_img_measurements(measurements_url: &Url) -> RecoveryResult<GuestLaunchMeasurements> {
+        // fetch the `launch-measurements.json` file
+        let mut curl = Command::new("curl");
+        curl.arg(measurements_url.to_string());
+        let output = exec_cmd(&mut curl)?.unwrap_or_default();
+
+        let guest_launch_measurements = serde_json::from_str::<GuestLaunchMeasurements>(&output)
+            .map_err(RecoveryError::parsing_error)?;
+
+        Ok(guest_launch_measurements)
+    }
+
     /// Return an [AdminStep] step electing the given [ReplicaVersion].
     /// Existence of artifacts for the given version is checked beforehand, thus
     /// generation of this step may fail if the version is invalid.
@@ -579,6 +724,7 @@ impl Recovery {
         upgrade_version: &ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        guest_launch_measurements_path: &Path,
     ) -> RecoveryResult<impl Step + use<>> {
         Ok(AdminStep {
             logger: self.logger.clone(),
@@ -587,7 +733,8 @@ impl Recovery {
                 .get_propose_to_update_elected_replica_versions_command(
                     upgrade_version,
                     &upgrade_url,
-                    sha256,
+                    &sha256,
+                    guest_launch_measurements_path,
                 ),
         })
     }
@@ -654,8 +801,7 @@ impl Recovery {
         })
     }
 
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
-    /// a node and restart it.
+    /// Return a [WaitForCUPStep] to wait until the recovery CUP is present on the given node.
     pub fn get_wait_for_cup_step(&self, node_ip: IpAddr) -> impl Step + use<> {
         WaitForCUPStep {
             logger: self.logger.clone(),
@@ -840,14 +986,6 @@ impl Recovery {
         }
     }
 
-    pub fn get_copy_ic_state(&self, new_state_dir: PathBuf) -> impl Step + use<> {
-        CopyIcStateStep {
-            logger: self.logger.clone(),
-            work_dir: self.work_dir.join(IC_STATE_DIR),
-            new_state_dir,
-        }
-    }
-
     /// Return an [UploadCUPAndTarStep] uploading CUP and registry tar to the given node IP
     pub fn get_upload_cup_and_tar_step(&self, node_ip: IpAddr) -> impl Step + use<> {
         UploadCUPAndTarStep {
@@ -913,13 +1051,13 @@ impl Recovery {
     /// Return an [UploadAndHostTarStep] to upload and host a tar file on the given auxiliary host
     pub fn get_upload_and_host_tar(
         &self,
-        aux_host: String,
+        aux_user: SshUser,
         aux_ip: IpAddr,
         tar: PathBuf,
     ) -> impl Step + use<> {
         UploadAndHostTarStep {
             logger: self.logger.clone(),
-            aux_host,
+            aux_user,
             aux_ip,
             tar,
             require_confirmation: self.ssh_confirmation,

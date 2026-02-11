@@ -2,7 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
 
-package(default_visibility = ["//rs/dogecoin/ckdoge/test_utils:__subpackages__"])
+package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "ckdoge_minter_lib",
@@ -19,15 +19,23 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-secp256k1",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
+        "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:bs58",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
         "@crate_index//:sha2",
     ],
+)
+
+alias(
+    name = "minter",
+    actual = ":ckdoge_minter_lib",
 )
 
 filegroup(
@@ -42,10 +50,19 @@ rust_test(
     env = {
         "TEST_VECTORS": "$(locations :test_vectors)",
     },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
     deps = [
         # Keep sorted.
+        "//packages/ic-secp256k1",
+        "//rs/types/base_types",
         "@crate_index//:assert_matches",
+        "@crate_index//:mockall",
+        "@crate_index//:proptest",
         "@crate_index//:serde_json",
+        "@crate_index//:tokio",
     ],
 )
 
@@ -66,6 +83,7 @@ rust_test(
         deps = [
             # Keep sorted.
             ":ckdoge_minter_lib",
+            "//packages/ic-http-types",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
             "@crate_index//:candid",
             "@crate_index//:ic-cdk",
@@ -103,20 +121,29 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = [
         ":ckdoge_minter_debug.wasm.gz",
-        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+        "//:dogecoind",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256",
     ],
     env = {
+        "DOGECOIND_BIN": "$(rootpath //:dogecoind)",
         "IC_CKDOGE_MINTER_WASM_PATH": "$(rootpath :ckdoge_minter_debug.wasm.gz)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256)",
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
     },
+    # Because dogecoind binary package is not available on darwin or arm64.
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
     deps = [
         # Keep sorted.
         ":ckdoge_minter_lib",
         "//:pocket-ic-server",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
         "//rs/dogecoin/ckdoge/test_utils",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
+        "@crate_index//:ic-management-canister-types",
     ],
 )

@@ -6,7 +6,7 @@ use crate::crypto::canister_threshold_sig::error::{
 use crate::crypto::impl_display_using_debug;
 use crate::crypto::{AlgorithmId, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
+use crate::{CountBytes, Height, NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
@@ -84,6 +84,17 @@ impl IDkgTranscriptId {
             source_subnet: self.source_subnet,
             source_height: height,
         })
+    }
+}
+
+impl CountBytes for IDkgTranscriptId {
+    fn count_bytes(&self) -> usize {
+        let IDkgTranscriptId {
+            id,
+            source_height,
+            source_subnet,
+        } = self;
+        size_of_val(id) + size_of_val(source_height) + size_of_val(source_subnet)
     }
 }
 
@@ -1036,6 +1047,16 @@ impl Display for IDkgDealing {
 impl SignedBytesWithoutDomainSeparator for IDkgDealing {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
+    }
+}
+
+impl CountBytes for IDkgDealing {
+    fn count_bytes(&self) -> usize {
+        let IDkgDealing {
+            transcript_id,
+            internal_dealing_raw,
+        } = self;
+        transcript_id.count_bytes() + internal_dealing_raw.len()
     }
 }
 

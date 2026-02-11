@@ -2,9 +2,10 @@ use anyhow::{Result, anyhow};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nns_governance_api::{
-    CreateServiceNervousSystem, Proposal, proposal::Action,
+    CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
     proposal_validation::validate_user_submitted_proposal_fields,
 };
+use ic_sns_governance::types::NativeAction;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use std::{
     fmt::Debug,
@@ -18,7 +19,7 @@ use std::{
 mod nns_governance_pb {
     pub use ic_nns_governance_api::create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
-        governance_parameters::VotingRewardParameters,
+        governance_parameters::{CustomProposalCriticality, VotingRewardParameters},
         initial_token_distribution::{
             DeveloperDistribution, SwapDistribution, TreasuryDistribution,
             developer_distribution::NeuronDistribution,
@@ -100,6 +101,10 @@ pub(crate) struct Proposals {
 
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration,
+
+    /// Additional native function IDs that should be considered critical.
+    #[serde(default)]
+    additional_critical_native_action_ids: Vec<NativeAction>,
 }
 
 #[derive(Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
@@ -327,7 +332,7 @@ fn parse_image_path(
 }
 
 impl SnsConfigurationFile {
-    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<Proposal> {
+    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<MakeProposalRequest> {
         // Extract the proposal action from the config file
         let create_service_nervous_system =
             self.try_convert_to_create_service_nervous_system(base_path)?;
@@ -355,17 +360,16 @@ impl SnsConfigurationFile {
         // Empty strings is a legal NNS Proposal Url.
         let url = nns_proposal.url.clone().unwrap_or_default();
 
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title,
             summary,
             url,
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system,
             )),
         };
 
-        validate_user_submitted_proposal_fields(&(proposal.clone()))
-            .map_err(|e| anyhow!("{}", e))?;
+        validate_user_submitted_proposal_fields(&proposal).map_err(|e| anyhow!("{}", e))?;
 
         Ok(proposal)
     }
@@ -660,6 +664,7 @@ fn convert_to_governance_parameters(
         rejection_fee,
         initial_voting_period,
         maximum_wait_for_quiet_deadline_extension,
+        additional_critical_native_action_ids,
     } = proposals;
     let Neurons {
         minimum_creation_stake,
@@ -711,6 +716,19 @@ fn convert_to_governance_parameters(
         neuron_maximum_age_bonus,
 
         voting_reward_parameters,
+
+        custom_proposal_criticality: if additional_critical_native_action_ids.is_empty() {
+            None
+        } else {
+            Some(nns_governance_pb::CustomProposalCriticality {
+                additional_critical_native_action_ids: Some(
+                    additional_critical_native_action_ids
+                        .iter()
+                        .map(|action| *action as u64)
+                        .collect(),
+                ),
+            })
+        },
     }
 }
 

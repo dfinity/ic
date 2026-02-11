@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 #
 # 2) Run this script as follows:
 #
-# python generate_blocklist.py [currency (BTC or ETH)] [path to the SDN.XML file]
+# python generate_blocklist.py --currency {BTC, ETH} --input [path to the SDN.XML file]
 #
 # The command will generate the file 'blocklist.rs' containing the retrieved addresses.
 #
@@ -75,7 +75,7 @@ mod tests;
 use ic_ethereum_types::Address;
 
 macro_rules! ethereum_address {
-    ($address:expr) => {
+    ($address:expr_2021) => {
         Address::new(hex_literal::hex!($address))
     };
 }

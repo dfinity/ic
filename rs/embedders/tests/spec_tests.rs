@@ -53,6 +53,11 @@ mod convert {
                     )
                 }
             },
+            HeapType::Exact(_) => {
+                panic!(
+                    "Unable to handle heap type {heap_type:?}. The custom descriptors proposal isn't supported"
+                )
+            }
             HeapType::Concrete(_) => {
                 panic!("Unable to handle heap type {heap_type:?}. The GC proposal isn't supported")
             }
@@ -73,7 +78,7 @@ mod convert {
                 Some(wasmtime::ExternRef::new(store, n).unwrap().into())
             }
             WastArg::Core(WastArgCore::RefHost(n)) => {
-                Some(unsafe { wasmtime::AnyRef::from_raw(store, n).unwrap().into() })
+                Some(wasmtime::AnyRef::from_raw(store, n).unwrap().into())
             }
             WastArg::Component(_) => {
                 println!("Component feature not enabled. Can't handle WastArg {arg:?}");

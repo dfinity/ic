@@ -6,7 +6,7 @@ use crate::{
     governance::{submit_external_update_proposal, wait_for_final_state},
     state_test_helpers::state_machine_builder_for_nns_tests,
 };
-use candid::Encode;
+use candid::{CandidType, Encode, Principal};
 use canister_test::{
     Canister, Project, Runtime, Wasm, local_test_with_config_e,
     local_test_with_config_with_mutations_on_system_subnet,
@@ -39,6 +39,7 @@ use lifeline::LIFELINE_CANISTER_WASM;
 use on_wire::{IntoWire, bytes};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
+use serde::Deserialize;
 use std::{future::Future, path::Path, thread, time::SystemTime};
 use xrc_mock::{ExchangeRate, XrcMockInitPayload};
 
@@ -589,7 +590,7 @@ pub async fn install_registry_canister(
     init_payload: RegistryCanisterInitPayload,
 ) {
     let encoded = Encode!(&init_payload).unwrap();
-    install_rust_canister(canister, "registry-canister", &[], Some(encoded)).await;
+    install_rust_canister(canister, "registry-canister", &["test"], Some(encoded)).await;
 }
 
 /// Creates and installs the registry canister.
@@ -790,7 +791,17 @@ pub async fn set_up_sns_wasm_canister(
 
 /// Compiles the migration canister and installs it.
 pub async fn install_migration_canister(canister: &mut Canister<'_>) {
-    install_rust_canister(canister, "migration-canister", &[], None).await;
+    #[derive(CandidType, Deserialize, Default)]
+    struct MigrationCanisterInitArgs {
+        allowlist: Option<Vec<Principal>>,
+    }
+    install_rust_canister(
+        canister,
+        "migration-canister",
+        &[],
+        Some(Encode!(&MigrationCanisterInitArgs::default()).unwrap()),
+    )
+    .await;
 }
 
 /// Creates and installs the migration canister.

@@ -8,7 +8,7 @@ use std::{
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
 use crate::driver::log_events;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
-use crate::driver::test_env_api::{HasFarmUrl, read_dependency_to_string};
+use crate::driver::test_env_api::HasFarmUrl;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ic_crypto_sha2::Sha256;
@@ -235,28 +235,12 @@ impl Farm {
         Ok(())
     }
 
-    // delete with large timeout but only one attempt, because it takes a long time and farm's
-    // garbage collector would interfere with retries.
-    pub fn delete_group(&self, group_name: &str) {
-        // bump TTL, so that farm garbage collector does not remove while we remove
-        if self
-            .set_group_ttl(group_name, Duration::from_secs(120))
-            .is_err()
-        {
-            warn!(self.logger, "Failed to bump TTL before deleting group.");
-        }
-        let path = format!("group/{group_name}");
-        let mut req = self.delete(&path);
-        req = req.timeout(Duration::from_secs(130)); // longer than VM soft shutdown timeout (120s)
-        match req.send() {
-            Err(e) => error!(self.logger, "Sending a request to Farm failed: {:?}", e),
-            Ok(r) if !r.status().is_success() => warn!(
-                self.logger,
-                "unexpected response from Farm: {:?}",
-                r.text().unwrap()
-            ),
-            _ => {}
-        };
+    pub fn delete_group(&self, group_name: &str) -> FarmResult<()> {
+        let path = format!("group/{group_name}/async");
+        let rb = self.delete(&path);
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let _resp = self.retry_until_success(rbb)?;
+        Ok(())
     }
 
     /// Creates DNS records under the suffix: `.<group-name>.farm.dfinity.systems`.
@@ -450,25 +434,12 @@ pub struct GroupSpec {
 
 impl GroupSpec {
     pub fn add_meta(mut self, group_base_name: &str) -> Self {
-        // Acquire bazel's stable status containing key value pairs like user and job name:
-        let farm_metadata_path = std::env::var("FARM_METADATA_PATH")
-            .expect("Expected the environment variable FARM_METADATA_PATH to be defined!");
-        let farm_metadata = read_dependency_to_string(&farm_metadata_path)
-            .unwrap_or_else(|e| {
-                panic!("Couldn't read content of the status file {farm_metadata_path}: {e:?}")
-            })
-            .trim_end()
-            .to_string();
-        let runtime_args_map = parse_farm_metadata_file(farm_metadata);
-
-        // Read values from the runtime args and use sensible defaults if unset
-        let user = runtime_args_map
-            .get("STABLE_FARM_USER") // Always set by bazel
-            .cloned()
-            .unwrap_or("CI".to_string());
+        // Read injected farm metadata. We expect 'USER' and 'JOB_NAME' to be set and
+        // use sensible defaults if unset.
+        let mut runtime_args_map = parse_farm_metadata_env();
+        let user = runtime_args_map.remove("USER").unwrap_or("CI".to_string());
         let job_schedule = runtime_args_map
-            .get("STABLE_FARM_JOB_NAME") // Injected by workspace status
-            .cloned()
+            .remove("JOB_NAME")
             .unwrap_or("manual".to_string());
         let metadata = GroupMetadata {
             user,
@@ -490,11 +461,15 @@ pub struct GroupMetadata {
     pub test_name: String,
 }
 
-fn parse_farm_metadata_file(input: String) -> HashMap<String, String> {
+fn parse_farm_metadata_env() -> HashMap<String, String> {
+    // Read the FARM_METADATA environment variable containing ';' separated key pairs:
+    //      'FARM_METADATA=FOO=bar;BAZ=quux'
+    let farm_metadata = std::env::var("FARM_METADATA")
+        .expect("Expected the environment variable FARM_METADATA to be defined!");
     let mut map = HashMap::new();
-    let lines = input.split('\n');
-    for line in lines {
-        if let Some((key, value)) = line.split_once(' ') {
+    let pairs = farm_metadata.split(';');
+    for pair in pairs {
+        if let Some((key, value)) = pair.split_once('=') {
             map.insert(String::from(key), String::from(value));
         }
     }
@@ -506,11 +481,11 @@ pub enum HostFeature {
     DC(String),
     Host(String),
     AmdSevSnp,
-    SnsLoadTest,
     Performance,
     IoPerformance,
     Dell,
     Supermicro,
+    DMZ,
 }
 
 impl Serialize for HostFeature {
@@ -530,21 +505,21 @@ impl Serialize for HostFeature {
                 serializer.serialize_str(&host_feature)
             }
             HostFeature::AmdSevSnp => serializer.serialize_str(AMD_SEV_SNP),
-            HostFeature::SnsLoadTest => serializer.serialize_str(SNS_LOAD_TEST),
             HostFeature::Performance => serializer.serialize_str(PERFORMANCE),
             HostFeature::IoPerformance => serializer.serialize_str(IO_PERFORMANCE),
             HostFeature::Dell => serializer.serialize_str(DLL),
             HostFeature::Supermicro => serializer.serialize_str(SPM),
+            HostFeature::DMZ => serializer.serialize_str(DMZ),
         }
     }
 }
 
 const AMD_SEV_SNP: &str = "AMD-SEV-SNP";
-const SNS_LOAD_TEST: &str = "SNS-load-test";
 const PERFORMANCE: &str = "performance";
 const IO_PERFORMANCE: &str = "io-performance";
 const DLL: &str = "dll";
 const SPM: &str = "spm";
+const DMZ: &str = "dmz";
 
 impl<'de> Deserialize<'de> for HostFeature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -557,21 +532,22 @@ impl<'de> Deserialize<'de> for HostFeature {
             Some(("host", host)) => Ok(HostFeature::Host(host.to_owned())),
             _ => match input.as_str() {
                 AMD_SEV_SNP => Ok(HostFeature::AmdSevSnp),
-                SNS_LOAD_TEST => Ok(HostFeature::SnsLoadTest),
                 PERFORMANCE => Ok(HostFeature::Performance),
                 IO_PERFORMANCE => Ok(HostFeature::IoPerformance),
                 DLL => Ok(HostFeature::Dell),
                 SPM => Ok(HostFeature::Supermicro),
+                DMZ => Ok(HostFeature::DMZ),
                 _ => Err(Error::unknown_variant(
                     &input,
                     &[
                         "dc=<dc-name>",
                         "host=<host-name>",
                         AMD_SEV_SNP,
-                        SNS_LOAD_TEST,
                         PERFORMANCE,
+                        IO_PERFORMANCE,
                         DLL,
                         SPM,
+                        DMZ,
                     ],
                 )),
             },

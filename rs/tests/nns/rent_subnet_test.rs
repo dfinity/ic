@@ -50,7 +50,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
+            NnsInstallationBuilder, SshSession, SubnetSnapshot, TopologySnapshot,
             find_subnet_that_hosts_canister_id, new_subnet_runtime,
         },
     },
@@ -124,6 +124,8 @@ lazy_static! {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        .with_timeout_per_test(Duration::from_secs(20 * 60))
+        .with_overall_timeout(Duration::from_secs(30 * 60))
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
@@ -635,7 +637,7 @@ fn wait_for_cycles_minting_to_get_price_of_icp(
             .unwrap()
             .as_secs();
 
-        now - timestamp_seconds
+        now.saturating_sub(timestamp_seconds)
     }
 
     let mut err_budget = 30;

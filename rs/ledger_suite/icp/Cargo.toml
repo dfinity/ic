@@ -18,16 +18,13 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../common/ledger_canister_core" }
 ic-ledger-core = { path = "../common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
-ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-lazy_static = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
-strum = { workspace = true }
 strum_macros = { workspace = true }
 
 [dev-dependencies]
@@ -40,6 +37,7 @@ ic-icp-index = { path = "index" }
 ic-ledger-suite-in-memory-ledger = { path = "../test_utils/in_memory_ledger" }
 ic-ledger-suite-state-machine-helpers = { path = "../test_utils/state_machine_helpers" }
 ic-ledger-test-utils = { path = "test_utils" }
+ic-management-canister-types = { workspace = true }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }

@@ -1,8 +1,13 @@
 load("@rules_motoko//motoko:defs.bzl", "external_actor")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "motoko_canister")
 
 package(default_visibility = ["//visibility:public"])
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = ["**/*tests.rs"],
+)
 
 # The motoko compiler fails to map float types in the Governance init arg to
 # appropriate Motoko types.
@@ -47,6 +52,11 @@ external_actor(
 motoko_canister(
     name = "lifeline_canister",
     entry = "lifeline.mo",
+    moc_flags = [
+        # The lifeline canister has no stable variables so we use the classical orthogonal persistence
+        # with 32bit main memory such that upgrades don't require the wasm_memory_persistence option.
+        "--legacy-persistence",
+    ],
     deps = [
         # Keep sorted.
         ":governance",
@@ -56,23 +66,30 @@ motoko_canister(
 
 rust_library(
     name = "lifeline",
-    srcs = ["src/lib.rs"],
+    srcs = LIB_SRCS,
     compile_data = [":lifeline_canister"],
     rustc_env = {
         "LIFELINE_CANISTER_WASM_PATH": "$(location :lifeline_canister)",
     },
 )
 
-rust_binary(
-    name = "lifeline_bin",
-    srcs = ["src/main.rs"],
-    deps = [":lifeline"],
-)
-
+# The only thing this does (as of Dec, 2025) is make sure that the output of the
+# :lifeline_canister rule (above) is valid WASM. This hardly adds any value. In
+# particular, this does not tell us that lifeline.mo is correct. All this really
+# does is tell us the moc outputs valid WASM, which is pretty weak, and in any
+# case, testing moc is not our job (as the developer of the lifeline canister,
+# not the Motoko language).
 rust_test(
-    name = "lifeline_unit_test",
-    compile_data = [":lifeline_canister.wasm.gz"],
-    crate = ":lifeline",
+    name = "lifeline_test",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = [":lifeline_canister"],
+    # This is just to work around a bug where rust_test/bazel believes that we
+    # need this data at run time; it's only needed at compile time (and
+    # fulfilling that requirement is done by compile_data).
+    data = [":lifeline_canister"],
+    rustc_env = {
+        "LIFELINE_CANISTER_WASM_PATH": "$(location :lifeline_canister)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:flate2",

@@ -12,7 +12,6 @@ icos_images = icos_build(
     image_deps_func = image_deps,
     visibility = [
         "//rs:ic-os-pkg",
-        "//testnet/tools:icos_deploy-pkg",
     ],
 )
 

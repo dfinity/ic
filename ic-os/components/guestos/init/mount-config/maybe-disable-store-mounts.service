@@ -1,0 +1,15 @@
+[Unit]
+Description=Disable IC Encrypted Mounts and Swap in Guest Upgrade VMs
+DefaultDependencies=no
+Requires=init-config.service
+After=init-config.service
+Before=dev-mapper-store\x2dshared\x2d\x2dswap.swap var-lib-ic-backup.mount var-lib-ic-crypto.mount var-lib-ic-data.mount
+ConditionPathExists=!/run/config/guest_vm_type/default
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=systemctl stop dev-mapper-store\\x2dshared\\x2d\\x2dswap.swap var-lib-ic-backup.mount var-lib-ic-crypto.mount var-lib-ic-data.mount
+
+[Install]
+WantedBy=local-fs.target

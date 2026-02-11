@@ -14,7 +14,7 @@ use crate::{
 use anyhow::Result;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_test_utils_ni_dkg::{InitialNiDkgConfig, initial_dkg_transcript};
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
+use ic_crypto_utils_threshold_sig_der::{KeyConversionError, threshold_sig_public_key_to_der};
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
@@ -137,6 +137,12 @@ pub enum InitializeSubnetError {
     Crypto {
         #[from]
         source: CryptoError,
+    },
+
+    #[error("key conversion error: {source}")]
+    KeyConversion {
+        #[from]
+        source: KeyConversionError,
     },
 
     #[error("saving node id to {path:?} failed: {source}")]

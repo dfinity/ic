@@ -68,8 +68,8 @@ mod tests {
     use ic_nns_common::pb::v1::NeuronId;
     use std::sync::Arc;
 
-    #[test]
-    fn test_reward_scheduling_and_cancelling() {
+    #[tokio::test]
+    async fn test_reward_scheduling_and_cancelling() {
         thread_local! {
             static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
         }
@@ -107,7 +107,7 @@ mod tests {
 
         // We run this 10x b/c test version of is_over_instructions_limit returns true every
         // other time it's called.
-        run_pending_timers_every_interval_for_count(DistributeRewardsTask::INTERVAL, 10);
+        run_pending_timers_every_interval_for_count(DistributeRewardsTask::INTERVAL, 10).await;
 
         assert!(REWARDS_TIMER_ID.with(|id| id.borrow().is_none()));
         assert_eq!(existing_timer_ids().len(), 0);

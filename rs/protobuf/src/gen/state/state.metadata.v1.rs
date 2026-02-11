@@ -214,6 +214,36 @@ pub struct CanisterHttpRequestContext {
     pub transform_context: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[prost(message, optional, tag = "11")]
     pub replication: ::core::option::Option<Replication>,
+    #[prost(message, optional, tag = "12")]
+    pub pricing_version: ::core::option::Option<PricingVersion>,
+    #[prost(message, optional, tag = "13")]
+    pub refund_status: ::core::option::Option<RefundStatus>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RefundStatus {
+    #[prost(message, optional, tag = "1")]
+    pub refundable_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "2")]
+    pub per_replica_allowance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "3")]
+    pub refunded_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "4")]
+    pub refunding_nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct PricingVersion {
+    #[prost(oneof = "pricing_version::Version", tags = "1, 2")]
+    pub version: ::core::option::Option<pricing_version::Version>,
+}
+/// Nested message and enum types in `PricingVersion`.
+pub mod pricing_version {
+    #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
+    pub enum Version {
+        #[prost(message, tag = "1")]
+        Legacy(()),
+        #[prost(message, tag = "2")]
+        PayAsYouGo(()),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Replication {
@@ -498,6 +528,8 @@ pub struct SystemMetadata {
     pub own_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     #[prost(message, optional, tag = "8")]
     pub subnet_call_context_manager: ::core::option::Option<SubnetCallContextManager>,
+    #[prost(message, optional, tag = "23")]
+    pub subnet_split_from: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     /// Canister ID ranges allocated (exclusively) to this subnet, to generate
     /// canister IDs from.
     #[prost(message, optional, tag = "16")]
@@ -535,12 +567,6 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
-    /// TODO: deprecate in favour of information in NetworkTopology
-    #[prost(
-        enumeration = "super::super::super::registry::subnet::v1::CanisterCyclesCostSchedule",
-        tag = "22"
-    )]
-    pub canister_cycles_cost_schedule: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

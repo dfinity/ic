@@ -4,12 +4,13 @@ DefaultDependencies=no
 # When SEV is disabled, the key is read from /boot/config.
 # When SEV is enabled, the key is read from /var during the first boot after an upgrade.
 RequiresMountsFor=/boot/config /var
-Requires=init-config.service guest-upgrade-client.service
-After=init-config.service guest-upgrade-client.service
+Requires=init-config.service
+After=init-config.service
 Wants=cryptsetup-pre.target
 Before=cryptsetup.target
 Conflicts=umount.target
 Before=umount.target
+ConditionPathExists=/run/config/guest_vm_type/default
 
 [Install]
 WantedBy=local-fs.target
@@ -18,4 +19,4 @@ WantedBy=local-fs.target
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-data-encryption.sh
-ExecStop=/usr/bin/systemd-cryptsetup detach 'vda10-crypt'
+ExecStop=/usr/bin/systemd-cryptsetup detach 'store-crypt'

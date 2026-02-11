@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-11-28: Proposal 139577
+
+http://dashboard.internetcomputer.org/proposal/139577
+
+## Changed
+
+* Clean up if RegisterExtension fails.
+
+
 # 2025-08-15: Proposal 137920
 
 http://dashboard.internetcomputer.org/proposal/137920

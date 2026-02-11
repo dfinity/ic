@@ -3,10 +3,10 @@
 // The system node uses the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 // The application node uses the following resources: 64 vCPUs, 480GiB of RAM, and 500 GiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create single_app_large_node_with_nns --lifetime-mins=180 --output-dir=./single_app_large_node_with_nns -- --test_tmpdir=./single_app_large_node_with_nns
+//   $ ict testnet create single_app_large_node_with_nns --output-dir=./single_app_large_node_with_nns -- --test_tmpdir=./single_app_large_node_with_nns
 //
 // The --output-dir=./single_app_large_node_with_nns will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./single_app_large_node_with_nns will store the remaining test output in the specified directory.
@@ -53,7 +53,6 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{HasTopologySnapshot, NnsCustomizations};
 
@@ -65,10 +64,6 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
@@ -86,5 +81,4 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    env.sync_with_prometheus();
 }

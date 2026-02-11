@@ -12,7 +12,6 @@ ic-adapter-metrics-client = { path = "../adapter_metrics/client" }
 libc = { workspace = true }
 parking_lot = { workspace = true }
 prometheus = { workspace = true }
-tokio = { workspace = true }
 tokio-metrics = { workspace = true }
 
 [dev-dependencies]
@@ -20,4 +19,4 @@ ic-logger = { path = "../logger" }
 slog = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-procfs = { version = "^0.9", default-features = false }
+procfs = { workspace = true }

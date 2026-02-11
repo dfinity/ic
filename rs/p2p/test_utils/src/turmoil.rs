@@ -110,7 +110,7 @@ impl<MakeFut, Fut> Debug for UdpPollHelper<MakeFut, Fut> {
 //
 
 impl AsyncUdpSocket for CustomUdp {
-    fn create_io_poller(self: Arc<Self>) -> Pin<Box<(dyn UdpPoller + 'static)>> {
+    fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller + 'static>> {
         Box::pin(UdpPollHelper::new(move || {
             let socket = self.clone();
             async move { socket.inner.writable().await }
@@ -320,7 +320,7 @@ pub fn add_transport_to_sim<F>(
     registry_handler: RegistryConsensusHandle,
     topology_watcher: watch::Receiver<SubnetTopology>,
     conn_checker: Option<Router>,
-    crypto: Option<Arc<dyn TlsConfig + Send + Sync>>,
+    crypto: Option<Arc<dyn TlsConfig>>,
     state_sync_client: Option<Arc<dyn StateSyncClient<Message = StateSyncMessage>>>,
     consensus_manager: Option<TestConsensus<U64Artifact>>,
     post_setup_future: F,

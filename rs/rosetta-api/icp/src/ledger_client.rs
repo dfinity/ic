@@ -23,6 +23,7 @@ pub mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
 
+use async_trait::async_trait;
 use candid::{Decode, Encode};
 use core::ops::Deref;
 use ic_agent::agent::{RejectCode, RejectResponse, RequestStatusResponse};
@@ -30,17 +31,15 @@ use ic_agent::{Agent, RequestId};
 use ic_nns_governance_api::{
     KnownNeuron, ListKnownNeuronsResponse, NetworkEconomics, ProposalInfo,
 };
+use reqwest::{Client, StatusCode};
 use std::{
     convert::TryFrom,
     sync::{Arc, atomic::AtomicBool},
-    thread, time,
     time::{Duration, Instant},
 };
-use url::Url;
-
-use async_trait::async_trait;
-use reqwest::{Client, StatusCode};
+use tokio::time::sleep;
 use tracing::{debug, error, warn};
+use url::Url;
 
 use ic_ledger_canister_blocks_synchronizer::{
     blocks::{Blocks, IndexOptimization, RosettaBlocksConfig, RosettaBlocksMode, RosettaDbConfig},
@@ -677,7 +676,7 @@ impl LedgerClient {
             }
 
             // Sleep for 100 milliseconds to avoid spamming the ICP ledger in case of repeated errors
-            thread::sleep(time::Duration::from_millis(100));
+            sleep(Duration::from_millis(100)).await;
             // Bump the poll interval and compute the next poll time (based on current wall
             // time, so we don't spin without delay after a slow poll).
             poll_interval = poll_interval
@@ -754,7 +753,7 @@ impl LedgerClient {
         let mut poll_interval = Self::MIN_POLL_INTERVAL;
         while Instant::now() + poll_interval < deadline {
             debug!("Waiting {} ms for response", poll_interval.as_millis());
-            actix_rt::time::sleep(poll_interval).await;
+            sleep(poll_interval).await;
 
             let agent = self.agent_with_timeout.as_ref().unwrap();
             let status = agent

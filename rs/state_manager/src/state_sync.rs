@@ -3,7 +3,9 @@ pub mod types;
 
 use super::StateManagerImpl;
 use crate::{
-    EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS, StateSyncRefs,
+    EXTRA_CHECKPOINTS_TO_KEEP, LABEL_LOAD_AND_VALIDATE_CHECKPOINT, LABEL_LOAD_CHECKPOINT,
+    LABEL_MARK_FILES_READONLY_AND_SYNC, LABEL_ON_SYNCED_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
+    StateSyncRefs,
     manifest::build_file_group_chunks,
     state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
 };
@@ -14,6 +16,11 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, fatal, info, warn};
 use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
+
+/// Maximum height difference from the last verified checkpoint before performing validation
+/// during state sync. If the difference exceeds this threshold, the synced checkpoint will
+/// be validated to prevent losing all state sync progress if it gets archived during restart.
+const MAX_HEIGHT_DIFFERENCE_WITHOUT_VALIDATION: u64 = 10_000;
 
 #[derive(Clone)]
 pub struct StateSync {
@@ -84,29 +91,104 @@ impl StateSync {
         manifest: Manifest,
         meta_manifest: Arc<MetaManifest>,
     ) {
-        info!(self.log, "Received state {} at height", height);
+        info!(
+            self.log,
+            "Starting to deliver the synced state at height {}", height
+        );
+        let state_sync_metrics = &self.state_manager.metrics.state_sync_metrics;
+
         let ro_layout = self
             .state_manager
             .state_layout
             .checkpoint_in_verification(height)
             .expect("failed to create checkpoint layout");
 
-        let state = match crate::checkpoint::load_checkpoint_and_validate_parallel(
-            &ro_layout,
-            self.state_manager.own_subnet_type,
-            &self.state_manager.metrics.checkpoint_metrics,
-            self.state_manager.get_fd_factory(),
-        ) {
-            Ok(state) => state,
-            Err(err) => {
-                fatal!(
-                    self.log,
-                    "Failed to load and finalize checkpoint or remove the unverified marker @height {}: {}",
-                    height,
-                    err
-                );
+        let verified_checkpoint_heights = self
+            .state_manager
+            .state_layout
+            .verified_checkpoint_heights()
+            .unwrap_or_else(|err| {
+                fatal!(self.log, "Failed to get verified checkpoint heights: {err}");
+            });
+
+        // Perform validation if no verified checkpoint exists or the last verified checkpoint is too old
+        let perform_validation = match verified_checkpoint_heights.last() {
+            None => true,
+            Some(last_checkpoint_height) => {
+                last_checkpoint_height.get() + MAX_HEIGHT_DIFFERENCE_WITHOUT_VALIDATION
+                    < height.get()
             }
         };
+        let state = if perform_validation {
+            let _timer = state_sync_metrics
+                .step_duration
+                .with_label_values(&[LABEL_LOAD_AND_VALIDATE_CHECKPOINT])
+                .start_timer();
+            info!(
+                self.log,
+                "Loading and validating checkpoint at {height} to mark as verified as no verified checkpoints exist or last one is too old. Current verified heights: {verified_checkpoint_heights:?}"
+            );
+            match crate::checkpoint::load_checkpoint_and_validate_parallel(
+                &ro_layout,
+                self.state_manager.own_subnet_type,
+                &self.state_manager.metrics.checkpoint_metrics,
+                self.state_manager.get_fd_factory(),
+            ) {
+                Ok(state) => state,
+                Err(err) => {
+                    fatal!(
+                        self.log,
+                        "Failed to load and finalize checkpoint or remove the unverified marker @height {height}: {err}",
+                    );
+                }
+            }
+        } else {
+            let timer = state_sync_metrics
+                .step_duration
+                .with_label_values(&[LABEL_LOAD_CHECKPOINT])
+                .start_timer();
+            info!(
+                self.log,
+                "Loading state sync checkpoint at {height} and skipping validation. The checkpoint will remain unverified."
+            );
+            let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+            let state = match crate::checkpoint::load_checkpoint(
+                &ro_layout,
+                self.state_manager.own_subnet_type,
+                &self.state_manager.metrics.checkpoint_metrics,
+                Some(&mut thread_pool),
+                self.state_manager.get_fd_factory(),
+            ) {
+                Ok(state) => state,
+                Err(err) => {
+                    fatal!(
+                        self.log,
+                        "Failed to load checkpoint @height {height}: {err}",
+                    );
+                }
+            };
+            drop(timer);
+
+            let _timer = state_sync_metrics
+                .step_duration
+                .with_label_values(&[LABEL_MARK_FILES_READONLY_AND_SYNC])
+                .start_timer();
+
+            ro_layout
+                .mark_files_readonly_and_sync(Some(&mut thread_pool), false)
+                .unwrap_or_else(|err| {
+                    fatal!(
+                        self.log,
+                        "Failed to mark files readonly for checkpoint @height {height}: {err}",
+                    );
+                });
+            state
+        };
+
+        let _timer = state_sync_metrics
+            .step_duration
+            .with_label_values(&[LABEL_ON_SYNCED_CHECKPOINT])
+            .start_timer();
         self.state_manager.on_synced_checkpoint(
             state,
             ro_layout,
@@ -135,11 +217,12 @@ impl StateSync {
                 if metadata.root_hash().map(|v| v.get_ref()) == Some(&msg_id.hash) {
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
-                    let checkpoint_root = self
+                    let checkpoint_layout = self
                         .state_manager
                         .state_layout
-                        .checkpoint_verified(*height)
-                        .ok()?;
+                        .checkpoint_in_verification(*height)
+                        .ok()
+                        .filter(|layout| layout.is_verified_or_state_sync_checkpoint())?;
                     let state_sync_file_group = match &metadata.state_sync_file_group {
                         Some(value) => value.clone(),
                         None => {
@@ -154,7 +237,7 @@ impl StateSync {
                     Some(StateSyncMessage {
                         height: *height,
                         root_hash: CryptoHashOfState::from(msg_id.hash.clone()),
-                        checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
+                        checkpoint_root: checkpoint_layout.raw_path().to_path_buf(),
                         meta_manifest,
                         manifest: manifest.clone(),
                         state_sync_file_group,
@@ -181,7 +264,11 @@ impl StateSync {
     // Enumerates all recent fully certified (i.e. referenced in a CUP) states that
     // is above the filter height.
     fn get_all_validated_ids_by_height(&self, height: Height) -> Vec<StateSyncArtifactId> {
-        let heights = match self.state_manager.state_layout.checkpoint_heights() {
+        let heights = match self
+            .state_manager
+            .state_layout
+            .verified_or_state_sync_checkpoint_heights()
+        {
             Ok(heights) => heights,
             Err(err) => {
                 warn!(

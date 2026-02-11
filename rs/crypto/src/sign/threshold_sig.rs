@@ -22,7 +22,6 @@ mod tests;
 pub struct ThresholdSignerInternal {}
 
 impl ThresholdSignerInternal {
-    // TODO(CRP-2639): Adapt ThresholdSignError so that clippy exception is no longer needed
     #[allow(clippy::result_large_err)]
     pub fn sign_threshold<C: ThresholdSignatureCspClient, H: Signable>(
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
@@ -37,7 +36,7 @@ impl ThresholdSignerInternal {
                 message.as_signed_bytes(),
                 pub_coeffs,
             )
-            .map_err(|error| map_threshold_sign_error_or_panic(error, dkg_id.clone()))?;
+            .map_err(|error| map_threshold_sign_error(error, dkg_id.clone()))?;
         threshold_sig_share_or_panic(csp_signature)
     }
 }
@@ -72,7 +71,6 @@ fn sig_data_not_found_error(dkg_id: NiDkgId) -> ThresholdSigDataNotFoundError {
     ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id }
 }
 
-// TODO(CRP-2639): Adapt ThresholdSignError so that clippy exception is no longer needed
 #[allow(clippy::result_large_err)]
 fn threshold_sig_share_or_panic<H: Signable>(
     csp_signature: CspSignature,
@@ -81,16 +79,13 @@ fn threshold_sig_share_or_panic<H: Signable>(
         "This case cannot occur because `CryptoError::MalformedSignature` is returned only \
             if the signature returned by the CSP is not a \
             `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual)`, but this must \
-            be guaranteed by the CSP.", /* TODO (DFN-1186) */
+            be guaranteed by the CSP.",
     ))
 }
 
 // Normally we implement a `From` conversion. But since this conversion takes
 // the dkg_id as parameter, this cannot be done in this case.
-fn map_threshold_sign_error_or_panic(
-    error: CspThresholdSignError,
-    dkg_id: NiDkgId,
-) -> ThresholdSignError {
+fn map_threshold_sign_error(error: CspThresholdSignError, dkg_id: NiDkgId) -> ThresholdSignError {
     match error {
         CspThresholdSignError::SecretKeyNotFound { algorithm, key_id } => {
             // If the secret key was not found, reloading the transcript will not generally help
@@ -110,16 +105,15 @@ fn map_threshold_sign_error_or_panic(
             }
         }
         CspThresholdSignError::TransientInternalError { internal_error } => {
-            ThresholdSignError::TransientInternalError { internal_error }
+            ThresholdSignError::TransientInternalError(internal_error)
         }
         CspThresholdSignError::KeyIdInstantiationError(internal_error) => {
             ThresholdSignError::KeyIdInstantiationError(internal_error)
         }
-        // Panic, since these would be implementation errors:
         CspThresholdSignError::UnsupportedAlgorithm { .. }
         | CspThresholdSignError::MalformedSecretKey { .. }
         | CspThresholdSignError::WrongSecretKeyType { .. } => {
-            panic!("Illegal state: {error}")
+            ThresholdSignError::InternalError(error.to_string())
         }
     }
 }
@@ -272,7 +266,7 @@ fn panic_on_illegal_individual_sig_verification_state(error: CryptoError) -> Cry
             if the given signature was not a \
             `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual)`, but we know \
             for sure that it has this type because this is the type returned by \
-            `CspSignature::try_from(ThresholdSigShareOf)`." /* TODO (DFN-1186) */
+            `CspSignature::try_from(ThresholdSigShareOf)`."
         ),
         _ => error,
     }
@@ -356,7 +350,7 @@ fn combined_threshold_sig_or_panic<H: Signable>(
 ) -> CryptoResult<CombinedThresholdSigOf<H>> {
     Ok(CombinedThresholdSigOf::try_from(csp_signature).expect(
         "The CSP must return a signature of type \
-        `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined)`.", /* TODO (DFN-1186) */
+        `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined)`.",
     ))
 }
 
@@ -406,8 +400,6 @@ impl ThresholdSigVerifierInternal {
     }
 }
 
-// TODO (DFN-1186): improve the error handling by introducing more specific
-// errors on CSP level.
 fn map_verify_combined_error(error: CryptoError) -> CryptoError {
     match error {
         CryptoError::SignatureVerification { .. }

@@ -70,7 +70,7 @@ impl NeuronsFundConfig {
     fn new_with_20_hotkeys() -> Self {
         let hotkeys = (0..20)
             .map(|i: u64| {
-                if i % 2 == 0 {
+                if i.is_multiple_of(2) {
                     // Model some self-authenticating hotkeys.
                     PrincipalId::new_self_authenticating(&i.to_be_bytes())
                 } else {

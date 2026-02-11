@@ -1,10 +1,7 @@
 use crate::{
     canister_agent::CanisterAgent,
     canister_api::GenericRequest,
-    driver::{
-        group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS},
-        test_env_api::*,
-    },
+    driver::{group::MAX_RUNTIME_THREADS, test_env_api::*},
     generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics},
     retry_with_msg, retry_with_msg_async,
     types::*,
@@ -12,6 +9,7 @@ use crate::{
 use anyhow::{anyhow, bail};
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
+use config_tool::guestos::generate_ic_config;
 use dfn_protobuf::{ProtoBuf, protobuf};
 use futures::{
     FutureExt,
@@ -51,7 +49,7 @@ use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
 use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
     CanisterId, Cycles, PrincipalId,
-    messages::{HttpCallContent, HttpQueryContent},
+    messages::{HttpCallContent, HttpQueryContent, HttpReadStateContent},
 };
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
@@ -140,9 +138,7 @@ lazy_static! {
 }
 
 fn get_canister_wasm(env_var: &str) -> Vec<u8> {
-    let uc_wasm_path = get_dependency_path(
-        std::env::var(env_var).unwrap_or_else(|e| panic!("{env_var:?} not set: {e:?}")),
-    );
+    let uc_wasm_path = get_dependency_path_from_env(env_var);
     std::fs::read(&uc_wasm_path)
         .unwrap_or_else(|e| panic!("Could not read WASM from {uc_wasm_path:?}: {e:?}"))
 }
@@ -947,6 +943,8 @@ pub async fn agent_with_client_identity(
         .with_url(url)
         .with_http_client(client)
         .with_identity(identity)
+        // Setting a large polling time for the sake of long-running update calls.
+        .with_max_polling_time(Duration::from_secs(600))
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
@@ -1314,10 +1312,8 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
             let rt = {
                 let cpus = num_cpus::get();
                 let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
-                let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
                 Builder::new_multi_thread()
                     .worker_threads(workers)
-                    .max_blocking_threads(blocking_threads)
                     .enable_all()
                     .build()
             }
@@ -1514,7 +1510,7 @@ pub fn escape_for_wat(id: &Principal) -> String {
 }
 
 pub fn get_config() -> ConfigOptional {
-    let template = config::guestos::generate_ic_config::IcConfigTemplate {
+    let template = generate_ic_config::IcConfigTemplate {
         ipv6_address: "::".to_string(),
         ipv6_prefix: "::/64".to_string(),
         ipv4_address: "".to_string(),
@@ -1529,8 +1525,8 @@ pub fn get_config() -> ConfigOptional {
         malicious_behavior: "null".to_string(),
     };
 
-    let ic_json = config::guestos::generate_ic_config::render_ic_config(template)
-        .expect("Failed to render config template");
+    let ic_json =
+        generate_ic_config::render_ic_config(template).expect("Failed to render config template");
     ConfigSource::Literal(ic_json)
         .load()
         .expect("Failed to parse dummy config")
@@ -1574,9 +1570,17 @@ impl LogStream {
     where
         P: Fn(&IcNodeSnapshot, &str) -> bool,
     {
+        self.find(predicate).await.map(|_| ())
+    }
+
+    /// Find and return the first log line that satisfies the given predicate
+    pub async fn find<P>(&mut self, predicate: P) -> std::io::Result<(IcNodeSnapshot, String)>
+    where
+        P: Fn(&IcNodeSnapshot, &str) -> bool,
+    {
         while let Some((node, line)) = self.read().await? {
             if predicate(&node, &line) {
-                return Ok(());
+                return Ok((node, line));
             }
         }
 
@@ -1971,6 +1975,30 @@ pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: content.nonce.clone().map(|blob| blob.0),
+    };
+    identity.sign(&msg).unwrap()
+}
+
+pub fn sign_read_state(content: &HttpReadStateContent, identity: &impl Identity) -> Signature {
+    use ic_agent::hash_tree::Label;
+    use std::ops::Deref;
+    let HttpReadStateContent::ReadState {
+        read_state: content,
+    } = content;
+    let paths = content
+        .paths
+        .iter()
+        .map(|path| {
+            path.deref()
+                .iter()
+                .map(|label| Label::from_bytes(label.as_bytes()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let msg = EnvelopeContent::ReadState {
+        paths,
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
     };
     identity.sign(&msg).unwrap()
 }

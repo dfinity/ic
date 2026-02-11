@@ -343,6 +343,8 @@ fn timeout_priority() {
                     // this is the important one
                     time: UNIX_EPOCH,
                     replication: ic_types::canister_http::Replication::FullyReplicated,
+                    pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+                    refund_status: ic_types::canister_http::RefundStatus::default(),
                 };
                 init_state
                     .metadata
@@ -849,6 +851,8 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus::default(),
         };
 
         // Insert the context in the replicated state
@@ -952,6 +956,8 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus::default(),
         };
 
         // Insert the context in the replicated state
@@ -1056,6 +1062,8 @@ fn non_replicated_share_is_ignored_if_content_is_missing() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus::default(),
         };
 
         let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
@@ -1134,6 +1142,8 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus::default(),
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1200,6 +1210,8 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus::default(),
         };
 
         // Inject this context into the state reader.
@@ -1282,6 +1294,8 @@ fn validate_payload_fails_for_response_with_no_signatures() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus::default(),
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1369,6 +1383,8 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
             time: UNIX_EPOCH,
             // The state says the request is replicated.
             replication: ic_types::canister_http::Replication::FullyReplicated,
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus::default(),
         };
 
         // Inject this context into the state reader.
@@ -1461,6 +1477,8 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus::default(),
         };
 
         // 2. Inject this context into the state reader

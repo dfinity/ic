@@ -1,10 +1,11 @@
 use crate::{
-    CountBytes, Time,
+    Time,
     artifact::IngressMessageId,
     messages::{
         EXPECTED_MESSAGE_ID_LENGTH, HttpRequestError, MessageId, SignedIngress, SignedRequestBytes,
     },
 };
+use ic_base_types::NumBytes;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
@@ -32,6 +33,24 @@ impl From<&IngressPayload> for pb::IngressPayload {
                     expiry: ingress_message_id.expiry().as_nanos_since_unix_epoch(),
                     message_id: ingress_message_id.message_id.as_bytes().to_vec(),
                     signed_request_bytes: serialized_ingress_message.as_ref().to_vec(),
+                },
+            )
+            .collect();
+
+        pb::IngressPayload { ingress_messages }
+    }
+}
+
+impl From<IngressPayload> for pb::IngressPayload {
+    fn from(ingress_payload: IngressPayload) -> Self {
+        let ingress_messages = ingress_payload
+            .serialized_ingress_messages
+            .into_iter()
+            .map(
+                |(ingress_message_id, serialized_ingress_message)| pb::IngressMessage {
+                    expiry: ingress_message_id.expiry().as_nanos_since_unix_epoch(),
+                    message_id: ingress_message_id.message_id.as_bytes().to_vec(),
+                    signed_request_bytes: serialized_ingress_message.into(),
                 },
             )
             .collect();
@@ -122,36 +141,43 @@ impl IngressPayload {
     ) -> impl Iterator<Item = (&IngressMessageId, &SignedRequestBytes)> {
         self.serialized_ingress_messages.iter()
     }
-}
 
-impl CountBytes for IngressPayload {
-    fn count_bytes(&self) -> usize {
-        let IngressPayload {
-            serialized_ingress_messages,
-        } = &self;
-        serialized_ingress_messages
+    pub fn total_messages_size_estimate(&self) -> NumBytes {
+        let messages_total_size: usize = self
+            .serialized_ingress_messages
             .values()
-            .map(|message| EXPECTED_MESSAGE_ID_LENGTH + message.len())
-            .sum()
+            .map(SignedRequestBytes::len)
+            .sum();
+
+        NumBytes::new(messages_total_size as u64)
     }
-}
 
-impl<'a> FromIterator<&'a SignedIngress> for IngressPayload {
-    fn from_iter<I: IntoIterator<Item = &'a SignedIngress>>(msgs: I) -> Self {
-        let serialized_ingress_messages = msgs
-            .into_iter()
-            .map(|ingress| (IngressMessageId::from(ingress), ingress.binary().clone()))
-            .collect();
+    pub fn total_ids_size_estimate(&self) -> NumBytes {
+        let ids_total_size = self.serialized_ingress_messages.len() * EXPECTED_MESSAGE_ID_LENGTH;
 
-        Self {
-            serialized_ingress_messages,
-        }
+        NumBytes::new(ids_total_size as u64)
     }
 }
 
 impl From<Vec<SignedIngress>> for IngressPayload {
     fn from(msgs: Vec<SignedIngress>) -> IngressPayload {
-        IngressPayload::from_iter(&msgs)
+        IngressPayload::from_iter(
+            msgs.into_iter()
+                .map(|msg| (IngressMessageId::from(&msg), msg)),
+        )
+    }
+}
+
+impl FromIterator<(IngressMessageId, SignedIngress)> for IngressPayload {
+    fn from_iter<I: IntoIterator<Item = (IngressMessageId, SignedIngress)>>(msgs: I) -> Self {
+        let serialized_ingress_messages = msgs
+            .into_iter()
+            .map(|(id, ingress)| (id, SignedRequestBytes::from(ingress)))
+            .collect();
+
+        Self {
+            serialized_ingress_messages,
+        }
     }
 }
 

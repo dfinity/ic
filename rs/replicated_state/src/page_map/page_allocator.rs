@@ -58,7 +58,7 @@ impl Clone for Page {
 /// A clonable wrapper around a page allocator implementation.
 /// The actual implementation is wrapped in an optional for two reasons:
 /// 1) Cheap initialization: most PageMaps will not have dirty pages, so we can
-///    safe a lot of redundant work by postponing the initialization of the
+///    save a lot of redundant work by postponing the initialization of the
 ///    allocator until the actual allocation.
 /// 2) PageMaps corresponding to checkpoints must have an empty page allocator
 ///    to prevent memory leaks. That's because such PageMaps may be kept in

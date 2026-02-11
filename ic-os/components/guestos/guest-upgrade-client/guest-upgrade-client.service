@@ -1,9 +1,10 @@
 [Unit]
 Description=Guest Upgrade Client - Disk Encryption Key Exchange
-DefaultDependencies=no
-After=init-config.service
+After=init-config.service network-online.target dev-sev\x2dguest.device
 Requires=init-config.service
+Wants=network-online.target dev-sev\x2dguest.device
 RequiresMountsFor=/var
+ConditionEnvironment=SEV_ACTIVE=1
 
 [Service]
 Type=oneshot
@@ -14,5 +15,5 @@ StandardOutput=journal+console
 StandardError=journal+console
 
 [Install]
-WantedBy=local-fs.target
+WantedBy=multi-user.target
 

@@ -1,22 +1,22 @@
 #![cfg(test)]
 
 use anyhow::bail;
-use attestation::verification::SevRootCertificateVerification;
+use attestation::attestation_package::SevRootCertificateVerification;
 use attestation_testing::registry::setup_mock_registry_client_with_blessed_versions;
 use config_types::{
-    DeploymentEnvironment, GuestOSConfig, GuestOSSettings, GuestOSUpgradeConfig, GuestVMType,
-    ICOSSettings, Ipv6Config, NetworkSettings, TrustedExecutionEnvironmentConfig,
+    GuestOSConfig, GuestOSUpgradeConfig, GuestVMType, ICOSSettings,
+    TrustedExecutionEnvironmentConfig,
 };
 use futures::future::Either;
 use futures::{FutureExt, TryFutureExt};
 use guest_upgrade_client::DiskEncryptionKeyExchangeClientAgent;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
-use guest_upgrade_shared::DEFAULT_SERVER_PORT;
+use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
 };
-use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
+use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
 use std::net::Ipv6Addr;
 use std::path::Path;
@@ -129,25 +129,10 @@ impl DiskEncryptionKeyExchangeTestFixture {
         };
 
         let client_guestos_config = GuestOSConfig {
-            config_version: "1.0".to_string(),
-            network_settings: NetworkSettings {
-                ipv6_config: Ipv6Config::Unknown,
-                ipv4_config: None,
-                domain_name: None,
-            },
             icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: Default::default(),
-                deployment_environment: DeploymentEnvironment::Mainnet,
-                logging: Default::default(),
-                use_nns_public_key: false,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
                 enable_trusted_execution_environment: true,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
+                ..Default::default()
             },
-            guestos_settings: GuestOSSettings::default(),
             guest_vm_type: GuestVMType::Upgrade,
             upgrade_config: GuestOSUpgradeConfig {
                 peer_guest_vm_address: Some(Ipv6Addr::LOCALHOST),
@@ -155,7 +140,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             trusted_execution_environment_config: Some(
                 trusted_execution_environment_config.clone(),
             ),
-            recovery_config: None,
+            ..GuestOSConfig::default()
         };
 
         let previous_key = NamedTempFile::new().unwrap();
@@ -266,7 +251,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
         let expected_key = derive_key_from_sev_measurement(
             &mut self.server_sev_firmware.clone(),
             Key::DiskEncryptionKey {
-                device_path: Path::new("/dev/vda10"),
+                device_path: Path::new(STORE_DEVICE),
             },
         )
         .unwrap();

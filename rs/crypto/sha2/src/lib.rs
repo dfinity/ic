@@ -81,4 +81,11 @@
 //! ```
 
 #![forbid(unsafe_code)]
-pub use ic_crypto_internal_sha2::{Context, DomainSeparationContext, Sha224, Sha256, Sha512};
+#![deny(clippy::unwrap_used)]
+
+mod context;
+mod sha224;
+mod sha256;
+mod sha512;
+
+pub use {context::DomainSeparationContext, sha224::Sha224, sha256::Sha256, sha512::Sha512};

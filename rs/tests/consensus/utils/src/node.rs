@@ -11,6 +11,7 @@ use anyhow::{Result, anyhow, bail, ensure};
 use slog::{Logger, info};
 use ssh2::Session;
 use std::fmt::Debug;
+use std::time::Duration;
 
 use crate::ssh_access::execute_bash_command;
 
@@ -197,6 +198,22 @@ pub fn await_subnet_earliest_topology_version(
     target_version: RegistryVersion,
     logger: &Logger,
 ) {
+    await_subnet_earliest_topology_version_with_retries(
+        subnet,
+        target_version,
+        logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+    )
+}
+
+pub fn await_subnet_earliest_topology_version_with_retries(
+    subnet: &SubnetSnapshot,
+    target_version: RegistryVersion,
+    logger: &Logger,
+    retry_timeout: Duration,
+    retry_backoff: Duration,
+) {
     info!(
         logger,
         "Waiting until earliest topology version {} on subnet {}", target_version, subnet.subnet_id,
@@ -207,8 +224,8 @@ pub fn await_subnet_earliest_topology_version(
             target_version, subnet.subnet_id,
         ),
         logger.clone(),
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
+        retry_timeout,
+        retry_backoff,
         || fetch_metric_from_nodes::<u64>(subnet.nodes().collect(), EARLIEST_TOPOLOGY_VERSION)
             .and_then(|earliest_registry_versions| {
                 let min_earliest_registry_version =

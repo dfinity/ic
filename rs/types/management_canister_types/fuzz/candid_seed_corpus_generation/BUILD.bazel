@@ -7,11 +7,11 @@ sh_binary(
     srcs = ["candid_seed_corpus_generation.sh"],
     args = ["ecdsa_public_key"],
     data = [
-        "@candid//:didc",
+        "//:didc",
         "@management_canister_did//file",
     ],
     env = {
-        "DIDC_PATH": "$(execpath @candid//:didc)",
+        "DIDC_PATH": "$(execpath //:didc)",
         "IC_SPEC": "$(rootpath @management_canister_did//file)",
     },
 )
@@ -21,11 +21,11 @@ sh_binary(
     srcs = ["candid_seed_corpus_generation.sh"],
     args = ["http_request"],
     data = [
-        "@candid//:didc",
+        "//:didc",
         "@management_canister_did//file",
     ],
     env = {
-        "DIDC_PATH": "$(execpath @candid//:didc)",
+        "DIDC_PATH": "$(execpath //:didc)",
         "IC_SPEC": "$(rootpath @management_canister_did//file)",
     },
 )
@@ -35,11 +35,11 @@ sh_binary(
     srcs = ["candid_seed_corpus_generation.sh"],
     args = ["sign_with_ecdsa"],
     data = [
-        "@candid//:didc",
+        "//:didc",
         "@management_canister_did//file",
     ],
     env = {
-        "DIDC_PATH": "$(execpath @candid//:didc)",
+        "DIDC_PATH": "$(execpath //:didc)",
         "IC_SPEC": "$(rootpath @management_canister_did//file)",
     },
 )
@@ -49,11 +49,11 @@ sh_binary(
     srcs = ["candid_seed_corpus_generation.sh"],
     args = ["install_code"],
     data = [
-        "@candid//:didc",
+        "//:didc",
         "@management_canister_did//file",
     ],
     env = {
-        "DIDC_PATH": "$(execpath @candid//:didc)",
+        "DIDC_PATH": "$(execpath //:didc)",
         "IC_SPEC": "$(rootpath @management_canister_did//file)",
     },
 )
