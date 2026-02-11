@@ -9,11 +9,12 @@ use ic_system_test_driver::{
     driver::test_env_api::*,
     nns::{
         get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
-        submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
+        submit_update_elected_replica_versions_proposal, submit_update_nodes_slow_version_proposal,
+        vote_execute_proposal_assert_executed,
     },
     util::runtime_from_url,
 };
-use ic_types::{ReplicaVersion, SubnetId, messages::ReplicaHealthStatus};
+use ic_types::{NodeId, ReplicaVersion, SubnetId, messages::ReplicaHealthStatus};
 use prost::Message;
 use slog::{Logger, info};
 use std::{convert::TryFrom, io::Read, path::Path};
@@ -206,6 +207,26 @@ pub async fn deploy_guestos_to_all_subnet_nodes(
         test_neuron_id,
         new_replica_version.clone(),
         subnet_id,
+    )
+    .await;
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+}
+
+pub async fn deploy_slow_to_subnet_node(
+    nns_node: &IcNodeSnapshot,
+    new_replica_version: &ReplicaVersion,
+    node_id: NodeId,
+) {
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance_canister = get_governance_canister(&nns);
+    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+    let proposal_id = submit_update_nodes_slow_version_proposal(
+        &governance_canister,
+        proposal_sender.clone(),
+        test_neuron_id,
+        new_replica_version.clone(),
+        vec![node_id],
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;

@@ -80,6 +80,9 @@ message NodeRecord {
   // to nodes in all the subnet.
   repeated string ssh_node_state_write_access = 21;
 
+  // ID of the GuestOS version to run.
+  optional string slow_version_id = 22;
+
   reserved 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14;
   reserved "node_id";
   reserved "gossip_advert";

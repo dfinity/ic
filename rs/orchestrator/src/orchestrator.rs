@@ -10,6 +10,7 @@ use crate::{
     process_manager::ProcessManager,
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
+    slow_upgrade::SlowUpgrader,
     ssh_access_manager::SshAccessManager,
     upgrade::{OrchestratorControlFlow, Upgrade},
 };
@@ -72,6 +73,7 @@ pub struct Orchestrator {
     _metrics_runtime: MetricsHttpEndpoint,
     upgrade: Option<Upgrade>,
     hostos_upgrade: Option<HostosUpgrader>,
+    slow_upgrade: Option<SlowUpgrader>,
     boundary_node_manager: Option<BoundaryNodeManager>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
@@ -282,7 +284,7 @@ impl Orchestrator {
                 args.replica_binary_dir.clone(),
                 logger.clone(),
                 args.orchestrator_data_directory.clone(),
-                disk_encryption_key_exchange_agent,
+                None,
             )
             .await,
         );
@@ -312,6 +314,19 @@ impl Orchestrator {
                 .await,
             ),
         };
+
+        let slow_upgrade = Some(
+            SlowUpgrader::new(
+                Arc::clone(&registry),
+                replica_version.clone(),
+                node_id,
+                args.replica_binary_dir.clone(),
+                ic_binary_directory.clone(),
+                disk_encryption_key_exchange_agent,
+                logger.clone(),
+            )
+            .await,
+        );
 
         let boundary_node = BoundaryNodeManager::new(
             Arc::clone(&registry),
@@ -367,6 +382,7 @@ impl Orchestrator {
             _metrics_runtime,
             upgrade,
             hostos_upgrade,
+            slow_upgrade,
             boundary_node_manager: Some(boundary_node),
             firewall: Some(firewall),
             ssh_access_manager: Some(ssh_access_manager),
@@ -512,6 +528,40 @@ impl Orchestrator {
                 .await;
         }
 
+        async fn slow_upgrade_checks(
+            mut upgrade: SlowUpgrader,
+            cancellation_token: CancellationToken,
+        ) {
+            // Wait for a minute before starting the first loop, to allow the
+            // registry some time to catch up, after starting.
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {}
+                _ = cancellation_token.cancelled() => return
+            }
+
+            // Run the slow GuestOS upgrade loop with an exponential backoff. A 15
+            // minute liveness timeout will restart the loop if no progress is
+            // made, to ensure the upgrade loop does not get stuck.
+            //
+            // The exponential backoff between retries starts at 1 minute, and
+            // increases by a factor of 1.75, maxing out at two hours.
+            // e.g. (roughly) 1, 1.75, 3, 5.25, 9.5, 16.5, 28.75, 50.25, 88, 120, 120
+            //
+            // Additionally, there's a random +=50% range added to each delay, for jitter.
+            let backoff = ExponentialBackoffBuilder::new()
+                .with_initial_interval(Duration::from_secs(60))
+                .with_randomization_factor(0.5)
+                .with_multiplier(1.75)
+                .with_max_interval(Duration::from_secs(2 * 60 * 60))
+                .with_max_elapsed_time(None)
+                .build();
+            let liveness_timeout = Duration::from_secs(15 * 60);
+
+            upgrade
+                .upgrade_loop(cancellation_token, backoff, liveness_timeout)
+                .await;
+        }
+
         async fn boundary_node_check(
             mut boundary_node_manager: BoundaryNodeManager,
             cancellation_token: CancellationToken,
@@ -602,6 +652,13 @@ impl Orchestrator {
             self.task_tracker.spawn(
                 "HostOS_upgrade",
                 hostos_upgrade_checks(hostos_upgrade, cancellation_token.clone()),
+            );
+        }
+
+        if let Some(slow_upgrade) = self.slow_upgrade.take() {
+            self.task_tracker.spawn(
+                "Slow_upgrade",
+                slow_upgrade_checks(slow_upgrade, cancellation_token.clone()),
             );
         }
 

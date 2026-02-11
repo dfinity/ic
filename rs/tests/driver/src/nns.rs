@@ -5,6 +5,7 @@ use itertools::Itertools;
 use registry_canister::mutations::{
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
     do_update_nodes_hostos_version::DeployHostosToSomeNodes,
+    do_update_nodes_slow_version::DeploySlowToSomeNodes,
 };
 
 use crate::{
@@ -899,6 +900,45 @@ pub async fn submit_update_nodes_hostos_version_proposal(
     )
     .await
     .expect("submit_update_nodes_hostos_version_proposal failed")
+}
+
+/// Submits a proposal for updating nodes slowly to a GuestOS version.
+///
+/// # Arguments
+///
+/// * `governance`  - Governance canister
+/// * `sender`      - Sender of the proposal
+/// * `neuron_id`   - ID of the proposing neuron. This neuron will automatically
+///   vote in favor of the proposal.
+/// * `version`     - GuestOS software version
+/// * `node_ids`   - List of Node ID to be updated
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_update_nodes_slow_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    version: ReplicaVersion,
+    node_ids: Vec<NodeId>,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::DeploySlowToSomeNodes,
+        DeploySlowToSomeNodes {
+            node_ids: node_ids.clone(),
+            slow_version_id: Some(String::from(version.clone())),
+        },
+        format!(
+            "Update nodes '{:#?}' to slow version '{}'",
+            node_ids,
+            String::from(version)
+        ),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_update_nodes_slow_version_proposal failed")
 }
 
 /// Submits a proposal for updating replica software version of the specified
