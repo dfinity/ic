@@ -1177,7 +1177,7 @@ fn split() {
     let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
     canister_state
         .system_state
-        .split_input_schedules(&CANISTER_1, &expected.canister_states());
+        .split_input_schedules(&CANISTER_1, expected.canister_states());
     expected.put_canister_state(canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
