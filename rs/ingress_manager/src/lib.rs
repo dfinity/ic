@@ -237,7 +237,7 @@ pub(crate) mod tests {
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_limits::MAX_INGRESS_MESSAGES_PER_BLOCK;
     use ic_metrics::MetricsRegistry;
-    use ic_registry_client::client::RegistryClientImpl;
+    use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_subnet_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::{
@@ -273,11 +273,10 @@ pub(crate) mod tests {
                 Some(subnet_record),
             )
             .expect("Failed to add subnet record.");
-        let registry = Arc::new(RegistryClientImpl::new(
-            Arc::clone(&registry_data_provider) as Arc<_>,
-            None,
+        let registry = Arc::new(FakeRegistryClient::new(
+            Arc::clone(&registry_data_provider) as Arc<_>
         ));
-        registry.fetch_and_start_polling().unwrap();
+        registry.update_to_latest_version();
         registry
     }
 

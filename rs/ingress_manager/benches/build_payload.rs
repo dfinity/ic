@@ -27,7 +27,7 @@ use ic_limits::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{
@@ -90,12 +90,7 @@ where
         .expect_get_status_at_height()
         .returning(|_| Ok(Box::new(|_| IngressStatus::Unknown)));
     let subnet_id = subnet_test_id(0);
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let registry = set_up_registry(
-        subnet_id,
-        test_case.payload_size_limit,
-        runtime.handle().clone(),
-    );
+    let registry = set_up_registry(subnet_id, test_case.payload_size_limit);
     let consensus_time = Arc::new(MockConsensusTime::new());
     let mut state_manager = MockStateManager::new();
     state_manager.expect_get_state_at().return_const(Ok(
@@ -150,7 +145,6 @@ where
 fn set_up_registry(
     subnet_id: SubnetId,
     max_ingress_bytes_per_block: u64,
-    runtime: tokio::runtime::Handle,
 ) -> Arc<dyn RegistryClient> {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let mut subnet_record = test_subnet_record();
@@ -162,11 +156,10 @@ fn set_up_registry(
             Some(subnet_record),
         )
         .expect("Failed to add subnet record.");
-    let registry = Arc::new(RegistryClientImpl::new(
-        Arc::clone(&registry_data_provider) as Arc<_>,
-        None,
+    let registry = Arc::new(FakeRegistryClient::new(
+        Arc::clone(&registry_data_provider) as Arc<_>
     ));
-    runtime.block_on(async { registry.as_ref().fetch_and_start_polling().unwrap() });
+    registry.update_to_latest_version();
     registry
 }
 

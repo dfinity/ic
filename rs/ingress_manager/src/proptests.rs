@@ -179,7 +179,7 @@ proptest! {
 
         let test_result = test_ingress_size_is_taken_into_account(SizeTestCase {
             ingress_message_payload_size,
-            wire_bytes_limit,
+            wire_bytes_limit: NumBytes::new(wire_bytes_limit as u64),
             memory_bytes_limit: Some(memory_bytes_limit),
             messages_count_limit,
             expected_payload_messages_count_when_hashes_in_blocks_enabled,

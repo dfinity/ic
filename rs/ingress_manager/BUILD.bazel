@@ -30,7 +30,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/temp_crypto",
     "//rs/interfaces/mocks",
     "//rs/interfaces/state_manager/mocks",
-    "//rs/registry/client",
+    "//rs/registry/fake",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",
@@ -84,7 +84,7 @@ rust_ic_bench(
         "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
-        "//rs/registry/client",
+        "//rs/registry/fake",
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
@@ -99,7 +99,6 @@ rust_ic_bench(
         "@crate_index//:criterion",
         "@crate_index//:pprof",
         "@crate_index//:rand",
-        "@crate_index//:tokio",
     ],
 )
 
@@ -121,7 +120,7 @@ rust_ic_bench(
         "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
-        "//rs/registry/client",
+        "//rs/registry/fake",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
         "//rs/registry/subnet_type",
@@ -136,6 +135,5 @@ rust_ic_bench(
         "@crate_index//:criterion",
         "@crate_index//:pprof",
         "@crate_index//:rand",
-        "@crate_index//:tokio",
     ],
 )
