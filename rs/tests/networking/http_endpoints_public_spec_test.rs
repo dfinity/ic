@@ -64,7 +64,7 @@ use ic_system_test_driver::{
 use ic_types::{CanisterId, PrincipalId};
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::ManagementCanister;
-use ic_utils::interfaces::management_canister::builders::InstallMode;
+use ic_utils::interfaces::management_canister::builders::CanisterInstallMode as InstallMode;
 use maplit::btreemap;
 use reqwest::{Response, StatusCode};
 use serde_cbor::Value;
