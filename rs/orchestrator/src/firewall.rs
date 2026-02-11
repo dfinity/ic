@@ -1187,6 +1187,7 @@ mod tests {
                     chip_id: None,
                     hostos_version_id: None,
                     public_ipv4_config: None,
+                    version_id: None,
                     domain: None,
                     node_reward_type: None,
                     ssh_node_state_write_access: vec![],

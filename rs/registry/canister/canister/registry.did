@@ -435,6 +435,11 @@ type DeployHostosToSomeNodes = record {
   node_ids : vec principal;
 };
 
+type DeployGuestosToSomeNodes = record {
+  version_id : opt text;
+  node_ids : vec principal;
+};
+
 type UpdateSshReadOnlyAccessForAllUnassignedNodesPayload = record {
   ssh_readonly_keys : vec text;
 };
@@ -531,6 +536,7 @@ service : {
     DeployGuestosToAllUnassignedNodesPayload
   ) -> ();
   deploy_guestos_to_some_api_boundary_nodes : (DeployGuestosToSomeApiBoundaryNodes) -> ();
+  deploy_guestos_to_some_nodes : (DeployGuestosToSomeNodes) -> ();
   deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
   get_api_boundary_node_ids : (GetApiBoundaryNodeIdsRequest) -> (GetApiBoundaryNodeIdsResponse) query;
   get_build_metadata : () -> (text) query;

@@ -33,6 +33,7 @@
 //! system to read.
 
 pub mod args;
+mod async_upgrade;
 mod boundary_node;
 mod catch_up_package_provider;
 mod dashboard;

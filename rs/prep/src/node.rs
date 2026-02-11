@@ -466,6 +466,7 @@ mod node_configuration {
                 port: 8080,
             }),
             hostos_version_id: None,
+            version_id: None,
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
