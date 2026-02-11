@@ -157,6 +157,7 @@ pub fn main() -> Result<()> {
                 enable_trusted_execution_environment,
                 node_operator_private_key,
                 use_ssh_authorized_keys,
+                #[cfg(feature = "dev")]
                 nns_public_key_override_path,
                 verbose,
                 network_settings,
@@ -268,7 +269,7 @@ pub fn assemble_setupos_config(
     enable_trusted_execution_environment: bool,
     node_operator_private_key: Option<String>,
     use_ssh_authorized_keys: bool,
-    nns_public_key_override_path: PathBuf,
+    #[cfg(feature = "dev")] nns_public_key_override_path: PathBuf,
     verbose: bool,
     network_settings: NetworkSettings,
 ) -> Result<SetupOSConfig, Error> {
