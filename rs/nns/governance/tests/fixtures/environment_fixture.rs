@@ -11,8 +11,8 @@ use ic_nns_governance::{
 use ic_sns_root::GetSnsCanistersSummaryRequest;
 use ic_sns_swap::pb::v1::GetStateRequest;
 use ic_sns_wasm::pb::v1::{DeployNewSnsRequest, ListDeployedSnsesRequest};
-use proptest::prelude::RngCore;
 use rand::rngs::StdRng;
+use rand::RngCore;
 use rand_chacha::ChaCha20Rng;
 use std::time::Duration;
 use std::{

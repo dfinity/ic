@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use proptest::prelude::*;
+use rand::Rng;
 
 use ic_base_types::CanisterId;
 use ic_stable_memory_integrity::StableOperationResult;
