@@ -5,6 +5,7 @@ use super::{
     routing::ResolveDestinationError,
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
@@ -335,15 +336,17 @@ impl SystemStateModifications {
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
-        let log_memory_store = &mut system_state.log_memory_store;
-        // TODO(DSM-11): cleanup population logic after migration is done.
-        // We need to copy existing canister_log to log_memory_store in order
-        // not to loose any log records until the migration is complete.
-        let old_total = &system_state.canister_log;
-        if log_memory_store.is_empty() && !old_total.is_empty() {
-            log_memory_store.append_delta_log(&mut old_total.clone());
+        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            let log_memory_store = &mut system_state.log_memory_store;
+            // TODO(DSM-11): cleanup population logic after migration is done.
+            // We need to copy existing canister_log to log_memory_store in order
+            // not to loose any log records until the migration is complete.
+            let old_total = &system_state.canister_log;
+            if log_memory_store.is_empty() && !old_total.is_empty() {
+                log_memory_store.append_delta_log(&mut old_total.clone());
+            }
+            log_memory_store.append_delta_log(&mut self.canister_log.clone());
         }
-        log_memory_store.append_delta_log(&mut self.canister_log.clone());
         system_state
             .canister_log
             .append_delta_log(&mut self.canister_log);

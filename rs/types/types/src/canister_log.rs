@@ -5,17 +5,17 @@ use ic_validate_eq_derive::ValidateEq;
 use serde::Serialize;
 use std::collections::VecDeque;
 
-#[allow(non_upper_case_globals)]
-const KiB: usize = 1024;
+const KIB: usize = 1024;
+const MIB: usize = 1024 * KIB;
 
 /// The maximum size of an aggregate canister log buffer.
-pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 100 * MIB;
 
 /// The default size of an aggregate canister log buffer.
-pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KIB;
 
 /// The maximum size of a delta (per message) canister log buffer.
-pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MIB;
 
 /// Upper bound on stored delta-log sizes used for metrics.
 /// Limits memory growth, 10k covers expected per-round
@@ -281,7 +281,7 @@ mod tests {
     use super::*;
     use ic_management_canister_types_private::CanisterLogRecord;
 
-    const TEST_MAX_ALLOWED_SIZE: usize = 4 * KiB;
+    const TEST_MAX_ALLOWED_SIZE: usize = 4 * KIB;
     const BIGGER_THAN_LIMIT_MESSAGE: &[u8] = &[b'a'; 2 * TEST_MAX_ALLOWED_SIZE];
 
     fn canister_log_records(data: &[(u64, u64, &[u8])]) -> Vec<CanisterLogRecord> {
