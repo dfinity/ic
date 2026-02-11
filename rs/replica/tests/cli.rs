@@ -2,13 +2,13 @@ use assert_cmd::Command;
 use ic_config::SAMPLE_CONFIG;
 use predicates::prelude::*;
 
+#[allow(deprecated)]
 fn new_replica_command() -> Command {
-    // Try cargo_bin_cmd! first for Cargo environment
-    if std::env::var("CARGO").is_ok() {
-        assert_cmd::cargo::cargo_bin_cmd!("replica")
-    } else {
+    match Command::cargo_bin("replica") {
+        // When in Cargo environment.
+        Ok(cmd) => cmd,
         // When in Bazel environment
-        Command::new("rs/replica/replica")
+        Err(_) => Command::new("rs/replica/replica"),
     }
 }
 
