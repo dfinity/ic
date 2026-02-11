@@ -40,11 +40,13 @@ use slog::info;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 
+use bytes::Bytes;
+use http::{Request, Response};
 use ic_agent::{
     Agent, AgentError, Identity,
     agent::{
         HttpService,
-        http_transport::reqwest_transport::reqwest::{Client, Request, Response},
+        http_transport::reqwest_transport::reqwest::Client,
     },
     identity::Secp256k1Identity,
 };
@@ -434,9 +436,10 @@ struct HttpServiceNoRetry {
 impl HttpService for HttpServiceNoRetry {
     async fn call<'a>(
         &'a self,
-        req: &'a (dyn Fn() -> Result<Request, AgentError> + Send + Sync),
+        req: &'a (dyn Fn() -> Result<Request<Bytes>, AgentError> + Send + Sync),
         _max_tcp_retries: usize,
-    ) -> Result<Response, AgentError> {
-        Ok(self.client.call(req, _max_tcp_retries).await?)
+        _max_response_body_size: Option<usize>,
+    ) -> Result<Response<Bytes>, AgentError> {
+        Ok(self.client.call(req, _max_tcp_retries, _max_response_body_size).await?)
     }
 }
