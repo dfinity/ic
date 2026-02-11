@@ -20993,6 +20993,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "attestation",
+ "attestation_testing",
  "build-info",
  "build-info-build",
  "canbench-rs",

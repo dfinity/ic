@@ -69,6 +69,7 @@ getrandom = { version = "0.2", features = ["custom"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }
+attestation_testing = { path = "../../ic_os/sev/attestation/testing" }
 candid_parser = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
