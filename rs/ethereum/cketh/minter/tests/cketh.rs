@@ -40,6 +40,7 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -831,20 +832,13 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
 }
 
 #[test]
-fn should_document_current_behavior_of_being_unstoppable_while_scraping_blocks_has_open_call_context()
- {
-    // TODO(DEFI-2566): This test documents the current behavior, where the ckETH minter is
-    //  unstoppable while scraping (lots of) logs on a timer. Since log scraping calls are made on
-    //  a loop in the callback handler for log scraping responses, the scraping continues until all
-    //  logs have been scraped. The same call context is reused, and as long as there is an open
-    //  call context, the minter is not stoppable.
+fn should_be_able_to_stop_canister_during_scraping() {
     const UNSCRAPED_BLOCKS: u64 = 5_000;
     const NUM_BLOCK_RANGES: usize = 10;
 
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.as_ref().max_logs_block_range();
     const MAX_BLOCK: u64 = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + UNSCRAPED_BLOCKS;
-
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -878,6 +872,14 @@ fn should_document_current_behavior_of_being_unstoppable_while_scraping_blocks_h
             .unwrap();
     }
 
+    cketh.env.tick();
+    cketh.env.tick();
+    assert_eq!(
+        cketh.env.canister_http_request_contexts().len(),
+        4,
+        "Expected HTTPS outcalls since scraping is still in progress."
+    );
+
     // At this point:
     // - 3 block ranges have been scraped
     // - The minter has made an HTTP outcall for the 4th block range
@@ -886,74 +888,32 @@ fn should_document_current_behavior_of_being_unstoppable_while_scraping_blocks_h
     // The stop will NOT complete because there's an open call context.
     cketh.try_stop_minter_without_stopping_ongoing_https_outcalls();
 
-    // Verify the minter is in "Stopping" state (not "Stopped")
     let status = cketh.tick_until_minter_canister_status(CanisterStatusType::Stopping);
     assert_eq!(
         status,
         CanisterStatusType::Stopping,
         "Expected minter to be in Stopping state due to open call contexts"
     );
-
-    // Even while in "Stopping" state, when we provide a response to the pending HTTPS call, the
-    // canister does not stop. Instead, the callback continuation runs and the next loop iteration
-    // makes another outcall. The canister remains in "Stopping" state throughout.
-    for i in BLOCKS_TO_PROCESS_BEFORE_STOP..NUM_BLOCK_RANGES {
-        // Before providing response, verify canister is STILL in Stopping state
-        let status_before = cketh.minter_status();
-        assert_eq!(
-            status_before,
-            CanisterStatusType::Stopping,
-            "Block range {}/{}: Canister should be in Stopping state before receiving response",
-            i + 1,
-            NUM_BLOCK_RANGES
-        );
-
-        // Provide response to the pending HTTPS call.
-        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
-            .with_request_params(json!([{
+    // Answer 4th block range to be able to stop.
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
                 "fromBlock": from_block,
                 "toBlock": to_block,
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
                 "topics": [cketh.received_eth_event_topic()]
             }]))
-            .respond_for_all_with(empty_logs())
-            .build()
-            .expect_rpc_calls(&cketh);
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
 
-        // After processing the response, verify the canister is still in Stopping state.
-        let status_after = cketh.minter_status();
-
-        if i < NUM_BLOCK_RANGES - 1 {
-            assert_eq!(
-                status_after,
-                CanisterStatusType::Stopping,
-                "Block range {}/{}: Canister should still be in Stopping state after receiving \
-                 response (it made a new HTTP call for the next block range!)",
-                i + 1,
-                NUM_BLOCK_RANGES
-            );
-        } else {
-            // Last block range - canister might transition to Stopped
-            println!(
-                "  Block range {}/{}: Final response received",
-                i + 1,
-                NUM_BLOCK_RANGES
-            );
-        }
-
-        from_block = to_block.checked_increment().unwrap();
-        to_block = from_block
-            .checked_add(BlockNumber::from(max_eth_logs_block_range))
-            .unwrap();
-    }
-
-    // After all scraping is complete, the canister should finally be Stopped.
-    let status = cketh.tick_until_minter_canister_status(CanisterStatusType::Stopped);
+    assert_eq!(cketh.minter_status(), CanisterStatusType::Stopped);
     assert_eq!(
-        status,
-        CanisterStatusType::Stopped,
-        "Expected minter to be Stopped after all call contexts closed"
+        cketh.env.canister_http_request_contexts(),
+        BTreeMap::default(),
+        "Unexpected pending HTTPS outcall"
     );
+
+    // Restarting the canister should resume scraping from where we stopped
 }
 
 #[test]
