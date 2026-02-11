@@ -1,0 +1,49 @@
+name: Container Scan Nightly
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  container-scan-nightly:
+    name: Container Scan Nightly
+    environment: dependency-scan
+    runs-on:
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:ece16fc265918da396aa2cbe8d4114c614de9328a49c7cca86a22d53d47ad633
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup environment deps
+        id: setup-environment-deps
+        shell: bash
+        run: |
+          # Ignore externally-managed-environment pip error, install packages system-wide.
+          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
+      - name: Run Container Scan Nightly
+        id: container-scan-nightly
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+          cd ci/src/dependencies/
+          $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+          REPO_NAME: ${{ github.repository }}
+          SHELL_WRAPPER: "/usr/bin/time"
+          CI_PIPELINE_ID: ${{ github.run_id }}
+          LOG_LEVEL: "INFO"

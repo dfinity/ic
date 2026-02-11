@@ -44,3 +44,5 @@ pandas
 psycopg
 tabulate
 codeowners
+protobuf>=5.29.0
+dacite

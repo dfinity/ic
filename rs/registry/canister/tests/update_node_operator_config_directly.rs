@@ -5,7 +5,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
+    itest_helpers::{set_up_registry_canister, state_machine_test_on_nns_subnet},
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
@@ -21,7 +21,7 @@ use registry_canister::{
 
 #[test]
 fn node_provider_is_updated_on_receiving_the_request() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let node_operator_key = make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let node_operator_record = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
