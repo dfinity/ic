@@ -897,11 +897,11 @@ fn should_be_able_to_stop_canister_during_scraping() {
     // Answer 4th block range to be able to stop.
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
-                "fromBlock": from_block,
-                "toBlock": to_block,
-                "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [cketh.received_eth_event_topic()]
-            }]))
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [cketh.received_eth_event_topic()]
+        }]))
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);
