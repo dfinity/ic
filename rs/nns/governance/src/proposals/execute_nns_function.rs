@@ -456,6 +456,7 @@ pub enum ValidNnsFunction {
     PauseCanisterMigrations,
     UnpauseCanisterMigrations,
     SetSubnetOperationalLevel,
+    DeployGuestosToSomeNodes,
 }
 
 impl ValidNnsFunction {
@@ -584,6 +585,9 @@ impl ValidNnsFunction {
             ValidNnsFunction::SetSubnetOperationalLevel => {
                 (REGISTRY_CANISTER_ID, "set_subnet_operational_level")
             }
+            ValidNnsFunction::DeployGuestosToSomeNodes => {
+                (REGISTRY_CANISTER_ID, "deploy_guestos_to_some_nodes")
+            }
         }
     }
 
@@ -618,6 +622,7 @@ impl ValidNnsFunction {
             | ValidNnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
 
             ValidNnsFunction::DeployHostosToSomeNodes
+            | ValidNnsFunction::DeployGuestosToSomeNodes
             | ValidNnsFunction::DeployGuestosToAllSubnetNodes
             | ValidNnsFunction::DeployGuestosToSomeApiBoundaryNodes
             | ValidNnsFunction::DeployGuestosToAllUnassignedNodes => Topic::IcOsVersionDeployment,
@@ -696,6 +701,7 @@ impl ValidNnsFunction {
             }
             ValidNnsFunction::ReviseElectedHostosVersions => "Revise Elected HostOS Versions",
             ValidNnsFunction::DeployHostosToSomeNodes => "Deploy HostOS To Some Nodes",
+            ValidNnsFunction::DeployGuestosToSomeNodes => "Deploy GuestOS To Some Nodes",
             ValidNnsFunction::SubnetRentalRequest => "Subnet Rental Request",
             ValidNnsFunction::PauseCanisterMigrations => "Pause Canister Migrations",
             ValidNnsFunction::UnpauseCanisterMigrations => "Unpause Canister Migrations",
@@ -895,6 +901,10 @@ impl ValidNnsFunction {
                 "Deploy a HostOS version to a given set of nodes. The proposal \
                 changes the HostOS version that is used on the specified nodes."
             }
+            ValidNnsFunction::DeployGuestosToSomeNodes => {
+                "Deploy a GuestOS version to a given set of nodes. The proposal \
+                changes the GuestOS version that is used on the specified nodes."
+            }
             ValidNnsFunction::SubnetRentalRequest => {
                 "Rent a subnet on the Internet Computer.\n\n\
                 The Subnet Rental Canister is called when this proposal is executed, and the \
@@ -1050,6 +1060,7 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
             NnsFunction::Unspecified => {
                 Err("NNS_FUNCTION_UNSPECIFIED is not a valid function".to_string())
             }
+            NnsFunction::DeployGuestosToSomeNodes => Ok(ValidNnsFunction::DeployGuestosToSomeNodes),
         }
     }
 }

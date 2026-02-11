@@ -46,6 +46,7 @@ mod process_manager;
 mod registration;
 mod registry_helper;
 mod signer;
+mod async_upgrade;
 mod ssh_access_manager;
 mod upgrade;
 mod utils;
