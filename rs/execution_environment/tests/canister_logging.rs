@@ -1,6 +1,8 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
+use ic_config::execution_environment::{
+    LOG_MEMORY_STORE_FEATURE_ENABLED, TEST_DEFAULT_LOG_MEMORY_USAGE,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_execution_environment::units::KIB;
@@ -16,8 +18,7 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
-//use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
-use ic_test_utilities_metrics::{fetch_histogram_vec_stats, labels};
+use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{CanisterId, Cycles, NumInstructions, ingress::WasmResult};
 use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
@@ -1675,31 +1676,48 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
     );
 }
 
-// TODO: figure out how to properly test this for old and new logs.
-// #[test]
-// fn test_canister_log_memory_usage_bytes() {
-//     // Test canister logging metrics record the size of the log.
-//     let metric = "canister_log_memory_usage_bytes_v2";
-//     const PAYLOAD_SIZE: usize = 1_000;
-//     let user_controller = PrincipalId::new_user_test_id(42);
-//     let (env, canister_id) = setup_with_controller(
-//         user_controller,
-//         wat_canister()
-//             .update("test", wat_fn().debug_print(&[37; PAYLOAD_SIZE]))
-//             .build_wasm(),
-//     );
-//     // // Assert canister log size metric is zero initially.
-//     // let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
-//     // assert_eq!(stats.sum, 0.0);
+#[test]
+fn test_canister_log_memory_usage_bytes_old() {
+    if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let metric = "canister_log_memory_usage_bytes_v2";
+    const PAYLOAD_SIZE: usize = 1_000;
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
+        wat_canister()
+            .update("test", wat_fn().debug_print(&[37; PAYLOAD_SIZE]))
+            .build_wasm(),
+    );
+    // Assert canister log size metric is zero initially.
+    let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
+    assert_eq!(stats.sum, 0.0);
 
-//     // Add log message.
-//     let _ = env.execute_ingress(canister_id, "test", vec![]);
+    // Add log message.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
 
-//     // Assert canister log size metric is within the expected range.
-//     let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
-//     assert_le!(PAYLOAD_SIZE as f64, stats.sum);
-//     assert_le!(stats.sum, 1.05 * (PAYLOAD_SIZE as f64));
-// }
+    // Assert canister log size metric is within the expected range.
+    let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
+    assert_le!(PAYLOAD_SIZE as f64, stats.sum);
+    assert_le!(stats.sum, 1.05 * (PAYLOAD_SIZE as f64));
+}
+
+#[test]
+fn test_canister_log_memory_usage_bytes_new() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    // Test canister logging metrics record the size of the log.
+    let metric = "canister_log_memory_usage_bytes_v2";
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, _) = setup_with_controller(user_controller, wat_canister().build_wasm());
+
+    // Assert canister log size metric is within the expected range.
+    let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
+    let average_memory_usage = stats.sum as u64 / stats.count;
+    assert_eq!(average_memory_usage, TEST_DEFAULT_LOG_MEMORY_USAGE);
+}
 
 #[test]
 fn test_canister_log_on_reply() {

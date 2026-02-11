@@ -9,7 +9,7 @@ const KIB: usize = 1024;
 const MIB: usize = 1024 * KIB;
 
 /// The maximum size of an aggregate canister log buffer.
-pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 100 * MIB;
+pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 2 * MIB;
 
 /// The default size of an aggregate canister log buffer.
 pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KIB;
