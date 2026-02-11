@@ -1408,12 +1408,12 @@ mod tests {
         subnet_id: SubnetId,
         membership: impl AsRef<[NodeId]>,
         replica_version: &ReplicaVersion,
-        recalled_versions: impl AsRef<[String]>,
+        recalled_replica_versions: impl AsRef<[String]>,
     ) {
         let subnet_record = SubnetRecordBuilder::new()
             .with_membership(membership.as_ref())
             .with_replica_version(replica_version.as_ref())
-            .with_recalled_replica_version_ids(recalled_versions.as_ref())
+            .with_recalled_replica_version_ids(recalled_replica_versions.as_ref())
             .build();
 
         data_provider
@@ -1788,7 +1788,7 @@ mod tests {
             // If the upgrade is to a recalled replica version, we should add that version to the
             // list of recalled versions in the registry at the latest registry version. To make it
             // easier, we will add it to all following subnet record mutations.
-            let recalled_versions = if let Some(upgrade) = &self.upgrade_to
+            let recalled_replica_versions = if let Some(upgrade) = &self.upgrade_to
                 && upgrade.is_recalled
             {
                 vec![upgrade.replica_version.to_string()]
@@ -1806,7 +1806,7 @@ mod tests {
                     local_cup.subnet_id,
                     vec![self.node_id, other_node_id],
                     &self.current_replica_version,
-                    &recalled_versions,
+                    &recalled_replica_versions,
                 );
 
                 match (&self.is_leaving, &self.upgrade_to) {
@@ -1821,7 +1821,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some(leaving_registry_version), None) => {
@@ -1833,7 +1833,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &self.current_replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some(leaving_registry_version), Some(upgrade))
@@ -1846,7 +1846,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &self.current_replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                         // And later upgrade the subnet
                         add_subnet_record_to_provider(
@@ -1855,7 +1855,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &upgrade.replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some(leaving_registry_version), Some(upgrade))
@@ -1869,7 +1869,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &upgrade.replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some(leaving_registry_version), Some(upgrade)) => {
@@ -1880,7 +1880,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                         // And later remove the node from the membership
                         add_subnet_record_to_provider(
@@ -1889,7 +1889,7 @@ mod tests {
                             local_cup.subnet_id,
                             vec![other_node_id],
                             &upgrade.replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                     }
                 }
@@ -1922,7 +1922,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &self.current_replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some((registry_cup, registry_cup_registry_version)), Some(upgrade))
@@ -1935,7 +1935,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &self.current_replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                         // And later upgrade the subnet
                         add_subnet_record_to_provider(
@@ -1944,7 +1944,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some((registry_cup, registry_cup_registry_version)), Some(upgrade))
@@ -1956,7 +1956,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                     }
                     (Some((registry_cup, registry_cup_registry_version)), Some(upgrade)) => {
@@ -1973,7 +1973,7 @@ mod tests {
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
-                            &recalled_versions,
+                            &recalled_replica_versions,
                         );
                     }
                 }
