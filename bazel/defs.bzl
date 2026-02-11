@@ -112,7 +112,6 @@ mcopy = rule(
     attrs = {
         "srcmap": attr.label_keyed_string_dict(allow_files = True),
         "fs": attr.label(allow_single_file = True),
-        "remap_paths": attr.string_dict(),
     },
 )
 
