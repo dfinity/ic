@@ -369,23 +369,26 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
+    // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
+    let mut proto = pb::SystemMetadata::from(&system_metadata);
+    proto.canister_allocation_ranges = None;
+    assert_eq!(
+        system_metadata,
+        (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
+            .try_into()
+            .unwrap()
+    );
+
     // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
     fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
         let proto = pb::SystemMetadata::from(system_metadata);
         assert_eq!(
             *system_metadata,
-            (
-                proto,
-                system_metadata.subnet_schedule.clone(),
-                &DummyMetrics as &dyn CheckpointLoadingMetrics
-            )
+            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
                 .try_into()
                 .unwrap()
         );
     }
-
-    // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
-    validate_roundtrip_encoding(&system_metadata);
 
     // Set `canister_allocation_ranges`, but not `last_generated_canister_id`.
     system_metadata.canister_allocation_ranges = canister_allocation_ranges.try_into().unwrap();
@@ -414,13 +417,6 @@ fn system_metadata_roundtrip_encoding() {
             failed_blockmakers: vec![node_test_id(4)],
         },
     );
-    validate_roundtrip_encoding(&system_metadata);
-
-    // Add scheduling priority for a canister.
-    system_metadata
-        .subnet_schedule
-        .get_mut(CanisterId::from_u64(1))
-        .accumulated_priority = 1.into();
     validate_roundtrip_encoding(&system_metadata);
 }
 

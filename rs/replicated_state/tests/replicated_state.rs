@@ -1169,8 +1169,6 @@ fn split() {
     //
     state_a.after_split();
 
-    // `CANISTER_2` should have been removed from the schedule.
-    expected.metadata.subnet_schedule.remove(&CANISTER_2);
     // Ingress history should only contain the message to `CANISTER_1`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
     // The input schedules of `CANISTER_1` should have been repartitioned.
@@ -1335,7 +1333,7 @@ fn online_split() {
     // Start off with the original state (plus new routing table).
     let mut expected = fixture.state.clone();
     // Only `CANISTER_1` should be left.
-    expected.remove_canister(&CANISTER_2);
+    expected.canister_states.remove(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state = expected.canister_states.remove(&CANISTER_1).unwrap();
     canister_state
@@ -1365,7 +1363,7 @@ fn online_split() {
     // New subnet ID.
     expected.metadata.own_subnet_id = SUBNET_B;
     // Only `CANISTER_2` should be hosted.
-    expected.remove_canister(&CANISTER_1);
+    expected.canister_states.remove(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state = expected.canister_states.remove(&CANISTER_2).unwrap();
     canister_state
