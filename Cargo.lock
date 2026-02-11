@@ -2566,6 +2566,7 @@ dependencies = [
  "once_cell",
  "regex",
  "rust-ini",
+ "securefmt",
  "serde",
  "serde_json",
  "serde_with 1.14.0",

@@ -128,14 +128,6 @@ fn process_bootstrap(
         println!("Setting up initial {}", node_op_key_dst.display());
         fs::write(&node_op_key_dst, v).context("unable to write node operator private key")?;
         fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400))?;
-    } else {
-        // Otherwise try to copy the file from the bootstrap dir.
-        // TODO remove this branch when HostOS is upgraded to put the key in GuestOSConfig
-        let node_op_key_src = bootstrap_dir.join("node_operator_private_key.pem");
-        if node_op_key_src.exists() {
-            copy_file_with_parent_dir(&node_op_key_src, &node_op_key_dst)?;
-            fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400))?;
-        }
     }
 
     // Fix up permissions. Ideally this is specific to only what is copied. If

@@ -24,6 +24,7 @@ fs_extra = { workspace = true }
 get_if_addrs = { workspace = true }
 sev_guest = { path = "../../sev/guest" }
 strum = { workspace = true }
+securefmt = { workspace = true }
 
 [dev-dependencies]
 once_cell = "1.8"
