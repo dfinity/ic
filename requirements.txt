@@ -4,7 +4,7 @@
 #
 #    bazel run //:python-requirements.update
 #
-ctf-pipline-test==2.0.0
+ci-metadata-python-logging==0.1.0
 ansible==13.2.0 \
     --hash=sha256:8a7f536542d4b18118200b8eaba40aa62ed990bd0e7b7622368b656b67db056f \
     --hash=sha256:fac46e202d1020027341659918b39e588dd7c43cef26537d7ca7fe51c324fe31
