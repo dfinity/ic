@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+- Pass through a `CustomProposalCriticality` field so that SNSes can specify additional critical proposal types at launch.
+
 ## Changed
 
 ## Deprecated
