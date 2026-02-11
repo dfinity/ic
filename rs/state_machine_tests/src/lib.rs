@@ -5014,6 +5014,7 @@ impl StateMachine {
         let remote_subnets: BTreeSet<_> = routing_table
             .iter()
             .map(|(_, subnet_id)| subnet_id.get())
+            .filter(|subnet_id| *subnet_id != self.get_subnet_id().get())
             .collect();
         let (height, mut replicated_state) = self.state_manager.take_tip();
         let mut synthetic_responses = vec![];
