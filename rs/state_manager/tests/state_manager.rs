@@ -8217,6 +8217,12 @@ fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: Can
         .subnet_schedule
         .rename_canister(&old_id, new_id);
 
+    // Migrate the canister priority.
+    state
+        .metadata
+        .subnet_schedule
+        .rename_canister(&old_id, new_id);
+
     canister.system_state.set_canister_id(new_id);
     state
         .metadata
