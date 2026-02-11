@@ -1223,8 +1223,8 @@ impl CanisterManager {
         // - its state is permanently deleted, and
         // - its cycles are discarded.
 
-        // Take out the canister from `ReplicatedState`.
-        let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
+        // Remove the canister from `ReplicatedState`.
+        let canister_to_delete = state.remove_canister(&canister_id_to_delete).unwrap();
         let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
 
         // Delete canister snapshots that are stored separately in `ReplicatedState`.
@@ -3148,6 +3148,12 @@ impl CanisterManager {
             execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
             execution_state.wasm_binary.clear_compilation_cache();
         }
+
+        // Carry over the scheduling priority.
+        state
+            .metadata
+            .subnet_schedule
+            .rename_canister(&old_id, new_id);
 
         state
             .metadata
