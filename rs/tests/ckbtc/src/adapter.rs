@@ -11,7 +11,7 @@ use ic_management_canister_types_private::{
 };
 use ic_system_test_driver::util::{MESSAGE_CANISTER_WASM, MessageCanister};
 use ic_types::PrincipalId;
-use ic_utils::interfaces::{ManagementCanister, management_canister::CanisterStatus};
+use ic_utils::interfaces::{ManagementCanister, management_canister::CanisterStatusType};
 use slog::{Logger, info};
 use std::{str::FromStr, time::Duration};
 
@@ -38,7 +38,7 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
 
         match mgr.canister_status(&bitcoin_principal).await {
             Ok((status,)) => {
-                if status.status != CanisterStatus::Running {
+                if status.status != CanisterStatusType::Running {
                     panic!("Message canister in unexpected status");
                 }
             }
