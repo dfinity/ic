@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 * Enabling direct node swapping feature on all subnets for all node operators.
 
+* Add type4 node reward type for Cloud Engine nodes.
+
 ## Changed
 
 ## Deprecated
