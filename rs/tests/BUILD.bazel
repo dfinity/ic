@@ -110,6 +110,9 @@ genrule(
 
         tar -cf $@ -C squash_tmp .
     """,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 oci_image(
