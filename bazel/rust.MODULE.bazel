@@ -454,11 +454,13 @@ crate.spec(
 )
 crate.spec(
     package = "evm_rpc_client",
-    version = "^0.3.0",
+    git = "https://github.com/dfinity/evm-rpc-canister.git",
+    rev= "94a38c2f02abcb4e6590ae860d3572e3a193a8a4",
 )
 crate.spec(
     package = "evm_rpc_types",
-    version = "^3.1.0",
+    git = "https://github.com/dfinity/evm-rpc-canister.git",
+    rev= "94a38c2f02abcb4e6590ae860d3572e3a193a8a4",
 )
 crate.spec(
     package = "exec",
@@ -634,8 +636,9 @@ crate.spec(
     version = "^0.2.0",
 )
 crate.spec(
+    git = "https://github.com/dfinity/canhttp.git",
     package = "ic-canister-runtime",
-    version = "^0.1.0",
+    rev = "f8eec859504fe009711d6183c91b326ed0f2e216",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
