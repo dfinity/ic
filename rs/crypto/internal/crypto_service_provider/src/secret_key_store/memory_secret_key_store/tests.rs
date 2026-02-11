@@ -392,6 +392,7 @@ mod retain_would_modify_keystore {
 mod insert_or_replace {
     use super::*;
     use proptest::option;
+    use rand::Rng;
 
     proptest! {
         #[test]

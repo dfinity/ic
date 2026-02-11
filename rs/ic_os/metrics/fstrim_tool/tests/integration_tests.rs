@@ -1,15 +1,16 @@
-use assert_cmd::Command;
+use assert_cmd::{cargo::cargo_bin_cmd, Command};
 use predicates::prelude::*;
 use regex::Regex;
 use std::fs::read_to_string;
 use tempfile::tempdir;
 
 fn new_fstrim_tool_command() -> Command {
-    match Command::cargo_bin("fstrim_tool") {
-        // When in Cargo environment.
-        Ok(cmd) => cmd,
+    // Try cargo_bin_cmd! first for Cargo environment
+    if std::env::var("CARGO").is_ok() {
+        cargo_bin_cmd!("fstrim_tool")
+    } else {
         // When in Bazel environment
-        Err(_) => Command::new("rs/ic_os/metrics/fstrim_tool/fstrim_tool_bin"),
+        Command::new("rs/ic_os/metrics/fstrim_tool/fstrim_tool_bin")
     }
 }
 
