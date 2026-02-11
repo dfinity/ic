@@ -15595,8 +15595,10 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bytes",
  "candid",
  "canister-test",
+ "http 1.4.0",
  "ic-agent",
  "ic-base-types",
  "ic-boundary-nodes-integration-test-common",
