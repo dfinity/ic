@@ -16,7 +16,7 @@ use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
 use flate2::Compression;
 use flate2::write::GzEncoder;
-use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
+use ic_base_types::{CanisterEnvironmentVariables, NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
@@ -6029,7 +6029,7 @@ fn test_environment_variables_are_changed_via_create_canister() {
     let canister = test.canister_state(canister_id);
     assert_eq!(
         canister.system_state.environment_variables,
-        EnvironmentVariables::new(env_vars)
+        CanisterEnvironmentVariables::new(env_vars)
     );
 }
 
@@ -6043,7 +6043,7 @@ fn test_environment_variables_are_updated_on_update_settings() {
         .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
-    let env_vars = EnvironmentVariables::new(BTreeMap::from([
+    let env_vars = CanisterEnvironmentVariables::new(BTreeMap::from([
         ("KEY1".to_string(), "VALUE1".to_string()),
         ("KEY2".to_string(), "VALUE2".to_string()),
     ]));
@@ -6120,7 +6120,7 @@ fn test_environment_variables_are_not_set_when_disabled() {
     let canister = test.canister_state(canister_id);
     assert_eq!(
         canister.system_state.environment_variables,
-        EnvironmentVariables::new(BTreeMap::new())
+        CanisterEnvironmentVariables::new(BTreeMap::new())
     );
 
     // Set environment variables via `update_settings`.
@@ -6138,7 +6138,7 @@ fn test_environment_variables_are_not_set_when_disabled() {
     let canister = test.canister_state(canister_id);
     assert_eq!(
         canister.system_state.environment_variables,
-        EnvironmentVariables::new(BTreeMap::new())
+        CanisterEnvironmentVariables::new(BTreeMap::new())
     );
 }
 

@@ -1,4 +1,4 @@
-use ic_base_types::{EnvironmentVariables, PrincipalId};
+use ic_base_types::{CanisterEnvironmentVariables, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
@@ -1257,7 +1257,7 @@ fn check_environment_variables_for_create_canister_history(
     // Expected canister history.
     let reference_change_entries = match environment_variables_flag {
         FlagStatus::Enabled => {
-            let env_vars_hash = EnvironmentVariables::new(env_vars.clone()).hash();
+            let env_vars_hash = CanisterEnvironmentVariables::new(env_vars.clone()).hash();
             vec![CanisterChange::new(
                 now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the next round after the ingress message is received
                 0,
@@ -1294,13 +1294,13 @@ fn check_environment_variables_for_create_canister_history(
         FlagStatus::Enabled => {
             assert_eq!(
                 canister_state.system_state.environment_variables,
-                EnvironmentVariables::new(env_vars.clone())
+                CanisterEnvironmentVariables::new(env_vars.clone())
             );
         }
         FlagStatus::Disabled => {
             assert_eq!(
                 canister_state.system_state.environment_variables,
-                EnvironmentVariables::new(BTreeMap::new())
+                CanisterEnvironmentVariables::new(BTreeMap::new())
             );
         }
     }
@@ -1309,7 +1309,7 @@ fn check_environment_variables_for_create_canister_history(
 #[test]
 fn canister_history_tracking_env_vars_update_settings() {
     let user_id = user_test_id(7).get();
-    let intial_env_vars = EnvironmentVariables::new(BTreeMap::from([
+    let intial_env_vars = CanisterEnvironmentVariables::new(BTreeMap::from([
         ("NODE_ENV".to_string(), "production".to_string()),
         ("LOG_LEVEL".to_string(), "info".to_string()),
     ]));
@@ -1343,7 +1343,7 @@ fn canister_history_tracking_env_vars_update_settings() {
     // Update settings with new environment variables.
     now += Duration::from_secs(5);
     env.set_time(now);
-    let env_vars = EnvironmentVariables::new(BTreeMap::from([
+    let env_vars = CanisterEnvironmentVariables::new(BTreeMap::from([
         ("NODE_ENV".to_string(), "production".to_string()),
         ("LOG_LEVEL".to_string(), "debug".to_string()),
     ]));
@@ -1553,7 +1553,7 @@ fn canister_history_tracking_env_vars_provisional_create_canister() {
 #[test]
 fn canister_history_tracking_env_vars_update_with_identical_values() {
     let user_id = user_test_id(7).get();
-    let env_vars = EnvironmentVariables::new(BTreeMap::from([
+    let env_vars = CanisterEnvironmentVariables::new(BTreeMap::from([
         ("NODE_ENV".to_string(), "production".to_string()),
         ("LOG_LEVEL".to_string(), "info".to_string()),
     ]));

@@ -16,8 +16,8 @@ pub use http::{
     PRICING_VERSION_PAY_AS_YOU_GO, TransformArgs, TransformContext, TransformFunc,
 };
 use ic_base_types::{
-    CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
-    SubnetId,
+    CanisterEnvironmentVariables, CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion,
+    SnapshotId, SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -1320,7 +1320,7 @@ impl DefiniteCanisterSettingsArgs {
         log_memory_limit: u64,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
-        environment_variables: EnvironmentVariables,
+        environment_variables: CanisterEnvironmentVariables,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
@@ -1495,7 +1495,7 @@ impl CanisterStatusResultV2 {
         query_egress_payload_size: u128,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
-        environment_variables: EnvironmentVariables,
+        environment_variables: CanisterEnvironmentVariables,
     ) -> Self {
         Self {
             status,

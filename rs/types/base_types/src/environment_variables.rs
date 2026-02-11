@@ -5,11 +5,11 @@ use std::collections::BTreeMap;
 /// Represents a set of environment variables for a canister
 /// mapping environment variable names to their values.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
-pub struct EnvironmentVariables {
+pub struct CanisterEnvironmentVariables {
     map: BTreeMap<String, String>,
 }
 
-impl EnvironmentVariables {
+impl CanisterEnvironmentVariables {
     pub fn new(environment_variables: BTreeMap<String, String>) -> Self {
         Self {
             map: environment_variables,
@@ -40,8 +40,8 @@ impl EnvironmentVariables {
     }
 }
 
-impl From<EnvironmentVariables> for BTreeMap<String, String> {
-    fn from(environment_variables: EnvironmentVariables) -> Self {
+impl From<CanisterEnvironmentVariables> for BTreeMap<String, String> {
+    fn from(environment_variables: CanisterEnvironmentVariables) -> Self {
         environment_variables.map
     }
 }
