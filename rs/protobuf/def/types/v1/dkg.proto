@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package types.v1;
 
+import "google/protobuf/empty.proto";
 import "types/v1/types.proto";
 
 message DkgMessage {
@@ -27,6 +28,12 @@ message DkgDataPayload {
   uint64 summary_height = 2;
 }
 
+message SplittingArgs {
+  SubnetId destination_subnet_id = 1;
+  SubnetId source_subnet_id = 2;
+}
+
+// next id: 16
 message Summary {
   reserved 5, 6, 8;
   reserved "transcripts_for_new_subnets";
@@ -39,6 +46,11 @@ message Summary {
   repeated CallbackIdedNiDkgTranscript transcripts_for_remote_subnets = 10;
   repeated NiDkgTranscript current_transcripts = 11;
   repeated NiDkgTranscript next_transcripts = 12;
+  oneof subnet_splitting_status {
+    google.protobuf.Empty not_scheduled = 13;
+    SplittingArgs scheduled = 14;
+    SubnetId done = 15;
+  }
 }
 
 message CallbackIdedNiDkgTranscript {

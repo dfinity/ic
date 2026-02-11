@@ -836,6 +836,7 @@ mod tests {
                 Height::from(100),
                 height,
                 BTreeMap::new(),
+                /*subnet_splitting_status=*/ None,
             ),
             idkg: Some(idkg_summary),
         })

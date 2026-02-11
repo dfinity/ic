@@ -7693,6 +7693,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "criterion",
+ "hex",
  "ic-artifact-pool",
  "ic-btc-replica-types",
  "ic-config",
