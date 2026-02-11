@@ -138,8 +138,13 @@ impl From<ArtifactPoolTomlConfig> for ArtifactPoolConfig {
 }
 
 impl ArtifactPoolConfig {
-    pub fn new(consensus_pool_path: PathBuf) -> ArtifactPoolConfig {
+    pub fn new(consensus_pool_path: PathBuf) -> Self {
         Self::from(ArtifactPoolTomlConfig::new(consensus_pool_path, None))
+    }
+
+    pub fn read_only(mut self) -> Self {
+        self.persistent_pool_read_only = true;
+        self
     }
 
     /// Return the directory path to the persistent pool database.

@@ -12907,6 +12907,7 @@ dependencies = [
 name = "ic-recovery"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "base64 0.13.1",
  "clap 4.5.27",
  "futures",
@@ -12915,6 +12916,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-sandbox-backend-lib",
  "ic-config",
+ "ic-consensus-mocks",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cup-explorer",
  "ic-http-utils",
@@ -12931,7 +12933,9 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-replay",
  "ic-state-manager",
+ "ic-test-artifact-pool",
  "ic-test-utilities-consensus",
+ "ic-test-utilities-registry",
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
  "ic-types",

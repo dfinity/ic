@@ -325,21 +325,23 @@ impl Step for DownloadIcDataStep {
             &self.working_dir
         };
 
-        self.ssh_helper.rsync_includes(
-            &self.data_includes,
-            self.ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH)),
-            target.join("data").join(""),
-        )?;
-
-        if self.keep_downloaded_data {
-            rsync_includes(
-                &self.logger,
+        if !self.data_includes.is_empty() {
+            self.ssh_helper.rsync_includes(
                 &self.data_includes,
-                target.join("data"),
-                self.working_dir.join("data").join(""),
-                false,
-                None,
+                self.ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH)),
+                target.join("data").join(""),
             )?;
+
+            if self.keep_downloaded_data {
+                rsync_includes(
+                    &self.logger,
+                    &self.data_includes,
+                    target.join("data"),
+                    self.working_dir.join("data").join(""),
+                    false,
+                    None,
+                )?;
+            }
         }
 
         if self.include_config {
@@ -381,7 +383,12 @@ impl Step for CopyLocalIcStateStep {
         let log = self.require_confirmation.then_some(&self.logger);
 
         // State
-        let includes = Recovery::get_ic_state_includes(None)?;
+        let includes = Recovery::get_ic_state_includes_with_paths(
+            &self.logger,
+            &PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH),
+            &self.working_dir.join("data").join(IC_CONSENSUS_POOL_PATH),
+            None,
+        )?;
         for include in includes.iter() {
             let src = PathBuf::from(IC_DATA_PATH).join(include);
             let dst_parent = self
@@ -626,8 +633,11 @@ impl Step for UploadStateAndRestartStep {
             );
 
             // For remote recoveries, we copy the source directory via rsync.
-            // To improve rsync times, we copy the latest checkpoint to the
-            // upload directory.
+            // To improve rsync times, we copy the latest checkpoint to the upload directory. We
+            // could instead choose the checkpoint of the latest CUP height, since that is the
+            // height at which we started the replay. However it is guaranteed that the replayed
+            // state is at least as new as whatever the subnet has ever certified, which includes
+            // the latest checkpoint. Thus, choosing the latest checkpoint here is more optimal.
             let upload_dir = PathBuf::from(IC_DATA_PATH).join(NEW_IC_STATE);
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node

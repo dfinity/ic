@@ -41,9 +41,13 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/consensus/mocks",
+    "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/consensus",
+    "//rs/test_utilities/registry",
     "//rs/test_utilities/tmpdir",
     "//rs/test_utilities/types",
+    "@crate_index//:assert_matches",
     "@crate_index//:tempfile",
 ]
 

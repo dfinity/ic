@@ -185,8 +185,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
         match step_type {
             StepType::StopReplica | StepType::DownloadConsensusPool | StepType::DownloadState => {
                 if self.params.download_node.is_none() {
-                    // We could pick a node with highest finalization height automatically, but we
-                    // might have a preference between nodes of the same finalization height.
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes of same heights.
                     print_height_info(
                         &self.logger,
                         &self.recovery.registry_helper,

@@ -14,18 +14,25 @@ use command_helper::exec_cmd;
 use error::{RecoveryError, RecoveryResult};
 use file_sync_helper::{create_dir, download_binary, read_dir};
 use futures::future::join_all;
+use ic_artifact_pool::consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl};
 use ic_base_types::{CanisterId, NodeId};
+use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_cup_explorer::get_catchup_content;
+use ic_interfaces::{consensus_pool::ConsensusPool, time_source::SysTimeSource};
+use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
     cmd::{AddRegistryContentCmd, SubCommand, UpgradeSubnetToReplicaVersionCmd},
     player::StateParams,
 };
-use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
+use ic_types::{
+    Height, PrincipalId, ReplicaVersion, SubnetId, consensus::HasHeight,
+    messages::HttpStatusResponse,
+};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
-use std::{env, io::ErrorKind};
+use std::{env, io::ErrorKind, sync::Arc};
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -82,6 +89,7 @@ pub struct NeuronArgs {
 #[derive(Debug)]
 pub struct NodeMetrics {
     _ip: IpAddr,
+    pub catch_up_package_height: Height,
     pub finalization_height: Height,
     pub certification_height: Height,
     pub certification_share_height: Height,
@@ -345,22 +353,97 @@ impl Recovery {
 
     /// Return the list of paths to include when downloading a node's "production" state (i.e. at
     /// /var/lib/ic/data) with rsync.
-    /// One of them is the latest checkpoint, which is looked up remotely via ssh if an `ssh_helper`
-    /// is given, or locally on disk otherwise.
-    pub fn get_ic_state_includes(ssh_helper: Option<&SshHelper>) -> RecoveryResult<Vec<PathBuf>> {
-        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
-        let latest_checkpoint_name = if let Some(ssh_helper) = ssh_helper {
-            Self::get_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
+    /// One of them is a checkpoint, which is looked up remotely via ssh if an `ssh_helper` is
+    /// given, or locally on disk otherwise.
+    pub fn get_ic_state_includes(
+        &self,
+        ssh_helper: Option<&SshHelper>,
+    ) -> RecoveryResult<Vec<PathBuf>> {
+        Self::get_ic_state_includes_with_paths(
+            &self.logger,
+            &PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH),
+            &self.work_dir.join("data").join(IC_CONSENSUS_POOL_PATH),
+            ssh_helper,
+        )
+    }
+
+    /// Return the list of paths to include when downloading a node's state with rsync. One of them
+    /// is a checkpoint:
+    /// If we have downloaded the consensus pool before, then download the checkpoint corresponding
+    /// to the latest CUP height since we start replaying from there. If the checkpoint does not
+    /// exist, return an error, except if it is a genesis CUP, where it is expected that there is
+    /// no checkpoint.
+    /// If we have not downloaded the consensus pool, then fall back to the latest checkpoint,
+    /// returning an error if there are no checkpoints.
+    /// In almost all cases, the latest CUP checkpoint and the latest one in absolute should be the
+    /// same, but we could imagine a scenario where the subnet stalled after the checkpoint was
+    /// created but before the CUP was created, at which point the latest checkpoint would be ahead
+    /// of the latest CUP. In that case, we would definitely want the checkpoint at the previous
+    /// CUP height.
+    /// The existence check is done remotely via ssh if an `ssh_helper` is given, or locally on
+    /// disk otherwise.
+    pub fn get_ic_state_includes_with_paths(
+        logger: &Logger,
+        checkpoints_path: &Path,
+        consensus_pool_path: &Path,
+        ssh_helper: Option<&SshHelper>,
+    ) -> RecoveryResult<Vec<PathBuf>> {
+        let checkpoint = if consensus_pool_path.exists() {
+            let highest_cup_height = Recovery::get_highest_cup_height(logger, &consensus_pool_path);
+            if highest_cup_height == Height::from(0) {
+                // In case of a genesis CUP, no checkpoint/metadata have been created, so we do not
+                // have anything to download
+                info!(logger, "Genesis CUP detected, no state to download");
+                return Ok(vec![]);
+            }
+
+            let checkpoint_name = format!("{:016x}", highest_cup_height.get());
+            let full_checkpoint_name = checkpoints_path.join(&checkpoint_name);
+            let exists = match ssh_helper {
+                Some(ssh_helper) => {
+                    let command = format!("test -d {}", full_checkpoint_name.display());
+                    ssh_helper.ssh(command).is_ok()
+                }
+                None => full_checkpoint_name.is_dir(),
+            };
+
+            if !exists {
+                return Err(RecoveryError::invalid_output_error(format!(
+                    "Checkpoint {checkpoint_name} at CUP height {highest_cup_height} does not exist at {}",
+                    checkpoints_path.display()
+                )));
+            }
+
+            checkpoint_name
+        } else if let Some(ssh_helper) = ssh_helper {
+            Self::get_latest_checkpoint_name_remotely(ssh_helper, &checkpoints_path)?
         } else {
-            Self::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?.0
+            Self::get_latest_checkpoint_name_and_height(&checkpoints_path)
+                .map(|(name, _height)| name)?
         };
 
-        Ok(
-            Self::get_state_includes_with_given_checkpoint(&latest_checkpoint_name)
-                .iter()
-                .map(|p| PathBuf::from(IC_STATE).join(p))
-                .collect(),
-        )
+        info!(logger, "Proceeding with checkpoint {checkpoint}");
+
+        Ok(Self::get_state_includes_with_given_checkpoint(&checkpoint)
+            .iter()
+            .map(|p| PathBuf::from(IC_STATE).join(p))
+            .collect())
+    }
+
+    /// Read the consensus pool in the working directory and return the height of the highest CUP.
+    ///
+    /// Panics if there is no CUP inside the pool.
+    pub fn get_highest_cup_height(logger: &Logger, consensus_pool_path: &Path) -> Height {
+        let pool_config = ArtifactPoolConfig::new(consensus_pool_path.to_path_buf()).read_only();
+        let pool = ConsensusPoolImpl::from_uncached(
+            NodeId::from(PrincipalId::new_anonymous()),
+            UncachedConsensusPoolImpl::new(pool_config, logger.clone().into()),
+            MetricsRegistry::new(),
+            logger.clone().into(),
+            Arc::new(SysTimeSource::new()),
+        );
+
+        pool.validated().highest_catch_up_package().height();
     }
 
     /// Return the list of paths to include when downloading/uploading the state with rsync.
@@ -389,7 +472,7 @@ impl Recovery {
             key_file,
         );
 
-        let includes = Self::get_ic_state_includes(Some(&ssh_helper))?;
+        let includes = self.get_ic_state_includes(Some(&ssh_helper))?;
 
         self.get_download_data_step(
             ssh_helper,
@@ -1036,6 +1119,7 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
         }
     };
     let mut node_heights = NodeMetrics {
+        catch_up_package_height: Height::from(0),
         finalization_height: Height::from(0),
         certification_height: Height::from(0),
         certification_share_height: Height::from(0),
@@ -1045,6 +1129,14 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
         let mut parts = line.split(' ');
         if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
             match prefix {
+                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="catch_up_package"}"# => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.catch_up_package_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
                 r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# => {
                     match height.trim().parse::<u64>() {
                         Ok(val) => node_heights.certification_height = Height::from(val),
@@ -1135,7 +1227,124 @@ pub fn get_member_ips(
 mod tests {
     use super::*;
     use crate::error::GracefulExpect;
+    use assert_matches::assert_matches;
+    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
+    use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_tmpdir::tmpdir;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+
+    #[test]
+    fn get_ic_state_includes_test() {
+        let logger = slog::Logger::root(slog::Discard, slog::o!());
+
+        let checkpoints_dir = tmpdir("checkpoints");
+        let checkpoints_path = checkpoints_dir.path();
+
+        // The consensus pool does not exist, so the includes should correspond to the latest
+        // checkpoint. Though, since there are no checkpoints, an error is expected.
+        let ic_state_includes = Recovery::get_ic_state_includes_with_paths(
+            &logger,
+            checkpoints_path,
+            &PathBuf::from("non_existent_consensus_pool"),
+            None,
+        );
+        assert_matches!(ic_state_includes, Err(RecoveryError::OutputError(_)));
+
+        create_fake_checkpoint_dirs(
+            checkpoints_path,
+            &[&format!("{:016x}", 100), &format!("{:016x}", 150)],
+        );
+        // Now that there are checkpoints, the includes should correspond to the latest checkpoint.
+        let ic_state_includes = Recovery::get_ic_state_includes_with_paths(
+            &logger,
+            checkpoints_path,
+            &PathBuf::from("non_existent_consensus_pool"),
+            None,
+        );
+        assert_matches!(
+            ic_state_includes,
+            Ok(includes) if includes ==
+        Recovery::get_state_includes_with_given_checkpoint(&format!("{:016x}", 150))
+            .iter()
+            .map(|p| PathBuf::from(IC_STATE).join(p))
+            .collect::<Vec<_>>()
+        );
+
+        let interval_length = 49;
+        let consensus_pool_dir = tmpdir("ic_consensus_pool");
+        let consensus_pool_path = consensus_pool_dir.path();
+        let mut pool = create_test_consensus_pool(consensus_pool_path, interval_length);
+        // There is a gensis CUP in the pool. At that moment, no checkpoint are expected to be
+        // have been created, thus nor downloaded, and the includes should be empty.
+        let ic_state_includes = Recovery::get_ic_state_includes_with_paths(
+            &logger,
+            checkpoints_path,
+            consensus_pool_path,
+            None,
+        );
+        assert_matches!(ic_state_includes, Ok(includes) if includes.is_empty());
+
+        // The line below will create a CUP at height `interval_length + 1`
+        pool.advance_round_normal_operation_n(interval_length + 1);
+        // There is a CUP at height `interval_length + 1`, though, there are no corresponding
+        // checkpoints, so an error is expected.
+        let ic_state_includes = Recovery::get_ic_state_includes_with_paths(
+            &logger,
+            checkpoints_path,
+            consensus_pool_path,
+            None,
+        );
+        assert_matches!(ic_state_includes, Err(RecoveryError::OutputError(_)));
+
+        create_fake_checkpoint_dirs(
+            checkpoints_path,
+            &[&format!("{:016x}", interval_length + 1)],
+        );
+        // Now that there is a checkpoint corresponding to the highest CUP height,
+        // the includes should correspond to that checkpoint.
+        let ic_state_includes = Recovery::get_ic_state_includes_with_paths(
+            &logger,
+            checkpoints_path,
+            consensus_pool_path,
+            None,
+        );
+        assert_matches!(
+            ic_state_includes,
+            Ok(includes) if includes ==
+            Recovery::get_state_includes_with_given_checkpoint(&format!(
+                "{:016x}",
+                interval_length + 1
+            ))
+                .iter()
+                .map(|p| PathBuf::from(IC_STATE).join(p))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn get_highest_cup_height_test() {
+        let logger = slog::Logger::root(slog::Discard, slog::o!());
+
+        let consensus_pool_dir = tmpdir("ic_consensus_pool");
+        let consensus_pool_path = consensus_pool_dir.path();
+        let interval_length = 9;
+        let mut pool = create_test_consensus_pool(consensus_pool_path, interval_length);
+
+        // On a fresh pool, the highest CUP height should be 0
+        let cup_height = Recovery::get_highest_cup_height(&logger, consensus_pool_path);
+        assert_eq!(cup_height, 0);
+
+        pool.advance_round_normal_operation_n(interval_length);
+        // Before reaching the next summary height, the highest CUP height should still be 0
+        let cup_height = Recovery::get_highest_cup_height(&logger, consensus_pool_path);
+        assert_eq!(cup_height, 0);
+
+        pool.advance_round_normal_operation_n(1);
+        // After reaching the next summary height, the highest CUP height should be interval_length
+        let cup_height = Recovery::get_highest_cup_height(&logger, consensus_pool_path);
+        assert_eq!(cup_height, interval_length + 1);
+    }
 
     #[test]
     fn get_latest_checkpoint_name_and_height_test() {
@@ -1208,6 +1417,24 @@ mod tests {
         assert!(
             Recovery::remove_all_but_highest_checkpoints(checkpoints_dir.path(), &logger).is_err()
         );
+    }
+
+    fn create_test_consensus_pool(path: &Path, interval_length: u64) -> TestConsensusPool {
+        let pool_config = ArtifactPoolConfig::new(path.to_path_buf());
+        let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+
+        let Dependencies { pool, .. } = dependencies_with_subnet_params(
+            pool_config,
+            subnet_test_id(0),
+            vec![(
+                1,
+                SubnetRecordBuilder::from(&committee)
+                    .with_dkg_interval_length(interval_length)
+                    .build(),
+            )],
+        );
+
+        pool
     }
 
     fn create_fake_checkpoint_dirs(root: &Path, checkpoint_names: &[&str]) {

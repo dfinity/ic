@@ -5,7 +5,7 @@ use ic_consensus_system_test_subnet_recovery::utils::{
     AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
     get_admin_keys_and_generate_backup_keys,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
-    node_with_highest_certification_share_height, remote_recovery,
+    node_with_highest_cert_share_and_cup_heights, remote_recovery,
 };
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
@@ -286,8 +286,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     );
 
     // Download pool from the node with the highest certification share height
-    let (download_pool_node, highest_cert_share) =
-        node_with_highest_certification_share_height(&nns_subnet, &logger);
+    let (download_pool_node, highest_cert_share, _) =
+        node_with_highest_cert_share_and_cup_heights(&nns_subnet, &logger);
     info!(
         logger,
         "Selected node {} ({:?}) as download pool with certification share height {}",

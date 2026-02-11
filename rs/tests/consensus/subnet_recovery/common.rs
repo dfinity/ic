@@ -31,7 +31,7 @@ end::catalog[] */
 use crate::utils::{
     AdminAndUserKeys, Cursor, assert_subnet_is_broken, break_nodes,
     get_admin_keys_and_generate_readonly_keys, get_node_certification_share_height, halt_subnet,
-    local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
+    local::app_subnet_recovery_local_cli_args, node_with_highest_cert_share_and_cup_heights,
     remote_recovery, unhalt_subnet,
 };
 use anyhow::bail;
@@ -95,6 +95,8 @@ const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
+
+const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
@@ -409,19 +411,19 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         })
         .expect("there is no application subnet");
     let mut app_nodes = app_subnet.nodes();
-    let download_state_node = app_nodes.next().expect("there is no application node");
+    let app_node = app_nodes.next().expect("there is no application node");
     info!(
         logger,
         "Selected random application subnet node to download the state from: {} ({:?})",
-        download_state_node.node_id,
-        download_state_node.get_ip_addr()
+        app_node.node_id,
+        app_node.get_ip_addr()
     );
 
     info!(logger, "Ensure app subnet is functional");
     let init_msg = "subnet recovery works!";
     let app_can_id = store_message(
-        &download_state_node.get_public_url(),
-        download_state_node.effective_canister_id(),
+        &app_node.get_public_url(),
+        app_node.effective_canister_id(),
         init_msg,
         &logger,
     );
@@ -497,88 +499,31 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         let f = (cfg.subnet_size - 1) / 3;
         break_nodes(&app_nodes.take(f + 1).collect::<Vec<_>>(), &logger);
     } else {
-        halt_subnet(
-            &admin_helper,
-            &download_state_node,
-            app_subnet_id,
-            &[],
-            &logger,
-        )
+        halt_subnet(&admin_helper, &app_node, app_subnet_id, &[], &logger)
     }
-    assert_subnet_is_broken(
-        &download_state_node.get_public_url(),
-        app_can_id,
-        msg,
-        true,
-        &logger,
+    assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
+
+    let (download_pool_node, download_state_node, upload_node, admin_nodes, replay_height) =
+        if ssh_readonly_pub_key_deployed.is_some() {
+            get_recovery_parameters_when_ssh_key_can_be_deployed(&env, &app_subnet, &logger)
+        } else {
+            get_recovery_parameters_when_ssh_key_cannot_be_deployed(&env, &app_node, &logger)
+        };
+    info!(
+        logger,
+        "Using node {} to download the consensus pool, node {} to download the state, and node {} to upload the state. \
+        Admin nodes: {:?}. Replaying until height {}.",
+        download_pool_node.node_id,
+        download_state_node.node_id,
+        upload_node.node_id,
+        admin_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
+        replay_height,
     );
-
-    // If there are unassigned nodes, we are in a failover nodes scenario. Otherwise, just use the
-    // same node that we downloaded the state from.
-    let upload_node = env
-        .topology_snapshot()
-        .unassigned_nodes()
-        .next()
-        .unwrap_or_else(|| download_state_node.clone());
-
-    let (download_pool_node, replay_height, admin_nodes) = if ssh_readonly_pub_key_deployed
-        .is_some()
-    {
-        // If we can deploy read-only access to the subnet, then we can download the consensus
-        // poll from the node with highest certification, and we only need admin access on the
-        // upload node to upload the state
-
-        let (download_pool_node, highest_cert_share) =
-            node_with_highest_certification_share_height(&app_subnet, &logger);
-        info!(
-            logger,
-            "Selected node {} ({:?}) as download pool with certification share height {}",
-            download_pool_node.node_id,
-            download_pool_node.get_ip_addr(),
-            highest_cert_share,
-        );
-        let admins = vec![&upload_node];
-
-        (download_pool_node, highest_cert_share, admins)
-    } else {
-        // If we cannot deploy read-only access to the subnet, this would mean that the CUP is
-        // corrupted on enough nodes to stall the subnet which, in practice, should happen only
-        // during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
-        // and the node with admin access (if not lagging behind) will have the highest
-        // certification height (and thus state), which can be used to download both the consensus
-        // pool and the state. Though, this means that this node requires admin access to read them
-        // without a readonly key.
-        //
-        // Note: inside this system test, it is not the case that all nodes stalled at the same
-        // height, and it is not the case that they stalled at an upgrade height. We would normally
-        // not need to replay anything (because it would be an upgrade height), but we need here,
-        // and since we do not break `download_state_node`, we know that it will have the highest
-        // certification height available in the subnet.
-
-        let download_pool_node = download_state_node.clone();
-        info!(
-            logger,
-            "Using node {} ({:?}) both as download pool and download state node as read-only access cannot be deployed",
-            download_pool_node.node_id,
-            download_pool_node.get_ip_addr(),
-        );
-        let node_cert_share =
-            get_node_certification_share_height(&download_state_node, &logger).unwrap();
-        let admins = vec![&upload_node, &download_state_node];
-
-        (download_pool_node, node_cert_share, admins)
-    };
 
     if cfg.corrupt_cup {
         info!(logger, "Corrupting the latest CUP on all nodes");
         corrupt_latest_cup(&app_subnet, &admin_helper, &logger);
-        assert_subnet_is_broken(
-            &download_state_node.get_public_url(),
-            app_can_id,
-            msg,
-            false,
-            &logger,
-        );
+        assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, false, &logger);
     }
 
     // Mirror production setup by removing admin SSH access from all nodes except the ones we need
@@ -1010,4 +955,105 @@ fn enable_chain_key_on_new_subnet(
 
     assert_eq!(app_keys, source_keys);
     app_keys
+}
+
+/// If we can deploy read-only access to the subnet, then:
+///   - We can download the consensus pool from the node with highest certification and
+///   CUP share height.
+///   - The node where we download the state from must have a last manifest height at
+///   least as high as the highest CUP height to be able to replay correctly.
+///   - The upload node is either an unassigned node (in case of failover nodes recovery)
+///   or the same as the download state node (in case of same nodes recovery).
+///   - The admin nodes are only the upload node.
+fn get_recovery_parameters_when_ssh_key_can_be_deployed(
+    env: &TestEnv,
+    app_subnet: &SubnetSnapshot,
+    logger: &Logger,
+) -> (
+    IcNodeSnapshot,      // Download pool node
+    IcNodeSnapshot,      // Download state node
+    IcNodeSnapshot,      // Upload node
+    Vec<IcNodeSnapshot>, // Admin nodes
+    u64,                 // Replay height
+) {
+    let (download_pool_node, highest_cert_share, highest_cup) =
+        node_with_highest_cert_share_and_cup_heights(&app_subnet, &logger);
+
+    let download_state_node = app_subnet
+        .nodes()
+        .zip(
+            block_on(
+                MetricsFetcher::new(app_subnet.nodes(), vec![LAST_MANIFEST_HEIGHT.to_string()])
+                    .fetch::<u64>(),
+            )
+            .expect("Could not fetch metrics")[LAST_MANIFEST_HEIGHT]
+                .clone(),
+        )
+        .find(|(_node, last_manifest_height)| *last_manifest_height >= highest_cup)
+        .map(|(node, _)| node)
+        .expect("No node found with last manifest height >= highest CUP height");
+
+    let upload_node = env
+        .topology_snapshot()
+        .unassigned_nodes()
+        .next()
+        .unwrap_or_else(|| download_state_node.clone());
+
+    let admin_nodes = vec![upload_node.clone()];
+
+    let replay_height = highest_cert_share;
+
+    (
+        download_pool_node,
+        download_state_node,
+        upload_node,
+        admin_nodes,
+        replay_height,
+    )
+}
+
+/// If we cannot deploy read-only access to the subnet, this would mean that the CUP is
+/// corrupted on enough nodes to stall the subnet which, in practice, should happen only
+/// during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
+/// and the node with admin access (if not lagging behind) will have the highest
+/// certification height (and thus state), which can be used to download both the consensus
+/// pool and the state. Though, this means that this node requires admin access to read them
+/// without a readonly key.
+/// Note: inside this system test, it is not the case that all nodes stalled at the same
+/// height, and it is not the case that they stalled at an upgrade height. We would normally
+/// not need to replay anything (because it would be an upgrade height), but we need here,
+/// and since we do not break `app_node`, we know that it will have the highest
+/// certification height available in the subnet.
+fn get_recovery_parameters_when_ssh_key_cannot_be_deployed(
+    env: &TestEnv,
+    app_node: &IcNodeSnapshot,
+    logger: &Logger,
+) -> (
+    IcNodeSnapshot,      // Download pool node
+    IcNodeSnapshot,      // Download state node
+    IcNodeSnapshot,      // Upload node
+    Vec<IcNodeSnapshot>, // Admin nodes
+    u64,                 // Replay height
+) {
+    let download_pool_node = app_node.clone();
+
+    let download_state_node = download_pool_node.clone();
+
+    let upload_node = env
+        .topology_snapshot()
+        .unassigned_nodes()
+        .next()
+        .unwrap_or_else(|| download_state_node.clone());
+
+    let replay_height = get_node_certification_share_height(&download_state_node, &logger).unwrap();
+
+    let admin_nodes = vec![upload_node.clone(), download_state_node.clone()];
+
+    (
+        download_pool_node,
+        download_state_node,
+        upload_node,
+        admin_nodes,
+        replay_height,
+    )
 }

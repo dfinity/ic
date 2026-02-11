@@ -210,14 +210,22 @@ pub fn get_node_certification_share_height(node: &IcNodeSnapshot, logger: &Logge
 }
 
 /// Select a node with highest certification share height in the given subnet snapshot
-pub fn node_with_highest_certification_share_height(
+pub fn node_with_highest_cert_share_and_cup_heights(
     subnet: &SubnetSnapshot,
     logger: &Logger,
-) -> (IcNodeSnapshot, u64) {
+) -> (IcNodeSnapshot, u64, u64) {
     subnet
         .nodes()
-        .filter_map(|n| get_node_certification_share_height(&n, logger).map(|h| (n, h)))
-        .max_by_key(|&(_, cert_height)| cert_height)
+        .filter_map(|n| {
+            block_on(get_node_metrics(logger, &n.get_ip_addr())).map(|m| {
+                (
+                    n,
+                    m.certification_share_height.get(),
+                    m.catch_up_package_height.get(),
+                )
+            })
+        })
+        .max_by_key(|&(_, cert_share_height, cup_height)| (cert_share_height, cup_height))
         .expect("No healthy node found")
 }
 

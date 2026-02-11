@@ -187,7 +187,10 @@ fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) {
 
 pub fn print_height_info(logger: &Logger, registry_helper: &RegistryHelper, subnet_id: SubnetId) {
     info!(logger, "Collecting node heights from metrics...");
-    info!(logger, "Select a node with highest finalization height:");
+    info!(
+        logger,
+        "Select a node with highest finalization height and highest CUP height:"
+    );
     match get_node_heights_from_metrics(logger, registry_helper, subnet_id) {
         Ok(heights) => info!(logger, "{:#?}", heights),
         Err(err) => warn!(logger, "Failed to query height info: {:?}", err),

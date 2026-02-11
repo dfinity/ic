@@ -227,10 +227,10 @@ impl Player {
         let time_source = Arc::new(SysTimeSource::new());
 
         let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
-            let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
             // We don't want to modify the original consensus pool during the subnet
             // recovery.
-            artifact_pool_config.persistent_pool_read_only = true;
+            let artifact_pool_config =
+                ArtifactPoolConfig::from(cfg.artifact_pool.clone()).read_only();
             let consensus_pool = ConsensusPoolImpl::from_uncached(
                 NodeId::from(PrincipalId::new_anonymous()),
                 UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
