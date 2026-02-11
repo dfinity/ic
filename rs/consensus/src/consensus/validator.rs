@@ -4308,6 +4308,16 @@ pub mod test {
         expected_validated_blocks_count: 0,
         expected_removed_blocks_count: 0,
     })]
+    #[case::issue_equivocation_proof_when_we_already_have_a_valid_block_deduplicated(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::validated(),
+            TestBlockBuilder::unvalidated().with_altered_content(),
+            TestBlockBuilder::unvalidated().with_altered_content().with_altered_signature(vec![0, 0, 2]),
+        ],
+        expected_equivocations_count: 1,
+        expected_validated_blocks_count: 0,
+        expected_removed_blocks_count: 0,
+    })]
     #[case::dont_issue_equivocation_proof_when_valid_notarization(EquivocationProofTestCase {
         artifacts: vec![
             TestBlockBuilder::validated(),
@@ -4335,6 +4345,15 @@ pub mod test {
         expected_equivocations_count: 0,
         expected_validated_blocks_count: 0,
         expected_removed_blocks_count: 1,
+    })]
+    #[case(EquivocationProofTestCase {
+        artifacts: vec![
+            TestBlockBuilder::unvalidated(),
+            TestBlockBuilder::unvalidated().with_altered_content().with_notarization(),
+        ],
+        expected_equivocations_count: 0,
+        expected_validated_blocks_count: 2,
+        expected_removed_blocks_count: 0,
     })]
     #[case(EquivocationProofTestCase {
         artifacts: vec![
