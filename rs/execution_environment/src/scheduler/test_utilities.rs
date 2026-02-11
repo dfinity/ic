@@ -178,13 +178,6 @@ impl SchedulerTest {
         &self.registry_settings
     }
 
-    pub fn set_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
-        if let Some(state) = self.state.as_mut() {
-            state.set_own_cost_schedule(cost_schedule);
-        }
-        self.registry_settings.canister_cycles_cost_schedule = cost_schedule;
-    }
-
     /// Returns how many instructions were executed by a canister on a thread
     /// and in an execution round. The order of elements is important and
     /// matches the execution order for a fixed thread.
@@ -702,6 +695,7 @@ pub(crate) struct SchedulerTestBuilder {
     metrics_registry: MetricsRegistry,
     round_summary: Option<ExecutionRoundSummary>,
     replica_version: ReplicaVersion,
+    cost_schedule: CanisterCyclesCostSchedule,
 }
 
 impl Default for SchedulerTestBuilder {
@@ -731,6 +725,7 @@ impl Default for SchedulerTestBuilder {
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
             replica_version: ReplicaVersion::default(),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 }
@@ -811,11 +806,6 @@ impl SchedulerTestBuilder {
         }
     }
 
-    pub fn with_store_pre_signatures_in_state(mut self, status: FlagStatus) -> Self {
-        self.scheduler_config.store_pre_signatures_in_state = status;
-        self
-    }
-
     pub fn with_batch_time(self, batch_time: Time) -> Self {
         Self { batch_time, ..self }
     }
@@ -831,6 +821,13 @@ impl SchedulerTestBuilder {
     pub fn with_replica_version(self, replica_version: ReplicaVersion) -> Self {
         Self {
             replica_version,
+            ..self
+        }
+    }
+
+    pub fn with_cost_schedule(self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        Self {
+            cost_schedule,
             ..self
         }
     }
@@ -854,6 +851,7 @@ impl SchedulerTestBuilder {
             self.own_subnet_id,
             self.subnet_type,
             registry_settings.subnet_size,
+            self.cost_schedule,
         );
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;

@@ -1,5 +1,5 @@
 use crate::as_round_instructions;
-use crate::execution::install_code::{OriginalContext, validate_controller};
+use crate::execution::{common::validate_controller, install_code::OriginalContext};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
     CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
@@ -1223,8 +1223,8 @@ impl CanisterManager {
         // - its state is permanently deleted, and
         // - its cycles are discarded.
 
-        // Take out the canister from `ReplicatedState`.
-        let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
+        // Remove the canister from `ReplicatedState`.
+        let canister_to_delete = state.remove_canister(&canister_id_to_delete).unwrap();
         let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
 
         // Delete canister snapshots that are stored separately in `ReplicatedState`.
@@ -1312,6 +1312,10 @@ impl CanisterManager {
         settings
             .reserved_cycles_limit
             .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
+
+        settings
+            .wasm_memory_limit
+            .get_or_insert(self.config.default_wasm_memory_limit);
 
         // Validate settings before `create_canister_helper` applies them
         // No creation fee applied.
@@ -3144,6 +3148,12 @@ impl CanisterManager {
             execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
             execution_state.wasm_binary.clear_compilation_cache();
         }
+
+        // Carry over the scheduling priority.
+        state
+            .metadata
+            .subnet_schedule
+            .rename_canister(&old_id, new_id);
 
         state
             .metadata
