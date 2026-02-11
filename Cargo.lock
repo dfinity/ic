@@ -2570,6 +2570,7 @@ dependencies = [
  "serde_json",
  "serde_with 1.14.0",
  "sev_guest",
+ "strum 0.26.3",
  "tempfile",
  "url",
  "utils",

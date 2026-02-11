@@ -25,6 +25,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:url",
 ]

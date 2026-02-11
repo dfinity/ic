@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::path::Path;
+use strum::{Display, EnumString};
 
 pub static DEFAULT_SETUPOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config.json";
 pub static DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH: &str = "/config/config.ini";
@@ -22,6 +23,13 @@ pub static DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/confi
 pub static DEFAULT_GUESTOS_CONFIG_OBJECT_PATH: &str = "/run/config/config.json";
 pub static DEFAULT_BOOTSTRAP_DIR: &str = "/run/config/bootstrap";
 pub static DEFAULT_IC_JSON5_OUTPUT_PATH: &str = "/run/ic-node/config/ic.json5";
+
+/// Type of the operating system
+#[derive(Debug, Clone, EnumString, Display)]
+pub enum OsType {
+    HostOS,
+    GuestOS,
+}
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =

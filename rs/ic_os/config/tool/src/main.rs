@@ -2,9 +2,9 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use config_tool::guestos::bootstrap_ic_node::bootstrap_ic_node;
 use config_tool::guestos::generate_ic_config;
-use config_tool::serialize_and_write_config;
 use config_tool::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
 use config_tool::setupos::deployment_json::{VmResources, get_deployment_settings};
+use config_tool::{OsType, serialize_and_write_config};
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
@@ -48,6 +48,12 @@ pub enum Commands {
         guestos_config_json_path: PathBuf,
         #[arg(long, default_value = config_tool::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
+    },
+    /// Dumps OS configuration
+    DumpOSConfig {
+        /// Type of the operating system to select the right config
+        #[arg(long)]
+        os_type: OsType,
     },
 }
 
@@ -231,6 +237,28 @@ pub fn main() -> Result<()> {
 
             generate_ic_config::generate_ic_config(&guestos_config, &output_path)
         }
+        Some(Commands::DumpOSConfig { os_type }) => {
+            println!("Dumping OS configuration");
+
+            match os_type {
+                OsType::GuestOS => {
+                    let config: GuestOSConfig =
+                        config_tool::deserialize_config("/run/config/config.json")?;
+
+                    println!("{config:?}");
+                }
+
+                OsType::HostOS => {
+                    let config: HostOSConfig =
+                        config_tool::deserialize_config("/boot/config/config.json")?;
+
+                    println!("{config:?}");
+                }
+            }
+
+            Ok(())
+        }
+
         None => {
             println!("No command provided. Use --help for usage information.");
             Ok(())

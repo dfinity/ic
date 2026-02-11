@@ -246,7 +246,7 @@ mod tests {
         guestos_config.icos_settings.node_operator_private_key =
             Some("node_operator_private_key_foo".to_string());
         let guestos_config_json: GuestOSConfig =
-            serde_json::from_slice(&fs::read(bootstrap_dir.path().join("config.json"))?)?;
+            serde_json::from_slice(&fs::read(bootstrap_dir.join("config.json"))?)?;
 
         // Verify all copied files and directories
         assert_eq!(guestos_config, guestos_config_json);
@@ -279,6 +279,8 @@ mod tests {
     #[cfg(feature = "dev")]
     fn test_build_bootstrap_dir_node_operator_in_config() -> Result<()> {
         let tmp_dir = tempfile::tempdir()?;
+        let bootstrap_dir = tmp_dir.path().join("bootstrap");
+        fs::create_dir(&bootstrap_dir)?;
 
         // Create test files and directories
         let test_files_dir = tmp_dir.path().join("test_files");
@@ -307,10 +309,10 @@ mod tests {
             ic_registry_local_store: None,
         };
 
-        let bootstrap_dir = bootstrap_options.build_bootstrap_dir()?;
+        bootstrap_options.populate_bootstrap_dir(&bootstrap_dir)?;
 
         let guestos_config_json: GuestOSConfig =
-            serde_json::from_slice(&fs::read(bootstrap_dir.path().join("config.json"))?)?;
+            serde_json::from_slice(&fs::read(bootstrap_dir.join("config.json"))?)?;
 
         // Make sure that the key from the config gets into the resulitng JSON,
         // and not the key from the file.
