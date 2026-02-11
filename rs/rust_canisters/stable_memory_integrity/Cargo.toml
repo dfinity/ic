@@ -16,6 +16,7 @@ ic-types = { path = "../../types/types" }
 ic-base-types = { path = "../../types/base_types" }
 lazy_static = "1.4.0"
 proptest = { workspace = true }
+rand = "0.9"
 serde = { workspace = true }
 
 [[bin]]
