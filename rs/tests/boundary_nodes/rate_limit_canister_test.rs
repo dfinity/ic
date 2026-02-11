@@ -44,10 +44,7 @@ use bytes::Bytes;
 use http::{Request, Response};
 use ic_agent::{
     Agent, AgentError, Identity,
-    agent::{
-        HttpService,
-        http_transport::reqwest_transport::reqwest::Client,
-    },
+    agent::{HttpService, http_transport::reqwest_transport::reqwest::Client},
     identity::Secp256k1Identity,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -440,6 +437,9 @@ impl HttpService for HttpServiceNoRetry {
         _max_tcp_retries: usize,
         _max_response_body_size: Option<usize>,
     ) -> Result<Response<Bytes>, AgentError> {
-        Ok(self.client.call(req, _max_tcp_retries, _max_response_body_size).await?)
+        Ok(self
+            .client
+            .call(req, _max_tcp_retries, _max_response_body_size)
+            .await?)
     }
 }
