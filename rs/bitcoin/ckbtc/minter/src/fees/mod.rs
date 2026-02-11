@@ -38,6 +38,7 @@ pub trait FeeEstimator {
     fn reimbursement_fee_for_pending_withdrawal_requests(&self, num_requests: u64) -> u64;
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct BitcoinFeeEstimator {
     /// The Bitcoin network that the minter will connect to
     network: Network,

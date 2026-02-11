@@ -1,32 +1,20 @@
 //! Generate data for proptests
 use super::*;
 use crate::crypto::*;
+use ic_crypto_internal_seed::Seed;
 use proptest::prelude::*;
 mod tests;
 
-// Once upon a time we had placed the `seed` values directly into the output
-// `FrRepr` value, but this places a large burden on the caller, who must
-// guarantee `seed` represents a number strictly less than the group order, or
-// risk generating from a non-uniform distribution. Now, we use `seed` to seed a
-// RNG, then use this to generate a uniform random element.
-fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
-    let mut seed_as_u8: [u8; 32] = [0; 32];
-    for i in 0..4 {
-        let bs = seed[i].to_be_bytes();
-        for j in 0..8 {
-            seed_as_u8[i * 8 + j] = bs[j];
-        }
-    }
-    keypair_from_rng(&mut ChaCha20Rng::from_seed(seed_as_u8))
+fn keypair_from_seed_bytes(seed_bytes: [u8; 32]) -> (SecretKey, PublicKey) {
+    let seed = Seed::from_bytes(&seed_bytes);
+    keypair_from_rng(&mut seed.into_rng())
 }
 
 //////////////////////
 // Proptest strategies
 // These are for generating data types
 pub fn key_pair() -> impl Strategy<Value = (SecretKey, PublicKey)> {
-    any::<[u64; 4]>().prop_map(keypair_from_seed)
+    any::<[u8; 32]>().prop_map(keypair_from_seed_bytes)
 }
 pub fn secret_key() -> impl Strategy<Value = SecretKey> {
     key_pair().prop_map(|keypair| keypair.0)
@@ -35,16 +23,16 @@ pub fn public_key() -> impl Strategy<Value = PublicKey> {
     key_pair().prop_map(|keypair| keypair.1)
 }
 pub fn individual_signature() -> impl Strategy<Value = IndividualSignature> {
-    any::<([u64; 4], [u8; 8])>()
-        .prop_map(|(seed, message)| (keypair_from_seed(seed), message))
+    any::<([u8; 32], [u8; 8])>()
+        .prop_map(|(seed, message)| (keypair_from_seed_bytes(seed), message))
         .prop_map(|(keypair, message)| {
             let (secret_key, _public_key) = keypair;
             sign_message(&message, &secret_key)
         })
 }
 pub fn pop() -> impl Strategy<Value = Pop> {
-    any::<[u64; 4]>()
-        .prop_map(keypair_from_seed)
+    any::<[u8; 32]>()
+        .prop_map(keypair_from_seed_bytes)
         .prop_map(|keypair| {
             let (secret_key, public_key) = keypair;
             create_pop(&public_key, &secret_key)

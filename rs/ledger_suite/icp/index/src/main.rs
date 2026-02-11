@@ -3,14 +3,14 @@ use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::api::caller;
-use ic_cdk::{init, post_upgrade, query};
+use ic_cdk::{init, post_upgrade, query, trap};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, InitArg, Log, LogEntry,
-    Priority, SettledTransaction, SettledTransactionWithId, Status, UpgradeArg,
+    GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, IndexArg, InitArg, Log,
+    LogEntry, Priority, SettledTransaction, SettledTransactionWithId, Status, UpgradeArg,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -89,6 +89,10 @@ thread_local! {
     static TIMER_ID: RefCell<TimerId> = RefCell::new(TimerId::default());
 }
 
+fn default_last_wait_time() -> Duration {
+    DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL
+}
+
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 struct State {
     // Equals to `true` while the [build_index] task runs.
@@ -96,6 +100,13 @@ struct State {
 
     /// The principal of the ledger canister that is indexed by this index.
     ledger_id: Principal,
+
+    // Last wait time in nanoseconds.
+    #[deprecated]
+    #[serde(default = "default_last_wait_time")]
+    // TODO(DEFI-1144): Also add `#[serde(skip_serializing)]` annotation once the above `default` annotation has been deployed to mainnet.
+    // TODO(DEFI-1144): Remove the `last_wait_time` field once the above `skip_serializing` annotation has been deployed to mainnet.
+    pub last_wait_time: Duration,
 
     /// The interval for retrieving blocks from the ledger and archive(s) for (re)building the
     /// index. Lower values will result in a more responsive UI, but higher costs due to increased
@@ -117,6 +128,7 @@ impl Default for State {
         Self {
             is_build_index_running: false,
             ledger_id: Principal::management_canister(),
+            last_wait_time: Duration::from_secs(0),
             retrieve_blocks_from_ledger_interval: None,
         }
     }
@@ -244,10 +256,19 @@ fn balance_key(account_identifier: AccountIdentifier) -> (AccountIdentifierDataT
 }
 
 #[init]
-fn init(init_arg: InitArg) {
+fn init(index_arg: Option<IndexArg>) {
+    let InitArg {
+        ledger_id,
+        retrieve_blocks_from_ledger_interval_seconds,
+    } = match index_arg {
+        Some(IndexArg::Init(arg)) => arg,
+        _ => trap("Index initialization must take in input an InitArg argument"),
+    };
     // stable memory initialization
     mutate_state(|state| {
-        state.ledger_id = init_arg.ledger_id;
+        state.ledger_id = ledger_id;
+        state.retrieve_blocks_from_ledger_interval =
+            retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
     });
 
     // set the first build_index to be called after init
@@ -257,20 +278,30 @@ fn init(init_arg: InitArg) {
 }
 
 #[post_upgrade]
-fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
-    if let Some(upgrade) = upgrade_arg {
-        log!(P1, "Possible upgrade configuration changes: {:#?}", upgrade);
+fn post_upgrade(index_arg: Option<IndexArg>) {
+    match index_arg {
+        Some(IndexArg::Upgrade(upgrade)) => {
+            log!(P1, "Possible upgrade configuration changes: {:#?}", upgrade,);
 
-        let UpgradeArg {
-            retrieve_blocks_from_ledger_interval_seconds,
-        } = upgrade;
+            let UpgradeArg {
+                ledger_id,
+                retrieve_blocks_from_ledger_interval_seconds,
+            } = upgrade;
 
-        mutate_state(|state| {
-            if let Some(new_value) = retrieve_blocks_from_ledger_interval_seconds {
-                state.retrieve_blocks_from_ledger_interval = Some(Duration::from_secs(new_value));
-            }
-        });
-    }
+            mutate_state(|state| {
+                if let Some(new_value) = ledger_id {
+                    state.ledger_id = new_value;
+                }
+
+                if let Some(new_value) = retrieve_blocks_from_ledger_interval_seconds {
+                    state.retrieve_blocks_from_ledger_interval =
+                        Some(Duration::from_secs(new_value));
+                }
+            });
+        }
+        Some(IndexArg::Init(..)) => trap("Index upgrade argument cannot be of variant Init"),
+        _ => (),
+    };
 
     // set the first build_index to be called after upgrade
     set_build_index_timer(with_state(|state| {

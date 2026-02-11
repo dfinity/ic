@@ -11,7 +11,6 @@ use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version_with_retries,
     rw_message::store_message,
-    set_sandbox_env_vars,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
@@ -45,7 +44,7 @@ use slog::{Logger, info};
 use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(8)),
+    vcpus: Some(NrOfVCPUs::new(16)),
     memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
     boot_image_minimal_size_gibibytes: None,
 };
@@ -235,7 +234,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let upgrade_version = get_guestos_update_img_version();
     let upgrade_image_url = get_guestos_update_img_url();
     let upgrade_image_hash = get_guestos_update_img_sha256();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     std::fs::write(
         env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
         serde_json::to_string(&guest_launch_measurements).unwrap(),
@@ -253,9 +252,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         ));
     }
 
-    let recovery_dir = get_dependency_path("rs/tests");
     let output_dir = env.get_path("recovery_output");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     // Choose f+1 faulty nodes to break
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
@@ -330,10 +327,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &admin_auth,
     );
 
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
-        replica_version: Some(current_version),
+        replica_version: None,
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
@@ -497,19 +495,31 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to spoof HostOS DNS");
 
-    // Run guestos-recovery-upgrader directly, bypassing the limited-console manual recovery TUI
+    // Run guestos-recovery-upgrader via limited-console's rbash-console
+    // This tests the backup recovery path that node providers can use if the recovery TUI fails.
+    //
+    // Flow: SSH as admin → su to limited-console user → rbash-console → sudo recovery-launcher
     info!(
         logger,
-        "Running guestos-recovery-upgrader on GuestOS {} with version={}, recovery-hash-prefix={}",
+        "Running guestos-recovery-upgrader via rbash-console on HostOS {} with version={}, recovery-hash-prefix={}",
         host.vm_name(),
         img_version,
         recovery_hash_prefix,
     );
-    let recovery_upgrader_command =
+
+    let recovery_upgrader_cmd =
         build_recovery_upgrader_run_command(img_version, recovery_hash_prefix).to_shell_string();
-    host.block_on_bash_script_async(&recovery_upgrader_command)
+
+    // Note: keep in sync with the limited-console invocation in cpp/infogetty-cpp/infogetty.cc.
+    // We need TWO "exit" commands: one to exit rbash, and one to exit limited-console's main loop.
+    let script = format!(
+        r#"echo -e "rbash-console\n{}\nexit\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
+        recovery_upgrader_cmd
+    );
+
+    host.block_on_bash_script_async(&script)
         .await
-        .expect("Failed to run guestos-recovery-upgrader");
+        .expect("Failed to run guestos-recovery-upgrader via rbash-console");
 
     // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();

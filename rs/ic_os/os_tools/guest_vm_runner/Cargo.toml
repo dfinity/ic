@@ -7,6 +7,7 @@ name = "guest_vm_runner"
 path = "src/main.rs"
 
 [dependencies]
+command_runner = { path = "../../command_runner" }
 config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
 deterministic_ips = { path = "../../networking/deterministic_ips" }
@@ -45,4 +46,3 @@ upgrade_device_mapper_test = []
 
 [dev-dependencies]
 goldenfile = { workspace = true }
-url = { workspace = true }

@@ -1,7 +1,7 @@
 use crate::driver::farm::VmSpec;
 use crate::driver::ic::VmResources;
 use crate::driver::port_allocator::AddrType;
-use crate::driver::resource::AllocatedVm;
+use crate::driver::resource::{AllocatedVm, BootImage};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
 use crate::driver::{
@@ -11,7 +11,7 @@ use crate::driver::{
     test_env::TestEnvAttribute,
     test_setup::GroupSetup,
 };
-use crate::util::{block_on, create_agent};
+use crate::util::create_agent;
 use ic_agent::{Agent, AgentError};
 
 use std::fs;
@@ -23,7 +23,7 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -55,7 +55,7 @@ impl NestedNodes {
     }
 
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
-        let farm = block_on(Farm::from_test_env(env, "Internet Computer"));
+        let farm = Farm::from_test_env(env, "Internet Computer");
 
         let group_setup = GroupSetup::read_attribute(env);
         let group_name: String = group_setup.infra_group_name;
@@ -79,11 +79,21 @@ impl NestedNodes {
 pub struct NestedNode {
     pub name: String,
     pub vm_resources: VmResources,
+    pub boot_image: BootImage,
 }
 
 impl NestedNode {
     pub fn new(name: String, vm_resources: VmResources) -> Self {
-        NestedNode { name, vm_resources }
+        NestedNode {
+            name,
+            vm_resources,
+            boot_image: BootImage::GroupDefault,
+        }
+    }
+
+    pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {
+        self.boot_image = boot_image;
+        self
     }
 }
 
@@ -216,13 +226,11 @@ impl HasNestedVms for TestEnv {
         let host_mac = calculate_deterministic_mac(
             &seed_mac,
             DeploymentEnvironment::Testnet,
-            IpVariant::V6,
             NodeType::HostOS,
         );
         let guest_mac = calculate_deterministic_mac(
             &seed_mac,
             DeploymentEnvironment::Testnet,
-            IpVariant::V6,
             NodeType::GuestOS,
         );
 

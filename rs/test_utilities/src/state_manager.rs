@@ -5,7 +5,7 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateReader, TransientStateHashError::*,
+    StateHashError, StateHashMetadata, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
@@ -183,13 +183,16 @@ impl StateManager for FakeStateManager {
         });
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.states
             .read()
             .unwrap()
             .iter()
             .filter(|s| s.height > Height::from(0) && s.certification.is_none())
-            .map(|s| (s.height, s.partial_hash.clone()))
+            .map(|s| StateHashMetadata {
+                height: s.height,
+                hash: s.partial_hash.clone(),
+            })
             .collect()
     }
 
@@ -216,6 +219,10 @@ impl StateManager for FakeStateManager {
         _extra_heights_to_keep: &BTreeSet<Height>,
     ) {
         // All heights are checkpoints
+    }
+
+    fn update_fast_forward_height(&self, _height: Height) {
+        // `FakeStateManager` does not implement fast-forwarding.
     }
 
     fn commit_and_certify(
@@ -686,7 +693,7 @@ impl StateManager for RefMockStateManager {
             .fetch_state(height, root_hash, cup_interval_length)
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.mock.read().unwrap().list_state_hashes_to_certify()
     }
 
@@ -699,6 +706,10 @@ impl StateManager for RefMockStateManager {
 
     fn remove_states_below(&self, height: Height) {
         self.mock.read().unwrap().remove_states_below(height)
+    }
+
+    fn update_fast_forward_height(&self, height: Height) {
+        self.mock.read().unwrap().update_fast_forward_height(height)
     }
 
     fn remove_inmemory_states_below(

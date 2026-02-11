@@ -2,7 +2,11 @@ syntax = "proto3";
 
 package attestation;
 
-// SEV attestation package that is shared by a node as evidence of its integrity
+// SEV attestation package that is shared by a node as evidence of its integrity.
+//
+// IMPORTANT: All fields in this message (and nested messages) MUST remain optional.
+// This type is used in the registry Candid API, and adding or removing
+// non-optional fields causes Candid client/server compatibility issues.
 message SevAttestationPackage {
   // Opaque bytes containing the SEV attestation report. Can be parsed using
   // sev::firmware::guest::AttestationReport::from_bytes.
@@ -16,6 +20,8 @@ message SevAttestationPackage {
   optional string custom_data_debug_info = 3;
 }
 
+// Certificate chain for SEV attestation verification.
+// NOTE: All fields must remain optional (see SevAttestationPackage comment).
 message SevCertificateChain {
   // AMD Root Key (ARK) certificate in PEM encoding
   optional string ark_pem = 1;

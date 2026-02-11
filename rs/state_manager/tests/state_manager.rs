@@ -20,6 +20,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting};
 use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
@@ -27,7 +28,6 @@ use ic_replicated_state::{
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::ApiBoundaryNodeEntry,
     page_map::{PageIndex, Shard, StorageLayout},
-    testing::{ReplicatedStateTesting, StreamTesting},
 };
 use ic_state_layout::{
     CANISTER_FILE, CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE, StateLayout, WASM_FILE,
@@ -1039,9 +1039,9 @@ fn populates_prev_state_hash() {
         let hashes = state_manager.list_state_hashes_to_certify();
 
         assert_eq!(2, hashes.len());
-        assert_ne!(hashes[0].1, hashes[1].1);
+        assert_ne!(hashes[0].hash, hashes[1].hash);
         assert_eq!(
-            Some(hashes[0].1.clone()),
+            Some(hashes[0].hash.clone()),
             state_2.system_metadata().prev_state_hash
         );
     });
@@ -2424,7 +2424,7 @@ fn recomputes_metadata_on_restart_if_missing() {
             .expect("Failed to remove states metadata");
         let cert_hashes = state_manager.list_state_hashes_to_certify();
         assert_eq!(1, cert_hashes.len());
-        assert_eq!(height(1), cert_hashes[0].0);
+        assert_eq!(height(1), cert_hashes[0].height);
 
         let state_manager = restart_fn(state_manager, None);
 
@@ -2515,11 +2515,11 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 
 /// Asserts that all error counters in the state manager are still 0
 fn assert_error_counters(metrics: &MetricsRegistry) {
+    let critical_errors = fetch_int_counter_vec(metrics, "critical_errors");
     assert_eq!(
         0,
-        fetch_int_counter_vec(metrics, "critical_errors")
-            .values()
-            .sum::<u64>()
+        critical_errors.values().sum::<u64>(),
+        "critical_errors: {critical_errors:?}"
     );
 }
 
@@ -8155,11 +8155,11 @@ fn can_split_with_inflight_restore_snapshot() {
             if subnet_id == SUBNET_A {
                 other_subnet_id = SUBNET_B;
                 // `SUBNET_A` should only host `CANISTER_1` (and preserve its snapshot).
-                expected.canister_states.remove(&CANISTER_2);
+                expected.remove_canister(&CANISTER_2);
             } else if subnet_id == SUBNET_B {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
-                expected.canister_states.remove(&CANISTER_1);
+                expected.remove_canister(&CANISTER_1);
                 // And the snapshot of `CANISTER_1` should be deleted.
                 expected.canister_snapshots = Default::default();
             } else {
@@ -8209,7 +8209,13 @@ fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: Can
     // Take canister out.
     let mut canister = state.take_canister_state(&old_id).unwrap();
 
-    canister.system_state.canister_id = new_id;
+    // Migrate the canister priority.
+    state
+        .metadata
+        .subnet_schedule
+        .rename_canister(&old_id, new_id);
+
+    canister.system_state.set_canister_id(new_id);
     state
         .metadata
         .unflushed_checkpoint_ops
@@ -8953,9 +8959,9 @@ fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
 #[test]
 fn commit_and_certify_optimization_conditions() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -8975,8 +8981,8 @@ fn commit_and_certify_optimization_conditions() {
         sm.commit_and_certify(state, Height::new(20), CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 1);
 
-        // height of 42 is not less than `latest_subnet_certified_height` => optimization does not trigger
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        // height of 42 is not less than `fast_forward_height` => optimization does not trigger
+        assert_eq!(sm.fast_forward_height(), 42);
         let state = sm.take_tip().1;
         sm.commit_and_certify(state, Height::new(42), CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 1);
@@ -8986,9 +8992,9 @@ fn commit_and_certify_optimization_conditions() {
 #[test]
 fn commit_and_certify_optimization_semantics() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -9039,23 +9045,19 @@ fn commit_and_certify_optimization_semantics() {
 }
 
 #[test]
-fn latest_subnet_certified_height() {
+fn fast_forward_height() {
     state_manager_test(|_metrics, sm| {
         // initial value
-        assert_eq!(sm.latest_subnet_certified_height(), 0);
+        assert_eq!(sm.fast_forward_height(), 0);
 
-        // `remove_inmemory_states_below` updates `latest_subnet_certified_height`
-        sm.remove_inmemory_states_below(Height::new(100), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 100);
+        // `update_fast_forward_height` updates `fast_forward_height`
+        sm.update_fast_forward_height(Height::new(100));
+        assert_eq!(sm.fast_forward_height(), 100);
 
-        // `remove_inmemory_states_below` does not update `latest_subnet_certified_height`
+        // `update_fast_forward_height` does not update `fast_forward_height`
         // to a lower value
-        sm.remove_inmemory_states_below(Height::new(10), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 100);
-
-        // `remove_states_below` never updates `latest_subnet_certified_height`
-        sm.remove_states_below(Height::new(200));
-        assert_eq!(sm.latest_subnet_certified_height(), 100);
+        sm.update_fast_forward_height(Height::new(10));
+        assert_eq!(sm.fast_forward_height(), 100);
     });
 }
 
@@ -9078,9 +9080,9 @@ fn commit_and_certify_tip_set_panic() {
 )]
 fn commit_and_certify_optimization_tip_set_panic() {
     state_manager_test(|_metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization triggers
         let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
@@ -9122,9 +9124,9 @@ fn take_tip_does_not_hash_without_optimization() {
 #[test]
 fn take_tip_hashes_with_optimization() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -9156,9 +9158,9 @@ fn take_tip_hashes_with_optimization() {
 #[test]
 fn get_state_hash_at() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(500), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 500);
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(500));
+        assert_eq!(sm.fast_forward_height(), 500);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -9244,9 +9246,9 @@ fn get_state_hash_at() {
 #[test]
 fn flush_with_optimization() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);

@@ -13,9 +13,7 @@ use crate::{
 
 use ic_cdk::println;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
-use ic_nervous_system_governance::maturity_modulation::{
-    MIN_MATURITY_MODULATION_PERMYRIAD, apply_maturity_modulation,
-};
+use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, protobuf::AccountIdentifier as AccountIdentifierProto};
@@ -66,7 +64,6 @@ pub enum InitiateMaturityDisbursementError {
     DisbursementTooSmall {
         disbursement_maturity_e8s: u64,
         minimum_disbursement_e8s: u64,
-        worst_case_maturity_modulation_basis_points: i32,
     },
     // This error usually indicates a bug in the code.
     Unknown {
@@ -111,13 +108,11 @@ impl From<InitiateMaturityDisbursementError> for GovernanceError {
             InitiateMaturityDisbursementError::DisbursementTooSmall {
                 disbursement_maturity_e8s,
                 minimum_disbursement_e8s,
-                worst_case_maturity_modulation_basis_points,
             } => GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Disbursement ({disbursement_maturity_e8s}) is too small. After the worst \
-                    case maturity modulation ({worst_case_maturity_modulation_basis_points}) \
-                    the amount should be at least: {minimum_disbursement_e8s} e8s",
+                    "Disbursement ({disbursement_maturity_e8s}) is too small. The amount \
+                    should be at least: {minimum_disbursement_e8s} e8s",
                 ),
             ),
             InitiateMaturityDisbursementError::Unknown { reason } => {
@@ -249,26 +244,6 @@ fn percentage_of_maturity(
         })
 }
 
-fn check_minimum_transaction(
-    disbursement_maturity_e8s: u64,
-    worst_case_maturity_modulation_basis_points: i32,
-    minimum_disbursement_e8s: u64,
-) -> Result<(), InitiateMaturityDisbursementError> {
-    let disbursement_after_worst_case_maturity_modulation = apply_maturity_modulation(
-        disbursement_maturity_e8s,
-        worst_case_maturity_modulation_basis_points,
-    )
-    .map_err(|reason| InitiateMaturityDisbursementError::Unknown { reason })?;
-    if disbursement_after_worst_case_maturity_modulation < minimum_disbursement_e8s {
-        return Err(InitiateMaturityDisbursementError::DisbursementTooSmall {
-            disbursement_maturity_e8s,
-            minimum_disbursement_e8s,
-            worst_case_maturity_modulation_basis_points,
-        });
-    }
-    Ok(())
-}
-
 /// Initiates the maturity disbursement process for a neuron.
 pub fn initiate_maturity_disbursement(
     neuron_store: &mut NeuronStore,
@@ -315,11 +290,12 @@ pub fn initiate_maturity_disbursement(
 
     let disbursement_maturity_e8s =
         percentage_of_maturity(maturity_e8s_equivalent, *percentage_to_disburse)?;
-    check_minimum_transaction(
-        disbursement_maturity_e8s,
-        MIN_MATURITY_MODULATION_PERMYRIAD,
-        MINIMUM_DISBURSEMENT_E8S,
-    )?;
+    if disbursement_maturity_e8s < MINIMUM_DISBURSEMENT_E8S {
+        return Err(InitiateMaturityDisbursementError::DisbursementTooSmall {
+            disbursement_maturity_e8s,
+            minimum_disbursement_e8s: MINIMUM_DISBURSEMENT_E8S,
+        });
+    }
 
     if is_neuron_spawning {
         return Err(InitiateMaturityDisbursementError::NeuronSpawning);

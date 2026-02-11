@@ -1,4 +1,8 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
+use attestation::attestation_package::{
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+};
+use der::asn1::OctetStringRef;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
@@ -25,7 +29,7 @@ use crate::mutations::node_management::{
 };
 use crate::rate_limits::{commit_add_node_capacity, try_reserve_add_node_capacity};
 use ic_nervous_system_time_helpers::now_system_time;
-use ic_registry_canister_api::AddNodePayload;
+use ic_registry_canister_api::{AddNodePayload, NodeRegistrationAttestationCustomData};
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
@@ -185,13 +189,15 @@ impl Registry {
             ));
         }
 
+        let chip_id = self.extract_chip_id_from_payload(&payload)?;
+
         // Create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
             node_operator_id: caller_id.into_vec(),
             hostos_version_id: None,
-            chip_id: payload.chip_id.clone(),
+            chip_id,
             public_ipv4_config: ipv4_intf_config,
             domain,
             node_reward_type: node_reward_type.map(|t| t as i32),
@@ -227,6 +233,43 @@ impl Registry {
     fn are_node_rewards_enabled(&self) -> bool {
         self.get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
             .is_some()
+    }
+
+    /// Extracts the chip_id from the AddNodePayload.
+    ///
+    /// If `node_registration_attestation` is provided, it will be parsed and verified,
+    /// and the chip_id will be extracted from the attestation report.
+    ///
+    /// If `node_registration_attestation` is not provided, returns `None` (non-SEV node).
+    fn extract_chip_id_from_payload(
+        &self,
+        payload: &AddNodePayload,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let Some(attestation_package) = &payload.node_registration_attestation else {
+            return Ok(None);
+        };
+
+        let expected_custom_data = NodeRegistrationAttestationCustomData {
+            node_signing_pk: OctetStringRef::new(&payload.node_signing_pk)
+                .expect("node_signing_pk must be valid"),
+        };
+
+        let parsed = ParsedSevAttestationPackage::parse(
+            attestation_package.clone(),
+            SevRootCertificateVerification::Verify,
+        )
+        .verify_custom_data(&expected_custom_data)
+        .verify_measurement(&self.get_all_blessed_guest_launch_measurements())
+        .map_err(|e| format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}"))?;
+
+        let chip_id = parsed.attestation_report().chip_id.to_vec();
+
+        println!(
+            "{LOG_PREFIX}do_add_node: Successfully extracted chip_id from attestation report: {}",
+            hex::encode(&chip_id)
+        );
+
+        Ok(Some(chip_id))
     }
 }
 
@@ -390,7 +433,7 @@ mod tests {
             idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
             xnet_endpoint: format!("128.0.{mutation_id}.100:1234"),
             http_endpoint: format!("128.0.{mutation_id}.100:4321"),
-            chip_id: None,
+            node_registration_attestation: None,
             public_ipv4_config: None,
             domain: Some("api-example.com".to_string()),
             // Unused section follows
@@ -429,7 +472,7 @@ mod tests {
             idkg_dealing_encryption_pk: Some(vec![]),
             xnet_endpoint: "127.0.0.1:1234".to_string(),
             http_endpoint: "127.0.0.1:8123".to_string(),
-            chip_id: None,
+            node_registration_attestation: None,
             public_ipv4_config: None,
             domain: None,
             // Unused section follows

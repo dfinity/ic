@@ -183,26 +183,41 @@ impl Recovery {
             wait_for_confirmation(&logger);
         }
 
-        if !args.use_local_binaries && !binary_dir.join("ic-admin").exists() {
-            if let Some(version) = args.replica_version {
-                block_on(download_binary(
-                    &logger,
-                    &version,
-                    String::from("ic-admin"),
-                    &binary_dir,
-                ))?;
-            } else {
-                info!(logger, "No ic-admin version provided, skipping download.");
-            }
-        } else {
-            info!(logger, "ic-admin exists, skipping download.");
-        }
+        let ic_admin = match env::var("IC_ADMIN_PATH") {
+            // if IC_ADMIN_PATH is set, use that
+            Ok(ic_admin_path) => PathBuf::from(ic_admin_path),
+            // Otherwise, either download ic-admin or use the one from 'binary_dir'
+            Err(std::env::VarError::NotPresent) => {
+                let local_ic_admin_path = binary_dir.join("ic-admin");
 
-        let ic_admin = if args.use_local_binaries {
-            PathBuf::from(env::var("IC_ADMIN_BIN").unwrap_or("ic-admin".to_string()))
-        } else {
-            binary_dir.join("ic-admin")
+                if local_ic_admin_path.exists() {
+                    // env var not set, but local ic admin was found, so use that
+                    local_ic_admin_path
+                } else if let Some(version) = args.replica_version {
+                    block_on(download_binary(
+                        &logger,
+                        &version,
+                        String::from("ic-admin"),
+                        &binary_dir,
+                    ))?;
+
+                    // we expect 'download_binary' to download the binary to
+                    // <binary_dir>/ic-admin
+                    local_ic_admin_path
+                } else {
+                    // the env var is not set, the binary does not exist locally and we have no version
+                    // to download.
+                    info!(
+                        logger,
+                        "No ic-admin version provided, file may not exist: '{:?}'",
+                        local_ic_admin_path
+                    );
+                    local_ic_admin_path
+                }
+            }
+            Err(e) => panic!("Could not read IC_ADMIN_PATH: {:?}", e),
         };
+
         let admin_helper = AdminHelper::new(ic_admin, args.nns_url, neuron_args);
 
         Ok(Self {

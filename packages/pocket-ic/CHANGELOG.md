@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIcBuilder::with_mainnet_nns_subnet_id` to specify that the NNS subnet should be created with the mainnet NNS subnet ID.
+
 
 
 ## 12.0.0 - 2026-01-23

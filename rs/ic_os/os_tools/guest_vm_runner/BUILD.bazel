@@ -7,6 +7,7 @@ DEPENDENCIES = [
     # Keep sorted.
     ":build_script",
     "//rs/ic_os/boot/grub",
+    "//rs/ic_os/command_runner",
     "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/device",
     "//rs/ic_os/metrics/metrics_tool",
@@ -35,9 +36,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/build_tools/partition_tools",
     "@crate_index//:goldenfile",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [

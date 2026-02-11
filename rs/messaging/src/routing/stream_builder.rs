@@ -30,6 +30,8 @@ struct StreamBuilderMetrics {
     pub stream_bytes: IntGaugeVec,
     /// Stream begin, by remote subnet.
     pub stream_begin: IntGaugeVec,
+    /// Signals currently enqueued in streams, by remote subnet.
+    pub stream_signals: IntGaugeVec,
     /// Signals end, by remote subnet.
     pub signals_end: IntGaugeVec,
     /// Routed XNet messages, by type and status.
@@ -52,6 +54,7 @@ struct StreamBuilderMetrics {
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
+const METRIC_STREAM_SIGNALS: &str = "mr_stream_signals";
 const METRIC_SIGNALS_END: &str = "mr_signals_end";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
@@ -91,6 +94,11 @@ impl StreamBuilderMetrics {
         let stream_begin = metrics_registry.int_gauge_vec(
             METRIC_STREAM_BEGIN,
             "Stream begin, by remote subnet",
+            &[LABEL_REMOTE],
+        );
+        let stream_signals = metrics_registry.int_gauge_vec(
+            METRIC_STREAM_SIGNALS,
+            "Signals currently enqueued in streams, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let signals_end = metrics_registry.int_gauge_vec(
@@ -149,6 +157,7 @@ impl StreamBuilderMetrics {
             stream_messages,
             stream_bytes,
             stream_begin,
+            stream_signals,
             signals_end,
             routed_messages,
             routed_payload_sizes,
@@ -611,27 +620,34 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
+                    stream.signals_begin(),
                     stream.signals_end(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes, begin, signals_end)| {
-                self.metrics
-                    .stream_messages
-                    .with_label_values(&[&subnet])
-                    .set(len as i64);
-                self.metrics
-                    .stream_bytes
-                    .with_label_values(&[&subnet])
-                    .set(size_bytes as i64);
-                self.metrics
-                    .stream_begin
-                    .with_label_values(&[&subnet])
-                    .set(begin.get() as i64);
-                self.metrics
-                    .signals_end
-                    .with_label_values(&[&subnet])
-                    .set(signals_end.get() as i64);
-            });
+            .for_each(
+                |(subnet, len, size_bytes, begin, signals_begin, signals_end)| {
+                    self.metrics
+                        .stream_messages
+                        .with_label_values(&[&subnet])
+                        .set(len as i64);
+                    self.metrics
+                        .stream_bytes
+                        .with_label_values(&[&subnet])
+                        .set(size_bytes as i64);
+                    self.metrics
+                        .stream_begin
+                        .with_label_values(&[&subnet])
+                        .set(begin.get() as i64);
+                    self.metrics
+                        .stream_signals
+                        .with_label_values(&[&subnet])
+                        .set((signals_end - signals_begin).get() as i64);
+                    self.metrics
+                        .signals_end
+                        .with_label_values(&[&subnet])
+                        .set(signals_end.get() as i64);
+                },
+            );
         self.observe_misrouted_messages(&state);
 
         {

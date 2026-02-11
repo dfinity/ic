@@ -34,6 +34,7 @@ itertools = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 maplit = "1.0.2"
+more-asserts = { workspace = true }
 nix = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }

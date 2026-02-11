@@ -182,15 +182,15 @@ system_test(
 
 system_test(
     name = "fill_execution_rounds_workload",
-    data = [
-        "//rs/tests:jaeger_uvm_config_image",
-    ],
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
     test_timeout = "eternal",
+    runtime_deps = {
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
+    },
     deps = [
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",

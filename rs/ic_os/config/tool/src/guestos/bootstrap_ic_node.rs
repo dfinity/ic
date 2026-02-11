@@ -189,7 +189,7 @@ fn copy_bootstrap_files(
     let ssh_keys_src = bootstrap_dir.join("accounts_ssh_authorized_keys");
     let ssh_keys_dst = config_root.join("accounts_ssh_authorized_keys");
     if ssh_keys_src.exists() {
-        println!("Setting up accounts_ssh_authorized_keys");
+        println!("Copying accounts_ssh_authorized_keys");
         copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
     }
 

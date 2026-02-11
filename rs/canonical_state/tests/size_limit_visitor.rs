@@ -93,7 +93,7 @@ fn size_limit_proptest(#[strategy(arb_fixture(10))] fixture: Fixture) {
         size_limit,
         SubtreeVisitor::new(&subtree_pattern, MessageSpyVisitor::default()),
     );
-    let (actual_size, actual_begin, actual_end) = traverse(Height::new(0), &state, visitor);
+    let (actual_size, actual_begin, actual_end) = traverse(&state, Height::new(0), visitor);
 
     if let (Some(actual_begin), Some(actual_end)) = (actual_begin, actual_end) {
         // Non-empty slice.
@@ -126,7 +126,7 @@ fn compute_message_sizes(state: &ReplicatedState, begin: u64, end: u64) -> usize
     // Traverse the stream once to collect its messages' total byte size.
     let pattern = make_slice_pattern(begin, end);
     let visitor = SubtreeVisitor::new(&pattern, MessageSpyVisitor::default());
-    let (size, tbegin, tend) = traverse(Height::new(0), state, visitor);
+    let (size, tbegin, tend) = traverse(state, Height::new(0), visitor);
 
     // Sanity check MessageSpyVisitor.
     if let (Some(tbegin), Some(tend)) = (tbegin, tend) {

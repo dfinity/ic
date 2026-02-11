@@ -34,8 +34,8 @@ fn diff_checkpoints(path_a: PathBuf, path_b: PathBuf) -> Result<Changes, Checkpo
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )?;
 
-    let tree_a = hash_state(unused_height, &state_a);
-    let tree_b = hash_state(unused_height, &state_b);
+    let tree_a = hash_state(&state_a, unused_height);
+    let tree_b = hash_state(&state_b, unused_height);
     Ok(diff(&tree_a, &tree_b))
 }
 

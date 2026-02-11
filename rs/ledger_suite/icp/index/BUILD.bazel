@@ -33,6 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
+    "//rs/types/types",
     "@crate_index//:candid_parser",
     "@crate_index//:proptest",
 ]
@@ -94,11 +95,13 @@ rust_ic_test(
     data = [
         ":ic-icp-index-canister.wasm.gz",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
+        "//rs/ledger_suite/icp/test_utils/icp_test_ledger:icp_test_ledger_canister.wasm.gz",
     ],
     env = {
         "RUST_TEST_THREADS": "4",
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
         "IC_ICP_INDEX_WASM_PATH": "$(rootpath :ic-icp-index-canister.wasm.gz)",
+        "IC_ICP_TEST_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/test_utils/icp_test_ledger:icp_test_ledger_canister.wasm.gz)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
     tags = ["cpu:4"],

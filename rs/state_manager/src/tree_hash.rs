@@ -51,10 +51,10 @@ where
 }
 
 /// Compute the hash tree corresponding to the full replicated state.
-pub fn hash_state(height: Height, state: &ReplicatedState) -> HashTree {
+pub fn hash_state(state: &ReplicatedState, height: Height) -> HashTree {
     ic_canonical_state::traverse(
-        height,
         state,
+        height,
         HashingVisitor::<HashTreeBuilderImpl>::default(),
     )
     .into_hash_tree()
@@ -111,7 +111,7 @@ mod tests {
     fn partial_hash_reflects_streams() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        let hash_of_empty_state = hash_state(Height::new(0), &state);
+        let hash_of_empty_state = hash_state(&state, Height::new(0));
 
         state.modify_streams(|streams| {
             streams.insert(
@@ -123,7 +123,7 @@ mod tests {
             );
         });
 
-        let hash_of_state_with_streams = hash_state(Height::new(0), &state);
+        let hash_of_state_with_streams = hash_state(&state, Height::new(0));
 
         assert!(
             hash_of_empty_state != hash_of_state_with_streams,
@@ -147,7 +147,7 @@ mod tests {
             streams.insert(subnet_test_id(5), stream);
         });
 
-        let hash_of_state_one = hash_state(Height::new(0), &state);
+        let hash_of_state_one = hash_state(&state, Height::new(0));
 
         let stream = Stream::new(
             StreamIndexedQueue::with_begin(StreamIndex::from(14)),
@@ -157,7 +157,7 @@ mod tests {
             streams.insert(subnet_test_id(6), stream);
         });
 
-        let hash_of_state_two = hash_state(Height::new(0), &state);
+        let hash_of_state_two = hash_state(&state, Height::new(0));
 
         assert!(
             hash_of_state_one != hash_of_state_two,
@@ -370,7 +370,7 @@ mod tests {
             let state = state_fixture(certification_version);
 
             assert_eq!(
-                hash_state(Height::new(0), &state).digest(),
+                hash_state(&state, Height::new(0)).digest(),
                 &Digest::from(<[u8; 32]>::from_hex(expected_hash,).unwrap()),
                 "Mismatched partial state hash computed according to certification version {certification_version:?}. \
                 Perhaps you made a change that requires writing backward compatibility code?"

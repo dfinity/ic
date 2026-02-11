@@ -7,17 +7,22 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-assert_matches = { workspace = true }
 async-trait = { workspace = true }
+attestation = { path = "../ic_os/sev/attestation" }
 backoff = { workspace = true }
 candid = { workspace = true }
-config_tool = { path = "../ic_os/config/tool" }
 clap = { workspace = true }
+config_tool = { path = "../ic_os/config/tool" }
+config_types = { path = "../ic_os/config/types" }
+der = { workspace = true }
 exec = "0.3.1"
 env-file-reader = "0.3.0"
 get_if_addrs = { workspace = true }
 guest_upgrade_server = { path = "../ic_os/guest_upgrade/server" }
 hex = { workspace = true }
+pem = { workspace = true }
+sev = { workspace = true }
+sev_guest = { path = "../ic_os/sev/guest" }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
@@ -52,6 +57,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 idna = { workspace = true }
 indoc = "1.0.9"
+mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
@@ -71,6 +77,7 @@ qrcode = { workspace = true }
 
 [dev-dependencies]
 async-stream = { workspace = true }
+assert_matches = { workspace = true }
 hyper-util = { workspace = true }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
@@ -88,7 +95,8 @@ ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-mockall = { workspace = true }
+libc = { workspace = true }
 rcgen = { workspace = true }
+rstest = { workspace = true }
 rustls = { workspace = true }
 tokio-rustls = { workspace = true }

@@ -7,7 +7,8 @@ mod update_balance {
     use crate::state::{SuspendedReason, audit, eventlog::EventType, mutate_state, read_state};
     use crate::test_fixtures::{
         BTC_CHECKER_CANISTER_ID, DAY, MINTER_CANISTER_ID, NOW, ecdsa_public_key, get_uxos_response,
-        ignored_utxo, init_args, init_state, ledger_account, mock::MockCanisterRuntime,
+        ignored_utxo, init_args, init_state, ledger_account,
+        mock::{MockCanisterRuntime, mock_increasing_time},
         quarantined_utxo, utxo,
     };
     use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
@@ -926,19 +927,6 @@ mod update_balance {
 
     fn mock_schedule_now_process_logic(runtime: &mut MockCanisterRuntime) {
         runtime.expect_global_timer_set().return_const(());
-    }
-
-    fn mock_increasing_time(
-        runtime: &mut MockCanisterRuntime,
-        start: Timestamp,
-        interval: Duration,
-    ) {
-        let mut current_time = start;
-        runtime.expect_time().returning(move || {
-            let previous_time = current_time;
-            current_time = current_time.saturating_add(interval);
-            previous_time.as_nanos_since_unix_epoch()
-        });
     }
 
     fn mock_constant_time(

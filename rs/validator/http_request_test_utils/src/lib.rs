@@ -1,7 +1,7 @@
 use crate::DirectAuthenticationScheme::{CanisterSignature, UserKeyPair};
 use ic_canister_client_sender::{Ed25519KeyPair, ed25519_public_key_to_der};
 use ic_certification_test_utils::{generate_root_of_trust, serialize_to_cbor};
-use ic_crypto_internal_basic_sig_iccsa_test_utils::CanisterState;
+use ic_crypto_iccsa_test_utils::CanisterState;
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_tree_hash::Path;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
@@ -378,9 +378,7 @@ impl CanisterSigner {
         use ic_certification_test_utils::CertificateBuilder;
         use ic_certification_test_utils::CertificateData;
         use ic_crypto_iccsa::types::Signature;
-        use ic_crypto_internal_basic_sig_iccsa_test_utils::{
-            new_canister_state_tree, witness_from_tree,
-        };
+        use ic_crypto_iccsa_test_utils::{new_canister_state_tree, witness_from_tree};
 
         let canister_state = {
             let message_to_sign = message.as_signed_bytes();

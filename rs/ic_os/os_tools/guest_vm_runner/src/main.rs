@@ -6,9 +6,10 @@ use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
+use command_runner::{AsyncCommandRunner, RealAsyncCommandRunner};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use ic_device::device_mapping::MappedDevice;
 use ic_device::mount::{GptPartitionProvider, PartitionProvider};
 use ic_metrics_tool::{Metric, MetricsWriter};
@@ -25,7 +26,6 @@ use strum_macros::AsRefStr;
 use sysinfo::{ProcessRefreshKind, RefreshKind};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -93,9 +93,16 @@ pub async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    match args.vm_type {
-        GuestVMType::Default => println!("Starting GuestOS service"),
-        GuestVMType::Upgrade => println!("Starting Upgrade GuestOS service"),
+    let startup_message = match args.vm_type {
+        GuestVMType::Default => "Launching GuestOS Virtual Machine...",
+        GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
+    };
+    println!("{startup_message}");
+    for path in [CONSOLE_TTY1_PATH, CONSOLE_TTY_SERIAL_PATH] {
+        if let Ok(mut tty) = File::options().write(true).open(path) {
+            let _ = writeln!(tty, "\n{startup_message}\n");
+            let _ = tty.flush();
+        }
     }
 
     let termination_token = CancellationToken::new();
@@ -142,10 +149,8 @@ impl VirtualMachine {
         config_media: NamedTempFile,
         direct_boot: Option<DirectBoot>,
         vm_domain_name: &str,
+        command_runner: Arc<dyn AsyncCommandRunner>,
     ) -> Result<Self, GuestVmServiceError> {
-        // Check if a domain with the same name already exists and, if so, try to destroy it
-        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).await?;
-
         let mut retries = 3;
         let domain = loop {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
@@ -162,7 +167,12 @@ impl VirtualMachine {
                             "VM domain '{}' exists even though create_xml failed, attempting to destroy it before retry",
                             vm_domain_name
                         );
-                        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).await?;
+                        Self::try_destroy_existing_vm(
+                            libvirt_connect,
+                            vm_domain_name,
+                            command_runner.as_ref(),
+                        )
+                        .await?;
                     }
                     retries -= 1;
                     continue;
@@ -182,6 +192,7 @@ impl VirtualMachine {
     async fn try_destroy_existing_vm(
         libvirt_connect: &Connect,
         vm_domain_name: &str,
+        command_runner: &dyn AsyncCommandRunner,
     ) -> Result<(), GuestVmServiceError> {
         let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) else {
             eprintln!("No existing domain found to destroy");
@@ -216,7 +227,7 @@ impl VirtualMachine {
             }
             Ok(())
         } else {
-            Self::debug_inactive_domain(vm_domain_name).await;
+            Self::debug_inactive_domain(vm_domain_name, command_runner).await;
             Err(GuestVmServiceError::UnrecoverableNeedsReboot)
         }
     }
@@ -224,7 +235,7 @@ impl VirtualMachine {
     /// In a small amount of cases, the QEMU process gets stuck after the VM shuts down.
     /// We don't know why it's happening. This method attempts to gather information about the
     /// QEMU process which helps with debugging.
-    async fn debug_inactive_domain(vm_domain_name: &str) {
+    async fn debug_inactive_domain(vm_domain_name: &str, command_runner: &dyn AsyncCommandRunner) {
         let sysinfo = sysinfo::System::new_with_specifics(
             RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
         );
@@ -251,12 +262,9 @@ impl VirtualMachine {
             eprintln!("QEMU process: {qemu_process:?}");
             eprintln!("Process status: {:?}", qemu_process.status());
             eprintln!("Running lsof for QEMU process {}", qemu_process.pid());
-            let lsof_status = Command::new("lsof")
-                .arg("-p")
-                .arg(qemu_process.pid().to_string())
-                .status()
-                .await;
-            if let Err(err) = lsof_status {
+            let mut lsof_cmd = tokio::process::Command::new("lsof");
+            lsof_cmd.arg("-p").arg(qemu_process.pid().to_string());
+            if let Err(err) = command_runner.status(&mut lsof_cmd).await {
                 eprintln!("Failed to run lsof: {err:?}");
             }
 
@@ -268,20 +276,14 @@ impl VirtualMachine {
         }
 
         eprintln!("Will run strace for 60s");
-        let strace_status = Command::new("timeout")
+        let mut strace_cmd = tokio::process::Command::new("timeout");
+        strace_cmd
             .arg("60")
             .arg("strace")
             .arg("-p")
-            .arg(
-                qemu_processes
-                    .iter()
-                    .map(|p| p.pid().to_string())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-            )
-            .status()
-            .await;
-        if let Err(e) = strace_status {
+            // pass all QEMU PIDs
+            .args(qemu_processes.iter().map(|p| p.pid().to_string()));
+        if let Err(e) = command_runner.status(&mut strace_cmd).await {
             eprintln!("Failed to run strace: {e}");
         }
     }
@@ -384,6 +386,7 @@ pub struct GuestVmService {
     _upgrade_mapped_device: Option<MappedDevice>,
     guestos_boot_timeout: Duration,
     vm_serial_log_path: PathBuf,
+    command_runner: Arc<dyn AsyncCommandRunner>,
 }
 
 impl GuestVmService {
@@ -450,6 +453,7 @@ impl GuestVmService {
             _upgrade_mapped_device: upgrade_mapped_device,
             guestos_boot_timeout: GUESTOS_BOOT_TIMEOUT,
             vm_serial_log_path: serial_log_path(guest_vm_type).to_path_buf(),
+            command_runner: Arc::new(RealAsyncCommandRunner),
         })
     }
 
@@ -478,7 +482,8 @@ impl GuestVmService {
                 },
                 Err(GuestVmServiceError::UnrecoverableNeedsReboot) => {
                     println!("Issuing HostOS reboot");
-                    Command::new("reboot").status().await?;
+                    let mut cmd = tokio::process::Command::new("reboot");
+                    self.command_runner.status(&mut cmd).await?;
                     bail!("Found unrecoverable error, issued reboot");
                 }
                 Err(GuestVmServiceError::Other(err)) => {
@@ -532,6 +537,14 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
+        // Try to destroy any existing VM, if this fails, don't even try to create the configuration
+        VirtualMachine::try_destroy_existing_vm(
+            &self.libvirt_connection,
+            vm_domain_name(self.guest_vm_type),
+            self.command_runner.as_ref(),
+        )
+        .await?;
+
         let config_media = NamedTempFile::with_prefix("config_media")
             .context("Failed to create config media file")?;
 
@@ -590,6 +603,7 @@ impl GuestVmService {
             config_media,
             direct_boot,
             vm_domain_name(self.guest_vm_type),
+            self.command_runner.clone(),
         )
         .await?;
 
@@ -627,7 +641,6 @@ impl GuestVmService {
         let generated_mac = calculate_deterministic_mac(
             &self.hostos_config.icos_settings.mgmt_mac,
             self.hostos_config.icos_settings.deployment_environment,
-            IpVariant::V6,
             NodeType::HostOS,
         );
 
@@ -755,6 +768,7 @@ mod tests {
     use super::*;
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use anyhow::ensure;
+    use command_runner::MockAsyncCommandRunner;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSDevSettings, HostOSSettings,
         ICOSSettings, NetworkSettings,
@@ -943,6 +957,7 @@ mod tests {
         _libvirt_definition: NamedTempFile,
         guestos_boot_timeout: Duration,
         guest_serial_log: NamedTempFile,
+        command_runner: Arc<MockAsyncCommandRunner>,
     }
 
     impl TestFixture {
@@ -965,6 +980,7 @@ mod tests {
                 _libvirt_definition: libvirt_definition,
                 guestos_boot_timeout: GUESTOS_BOOT_TIMEOUT,
                 guest_serial_log: NamedTempFile::new().unwrap(),
+                command_runner: Arc::new(MockAsyncCommandRunner::new()),
             }
         }
 
@@ -1000,6 +1016,7 @@ mod tests {
                 _upgrade_mapped_device: None,
                 guestos_boot_timeout: self.guestos_boot_timeout,
                 vm_serial_log_path: self.guest_serial_log.path().to_path_buf(),
+                command_runner: self.command_runner.clone(),
             };
 
             // Start the service in the background

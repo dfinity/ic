@@ -95,6 +95,15 @@ impl<State> Labeled<State> {
     }
 }
 
+/// A state hash for a height to be signed and certified by consensus.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StateHashMetadata {
+    /// The state height.
+    pub height: Height,
+    /// The state hash at the height.
+    pub hash: CryptoHashOfPartialState,
+}
+
 /// APIs related to fetching and certifying the state.
 // tag::state-manager-interface[]
 pub trait StateManager: StateReader {
@@ -144,7 +153,7 @@ pub trait StateManager: StateReader {
     ///   let l_2 = state_manager.list_state_hashes_to_certify()
     ///   ∀ (h_1, H_1) ∈ l_1, (h_2, H_2) ∈ l_2: h_1 = h_2 ⇒ H_1 = H_2
     ///   ```
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)>;
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
 
     /// Delivers a `certification` corresponding to some state hash / height
     /// pair.
@@ -226,11 +235,8 @@ pub trait StateManager: StateReader {
     /// Notify the state manager that states committed with partial certification
     /// state and heights strictly less than the specified `height` can be removed, except
     /// for any heights provided in `extra_heights_to_keep`, which will still be retained.
-    /// The specified `height` is expected to be the *latest certified height*
-    /// of the subnet, i.e., the latest height for which a valid certification is available
-    /// to consensus.
-    /// There are no guarantees for future heights in `extra_heights_to_keep`
-    /// w.r.t. the height of the latest state snapshot stored by the state manager.
+    ///
+    /// The heights in `extra_heights_to_keep` only apply to this call.
     ///
     /// Note that:
     ///  * The initial state (height = 0) is not removed.
@@ -244,6 +250,10 @@ pub trait StateManager: StateReader {
         height: Height,
         extra_heights_to_keep: &BTreeSet<Height>,
     );
+
+    /// Notify the state manager that it could skip cloning and hashing the state
+    /// at heights strictly less than the specified `height`.
+    fn update_fast_forward_height(&self, height: Height);
 
     /// Commits the `state` at given `height`, limits the certification to
     /// `scope`. The `state` must be the mutable state obtained via a call to
