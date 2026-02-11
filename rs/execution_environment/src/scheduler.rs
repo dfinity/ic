@@ -1567,8 +1567,8 @@ impl Scheduler for SchedulerImpl {
                     } else {
                         (old_log.bytes_used(), old_log.delta_log_sizes())
                     };
-                    // IMPORTANT: clear_delta_log_sizes() must be called unconditionally to
-                    // make sure that the delta log sizes are always empty at the end of the round.
+                    // IMPORTANT: clear_delta_log_sizes() must be called to make sure
+                    // that the delta log sizes are always empty at the end of the round.
                     new_log.clear_delta_log_sizes();
                     old_log.clear_delta_log_sizes();
                     self.metrics
