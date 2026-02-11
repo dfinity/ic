@@ -858,7 +858,7 @@ sysinfo = "0.37"
 systemd = "0.10"
 tar = "0.4.39"
 tempfile = "3.20"
-thiserror = "2.0.3"
+thiserror = "2.0.18"
 threadpool = "1.8.1"
 tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
 tikv-jemallocator = "0.6"
