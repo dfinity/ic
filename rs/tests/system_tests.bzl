@@ -78,8 +78,9 @@ def system_test(
       For example: [ "performance" ]
       guestos: see configure_icos().
       guestos_update: see configure_icos().
-      setupos: see configure_icos().
+      hostos: see configure_icos().
       hostos_update: see configure_icos().
+      setupos: see configure_icos().
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
