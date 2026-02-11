@@ -26,23 +26,22 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
+    CallOrigin, CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology,
     ReplicatedState,
     canister_state::{
         NextExecution, execution_state::NextScheduledMethod, system_state::CyclesUseCase,
     },
-    num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MAX_WASM_MEMORY_IN_BYTES,
-    MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId, Randomness,
-    ReplicaVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
+    NumInstructions, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
     messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage},
 };
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
+use ic_utils::iter::left_outer_join;
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
 use prometheus::Histogram;
@@ -491,7 +490,6 @@ impl SchedulerImpl {
             round_schedule.charge_idle_canisters(
                 &mut canisters,
                 &mut round_fully_executed_canister_ids,
-                current_round,
                 is_first_iteration,
             );
 
@@ -559,6 +557,20 @@ impl SchedulerImpl {
             );
             state.put_canister_states(canisters);
 
+            // TODO(IC-1976): When we only schedule (and have `CanisterPriorities` for)
+            // active canisters, switch back to `SubnetSchedule::get_mut()`. For now, all
+            // canisters are scheduled, so we always have a matching `CanisterPriority`.
+            for (_, _, canister_priority) in left_outer_join(
+                round_fully_executed_canister_ids
+                    .iter()
+                    .map(|canister_id| (canister_id, ())),
+                state.metadata.subnet_schedule.iter_mut(),
+            ) {
+                if let Some(canister_priority) = canister_priority {
+                    canister_priority.last_full_execution_round = current_round;
+                }
+            }
+
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
             round_limits.instructions -= as_round_instructions(
@@ -619,16 +631,17 @@ impl SchedulerImpl {
         // We only export metrics for "executable" canisters to ensure that the metrics
         // are not polluted by canisters that haven't had any messages for a long time.
         for canister_id in &round_filtered_canisters.active_canister_ids {
-            let canister_state = state.canister_state(canister_id).unwrap();
             // Newly created canisters have `last_full_execution_round` set to zero,
             // and hence skew the `canister_age` metric.
-            let last_full_execution_round =
-                canister_state.scheduler_state.last_full_execution_round;
+            let last_full_execution_round = state
+                .canister_priority(canister_id)
+                .last_full_execution_round;
             if last_full_execution_round.get() != 0 {
                 let canister_age = current_round.get() - last_full_execution_round.get();
                 self.metrics.canister_age.observe(canister_age as f64);
                 // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
                 // scheduled.
+                let canister_state = state.canister_state(canister_id).unwrap();
                 let allocation = Ratio::new(canister_state.compute_allocation().as_percent(), 100);
                 if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
                 {
@@ -891,42 +904,43 @@ impl SchedulerImpl {
     ) {
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
+        let threshold_last_allocation_charge = state_time.saturating_sub(
+            self.cycles_account_manager
+                .duration_between_allocation_charges(),
+        );
         let mut canisters_to_uninstall = Vec::new();
         for canister in state.canisters_iter_mut() {
+            if canister.system_state.time_of_last_allocation_charge
+                > threshold_last_allocation_charge
+            {
+                // Skip charging for the resources in this round because not enough time has passed
+                // since the last charge happened.
+                continue;
+            }
+
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
             if canister.has_paused_execution() || canister.has_paused_install_code() {
                 continue;
             }
 
-            if state_time
-                < canister.system_state.time_of_last_allocation_charge
-                    + self
-                        .cycles_account_manager
-                        .duration_between_allocation_charges()
+            self.observe_canister_metrics(canister);
+            let duration_since_last_charge =
+                canister.duration_since_last_allocation_charge(state_time);
+            canister.system_state.time_of_last_allocation_charge = state_time;
+            if self
+                .cycles_account_manager
+                .charge_canister_for_resource_allocation_and_usage(
+                    &self.log,
+                    canister,
+                    duration_since_last_charge,
+                    registry_settings.subnet_size,
+                    cost_schedule,
+                )
+                .is_err()
             {
-                // Skip charging for the resources in this round because not enough time has passed
-                // since the last charge happened.
-                continue;
-            } else {
-                self.observe_canister_metrics(canister);
-                let duration_since_last_charge =
-                    canister.duration_since_last_allocation_charge(state_time);
-                canister.system_state.time_of_last_allocation_charge = state_time;
-                if self
-                    .cycles_account_manager
-                    .charge_canister_for_resource_allocation_and_usage(
-                        &self.log,
-                        canister,
-                        duration_since_last_charge,
-                        registry_settings.subnet_size,
-                        cost_schedule,
-                    )
-                    .is_err()
-                {
-                    let canister_id = canister.canister_id();
-                    canisters_to_uninstall.push(canister_id);
-                }
+                let canister_id = canister.canister_id();
+                canisters_to_uninstall.push(canister_id);
             }
         }
 
@@ -1111,11 +1125,12 @@ impl SchedulerImpl {
             .canisters_iter()
             .filter_map(|canister| {
                 if canister.has_paused_execution() {
+                    let canister_priority = state.canister_priority(&canister.canister_id());
                     Some(CanisterRoundState {
                         canister_id: canister.canister_id(),
-                        accumulated_priority: canister.scheduler_state.accumulated_priority,
+                        accumulated_priority: canister_priority.accumulated_priority,
                         compute_allocation: Default::default(), // not used
-                        long_execution_mode: canister.scheduler_state.long_execution_mode,
+                        long_execution_mode: canister_priority.long_execution_mode,
                         has_aborted_or_paused_execution: true,
                     })
                 } else {
@@ -1155,36 +1170,7 @@ impl SchedulerImpl {
                 self.abort_paused_executions_above_limit(state);
             }
         }
-        self.initialize_wasm_memory_limit(state);
         self.check_dts_invariants(state, current_round_type);
-    }
-
-    fn initialize_wasm_memory_limit(&self, state: &mut ReplicatedState) {
-        fn compute_default_wasm_memory_limit(default: NumBytes, usage: NumBytes) -> NumBytes {
-            // Returns the larger of the two:
-            // - the default value
-            // - the average between the current usage and the hard limit.
-            default.max(NumBytes::new(
-                MAX_WASM_MEMORY_IN_BYTES.saturating_add(usage.get()) / 2,
-            ))
-        }
-
-        let default_wasm_memory_limit = self.exec_env.default_wasm_memory_limit();
-        for (_id, canister) in state.canister_states.iter_mut() {
-            if canister.system_state.wasm_memory_limit.is_none() {
-                let num_wasm_pages = canister
-                    .execution_state
-                    .as_ref()
-                    .map_or_else(|| NumWasmPages::new(0), |es| es.wasm_memory.size);
-                if let Ok(wasm_memory_usage) = num_bytes_try_from(num_wasm_pages) {
-                    canister.system_state.wasm_memory_limit =
-                        Some(compute_default_wasm_memory_limit(
-                            default_wasm_memory_limit,
-                            wasm_memory_usage,
-                        ));
-                }
-            }
-        }
     }
 
     /// Checks the deterministic time slicing invariant after round execution.
@@ -1481,12 +1467,13 @@ impl Scheduler for SchedulerImpl {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
 
             RoundSchedule::apply_scheduling_strategy(
-                &round_log,
+                &mut state.canister_states,
+                &mut state.metadata.subnet_schedule,
                 self.config.scheduler_cores,
                 current_round,
                 self.config.accumulated_priority_reset_interval,
-                &mut state.canister_states,
                 &self.metrics,
+                &round_log,
             )
         };
 
@@ -1669,7 +1656,8 @@ impl Scheduler for SchedulerImpl {
                     .set(final_state.canister_snapshots.count() as i64);
             }
             round_schedule.finish_round(
-                &mut final_state.canister_states,
+                &final_state.canister_states,
+                &mut final_state.metadata.subnet_schedule,
                 fully_executed_canister_ids,
             );
             self.finish_round(&mut final_state, current_round_type);
@@ -1921,9 +1909,8 @@ fn execute_canisters_on_thread(
             es.last_executed_round = round_id;
         }
         RoundSchedule::finish_canister_execution(
-            &mut canister,
+            &canister,
             &mut fully_executed_canister_ids,
-            round_id,
             is_first_iteration,
             rank,
         );
@@ -2041,25 +2028,27 @@ fn observe_replicated_state_metrics(
             canisters_not_in_routing_table += 1;
         }
         if let Some(manager) = canister.system_state.call_context_manager() {
-            let old_call_contexts =
-                manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF_ONE_DAY);
             // Log all old call contexts, but not (nearly) every round.
-            if current_round
-                .get()
-                .is_multiple_of(SPAMMY_LOG_INTERVAL_ROUNDS)
-            {
-                for (origin, origin_time) in &old_call_contexts {
+            let maybe_log_old_call_contexts = |origin: &CallOrigin, origin_time: Time| {
+                if current_round
+                    .get()
+                    .is_multiple_of(SPAMMY_LOG_INTERVAL_ROUNDS)
+                {
                     warn!(
                         logger,
                         "Call context on canister {} with origin {:?} has been open for {:?}",
                         canister.canister_id(),
                         origin,
-                        state.time().saturating_duration_since(*origin_time),
+                        state.time().saturating_duration_since(origin_time),
                     );
                 }
-            }
-            if !old_call_contexts.is_empty() {
-                old_call_contexts_count += old_call_contexts.len();
+            };
+            let old_call_contexts = manager.call_contexts_older_than(
+                state.time().saturating_sub(OLD_CALL_CONTEXT_CUTOFF_ONE_DAY),
+                maybe_log_old_call_contexts,
+            );
+            if old_call_contexts > 0 {
+                old_call_contexts_count += old_call_contexts;
                 canisters_with_old_open_call_contexts += 1;
             }
         }
