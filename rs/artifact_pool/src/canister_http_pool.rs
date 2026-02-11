@@ -58,7 +58,7 @@ impl CanisterHttpPoolImpl {
                 POOL_TYPE_UNVALIDATED,
             ),
             content: ContentCanisterHttpPoolSection::new(
-                metrics.clone(),
+                metrics,
                 POOL_CANISTER_HTTP_CONTENT,
                 POOL_TYPE_VALIDATED,
             ),
@@ -185,7 +185,7 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
                     let payment_share = self
                         .unvalidated
                         .get(&id)
-                        .map(|artifact| artifact.payment_share.clone());
+                        .map(|artifact| &artifact.payment_share);
 
                     self.invalidated_artifacts.inc();
                     warn!(
