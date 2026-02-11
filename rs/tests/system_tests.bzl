@@ -35,6 +35,7 @@ def system_test(
         guestos = True,
         guestos_update = False,
         setupos = False,
+        hostos = False,
         hostos_update = False,
         env = {},
         env_inherit = [],
@@ -77,8 +78,9 @@ def system_test(
       For example: [ "performance" ]
       guestos: see configure_icos().
       guestos_update: see configure_icos().
-      setupos: see configure_icos().
+      hostos: see configure_icos().
       hostos_update: see configure_icos().
+      setupos: see configure_icos().
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
@@ -127,7 +129,7 @@ def system_test(
     icos_images = dict()
 
     # # IC-OS image configuration
-    icos_config = configure_icos(guestos = guestos, guestos_update = guestos_update, setupos = setupos, hostos_update = hostos_update)
+    icos_config = configure_icos(guestos = guestos, guestos_update = guestos_update, hostos = hostos, hostos_update = hostos_update, setupos = setupos)
     env_var_files |= icos_config.env_var_files
     env |= icos_config.env
     _runtime_deps |= icos_config.runtime_deps
