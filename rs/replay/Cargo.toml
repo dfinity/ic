@@ -21,6 +21,7 @@ ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-error-types = { path = "../../packages/ic-error-types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
