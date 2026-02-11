@@ -22,10 +22,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response};
 use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{
-    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
-    MemoryAllocation, NumBytes, PrincipalId, Time,
+    CanisterId, CanisterLog, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, Time,
 };
-use ic_types::{LongExecutionMode, NumInstructions};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
@@ -37,27 +36,6 @@ use std::time::Duration;
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
-    /// The last full round that a canister got the chance to execute. This
-    /// means that the canister was given the first pulse in the round or
-    /// consumed its input queue.
-    pub last_full_execution_round: ExecutionRound,
-
-    /// Keeps the current priority of this canister, accumulated during the past
-    /// rounds. In the scheduler analysis documentation, this value is the entry
-    /// in the vector d that corresponds to this canister.
-    pub accumulated_priority: AccumulatedPriority,
-
-    /// Keeps the current priority credit of this Canister, accumulated during the
-    /// long execution.
-    ///
-    /// During the long execution, the Canister is temporarily credited with priority
-    /// to slightly boost the long execution priority. Only when the long execution
-    /// is done, then the `accumulated_priority` is decreased by the `priority_credit`.
-    pub priority_credit: AccumulatedPriority,
-
-    /// Long execution mode: Opportunistic (default) or Prioritized
-    pub long_execution_mode: LongExecutionMode,
-
     /// The amount of heap delta debit. The canister skips execution of update
     /// messages if this value is non-zero.
     pub heap_delta_debit: NumBytes,
@@ -70,10 +48,6 @@ pub struct SchedulerState {
 impl Default for SchedulerState {
     fn default() -> Self {
         Self {
-            last_full_execution_round: 0.into(),
-            accumulated_priority: AccumulatedPriority::default(),
-            priority_credit: AccumulatedPriority::default(),
-            long_execution_mode: LongExecutionMode::default(),
             heap_delta_debit: 0.into(),
             install_code_debit: 0.into(),
         }

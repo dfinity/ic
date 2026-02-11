@@ -260,7 +260,7 @@ go.sum                    @dfinity/idx
 /rs/tests/node/                                         @dfinity/node
 /rs/tests/query_stats/                                  @dfinity/team-dsm @dfinity/consensus
 /rs/tests/sdk/                                          @dfinity/sdk
-/rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
+/rs/tla_instrumentation/                                @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/defi
 /rs/tree_deserializer/                                  @dfinity/team-dsm
