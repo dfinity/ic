@@ -2510,15 +2510,14 @@ mod tests {
     }
 
     async fn test_upgrade(test_scenario: UpgradeTestScenario) {
-        let logger = InMemoryReplicaLogger::new();
-        let replica_logger = ReplicaLogger::from(&logger);
         let data_provider = test_scenario.setup_registry();
 
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
         let mut upgrade_loop = create_upgrade_for_test(
             tmp_path,
-            replica_logger,
+            ReplicaLogger::from(&logger),
             test_scenario.clone(),
             data_provider,
         )
@@ -2793,15 +2792,14 @@ mod tests {
             }),
         };
 
-        let logger = InMemoryReplicaLogger::new();
-        let replica_logger = ReplicaLogger::from(&logger);
         let data_provider = test_scenario.setup_registry();
 
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
         let mut upgrade_loop = create_upgrade_for_test(
             tmp_path,
-            replica_logger,
+            ReplicaLogger::from(&logger),
             test_scenario.clone(),
             data_provider,
         )
@@ -2835,15 +2833,14 @@ mod tests {
             }),
         };
 
-        let logger = InMemoryReplicaLogger::new();
-        let replica_logger = ReplicaLogger::from(&logger);
         let data_provider = test_scenario.setup_registry();
 
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
         let mut upgrade_loop = create_upgrade_for_test(
             tmp_path,
-            replica_logger,
+            ReplicaLogger::from(&logger),
             test_scenario.clone(),
             data_provider,
         )
