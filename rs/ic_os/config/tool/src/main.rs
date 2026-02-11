@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Error, Result, bail};
 use clap::{Parser, Subcommand};
 use config_tool::guestos::bootstrap_ic_node::bootstrap_ic_node;
 use config_tool::guestos::generate_ic_config;
@@ -148,8 +148,7 @@ pub fn main() -> Result<()> {
 
             let use_ssh_authorized_keys = Path::new("/config/ssh_authorized_keys").exists();
 
-            #[allow(unused_mut)]
-            let mut setupos_config = assemble_setupos_config(
+            let setupos_config = assemble_setupos_config(
                 node_reward_type,
                 mgmt_mac,
                 deployment_json_settings.deployment.deployment_environment,
@@ -158,21 +157,11 @@ pub fn main() -> Result<()> {
                 enable_trusted_execution_environment,
                 node_operator_private_key,
                 use_ssh_authorized_keys,
+                nns_public_key_override_path,
                 verbose,
                 network_settings,
-            );
-
-            // If the NNS pubkey override exists - read it and put into the config
-            #[cfg(feature = "dev")]
-            if nns_public_key_override_path.exists() {
-                let nns_public_key_override = fs::read_to_string(&nns_public_key_override_path)
-                    .context("unable to read NNS public key override")?;
-
-                setupos_config
-                    .guestos_settings
-                    .guestos_dev_settings
-                    .nns_pub_key_override = Some(nns_public_key_override);
-            }
+            )
+            .context("unable to assemble SetupOS config")?;
 
             println!("SetupOSConfig: {setupos_config:?}");
 
@@ -279,9 +268,10 @@ pub fn assemble_setupos_config(
     enable_trusted_execution_environment: bool,
     node_operator_private_key: Option<String>,
     use_ssh_authorized_keys: bool,
+    nns_public_key_override_path: PathBuf,
     verbose: bool,
     network_settings: NetworkSettings,
-) -> SetupOSConfig {
+) -> Result<SetupOSConfig, Error> {
     let icos_settings = ICOSSettings {
         node_reward_type,
         mgmt_mac,
@@ -305,14 +295,24 @@ pub fn assemble_setupos_config(
         },
     };
 
-    let guestos_settings = GuestOSSettings::default();
+    #[allow(unused_mut)]
+    let mut guestos_settings = GuestOSSettings::default();
 
-    SetupOSConfig {
+    // If the NNS pubkey override exists - read it and put into the config
+    #[cfg(feature = "dev")]
+    if nns_public_key_override_path.exists() {
+        let nns_public_key_override = fs::read_to_string(&nns_public_key_override_path)
+            .context("unable to read NNS public key override")?;
+
+        guestos_settings.guestos_dev_settings.nns_pub_key_override = Some(nns_public_key_override);
+    }
+
+    Ok(SetupOSConfig {
         config_version: CONFIG_VERSION.to_string(),
         network_settings,
         icos_settings,
         setupos_settings,
         hostos_settings,
         guestos_settings,
-    }
+    })
 }

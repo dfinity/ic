@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:macaddr",
     "@crate_index//:regex",
     "@crate_index//:rust_ini",
+    "@crate_index//:securefmt",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
