@@ -713,7 +713,7 @@ pub(crate) mod tests {
     }
 
     fn mock_tls_config_impl<Times: Into<mockall::TimesRange>>(
-        opt_n: Option<Times>,
+        opt_times: Option<Times>,
     ) -> MockTlsConfig {
         #[derive(Debug)]
         struct NoVerify;
@@ -760,8 +760,8 @@ pub(crate) mod tests {
         let expectation = tls_config
             .expect_client_config()
             .returning(move |_, _| Ok(accept_any_config.clone()));
-        if let Some(n) = opt_n {
-            expectation.times(n);
+        if let Some(t) = opt_times {
+            expectation.times(t);
         }
         tls_config
     }
