@@ -19,7 +19,7 @@ use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use proptest::prelude::*;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
