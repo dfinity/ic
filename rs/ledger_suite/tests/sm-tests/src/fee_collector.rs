@@ -147,6 +147,32 @@ pub fn test_fee_collector_107_access_denied<T>(
     assert_eq!(err, SetFeeCollectorError::AccessDenied("The `icrc107_set_fee_collector` endpoint can only be called by the canister controller".to_string()));
 }
 
+pub fn test_fee_collector_107_minting_account<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    let minter = minting_account(&env, canister_id).unwrap();
+
+    let controllers = env
+        .get_controllers(canister_id)
+        .expect("ledger should have a controller");
+    assert_eq!(controllers.len(), 1);
+    let controller = controllers[0];
+    let result = set_fc_107(&env, canister_id, controller, Some(minter));
+
+    let err = result.unwrap_err();
+    assert_eq!(
+        err,
+        SetFeeCollectorError::InvalidAccount(
+            "The fee collector cannot be set to minting account".to_string()
+        )
+    );
+}
+
 fn get_fc_107_from_ledger(env: &StateMachine, canister_id: CanisterId) -> Option<Account> {
     Decode!(
         &env.query(canister_id, "icrc107_get_fee_collector", Encode!().unwrap())

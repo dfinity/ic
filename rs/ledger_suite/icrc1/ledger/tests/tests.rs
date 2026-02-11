@@ -768,6 +768,14 @@ fn test_fee_collector_107_access_denied() {
 }
 
 #[test]
+fn test_fee_collector_107_minting_account() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_minting_account(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_fee_collector_107_smoke() {
     ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_107_smoke(
         ledger_wasm(),

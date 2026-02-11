@@ -1046,6 +1046,13 @@ async fn icrc107_set_fee_collector(arg: SetFeeCollectorArgs) -> Result<Nat, SetF
         ));
     }
 
+    let minting_account = Access::with_ledger(|ledger| *ledger.minting_account());
+    if arg.fee_collector == Some(minting_account) {
+        return Err(SetFeeCollectorError::InvalidAccount(
+            "The fee collector cannot be set to minting account".to_string(),
+        ));
+    }
+
     let tx = Transaction {
         operation: Operation::FeeCollector {
             fee_collector: arg.fee_collector,
