@@ -410,7 +410,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         &BTreeMap::from([(node_id, vec![pub_key])]),
                     )))
                 } else {
-                    // TODO (CON-XXXX): Remove this branch and only use `take_subnet_offline_for_repairs`
+                    // TODO (CON-1637): Remove this branch and only use `take_subnet_offline_for_repairs`
                     Ok(Box::new(self.recovery.halt_subnet(
                         self.params.subnet_id,
                         true,
@@ -582,11 +582,22 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::Unhalt => Ok(Box::new(self.recovery.halt_subnet(
-                self.params.subnet_id,
-                false,
-                &["".to_string()],
-            ))),
+            StepType::Unhalt => {
+                if self.params.write_node_id_and_pub_key.is_some() {
+                    Ok(Box::new(
+                        self.recovery
+                            .bring_subnet_back_online_after_repairs(self.params.subnet_id),
+                    ))
+                } else {
+                    // TODO (CON-1637): Remove this branch and only use
+                    // `bring_subnet_back_online_after_repairs`
+                    Ok(Box::new(self.recovery.halt_subnet(
+                        self.params.subnet_id,
+                        false,
+                        &["".to_string()],
+                    )))
+                }
+            }
 
             StepType::Cleanup => Ok(Box::new(self.recovery.get_cleanup_step())),
         }

@@ -147,6 +147,27 @@ impl AdminHelper {
         ic_admin
     }
 
+    pub fn get_propose_to_bring_subnet_back_online_after_repairs_command(
+        &self,
+        subnet_id: SubnetId,
+    ) -> IcAdmin {
+        let mut ic_admin = self.get_ic_admin_cmd_base();
+
+        ic_admin
+            .add_positional_argument("propose-to-bring-subnet-back-online-after-repairs")
+            .add_argument("subnet", subnet_id)
+            .add_argument(
+                SUMMARY_ARG,
+                quote(format!(
+                    "Bring subnet {subnet_id} back online after repairs",
+                )),
+            );
+
+        self.add_proposer_args(&mut ic_admin);
+
+        ic_admin
+    }
+
     pub fn get_propose_to_update_elected_replica_versions_command(
         &self,
         upgrade_version: &ReplicaVersion,

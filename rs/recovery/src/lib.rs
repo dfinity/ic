@@ -299,6 +299,16 @@ impl Recovery {
         }
     }
 
+    /// Return a recovery [AdminStep] to bring the given subnet back online after repairs
+    pub fn bring_subnet_back_online_after_repairs(&self, subnet_id: SubnetId) -> impl Step + use<> {
+        AdminStep {
+            logger: self.logger.clone(),
+            ic_admin_cmd: self
+                .admin_helper
+                .get_propose_to_bring_subnet_back_online_after_repairs_command(subnet_id),
+        }
+    }
+
     // Execute an `ic-admin` command, log the output.
     fn exec_admin_cmd(logger: &Logger, ic_admin_cmd: &IcAdmin) -> RecoveryResult<()> {
         let mut cmd = AdminHelper::to_system_command(ic_admin_cmd);
