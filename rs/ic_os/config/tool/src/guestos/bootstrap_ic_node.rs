@@ -24,11 +24,10 @@ fn populate_nns_public_key(
     guestos_config: &GuestOSConfig,
 ) -> Result<()> {
     let nns_key_dst = root.join(NNS_KEY_PATH);
-    let nns_key_src = root.join(NNS_KEY_DEFAULT_PATH);
 
     // Get the override key from the config if we're in dev environment & it was set
     #[cfg(feature = "dev")]
-    let nns_key_src = if let Some(v) = guestos_config
+    if let Some(v) = guestos_config
         .guestos_settings
         .guestos_dev_settings
         .nns_pub_key_override
@@ -47,14 +46,9 @@ fn populate_nns_public_key(
         fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))
             .context("unable to set NNS public key permissions")?;
         return Ok(());
-    } else if bootstrap_dir.join("nns_public_key_override.pem").exists() {
-        // Otherwise try to copy the override file from the bootstrap dir.
-        // TODO remove this branch when HostOS is upgraded to put the override key in GuestOSConfig
-        bootstrap_dir.join("nns_public_key_override.pem")
-    } else {
-        root.join(NNS_KEY_DEFAULT_PATH)
     };
 
+    let nns_key_src = root.join(NNS_KEY_DEFAULT_PATH);
     // Otherwise just copy the normal key from the rootfs
     println!(
         "Copying {} to {}",

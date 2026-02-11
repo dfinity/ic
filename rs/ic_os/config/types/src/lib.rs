@@ -120,7 +120,7 @@ pub struct GuestOSConfig {
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+#[derive(Serialize, Deserialize, securefmt::Debug, PartialEq, Eq, Clone, Default)]
 pub struct ICOSSettings {
     /// The node reward type determines node rewards
     pub node_reward_type: Option<String>,
@@ -132,10 +132,11 @@ pub struct ICOSSettings {
     pub deployment_environment: DeploymentEnvironment,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    /// TODO: Remove after HostOS is upgraded and `node_operator_private_key` is used
+    /// TODO(NODE-1838): Remove after HostOS is upgraded and `node_operator_private_key` is used
     #[serde(default)]
     pub use_node_operator_private_key: bool,
     /// PEM-encoded Node Operator private key
+    #[sensitive]
     pub node_operator_private_key: Option<String>,
     /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
     /// If the value is enabled, we check during deployment that SEV-SNP is supported

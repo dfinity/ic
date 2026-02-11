@@ -20,12 +20,13 @@ pub enum Commands {
     CreateSetuposConfig {
         #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
         config_ini_path: PathBuf,
-
         #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
         deployment_json_path: PathBuf,
-
         #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
+        #[cfg(feature = "dev")]
+        #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_NNS_PUBLIC_KEY_OVERRIDE_PATH, value_name = "nns_public_key_override.pem")]
+        nns_public_key_override_path: PathBuf,
     },
     /// Creates HostOSConfig object from existing SetupOS config.json file
     GenerateHostosConfig {
@@ -33,8 +34,6 @@ pub enum Commands {
         setupos_config_json_path: PathBuf,
         #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
         hostos_config_json_path: PathBuf,
-        #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_NNS_PUBLIC_KEY_OVERRIDE_PATH, value_name = "nns_public_key_override.pem")]
-        nns_public_key_override_path: PathBuf,
     },
     /// Bootstrap IC Node from a bootstrap package & guestos config
     BootstrapICNode {
@@ -67,6 +66,8 @@ pub fn main() -> Result<()> {
             config_ini_path,
             deployment_json_path,
             setupos_config_json_path,
+            #[cfg(feature = "dev")]
+            nns_public_key_override_path,
         }) => {
             // get config.ini settings
             let ConfigIniSettings {
@@ -141,7 +142,8 @@ pub fn main() -> Result<()> {
 
             let use_ssh_authorized_keys = Path::new("/config/ssh_authorized_keys").exists();
 
-            let setupos_config = assemble_setupos_config(
+            #[allow(unused_mut)]
+            let mut setupos_config = assemble_setupos_config(
                 node_reward_type,
                 mgmt_mac,
                 deployment_json_settings.deployment.deployment_environment,
@@ -153,6 +155,20 @@ pub fn main() -> Result<()> {
                 verbose,
                 network_settings,
             );
+
+            // If the NNS pubkey override exists - read it and put into the config
+            #[cfg(feature = "dev")]
+            if nns_public_key_override_path.exists() {
+                let nns_public_key_override = fs::read_to_string(&nns_public_key_override_path)
+                    .context("unable to read NNS public key override")?;
+
+                setupos_config
+                    .guestos_settings
+                    .guestos_dev_settings
+                    .nns_pub_key_override = Some(nns_public_key_override);
+            }
+
+            println!("SetupOSConfig: {setupos_config:?}");
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;
@@ -167,26 +183,11 @@ pub fn main() -> Result<()> {
         Some(Commands::GenerateHostosConfig {
             setupos_config_json_path,
             hostos_config_json_path,
-            #[allow(unused_variables)]
-            nns_public_key_override_path,
         }) => {
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
 
-            #[allow(unused_mut)]
-            let mut setupos_config: SetupOSConfig =
+            let setupos_config: SetupOSConfig =
                 config_tool::deserialize_config(setupos_config_json_path)?;
-
-            // If the NNS pubkey override exists - read it and put into the config
-            #[cfg(feature = "dev")]
-            if nns_public_key_override_path.exists() {
-                let nns_public_key_override = fs::read_to_string(&nns_public_key_override_path)
-                    .context("unable to read NNS public key override")?;
-
-                setupos_config
-                    .guestos_settings
-                    .guestos_dev_settings
-                    .nns_pub_key_override = Some(nns_public_key_override);
-            }
 
             let hostos_config = HostOSConfig {
                 config_version: setupos_config.config_version,

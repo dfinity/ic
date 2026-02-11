@@ -814,6 +814,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
+securefmt = "0.1.5"
 semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"

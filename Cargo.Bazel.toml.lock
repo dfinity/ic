@@ -3864,6 +3864,7 @@ dependencies = [
  "scraper",
  "scrypt",
  "secp256k1 0.22.2",
+ "securefmt",
  "semver",
  "serde",
  "serde-bytes-repr",
@@ -12095,6 +12096,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1433bd67156263443f14d603720b082dd3121779323fce20cba2aa07b874bc1b"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "securefmt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95d159bf5e6b8c35033c3742a00cb8e7370a217af82e5d304a0d3ce4930e41fe"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.110",
+ "thiserror 1.0.68",
 ]
 
 [[package]]

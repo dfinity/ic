@@ -46,20 +46,6 @@ function update_config_version_metric() {
         "gauge"
 }
 
-function update_node_operator_private_key_metric() {
-    node_operator_private_key_exists=0
-
-    node_operator_private_key_str=$(get_config_value '.icos_settings.node_operator_private_key')
-    if [ "${node_operator_private_key_str}" != "null" ]; then
-        node_operator_private_key_exists=1
-    fi
-
-    write_metric "guestos_node_operator_private_key_exists" \
-        "${node_operator_private_key_exists}" \
-        "Existence of a Node Operator private key indicates the node deployment method" \
-        "gauge"
-}
-
 function update_tee_metrics() {
     # Define the metric metadata once.
     local metric_family="guestos_tee"
@@ -93,7 +79,6 @@ function main() {
     update_guestos_version_metric
     update_guestos_boot_action_metric
     update_config_version_metric
-    update_node_operator_private_key_metric
     update_tee_metrics
 }
 
