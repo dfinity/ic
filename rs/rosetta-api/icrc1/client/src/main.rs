@@ -120,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to get network list: {:?}", e))?
         .network_identifiers[0];
 
-    let sender_keypair = Arc::new(BasicIdentity::from_pem(&pem_contents)?);
+    let sender_keypair = Arc::new(BasicIdentity::from_pem(&*pem_contents)?);
 
     match args.operation_type {
         OperationType::Approve {
