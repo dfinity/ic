@@ -9,8 +9,8 @@ use ic_management_canister_types_private::{
 use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister, try_call_via_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet, try_call_via_universal_canister,
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
@@ -37,7 +37,7 @@ use common::test_helpers::get_subnet_record;
 
 #[test]
 fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // TEST_ID is used as subnet_id also when creating the initial registry state below.
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(TEST_ID));
 
@@ -127,7 +127,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_configuration() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
             PrincipalId::from_str(
                 "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
@@ -241,7 +241,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
 
 #[test]
 fn test_the_governance_canister_can_update_a_subnets_configuration() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
             PrincipalId::from_str(
                 "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
@@ -429,7 +429,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         must first be separately submitted.'"
     );
 
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
             PrincipalId::from_str(
                 "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",

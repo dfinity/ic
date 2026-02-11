@@ -3322,12 +3322,8 @@ fn with_test_setup_and_config(
                     // corresponds to `LOCAL_CANISTER`; else use a dummy callback id.
                     if originator == *LOCAL_CANISTER {
                         // Register a `Callback` and get a `CallbackId`.
-                        let callback_id = register_callback(
-                            &mut canister_state,
-                            originator,
-                            respondent,
-                            deadline,
-                        );
+                        let callback_id =
+                            register_callback(&mut canister_state, respondent, deadline);
 
                         // Make an input queue reservation.
                         canister_state

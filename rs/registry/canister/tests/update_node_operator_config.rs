@@ -7,8 +7,8 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
@@ -28,7 +28,7 @@ use maplit::btreemap;
 
 #[test]
 fn test_non_governance_users_cannot_update_node_operator_config() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the proposals
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -105,7 +105,7 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
 
 #[test]
 fn test_accepted_proposal_mutates_the_registry() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let node_operator_key = make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let node_operator_record = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
@@ -208,7 +208,7 @@ fn test_accepted_proposal_mutates_the_registry() {
 /// rs/registry/canister/src/mutations/do_update_node_operator_config.rs
 #[test]
 fn test_set_ipv6_none() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let node_operator_key = make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let node_operator_record = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),

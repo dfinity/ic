@@ -8,7 +8,7 @@ use ic_management_canister_types_private::IC_00;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, NO_DEADLINE, Request,
-    RequestMetadata, Response,
+    RequestMetadata,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
@@ -19,7 +19,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::{From, TryFrom, TryInto};
 use std::sync::Arc;
-use std::time::Duration;
 
 #[cfg(test)]
 use std::collections::BTreeMap;
@@ -277,53 +276,6 @@ impl CallContextManagerStats {
     }
 
     /// Calculates the expected number of response slots (responses plus
-    /// reservations) per input queue.
-    ///
-    /// This is the count of callbacks per respondent; except for the callback
-    /// corresponding to a potential paused or aborted canister response execution
-    /// (since this response was just delivered).
-    ///
-    /// Time complexity: `O(n)`.
-    #[cfg(test)]
-    pub(crate) fn calculate_unresponded_callbacks_per_respondent(
-        callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
-        aborted_or_paused_response: Option<&Response>,
-    ) -> BTreeMap<CanisterId, usize> {
-        use std::collections::btree_map::Entry;
-
-        let mut callback_counts = callbacks.values().fold(
-            BTreeMap::<CanisterId, usize>::new(),
-            |mut counts, callback| {
-                *counts.entry(callback.respondent).or_default() += 1;
-                counts
-            },
-        );
-
-        // Discount the callback corresponding to an aborted or paused response
-        // execution, because this response was already delivered.
-        if let Some(response) = aborted_or_paused_response {
-            match callback_counts.entry(response.respondent) {
-                Entry::Occupied(mut entry) => {
-                    let count = entry.get_mut();
-                    if *count > 1 {
-                        *count -= 1;
-                    } else {
-                        entry.remove();
-                    }
-                }
-                Entry::Vacant(_) => {
-                    debug_assert!(
-                        false,
-                        "Aborted or paused DTS response with no matching callback: {response:?}"
-                    )
-                }
-            }
-        }
-
-        callback_counts
-    }
-
-    /// Calculates the expected number of response slots (responses plus
     /// reservations) per output queue corresponding to unresponded call contexts.
     ///
     /// This is the count of unresponded call contexts per originator; potentially
@@ -521,7 +473,6 @@ impl CallContextManager {
     pub(super) fn on_canister_result(
         &mut self,
         call_context_id: CallContextId,
-        callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> (CallContextAction, Option<CallContext>) {
@@ -532,10 +483,6 @@ impl CallContextManager {
         enum Responded {
             Yes,
             No,
-        }
-
-        if let Some(callback_id) = callback_id {
-            self.unregister_callback(callback_id);
         }
 
         let outstanding_calls = if self.outstanding_calls(call_context_id) > 0 {
@@ -777,30 +724,29 @@ impl CallContextManager {
         self.next_callback_id
     }
 
-    /// Returns a collection of all call contexts older than the provided age.
+    /// Returns the number of call contexts older than the provided threshold time,
+    /// calling the provided function on each such call context.
     pub fn call_contexts_older_than(
         &self,
-        current_time: Time,
-        age: Duration,
-    ) -> Vec<(&CallOrigin, Time)> {
+        threshold_time: Time,
+        for_each: impl Fn(&CallOrigin, Time),
+    ) -> usize {
         // Call contexts are stored in order of increasing CallContextId, and
         // the IDs are generated sequentially, so we are iterating in order of
         // creation time. This means we can stop as soon as we encounter a call
         // context that isn't old enough.
         self.call_contexts
             .iter()
-            .take_while(|(_, call_context)| call_context.time() + age <= current_time)
-            .filter_map(|(_, call_context)| {
+            .take_while(|(_, call_context)| call_context.time() <= threshold_time)
+            .inspect(|(_, call_context)| {
                 if !call_context.is_deleted() {
-                    return Some((call_context.call_origin(), call_context.time()));
+                    for_each(call_context.call_origin(), call_context.time());
                 }
-                None
             })
-            .collect()
+            .count()
     }
 
     /// Returns the number of unresponded canister update call contexts, also taking
-    /// into account a potential paused or aborted canister request execution
     /// (equivalent to one extra call context).
     ///
     /// Time complexity: `O(1)`.
@@ -831,36 +777,20 @@ impl CallContextManager {
             }
     }
 
-    /// Returns the number of unresponded callbacks, ignoring the callback
-    /// corresponding to a potential paused or aborted canister response execution
-    /// (since this response was just delivered).
+    /// Returns the number of unresponded callbacks, including those for which
+    /// responses are already enqueued.
     ///
     /// Time complexity: `O(1)`.
-    pub fn unresponded_callback_count(
-        &self,
-        aborted_or_paused_response: Option<&Response>,
-    ) -> usize {
+    pub fn unresponded_callback_count(&self) -> usize {
         self.callbacks.len()
-            - match aborted_or_paused_response {
-                Some(_) => 1,
-                None => 0,
-            }
     }
 
-    /// Returns the number of unresponded guaranteed response callbacks, ignoring
-    /// the callback corresponding to a potential paused or aborted canister
-    /// response execution (since this response was just delivered).
+    /// Returns the number of unresponded guaranteed response callbacks, including
+    /// those for which responses are already enqueued.
     ///
     /// Time complexity: `O(1)`.
-    pub fn unresponded_guaranteed_response_callback_count(
-        &self,
-        aborted_or_paused_response: Option<&Response>,
-    ) -> usize {
+    pub fn unresponded_guaranteed_response_callback_count(&self) -> usize {
         self.stats.guaranteed_response_callback_count
-            - match aborted_or_paused_response {
-                Some(response) if response.deadline == NO_DEADLINE => 1,
-                _ => 0,
-            }
     }
 
     /// Helper function to concisely validate stats adjustments in debug builds,
@@ -995,8 +925,7 @@ impl AsInt for (CoarseTime, CallbackId) {
 }
 
 pub mod testing {
-    use super::{CallContext, CallContextManager};
-    use ic_types::messages::CallContextId;
+    use super::*;
 
     /// Exposes `CallContextManager` internals for use in other modules' or crates'
     /// tests.
@@ -1004,6 +933,12 @@ pub mod testing {
         /// Testing only: Registers the given call context (which may already be
         /// responded or deleted).
         fn with_call_context(&mut self, call_context: CallContext) -> CallContextId;
+
+        /// Testing only: Publicly exposes `register_callback()`.
+        fn with_callback(&mut self, callback: Callback) -> CallbackId;
+
+        /// Testing only: Publicly exposes `unregister_callback()`.
+        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>>;
     }
 
     impl CallContextManagerTesting for CallContextManager {
@@ -1019,6 +954,14 @@ pub mod testing {
             debug_assert!(self.stats_ok());
 
             id
+        }
+
+        fn with_callback(&mut self, callback: Callback) -> CallbackId {
+            self.register_callback(callback)
+        }
+
+        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
+            self.unregister_callback(callback_id)
         }
     }
 }
