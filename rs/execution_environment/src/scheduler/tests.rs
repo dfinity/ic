@@ -5873,21 +5873,9 @@ fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
@@ -5911,22 +5899,10 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone()).try_into().unwrap();
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
@@ -5942,28 +5918,26 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
         },
     )]));
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If the stash is enabled, deliver pre-signatures only once.
-        // They should be stored in the stash and don't have to be delivered in every round.
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // If the stash is enabled, deliver pre-signatures only once.
+    // They should be stored in the stash and don't have to be delivered in every round.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        test.deliver_pre_signatures(BTreeMap::from_iter([(
-            master_key_id.clone(),
-            AvailablePreSignatures {
-                key_transcript: key_transcript.clone(),
-                pre_signatures: BTreeMap::new(),
-            },
-        )]));
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.deliver_pre_signatures(BTreeMap::from_iter([(
+        master_key_id.clone(),
+        AvailablePreSignatures {
+            key_transcript: key_transcript.clone(),
+            pre_signatures: BTreeMap::new(),
+        },
+    )]));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 1);
-        assert!(
-            stashes[&master_key_id]
-                .pre_signatures
-                .contains_key(&pre_sig_id),
-        );
-    }
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 1);
+    assert!(
+        stashes[&master_key_id]
+            .pre_signatures
+            .contains_key(&pre_sig_id),
+    );
 
     inject_ecdsa_signing_request(&mut test, &key_id);
 
@@ -5999,12 +5973,10 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If pre-signatures were stored in the state, they should now have been consumed.
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 1);
-        assert!(stashes[&master_key_id].pre_signatures.is_empty());
-    }
+    // If pre-signatures were stored in the state, they should now have been consumed.
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 1);
+    assert!(stashes[&master_key_id].pre_signatures.is_empty());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let contexts = test
@@ -6050,18 +6022,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     let key_ids: Vec<_> = (0..3).map(make_ecdsa_key_id).collect();
     let master_key_ids: Vec<_> = key_ids
         .iter()
@@ -6070,7 +6031,6 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
         .flat_map(IDkgMasterPublicKeyId::try_from)
         .collect();
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_keys(
             key_ids
                 .iter()
@@ -6107,22 +6067,20 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
     ]);
     test.deliver_pre_signatures(pre_signatures.clone());
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If the stash is enabled, deliver pre-signatures only once.
-        // They should be stored in the stash and don't have to be delivered in every round.
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Pre-signatures are delivered only once.
+    // They should be stored in the stash and don't have to be delivered in every round.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        pre_signatures
-            .values_mut()
-            .for_each(|pre_sigs| pre_sigs.pre_signatures.clear());
-        test.deliver_pre_signatures(pre_signatures);
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    pre_signatures
+        .values_mut()
+        .for_each(|pre_sigs| pre_sigs.pre_signatures.clear());
+    test.deliver_pre_signatures(pre_signatures);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 2);
-        assert_eq!(stashes[&master_key_ids[0]].pre_signatures, pre_sigs0);
-        assert_eq!(stashes[&master_key_ids[1]].pre_signatures, pre_sigs1);
-    }
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 2);
+    assert_eq!(stashes[&master_key_ids[0]].pre_signatures, pre_sigs0);
+    assert_eq!(stashes[&master_key_ids[1]].pre_signatures, pre_sigs1);
 
     // Inject 3 contexts requesting the third, second and first key in order
     for i in (0..3).rev() {
@@ -6133,18 +6091,16 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
     for _ in 0..2 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        if store_pre_signatures_in_state == FlagStatus::Enabled {
-            // If pre-signatures were stored in the state, they should now have been consumed.
-            let stashes = test.state().pre_signature_stashes();
-            assert_eq!(stashes.len(), 2);
-            assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
-            assert!(
-                stashes[&master_key_ids[0]]
-                    .pre_signatures
-                    .contains_key(&PreSigId(1))
-            );
-            assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
-        }
+        // Pre-signatures in the state should now have been consumed.
+        let stashes = test.state().pre_signature_stashes();
+        assert_eq!(stashes.len(), 2);
+        assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
+        assert!(
+            stashes[&master_key_ids[0]]
+                .pre_signatures
+                .contains_key(&PreSigId(1))
+        );
+        assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
     }
 
     let sign_with_ecdsa_contexts = &test
