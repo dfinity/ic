@@ -55,6 +55,6 @@ rust_ic_test(
         "@crate_index//:candid",
         "@crate_index//:lazy_static",
         "@crate_index//:proptest",
-        "@crate_index//:rand-0.9",
+        "@crate_index//:rand",
     ],
 )

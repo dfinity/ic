@@ -15977,7 +15977,7 @@ dependencies = [
  "ic-types",
  "lazy_static",
  "proptest",
- "rand 0.9.0",
+ "rand 0.8.5",
  "serde",
 ]
 
