@@ -19,7 +19,7 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "rules_cc", version = "0.2.16")
 bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
 single_version_override(
@@ -63,7 +63,7 @@ include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
-bazel_dep(name = "rules_python", version = "0.35.0")
+bazel_dep(name = "rules_python", version = "1.4.1")
 
 python_version = "3.12"
 
@@ -81,7 +81,7 @@ use_repo(pip, "python_deps")
 # Protobuf dependencies
 bazel_dep(
     name = "protobuf",
-    version = "29.1",
+    version = "32.1",
     # We rename it to keep the legacy name used throughout our bazel files
     repo_name = "com_google_protobuf",
 )
@@ -286,6 +286,8 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
 
 # TLA+ tools
+bazel_dep(name = "rules_java", version = "9.3.0")
+
 http_jar(
     name = "tlaplus_community_modules",
     sha256 = "109e0828d192c33703d5cbc50b5b6e128acd816565616e27b3855949c7baba9c",
@@ -301,14 +303,10 @@ http_jar(
 # Apalache model checker for TLA+
 http_archive(
     name = "tla_apalache",
-    build_file_content = """
-package(default_visibility = ["//visibility:public"])
-
-exports_files([ "bin/apalache-mc" ])
-    """,
-    sha256 = "173a683707c2a639c955328746461cad39e4b8a5adff95e156ce3bf376ba293b",
-    strip_prefix = "apalache-0.44.11",
-    url = "https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz",
+    build_file = "@//third_party:BUILD.tla_apalache.bazel",
+    sha256 = "e0ebea7e45c8f99df8d92f2755101dda84ab71df06d1ec3a21955d3b53a886e2",
+    strip_prefix = "apalache-0.52.2",
+    url = "https://github.com/apalache-mc/apalache/releases/download/v0.52.2/apalache-0.52.2.tgz",
 )
 
 # Official WebAssembly test suite.
@@ -886,6 +884,23 @@ http_archive(
     sha256 = "a817449d1f05ae58bcb7bf073b4cebe5d31512f859ba4b83951bd825d28d2114",
     strip_prefix = "pebble-challtestsrv-linux-amd64/linux/amd64",
     url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-amd64.tar.gz",
+)
+
+## For //ci/githubstats:query to query our BuildBuddy services via protobuf-based RPC to fetch logs
+
+http_archive(
+    name = "buildbuddy_proto",
+    files = {
+        "BUILD.bazel": "//ci/githubstats:BUILD.buildbuddy-proto.bazel",
+    },
+    patch_cmds = [
+        # Remove everything except ./proto/
+        "find . -mindepth 1 -maxdepth 1 ! -name proto -exec rm -rf {} +",
+        "find ./proto -name BUILD -delete",
+    ],
+    sha256 = "9c675c30ae4c7e41018ad5539fc27287221d31fc3ab7c6439a30f46c4325c56a",
+    strip_prefix = "buildbuddy-2.241.0",
+    url = "https://github.com/buildbuddy-io/buildbuddy/archive/refs/tags/v2.241.0.tar.gz",
 )
 
 ## shfmt, for formatting bash code

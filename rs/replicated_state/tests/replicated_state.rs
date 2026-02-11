@@ -36,7 +36,7 @@ use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{
     CallbackId, CanisterCall, CanisterMessage, MAX_RESPONSE_COUNT_BYTES, Payload, Refund,
-    RejectContext, Request, RequestOrResponse, Response,
+    RejectContext, Request, RequestOrResponse, Response, SubnetMessage,
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
@@ -973,7 +973,7 @@ fn time_out_messages_in_subnet_queues() {
     // Second request should still be in the queue.
     assert_matches!(
         fixture.state.pop_subnet_input(),
-        Some(CanisterMessage::Request(request)) if request.deadline == second_request_deadline
+        Some(SubnetMessage::Request(request)) if request.deadline == second_request_deadline
     );
     assert_eq!(None, fixture.state.pop_subnet_input());
 }
@@ -1169,6 +1169,8 @@ fn split() {
     //
     state_a.after_split();
 
+    // `CANISTER_2` should have been removed from the schedule.
+    expected.metadata.subnet_schedule.remove(&CANISTER_2);
     // Ingress history should only contain the message to `CANISTER_1`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
     // The input schedules of `CANISTER_1` should have been repartitioned.
@@ -1333,7 +1335,7 @@ fn online_split() {
     // Start off with the original state (plus new routing table).
     let mut expected = fixture.state.clone();
     // Only `CANISTER_1` should be left.
-    expected.canister_states.remove(&CANISTER_2);
+    expected.remove_canister(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state = expected.canister_states.remove(&CANISTER_1).unwrap();
     canister_state
@@ -1363,7 +1365,7 @@ fn online_split() {
     // New subnet ID.
     expected.metadata.own_subnet_id = SUBNET_B;
     // Only `CANISTER_2` should be hosted.
-    expected.canister_states.remove(&CANISTER_1);
+    expected.remove_canister(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state = expected.canister_states.remove(&CANISTER_2).unwrap();
     canister_state

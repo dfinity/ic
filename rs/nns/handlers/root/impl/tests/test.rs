@@ -12,8 +12,8 @@ use ic_nns_handler_root::{
     PROXIED_CANISTER_CALLS_TRACKER, encode_metrics, init::RootCanisterInitPayloadBuilder,
 };
 use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
-    set_up_universal_canister,
+    forward_call_via_universal_canister, set_up_root_canister, set_up_universal_canister,
+    state_machine_test_on_nns_subnet,
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use maplit::btreeset;
@@ -24,7 +24,7 @@ use std::{collections::BTreeSet, str::FromStr};
 /// through the root handler.
 #[test]
 fn test_get_status() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let root =
             set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
 
@@ -54,7 +54,7 @@ fn test_get_status() {
 /// this supports multiple controllers.
 #[test]
 fn test_get_status_multiple_controllers() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let root =
             set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
         let other_controller = PrincipalId::new_user_test_id(1000);
@@ -87,7 +87,7 @@ fn test_get_status_multiple_controllers() {
 
 #[test]
 fn test_the_anonymous_user_cannot_change_an_nns_canister() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut root =
             set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
 
@@ -132,7 +132,7 @@ fn test_the_anonymous_user_cannot_change_an_nns_canister() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_change_an_nns_canister() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let root =
             set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
 

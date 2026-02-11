@@ -2448,6 +2448,7 @@ pub mod create_service_nervous_system {
         pub neuron_maximum_age_for_age_bonus: Option<::ic_nervous_system_proto::pb::v1::Duration>,
         pub neuron_maximum_age_bonus: Option<::ic_nervous_system_proto::pb::v1::Percentage>,
         pub voting_reward_parameters: Option<governance_parameters::VotingRewardParameters>,
+        pub custom_proposal_criticality: Option<governance_parameters::CustomProposalCriticality>,
     }
     /// Nested message and enum types in `GovernanceParameters`.
     pub mod governance_parameters {
@@ -2465,6 +2466,18 @@ pub mod create_service_nervous_system {
             pub final_reward_rate: Option<::ic_nervous_system_proto::pb::v1::Percentage>,
             pub reward_rate_transition_duration:
                 Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            Clone,
+            PartialEq,
+            Debug,
+            Default,
+        )]
+        pub struct CustomProposalCriticality {
+            pub additional_critical_native_action_ids: Option<Vec<u64>>,
         }
     }
 }
