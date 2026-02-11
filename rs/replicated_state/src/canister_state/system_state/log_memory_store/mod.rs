@@ -27,10 +27,9 @@ use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
-    #[validate_eq(Ignore)]
     feature_flag: FlagStatus,
 
-    #[validate_eq(Ignore)]
+    #[validate_eq(CompareWithValidateEq)]
     maybe_page_map: Option<PageMap>,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
