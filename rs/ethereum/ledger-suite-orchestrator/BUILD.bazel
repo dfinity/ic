@@ -175,5 +175,6 @@ rust_ic_test(
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:proptest",
+        "@crate_index//:rand",
     ],
 )
