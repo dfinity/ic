@@ -765,7 +765,7 @@ pub(crate) mod tests {
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_limits::MAX_INGRESS_MESSAGES_PER_BLOCK;
+    use ic_limits::{MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, MAX_INGRESS_MESSAGES_PER_BLOCK};
     use ic_management_canister_types_private::{CanisterIdRecord, IC_00, Payload};
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
@@ -779,7 +779,7 @@ pub(crate) mod tests {
     };
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
-        ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+        ids::{SUBNET_0, canister_test_id, node_test_id, subnet_test_id, user_test_id},
         messages::SignedIngressBuilder,
     };
     use ic_types::{
@@ -797,7 +797,6 @@ pub(crate) mod tests {
     use std::sync::RwLock;
     use std::{collections::HashSet, convert::TryInto, time::Duration};
 
-    const MAX_INGRESS_SIZE_BYTES: usize = 2 * 1024 * 1024;
     const MAX_WIRE_BYTES: NumBytes = NumBytes::new(1000);
 
     #[test]
@@ -1254,17 +1253,23 @@ pub(crate) mod tests {
 
     #[rstest]
     #[trace]
-    // Select only one out of two big messages in the artifact pool
+    /// Select only one out of two big messages in the artifact pool
     fn test_get_payload_large_size_accumulation(
         #[values(true, false)] hashes_in_blocks_enabled: bool,
-        #[values(None, Some(2 * MAX_INGRESS_SIZE_BYTES - 1))] memory_bytes_limit: Option<usize>,
+        #[values(
+            Some(MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize),
+            Some(2 * MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize - 2 * 1024 - 1),
+        )]
+        memory_bytes_limit: Option<usize>,
     ) {
+        use ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET;
+
         let subnet_id = subnet_test_id(0);
         let registry = set_up_registry(
             subnet_id,
             memory_bytes_limit,
             MAX_INGRESS_MESSAGES_PER_BLOCK,
-            MAX_INGRESS_SIZE_BYTES + 1024,
+            MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
         setup_with_params(
             None,
@@ -1284,18 +1289,20 @@ pub(crate) mod tests {
                 ingress_manager.hashes_in_blocks_enabled_in_tests = hashes_in_blocks_enabled;
                 let time_source = FastForwardTimeSource::new();
 
-                // create two large messages (one of them would fit)
+                let ingress_payload_size = MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize - 1024;
+
+                // create two large messages (only one of them would fit)
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .nonce(1)
                     .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
-                    .method_payload(vec![0; MAX_INGRESS_SIZE_BYTES])
+                    .method_payload(vec![0; ingress_payload_size])
                     .build();
                 let ingress_msg2 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .nonce(2)
                     .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
-                    .method_payload(vec![0; MAX_INGRESS_SIZE_BYTES])
+                    .method_payload(vec![0; ingress_payload_size])
                     .build();
 
                 // add them to the pool
@@ -1326,7 +1333,7 @@ pub(crate) mod tests {
                 let ingress_payload = ingress_manager.get_ingress_payload(
                     &HashSet::new(),
                     &validation_context,
-                    NumBytes::new(2 * MAX_INGRESS_SIZE_BYTES as u64 - 1),
+                    NumBytes::new(2 * MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET - 1),
                 );
 
                 assert_eq!(ingress_payload.payload.message_count(), 1);
@@ -1585,7 +1592,7 @@ pub(crate) mod tests {
             subnet_id,
             None,
             MAX_INGRESS_MESSAGES_PER_BLOCK,
-            MAX_INGRESS_SIZE_BYTES,
+            MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
         let time = UNIX_EPOCH;
         // Canister 0 has enough to induct this message...
@@ -1702,7 +1709,7 @@ pub(crate) mod tests {
             subnet_id,
             None,
             MAX_INGRESS_MESSAGES_PER_BLOCK,
-            MAX_INGRESS_SIZE_BYTES,
+            MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
         setup_with_params(
             None,
@@ -1762,7 +1769,7 @@ pub(crate) mod tests {
             subnet_id,
             None,
             MAX_INGRESS_MESSAGES_PER_BLOCK,
-            MAX_INGRESS_SIZE_BYTES,
+            MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
         setup_with_params(
             None,
@@ -1806,7 +1813,7 @@ pub(crate) mod tests {
             subnet_id,
             None,
             MAX_INGRESS_MESSAGES_PER_BLOCK,
-            MAX_INGRESS_SIZE_BYTES,
+            MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
         setup_with_params(
             None,
@@ -1856,7 +1863,7 @@ pub(crate) mod tests {
             subnet_id,
             None,
             MAX_INGRESS_MESSAGES_PER_BLOCK,
-            MAX_INGRESS_SIZE_BYTES,
+            MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
         setup_with_params(
             None,
@@ -1911,7 +1918,7 @@ pub(crate) mod tests {
             subnet_id,
             None,
             MAX_INGRESS_MESSAGES_PER_BLOCK,
-            MAX_INGRESS_SIZE_BYTES,
+            MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
         setup_with_params(
             None,
@@ -2117,7 +2124,7 @@ pub(crate) mod tests {
             subnet_id,
             None,
             MAX_INGRESS_MESSAGES_PER_BLOCK,
-            MAX_INGRESS_SIZE_BYTES,
+            MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
         setup_with_params(
             None,
@@ -2445,84 +2452,128 @@ pub(crate) mod tests {
         )
     }
 
-    const INGRESSES_COUNT_LIMIT: usize = 500;
+    #[derive(Debug)]
+    pub struct SizeTestCase {
+        pub ingress_message_payload_size: usize,
+        pub wire_bytes_limit: NumBytes,
+        pub memory_bytes_limit: Option<usize>,
+        pub messages_count_limit: usize,
+        pub expected_payload_messages_count_when_hashes_in_blocks_enabled: usize,
+        pub expected_payload_messages_count_when_hashes_in_blocks_disabled: usize,
+    }
 
     #[rstest]
-    #[case::limited_by_the_wire_limit(true, 100_000, 10 * EXPECTED_MESSAGE_ID_LENGTH, None, 10)]
-    #[case::limited_by_the_wire_limit(false, 100_000, 10 * EXPECTED_MESSAGE_ID_LENGTH, None, 0)]
-    #[case::limited_by_the_mem_limit(true, 100_000, 1_500_000, None, 41)]
-    #[case::limited_by_the_wire_limit(false, 100_000, 1_500_000, None, 14)]
-    #[case::limited_by_the_mem_limit(true, 100_000, 10_000_000, None, 41)]
-    #[case::limited_by_the_mem_limit(false, 100_000, 10_000_000, None, 41)]
-    #[case::limited_by_the_msgs_count_limit(true, 1_000, 4_000_000, None, INGRESSES_COUNT_LIMIT)]
-    #[case::limited_by_the_msgs_count_limit(false, 1_000, 4_000_000, None, INGRESSES_COUNT_LIMIT)]
-    #[case::limited_by_the_wire_limit(true, 100_000, 10 * EXPECTED_MESSAGE_ID_LENGTH, Some(2_000_000), 10)]
-    #[case::limited_by_the_wire_limit(false, 100_000, 10 * EXPECTED_MESSAGE_ID_LENGTH, Some(2_000_000), 0)]
-    #[case::limited_by_the_mem_limit(true, 100_000, 1_500_000, Some(2_000_000), 19)]
-    #[case::limited_by_the_wire_limit(false, 100_000, 1_500_000, Some(2_000_000), 14)]
-    #[case::limited_by_the_mem_limit(true, 100_000, 10_000_000, Some(2_000_000), 19)]
-    #[case::limited_by_the_mem_limit(false, 100_000, 10_000_000, Some(2_000_000), 19)]
+    #[case::small_wire_limit(SizeTestCase{
+        ingress_message_payload_size: 100_000,
+        wire_bytes_limit: NumBytes::new(10 * EXPECTED_MESSAGE_ID_LENGTH as u64),
+        memory_bytes_limit: None, // `None` implies 4MiB
+        messages_count_limit: 1000,
+        expected_payload_messages_count_when_hashes_in_blocks_enabled: 10,
+        expected_payload_messages_count_when_hashes_in_blocks_disabled: 0,
+    })]
+    #[case::medium_wire_limit(SizeTestCase{
+        ingress_message_payload_size: 100_000,
+        wire_bytes_limit: NumBytes::new(1_500_000),
+        memory_bytes_limit: None, // `None` implies 4MiB
+        messages_count_limit: 1000,
+        expected_payload_messages_count_when_hashes_in_blocks_enabled: 41, // roughly 4MiB / 100KB
+        expected_payload_messages_count_when_hashes_in_blocks_disabled: 14,
+    })]
+    #[case::explicit_memory_limit(SizeTestCase{
+        ingress_message_payload_size: 100_000,
+        wire_bytes_limit: NumBytes::new(1_500_000),
+        memory_bytes_limit: Some(1_000_000),
+        messages_count_limit: 1000,
+        expected_payload_messages_count_when_hashes_in_blocks_enabled: 9,
+        expected_payload_messages_count_when_hashes_in_blocks_disabled: 9,
+    })]
+    #[case::limit_by_messages_count_limit(SizeTestCase{
+        ingress_message_payload_size: 1_000,
+        wire_bytes_limit: NumBytes::new(4_000_000),
+        memory_bytes_limit: None, // `None` implies 4MiB
+        messages_count_limit: 100,
+        expected_payload_messages_count_when_hashes_in_blocks_enabled: 100,
+        expected_payload_messages_count_when_hashes_in_blocks_disabled: 100,
+    })]
+    #[case::message_too_large(SizeTestCase{
+        ingress_message_payload_size: ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize + 1,
+        wire_bytes_limit: NumBytes::new(4_000_000),
+        memory_bytes_limit: None, // `None` implies 4MiB
+        messages_count_limit: 1000,
+        expected_payload_messages_count_when_hashes_in_blocks_enabled: 0,
+        expected_payload_messages_count_when_hashes_in_blocks_disabled: 0,
+    })]
     #[trace]
     pub(crate) fn test_ingress_size_is_taken_into_account(
-        #[case] hashes_in_blocks_enabled: bool,
-        #[case] ingress_message_payload_size: usize,
-        #[case] wire_bytes_limit: usize,
-        #[case] memory_bytes_limit: Option<usize>,
-        #[values(INGRESSES_COUNT_LIMIT)] messages_count_limit: usize,
-        #[case] expected_payload_messages_count: usize,
+        #[case] test_case: SizeTestCase,
     ) -> Result<(), String> {
-        let subnet_id = subnet_test_id(0);
+        let SizeTestCase {
+            ingress_message_payload_size,
+            wire_bytes_limit,
+            memory_bytes_limit,
+            messages_count_limit,
+            expected_payload_messages_count_when_hashes_in_blocks_enabled,
+            expected_payload_messages_count_when_hashes_in_blocks_disabled,
+        } = test_case;
+
         let registry = set_up_registry(
-            subnet_id,
+            SUBNET_0,
             memory_bytes_limit,
             messages_count_limit as u64,
             ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
-        let time = UNIX_EPOCH;
-
-        let canister_id = canister_test_id(1);
         let (ingress, canister) = generate_ingress_messages_with_params(
-            canister_id,
+            canister_test_id(1),
             messages_count_limit + 1,
             ingress_message_payload_size,
-            time + Duration::from_secs(40),
+            UNIX_EPOCH + Duration::from_secs(40),
         );
         let replicated_state = ReplicatedStateBuilder::new()
-            .with_subnet_id(subnet_id)
+            .with_subnet_id(SUBNET_0)
             .with_canister(canister)
             .build();
 
         setup_with_params(
-            None,
-            Some((registry, subnet_id)),
-            None,
+            /*ingress_history_reader=*/ None,
+            Some((registry, SUBNET_0)),
+            /*consensus_time=*/ None,
             Some(replicated_state),
             /*ingress_pool_max_count=*/ None,
             |mut ingress_manager, ingress_pool| -> Result<(), String> {
-                ingress_manager.hashes_in_blocks_enabled_in_tests = hashes_in_blocks_enabled;
+                insert_unvalidated_ingress_with_timestamp(ingress, &ingress_pool, UNIX_EPOCH);
                 let validation_context = ValidationContext {
-                    time,
+                    time: UNIX_EPOCH,
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(0),
                 };
-                insert_unvalidated_ingress_with_timestamp(ingress, &ingress_pool, time);
 
-                let payload = ingress_manager.get_ingress_payload(
-                    &HashSet::new(),
-                    &validation_context,
-                    NumBytes::new(wire_bytes_limit as u64),
-                );
+                for hashes_in_blocks_enabled_in_tests in [false, true] {
+                    ingress_manager.hashes_in_blocks_enabled_in_tests =
+                        hashes_in_blocks_enabled_in_tests;
 
-                if payload.payload.message_count() != expected_payload_messages_count {
-                    Err(format!(
-                        "The built payload has unexpected number of ingress messages: \
-                        expected {} vs actual {}",
-                        expected_payload_messages_count,
-                        payload.payload.message_count(),
-                    ))
-                } else {
-                    Ok(())
+                    let payload = ingress_manager.get_ingress_payload(
+                        &HashSet::new(),
+                        &validation_context,
+                        wire_bytes_limit,
+                    );
+
+                    let expected_payload_messages_count = if hashes_in_blocks_enabled_in_tests {
+                        expected_payload_messages_count_when_hashes_in_blocks_enabled
+                    } else {
+                        expected_payload_messages_count_when_hashes_in_blocks_disabled
+                    };
+                    if payload.payload.message_count() != expected_payload_messages_count {
+                        return Err(format!(
+                            "The built payload has unexpected number of ingress messages: \
+                            expected {} vs actual {}. Hashes in blocks enabled: \
+                            {hashes_in_blocks_enabled_in_tests}",
+                            expected_payload_messages_count,
+                            payload.payload.message_count(),
+                        ));
+                    }
                 }
+
+                Ok(())
             },
         )
     }

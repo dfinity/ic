@@ -15,7 +15,7 @@
 
 use crate::{
     ingress_selector::tests::{
-        generate_ingress_with_params, test_ingress_size_is_taken_into_account,
+        SizeTestCase, generate_ingress_with_params, test_ingress_size_is_taken_into_account,
     },
     tests::{access_ingress_pool, setup_with_params},
 };
@@ -152,40 +152,39 @@ proptest! {
         memory_bytes_limit in 1..= 8 * MB,
         wire_bytes_limit in 1..= 8 * MB,
         messages_count_limit in 1..= 1000_usize,
-        hashes_in_blocks_enabled: bool,
     ){
         prop_assume!(
             ingress_message_payload_size <=std::cmp::min(memory_bytes_limit, wire_bytes_limit)
         );
 
-        let expected_included_messages_count = {
-            let ingress_size = generate_ingress_with_params(
-                canister_test_id(0),
-                ingress_message_payload_size,
-                UNIX_EPOCH + Duration::from_secs(30),
-            )
-            .count_bytes();
+        let ingress_size = generate_ingress_with_params(
+            canister_test_id(0),
+            ingress_message_payload_size,
+            UNIX_EPOCH + Duration::from_secs(30),
+        )
+        .count_bytes();
 
-            let expected_included_messages_count = if hashes_in_blocks_enabled {
-                std::cmp::min(
-                    memory_bytes_limit / ingress_size,
-                    wire_bytes_limit / EXPECTED_MESSAGE_ID_LENGTH,
-                )
-            } else {
-                std::cmp::min(memory_bytes_limit, wire_bytes_limit) / ingress_size
-            };
+        let min = |a: usize, b: usize, c: usize| a.min(b).min(c);
 
-            std::cmp::min(expected_included_messages_count, messages_count_limit)
-        };
+        let expected_payload_messages_count_when_hashes_in_blocks_enabled = min(
+            memory_bytes_limit / ingress_size,
+            wire_bytes_limit / EXPECTED_MESSAGE_ID_LENGTH,
+            messages_count_limit,
+        );
+        let expected_payload_messages_count_when_hashes_in_blocks_disabled = min(
+            memory_bytes_limit / ingress_size,
+            wire_bytes_limit / ingress_size,
+            messages_count_limit,
+        );
 
-        let test_result = test_ingress_size_is_taken_into_account(
-            hashes_in_blocks_enabled,
+        let test_result = test_ingress_size_is_taken_into_account(SizeTestCase {
             ingress_message_payload_size,
             wire_bytes_limit,
-            Some(memory_bytes_limit),
+            memory_bytes_limit: Some(memory_bytes_limit),
             messages_count_limit,
-            expected_included_messages_count,
-        );
+            expected_payload_messages_count_when_hashes_in_blocks_enabled,
+            expected_payload_messages_count_when_hashes_in_blocks_disabled,
+        });
 
         prop_assert_eq!(test_result, Ok(()))
     }
