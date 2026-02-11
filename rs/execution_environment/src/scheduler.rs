@@ -1544,17 +1544,25 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+
+                    let log = &mut canister.system_state.canister_log;
+                    let (log_memory_usage, delta_log_sizes) =
+                        (log.bytes_used(), log.delta_log_sizes());
+                    // IMPORTANT: clear_delta_log_sizes() must be called to make sure
+                    // that the delta log sizes are always empty at the end of the round.
+                    log.clear_delta_log_sizes();
                     self.metrics
                         .canister_log_memory_usage_v2
-                        .observe(canister.system_state.canister_log.bytes_used() as f64);
+                        .observe(log_memory_usage as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
-                        .observe(canister.system_state.canister_log.bytes_used() as f64);
-                    for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
+                        .observe(log_memory_usage as f64);
+                    for size in delta_log_sizes {
                         self.metrics
                             .canister_log_delta_memory_usage
-                            .observe(memory_usage as f64);
+                            .observe(size as f64);
                     }
+
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_allocated_bytes += canister
                         .memory_allocation()
