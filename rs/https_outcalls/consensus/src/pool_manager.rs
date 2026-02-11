@@ -23,9 +23,13 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion, canister_http::*,
-    consensus::HasHeight, crypto::Signed, messages::CallbackId, replica_config::ReplicaConfig,
-    signature::BasicSignature,
+    Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion,
+    canister_http::*,
+    consensus::HasHeight,
+    crypto::Signed,
+    messages::CallbackId,
+    replica_config::ReplicaConfig,
+    signature::{BasicSignature, BasicSigned},
 };
 use ic_utils::str::StrEllipsize;
 use std::{
@@ -145,18 +149,23 @@ impl CanisterHttpPoolManagerImpl {
 
     fn sign_canister_http_metadata<M>(
         &self,
-        metadata: &M,
+        metadata: M,
         registry_version: RegistryVersion,
         error_context: &str,
-    ) -> Option<BasicSignature<M>>
+    ) -> Option<BasicSigned<M>>
     where
         M: ic_types::crypto::Signable,
         dyn ConsensusCrypto: SignVerify<M, BasicSignature<M>, RegistryVersion>,
     {
-        self.crypto
-            .sign(metadata, self.replica_config.node_id, registry_version)
+        let signature = self
+            .crypto
+            .sign(&metadata, self.replica_config.node_id, registry_version)
             .map_err(|err| error!(self.log, "{} {}", error_context, err))
-            .ok()
+            .ok()?;
+        Some(Signed {
+            content: metadata,
+            signature,
+        })
     }
 
     /// Purge shares of responses for requests that have already been processed.
@@ -395,30 +404,20 @@ impl CanisterHttpPoolManagerImpl {
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         replica_version: ReplicaVersion::default(),
                     };
-                    let signature = match self.sign_canister_http_metadata(
-                        &response_metadata,
+                    let Some(share) = self.sign_canister_http_metadata(
+                        response_metadata,
                         registry_version,
                         "Failed to sign http response",
-                    ) {
-                        Some(signature) => signature,
-                        None => continue,
-                    };
-                    let share = Signed {
-                        content: response_metadata,
-                        signature,
+                    ) else {
+                        continue;
                     };
 
-                    let payment_signature = match self.sign_canister_http_metadata(
-                        &payment_metadata,
+                    let Some(payment_share) = self.sign_canister_http_metadata(
+                        payment_metadata,
                         registry_version,
                         "Failed to sign payment metadata",
-                    ) {
-                        Some(signature) => signature,
-                        None => continue,
-                    };
-                    let payment_share = Signed {
-                        content: payment_metadata,
-                        signature: payment_signature,
+                    ) else {
+                        continue;
                     };
 
                     self.requested_id_cache.borrow_mut().remove(&response.id);
