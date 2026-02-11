@@ -1393,8 +1393,7 @@ fn consistent_install_code_calls_after_split() {
 fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls: usize) {
     // Collect the call IDs and calls of all aborted install code calls.
     let canister_install_code_contexts: Vec<_> = state
-        .canister_states()
-        .values()
+        .canisters_iter()
         .filter_map(|canister| {
             if let Some(ExecutionTask::AbortedInstallCode {
                 message, call_id, ..

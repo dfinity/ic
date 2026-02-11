@@ -1102,17 +1102,13 @@ fn serialize_protos_to_checkpoint_readwrite(
         query_stats: state.query_stats().as_query_stats(),
     })?;
 
-    let results = parallel_map(
-        thread_pool,
-        state.canister_states().values(),
-        |canister_state| {
-            serialize_canister_protos_to_checkpoint_readwrite(
-                canister_state,
-                state.canister_priority(&canister_state.canister_id()),
-                checkpoint_readwrite,
-            )
-        },
-    );
+    let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+        serialize_canister_protos_to_checkpoint_readwrite(
+            canister_state,
+            state.canister_priority(&canister_state.canister_id()),
+            checkpoint_readwrite,
+        )
+    });
 
     for result in results.into_iter() {
         result?;
@@ -1144,13 +1140,9 @@ fn serialize_wasm_binaries_and_pagemaps(
     lsmt_config: &LsmtConfig,
     metrics: &StorageMetrics,
 ) -> Result<(), CheckpointError> {
-    parallel_map(
-        thread_pool,
-        state.canister_states().values(),
-        |canister_state| {
-            serialize_canister_wasm_binary_and_pagemaps(canister_state, tip, metrics, lsmt_config)
-        },
-    )
+    parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
+        serialize_canister_wasm_binary_and_pagemaps(canister_state, tip, metrics, lsmt_config)
+    })
     .into_iter()
     .try_for_each(identity)?;
     parallel_map(

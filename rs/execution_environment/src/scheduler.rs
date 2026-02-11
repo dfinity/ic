@@ -1115,8 +1115,7 @@ impl SchedulerImpl {
     /// Aborts paused execution above `max_paused_executions` based on scheduler priority.
     fn abort_paused_executions_above_limit(&self, state: &mut ReplicatedState) {
         let mut paused_round_states = state
-            .canister_states()
-            .values()
+            .canisters_iter()
             .filter_map(|canister| {
                 if canister.has_paused_execution() {
                     let canister_priority = state.canister_priority(&canister.canister_id());
@@ -1962,7 +1961,7 @@ fn observe_replicated_state_metrics(
         BTreeMap::<MasterPublicKeyId, u32>::new();
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
-    state.canister_states().values().for_each(|canister| {
+    state.canisters_iter().for_each(|canister| {
         match canister.system_state.get_status() {
             CanisterStatus::Running { .. } => num_running_canisters += 1,
             CanisterStatus::Stopping { stop_contexts, .. } => {

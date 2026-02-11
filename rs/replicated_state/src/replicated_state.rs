@@ -581,6 +581,13 @@ impl ReplicatedState {
         self.canister_states = canisters;
     }
 
+    /// Returns an iterator over canister states, ordered by canister ID.
+    pub fn canisters_iter(
+        &self,
+    ) -> std::collections::btree_map::Values<'_, CanisterId, CanisterState> {
+        self.canister_states.values()
+    }
+
     /// Returns a mutable iterator over canister states, ordered by canister ID.
     pub fn canisters_iter_mut(
         &mut self,
@@ -774,8 +781,7 @@ impl ReplicatedState {
     /// Returns the sum of reserved compute allocations of all currently
     /// available canisters.
     pub fn total_compute_allocation(&self) -> u64 {
-        self.canister_states
-            .values()
+        self.canisters_iter()
             .map(|canister| canister.system_state.compute_allocation.as_percent())
             .sum()
     }
@@ -809,8 +815,7 @@ impl ReplicatedState {
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
         ) = self
-            .canister_states
-            .values()
+            .canisters_iter()
             .map(|canister| {
                 (
                     canister
@@ -855,8 +860,7 @@ impl ReplicatedState {
     /// the message memory usage is necessary.
     pub fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
-            .canister_states
-            .values()
+            .canisters_iter()
             .map(|canister| {
                 canister
                     .system_state
@@ -872,8 +876,7 @@ impl ReplicatedState {
     /// Computes the memory taken by best-effort response messages.
     pub fn best_effort_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
-            .canister_states
-            .values()
+            .canisters_iter()
             .map(|canister| canister.system_state.best_effort_message_memory_usage())
             .sum();
         let subnet_memory_usage =
@@ -889,8 +892,7 @@ impl ReplicatedState {
 
     /// Returns the total number of callbacks across all canisters.
     pub fn callback_count(&self) -> usize {
-        self.canister_states
-            .values()
+        self.canisters_iter()
             .map(|canister| {
                 canister
                     .system_state

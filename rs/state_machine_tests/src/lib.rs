@@ -2835,7 +2835,7 @@ impl StateMachine {
     /// ingress queues, canister queues, streams or refund pool).
     pub fn has_inflight_messages(&self) -> bool {
         let state = self.state_manager.get_latest_state().take();
-        state.canister_states().values().any(|canister| {
+        state.canisters_iter().any(|canister| {
             canister.has_input()
                 || canister.has_output()
                 // We're assuming no heartbeat.
