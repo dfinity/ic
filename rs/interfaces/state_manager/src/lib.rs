@@ -255,11 +255,10 @@ pub trait StateManager: StateReader {
     /// at heights strictly less than the specified `height`.
     fn update_fast_forward_height(&self, height: Height);
 
-    /// Commits the `state` at `tip_height`, limits the certification to
-    /// `scope`. The `state` must be the mutable state obtained via a call to
-    /// `take_tip`, which also sets `tip_height`.
-    ///
-    ///
+    /// Increments the `tip_height` and commits the `state` at the new height.
+    /// Limits the certification to `scope`.
+    /// The `state` must be the mutable state obtained via a call to `take_tip`, which
+    /// also returns `tip_height`.
     fn commit_and_certify(
         &self,
         state: Self::State,

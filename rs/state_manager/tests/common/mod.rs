@@ -59,7 +59,8 @@ pub fn alternate_wasm() -> CanisterModule {
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
-pub const fn height(h: u64) -> Height {
+#[allow(non_snake_case)]
+pub const fn Height(h: u64) -> Height {
     Height::new(h)
 }
 
