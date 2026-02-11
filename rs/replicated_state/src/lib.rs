@@ -71,7 +71,6 @@ pub use canister_state::{
         CanisterStatus, ExecutionTask, SystemState, memory_usage_of_request,
     },
 };
-pub use metadata_state::subnet_schedule::{CanisterPriority, SubnetSchedule};
 pub use metadata_state::{
     IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
 };

@@ -2046,7 +2046,7 @@ fn evict_sandbox_processes(
     let scheduler_priorities = state_reader
         .get_latest_state()
         .get_ref()
-        .canister_accumulated_priorities();
+        .get_scheduler_priorities();
 
     let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
 
@@ -2730,7 +2730,7 @@ mod tests {
                     (drop (call $stable_grow (i64.const 16385))) ;; 1GiB + 65536
                     (loop $loop
                         (call $stable_write (local.get $i) (i64.const 0) (i64.const 1))
-                        (br_if $loop
+                        (br_if $loop 
                             (i32.wrap_i64 (local.tee $i (i64.sub (local.get $i) (i64.const 4096))))
                         )
                     )
