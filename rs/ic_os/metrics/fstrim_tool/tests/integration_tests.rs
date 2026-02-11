@@ -1,4 +1,4 @@
-use assert_cmd::{cargo::cargo_bin_cmd, Command};
+use assert_cmd::{Command, cargo::cargo_bin_cmd};
 use predicates::prelude::*;
 use regex::Regex;
 use std::fs::read_to_string;
