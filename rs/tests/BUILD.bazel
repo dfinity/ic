@@ -132,12 +132,9 @@ oci_tar(
 
 uvm_config_image(
     name = "colocate_uvm_config_image",
-    srcs = [
-        ":ubuntu_test_runtime.tar",
-        "//rs/tests:activate-systest-uvm-config",
-    ],
-    remap_paths = {
-        "activate-systest-uvm-config": "activate",
+    srcmap = {
+        ":ubuntu_test_runtime.tar": "ubuntu_test_runtime.tar",
+        "//rs/tests:activate-systest-uvm-config": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -158,12 +155,9 @@ exports_files([
 
 uvm_config_image(
     name = "jaeger_uvm_config_image",
-    srcs = [
-        ":jaeger.tar",
-        ":jaeger_activate.sh",
-    ],
-    remap_paths = {
-        "jaeger_activate.sh": "activate",
+    srcmap = {
+        ":jaeger.tar": "jaeger.tar",
+        ":jaeger_activate.sh": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
@@ -210,42 +204,34 @@ oci_tar(
 
 uvm_config_image(
     name = "ckbtc_uvm_config_image",
-    srcs = [
-        ":bitcoind.tar",
-        ":dogecoind.tar",
-        ":minica.tar",
-        ":nginx-proxy.tar",
-        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
-        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
-        "//rs/tests/httpbin-rs:httpbin.tar",
-    ],
-    remap_paths = {
-        "canister_http_test_ca.cert": "cert.pem",
-        "canister_http_test_ca.key": "key.pem",
+    srcmap = {
+        ":bitcoind.tar": "bitcoind.tar",
+        ":dogecoind.tar": "dogecoind.tar",
+        ":minica.tar": "minica.tar",
+        ":nginx-proxy.tar": "nginx-proxy.tar",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert": "cert.pem",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key": "key.pem",
+        "//rs/tests/httpbin-rs:httpbin.tar": "httpbin.tar",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
 uvm_config_image(
     name = "impersonate_upstreams_uvm_config_image",
-    srcs = [
-        ":minica.tar",
-        ":static-file-server.tar",
-        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
-        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
-    ],
-    remap_paths = {
-        "canister_http_test_ca.cert": "minica.pem",
-        "canister_http_test_ca.key": "minica-key.pem",
+    srcmap = {
+        ":minica.tar": "minica.tar",
+        ":static-file-server.tar": "static-file-server.tar",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert": "minica.pem",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key": "minica-key.pem",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
 uvm_config_image(
     name = "ic_gateway_uvm_config_image",
-    srcs = [
-        ":ic_gatewayd.tar",
-    ],
+    srcmap = {
+        ":ic_gatewayd.tar": "ic_gatewayd.tar",
+    },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
@@ -263,12 +249,9 @@ exports_files([
 
 uvm_config_image(
     name = "vector_with_log_fetcher_image",
-    srcs = [
-        ":vector-with-log-fetcher.tar",
-        ":vector_activate.sh",
-    ],
-    remap_paths = {
-        "vector_activate.sh": "activate",
+    srcmap = {
+        ":vector-with-log-fetcher.tar": "vector-with-log-fetcher.tar",
+        ":vector_activate.sh": "activate",
     },
     tags = ["manual"],
 )
