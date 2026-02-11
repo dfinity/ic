@@ -90,8 +90,6 @@ pub struct Callback {
     pub on_cleanup: ::core::option::Option<WasmClosure>,
     #[prost(message, optional, tag = "5")]
     pub cycles_sent: ::core::option::Option<super::super::queues::v1::Cycles>,
-    #[prost(message, optional, tag = "6")]
-    pub originator: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag = "7")]
     pub respondent: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag = "8")]
@@ -332,7 +330,7 @@ pub mod execution_task {
         pub enum Input {
             #[prost(message, tag = "1")]
             Request(super::super::super::super::queues::v1::Request),
-            /// TODO(DSM-95): Remove once we switch to `AbortedResponse` below.
+            /// TODO(DSM-95): Remove after we have switched to `AbortedResponse`.
             #[prost(message, tag = "2")]
             Response(super::super::super::super::queues::v1::Response),
             #[prost(message, tag = "6")]

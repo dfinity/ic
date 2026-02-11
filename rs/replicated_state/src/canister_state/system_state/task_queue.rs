@@ -47,11 +47,8 @@ impl TaskQueue {
         })
     }
 
-    // TODO(DSM-95) Drop this when we drop the legacy `CanisterMessage::Response`
-    // variant and no longer need forward compatible decoding.
-    #[doc(hidden)]
-    pub fn mut_paused_or_aborted_task(&mut self) -> Option<&mut ExecutionTask> {
-        self.paused_or_aborted_task.as_mut()
+    pub fn has_paused_or_aborted_task(&self) -> bool {
+        self.paused_or_aborted_task.is_some()
     }
 
     pub fn remove(&mut self, task: ExecutionTask) {

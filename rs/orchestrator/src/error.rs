@@ -27,6 +27,10 @@ pub(crate) enum OrchestratorError {
     /// given version
     ApiBoundaryNodeMissingError(NodeId, RegistryVersion),
 
+    /// The given node id does not map to a `NodeRecord` at the
+    /// given version
+    NodeRecordMissingError(NodeId, RegistryVersion),
+
     /// An error occurred when querying the Registry that prevents Orchestrator
     /// from making progress
     RegistryClientError(RegistryClientError),
@@ -102,22 +106,22 @@ impl fmt::Display for OrchestratorError {
         match self {
             OrchestratorError::NodeUnassignedError(node_id, registry_version) => write!(
                 f,
-                "Node {node_id:?} is not found in any subnet at registry version {registry_version:?}"
+                "Node {node_id} is not found in any subnet at registry version {registry_version}"
             ),
-            OrchestratorError::RegistryClientError(e) => write!(f, "{e:?}"),
+            OrchestratorError::RegistryClientError(e) => write!(f, "{e}"),
             OrchestratorError::ReplicaVersionMissingError(replica_version, registry_version) => {
                 write!(
                     f,
-                    "Replica version {replica_version} was not found in the Registry at registry version {registry_version:?}"
+                    "Replica version {replica_version} was not found in the Registry at registry version {registry_version}"
                 )
             }
             OrchestratorError::IoError(msg, e) => {
-                write!(f, "IO error, message: {msg:?}, error: {e:?}")
+                write!(f, "IO error, message: {msg}, error: {e}")
             }
             OrchestratorError::FileDownloadError(e) => write!(f, "File download error: {e:?}"),
             OrchestratorError::ExecError(path, e) => write!(
                 f,
-                "Failed to exec new Orchestrator process: {path:?}, error: {e:?}"
+                "Failed to exec new Orchestrator process: {path:?}, error: {e}"
             ),
             OrchestratorError::InvalidConfigurationError(msg) => {
                 write!(f, "Invalid configuration: {msg}")
@@ -133,11 +137,15 @@ impl fmt::Display for OrchestratorError {
             }
             OrchestratorError::SubnetMissingError(subnet_id, registry_version) => write!(
                 f,
-                "Subnet ID {subnet_id:?} does not exist in the Registry at registry version {registry_version:?}"
+                "Subnet ID {subnet_id} does not exist in the Registry at registry version {registry_version}"
             ),
             OrchestratorError::ApiBoundaryNodeMissingError(node_id, registry_version) => write!(
                 f,
-                "Api Boundary Node ID {node_id:?} does not exist in the Registry at registry version {registry_version:?}"
+                "Api Boundary Node ID {node_id} does not exist in the Registry at registry version {registry_version}"
+            ),
+            OrchestratorError::NodeRecordMissingError(node_id, registry_version) => write!(
+                f,
+                "Node ID {node_id} does not exist in the Registry at registry version {registry_version}"
             ),
             OrchestratorError::ReplicaVersionParseError(e) => {
                 write!(f, "Failed to parse replica version: {e}")

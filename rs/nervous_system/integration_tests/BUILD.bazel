@@ -202,6 +202,7 @@ rust_test_suite_with_extra_srcs(
             "tests/custom_upgrade_path.rs",
             "tests/sns_topics.rs",
             "tests/sns_extension_test.rs",
+            "tests/custom_proposal_criticality.rs",
         ],
     ),
     aliases = ALIASES,
@@ -335,6 +336,22 @@ rust_test(
     timeout = "long",
     srcs = [
         "tests/sns_topics.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "cpu:4",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "custom_proposal_criticality",
+    timeout = "long",
+    srcs = [
+        "tests/custom_proposal_criticality.rs",
     ],
     aliases = ALIASES,
     data = DEV_DATA,

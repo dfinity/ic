@@ -77,6 +77,7 @@ go.sum                    @dfinity/idx
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
 /.github/workflows/bazel-dependency-submission.yml                       @dfinity/idx @dfinity/product-security
+/.github/workflows/container-scan-nightly.yml                            @dfinity/idx @dfinity/product-security
 /.github/workflows/ledger-suite-release.yml                              @dfinity/defi @dfinity/idx
 /.github/workflows/publish-crates.yml                                    @dfinity/idx @dfinity/infrasec
 /.github/workflows/repro-check.yml                                       @dfinity/dre @dfinity/idx
@@ -259,7 +260,7 @@ go.sum                    @dfinity/idx
 /rs/tests/node/                                         @dfinity/node
 /rs/tests/query_stats/                                  @dfinity/team-dsm @dfinity/consensus
 /rs/tests/sdk/                                          @dfinity/sdk
-/rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
+/rs/tla_instrumentation/                                @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/defi
 /rs/tree_deserializer/                                  @dfinity/team-dsm

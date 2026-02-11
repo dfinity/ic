@@ -2772,7 +2772,7 @@ mod tests {
         }
         // - A successful upgrade loop means the subnet assignment cannot be
         // `Unknown`
-        assert_ne!(new_subnet_assignment, SubnetAssignment::Unknown);
+        assert!(!matches!(new_subnet_assignment, SubnetAssignment::Unknown));
         // - There is a local CUP after the upgrade loop <=> the subnet assignment
         // must be `Assigned`
         assert_eq!(
