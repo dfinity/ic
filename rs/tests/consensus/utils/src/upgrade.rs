@@ -143,6 +143,8 @@ pub async fn bless_replica_version(
     sha256: String,
     guest_launch_measurements: Option<GuestLaunchMeasurements>,
     upgrade_url: Vec<String>,
+    replica_urls: Vec<String>,
+    replica_sha256_hash: Option<String>,
 ) {
     bless_replica_version_with_urls(
         nns_node,
@@ -151,6 +153,8 @@ pub async fn bless_replica_version(
         sha256,
         guest_launch_measurements,
         logger,
+        replica_urls,
+        replica_sha256_hash,
     )
     .await;
 }
@@ -162,6 +166,8 @@ pub async fn bless_replica_version_with_urls(
     sha256: String,
     guest_launch_measurements: Option<GuestLaunchMeasurements>,
     logger: &Logger,
+    replica_urls: Vec<String>,
+    replica_sha256_hex: Option<String>,
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
@@ -185,6 +191,8 @@ pub async fn bless_replica_version_with_urls(
         release_package_urls,
         guest_launch_measurements,
         vec![],
+        replica_urls,
+        replica_sha256_hex,
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;

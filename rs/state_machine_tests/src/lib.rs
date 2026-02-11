@@ -347,6 +347,8 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
         guest_launch_measurements: None,
+        replica_urls: vec![],
+        replica_sha256_hex: None,
     };
     registry_data_provider
         .add(

@@ -622,6 +622,8 @@ pub async fn submit_update_elected_replica_versions_proposal(
     upgrade_urls: Vec<String>,
     guest_launch_measurements: Option<GuestLaunchMeasurements>,
     versions_to_unelect: Vec<ReplicaVersion>,
+    replica_urls: Vec<String>,
+    replica_sha256_hex: Option<String>,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -634,6 +636,8 @@ pub async fn submit_update_elected_replica_versions_proposal(
             release_package_urls: upgrade_urls,
             replica_versions_to_unelect: versions_to_unelect.iter().map(String::from).collect(),
             guest_launch_measurements,
+            replica_urls,
+            replica_sha256_hex,
         },
         match (version, sha256, versions_to_unelect.is_empty()) {
             (Some(v), Some(sha), _) => format!(

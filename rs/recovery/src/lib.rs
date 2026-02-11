@@ -497,6 +497,8 @@ impl Recovery {
             release_package_sha256_hex: sha256,
             release_package_urls: vec![upgrade_url.to_string()],
             guest_launch_measurements: Some(guest_launch_measurements),
+            replica_sha256_hex: None,
+            replica_urls: vec![],
         };
 
         Ok(self.get_replay_step(

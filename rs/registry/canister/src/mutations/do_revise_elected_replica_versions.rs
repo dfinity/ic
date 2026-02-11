@@ -76,6 +76,8 @@ impl Registry {
                             }),
                         release_package_urls: payload.release_package_urls,
                         guest_launch_measurements: payload.guest_launch_measurements,
+                        replica_urls: payload.replica_urls,
+                        replica_sha256_hex: payload.replica_sha256_hex,
                     }
                     .encode_to_vec(),
                 },
@@ -234,6 +236,9 @@ pub struct ReviseElectedGuestosVersionsPayload {
 
     /// Version IDs. These can be anything, they have no semantics.
     pub replica_versions_to_unelect: Vec<String>,
+
+    pub replica_urls: Vec<String>,
+    pub replica_sha256_hex: Option<String>,
 }
 
 impl ReviseElectedGuestosVersionsPayload {

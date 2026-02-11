@@ -353,6 +353,8 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
         guest_launch_measurements: None,
+        replica_urls: vec![],
+        replica_sha256_hex: None,
     };
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version_id.clone()],
@@ -629,6 +631,8 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
         guest_launch_measurements,
+        replica_urls: vec![],
+        replica_sha256_hex: None,
     };
     let blessed_replica_version = BlessedReplicaVersions {
         blessed_version_ids: vec![replica_version_id.clone()],

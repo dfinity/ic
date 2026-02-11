@@ -12,6 +12,10 @@ pub struct ReplicaVersionRecord {
     /// The SEV-SNP measurements that belong to this release
     #[prost(message, optional, tag = "9")]
     pub guest_launch_measurements: ::core::option::Option<GuestLaunchMeasurements>,
+    #[prost(string, repeated, tag = "10")]
+    pub replica_urls: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "11")]
+    pub replica_sha256_hex: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
     serde::Serialize,
