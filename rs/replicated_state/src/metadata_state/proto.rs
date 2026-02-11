@@ -332,21 +332,11 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
 
 /// Decodes a `SystemMetadata` proto. The metrics are provided as a side-channel
 /// for recording errors without being forced to return `Err(_)`.
-impl
-    TryFrom<(
-        pb_metadata::SystemMetadata,
-        SubnetSchedule,
-        &dyn CheckpointLoadingMetrics,
-    )> for SystemMetadata
-{
+impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for SystemMetadata {
     type Error = ProxyDecodeError;
 
     fn try_from(
-        (item, subnet_schedule, metrics): (
-            pb_metadata::SystemMetadata,
-            SubnetSchedule,
-            &dyn CheckpointLoadingMetrics,
-        ),
+        (item, metrics): (pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics),
     ) -> Result<Self, Self::Error> {
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
@@ -437,7 +427,6 @@ impl
             // properly set this value.
             ingress_history: Default::default(),
             streams: Arc::new(streams),
-            subnet_schedule,
             network_topology: try_from_option_field(
                 item.network_topology,
                 "SystemMetadata::network_topology",

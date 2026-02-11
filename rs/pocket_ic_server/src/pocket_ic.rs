@@ -170,11 +170,7 @@ use tower::{service_fn, util::ServiceExt};
 #[template(path = "dashboard.html", escape = "html")]
 struct Dashboard<'a> {
     height: Height,
-    canisters: &'a Vec<(
-        &'a ic_replicated_state::CanisterState,
-        &'a ic_replicated_state::CanisterPriority,
-        SubnetId,
-    )>,
+    canisters: &'a Vec<(&'a ic_replicated_state::CanisterState, SubnetId)>,
 }
 
 const MAINNET_NNS_SUBNET_ID: &str =
@@ -4300,13 +4296,7 @@ impl Operation for DashboardRequest {
                 state
                     .get_ref()
                     .canisters_iter()
-                    .map(|canister| {
-                        (
-                            canister,
-                            state.get_ref().canister_priority(&canister.canister_id()),
-                            *subnet_id,
-                        )
-                    })
+                    .map(|c| (c, *subnet_id))
                     .collect::<Vec<_>>()
             })
             .concat();

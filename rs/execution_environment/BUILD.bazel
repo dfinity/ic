@@ -36,7 +36,6 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
-        "//rs/utils",
         "//rs/utils/lru_cache",
         "//rs/utils/thread",
         "@crate_index//:candid",
