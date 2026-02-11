@@ -32,16 +32,16 @@ pub struct LogMemoryStore {
     #[validate_eq(CompareWithValidateEq)]
     maybe_page_map: Option<PageMap>,
 
+    /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
+    #[validate_eq(Ignore)]
+    header_cache: OnceLock<Option<Header>>,
+
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
     /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
     /// The collected sizes are used to expose per-round memory usage metrics
     /// and the record is cleared at the end of the round.
     delta_log_sizes: VecDeque<usize>,
-
-    /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
-    #[validate_eq(Ignore)]
-    header_cache: OnceLock<Option<Header>>,
 }
 
 impl LogMemoryStore {
@@ -60,11 +60,11 @@ impl LogMemoryStore {
         log_memory_limit: NumBytes,
         page_map: PageMap,
     ) -> Self {
-        // PageMap is a lazy pointer that doesn't verify file existence on creation.
-        // To avoid redundant disk I/O during restoration, we only initialize it
-        // if the log memory limit is non-zero.
         Self::new_inner(
             feature_flag,
+            // PageMap is a lazy pointer that doesn't verify file existence on creation.
+            // To avoid redundant disk I/O during restoration, we only initialize page_map
+            // if the log memory limit is non-zero.
             (log_memory_limit > NumBytes::new(0)).then_some(page_map),
         )
     }
@@ -73,8 +73,8 @@ impl LogMemoryStore {
         Self {
             feature_flag,
             maybe_page_map,
-            delta_log_sizes: VecDeque::new(),
             header_cache: OnceLock::new(),
+            delta_log_sizes: VecDeque::new(),
         }
     }
 
@@ -158,11 +158,7 @@ impl LogMemoryStore {
     }
 
     fn resize_impl(&mut self, limit: usize, create_page_map: impl FnOnce() -> PageMap) {
-        if self.feature_flag == FlagStatus::Disabled {
-            self.deallocate();
-            return;
-        }
-        if limit == 0 {
+        if self.feature_flag == FlagStatus::Disabled || limit == 0 {
             self.deallocate();
             return;
         }
@@ -272,6 +268,7 @@ impl Clone for LogMemoryStore {
 
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
+        // header_cache is a transient cache and should not be compared.
         self.feature_flag == other.feature_flag
             && self.maybe_page_map == other.maybe_page_map
             && self.delta_log_sizes == other.delta_log_sizes
