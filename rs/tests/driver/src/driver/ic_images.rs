@@ -197,6 +197,19 @@ pub fn get_guestos_update_img_url() -> Url {
         .expect("Invalid Url")
 }
 
+pub fn get_replica_update_url() -> Url {
+    let env = "ENV_DEPS__REPLICA_UPDATE_URL";
+
+    Url::parse(&std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
+        .expect("Invalid Url")
+}
+
+pub fn get_replica_update_sha256() -> String {
+    let env = "ENV_DEPS__REPLICA_UPDATE_HASH";
+
+    std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
+}
+
 /// Pull the hash of the target GuestOS update image from the environment.
 pub fn get_guestos_update_img_sha256() -> String {
     let env = "ENV_DEPS__GUESTOS_UPDATE_IMG_HASH";
