@@ -42,6 +42,7 @@ use ic_types::{
     messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage},
 };
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
+use ic_utils::iter::left_outer_join;
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
 use prometheus::Histogram;
@@ -490,7 +491,6 @@ impl SchedulerImpl {
             round_schedule.charge_idle_canisters(
                 &mut canisters,
                 &mut round_fully_executed_canister_ids,
-                current_round,
                 is_first_iteration,
             );
 
@@ -558,6 +558,20 @@ impl SchedulerImpl {
             );
             state.put_canister_states(canisters);
 
+            // TODO(IC-1976): When we only schedule (and have `CanisterPriorities` for)
+            // active canisters, switch back to `SubnetSchedule::get_mut()`. For now, all
+            // canisters are scheduled, so we always have a matching `CanisterPriority`.
+            for (_, _, canister_priority) in left_outer_join(
+                round_fully_executed_canister_ids
+                    .iter()
+                    .map(|canister_id| (canister_id, ())),
+                state.metadata.subnet_schedule.iter_mut(),
+            ) {
+                if let Some(canister_priority) = canister_priority {
+                    canister_priority.last_full_execution_round = current_round;
+                }
+            }
+
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
             round_limits.instructions -= as_round_instructions(
@@ -618,16 +632,17 @@ impl SchedulerImpl {
         // We only export metrics for "executable" canisters to ensure that the metrics
         // are not polluted by canisters that haven't had any messages for a long time.
         for canister_id in &round_filtered_canisters.active_canister_ids {
-            let canister_state = state.canister_state(canister_id).unwrap();
             // Newly created canisters have `last_full_execution_round` set to zero,
             // and hence skew the `canister_age` metric.
-            let last_full_execution_round =
-                canister_state.scheduler_state.last_full_execution_round;
+            let last_full_execution_round = state
+                .canister_priority(canister_id)
+                .last_full_execution_round;
             if last_full_execution_round.get() != 0 {
                 let canister_age = current_round.get() - last_full_execution_round.get();
                 self.metrics.canister_age.observe(canister_age as f64);
                 // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
                 // scheduled.
+                let canister_state = state.canister_state(canister_id).unwrap();
                 let allocation = Ratio::new(canister_state.compute_allocation().as_percent(), 100);
                 if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
                 {
@@ -1104,11 +1119,12 @@ impl SchedulerImpl {
             .canisters_iter()
             .filter_map(|canister| {
                 if canister.has_paused_execution() {
+                    let canister_priority = state.canister_priority(&canister.canister_id());
                     Some(CanisterRoundState {
                         canister_id: canister.canister_id(),
-                        accumulated_priority: canister.scheduler_state.accumulated_priority,
+                        accumulated_priority: canister_priority.accumulated_priority,
                         compute_allocation: Default::default(), // not used
-                        long_execution_mode: canister.scheduler_state.long_execution_mode,
+                        long_execution_mode: canister_priority.long_execution_mode,
                         has_aborted_or_paused_execution: true,
                     })
                 } else {
@@ -1445,12 +1461,13 @@ impl Scheduler for SchedulerImpl {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
 
             RoundSchedule::apply_scheduling_strategy(
-                &round_log,
+                &mut state.canister_states,
+                &mut state.metadata.subnet_schedule,
                 self.config.scheduler_cores,
                 current_round,
                 self.config.accumulated_priority_reset_interval,
-                &mut state.canister_states,
                 &self.metrics,
+                &round_log,
             )
         };
 
@@ -1487,7 +1504,6 @@ impl Scheduler for SchedulerImpl {
                 &mut csprng,
                 registry_settings,
                 self.metrics.as_ref(),
-                &self.config,
                 &round_log,
             );
         }
@@ -1630,7 +1646,8 @@ impl Scheduler for SchedulerImpl {
                     .set(final_state.canister_snapshots.count() as i64);
             }
             round_schedule.finish_round(
-                &mut final_state.canister_states,
+                &final_state.canister_states,
+                &mut final_state.metadata.subnet_schedule,
                 fully_executed_canister_ids,
             );
             self.finish_round(&mut final_state, current_round_type);
@@ -1882,9 +1899,8 @@ fn execute_canisters_on_thread(
             es.last_executed_round = round_id;
         }
         RoundSchedule::finish_canister_execution(
-            &mut canister,
+            &canister,
             &mut fully_executed_canister_ids,
-            round_id,
             is_first_iteration,
             rank,
         );

@@ -747,7 +747,6 @@ impl CallContextManager {
     }
 
     /// Returns the number of unresponded canister update call contexts, also taking
-    /// into account a potential paused or aborted canister request execution
     /// (equivalent to one extra call context).
     ///
     /// Time complexity: `O(1)`.
