@@ -1075,6 +1075,20 @@ fn split() {
     // Fixture with 2 canisters.
     let mut fixture = ReplicatedStateFixture::with_canisters(&CANISTERS);
 
+    // Give the canisters non-default priorities.
+    fixture
+        .state
+        .metadata
+        .subnet_schedule
+        .get_mut(CANISTER_1)
+        .accumulated_priority = 1.into();
+    fixture
+        .state
+        .metadata
+        .subnet_schedule
+        .get_mut(CANISTER_2)
+        .accumulated_priority = 2.into();
+
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.
     fixture.push_to_stream(vec![
@@ -1204,6 +1218,9 @@ fn split() {
     expected.metadata.ingress_history = fixture.state.metadata.ingress_history;
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
+    // The logic preserves the full subnet schedule, even though only the priority
+    // of `CANISTER_2` will be persisted along with the canister state.
+    expected.metadata.subnet_schedule = fixture.state.metadata.subnet_schedule;
     // Otherwise, the state should be the same.
     assert_eq!(expected, state_b);
 
@@ -1222,6 +1239,8 @@ fn split() {
     expected.canister_states.insert(CANISTER_2, canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
+    // The canister priority for `CANISTER_1` is gone, as it was not persisted.
+    expected.metadata.subnet_schedule.remove(&CANISTER_1);
     // Everything else should be the same as in phase 1.
     assert_eq!(expected, state_b);
 }
