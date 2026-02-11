@@ -8,6 +8,8 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_management_canister_types_private::{
     MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
 };
+use ic_protobuf::registry::subnet::v1::GenesisArgs;
+use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
@@ -105,6 +107,7 @@ impl Registry {
                 response.high_threshold_transcript_record,
             ),
             chain_key_initializations,
+            cup_type: Some(CupType::Genesis(GenesisArgs {})),
             ..Default::default()
         };
 
