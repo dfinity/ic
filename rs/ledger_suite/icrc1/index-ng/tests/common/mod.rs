@@ -1,11 +1,15 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1_index_ng::FeeCollectorRanges;
 use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg, Log, Status};
 use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_suite_state_machine_helpers::get_logs;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 #[cfg(feature = "icrc3_disabled")]
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 #[cfg(not(feature = "icrc3_disabled"))]
@@ -432,4 +436,161 @@ pub fn status(env: &StateMachine, index_id: CanisterId) -> Status {
         .expect("Failed to send status")
         .bytes();
     Decode!(&res, Status).expect("Failed to decode status response")
+}
+
+#[allow(dead_code)]
+pub fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
+    IndexInitArg {
+        ledger_id: Principal::from(ledger_id),
+        retrieve_blocks_from_ledger_interval_seconds: None,
+    }
+}
+
+#[allow(dead_code)]
+pub fn icrc2_approve(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    caller: PrincipalId,
+    arg: ApproveArgs,
+) -> BlockIndex {
+    let req = Encode!(&arg).expect("Failed to encode ApproveArgs");
+    let res = env
+        .execute_ingress_as(caller, ledger_id, "icrc2_approve", req)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to approve tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+        .bytes();
+    Decode!(&res, Result<BlockIndex, ApproveError>)
+        .expect("Failed to decode Result<BlockIndex, ApproveError>")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to approve. caller:{} arg:{:?} error:{:?}",
+                caller, arg, e
+            )
+        })
+}
+
+#[allow(dead_code)]
+pub fn approve(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: Account,
+    spender: Account,
+    amount: u64,
+) -> u64 {
+    let req = ApproveArgs {
+        from_subaccount: from.subaccount,
+        spender,
+        amount: Nat::from(amount),
+        expected_allowance: None,
+        expires_at: None,
+        fee: None,
+        memo: None,
+        created_at_time: None,
+    };
+    icrc2_approve(env, ledger, PrincipalId(from.owner), req)
+        .0
+        .to_u64()
+        .unwrap()
+}
+
+#[allow(dead_code)]
+pub fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
+    let res = env
+        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
+        .expect("Failed to send icrc1_balance_of")
+        .bytes();
+    Decode!(&res, Nat)
+        .expect("Failed to decode icrc1_balance_of response")
+        .0
+        .to_u64()
+        .expect("Balance must be a u64!")
+}
+
+#[allow(dead_code)]
+pub fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollectorRanges {
+    Decode!(
+        &env.execute_ingress(index, "get_fee_collectors_ranges", Encode!(&()).unwrap())
+            .expect("failed to get_fee_collectors_ranges")
+            .bytes(),
+        FeeCollectorRanges
+    )
+    .expect("failed to decode get_fee_collectors_ranges response")
+}
+
+#[allow(dead_code)]
+pub fn icrc1_transfer(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    caller: PrincipalId,
+    arg: TransferArg,
+) -> BlockIndex {
+    let req = Encode!(&arg).expect("Failed to encode TransferArg");
+    let res = env
+        .execute_ingress_as(caller, ledger_id, "icrc1_transfer", req)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+        .bytes();
+    Decode!(&res, Result<BlockIndex, TransferError>)
+        .expect("Failed to decode Result<BlockIndex, TransferError>")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+}
+
+#[allow(dead_code)]
+pub fn transfer(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    from: Account,
+    to: Account,
+    amount: u64,
+) -> BlockIndex {
+    let Account { owner, subaccount } = from;
+    let req = TransferArg {
+        from_subaccount: subaccount,
+        to,
+        amount: amount.into(),
+        created_at_time: None,
+        fee: None,
+        memo: None,
+    };
+    icrc1_transfer(env, ledger_id, owner.into(), req)
+}
+
+#[allow(dead_code)]
+pub fn icrc2_transfer_from(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    caller: PrincipalId,
+    arg: TransferFromArgs,
+) -> BlockIndex {
+    let req = Encode!(&arg).expect("Failed to encode TransferFromArgs");
+    let res = env
+        .execute_ingress_as(caller, ledger_id, "icrc2_transfer_from", req)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+        .bytes();
+    Decode!(&res, Result<BlockIndex, TransferFromError>)
+        .expect("Failed to decode Result<BlockIndex, TransferFromError>")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
 }
