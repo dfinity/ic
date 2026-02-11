@@ -1,10 +1,10 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use config_tool::guestos::bootstrap_ic_node::bootstrap_ic_node;
 use config_tool::guestos::generate_ic_config;
+use config_tool::serialize_and_write_config;
 use config_tool::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
 use config_tool::setupos::deployment_json::{VmResources, get_deployment_settings};
-use config_tool::{OsType, serialize_and_write_config};
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
@@ -241,16 +241,20 @@ pub fn main() -> Result<()> {
             println!("Dumping OS configuration");
 
             match os_type {
-                OsType::GuestOS => {
-                    let config: GuestOSConfig =
-                        config_tool::deserialize_config("/run/config/config.json")?;
-
-                    println!("{config:?}");
+                OsType::SetupOS => {
+                    bail!("SetupOS is not supported");
                 }
 
                 OsType::HostOS => {
                     let config: HostOSConfig =
                         config_tool::deserialize_config("/boot/config/config.json")?;
+
+                    println!("{config:?}");
+                }
+
+                OsType::GuestOS => {
+                    let config: GuestOSConfig =
+                        config_tool::deserialize_config("/run/config/config.json")?;
 
                     println!("{config:?}");
                 }

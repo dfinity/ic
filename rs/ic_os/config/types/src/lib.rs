@@ -37,7 +37,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
-use strum::EnumString;
+use strum::{Display, EnumString};
 use url::Url;
 
 pub const CONFIG_VERSION: &str = "1.12.0";
@@ -50,6 +50,14 @@ pub static RESERVED_FIELD_PATHS: &[&str] = &[
     "hostos_settings.vm_memory",
     "hostos_settings.vm_nr_of_vcpus",
 ];
+
+/// Type of the operating system
+#[derive(Debug, Clone, EnumString, Display)]
+pub enum OsType {
+    SetupOS,
+    HostOS,
+    GuestOS,
+}
 
 pub type ConfigMap = HashMap<String, String>;
 
