@@ -4998,12 +4998,6 @@ dependencies = [
 
 [[package]]
 name = "fqdn"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb540cf7bc4fe6df9d8f7f0c974cfd0dce8ed4e9e8884e73433b503ee78b4e7d"
-
-[[package]]
-name = "fqdn"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "886ac788f62d16d6b0f26b2fa762b34ef16ebfb4b624c2c15fbcadc9173c0f72"
@@ -6614,7 +6608,7 @@ dependencies = [
  "cloudflare",
  "derive-new",
  "flate2",
- "fqdn 0.5.2",
+ "fqdn",
  "futures",
  "futures-util",
  "governor 0.10.4",
@@ -6691,7 +6685,7 @@ dependencies = [
  "clap 4.5.58",
  "cloudflare",
  "derive-new",
- "fqdn 0.5.2",
+ "fqdn",
  "hickory-proto",
  "hickory-resolver",
  "http 1.4.0",
@@ -9202,7 +9196,7 @@ dependencies = [
  "chacha20poly1305",
  "clap 4.5.58",
  "derive-new",
- "fqdn 0.5.2",
+ "fqdn",
  "ic-bn-lib",
  "ic-bn-lib-common",
  "ic-custom-domains-base",
@@ -9233,7 +9227,7 @@ dependencies = [
  "chrono",
  "clap 4.5.58",
  "derive-new",
- "fqdn 0.5.2",
+ "fqdn",
  "hickory-resolver",
  "humantime",
  "ic-bn-lib",
@@ -9275,7 +9269,7 @@ dependencies = [
  "async-trait",
  "candid",
  "derive-new",
- "fqdn 0.5.2",
+ "fqdn",
  "ic-bn-lib",
  "ic-bn-lib-common",
  "ic-custom-domains-base",
@@ -9634,7 +9628,7 @@ dependencies = [
  "cloudflare",
  "ctrlc",
  "derive-new",
- "fqdn 0.5.2",
+ "fqdn",
  "futures",
  "hickory-resolver",
  "hostname",
@@ -19581,7 +19575,7 @@ dependencies = [
  "ctrlc",
  "cycles-minting-canister",
  "flate2",
- "fqdn 0.3.12",
+ "fqdn",
  "futures",
  "hex",
  "http 1.4.0",

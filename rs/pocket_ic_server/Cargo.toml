@@ -19,7 +19,7 @@ clap = { workspace = true }
 ctrlc = { version = "3.4.5", features = ["termination"] }
 cycles-minting-canister = { path = "../nns/cmc" }
 flate2 = { workspace = true }
-fqdn = "0.3.11"
+fqdn = "0.5.2"
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }

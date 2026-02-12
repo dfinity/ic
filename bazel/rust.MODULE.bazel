@@ -486,7 +486,7 @@ crate.spec(
 )
 crate.spec(
     package = "fqdn",
-    version = "0.3.11",
+    version = "0.5.2",
 )
 crate.spec(
     package = "fs_extra",
