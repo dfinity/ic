@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   publish-crates:
-    name: Publish Crates
+    name: Publish Crate ${{ github.event.inputs.crate-name }}
     runs-on: ubuntu-latest
     environment: publish-crates
     steps:
