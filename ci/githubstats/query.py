@@ -639,6 +639,9 @@ def download_ic_logs_for_system_test(
     ic_logs_dir = attempt_dir / "ic_logs"
     ic_logs_dir.mkdir(exist_ok=True)
 
+    gte = test_start_time.isoformat()
+    lte = test_end_time.isoformat()
+
     elasticsearch_query = {
         "size": 10000,
         "query": {
@@ -648,8 +651,8 @@ def download_ic_logs_for_system_test(
                     {
                         "range": {
                             "timestamp": {
-                                "gte": test_start_time.isoformat(),
-                                "lte": test_end_time.isoformat(),
+                                "gte": gte,
+                                "lte": lte,
                             }
                         }
                     },
@@ -666,6 +669,10 @@ def download_ic_logs_for_system_test(
         params = {"filter_path": "hits.hits"}
         all_hits = []
         while True:
+            print(
+                f"Downloading IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
+                file=sys.stderr,
+            )
             response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
 
             if not response.ok:
