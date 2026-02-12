@@ -1,5 +1,5 @@
 {
-  "checksum": "d618464f4d333564bdee8d5fd0f84b62cdd1def00b6b5b3510d888a13f0cfc5a",
+  "checksum": "be63255a29db22bfe304c2578227933e73c3de701f98d3e735c17eb321b16b76",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2014,7 +2014,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -3521,7 +3521,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -14327,7 +14327,7 @@
               "target": "serde_with"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -14386,7 +14386,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -21665,7 +21665,7 @@
               "target": "ic_canister_log"
             },
             {
-              "id": "ic-canister-runtime 0.1.0",
+              "id": "ic-canister-runtime 0.1.2",
               "target": "ic_canister_runtime"
             },
             {
@@ -22439,7 +22439,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -26495,9 +26495,12 @@
       "version": "0.3.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_client/0.3.0/download",
-          "sha256": "11d6b4ecbd21ee4f46919e9640838a54517fe36bad263a3778d8117eb284b44e"
+        "Git": {
+          "remote": "https://github.com/dfinity/evm-rpc-canister.git",
+          "commitish": {
+            "Rev": "94a38c2f02abcb4e6590ae860d3572e3a193a8a4"
+          },
+          "strip_prefix": "evm_rpc_client"
         }
       },
       "targets": [
@@ -26530,7 +26533,7 @@
               "target": "evm_rpc_types"
             },
             {
-              "id": "ic-canister-runtime 0.1.0",
+              "id": "ic-canister-runtime 0.1.2",
               "target": "ic_canister_runtime"
             },
             {
@@ -26571,9 +26574,12 @@
       "version": "3.1.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/3.1.0/download",
-          "sha256": "75922b95f9ccc305d90df9dc4dca69d6935c2d961528b8a4916900de1880135b"
+        "Git": {
+          "remote": "https://github.com/dfinity/evm-rpc-canister.git",
+          "commitish": {
+            "Rev": "94a38c2f02abcb4e6590ae860d3572e3a193a8a4"
+          },
+          "strip_prefix": "evm_rpc_types"
         }
       },
       "targets": [
@@ -26630,7 +26636,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -32452,7 +32458,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -32596,7 +32602,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -34716,7 +34722,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -34948,7 +34954,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -35268,7 +35274,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -35488,7 +35494,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -35640,14 +35646,17 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-canister-runtime 0.1.0": {
+    "ic-canister-runtime 0.1.2": {
       "name": "ic-canister-runtime",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "package_url": "https://github.com/dfinity/canhttp",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-canister-runtime/0.1.0/download",
-          "sha256": "01a81a68bc6825ab81142a4e176ee04d0cc73deeed69753603e90e57b3ddcd3f"
+        "Git": {
+          "remote": "https://github.com/dfinity/canhttp.git",
+          "commitish": {
+            "Rev": "f8eec859504fe009711d6183c91b326ed0f2e216"
+          },
+          "strip_prefix": "ic-canister-runtime"
         }
       },
       "targets": [
@@ -35688,7 +35697,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -35704,7 +35713,7 @@
           ],
           "selects": {}
         },
-        "version": "0.1.0"
+        "version": "0.1.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35786,7 +35795,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -35932,7 +35941,7 @@
               "target": "slotmap"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -36502,7 +36511,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -36644,7 +36653,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -36730,7 +36739,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -36968,7 +36977,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -37229,7 +37238,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -37532,7 +37541,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -38222,7 +38231,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -38310,7 +38319,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -38408,7 +38417,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -38516,7 +38525,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -41581,7 +41590,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -48076,7 +48085,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -58245,7 +58254,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -60774,7 +60783,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -65182,7 +65191,7 @@
               "target": "libredox"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -66963,7 +66972,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -69592,7 +69601,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -73017,7 +73026,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -76526,7 +76535,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -80538,14 +80547,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror 2.0.17": {
+    "thiserror 2.0.18": {
       "name": "thiserror",
-      "version": "2.0.17",
+      "version": "2.0.18",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/2.0.17/download",
-          "sha256": "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
+          "url": "https://static.crates.io/crates/thiserror/2.0.18/download",
+          "sha256": "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
         }
       },
       "targets": [
@@ -80589,7 +80598,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "build_script_build"
             }
           ],
@@ -80599,13 +80608,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 2.0.17",
+              "id": "thiserror-impl 2.0.18",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "2.0.17"
+        "version": "2.0.18"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -80681,14 +80690,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 2.0.17": {
+    "thiserror-impl 2.0.18": {
       "name": "thiserror-impl",
-      "version": "2.0.17",
+      "version": "2.0.18",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/2.0.17/download",
-          "sha256": "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.18/download",
+          "sha256": "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
         }
       },
       "targets": [
@@ -80728,7 +80737,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.17"
+        "version": "2.0.18"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -84331,7 +84340,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -84415,7 +84424,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -85843,7 +85852,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -90635,7 +90644,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -92239,7 +92248,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -96666,7 +96675,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -98527,7 +98536,7 @@
     "ic-bn-lib-common 0.1.0",
     "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",
-    "ic-canister-runtime 0.1.0",
+    "ic-canister-runtime 0.1.2",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.0.3",
     "ic-cdk 0.19.0",
@@ -98727,7 +98736,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 2.0.17",
+    "thiserror 2.0.18",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.6.0",
