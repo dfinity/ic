@@ -431,6 +431,9 @@ def execute_download_tasks(
     )
 
 
+TIMESTAMP_LEN = 23
+
+
 def process_log(
     row: pd.Series,
     test_target: str,
@@ -465,14 +468,14 @@ def process_log(
             try:
                 # Here we try parsing a timestamp from the first 23 characters of a line
                 # assuming the line looks something like: "2026-02-03 13:55:09.645 INFO..."
-                last_seen_timestamp = pd.to_datetime(line[:23], utc=True)
+                last_seen_timestamp = datetime.strptime(line[:TIMESTAMP_LEN], "%Y-%m-%d %H:%M:%S.%f")
             except (ValueError, pd.errors.ParserError):
-                pass
+                continue
 
-            ix = line.find("{")
+            ix = line[TIMESTAMP_LEN:].find("{")
             if ix == -1:
                 continue
-            obj = line[ix:]
+            obj = line[TIMESTAMP_LEN + ix :]
 
             try:
                 log_event = LogEvent.from_json(obj)
@@ -622,8 +625,8 @@ def shorten(msg: str, max_length: int) -> str:
 def download_ic_logs_for_system_test(
     attempt_dir: Path,
     group_name: str,
-    test_start_time: pd.Timestamp,
-    test_end_time: pd.Timestamp,
+    test_start_time: datetime,
+    test_end_time: datetime,
     vm_ipv6s: dict[str, str],
 ):
     ic_logs_dir = attempt_dir / "ic_logs"
@@ -683,8 +686,8 @@ def download_ic_logs_for_system_test(
                 continue
             node = source["ic_node"]
             try:
-                timestamp = pd.to_datetime(source["timestamp"], utc=True)
-            except (ValueError, pd.errors.ParserError):
+                timestamp = datetime.strptime(source["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            except ValueError:
                 continue
             logs_by_node.setdefault(node, []).append((timestamp, source["MESSAGE"]))
 
