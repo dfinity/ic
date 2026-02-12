@@ -23,10 +23,6 @@ pub struct BootstrapOptions {
     /// IC_PREP_OUT_PATH/ic_registry_local_store
     pub ic_registry_local_store: Option<PathBuf>,
 
-    /// Path to the PEM-encoded Node Operator private key
-    /// Will be filled only for the legacy SetupOS-installed systems
-    pub node_operator_private_key: Option<PathBuf>,
-
     /// Should point to a directory with files containing the authorized ssh
     /// keys for specific user accounts on the machine. The name of the
     /// key designates the name of the account (so, if there is a file
@@ -77,25 +73,9 @@ impl BootstrapOptions {
         Ok(())
     }
 
-    /// Build a bootstrap directory with this configuration.
-    /// Returns a TempDir containing all bootstrap files.
+    /// Populates given bootstrap directory with this configuration
     fn populate_bootstrap_dir(&self, bootstrap_dir: &Path) -> Result<()> {
-        if let Some(mut guestos_config) = self.guestos_config.clone() {
-            // See if there's a node operator key defined on the config.
-            // If not - see if there's a fallback path to the file provided
-            // and try to load it if it exists.
-            if guestos_config
-                .icos_settings
-                .node_operator_private_key
-                .is_none()
-                && let Some(v) = &self.node_operator_private_key
-                && v.exists()
-            {
-                let key = fs::read_to_string(v)
-                    .context("unable to read Node Operator private key from the file")?;
-                guestos_config.icos_settings.node_operator_private_key = Some(key);
-            }
-
+        if let Some(guestos_config) = self.guestos_config.clone() {
             serialize_and_write_config(&bootstrap_dir.join("config.json"), &guestos_config)
                 .context("Failed to write guestos config to config.json")?;
         }
@@ -203,15 +183,11 @@ mod tests {
         fs::create_dir(&test_files_dir)?;
 
         let mut guestos_config = GuestOSConfig::default();
+        guestos_config.icos_settings.node_operator_private_key =
+            Some("node_operator_private_key_foo".to_string());
 
         let node_key_path = test_files_dir.join("node.pem");
         fs::write(&node_key_path, "test_node_key")?;
-
-        let node_operator_private_key_path = test_files_dir.join("node_operator_private_key.pem");
-        fs::write(
-            &node_operator_private_key_path,
-            "node_operator_private_key_foo",
-        )?;
 
         let ssh_keys_dir = test_files_dir.join("ssh_keys");
         fs::create_dir(&ssh_keys_dir)?;
@@ -232,7 +208,6 @@ mod tests {
         // Create full configuration
         let bootstrap_options = BootstrapOptions {
             guestos_config: Some(guestos_config.clone()),
-            node_operator_private_key: Some(node_operator_private_key_path),
             #[cfg(feature = "dev")]
             accounts_ssh_authorized_keys: Some(ssh_keys_dir),
             ic_crypto: Some(crypto_dir),
@@ -242,9 +217,6 @@ mod tests {
 
         bootstrap_options.populate_bootstrap_dir(&bootstrap_dir)?;
 
-        // Set the expected key from the file
-        guestos_config.icos_settings.node_operator_private_key =
-            Some("node_operator_private_key_foo".to_string());
         let guestos_config_json: GuestOSConfig =
             serde_json::from_slice(&fs::read(bootstrap_dir.join("config.json"))?)?;
 
@@ -293,15 +265,8 @@ mod tests {
         let node_key_path = test_files_dir.join("node.pem");
         fs::write(&node_key_path, "test_node_key")?;
 
-        let node_operator_private_key_path = test_files_dir.join("node_operator_private_key.pem");
-        fs::write(
-            &node_operator_private_key_path,
-            "node_operator_private_key_from_file",
-        )?;
-
         let bootstrap_options = BootstrapOptions {
             guestos_config: Some(guestos_config.clone()),
-            node_operator_private_key: Some(node_operator_private_key_path),
             #[cfg(feature = "dev")]
             accounts_ssh_authorized_keys: None,
             ic_crypto: None,
