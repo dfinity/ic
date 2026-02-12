@@ -18694,7 +18694,7 @@ dependencies = [
 
 [[package]]
 name = "open_rootfs"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "attestation",
@@ -18702,11 +18702,12 @@ dependencies = [
  "command_runner",
  "config_tool",
  "config_types",
- "ic-agent 0.40.1",
+ "ic-certificate-verification",
  "ic-certification 3.0.3",
  "ic-certification-test-utils",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic_device",
