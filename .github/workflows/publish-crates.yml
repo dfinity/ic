@@ -16,7 +16,7 @@ on:
         type: boolean
 
 run-name: >-
-  ${{ format('Publish Crate {0}', github.event.inputs.crate-name) }}
+  ${{ format('Publish Crate {0} {1}', github.event.inputs.crate-name, github.event.inputs.crate-version) }}
 
 permissions:
   contents: read
