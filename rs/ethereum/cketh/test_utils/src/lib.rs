@@ -145,8 +145,8 @@ impl CkEthSetup {
             .unwrap(),
         )
         .unwrap();
-        let minter_id = install_minter(&env, ledger_id, minter_id, evm_rpc_id);
         install_evm_rpc(&env, evm_rpc_id);
+        let minter_id = install_minter(&env, ledger_id, minter_id, evm_rpc_id);
 
         let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
         let cketh = Self {
@@ -696,6 +696,21 @@ impl CkEthSetup {
         )
         .unwrap()
     }
+
+    pub fn minter_canister_logs(&self) -> Vec<CanisterLog> {
+        let log = self.env.canister_log(self.minter_id);
+
+        let mut records = log.records().iter().collect::<Vec<_>>();
+        records.sort_by(|a, b| a.idx.cmp(&b.idx));
+        records
+            .into_iter()
+            .map(|log| CanisterLog {
+                timestamp_nanos: log.timestamp_nanos,
+                idx: log.idx,
+                content: String::from_utf8_lossy(&log.content).to_string(),
+            })
+            .collect()
+    }
 }
 
 pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
@@ -781,4 +796,11 @@ pub struct LedgerBalance {
     pub ledger_id: Principal,
     pub account: Account,
     pub balance: Nat,
+}
+
+#[derive(Debug)]
+pub struct CanisterLog {
+    pub timestamp_nanos: u64,
+    pub idx: u64,
+    pub content: String,
 }
