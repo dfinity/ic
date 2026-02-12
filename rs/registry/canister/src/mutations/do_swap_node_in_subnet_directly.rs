@@ -684,6 +684,7 @@ mod tests {
             setup_registry_for_test(false);
 
         test_set_swapping_whitelisted_callers(vec![node_operator_id]);
+        test_set_swapping_enabled_subnets(vec![]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             old_node_id: Some(old_node_id.get()),

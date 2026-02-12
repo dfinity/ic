@@ -89,11 +89,13 @@ rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
 
 rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_colocate
 
-rs/dogecoin/* //rs/tests/cross_chain:doge_adapter_basics_test
-
 rs/bitcoin/* //rs/tests/cross_chain:btc_adapter_basics_test
              //rs/tests/cross_chain:doge_adapter_basics_test
              //rs/tests/cross_chain:btc_get_balance_test_colocate
+
+rs/dogecoin/ckdoge/* //rs/tests/ckbtc:ckdoge_minter_basics_test
+
+rs/bitcoin/ckbtc/*   //rs/tests/ckbtc:ckdoge_minter_basics_test
 
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test
 

@@ -15,8 +15,9 @@ WITH
       bazel_tests       AS bt ON bi.build_id = bt.build_id
 
     WHERE
-      ({hide} = '' OR bt.label NOT LIKE {hide})
-      AND ('{period}' = '' OR bt.first_start_time > now() - ('1 {period}'::interval))
+      ({exclude} = '' OR bt.label NOT LIKE {exclude})
+      AND ({include} = '' OR bt.label LIKE {include})
+      AND ({time_filter})
       AND (NOT {only_prs} OR wr.event_type = 'pull_request')
       AND ({branch} = '' OR wr.head_branch LIKE {branch})
 

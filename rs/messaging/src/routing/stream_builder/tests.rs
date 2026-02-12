@@ -97,7 +97,7 @@ fn reject_local_request() {
 
         // With a reservation on an input queue.
         let payment = Cycles::new(100);
-        let callback_id = register_callback(&mut canister_state, sender, receiver, NO_DEADLINE);
+        let callback_id = register_callback(&mut canister_state, receiver, NO_DEADLINE);
         let msg = generate_message_for_test(
             sender,
             receiver,
@@ -207,7 +207,10 @@ fn build_streams_success() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -313,7 +316,10 @@ fn build_streams_local_canisters() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -493,7 +499,10 @@ fn build_streams_respects_limits(
         // Act.
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 
@@ -572,7 +581,10 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -649,7 +661,10 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -1180,7 +1195,10 @@ fn build_streams_with_oversized_payloads() {
         // Act
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 
@@ -1589,8 +1607,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
 
         match msg {
             RequestOrResponse::Request(req) => {
-                let callback_id =
-                    register_callback(canister_state, req.sender, req.receiver, req.deadline);
+                let callback_id = register_callback(canister_state, req.receiver, req.deadline);
                 // Check the implicit assumption that the test messages were generated with a
                 // `sender_reply_callback` that is consistent with the callback IDs that the
                 // `CallContextManager` generates and registers.

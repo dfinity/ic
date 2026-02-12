@@ -156,6 +156,7 @@ mod tests {
     use gpt::{GptConfig, GptDisk};
     use ic_device::device_mapping::LoopDeviceWrapper;
     use std::fs::File;
+    use std::io::{Read, Seek, SeekFrom};
     use std::os::unix::fs::FileExt;
     use std::path::PathBuf;
     use std::sync::Mutex;
@@ -272,16 +273,24 @@ mod tests {
             .read_at(&mut read_buf, partition10_start_bytes)
             .expect("Failed to read from device file");
         assert_eq!(read_buf, b"bar");
+        // Sync the device to ensure that the writes are persisted to the backing file
+        upgrade_device
+            .sync_all()
+            .expect("Failed to sync device file");
         drop(upgrade_device);
 
-        let file = File::open(&setup.backing_file).expect("Failed to open backing file");
+        let mut file = File::open(&setup.backing_file).expect("Failed to open backing file");
         let mut read_buf = vec![0; 3];
-        file.read_at(&mut read_buf, partition3_start_bytes)
+        file.seek(SeekFrom::Start(partition3_start_bytes))
+            .expect("Failed to seek");
+        file.read_exact(&mut read_buf)
             .expect("Failed to read from backing file");
         // Check that the read-write partition is written to the backing file
         assert_eq!(read_buf, b"foo");
 
-        file.read_at(&mut read_buf, partition10_start_bytes)
+        file.seek(SeekFrom::Start(partition10_start_bytes))
+            .expect("Failed to seek");
+        file.read_exact(&mut read_buf)
             .expect("Failed to read from backing file");
         // Check that the read-only partition is not written to the backing file
         assert_eq!(read_buf, &[0, 0, 0]);
