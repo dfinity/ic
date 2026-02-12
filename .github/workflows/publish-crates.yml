@@ -1,4 +1,4 @@
-name: Publish ic crates to crates.io
+name: Publish Crates
 
 on:
   workflow_dispatch:
@@ -14,6 +14,9 @@ on:
         required: false
         default: 'false'
         type: boolean
+
+run-name: >-
+  ${{ format('Publish Crate {0}', github.event.inputs.crate-name) }}
 
 permissions:
   contents: read
