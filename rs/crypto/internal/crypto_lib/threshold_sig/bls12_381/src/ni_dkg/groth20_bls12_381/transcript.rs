@@ -207,8 +207,7 @@ fn compute_transcript(
                 .expect("Cannot fail because all x are distinct.");
 
             LagrangeCoefficients::at_zero(&indices)
-                .coefficients()
-                .to_vec()
+                .into_coefficients()
         };
 
         let mut combined = vec![];

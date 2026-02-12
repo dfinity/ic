@@ -124,8 +124,7 @@ impl PublicCoefficients {
         let indices = NodeIndices::from_slice(samples).map_err(|_| ThresholdError::DuplicateX)?;
 
         Ok(LagrangeCoefficients::at_zero(&indices)
-            .coefficients()
-            .to_vec())
+            .into_coefficients())
     }
 }
 
