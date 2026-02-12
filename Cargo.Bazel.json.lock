@@ -1,5 +1,5 @@
 {
-  "checksum": "6bbc39eee660686c1b373c4e136f78c3223cc99b235834389669075fadd3cbf5",
+  "checksum": "dbadba2b42a800ac952738bf5cbe73467c6a330b18e8c94701019bb1813dcb90",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22727,6 +22727,10 @@
             {
               "id": "rustversion 1.0.14",
               "target": "rustversion"
+            },
+            {
+              "id": "securefmt 0.1.5",
+              "target": "securefmt"
             },
             {
               "id": "strum_macros 0.26.4",
@@ -71904,6 +71908,65 @@
       ],
       "license_file": "LICENSE"
     },
+    "securefmt 0.1.5": {
+      "name": "securefmt",
+      "version": "0.1.5",
+      "package_url": "https://gitlab.com/pfouilloux/securefmt",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/securefmt/0.1.5/download",
+          "sha256": "95d159bf5e6b8c35033c3742a00cb8e7370a217af82e5d304a0d3ce4930e41fe"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "securefmt",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "securefmt",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.103",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.42",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.110",
+              "target": "syn"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.5"
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "License"
+    },
     "security-framework 2.11.1": {
       "name": "security-framework",
       "version": "2.11.1",
@@ -98683,6 +98746,7 @@
     "scraper 0.17.1",
     "scrypt 0.11.0",
     "secp256k1 0.22.2",
+    "securefmt 0.1.5",
     "semver 1.0.27",
     "serde 1.0.228",
     "serde-bytes-repr 0.1.5",
