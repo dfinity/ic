@@ -1817,3 +1817,247 @@ fn test_canister_log_on_cleanup() {
         ]
     );
 }
+
+#[test]
+fn test_default_log_memory_limit_and_size() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let controller = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup_with_controller(controller, UNIVERSAL_CANISTER_WASM.to_vec());
+
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(
+        status.settings().log_memory_limit(),
+        candid::Nat::from(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+    );
+    assert_eq!(
+        status.log_memory_store_size().get(),
+        TEST_DEFAULT_LOG_MEMORY_USAGE
+    );
+}
+
+#[test]
+fn test_changing_log_memory_limit_and_size() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let controller = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup_with_controller(controller, UNIVERSAL_CANISTER_WASM.to_vec());
+
+    let new_log_memory_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT + 1000) as u64;
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(new_log_memory_limit)
+            .build(),
+    );
+
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(
+        status.settings().log_memory_limit(),
+        candid::Nat::from(new_log_memory_limit)
+    );
+    assert_eq!(
+        status.log_memory_store_size().get(),
+        8 * KIB + new_log_memory_limit,
+    );
+}
+
+#[test]
+fn test_setting_log_memory_limit_to_zero() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let controller = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup_with_controller(controller, UNIVERSAL_CANISTER_WASM.to_vec());
+
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+    );
+
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(
+        status.settings().log_memory_limit(),
+        candid::Nat::from(0_u64)
+    );
+    assert_eq!(status.log_memory_store_size().get(), 0_u64);
+}
+
+#[test]
+fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let expected_memory_usage = 8 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT as u64;
+    let controller = PrincipalId::new_anonymous();
+    let wasm = wat_canister()
+        .update("test", wat_fn().debug_print(b"hello"))
+        .build_wasm();
+    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+    // Populate logs.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    // Assert non-empty logs.
+    assert_eq!(response.canister_log_records.len(), 1);
+
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(status.log_memory_store_size().get(), expected_memory_usage);
+
+    // Reinstall canister.
+    let _ = env.reinstall_canister(canister_id, wasm, vec![]);
+
+    // Logs should be cleared.
+    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    assert_eq!(response.canister_log_records.len(), 0);
+    // Log memory limit should be preserved.
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(status.log_memory_store_size().get(), expected_memory_usage);
+}
+
+#[test]
+fn test_canister_uninstall_code_deallocates_logs() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let (env, canister_id) = setup_with_controller(
+        PrincipalId::new_anonymous(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+
+    // Before uninstall code.
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(
+        status.settings().log_memory_limit(),
+        candid::Nat::from(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+    );
+    assert_eq!(
+        status.log_memory_store_size().get(),
+        TEST_DEFAULT_LOG_MEMORY_USAGE
+    );
+
+    let _ = env.uninstall_code(canister_id).unwrap();
+
+    // After uninstall code.
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(
+        status.settings().log_memory_limit(),
+        candid::Nat::from(0_u64)
+    );
+    assert_eq!(status.log_memory_store_size().get(), 0_u64);
+}
+
+#[test]
+fn test_canister_uninstall_and_install_clears_log_memory() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let controller = PrincipalId::new_anonymous();
+    let wasm = wat_canister()
+        .update("test", wat_fn().debug_print(b"hello"))
+        .build_wasm();
+    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+
+    // Before uninstall+install populate logs.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    assert_eq!(response.canister_log_records.len(), 3);
+
+    // Do uninstall code and install again.
+    let _ = env.uninstall_code(canister_id).unwrap();
+    let _ = env.install_wasm_in_mode(
+        canister_id,
+        CanisterInstallMode::Install,
+        wasm.clone(),
+        vec![],
+    );
+
+    // After uninstall code.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    // Expect zero, because log memory store is deallocated.
+    assert_eq!(response.canister_log_records.len(), 0);
+}
+
+#[test]
+fn test_canister_resize_up_preserves_logs() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let controller = PrincipalId::new_anonymous();
+    let wasm = wat_canister()
+        .update("test", wat_fn().debug_print(b"hello"))
+        .build_wasm();
+    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+
+    // Before resizing.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    let logs_before = response.canister_log_records;
+    assert_eq!(logs_before.len(), 3);
+
+    // Resize up.
+    let new_memory_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT + 1000) as u64;
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(new_memory_limit)
+            .build(),
+    );
+
+    // After resizing.
+    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    let logs_after = response.canister_log_records;
+    assert_eq!(logs_after.len(), 3);
+    assert_eq!(logs_before, logs_after);
+}
+
+#[test]
+fn test_canister_resize_down_preserves_logs() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let controller = PrincipalId::new_anonymous();
+    let wasm = wat_canister()
+        .update("test", wat_fn().debug_print(b"hello"))
+        .build_wasm();
+    let (env, canister_id) = setup_with_controller(controller, wasm.clone());
+
+    // Before resizing.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    let logs_before = response.canister_log_records;
+    assert_eq!(logs_before.len(), 3);
+
+    // Resize down.
+    let new_memory_limit = (TEST_DEFAULT_LOG_MEMORY_LIMIT - 1000) as u64;
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(new_memory_limit)
+            .build(),
+    );
+
+    // After resizing.
+    let reply = fetch_canister_logs(&env, controller, canister_id);
+    let response = FetchCanisterLogsResponse::decode(&get_reply(reply)).unwrap();
+    let logs_after = response.canister_log_records;
+    assert_eq!(logs_after.len(), 3);
+    assert_eq!(logs_before, logs_after);
+}
