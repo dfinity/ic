@@ -31,7 +31,7 @@ use std::convert::TryFrom;
 #[test]
 fn should_correctly_serialize_and_deserialize_idkg_opening() {
     let opening = idkg_opening();
-    let proto = IDkgOpeningProto::from(&opening);
+    let proto = IDkgOpeningProto::from(opening.clone());
     let parsing_result = IDkgOpening::try_from(&proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
@@ -41,7 +41,7 @@ fn should_correctly_serialize_and_deserialize_idkg_opening() {
 #[test]
 fn should_correctly_serialize_and_deserialize_idkg_complaint() {
     let complaint = idkg_complaint();
-    let proto = IDkgComplaintProto::from(&complaint);
+    let proto = IDkgComplaintProto::from(complaint.clone());
     let parsing_result = IDkgComplaint::try_from(&proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
@@ -75,9 +75,9 @@ fn should_correctly_serialize_and_deserialize_dealing_support() {
     let rng = &mut reproducible_rng();
     for _ in 0..100 {
         let dealing_support = dummy_dealing_support(rng);
-        let proto = IDkgDealingSupportProto::from(&dealing_support);
+        let proto = IDkgDealingSupportProto::from(dealing_support.clone());
         assert_matches!(
-            IDkgDealingSupport::try_from(&proto),
+            IDkgDealingSupport::try_from(proto),
             Ok(decoded_dealing_support)
             if decoded_dealing_support == dealing_support
         );

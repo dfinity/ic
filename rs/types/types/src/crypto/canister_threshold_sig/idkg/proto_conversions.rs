@@ -80,7 +80,7 @@ impl From<&InitialIDkgDealings> for InitialIDkgDealingsProto {
         let signed_dealings = initial_dealings
             .dealings()
             .iter()
-            .map(signed_idkg_dealing_tuple_proto)
+            .map(|d| d.clone().into())
             .collect();
         InitialIDkgDealingsProto {
             version: CURRENT_INITIAL_IDKG_DEALINGS_VERSION,
@@ -105,12 +105,12 @@ impl TryFrom<&InitialIDkgDealingsProto> for InitialIDkgDealings {
     }
 }
 
-impl From<&IDkgOpening> for IDkgOpeningProto {
-    fn from(value: &IDkgOpening) -> Self {
+impl From<IDkgOpening> for IDkgOpeningProto {
+    fn from(value: IDkgOpening) -> Self {
         Self {
             transcript_id: Some(IDkgTranscriptIdProto::from(&value.transcript_id)),
             dealer: Some(node_id_into_protobuf(value.dealer_id)),
-            raw_opening: value.internal_opening_raw.clone(),
+            raw_opening: value.internal_opening_raw,
         }
     }
 }
@@ -130,12 +130,12 @@ impl TryFrom<&IDkgOpeningProto> for IDkgOpening {
     }
 }
 
-impl From<&IDkgComplaint> for IDkgComplaintProto {
-    fn from(value: &IDkgComplaint) -> Self {
+impl From<IDkgComplaint> for IDkgComplaintProto {
+    fn from(value: IDkgComplaint) -> Self {
         Self {
             transcript_id: Some(IDkgTranscriptIdProto::from(&value.transcript_id)),
             dealer: Some(node_id_into_protobuf(value.dealer_id)),
-            raw_complaint: value.internal_complaint_raw.clone(),
+            raw_complaint: value.internal_complaint_raw,
         }
     }
 }
@@ -174,60 +174,64 @@ impl TryFrom<ExtendedDerivationPathProto> for ExtendedDerivationPath {
     }
 }
 
-impl From<&IDkgDealingSupport> for IDkgDealingSupportProto {
-    fn from(value: &IDkgDealingSupport) -> Self {
+impl From<IDkgDealingSupport> for IDkgDealingSupportProto {
+    fn from(value: IDkgDealingSupport) -> Self {
         Self {
             transcript_id: Some(IDkgTranscriptIdProto::from(&value.transcript_id)),
             dealer: Some(node_id_into_protobuf(value.dealer_id)),
-            dealing_hash: value.dealing_hash.clone().get().0,
-            sig_share: Some(BasicSignatureProto::from(value.sig_share.clone())),
+            dealing_hash: value.dealing_hash.get().0,
+            sig_share: Some(BasicSignatureProto::from(value.sig_share)),
         }
     }
 }
 
-impl TryFrom<&IDkgDealingSupportProto> for IDkgDealingSupport {
+impl TryFrom<IDkgDealingSupportProto> for IDkgDealingSupport {
     type Error = ProxyDecodeError;
 
-    fn try_from(proto: &IDkgDealingSupportProto) -> Result<Self, Self::Error> {
+    fn try_from(proto: IDkgDealingSupportProto) -> Result<Self, Self::Error> {
         Ok(Self {
             transcript_id: try_from_option_field(
                 proto.transcript_id.as_ref(),
                 "IDkgDealingSupport::transcript_id",
             )?,
-            dealer_id: node_id_try_from_option(proto.dealer.clone())?,
-            dealing_hash: CryptoHashOf::new(crate::crypto::CryptoHash(proto.dealing_hash.clone())),
-            sig_share: try_from_option_field(
-                proto.sig_share.clone(),
-                "IDkgDealingSupport::sig_share",
-            )?,
+            dealer_id: node_id_try_from_option(proto.dealer)?,
+            dealing_hash: CryptoHashOf::new(crate::crypto::CryptoHash(proto.dealing_hash)),
+            sig_share: try_from_option_field(proto.sig_share, "IDkgDealingSupport::sig_share")?,
         })
     }
 }
 
-impl From<&SignedIDkgDealing> for IDkgSignedDealingTupleProto {
-    fn from(value: &SignedIDkgDealing) -> Self {
-        signed_idkg_dealing_tuple_proto(value)
+impl From<SignedIDkgDealing> for IDkgSignedDealingTupleProto {
+    fn from(value: SignedIDkgDealing) -> Self {
+        let dealing = IDkgDealingProto {
+            transcript_id: Some(IDkgTranscriptIdProto::from(&value.content.transcript_id)),
+            raw_dealing: value.content.internal_dealing_raw,
+        };
+        IDkgSignedDealingTupleProto {
+            dealer: Some(node_id_into_protobuf(value.signature.signer)),
+            dealing: Some(dealing),
+            signature: value.signature.signature.get().0.clone(),
+        }
     }
 }
 
-impl TryFrom<&IDkgSignedDealingTupleProto> for SignedIDkgDealing {
+impl TryFrom<IDkgSignedDealingTupleProto> for SignedIDkgDealing {
     type Error = ProxyDecodeError;
 
-    fn try_from(proto: &IDkgSignedDealingTupleProto) -> Result<Self, Self::Error> {
+    fn try_from(proto: IDkgSignedDealingTupleProto) -> Result<Self, Self::Error> {
         let idkg_dealing_proto = proto
             .dealing
-            .as_ref()
             .ok_or(ProxyDecodeError::Other("Missing IDkgDealing.".to_string()))?;
         let idkg_dealing = IDkgDealing {
             transcript_id: try_from_option_field(
                 idkg_dealing_proto.transcript_id.as_ref(),
                 "IDkgDealing::transcript_id",
             )?,
-            internal_dealing_raw: idkg_dealing_proto.raw_dealing.clone(),
+            internal_dealing_raw: idkg_dealing_proto.raw_dealing,
         };
         let basic_signature = BasicSignature {
-            signature: BasicSigOf::new(BasicSig(proto.signature.clone())),
-            signer: node_id_try_from_option(proto.dealer.clone())?,
+            signature: BasicSigOf::new(BasicSig(proto.signature)),
+            signer: node_id_try_from_option(proto.dealer)?,
         };
         Ok(SignedIDkgDealing {
             content: idkg_dealing,
@@ -500,30 +504,13 @@ fn idkg_transcript_struct(proto: &IDkgTranscriptProto) -> Result<IDkgTranscript,
     })
 }
 
-fn signed_idkg_dealing_tuple_proto(
-    signed_dealing: &SignedIDkgDealing,
-) -> IDkgSignedDealingTupleProto {
-    let idkg_dealing = signed_dealing.idkg_dealing();
-    let dealing = IDkgDealingProto {
-        transcript_id: Some(IDkgTranscriptIdProto::from(&idkg_dealing.transcript_id)),
-        raw_dealing: idkg_dealing.internal_dealing_raw.clone(),
-    };
-    IDkgSignedDealingTupleProto {
-        dealer: Some(node_id_into_protobuf(signed_dealing.dealer_id())),
-        dealing: Some(dealing),
-        signature: signed_dealing.signature.signature.as_ref().0.clone(),
-    }
-}
-
 fn verified_idkg_dealing_proto(
     dealer_index: &NodeIndex,
     signed_dealing: &BatchSignedIDkgDealing,
 ) -> VerifiedIDkgDealingProto {
     VerifiedIDkgDealingProto {
         dealer_index: *dealer_index,
-        signed_dealing_tuple: Some(signed_idkg_dealing_tuple_proto(
-            signed_dealing.signed_idkg_dealing(),
-        )),
+        signed_dealing_tuple: Some(signed_dealing.signed_idkg_dealing().clone().into()),
         support_tuples: signed_dealing
             .signature
             .signatures_map
@@ -550,7 +537,7 @@ fn verified_dealings_map(
     for proto in verified_protos {
         let node_index = proto.dealer_index;
         let signed_dealing: SignedIDkgDealing = try_from_option_field(
-            proto.signed_dealing_tuple.as_ref(),
+            proto.signed_dealing_tuple.clone(),
             "VerifiedIDkgDealing::signed_dealing_tuple",
         )?;
         let batch_signed_dealing = BatchSignedIDkgDealing {
@@ -586,7 +573,7 @@ fn initial_dealings_vec(
 ) -> Result<Vec<SignedIDkgDealing>, ProxyDecodeError> {
     let mut result = Vec::new();
     for proto in dealing_tuple_protos {
-        result.push(SignedIDkgDealing::try_from(proto)?);
+        result.push(SignedIDkgDealing::try_from(proto.clone())?);
     }
     Ok(result)
 }
