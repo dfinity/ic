@@ -1374,8 +1374,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             node_public_keys,
             api_boundary_nodes,
         );
-        // Prune any orphaned canister priorities.
-        state_after_round.garbage_collect_subnet_schedule();
         // Garbage collect empty canister queue pairs before checkpointing.
         if certification_scope == CertificationScope::Full {
             state_after_round.garbage_collect_canister_queues();

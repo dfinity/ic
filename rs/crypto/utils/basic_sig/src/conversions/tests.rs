@@ -44,5 +44,3 @@ fn should_convert_pubkey_nodeid_known_result() {
 
     assert_eq!(nodeid, expected_nodeid);
 }
-
-// TODO(CRP-695): add more tests
