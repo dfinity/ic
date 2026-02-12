@@ -224,6 +224,7 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .without_assert_no_critical_errors()
         .add_test(systest!(test))
+        .add_metrics_to_check("consensus_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }

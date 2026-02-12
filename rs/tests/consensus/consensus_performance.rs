@@ -228,6 +228,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test_small_messages))
         .add_test(systest!(test_few_large_messages))
         .add_test(systest!(test_large_messages))
+        .add_metrics_to_check("consensus_invalidated_artifacts")
         .with_teardown(teardown)
         .execute_from_args()?;
     Ok(())

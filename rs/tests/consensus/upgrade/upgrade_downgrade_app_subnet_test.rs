@@ -173,6 +173,7 @@ fn main() -> Result<()> {
         .with_timeout_per_test(UP_DOWNGRADE_PER_TEST_TIMEOUT)
         .with_setup(setup)
         .add_test(systest!(upgrade_downgrade_app_subnet))
+        .add_metrics_to_check("consensus_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }

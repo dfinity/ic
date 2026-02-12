@@ -60,6 +60,7 @@ fn setup(env: TestEnv) {
                 .with_max_ingress_message_size(INGRESS_MAX_SIZE as u64)
                 .with_max_block_payload_size(XNET_MAX_SIZE as u64),
         )
+        .with_metrics_to_check("consensus_invalidated_artifacts")
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 }

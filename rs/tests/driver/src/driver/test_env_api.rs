@@ -1178,13 +1178,10 @@ impl IcNodeSnapshot {
         ))
     }
 
-    pub fn assert_no_critical_errors(&self) {
+    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>) {
         block_on(async {
-            let replica_metric_name_prefix = "critical_errors";
-            let replica_metrics_fetcher = MetricsFetcher::new(
-                std::iter::once(self.clone()),
-                vec![replica_metric_name_prefix.to_string()],
-            );
+            let replica_metrics_fetcher =
+                MetricsFetcher::new(std::iter::once(self.clone()), dbg!(metrics_to_check));
             let replica_metrics_result = replica_metrics_fetcher.fetch::<u64>().await;
             let replica_metrics = match replica_metrics_result {
                 Ok(replica_metrics) => replica_metrics,
@@ -1197,15 +1194,21 @@ impl IcNodeSnapshot {
                 }
             };
             assert!(
-                !replica_metrics.is_empty(),
-                "No critical error counters were found in replica metrics for node {}",
+                replica_metrics.is_empty(),
+                "No error counters were found in replica metrics for node {}",
                 self.node_id
             );
             for (name, value) in replica_metrics {
+                let maybe_extra_msg = if name == "critical_errors" {
+                    "Create `SystemTestGroup` using `without_assert_no_critical_errors` \
+                    if critical errors are expected in your test"
+                } else {
+                    ""
+                };
                 assert_eq!(
                     value[0], 0,
-                    "Critical error {} raised by node {}. Create `SystemTestGroup` using `without_assert_no_critical_errors` if critical errors are expected in your test",
-                    name, self.node_id
+                    "The metrics {} on node {} has non-zero value. {}",
+                    name, self.node_id, maybe_extra_msg,
                 );
             }
         });

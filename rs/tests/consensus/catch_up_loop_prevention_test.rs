@@ -71,6 +71,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test_catch_up_possible))
         .with_timeout_per_test(TIMEOUT)
         .with_overall_timeout(TIMEOUT)
+        .add_metrics_to_check("consensus_invalidated_artifacts")
         .execute_from_args()?;
 
     Ok(())
