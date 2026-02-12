@@ -3694,7 +3694,7 @@ dependencies = [
  "ff 0.12.1",
  "flate2",
  "form_urlencoded",
- "fqdn 0.3.11",
+ "fqdn 0.5.2",
  "fs_extra",
  "futures",
  "futures-util",
@@ -4883,12 +4883,6 @@ dependencies = [
  "nonempty",
  "thiserror 1.0.68",
 ]
-
-[[package]]
-name = "fqdn"
-version = "0.3.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08b1eaa7dfddeab6036292995620bf0435712e619db6d7690605897e76975eb0"
 
 [[package]]
 name = "fqdn"

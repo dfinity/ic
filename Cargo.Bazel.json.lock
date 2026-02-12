@@ -1,5 +1,5 @@
 {
-  "checksum": "ce113df421c027c57eb77a41c7efd19b88da095e40b263dbd37dc858e19fc517",
+  "checksum": "c5472ed299399183ec1f25266b366282fe52f0ce8c312605603278a8a806dfa7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21619,7 +21619,7 @@
               "target": "form_urlencoded"
             },
             {
-              "id": "fqdn 0.3.11",
+              "id": "fqdn 0.5.2",
               "target": "fqdn"
             },
             {
@@ -28253,51 +28253,6 @@
         "ISC"
       ],
       "license_file": "LICENSE.txt"
-    },
-    "fqdn 0.3.11": {
-      "name": "fqdn",
-      "version": "0.3.11",
-      "package_url": "https://github.com/Orange-OpenSource/fqdn",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/fqdn/0.3.11/download",
-          "sha256": "08b1eaa7dfddeab6036292995620bf0435712e619db6d7690605897e76975eb0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fqdn",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "fqdn",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "domain-label-cannot-start-or-end-with-hyphen"
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.3.11"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
     },
     "fqdn 0.4.6": {
       "name": "fqdn",
@@ -98669,7 +98624,7 @@
     "ff 0.12.1",
     "flate2 1.1.5",
     "form_urlencoded 1.2.1",
-    "fqdn 0.3.11",
+    "fqdn 0.5.2",
     "fs_extra 1.3.0",
     "futures 0.3.31",
     "futures-util 0.3.31",
