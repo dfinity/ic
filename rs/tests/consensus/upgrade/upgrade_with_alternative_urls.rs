@@ -109,7 +109,6 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
-        .add_metrics_to_check("consensus_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }

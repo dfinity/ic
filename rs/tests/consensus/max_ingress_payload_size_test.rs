@@ -255,7 +255,6 @@ fn main() -> Result<()> {
         .add_test(systest!(test_nns_subnet_query_exceeds_limits))
         .add_test(systest!(test_nns_subnet_update_within_limits))
         .add_test(systest!(test_nns_subnet_update_exceeds_limits))
-        .add_metrics_to_check("consensus_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }

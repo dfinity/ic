@@ -1194,21 +1194,17 @@ impl IcNodeSnapshot {
                 }
             };
             assert!(
-                replica_metrics.is_empty(),
+                !replica_metrics.is_empty(),
                 "No error counters were found in replica metrics for node {}",
                 self.node_id
             );
             for (name, value) in replica_metrics {
-                let maybe_extra_msg = if name == "critical_errors" {
-                    "Create `SystemTestGroup` using `without_assert_no_critical_errors` \
-                    if critical errors are expected in your test"
-                } else {
-                    ""
-                };
                 assert_eq!(
                     value[0], 0,
-                    "The metrics {} on node {} has non-zero value. {}",
-                    name, self.node_id, maybe_extra_msg,
+                    "The metric `{name}` on node {} has non-zero value. \
+                    If the metric is allowed to be non-zero in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")",
+                    self.node_id,
                 );
             }
         });

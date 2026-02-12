@@ -424,7 +424,6 @@ impl SystemTestSubGroup {
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
     teardown: Option<Box<dyn PotSetupFn>>,
-    assert_no_critical_errors: bool,
     assert_no_replica_restarts: bool,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
@@ -465,13 +464,15 @@ impl SystemTestGroup {
         Self {
             setup: Default::default(),
             teardown: Default::default(),
-            assert_no_critical_errors: true,
             assert_no_replica_restarts: true,
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
-            metrics_to_check: Vec::new(),
+            metrics_to_check: vec![
+                String::from("critical_errors"),
+                String::from("consensus_invalidated_artifacts"),
+            ],
         }
     }
 
@@ -499,15 +500,17 @@ impl SystemTestGroup {
         self
     }
 
-    pub fn without_assert_no_critical_errors(mut self) -> Self {
-        self.assert_no_critical_errors = false;
-        self
-    }
-
     /// If the provided metric will have a non-zero value for any of the nodes, the test will
     /// fail.
     pub fn add_metrics_to_check(mut self, metric_name: impl ToString) -> Self {
         self.metrics_to_check.push(metric_name.to_string());
+        self
+    }
+
+    pub fn remove_metrics_to_check(mut self, metric_name: impl ToString) -> Self {
+        let metric_name_to_remove = metric_name.to_string();
+        self.metrics_to_check
+            .retain(|metric_name| *metric_name != metric_name_to_remove);
         self
     }
 
@@ -603,7 +606,7 @@ impl SystemTestGroup {
         self
     }
 
-    fn make_plan(mut self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
+    fn make_plan(self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
         let logger = group_ctx.logger();
         debug!(logger, "SystemTestGroup.make_plan");
         let start_time = Utc::now();
@@ -708,11 +711,7 @@ impl SystemTestGroup {
             false,
         );
 
-        if self.assert_no_critical_errors {
-            self.metrics_to_check.push(String::from("critical_errors"));
-        }
-
-        let assert_no_critical_errors_fn: Option<(String, Box<dyn PotSetupFn>)> = if !self
+        let assert_no_metric_errors_fn: Option<(String, Box<dyn PotSetupFn>)> = if !self
             .metrics_to_check
             .is_empty()
         {
@@ -777,7 +776,7 @@ impl SystemTestGroup {
             .teardown
             .into_iter()
             .map(|teardown| (TEARDOWN_TASK_NAME.to_string(), teardown))
-            .chain(assert_no_critical_errors_fn)
+            .chain(assert_no_metric_errors_fn)
             .chain(assert_no_replica_restarts_fn)
             .map(|(teardown_name, teardown_fn)| {
                 let logger = logger.clone();
