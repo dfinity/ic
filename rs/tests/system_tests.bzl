@@ -327,21 +327,19 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
     )
     return struct(test_driver_target = mainnet_nns_systest.test_driver_target)
 
-def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None, testonly = True):
+def uvm_config_image(name, tags = None, visibility = None, srcmap = None, testonly = True):
     """This macro creates bazel targets for uvm config images.
 
     Args:
         name: This name will be used for the target.
         tags: Controls execution of targets. "manual" excludes a target from wildcard targets like (..., :*, :all). See: https://bazel.build/reference/test-encyclopedia#tag-conventions
         visibility: Target visibility controls who may depend on a target.
-        srcs: Source files that are copied into a vfat image.
-        remap_paths: Dict that maps a current filename to a desired filename,
-            e.g. {"activate.sh": "activate"}
+        srcmap: Dictionary of source files to copy into a vfat image mapped to their desired path in the image.
         testonly: If True, the target is only available in test configurations.
     """
     native.genrule(
         name = name + "_size",
-        srcs = srcs,
+        srcs = srcmap.keys(),
         outs = [name + "_size.txt"],
         cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
         tags = ["manual"],
@@ -367,9 +365,8 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
 
     mcopy(
         name = name + "_mcopy",
-        srcs = srcs,
+        srcmap = srcmap,
         fs = ":" + name + "_vfat",
-        remap_paths = remap_paths,
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
