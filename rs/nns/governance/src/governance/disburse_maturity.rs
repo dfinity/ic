@@ -266,7 +266,8 @@ pub fn initiate_maturity_disbursement(
         .map_err(|reason| InitiateMaturityDisbursementError::InvalidDestination { reason })?;
 
     let timestamp_of_disbursement_seconds = now_seconds;
-    let finalize_disbursement_timestamp_seconds = now_seconds + DISBURSEMENT_DELAY_SECONDS;
+    let finalize_disbursement_timestamp_seconds =
+        now_seconds.saturating_add(DISBURSEMENT_DELAY_SECONDS);
 
     let (
         is_neuron_spawning,
