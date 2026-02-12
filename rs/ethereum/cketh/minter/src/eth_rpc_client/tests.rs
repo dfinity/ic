@@ -22,6 +22,7 @@ const LLAMA_NODES: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::
 
 mod multi_call_results {
     use super::*;
+    use crate::eth_rpc_client::ReductionStrategy;
 
     mod reduce_with_min_by_key {
         use super::*;
@@ -336,6 +337,15 @@ mod multi_call_results {
                     (PUBLIC_NODE, Ok(1)),
                 ]));
             assert!(error_with_outcall_error.has_http_outcall_error_matching(always_true));
+        }
+    }
+
+    impl<T> ToReducedWithStrategy<T> for MultiRpcResult<T> {
+        fn reduce_with_strategy(
+            self,
+            strategy: impl ReductionStrategy<T>,
+        ) -> Result<T, MultiCallError<T>> {
+            strategy.reduce(self)
         }
     }
 }

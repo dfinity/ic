@@ -265,15 +265,6 @@ pub trait ToReducedWithStrategy<T> {
     ) -> Result<T, MultiCallError<T>>;
 }
 
-impl<T> ToReducedWithStrategy<T> for EvmMultiRpcResult<T> {
-    fn reduce_with_strategy(
-        self,
-        strategy: impl ReductionStrategy<T>,
-    ) -> Result<T, MultiCallError<T>> {
-        strategy.reduce(self)
-    }
-}
-
 impl<T> ToReducedWithStrategy<T> for Result<EvmMultiRpcResult<T>, IcError> {
     fn reduce_with_strategy(
         self,
