@@ -1,10 +1,12 @@
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2,
+    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, LogVisibilityV2,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::PrincipalId;
+use std::collections::VecDeque;
 
 pub(crate) fn fetch_canister_logs(
     sender: PrincipalId,
@@ -23,15 +25,10 @@ pub(crate) fn fetch_canister_logs(
     // Check if the sender has permission to access logs
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
 
+    let s = &canister.system_state;
     let canister_log_records = match log_memory_store_feature {
-        FlagStatus::Disabled => canister
-            .system_state
-            .canister_log
-            .records()
-            .iter()
-            .cloned()
-            .collect(),
-        FlagStatus::Enabled => canister.system_state.log_memory_store.records(args.filter),
+        FlagStatus::Disabled => filter_records(&args, s.canister_log.records())?,
+        FlagStatus::Enabled => s.log_memory_store.records(args.filter),
     };
 
     Ok(FetchCanisterLogsResponse {
@@ -61,4 +58,28 @@ pub(crate) fn check_log_visibility_permission(
             format!("Caller {caller} is not allowed to access canister logs"),
         ))
     }
+}
+
+fn filter_records(
+    args: &FetchCanisterLogsRequest,
+    records: &VecDeque<CanisterLogRecord>,
+) -> Result<Vec<CanisterLogRecord>, UserError> {
+    let Some(filter) = &args.filter else {
+        return Ok(records.iter().cloned().collect());
+    };
+
+    let (range, key): (&FetchCanisterLogsRange, fn(&CanisterLogRecord) -> u64) = match filter {
+        FetchCanisterLogsFilter::ByIdx(r) => (r, |rec| rec.idx),
+        FetchCanisterLogsFilter::ByTimestampNanos(r) => (r, |rec| rec.timestamp_nanos),
+    };
+
+    if range.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    Ok(records
+        .iter()
+        .filter(|r| range.contains(key(r)))
+        .cloned()
+        .collect())
 }
