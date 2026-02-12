@@ -8,8 +8,7 @@ package(default_visibility = ["//visibility:public"])
 # WARNING! .git is the directory, not a regular file! only consume it in your rules if you know how exactly bazel works and understand implications!
 # The mainnet routing table can be updated using:
 # ```
-# REGISTRY_VERSION="$(bazel run //rs/registry/admin:ic-admin -- get-registry-version)"
-# bazel run //rs/registry/admin:ic-admin -- get-routing-table --json --registry-version $REGISTRY_VERSION
+# bazel run //rs/registry/admin:ic-admin -- get-routing-table --json --registry-version "$(bazel run //rs/registry/admin:ic-admin -- get-registry-version)" > ./mainnet-routing-table.json
 # ```
 exports_files([
     ".git",
