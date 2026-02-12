@@ -27,18 +27,16 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
+    CallOrigin, CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology,
     ReplicatedState,
     canister_state::{
         NextExecution, execution_state::NextScheduledMethod, system_state::CyclesUseCase,
     },
-    num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MAX_WASM_MEMORY_IN_BYTES,
-    MemoryAllocation, NumBytes, NumInstructions, NumSlices, PrincipalId, Randomness,
-    ReplicaVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
+    NumInstructions, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressState, IngressStatus},
     messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage},
@@ -891,61 +889,62 @@ impl SchedulerImpl {
     ) {
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
+        let threshold_last_allocation_charge = state_time.saturating_sub(
+            self.cycles_account_manager
+                .duration_between_allocation_charges(),
+        );
         let mut all_rejects = Vec::new();
         let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
+            if canister.system_state.time_of_last_allocation_charge
+                > threshold_last_allocation_charge
+            {
+                // Skip charging for the resources in this round because not enough time has passed
+                // since the last charge happened.
+                continue;
+            }
+
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
             if canister.has_paused_execution() || canister.has_paused_install_code() {
                 continue;
             }
 
-            if state_time
-                < canister.system_state.time_of_last_allocation_charge
-                    + self
-                        .cycles_account_manager
-                        .duration_between_allocation_charges()
+            self.observe_canister_metrics(canister);
+            let duration_since_last_charge =
+                canister.duration_since_last_allocation_charge(state_time);
+            canister.system_state.time_of_last_allocation_charge = state_time;
+            if self
+                .cycles_account_manager
+                .charge_canister_for_resource_allocation_and_usage(
+                    &self.log,
+                    canister,
+                    duration_since_last_charge,
+                    subnet_size,
+                    cost_schedule,
+                )
+                .is_err()
             {
-                // Skip charging for the resources in this round because not enough time has passed
-                // since the last charge happened.
-                continue;
-            } else {
-                self.observe_canister_metrics(canister);
-                let duration_since_last_charge =
-                    canister.duration_since_last_allocation_charge(state_time);
-                canister.system_state.time_of_last_allocation_charge = state_time;
-                if self
-                    .cycles_account_manager
-                    .charge_canister_for_resource_allocation_and_usage(
-                        &self.log,
-                        canister,
-                        duration_since_last_charge,
-                        subnet_size,
-                        cost_schedule,
-                    )
-                    .is_err()
-                {
-                    uninstalled_canisters.push(canister.canister_id());
-                    all_rejects.push(uninstall_canister(
-                        &self.log,
-                        canister,
-                        None, /* we're at the end of a round so no need to update round limits */
-                        state_time,
-                        Arc::clone(&self.fd_factory),
-                    ));
-                    canister.system_state.compute_allocation = ComputeAllocation::zero();
-                    canister.system_state.memory_allocation = MemoryAllocation::default();
-                    canister.system_state.clear_canister_history();
-                    // Burn the remaining balance of the canister.
-                    canister.system_state.burn_remaining_balance_for_uninstall();
+                uninstalled_canisters.push(canister.canister_id());
+                all_rejects.push(uninstall_canister(
+                    &self.log,
+                    canister,
+                    None, /* we're at the end of a round so no need to update round limits */
+                    state_time,
+                    Arc::clone(&self.fd_factory),
+                ));
+                canister.system_state.compute_allocation = ComputeAllocation::zero();
+                canister.system_state.memory_allocation = MemoryAllocation::default();
+                canister.system_state.clear_canister_history();
+                // Burn the remaining balance of the canister.
+                canister.system_state.burn_remaining_balance_for_uninstall();
 
-                    info!(
-                        self.log,
-                        "Uninstalling canister {} because it ran out of cycles",
-                        canister.canister_id()
-                    );
-                    self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
-                }
+                info!(
+                    self.log,
+                    "Uninstalling canister {} because it ran out of cycles",
+                    canister.canister_id()
+                );
+                self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
         }
 
@@ -1149,36 +1148,7 @@ impl SchedulerImpl {
                 self.abort_paused_executions_above_limit(state);
             }
         }
-        self.initialize_wasm_memory_limit(state);
         self.check_dts_invariants(state, current_round_type);
-    }
-
-    fn initialize_wasm_memory_limit(&self, state: &mut ReplicatedState) {
-        fn compute_default_wasm_memory_limit(default: NumBytes, usage: NumBytes) -> NumBytes {
-            // Returns the larger of the two:
-            // - the default value
-            // - the average between the current usage and the hard limit.
-            default.max(NumBytes::new(
-                MAX_WASM_MEMORY_IN_BYTES.saturating_add(usage.get()) / 2,
-            ))
-        }
-
-        let default_wasm_memory_limit = self.exec_env.default_wasm_memory_limit();
-        for (_id, canister) in state.canister_states.iter_mut() {
-            if canister.system_state.wasm_memory_limit.is_none() {
-                let num_wasm_pages = canister
-                    .execution_state
-                    .as_ref()
-                    .map_or_else(|| NumWasmPages::new(0), |es| es.wasm_memory.size);
-                if let Ok(wasm_memory_usage) = num_bytes_try_from(num_wasm_pages) {
-                    canister.system_state.wasm_memory_limit =
-                        Some(compute_default_wasm_memory_limit(
-                            default_wasm_memory_limit,
-                            wasm_memory_usage,
-                        ));
-                }
-            }
-        }
     }
 
     /// Checks the deterministic time slicing invariant after round execution.
@@ -1517,7 +1487,6 @@ impl Scheduler for SchedulerImpl {
                 &mut csprng,
                 registry_settings,
                 self.metrics.as_ref(),
-                &self.config,
                 &round_log,
             );
         }
@@ -1558,17 +1527,25 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+
+                    let log = &mut canister.system_state.canister_log;
+                    let (log_memory_usage, delta_log_sizes) =
+                        (log.bytes_used(), log.delta_log_sizes());
+                    // IMPORTANT: clear_delta_log_sizes() must be called to make sure
+                    // that the delta log sizes are always empty at the end of the round.
+                    log.clear_delta_log_sizes();
                     self.metrics
                         .canister_log_memory_usage_v2
-                        .observe(canister.system_state.canister_log.bytes_used() as f64);
+                        .observe(log_memory_usage as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
-                        .observe(canister.system_state.canister_log.bytes_used() as f64);
-                    for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
+                        .observe(log_memory_usage as f64);
+                    for size in delta_log_sizes {
                         self.metrics
                             .canister_log_delta_memory_usage
-                            .observe(memory_usage as f64);
+                            .observe(size as f64);
                     }
+
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_allocated_bytes += canister
                         .memory_allocation()
@@ -2032,25 +2009,27 @@ fn observe_replicated_state_metrics(
             canisters_not_in_routing_table += 1;
         }
         if let Some(manager) = canister.system_state.call_context_manager() {
-            let old_call_contexts =
-                manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF_ONE_DAY);
             // Log all old call contexts, but not (nearly) every round.
-            if current_round
-                .get()
-                .is_multiple_of(SPAMMY_LOG_INTERVAL_ROUNDS)
-            {
-                for (origin, origin_time) in &old_call_contexts {
+            let maybe_log_old_call_contexts = |origin: &CallOrigin, origin_time: Time| {
+                if current_round
+                    .get()
+                    .is_multiple_of(SPAMMY_LOG_INTERVAL_ROUNDS)
+                {
                     warn!(
                         logger,
                         "Call context on canister {} with origin {:?} has been open for {:?}",
                         canister.canister_id(),
                         origin,
-                        state.time().saturating_duration_since(*origin_time),
+                        state.time().saturating_duration_since(origin_time),
                     );
                 }
-            }
-            if !old_call_contexts.is_empty() {
-                old_call_contexts_count += old_call_contexts.len();
+            };
+            let old_call_contexts = manager.call_contexts_older_than(
+                state.time().saturating_sub(OLD_CALL_CONTEXT_CUTOFF_ONE_DAY),
+                maybe_log_old_call_contexts,
+            );
+            if old_call_contexts > 0 {
+                old_call_contexts_count += old_call_contexts;
                 canisters_with_old_open_call_contexts += 1;
             }
         }

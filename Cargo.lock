@@ -1935,9 +1935,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.20"
+version = "0.10.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8037a01ec09d6c06883a38bad4f47b8d06158ad360b841e0ae5707c9884dfaf6"
+checksum = "3b64a1b8e8c368f8ffd2aaa64c7189d0a84783ba162f64de647cefedb4f12c88"
 dependencies = [
  "anyhow",
  "binread",
@@ -1967,9 +1967,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.20"
+version = "0.10.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb45f4d5eff3805598ee633dd80f8afb306c023249d34b5b7dfdc2080ea1df2e"
+checksum = "8a3ad1d26683b72c7fd16c8b2e3ebacf8785c9532389286c89971c1770ee57ce"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -2573,7 +2573,6 @@ dependencies = [
  "tempfile",
  "url",
  "utils",
- "walkdir",
 ]
 
 [[package]]
@@ -2596,7 +2595,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "config_types",
- "macaddr",
  "serde",
  "serde_json",
  "url",
@@ -5481,7 +5479,6 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
- "url",
  "uuid",
  "virt",
 ]
@@ -5496,7 +5493,6 @@ dependencies = [
  "config_types",
  "indoc 1.0.9",
  "network",
- "regex",
  "utils",
 ]
 
@@ -9604,7 +9600,6 @@ dependencies = [
  "clap 4.5.27",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-sys",
- "maplit",
  "predicates",
  "rand 0.8.5",
  "regex",
@@ -13577,7 +13572,7 @@ dependencies = [
 
 [[package]]
 name = "ic-secp256r1"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "hex-literal 0.4.1",
@@ -14575,6 +14570,7 @@ dependencies = [
  "anyhow",
  "assert_matches",
  "async-trait",
+ "bare_metal_deployment",
  "bincode",
  "candid",
  "canister-test",
@@ -14587,6 +14583,7 @@ dependencies = [
  "deterministic_ips",
  "dfn_candid",
  "dfn_protobuf",
+ "ed25519-dalek",
  "futures",
  "hex",
  "http 1.3.1",
@@ -16080,7 +16077,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "async-trait",
  "candid",
@@ -18015,6 +18012,7 @@ name = "nested"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "bare_metal_deployment",
  "canister-test",
  "ic-canister-client",
  "ic-nervous-system-common-test-keys",
@@ -18027,9 +18025,11 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
+ "nix 0.24.3",
  "prost 0.13.4",
  "regex",
  "reqwest",
+ "serde",
  "slog",
 ]
 
@@ -18702,7 +18702,6 @@ dependencies = [
  "command_runner",
  "config_tool",
  "config_types",
- "hex",
  "ic-agent 0.40.1",
  "ic-certification 3.0.3",
  "ic-certification-test-utils",
@@ -18712,7 +18711,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic_device",
  "linux_kernel_command_line",
- "mockall",
  "pem 3.0.6",
  "rand 0.8.5",
  "serde_cbor",
@@ -20995,6 +20993,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "attestation",
+ "attestation_testing",
  "build-info",
  "build-info-build",
  "canbench-rs",
@@ -21161,7 +21160,6 @@ version = "0.0.0"
 dependencies = [
  "attestation",
  "prost 0.13.4",
- "prost-build 0.13.4",
  "tonic 0.12.3",
  "tonic-build",
 ]
@@ -22489,7 +22487,6 @@ dependencies = [
  "partition_tools",
  "regex",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -22503,7 +22500,6 @@ dependencies = [
  "partition_tools",
  "serde_json",
  "tempfile",
- "tokio",
  "url",
 ]
 

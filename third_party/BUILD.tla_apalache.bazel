@@ -18,7 +18,7 @@ java_binary(
     # tla_apalache archive, which provides a `bin/apalache-mc` (which
     # we don't use here).
     name = "bin/apalache-mc",
-    # found by running
+    # java-specifics found by running
     # $ curl -LO https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz
     # $ tar xzf apalache-0.44.11.tgz
     # $ jar xf apalache-0.44.11/lib/apalache.jar  META-INF/MANIFEST.MF
@@ -26,6 +26,12 @@ java_binary(
     # for jvm opts, see the bash wrapper:
     # $ cat apalache-0.44.11/bin/apalache-mc  META-INF/MANIFEST.MF
     # and looking for `Main-Class`
+    jvm_flags = [
+        "-Xmx4096m",
+        "-XX:+UseG1GC",
+        "-XX:G1PeriodicGCInterval=600000",
+        "-XX:+G1PeriodicGCInvokesConcurrent",
+    ],
     main_class = "at.forsyte.apalache.tla.Tool",
     runtime_deps = [":tla_jar"],
 )

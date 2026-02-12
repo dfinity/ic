@@ -1227,6 +1227,7 @@ fn set_subnet_operational_level() {
 #[candid_method(update, rename = "set_subnet_operational_level")]
 fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
     registry_mut().do_set_subnet_operational_level(payload);
+    recertify_registry();
 }
 
 fn recertify_registry() {
