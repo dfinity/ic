@@ -13,7 +13,7 @@ use ic_state_machine_tests::StateMachine;
 // the memory usage grew by extra 1_002 x 32 = 32_064B
 // to 3_991_081 + 32_064 = 4_023_145.
 //
-// 4. Bumping the candid version to v.0.10.22 increased the memory
+// 4. Bumping the candid version to v0.10.22 increased the memory
 // further from 4_023_145 to 4_024_201 which is 1_056 bytes. However,
 // this varies on some runs, so the upper limit is set at 4_025_000.
 const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 4_025_000;
