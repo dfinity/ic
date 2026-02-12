@@ -210,7 +210,7 @@ impl From<SignedIDkgDealing> for IDkgSignedDealingTupleProto {
         IDkgSignedDealingTupleProto {
             dealer: Some(node_id_into_protobuf(value.signature.signer)),
             dealing: Some(dealing),
-            signature: value.signature.signature.get().0.clone(),
+            signature: value.signature.signature.get().0,
         }
     }
 }
