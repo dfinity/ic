@@ -153,23 +153,53 @@ pub fn test_fee_collector_107_minting_account<T>(
 ) where
     T: CandidType,
 {
-    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
 
-    let minter = minting_account(&env, canister_id).unwrap();
-
+    // Setting fee collector to minter with endpoint should fail
     let controllers = env
         .get_controllers(canister_id)
         .expect("ledger should have a controller");
     assert_eq!(controllers.len(), 1);
     let controller = controllers[0];
-    let result = set_fc_107(&env, canister_id, controller, Some(minter));
-
-    let err = result.unwrap_err();
+    let err = set_fc_107(&env, canister_id, controller, Some(MINTER)).unwrap_err();
     assert_eq!(
         err,
         SetFeeCollectorError::InvalidAccount(
             "The fee collector cannot be set to minting account".to_string()
         )
+    );
+
+    // Setting fee collector to minter during upgrade should fail
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_fee_collector: Some(ChangeFeeCollector::SetTo(MINTER)),
+        ..UpgradeArgs::default()
+    }));
+    let error = env
+        .upgrade_canister(
+            canister_id,
+            ledger_wasm.clone(),
+            Encode!(&upgrade_args).unwrap(),
+        )
+        .expect_err("upgrade should fail");
+    assert!(
+        error.description().contains(
+            "The fee collector account cannot be the same account as the minting account"
+        )
+    );
+
+    // Setting fee collector to minter during install should fail
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: Some(MINTER),
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    let error = env
+        .install_canister(ledger_wasm, args, None)
+        .expect_err("install should fail");
+    assert!(
+        error
+            .description()
+            .contains("The fee collector account cannot be the same as the minting account")
     );
 }
 
