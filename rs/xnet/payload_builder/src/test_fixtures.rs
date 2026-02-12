@@ -168,7 +168,11 @@ pub(crate) fn put_replicated_state_for_testing(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     streams: StreamMap,
 ) {
-    let (_height, mut state) = state_manager.take_tip();
+    let (mut height, mut state) = state_manager.take_tip();
+    while height < CERTIFIED_HEIGHT.decrement() {
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+        (height, state) = state_manager.take_tip();
+    }
     state.with_streams(streams);
     state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 }
@@ -180,7 +184,11 @@ pub(crate) fn make_certified_stream_slice(
     config: StreamConfig,
 ) -> CertifiedStreamSlice {
     let state_manager = FakeStateManager::new();
-    let (_height, mut state) = state_manager.take_tip();
+    let (mut height, mut state) = state_manager.take_tip();
+    while height < CERTIFIED_HEIGHT.decrement() {
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+        (height, state) = state_manager.take_tip();
+    }
     let stream = generate_stream(&config);
     state.with_streams(btreemap![from => stream]);
     state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
