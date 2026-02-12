@@ -278,13 +278,22 @@ pub fn test_without_chain_keys(env: TestEnv) {
 }
 
 pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
+    // Test the recoverable corrupt CUP case only when recovering an app subnet with chain keys
+    // without upgrade
+    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
+        // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
+        // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
+        CupCorruption::CorruptedWithValidNiDkgId
+    } else {
+        CupCorruption::NotCorrupted
+    };
     app_subnet_recovery_test(
         env,
         TestConfig {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: true,
-            corrupt_cup: CupCorruption::NotCorrupted,
+            corrupt_cup,
             local_recovery: false,
         },
     );
@@ -325,21 +334,6 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
             chain_key: false,
             corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: true,
-        },
-    );
-}
-
-pub fn test_recoverable_corrupt_cup_with_chain_keys(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: true,
-            chain_key: true,
-            // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
-            // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
-            corrupt_cup: CupCorruption::CorruptedWithValidNiDkgId,
-            local_recovery: false,
         },
     );
 }

@@ -93,23 +93,6 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "sr_app_recoverable_corrupt_cup_with_chain_keys_test",
-    guestos_update = "test",
-    tags = [
-        "colocate",
-        "long_test",
-        "subnet_recovery",
-    ],
-    test_timeout = "eternal",
-    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
-    deps = [
-        ":lib",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-    ],
-)
-
-system_test_nns(
     name = "sr_app_failover_nodes_test",
     guestos_update = "test",
     tags = [
