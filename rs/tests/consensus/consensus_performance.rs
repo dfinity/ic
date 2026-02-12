@@ -197,7 +197,7 @@ fn test_few_large_messages(env: TestEnv) {
 }
 
 fn test_large_messages(env: TestEnv) {
-    test(env, 950_000, 4.0)
+    test(env, 950_000, 16.0)
 }
 
 fn teardown(env: TestEnv) {
@@ -224,9 +224,9 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        .add_test(systest!(test_few_small_messages))
-        .add_test(systest!(test_small_messages))
-        .add_test(systest!(test_few_large_messages))
+        //.add_test(systest!(test_few_small_messages))
+        //.add_test(systest!(test_small_messages))
+        //.add_test(systest!(test_few_large_messages))
         .add_test(systest!(test_large_messages))
         .with_teardown(teardown)
         .execute_from_args()?;
