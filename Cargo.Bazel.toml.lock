@@ -3735,7 +3735,7 @@ dependencies = [
  "ic-doge-interface",
  "ic-gateway",
  "ic-http-certification",
- "ic-http-gateway 0.0.0-git (git+https://github.com/dfinity/http-gateway?rev=895d57344b549abb6a11e6f85879ef2b25f33171)",
+ "ic-http-gateway",
  "ic-identity-hsm",
  "ic-management-canister-types 0.5.0",
  "ic-metrics-encoder",
@@ -6516,7 +6516,7 @@ dependencies = [
  "ic-bn-lib-common",
  "ic-custom-domains-backend",
  "ic-custom-domains-base",
- "ic-http-gateway 0.0.0-git (git+https://github.com/dfinity/http-gateway?tag=v0.4.2)",
+ "ic-http-gateway",
  "ic-transport-types 0.45.0",
  "itertools 0.14.0",
  "lazy_static",
@@ -6568,24 +6568,6 @@ dependencies = [
 name = "ic-http-gateway"
 version = "0.0.0-git"
 source = "git+https://github.com/dfinity/http-gateway?tag=v0.4.2#252f2b10c0c18b0d24c9e54d84d1862e5183ac75"
-dependencies = [
- "bytes",
- "candid",
- "futures",
- "http 1.3.1",
- "http-body 1.0.1",
- "http-body-util",
- "ic-agent 0.45.0",
- "ic-http-certification",
- "ic-response-verification",
- "ic-utils",
- "thiserror 1.0.68",
-]
-
-[[package]]
-name = "ic-http-gateway"
-version = "0.0.0-git"
-source = "git+https://github.com/dfinity/http-gateway?rev=895d57344b549abb6a11e6f85879ef2b25f33171#895d57344b549abb6a11e6f85879ef2b25f33171"
 dependencies = [
  "bytes",
  "candid",

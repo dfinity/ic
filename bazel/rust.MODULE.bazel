@@ -687,7 +687,7 @@ crate.spec(
 crate.spec(
     git = "https://github.com/dfinity/http-gateway",
     package = "ic-http-gateway",
-    rev = "895d57344b549abb6a11e6f85879ef2b25f33171",
+    tag = "v0.4.2",
 )
 crate.spec(
     package = "ic-identity-hsm",
