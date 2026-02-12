@@ -9,6 +9,7 @@
 //    g^x  corresponds to g * x
 
 pub use crate::ni_dkg::fs_ni_dkg::chunking::*;
+use rayon::prelude::*;
 use crate::ni_dkg::fs_ni_dkg::dlog_recovery::{
     CheatingDealerDlogSolver, HonestDealerDlogLookupTable,
 };
@@ -696,8 +697,6 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     sys: &SysParam,
     rng: &mut R,
 ) -> (FsEncryptionCiphertext, EncryptionWitness) {
-    let receivers = recipient_and_message.len();
-
     let g1 = G1Affine::generator();
 
     let s = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
@@ -706,23 +705,14 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let r = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
     let rr = g1.batch_mul_array(&r);
 
-    // TODO(CRP-2550) This can run in parallel (n = # receivers)
-    let cc = {
-        let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
-
-        for (pk, ptext) in recipient_and_message {
+    let cc: Vec<[G1Affine; NUM_CHUNKS]> = recipient_and_message
+        .par_iter()
+        .map(|(pk, ptext)| {
             let pk_g1_tbl = G1Projective::compute_mul2_affine_tbl(pk, g1);
-
             let chunks = ptext.chunks_as_scalars();
-
-            let enc_chunks =
-                G1Projective::batch_normalize_array(&pk_g1_tbl.mul2_array(&r, &chunks));
-
-            cc.push(enc_chunks);
-        }
-
-        cc
-    };
+            G1Projective::batch_normalize_array(&pk_g1_tbl.mul2_array(&r, &chunks))
+        })
+        .collect();
 
     let id = ftau_extended(&cc, &rr, &ss, sys, epoch, associated_data);
     let id_h_tbl = G2Projective::compute_mul2_tbl(&id, &G2Projective::from(&sys.h));
@@ -800,19 +790,17 @@ pub fn dec_chunks(
     let bneg = G2Prepared::from(&bneg);
     let eneg = G2Prepared::from(&dk.e.neg());
 
-    let mut powers = Vec::with_capacity(m);
-
-    // TODO(CRP-2550) These multipairings could be computed in parallel
-    for i in 0..m {
-        let x = Gt::multipairing(&[
-            (&cj[i], G2Prepared::generator()),
-            (&crsz.rr[i], &bneg),
-            (&dk.a, &G2Prepared::from(&crsz.zz[i])),
-            (&crsz.ss[i], &eneg),
-        ]);
-
-        powers.push(x);
-    }
+    let powers: Vec<_> = (0..m)
+        .into_par_iter()
+        .map(|i| {
+            Gt::multipairing(&[
+                (&cj[i], G2Prepared::generator()),
+                (&crsz.rr[i], &bneg),
+                (&dk.a, &G2Prepared::from(&crsz.zz[i])),
+                (&crsz.ss[i], &eneg),
+            ])
+        })
+        .collect();
 
     // Find discrete log of the powers
     let linear_search = HonestDealerDlogLookupTable::new();
@@ -821,15 +809,23 @@ pub fn dec_chunks(
         let mut dlogs = linear_search.solve_several(&powers);
 
         if dlogs.iter().any(|x| x.is_none()) {
-            // Cheating dealer case
+            // Cheating dealer case — each BSGS solve can take hours
             let cheating_solver = CheatingDealerDlogSolver::new(n, m);
 
-            for i in 0..dlogs.len() {
-                if dlogs[i].is_none() {
-                    // TODO(CRP-2550) All BSGS could be run in parallel
-                    // It may take hours to brute force a cheater's discrete log.
-                    dlogs[i] = cheating_solver.solve(&powers[i]);
-                }
+            let unsolved: Vec<_> = dlogs
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| d.is_none())
+                .map(|(i, _)| i)
+                .collect();
+
+            let solved: Vec<_> = unsolved
+                .par_iter()
+                .map(|&i| (i, cheating_solver.solve(&powers[i])))
+                .collect();
+
+            for (i, result) in solved {
+                dlogs[i] = result;
             }
         }
 
@@ -878,19 +874,20 @@ pub fn verify_ciphertext_integrity(
     let g1_neg = G1Affine::generator().neg();
     let precomp_id = G2Prepared::from(&id);
 
-    // TODO(CRP-2550) Each of these checks could be run in parallel
-    for i in 0..NUM_CHUNKS {
+    let all_valid = (0..NUM_CHUNKS).into_par_iter().all(|i| {
         let r = &crsz.rr[i];
         let s = &crsz.ss[i];
         let z = G2Prepared::from(&crsz.zz[i]);
 
         let v = Gt::multipairing(&[(r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
+        v.is_identity()
+    });
 
-        if !v.is_identity() {
-            return Err(InvalidNidkgCiphertext);
-        }
+    if all_valid {
+        Ok(())
+    } else {
+        Err(InvalidNidkgCiphertext)
     }
-    Ok(())
 }
 
 #[derive(Eq, PartialEq, Debug)]

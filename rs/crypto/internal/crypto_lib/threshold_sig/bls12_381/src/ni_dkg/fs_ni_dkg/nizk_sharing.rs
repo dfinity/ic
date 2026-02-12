@@ -265,9 +265,6 @@ pub fn verify_sharing(
     // x' = oracle(x, F, A, Y)
     let x_challenge = sharing_proof_challenge(&x, &first_move);
 
-    // TODO(CRP-2550): The verification can run in three threads
-
-    // Thread 1
     {
         // First verification equation
         // R^x' * F == g_1^z_r
@@ -278,7 +275,6 @@ pub fn verify_sharing(
         }
     }
 
-    // Thread 2
     {
         // Second verification equation
         //   ( ∏_{k=0}^{t-1} A_k^{ Σ_{i=1}^n (i^k * x^i) } )^{x'} * A

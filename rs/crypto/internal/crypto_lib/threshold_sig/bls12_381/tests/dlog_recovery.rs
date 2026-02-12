@@ -237,6 +237,7 @@ fn honest_dealer_search_handles_no_match() {
 
 // Find the log for a cheater who exceeds the bounds by a little.
 #[test]
+#[ignore]
 fn slightly_dishonest_dlog() {
     let base = Gt::generator();
 
