@@ -77,7 +77,7 @@ pub(crate) fn make_unvalidated_checkpoint(
     tip_channel
         .send(TipRequest::FilterTipCanisters {
             height,
-            canister_ids: state.canister_states.keys().copied().collect(),
+            canister_ids: state.canister_states().keys().copied().collect(),
             snapshot_ids: state
                 .canister_snapshots
                 .iter()
@@ -194,7 +194,7 @@ impl PageMapType {
     /// List all PageMaps contained in `state`, ignoring PageMaps that are in snapshots.
     fn list_all_without_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
-        for (id, canister) in &state.canister_states {
+        for (id, canister) in state.canister_states() {
             result.push(Self::WasmChunkStore(id.to_owned()));
             if canister.execution_state.is_some() {
                 result.push(Self::WasmMemory(id.to_owned()));
@@ -275,7 +275,7 @@ fn strip_page_map_deltas(
     state: &mut ReplicatedState,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
-    for (_id, canister) in state.canister_states.iter_mut() {
+    for canister in state.canisters_iter_mut() {
         canister
             .system_state
             .wasm_chunk_store
@@ -357,18 +357,19 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
         page_map.strip_unflushed_delta();
     };
 
-    for (id, canister) in tip_state.canister_states.iter_mut() {
+    for canister in tip_state.canisters_iter_mut() {
+        let id = canister.canister_id();
         add_to_pagemaps_and_strip(
-            PageMapType::WasmChunkStore(id.to_owned()),
+            PageMapType::WasmChunkStore(id),
             canister.system_state.wasm_chunk_store.page_map_mut(),
         );
         if let Some(execution_state) = canister.execution_state.as_mut() {
             add_to_pagemaps_and_strip(
-                PageMapType::WasmMemory(id.to_owned()),
+                PageMapType::WasmMemory(id),
                 &mut execution_state.wasm_memory.page_map,
             );
             add_to_pagemaps_and_strip(
-                PageMapType::StableMemory(id.to_owned()),
+                PageMapType::StableMemory(id),
                 &mut execution_state.stable_memory.page_map,
             );
         }
@@ -547,7 +548,7 @@ impl CheckpointLoader {
         debug_assert!(on_disk_canister_ids.is_sorted());
         debug_assert!(ref_canister_ids.is_sorted());
         if on_disk_canister_ids != ref_canister_ids {
-            return Err("Canister ids mismatch".to_string());
+            return Err("Canister IDs mismatch".to_string());
         }
         maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |&canister_id| {
             let (canister_state, canister_priority, _) = load_canister_state_from_checkpoint(
