@@ -1979,7 +1979,9 @@ pub struct WaitForQuietState {
 /// This is a view of the ProposalData returned by API queries and is NOT used
 /// for storage. The ballots are restricted to those of the caller's neurons and
 /// additionally it has the computed fields, topic, status, and reward_status.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq, Default,
+)]
 pub struct ProposalInfo {
     /// The unique id for this proposal.
     pub id: Option<::ic_nns_common::pb::v1::ProposalId>,
