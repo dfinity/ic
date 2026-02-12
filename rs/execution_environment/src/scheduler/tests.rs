@@ -95,9 +95,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
     for canister in test.state().canisters_iter() {
         assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
         assert_eq!(
-            test.state()
-                .canister_priority(&canister.canister_id())
-                .last_full_execution_round,
+            canister.scheduler_state.last_full_execution_round,
             test.last_round()
         );
         let canister_metrics = canister.system_state.canister_metrics();
@@ -1288,9 +1286,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 1);
         assert_eq!(
-            test.state()
-                .canister_priority(&canister_state.canister_id())
-                .last_full_execution_round,
+            canister_state.scheduler_state.last_full_execution_round,
             ExecutionRound::from(0)
         );
         assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
@@ -1679,9 +1675,7 @@ fn can_execute_messages_with_just_enough_instructions() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
         assert_eq!(
-            test.state()
-                .canister_priority(&canister_state.canister_id())
-                .last_full_execution_round,
+            canister_state.scheduler_state.last_full_execution_round,
             ExecutionRound::from(1)
         );
         assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
@@ -1736,9 +1730,7 @@ fn execute_idle_and_canisters_with_messages() {
     // input messages.
     let idle = test.canister_state(idle);
     assert_eq!(
-        test.state()
-            .canister_priority(&idle.canister_id())
-            .last_full_execution_round,
+        idle.scheduler_state.last_full_execution_round,
         test.last_round()
     );
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
@@ -1746,9 +1738,7 @@ fn execute_idle_and_canisters_with_messages() {
     let active = test.canister_state(active);
     let system_state = &active.system_state;
     assert_eq!(
-        test.state()
-            .canister_priority(&active.canister_id())
-            .last_full_execution_round,
+        active.scheduler_state.last_full_execution_round,
         ExecutionRound::from(1)
     );
     assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
@@ -1796,9 +1786,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
         assert_eq!(
-            test.state()
-                .canister_priority(&canister_state.canister_id())
-                .last_full_execution_round,
+            canister_state.scheduler_state.last_full_execution_round,
             ExecutionRound::new(1)
         );
         assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
@@ -1939,18 +1927,21 @@ fn scheduler_long_execution_progress_across_checkpoints() {
         }
     );
     // Assert penalized canister accumulated priority is lower.
-    let penalized = test.state().canister_priority(&penalized_long_id);
-    let other = test.state().canister_priority(&other_long_id);
-    assert_lt!(penalized.accumulated_priority, other.accumulated_priority);
+    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    let other = test.state().canister_state(&other_long_id).unwrap();
+    assert_lt!(
+        penalized.scheduler_state.accumulated_priority,
+        other.scheduler_state.accumulated_priority
+    );
 
     // Start another long execution on the penalized canister.
     test.send_ingress(penalized_long_id, ingress(message_instructions));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // Assert the LEM is prioritized.
-    let penalized = test.state().canister_priority(&penalized_long_id);
+    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
     assert_eq!(
-        penalized.long_execution_mode,
+        penalized.scheduler_state.long_execution_mode,
         LongExecutionMode::Prioritized
     );
 
@@ -1959,18 +1950,22 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // Assert the LEM is opportunistic.
-    let other = test.state().canister_priority(&other_long_id);
-    assert_eq!(other.long_execution_mode, LongExecutionMode::Opportunistic);
+    let other = test.state().canister_state(&other_long_id).unwrap();
+    assert_eq!(
+        other.scheduler_state.long_execution_mode,
+        LongExecutionMode::Opportunistic
+    );
 
     // Abort both canisters on checkpoint.
     test.execute_round(ExecutionRoundType::CheckpointRound);
 
     // Assert penalized canister accumulated priority is still lower.
-    let penalized = test.state().canister_priority(&penalized_long_id);
-    let other = test.state().canister_priority(&other_long_id);
-    assert_lt!(penalized.accumulated_priority, other.accumulated_priority);
-
     let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    let other = test.state().canister_state(&other_long_id).unwrap();
+    assert_lt!(
+        penalized.scheduler_state.accumulated_priority,
+        other.scheduler_state.accumulated_priority
+    );
     let penalized_executed_before = penalized.system_state.canister_metrics().executed();
 
     // Send a bunch of messages.
@@ -2022,13 +2017,18 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
 
     let mut executed_canisters = 0;
     for canister in test.state().canisters_iter() {
-        let priority = test.state().canister_priority(&canister.canister_id());
         if canister.system_state.queues().ingress_queue_size() == 0 {
-            assert_eq!(priority.last_full_execution_round, ExecutionRound::from(1));
+            assert_eq!(
+                canister.scheduler_state.last_full_execution_round,
+                ExecutionRound::from(1)
+            );
             executed_canisters += 1;
         } else {
             assert_eq!(canister.system_state.queues().ingress_queue_size(), 10);
-            assert_eq!(priority.last_full_execution_round, ExecutionRound::from(0));
+            assert_eq!(
+                canister.scheduler_state.last_full_execution_round,
+                ExecutionRound::from(0)
+            );
         }
     }
     assert_eq!(executed_canisters, 2);
@@ -2090,9 +2090,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             0
         );
         assert_eq!(
-            test.state()
-                .canister_priority(&canister.canister_id())
-                .last_full_execution_round,
+            canister.scheduler_state.last_full_execution_round,
             ExecutionRound::from(1)
         );
     }
@@ -4493,10 +4491,8 @@ fn construct_scheduler_for_prop_test(
             None,
             None,
         );
-        test.state_mut()
-            .metadata
-            .subnet_schedule
-            .get_mut(canister)
+        test.canister_state_mut(canister)
+            .scheduler_state
             .last_full_execution_round = last_round;
         for _ in 0..messages_per_canister {
             test.send_ingress(canister, ingress(instructions_per_message as u64));
@@ -4746,9 +4742,8 @@ fn scheduler_respects_compute_allocation(
             test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
-        for (canister_id, _) in test.state().canister_states.iter() {
-            let priority = test.state().canister_priority(canister_id);
-            if priority.last_full_execution_round == test.last_round() {
+        for (canister_id, canister) in test.state().canister_states.iter() {
+            if canister.scheduler_state.last_full_execution_round == test.last_round() {
                 let count = scheduled_first_counters.entry(*canister_id).or_insert(0);
                 *count += 1;
             }
@@ -5878,21 +5873,9 @@ fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
@@ -5916,22 +5899,10 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone()).try_into().unwrap();
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
@@ -5947,28 +5918,26 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
         },
     )]));
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If the stash is enabled, deliver pre-signatures only once.
-        // They should be stored in the stash and don't have to be delivered in every round.
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // If the stash is enabled, deliver pre-signatures only once.
+    // They should be stored in the stash and don't have to be delivered in every round.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        test.deliver_pre_signatures(BTreeMap::from_iter([(
-            master_key_id.clone(),
-            AvailablePreSignatures {
-                key_transcript: key_transcript.clone(),
-                pre_signatures: BTreeMap::new(),
-            },
-        )]));
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.deliver_pre_signatures(BTreeMap::from_iter([(
+        master_key_id.clone(),
+        AvailablePreSignatures {
+            key_transcript: key_transcript.clone(),
+            pre_signatures: BTreeMap::new(),
+        },
+    )]));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 1);
-        assert!(
-            stashes[&master_key_id]
-                .pre_signatures
-                .contains_key(&pre_sig_id),
-        );
-    }
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 1);
+    assert!(
+        stashes[&master_key_id]
+            .pre_signatures
+            .contains_key(&pre_sig_id),
+    );
 
     inject_ecdsa_signing_request(&mut test, &key_id);
 
@@ -6004,12 +5973,10 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If pre-signatures were stored in the state, they should now have been consumed.
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 1);
-        assert!(stashes[&master_key_id].pre_signatures.is_empty());
-    }
+    // If pre-signatures were stored in the state, they should now have been consumed.
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 1);
+    assert!(stashes[&master_key_id].pre_signatures.is_empty());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let contexts = test
@@ -6055,18 +6022,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     let key_ids: Vec<_> = (0..3).map(make_ecdsa_key_id).collect();
     let master_key_ids: Vec<_> = key_ids
         .iter()
@@ -6075,7 +6031,6 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
         .flat_map(IDkgMasterPublicKeyId::try_from)
         .collect();
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_keys(
             key_ids
                 .iter()
@@ -6112,22 +6067,20 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
     ]);
     test.deliver_pre_signatures(pre_signatures.clone());
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If the stash is enabled, deliver pre-signatures only once.
-        // They should be stored in the stash and don't have to be delivered in every round.
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Pre-signatures are delivered only once.
+    // They should be stored in the stash and don't have to be delivered in every round.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        pre_signatures
-            .values_mut()
-            .for_each(|pre_sigs| pre_sigs.pre_signatures.clear());
-        test.deliver_pre_signatures(pre_signatures);
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    pre_signatures
+        .values_mut()
+        .for_each(|pre_sigs| pre_sigs.pre_signatures.clear());
+    test.deliver_pre_signatures(pre_signatures);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 2);
-        assert_eq!(stashes[&master_key_ids[0]].pre_signatures, pre_sigs0);
-        assert_eq!(stashes[&master_key_ids[1]].pre_signatures, pre_sigs1);
-    }
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 2);
+    assert_eq!(stashes[&master_key_ids[0]].pre_signatures, pre_sigs0);
+    assert_eq!(stashes[&master_key_ids[1]].pre_signatures, pre_sigs1);
 
     // Inject 3 contexts requesting the third, second and first key in order
     for i in (0..3).rev() {
@@ -6138,18 +6091,16 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
     for _ in 0..2 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        if store_pre_signatures_in_state == FlagStatus::Enabled {
-            // If pre-signatures were stored in the state, they should now have been consumed.
-            let stashes = test.state().pre_signature_stashes();
-            assert_eq!(stashes.len(), 2);
-            assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
-            assert!(
-                stashes[&master_key_ids[0]]
-                    .pre_signatures
-                    .contains_key(&PreSigId(1))
-            );
-            assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
-        }
+        // Pre-signatures in the state should now have been consumed.
+        let stashes = test.state().pre_signature_stashes();
+        assert_eq!(stashes.len(), 2);
+        assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
+        assert!(
+            stashes[&master_key_ids[0]]
+                .pre_signatures
+                .contains_key(&PreSigId(1))
+        );
+        assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
     }
 
     let sign_with_ecdsa_contexts = &test
@@ -6531,9 +6482,11 @@ fn inner_round_first_execution_is_not_a_full_execution() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
-        let priority = test.state().canister_priority(&canister.canister_id());
+        let scheduler_state = &canister.scheduler_state;
         // All ingresses should be executed in the previous round.
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
         assert_eq!(system_state.canister_metrics().executed(), 1);
@@ -6541,16 +6494,12 @@ fn inner_round_first_execution_is_not_a_full_execution() {
             // The target canister, despite being executed first in the second inner round,
             // should not be marked as fully executed.
             assert_ne!(test.last_round(), 0.into());
-            assert_eq!(priority.last_full_execution_round, 0.into());
+            assert_eq!(scheduler_state.last_full_execution_round, 0.into());
         } else {
-            assert_eq!(priority.last_full_execution_round, test.last_round());
+            assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
         }
-    }
-    let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
-    for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
-        total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += canister_priority.priority_credit.get();
+        total_accumulated_priority += scheduler_state.accumulated_priority.get();
+        total_priority_credit += scheduler_state.priority_credit.get();
     }
     // The accumulated priority invariant should be respected.
     assert_eq!(total_accumulated_priority - total_priority_credit, 0);
@@ -6592,9 +6541,11 @@ fn inner_round_long_execution_is_a_full_execution() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
-        let priority = test.state().canister_priority(&canister.canister_id());
+        let scheduler_state = &canister.scheduler_state;
         // All canisters should be executed.
         assert_eq!(system_state.canister_metrics().executed(), 1);
         if canister.canister_id() == target_id {
@@ -6605,13 +6556,9 @@ fn inner_round_long_execution_is_a_full_execution() {
         }
         // All canisters should be marked as fully executed. The target canister,
         // despite still having messages, executed a full slice of instructions.
-        assert_eq!(priority.last_full_execution_round, test.last_round());
-    }
-    let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
-    for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
-        total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += canister_priority.priority_credit.get();
+        assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
+        total_accumulated_priority += scheduler_state.accumulated_priority.get();
+        total_priority_credit += scheduler_state.priority_credit.get();
     }
     // The accumulated priority invariant should be respected.
     assert_eq!(total_accumulated_priority - total_priority_credit, 0);
@@ -6652,25 +6599,25 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
     for (i, canister) in test.state().canisters_iter().enumerate() {
-        let priority = test.state().canister_priority(&canister.canister_id());
         if i < num_canisters as usize / 2 {
             // The first half of the canisters should finish their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
             prop_assert_eq!(canister.system_state.canister_metrics().executed(), 1);
-            prop_assert_eq!(priority.last_full_execution_round, test.last_round());
+            prop_assert_eq!(
+                canister.scheduler_state.last_full_execution_round,
+                test.last_round()
+            );
         } else {
             // The second half of the canisters should still have their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 1);
             prop_assert_eq!(canister.system_state.canister_metrics().executed(), 0);
-            prop_assert_eq!(priority.last_full_execution_round, 0.into());
+            prop_assert_eq!(canister.scheduler_state.last_full_execution_round, 0.into());
         }
-    }
-    let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
-    for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
-        total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += canister_priority.priority_credit.get();
+        total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
+        total_priority_credit += canister.scheduler_state.priority_credit.get();
     }
     prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
 
@@ -6683,30 +6630,30 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
     for (i, canister) in test.state().canisters_iter().enumerate() {
         // Now all the canisters should be executed once.
         prop_assert_eq!(canister.system_state.canister_metrics().executed(), 1);
-        let priority = test.state().canister_priority(&canister.canister_id());
         if i < num_canisters as usize / 2 {
             // The first half of the canisters should have messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 1);
             // The first half of the canisters should be executed two rounds ago.
             prop_assert_eq!(
-                priority.last_full_execution_round.get(),
+                canister.scheduler_state.last_full_execution_round.get(),
                 test.last_round().get() - 1
             );
         } else {
             // The second half of the canisters should finish their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
             // The second half of the canisters should be executed in the last round.
-            prop_assert_eq!(priority.last_full_execution_round, test.last_round());
+            prop_assert_eq!(
+                canister.scheduler_state.last_full_execution_round,
+                test.last_round()
+            );
         }
-    }
-    let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
-    for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
-        total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += canister_priority.priority_credit.get();
+        total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
+        total_priority_credit += canister.scheduler_state.priority_credit.get();
     }
     prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
 }
@@ -6751,29 +6698,22 @@ fn charge_idle_canisters_for_full_execution_round() {
     for round in 0..num_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+        let mut total_accumulated_priority = 0;
+        let mut total_priority_credit = 0;
         for canister in test.state().canisters_iter() {
+            let scheduler_state = &canister.scheduler_state;
             // Assert that we punished all idle canisters, not just top `scheduler_cores`.
             if round == 0 && !canister.has_input() {
                 assert_ne!(test.last_round(), 0.into());
-                assert_eq!(
-                    test.state()
-                        .canister_priority(&canister.canister_id())
-                        .last_full_execution_round,
-                    test.last_round()
-                );
+                assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
             }
-        }
-        let mut total_accumulated_priority = 0;
-        let mut total_priority_credit = 0;
-        for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
             // Assert there is no divergency in accumulated priorities.
-            let priority =
-                canister_priority.accumulated_priority - canister_priority.priority_credit;
+            let priority = scheduler_state.accumulated_priority - scheduler_state.priority_credit;
             assert_le!(priority.get(), 100 * multiplier as i64);
             assert_ge!(priority.get(), -100 * multiplier as i64);
 
-            total_accumulated_priority += canister_priority.accumulated_priority.get();
-            total_priority_credit += canister_priority.priority_credit.get();
+            total_accumulated_priority += scheduler_state.accumulated_priority.get();
+            total_priority_credit += scheduler_state.priority_credit.get();
         }
         // The accumulated priority invariant should be respected.
         assert_eq!(total_accumulated_priority - total_priority_credit, 0);
