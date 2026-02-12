@@ -40,6 +40,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
+    metadata_state::testing::NetworkTopologyTesting,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
@@ -834,17 +835,15 @@ impl SchedulerTestBuilder {
 
     pub fn build(self) -> SchedulerTest {
         let first_xnet_canister = u64::MAX / 2;
-        let routing_table = Arc::new(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: CanisterId::from(0x0), end: CanisterId::from(first_xnet_canister) } => self.own_subnet_id,
-            }).unwrap()
-        );
+        let routing_table = RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0x0), end: CanisterId::from(first_xnet_canister) } => self.own_subnet_id,
+        }).unwrap();
 
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
         let mut registry_settings = self.registry_settings;
 
-        state.metadata.network_topology.subnets = generate_subnets(
+        state.metadata.network_topology.set_subnets(generate_subnets(
             vec![self.own_subnet_id, self.nns_subnet_id],
             self.nns_subnet_id,
             None,
@@ -852,8 +851,8 @@ impl SchedulerTestBuilder {
             self.subnet_type,
             registry_settings.subnet_size,
             self.cost_schedule,
-        );
-        state.metadata.network_topology.routing_table = routing_table;
+        ));
+        state.metadata.network_topology.set_routing_table(routing_table);
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.batch_time = self.batch_time;
 
@@ -867,7 +866,7 @@ impl SchedulerTestBuilder {
             state
                 .metadata
                 .network_topology
-                .subnets
+                .subnets_mut()
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
                 .chain_keys_held

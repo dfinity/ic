@@ -49,6 +49,7 @@ use ic_replicated_state::{
         NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
         system_state::CyclesUseCase,
     },
+    metadata_state::testing::NetworkTopologyTesting,
     page_map::{
         PAGE_SIZE, PageMap, TestPageAllocatorFileDescriptorImpl,
         test_utils::base_only_storage_layout,
@@ -170,19 +171,21 @@ pub fn generate_network_topology(
     routing_table: Option<RoutingTable>,
     own_subnet_cost_schedule: CanisterCyclesCostSchedule,
 ) -> NetworkTopology {
-    NetworkTopology {
-        nns_subnet_id,
-        subnets: generate_subnets(subnets, nns_subnet_id, None, own_subnet_id, own_subnet_type, subnet_size, own_subnet_cost_schedule),
-        routing_table: match routing_table {
-            Some(routing_table) => Arc::new(routing_table),
-            None => {
-                Arc::new(RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => own_subnet_id,
-            }).unwrap())
-            }
-        },
-        ..Default::default()
+    let mut topo = NetworkTopology::default();
+    topo.nns_subnet_id = nns_subnet_id;
+    topo.set_subnets(generate_subnets(subnets, nns_subnet_id, None, own_subnet_id, own_subnet_type, subnet_size, own_subnet_cost_schedule));
+    match routing_table {
+        Some(rt) => topo.set_routing_table(rt),
+        None => {
+            topo.routing_table_mut()
+                .insert(
+                    CanisterIdRange { start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) },
+                    own_subnet_id,
+                )
+                .unwrap();
+        }
     }
+    topo
 }
 
 pub fn test_registry_settings() -> RegistryExecutionSettings {
@@ -1993,6 +1996,7 @@ pub struct ExecutionTestBuilder {
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
     cost_schedule: CanisterCyclesCostSchedule,
+    network_topology: Option<NetworkTopology>,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -2028,6 +2032,7 @@ impl Default for ExecutionTestBuilder {
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
+            network_topology: None,
         }
     }
 }
@@ -2341,7 +2346,7 @@ impl ExecutionTestBuilder {
     pub fn build_with_routing_table_for_specified_ids(self) -> ExecutionTest {
         let routing_table =
             get_routing_table_with_specified_ids_allocation_range(self.own_subnet_id).unwrap();
-        self.build_common(Arc::new(routing_table))
+        self.build_common(routing_table)
     }
 
     pub fn with_stable_memory_dirty_page_limit(
@@ -2468,13 +2473,18 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_network_topology(mut self, network_topology: NetworkTopology) -> Self {
+        self.network_topology = Some(network_topology);
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
             end: CanisterId::from(2 * CANISTER_IDS_PER_SUBNET - 1),
         };
 
-        let routing_table = Arc::new(match self.caller_canister_id {
+        let routing_table = match self.caller_canister_id {
             None => RoutingTable::try_from(btreemap! {
                 CanisterIdRange { start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => self.own_subnet_id,
             }).unwrap(),
@@ -2482,27 +2492,33 @@ impl ExecutionTestBuilder {
                 CanisterIdRange { start: caller_canister, end: caller_canister } => self.caller_subnet_id.unwrap(),
                 own_range => self.own_subnet_id,
             }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {caller_canister} is in the range {own_range:?}")),
-        });
+        };
 
         self.build_common(routing_table)
     }
 
-    fn build_common(mut self, routing_table: Arc<RoutingTable>) -> ExecutionTest {
+    fn build_common(mut self, routing_table: RoutingTable) -> ExecutionTest {
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
-        let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
-        subnets.extend(self.caller_subnet_id.iter().copied());
-        state.metadata.network_topology.subnets = generate_subnets(
-            subnets,
-            self.nns_subnet_id,
-            self.root_key,
-            self.own_subnet_id,
-            self.subnet_type,
-            self.registry_settings.subnet_size,
-            self.cost_schedule,
-        );
-        state.metadata.network_topology.routing_table = routing_table;
-        state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
+        if let Some(network_topology) = self.network_topology.take() {
+            state.metadata.network_topology = network_topology;
+        } else {
+            let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
+            subnets.extend(self.caller_subnet_id.iter().copied());
+            let mut network_topology = NetworkTopology::default();
+            network_topology.nns_subnet_id = self.nns_subnet_id;
+            network_topology.set_subnets(generate_subnets(
+                subnets,
+                self.nns_subnet_id,
+                self.root_key.clone(),
+                self.own_subnet_id,
+                self.subnet_type,
+                self.registry_settings.subnet_size,
+                self.cost_schedule,
+            ));
+            network_topology.set_routing_table(routing_table);
+            state.metadata.network_topology = network_topology;
+        }
         state.metadata.init_allocation_ranges_if_empty().unwrap();
         state.metadata.bitcoin_get_successors_follow_up_responses =
             self.bitcoin_get_successors_follow_up_responses;
@@ -2570,7 +2586,7 @@ impl ExecutionTestBuilder {
             state
                 .metadata
                 .network_topology
-                .subnets
+                .subnets_mut()
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
                 .chain_keys_held

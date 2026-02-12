@@ -3441,10 +3441,10 @@ impl ExecutionEnvironment {
             }
         }
 
-        let topology = &state.metadata.network_topology;
         // If the request isn't from the NNS, then we need to charge for it.
-        let source_subnet = topology.route(request.sender.get());
-        if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
+        let source_subnet = state.metadata.network_topology.route(request.sender.get());
+        let nns_subnet_id = state.metadata.network_topology.nns_subnet_id;
+        if source_subnet != Some(nns_subnet_id) {
             let cost_schedule = state.get_own_cost_schedule();
             let signature_fee = self.calculate_signature_fee(&args, subnet_size, cost_schedule);
             if request.payment < signature_fee {
@@ -3477,7 +3477,7 @@ impl ExecutionEnvironment {
         let threshold_key = args.key_id();
 
         // Check if the key is enabled.
-        if !topology
+        if !state.metadata.network_topology
             .chain_key_enabled_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
         {

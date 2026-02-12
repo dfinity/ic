@@ -80,7 +80,7 @@ mod tests {
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
             system_state::CyclesUseCase,
         },
-        metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
+        metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics, testing::NetworkTopologyTesting},
         page_map::{PAGE_SIZE, PageIndex},
         testing::{ReplicatedStateTesting, StreamTesting},
     };
@@ -321,11 +321,11 @@ mod tests {
             })
             .unwrap();
 
-            state.metadata.network_topology.subnets = btreemap! {
+            state.metadata.network_topology.set_subnets(btreemap! {
                 own_subnet_id => Default::default(),
                 other_subnet_id => Default::default(),
-            };
-            state.metadata.network_topology.routing_table = Arc::new(routing_table);
+            });
+            state.metadata.network_topology.set_routing_table(routing_table);
             state.metadata.prev_state_hash =
                 Some(CryptoHashOfPartialState::new(CryptoHash(vec![3, 2, 1])));
 
