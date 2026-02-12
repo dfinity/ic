@@ -3244,7 +3244,7 @@ impl StateMachine {
         // Repartition input schedules; Required step for migrating canisters.
         canister_state
             .system_state
-            .split_input_schedules(&canister_id, &state.canister_states);
+            .split_input_schedules(&canister_id, state.canister_states());
 
         state.put_canister_state(canister_state);
 
@@ -4232,7 +4232,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
+            .canister_states()
             .contains_key(&canister)
     }
 
@@ -4241,7 +4241,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
+            .canister_states()
             .keys()
             .cloned()
             .collect()
@@ -4252,8 +4252,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
-            .get(&canister)
+            .canister_state(&canister)
             .map(|canister| canister.execution_state.is_some())
             .unwrap_or_default()
     }
@@ -5018,7 +5017,7 @@ impl StateMachine {
             .collect();
         let (height, mut replicated_state) = self.state_manager.take_tip();
         let mut synthetic_responses = vec![];
-        for (canister_id, canister_state) in replicated_state.canister_states.iter_mut() {
+        for canister_state in replicated_state.canisters_iter_mut() {
             let Some(call_context_manager) = canister_state.system_state.call_context_manager()
             else {
                 continue;
@@ -5045,7 +5044,7 @@ impl StateMachine {
                     );
                     let response_payload = MsgPayload::Reject(reject_context);
                     let response = Response {
-                        originator: *canister_id,
+                        originator: canister_state.canister_id(),
                         respondent: callback.respondent,
                         originator_reply_callback: *callback_id,
                         refund: Cycles::zero(),

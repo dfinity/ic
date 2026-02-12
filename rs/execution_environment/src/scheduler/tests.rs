@@ -1331,7 +1331,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    for (_, canister) in test.state().canister_states.iter() {
+    for canister in test.state().canisters_iter() {
         assert!(canister.execution_state.is_none());
         assert_eq!(canister.compute_allocation(), ComputeAllocation::zero());
         assert_eq!(
@@ -1363,7 +1363,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         None,
         Some(canister_test_id(10).get()),
     );
-    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
             .canister_snapshots
@@ -1470,7 +1470,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         None,
         Some(canister_test_id(10).get()),
     );
-    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
             .canister_snapshots
@@ -1734,27 +1734,27 @@ fn execute_idle_and_canisters_with_messages() {
 
     // We won't update `last_full_execution_round` for the canister without any
     // input messages.
-    let idle = test.canister_state(idle);
     assert_eq!(
         test.state()
-            .canister_priority(&idle.canister_id())
+            .canister_priority(&idle)
             .last_full_execution_round,
         test.last_round()
     );
+    let idle = test.canister_state(idle);
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
 
-    let active = test.canister_state(active);
-    let system_state = &active.system_state;
     assert_eq!(
         test.state()
-            .canister_priority(&active.canister_id())
+            .canister_priority(&active)
             .last_full_execution_round,
         ExecutionRound::from(1)
     );
-    assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
+    let active = test.canister_state(active);
+    assert_eq!(active.system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
     assert_eq!(
-        system_state
+        active
+            .system_state
             .canister_metrics()
             .interrupted_during_execution(),
         0
@@ -2763,7 +2763,7 @@ fn can_record_metrics_for_a_round() {
         }
     }
 
-    for canister in test.state_mut().canister_states.values_mut() {
+    for canister in test.state_mut().canisters_iter_mut() {
         canister.system_state.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
     }
     test.state_mut().metadata.batch_time = UNIX_EPOCH
@@ -4494,9 +4494,7 @@ fn construct_scheduler_for_prop_test(
             None,
         );
         test.state_mut()
-            .metadata
-            .subnet_schedule
-            .get_mut(canister)
+            .canister_priority_mut(canister)
             .last_full_execution_round = last_round;
         for _ in 0..messages_per_canister {
             test.send_ingress(canister, ingress(instructions_per_message as u64));
@@ -4706,9 +4704,9 @@ fn scheduler_does_not_lose_canisters(
     ),
 ) {
     let (mut test, _scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
-    let canisters_before = test.state().canisters_iter().count();
+    let canisters_before = test.state().canister_states().len();
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let canisters_after = test.state().canisters_iter().count();
+    let canisters_after = test.state().canister_states().len();
     assert_eq!(canisters_before, canisters_after);
 }
 
@@ -4725,7 +4723,7 @@ fn scheduler_respects_compute_allocation(
 ) {
     let (mut test, scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
     let replicated_state = test.state();
-    let number_of_canisters = replicated_state.canister_states.len();
+    let number_of_canisters = replicated_state.canister_states().len();
     let total_compute_allocation = replicated_state.total_compute_allocation();
     prop_assert!(total_compute_allocation <= 100 * scheduler_cores as u64);
 
@@ -4738,7 +4736,7 @@ fn scheduler_respects_compute_allocation(
     // for free, i.e. `100 * number_of_canisters` rounds.
     let number_of_rounds = 100 * number_of_canisters;
 
-    let canister_ids: Vec<_> = test.state().canister_states.iter().map(|x| *x.0).collect();
+    let canister_ids: Vec<_> = test.state().canister_states().keys().cloned().collect();
 
     // Add one more round as we update the accumulated priorities at the end of the round now.
     for _ in 0..=number_of_rounds {
@@ -4746,7 +4744,7 @@ fn scheduler_respects_compute_allocation(
             test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
-        for (canister_id, _) in test.state().canister_states.iter() {
+        for canister_id in test.state().canister_states().keys() {
             let priority = test.state().canister_priority(canister_id);
             if priority.last_full_execution_round == test.last_round() {
                 let count = scheduled_first_counters.entry(*canister_id).or_insert(0);
@@ -4756,7 +4754,7 @@ fn scheduler_respects_compute_allocation(
     }
 
     // Check that the compute allocations of the canisters are respected.
-    for (canister_id, canister) in test.state().canister_states.iter() {
+    for (canister_id, canister) in test.state().canister_states().iter() {
         let compute_allocation = canister.compute_allocation().as_percent() as usize;
 
         let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);
@@ -5682,9 +5680,9 @@ fn test_is_next_method_added_to_task_queue() {
     let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
     assert!(
         !test
-            .canister_state_mut(canister)
+            .canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
@@ -5721,16 +5719,13 @@ fn test_is_next_method_added_to_task_queue() {
         });
 
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
-        != NextScheduledMethod::Message
+    while test.canister_state(canister).get_next_scheduled_method() != NextScheduledMethod::Message
     {
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
@@ -5746,7 +5741,7 @@ fn test_is_next_method_added_to_task_queue() {
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
     // and GlobalTimer are added to the queue.
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .is_empty()
@@ -5754,9 +5749,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::Heartbeat
     {
         test.canister_state_mut(canister)
@@ -5774,7 +5767,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5787,7 +5780,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5803,9 +5796,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     heartbeat_and_timer_canister_ids = BTreeSet::new();
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::GlobalTimer
     {
         test.canister_state_mut(canister)
@@ -5822,7 +5813,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5835,7 +5826,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -6703,7 +6694,7 @@ fn charge_idle_canisters_for_full_execution_round() {
         }
     }
 
-    let multiplier = scheduler_cores * test.state().canister_states.len();
+    let multiplier = scheduler_cores * test.state().canister_states().len();
     for round in 0..num_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
