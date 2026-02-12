@@ -1120,6 +1120,7 @@ impl SystemTestGroup {
         let farm_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
-        farm.delete_group(&group_name);
+        farm.delete_group(&group_name)
+            .expect("failed to delete the farm group");
     }
 }
