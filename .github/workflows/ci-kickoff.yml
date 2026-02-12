@@ -17,8 +17,14 @@ concurrency:
 jobs:
   ci-main:
     name: CI Main
-    # run on all events except for forked PRs
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # run on these events:
+    # - merge groups
+    # - pull requests from the same repository (not forks)
+    # - pushes to master or dev branches only on dfinity/ic or dfinity/ic-private (to avoid running on forks, which can't access self-hosted runners)
+    if: |
+      github.event_name == 'merge_group' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'push' && contains(fromJson('["dfinity/ic","dfinity/ic-private"]'), github.repository))
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
     with:
