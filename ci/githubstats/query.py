@@ -457,40 +457,41 @@ def process_log(
     group_name = None
     summary = None
     vm_ipv6s = {}
-    lines = download_to_path.read_text().strip().splitlines()
-    last_line = lines[-1] if len(lines) > 0 else None
 
     # system-tests have structured logs with JSON objects that we can parse to get more detailed error summaries
     # and to determine the group (testnet) name for downloading the IC logs from ElasticSearch.
     # Non-system-tests just get annotated with the last line of the log which usually contains the error message.
     if test_target.startswith("//rs/tests/"):
-        for line in lines:
-            try:
-                # Here we try parsing a timestamp from the first 23 characters of a line
-                # assuming the line looks something like: "2026-02-03 13:55:09.645 INFO..."
-                last_seen_timestamp = datetime.strptime(line[:TIMESTAMP_LEN], "%Y-%m-%d %H:%M:%S.%f")
-            except (ValueError, pd.errors.ParserError):
-                continue
+        with open(download_to_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if len(line) < TIMESTAMP_LEN:
+                    continue
+                try:
+                    # Here we try parsing a timestamp from the first 23 characters of a line
+                    # assuming the line looks something like: "2026-02-03 13:55:09.645 INFO..."
+                    last_seen_timestamp = datetime.strptime(line[:TIMESTAMP_LEN], "%Y-%m-%d %H:%M:%S.%f")
+                except ValueError:
+                    continue
 
-            ix = line[TIMESTAMP_LEN:].find("{")
-            if ix == -1:
-                continue
-            obj = line[TIMESTAMP_LEN + ix :]
+                ix = line.find("{", TIMESTAMP_LEN)
+                if ix == -1:
+                    continue
+                obj = line[ix:]
 
-            try:
-                log_event = LogEvent.from_json(obj)
-                match log_event.event_name:
-                    case "infra_group_name_created_event":
-                        group_name = GroupName.from_dict(log_event.body).group
-                        test_start_time = last_seen_timestamp
-                    case "farm_vm_created_event":
-                        farm_vm_created = FarmVMCreated.from_dict(log_event.body)
-                        vm_ipv6s[farm_vm_created.vm_name] = farm_vm_created.ipv6
-                    case "json_report_created_event":
-                        summary = SystemGroupSummary.from_dict(log_event.body)
-                        break
-            except (ValueError, dacite.DaciteError):
-                continue
+                try:
+                    log_event = LogEvent.from_json(obj)
+                    match log_event.event_name:
+                        case "infra_group_name_created_event":
+                            group_name = GroupName.from_dict(log_event.body).group
+                            test_start_time = last_seen_timestamp
+                        case "farm_vm_created_event":
+                            farm_vm_created = FarmVMCreated.from_dict(log_event.body)
+                            vm_ipv6s[farm_vm_created.vm_name] = farm_vm_created.ipv6
+                        case "json_report_created_event":
+                            summary = SystemGroupSummary.from_dict(log_event.body)
+                            break
+                except (ValueError, dacite.DaciteError):
+                    continue
 
         if group_name is not None and download_ic_logs:
             # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
@@ -503,10 +504,16 @@ def process_log(
                 last_seen_timestamp,
                 vm_ipv6s,
             )
+    else:
+        # Efficiently get the last line of the log:
+        parts = download_to_path.read_text().rstrip().rsplit(sep="\n", maxsplit=1)
+        line = (parts[0] if len(parts) == 1 else parts[1]).lstrip()
+        if line == "":
+            line = None
 
     with row["lock"]:
         row["error_summaries"][attempt_num] = (
-            summary if summary is not None else last_line if attempt_status == FAILED else None
+            summary if summary is not None else line if attempt_status == FAILED else None
         )
 
 
