@@ -21,6 +21,7 @@ use ic_agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
     },
+    agent_error::TransportError,
     export::Principal,
     identity::BasicIdentity,
 };
@@ -92,10 +93,8 @@ pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 pub const MAX_TCP_ERROR_RETRIES: usize = 5;
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
-    ic_agent::identity::BasicIdentity::from_pem(std::io::Cursor::new(
-        TEST_IDENTITY_KEYPAIR.to_pem(),
-    ))
-    .expect("Invalid secret key.")
+    ic_agent::identity::BasicIdentity::from_pem(TEST_IDENTITY_KEYPAIR.to_pem())
+        .expect("Invalid secret key.")
 }
 
 /// Initializes a testing [Runtime] from a node's url. You should really
@@ -930,7 +929,9 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder.build().map_err(AgentError::TransportError)?;
+    let client = builder
+        .build()
+        .map_err(|e| AgentError::TransportError(TransportError::Reqwest(e)))?;
     agent_with_client_identity(url, client, identity).await
 }
 

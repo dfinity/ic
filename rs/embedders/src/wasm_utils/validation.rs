@@ -1734,7 +1734,7 @@ pub(super) fn validate_wasm_binary<'a>(
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
     let code_section_size = check_code_section_size(wasm)?;
     can_compile(wasm, config)?;
-    let module = Module::parse(wasm.as_slice(), false)
+    let module = Module::parse(wasm.as_slice(), false, false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{err}")))?;
     let imports_details = validate_import_section(&module)?;
     validate_export_section(

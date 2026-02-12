@@ -32,7 +32,7 @@ fn initialize_execution_test(
             // Gzipped Wasm is wasm32.
             false
         } else {
-            let module = Module::parse(wasm, true).unwrap();
+            let module = Module::parse(wasm, true, false).unwrap();
             if let Some(mem) = module.memories.iter().next() {
                 mem.ty.memory64
             } else {

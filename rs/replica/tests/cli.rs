@@ -3,11 +3,13 @@ use ic_config::SAMPLE_CONFIG;
 use predicates::prelude::*;
 
 fn new_replica_command() -> Command {
-    match Command::cargo_bin("replica") {
-        // When in Cargo environment. This should be removed after Bazel the migration is complete.
-        Ok(v) => v,
+    // Check if we're running in a Bazel environment
+    if std::env::var("TEST_TMPDIR").is_ok() {
         // When in Bazel environment
-        Err(_) => Command::new("rs/replica/replica"),
+        Command::new("rs/replica/replica")
+    } else {
+        // When in Cargo environment
+        assert_cmd::cargo::cargo_bin_cmd!("replica")
     }
 }
 

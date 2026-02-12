@@ -60,7 +60,7 @@ fn test_instrument_module_rename_memory_table() {
     .unwrap()
     .1;
 
-    let module = Module::parse(output.binary.as_slice(), false).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false, false).unwrap();
     assert_memory_and_table_exports(&module);
     // check that instrumented module instantiates correctly
     wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
@@ -92,7 +92,7 @@ fn test_instrument_module_export_memory_table() {
     .unwrap()
     .1;
 
-    let module = Module::parse(output.binary.as_slice(), false).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false, false).unwrap();
     assert_memory_and_table_exports(&module);
     // check that instrumented module instantiates correctly
     wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
