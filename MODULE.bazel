@@ -82,8 +82,6 @@ use_repo(pip, "python_deps")
 bazel_dep(
     name = "protobuf",
     version = "32.1",
-    # We rename it to keep the legacy name used throughout our bazel files
-    repo_name = "com_google_protobuf",
 )
 
 # protobuf linter
@@ -304,9 +302,9 @@ http_jar(
 http_archive(
     name = "tla_apalache",
     build_file = "@//third_party:BUILD.tla_apalache.bazel",
-    sha256 = "173a683707c2a639c955328746461cad39e4b8a5adff95e156ce3bf376ba293b",
-    strip_prefix = "apalache-0.44.11",
-    url = "https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz",
+    sha256 = "e0ebea7e45c8f99df8d92f2755101dda84ab71df06d1ec3a21955d3b53a886e2",
+    strip_prefix = "apalache-0.52.2",
+    url = "https://github.com/apalache-mc/apalache/releases/download/v0.52.2/apalache-0.52.2.tgz",
 )
 
 # Official WebAssembly test suite.
@@ -898,9 +896,9 @@ http_archive(
         "find . -mindepth 1 -maxdepth 1 ! -name proto -exec rm -rf {} +",
         "find ./proto -name BUILD -delete",
     ],
-    sha256 = "9c675c30ae4c7e41018ad5539fc27287221d31fc3ab7c6439a30f46c4325c56a",
-    strip_prefix = "buildbuddy-2.241.0",
-    url = "https://github.com/buildbuddy-io/buildbuddy/archive/refs/tags/v2.241.0.tar.gz",
+    sha256 = "b1699c80d25bb115805e5267fa89b21e098f1d4cb3ceed2310ea5e1e0599f22e",
+    strip_prefix = "buildbuddy-2.242.0",
+    url = "https://github.com/buildbuddy-io/buildbuddy/archive/refs/tags/v2.242.0.tar.gz",
 )
 
 ## shfmt, for formatting bash code
