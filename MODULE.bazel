@@ -82,8 +82,6 @@ use_repo(pip, "python_deps")
 bazel_dep(
     name = "protobuf",
     version = "32.1",
-    # We rename it to keep the legacy name used throughout our bazel files
-    repo_name = "com_google_protobuf",
 )
 
 # protobuf linter
