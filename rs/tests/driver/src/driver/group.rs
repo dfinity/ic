@@ -472,6 +472,10 @@ impl SystemTestGroup {
             metrics_to_check: vec![
                 String::from("critical_errors"),
                 String::from("consensus_invalidated_artifacts"),
+                String::from("dkg_invalidated_artifacts"),
+                String::from("idkg_invalidated_artifacts"),
+                String::from("certification_invalidated_artifacts"),
+                String::from("canister_http_invalidated_artifacts"),
             ],
         }
     }
