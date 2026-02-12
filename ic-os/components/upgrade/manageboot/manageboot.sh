@@ -313,11 +313,11 @@ case "${ACTION}" in
     confirm)
         write_log "${SYSTEM_TYPE} confirm action called - current boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}, IS_STABLE: ${IS_STABLE}"
         if [ "$boot_cycle" != "stable" ]; then
-            write_log "${SYSTEM_TYPE} transitioning from boot_cycle '${boot_cycle}' to 'stable' at slot ${CURRENT_ALTERNATIVE}"
+            write_log "${SYSTEM_TYPE} transitioning from boot_cycle '${boot_cycle}' to 'stable' at slot $boot_alternative"
             write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "stable"
             # Only update boot_cycle after successful write_grubenv
             boot_cycle=stable
-            write_log "${SYSTEM_TYPE} stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
+            write_log "${SYSTEM_TYPE} stable boot confirmed at slot $boot_alternative"
             write_metric "${SYSTEM_TYPE}_boot_stable" \
                 "1" \
                 "${SYSTEM_TYPE} is boot stable" \
