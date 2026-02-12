@@ -22135,7 +22135,7 @@ checksum = "95d159bf5e6b8c35033c3742a00cb8e7370a217af82e5d304a0d3ce4930e41fe"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.110",
+ "syn 2.0.115",
  "thiserror 1.0.69",
 ]
 
