@@ -10,7 +10,7 @@ on:
         description: 'The version of the crate to publish'
         required: true
       dry-run:
-        description: 'If true, run publish in dry-run mode'
+        description: "If true, run publish in dry-run mode (don't actually publish the crate"
         required: false
         default: 'false'
         type: boolean
