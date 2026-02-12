@@ -60,12 +60,22 @@ fn test_updating_fs_secret_key_is_stable() {
     let mut sk = SecretKey::deserialize(&key_and_pop.secret_key);
 
     let seed = Seed::from_bytes(b"ic-crypto-update-key-seed");
-    update_key_inplace_to_epoch(&mut sk, Epoch::from(2), seed);
 
-    assert_sha256_cbor_is(
-        &sk.serialize(),
-        "f70143bdd1fad70ac7d24cda1f5141b6e730841361fc4c8e5059ddc0a1514e15",
-    );
+    let key_hash_for_epoch = [
+        (2, "b79540c1e4148231c2e194b854e46f2449c4b8a534e854bf3f69d7f41d1af383"),
+        (4, "d6ecca647cf2069e1ae36a2dcda420932b1fc9ca66f8442953ca6d4cfc960a2b"),
+        (9, "5b7c6755f3a4ce7c399cb3f4db14cae977206deaa2a570b9969b7aa052d9c4f9"),
+        (1023, "8358c158fea524b8fe020973632423db981cff50c1c542572e74211a8e28b574"),
+        (1024, "27f15513f9d836fde9e80483498c66c7e77792a116676c1a46f368c2f6b3be2b"),
+        (1 << 28, "10aaf2a0245593cb6ecaa05cee4f2cb525f51fdd9a4ecfe106825990ba2b69f3"),
+        ((1 << 29) - 1, "b755fde575c74f5746450d6eb275cbf7437b3fdff17c0833fc22d00be15a6dbf"),
+        (1 << 29, "2fde8a15cad2917c81e8adf8828c6d477512677cd2f89367539c47ca3fe7948e"),
+    ];
+
+    for (epoch, expected_hash) in &key_hash_for_epoch {
+        update_key_inplace_to_epoch(&mut sk, Epoch::from(*epoch), seed.derive(&format!("Epoch {}", epoch)));
+        assert_sha256_cbor_is(&sk.serialize(), expected_hash);
+    }
 }
 
 fn create_receiver_keys(

@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:parking_lot",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:rayon",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
@@ -108,6 +109,7 @@ rust_bench(
         ":bls12_381",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/seed",
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
     ],
 )

@@ -265,86 +265,93 @@ pub fn verify_sharing(
     // x' = oracle(x, F, A, Y)
     let x_challenge = sharing_proof_challenge(&x, &first_move);
 
-    // TODO(CRP-2550): The verification can run in three threads
-
-    // Thread 1
-    {
-        // First verification equation
-        // R^x' * F == g_1^z_r
-        let lhs = &instance.combined_randomizer.mul_vartime(&x_challenge) + &first_move.blinder_g1;
-        let rhs = instance.g1_gen.mul_vartime(&nizk.z_r);
-        if lhs != rhs {
-            return Err(ZkProofSharingError::InvalidProof);
-        }
-    }
-
-    // Thread 2
-    {
-        // Second verification equation
-        //   ( ∏_{k=0}^{t-1} A_k^{ Σ_{i=1}^n (i^k * x^i) } )^{x'} * A
-        //     == g_2^{z_α}
-
-        // We initialize ik with x_challenge (A) to avoid the point/scalar multiplication later
-        let mut ik = vec![x_challenge.clone(); instance.public_keys.len()];
-
-        let mut scalars = Vec::with_capacity(instance.public_coefficients.len());
-        for _pc in &instance.public_coefficients {
-            let acc = Scalar::muln_vartime(&ik, &xpow);
-            scalars.push(acc);
-
-            for i in 0..ik.len() {
-                ik[i] *= Scalar::from_u64((i + 1) as u64);
+    let (r1, (r2, r3)) = rayon::join(
+        || -> Result<(), ZkProofSharingError> {
+            // First verification equation
+            // R^x' * F == g_1^z_r
+            let lhs =
+                &instance.combined_randomizer.mul_vartime(&x_challenge) + &first_move.blinder_g1;
+            let rhs = instance.g1_gen.mul_vartime(&nizk.z_r);
+            if lhs != rhs {
+                return Err(ZkProofSharingError::InvalidProof);
             }
-        }
-        let lhs =
-            G2Projective::muln_affine_vartime(&instance.public_coefficients[..], &scalars[..])
-                + &nizk.aa;
+            Ok(())
+        },
+        || {
+            rayon::join(
+                || -> Result<(), ZkProofSharingError> {
+                    // Second verification equation
+                    //   ( ∏_{k=0}^{t-1} A_k^{ Σ_{i=1}^n (i^k * x^i) } )^{x'} * A
+                    //     == g_2^{z_α}
 
-        let rhs = instance.g2_gen.mul_vartime(&nizk.z_alpha);
+                    // We initialize ik with x_challenge (A) to avoid the scalar multiplication later
+                    let mut ik = vec![x_challenge.clone(); instance.public_keys.len()];
 
-        if lhs != rhs {
-            return Err(ZkProofSharingError::InvalidProof);
-        }
-    }
+                    let mut scalars = Vec::with_capacity(instance.public_coefficients.len());
+                    for _pc in &instance.public_coefficients {
+                        let acc = Scalar::muln_vartime(&ik, &xpow);
+                        scalars.push(acc);
 
-    // Thread 3
-    {
-        // Third verification equation
-        // Original relation:
-        //   (∏_{i=1}^n C_i^{x^i})^{x'} * Y  ==  (∏_{i=1}^n y_i^{x^i})^{z_r} * g_1^{z_α}
-        //
-        // Equivalently, we can rewrite it by moving terms to opposite sides:
-        //
-        //   lhs = (∏_{i=1}^n C_i^{x^i})^{x'} * (∏_{i=1}^n y_i^{x^i})^{-z_r}
-        //   rhs = g_1^{z_α} * Y^{-1}
+                        for i in 0..ik.len() {
+                            ik[i] *= Scalar::from_u64((i + 1) as u64);
+                        }
+                    }
+                    let lhs = G2Projective::muln_affine_vartime(
+                        &instance.public_coefficients[..],
+                        &scalars[..],
+                    ) + &nizk.aa;
 
-        // The two expressions are re-arranged so that it becomes possible to compute
-        // everything with a single multi scalar multiplication.
+                    let rhs = instance.g2_gen.mul_vartime(&nizk.z_alpha);
 
-        let instance_inputs: Vec<_> = instance
-            .combined_ciphertexts
-            .iter()
-            .chain(&instance.public_keys)
-            .collect();
-        let challenges = {
-            let mut c = Vec::with_capacity(xpow.len() * 2);
-            for xp in &xpow {
-                c.push(xp * &x_challenge);
-            }
-            let z_r_neg = nizk.z_r.neg();
-            for xp in &xpow {
-                c.push(xp * &z_r_neg);
-            }
-            c
-        };
+                    if lhs != rhs {
+                        return Err(ZkProofSharingError::InvalidProof);
+                    }
+                    Ok(())
+                },
+                || -> Result<(), ZkProofSharingError> {
+                    // Third verification equation
+                    // Original relation:
+                    //   (∏_{i=1}^n C_i^{x^i})^{x'} * Y  ==  (∏_{i=1}^n y_i^{x^i})^{z_r} * g_1^{z_α}
+                    //
+                    // Equivalently, we can rewrite it by moving terms to opposite sides:
+                    //
+                    //   lhs = (∏_{i=1}^n C_i^{x^i})^{x'} * (∏_{i=1}^n y_i^{x^i})^{-z_r}
+                    //   rhs = g_1^{z_α} * Y^{-1}
 
-        let lhs = G1Projective::muln_affine_vartime_ref(&instance_inputs, &challenges);
-        let rhs = &instance.g1_gen.mul_vartime(&nizk.z_alpha) + &nizk.yy.neg();
+                    // The two expressions are re-arranged so that it becomes possible to compute
+                    // everything with a single multi scalar multiplication.
 
-        if lhs != rhs {
-            return Err(ZkProofSharingError::InvalidProof);
-        }
-    }
+                    let instance_inputs: Vec<_> = instance
+                        .combined_ciphertexts
+                        .iter()
+                        .chain(&instance.public_keys)
+                        .collect();
+                    let challenges = {
+                        let mut c = Vec::with_capacity(xpow.len() * 2);
+                        for xp in &xpow {
+                            c.push(xp * &x_challenge);
+                        }
+                        let z_r_neg = nizk.z_r.neg();
+                        for xp in &xpow {
+                            c.push(xp * &z_r_neg);
+                        }
+                        c
+                    };
+
+                    let lhs = G1Projective::muln_affine_vartime_ref(&instance_inputs, &challenges);
+                    let rhs = &instance.g1_gen.mul_vartime(&nizk.z_alpha) + &nizk.yy.neg();
+
+                    if lhs != rhs {
+                        return Err(ZkProofSharingError::InvalidProof);
+                    }
+                    Ok(())
+                },
+            )
+        },
+    );
+    r1?;
+    r2?;
+    r3?;
 
     Ok(())
 }
