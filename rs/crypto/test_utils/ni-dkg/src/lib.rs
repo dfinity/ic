@@ -264,7 +264,6 @@ pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {
                 .collect(),
         },
         zk_proof_decryptability: ni_dkg_groth20_bls12_381::ZKProofDec {
-            // TODO(CRP-530): Populate this when it has been defined in the spec.
             first_move_y0: g1(seed),
             first_move_b: [g1(seed); scheme::NUM_ZK_REPETITIONS],
             first_move_c: [g1(seed); scheme::NUM_ZK_REPETITIONS],

@@ -582,6 +582,11 @@ impl SystemMetadata {
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
 
+        // "Preserve" the subnet schedule. This is actually persisted per-canister, as
+        // part of the respective canister state, so will only actually be retained for
+        // local canisters.
+        res.subnet_schedule = self.subnet_schedule;
+
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
         // `self.batch_time`.
