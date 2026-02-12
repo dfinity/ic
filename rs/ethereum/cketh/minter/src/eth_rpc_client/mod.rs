@@ -5,7 +5,7 @@ use evm_rpc_types::{
     RpcError, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
 };
 use ic_canister_log::log;
-use ic_canister_runtime::IcRuntime;
+use ic_canister_runtime::{IcError, IcRuntime};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Debug,
@@ -140,9 +140,9 @@ impl<T: PartialEq> MultiCallResults<T> {
         let distinct_errors: BTreeSet<_> = self.errors.values().collect();
         match distinct_errors.len() {
             0 => panic!("BUG: expect errors should be non-empty"),
-            1 => {
-                MultiCallError::ConsistentError(distinct_errors.into_iter().next().unwrap().clone())
-            }
+            1 => MultiCallError::ConsistentError(ConsistentError::EvmRpc(
+                distinct_errors.into_iter().next().unwrap().clone(),
+            )),
             _ => MultiCallError::InconsistentResults(self),
         }
     }
@@ -150,8 +150,22 @@ impl<T: PartialEq> MultiCallResults<T> {
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum MultiCallError<T> {
-    ConsistentError(RpcError),
+    ConsistentError(ConsistentError),
     InconsistentResults(MultiCallResults<T>),
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub enum ConsistentError {
+    /// Error coming from the client talking to the EVM RPC canister
+    Client(IcError),
+    /// Error coming from the EVM RPC canister itself.
+    EvmRpc(RpcError),
+}
+
+impl From<RpcError> for ConsistentError {
+    fn from(error: RpcError) -> Self {
+        Self::EvmRpc(error)
+    }
 }
 
 pub trait ReductionStrategy<T> {
@@ -235,7 +249,9 @@ where
     F: Fn(MultiCallResults<T>) -> Result<T, MultiCallError<T>>,
 {
     match result {
-        EvmMultiRpcResult::Consistent(result) => result.map_err(MultiCallError::ConsistentError),
+        EvmMultiRpcResult::Consistent(result) => {
+            result.map_err(|e| MultiCallError::ConsistentError(e.into()))
+        }
         EvmMultiRpcResult::Inconsistent(results) => {
             reduce(MultiCallResults::from_non_empty_iter(results))
         }
@@ -264,10 +280,19 @@ impl<T> MultiCallError<T> {
         predicate: P,
     ) -> bool {
         match self {
-            MultiCallError::ConsistentError(RpcError::HttpOutcallError(error)) => predicate(error),
-            MultiCallError::ConsistentError(RpcError::JsonRpcError { .. }) => false,
-            MultiCallError::ConsistentError(RpcError::ProviderError(_)) => false,
-            MultiCallError::ConsistentError(RpcError::ValidationError(_)) => false,
+            MultiCallError::ConsistentError(ConsistentError::Client(_)) => false,
+            MultiCallError::ConsistentError(ConsistentError::EvmRpc(
+                RpcError::HttpOutcallError(error),
+            )) => predicate(error),
+            MultiCallError::ConsistentError(ConsistentError::EvmRpc(RpcError::JsonRpcError {
+                ..
+            })) => false,
+            MultiCallError::ConsistentError(ConsistentError::EvmRpc(RpcError::ProviderError(
+                _,
+            ))) => false,
+            MultiCallError::ConsistentError(ConsistentError::EvmRpc(
+                RpcError::ValidationError(_),
+            )) => false,
             MultiCallError::InconsistentResults(results) => {
                 results
                     .errors
