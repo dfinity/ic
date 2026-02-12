@@ -32,7 +32,7 @@ use std::convert::TryFrom;
 fn should_correctly_serialize_and_deserialize_idkg_opening() {
     let opening = idkg_opening();
     let proto = IDkgOpeningProto::from(opening.clone());
-    let parsing_result = IDkgOpening::try_from(&proto);
+    let parsing_result = IDkgOpening::try_from(proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(opening, parsed);
@@ -42,7 +42,7 @@ fn should_correctly_serialize_and_deserialize_idkg_opening() {
 fn should_correctly_serialize_and_deserialize_idkg_complaint() {
     let complaint = idkg_complaint();
     let proto = IDkgComplaintProto::from(complaint.clone());
-    let parsing_result = IDkgComplaint::try_from(&proto);
+    let parsing_result = IDkgComplaint::try_from(proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(complaint, parsed);

@@ -115,17 +115,17 @@ impl From<IDkgOpening> for IDkgOpeningProto {
     }
 }
 
-impl TryFrom<&IDkgOpeningProto> for IDkgOpening {
+impl TryFrom<IDkgOpeningProto> for IDkgOpening {
     type Error = ProxyDecodeError;
 
-    fn try_from(proto: &IDkgOpeningProto) -> Result<Self, Self::Error> {
+    fn try_from(proto: IDkgOpeningProto) -> Result<Self, Self::Error> {
         Ok(Self {
             transcript_id: try_from_option_field(
                 proto.transcript_id.as_ref(),
                 "IDkgOpening::transcript_id",
             )?,
-            dealer_id: node_id_try_from_option(proto.dealer.clone())?,
-            internal_opening_raw: proto.raw_opening.clone(),
+            dealer_id: node_id_try_from_option(proto.dealer)?,
+            internal_opening_raw: proto.raw_opening,
         })
     }
 }
@@ -140,17 +140,17 @@ impl From<IDkgComplaint> for IDkgComplaintProto {
     }
 }
 
-impl TryFrom<&IDkgComplaintProto> for IDkgComplaint {
+impl TryFrom<IDkgComplaintProto> for IDkgComplaint {
     type Error = ProxyDecodeError;
 
-    fn try_from(proto: &IDkgComplaintProto) -> Result<Self, Self::Error> {
+    fn try_from(proto: IDkgComplaintProto) -> Result<Self, Self::Error> {
         Ok(Self {
             transcript_id: try_from_option_field(
                 proto.transcript_id.as_ref(),
                 "IDkgComplaint::transcript_id",
             )?,
-            dealer_id: node_id_try_from_option(proto.dealer.clone())?,
-            internal_complaint_raw: proto.raw_complaint.clone(),
+            dealer_id: node_id_try_from_option(proto.dealer)?,
+            internal_complaint_raw: proto.raw_complaint,
         })
     }
 }

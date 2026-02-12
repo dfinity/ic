@@ -1668,7 +1668,7 @@ impl TryFrom<pb::IDkgComplaintContent> for IDkgComplaintContent {
     fn try_from(value: pb::IDkgComplaintContent) -> Result<Self, Self::Error> {
         Ok(Self {
             idkg_complaint: try_from_option_field(
-                value.idkg_complaint.as_ref(),
+                value.idkg_complaint,
                 "IDkgComplaintContent::idkg_complaint",
             )?,
         })
@@ -1745,7 +1745,7 @@ impl TryFrom<pb::IDkgOpeningContent> for IDkgOpeningContent {
     fn try_from(value: pb::IDkgOpeningContent) -> Result<Self, Self::Error> {
         Ok(Self {
             idkg_opening: try_from_option_field(
-                value.idkg_opening.as_ref(),
+                value.idkg_opening,
                 "IDkgOpeningContent::idkg_opening",
             )?,
         })
