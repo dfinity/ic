@@ -335,11 +335,12 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         );
 
                         if transform_result_size as u64 > max_response_size_bytes {
-                            return Err((
-                                RejectCode::SysFatal,
-                                "Transformed http response exceeds limit".to_string(),
-                            ));
+                            let err_msg = format!(
+                                "Transformed http response exceeds limit: {max_response_size_bytes}"
+                            );
+                            return Err((RejectCode::SysFatal, err_msg));
                         }
+
                         transform_result
                     }
                     None => Encode!(&payload).map_err(|encode_error| {
