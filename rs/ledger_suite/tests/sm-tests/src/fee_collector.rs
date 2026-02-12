@@ -209,26 +209,58 @@ pub fn test_fee_collector_107_anonymous<T>(
 ) where
     T: CandidType,
 {
-    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
 
     let fee_collector = Account {
         owner: Principal::anonymous(),
         subaccount: Some([1; 32]),
     };
 
+    // Setting fee collector to anonymous with endpoint should fail
     let controllers = env
         .get_controllers(canister_id)
         .expect("ledger should have a controller");
     assert_eq!(controllers.len(), 1);
     let controller = controllers[0];
-    let result = set_fc_107(&env, canister_id, controller, Some(fee_collector));
-
-    let err = result.unwrap_err();
+    let err = set_fc_107(&env, canister_id, controller, Some(fee_collector)).unwrap_err();
     assert_eq!(
         err,
         SetFeeCollectorError::InvalidAccount(
             "The fee collector cannot be set to an anonymous account".to_string()
         )
+    );
+
+    // Setting fee collector to anonymous during upgrade should fail
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_fee_collector: Some(ChangeFeeCollector::SetTo(fee_collector)),
+        ..UpgradeArgs::default()
+    }));
+    let error = env
+        .upgrade_canister(
+            canister_id,
+            ledger_wasm.clone(),
+            Encode!(&upgrade_args).unwrap(),
+        )
+        .expect_err("upgrade should fail");
+    assert!(
+        error
+            .description()
+            .contains("The fee collector account cannot be an anonymous account")
+    );
+
+    // Setting fee collector to anonymous during install should fail
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: Some(fee_collector),
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    let error = env
+        .install_canister(ledger_wasm, args, None)
+        .expect_err("install should fail");
+    assert!(
+        error
+            .description()
+            .contains("The fee collector account cannot be an anonymous account")
     );
 }
 

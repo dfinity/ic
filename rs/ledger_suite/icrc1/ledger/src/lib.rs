@@ -719,7 +719,10 @@ impl Ledger {
         if ledger.fee_collector_107 == Some(ledger.minting_account) {
             ic_cdk::trap("The fee collector account cannot be the same as the minting account");
         }
-        if ledger.fee_collector_107.is_some() {
+        if let Some(fee_collector) = ledger.fee_collector_107 {
+            if fee_collector.owner == Principal::anonymous() {
+                ic_cdk::trap("The fee collector account cannot be an anonymous account")
+            }
             ledger.ledger_set_107_fee_collector(ledger.fee_collector_107);
         }
 
@@ -968,6 +971,11 @@ impl Ledger {
                 ic_cdk::trap(
                     "The fee collector account cannot be the same account as the minting account",
                 );
+            }
+            if let Some(fee_collector) = self.fee_collector_107
+                && fee_collector.owner == Principal::anonymous()
+            {
+                ic_cdk::trap("The fee collector account cannot be an anonymous account")
             }
         }
         if let Some(feature_flags) = args.feature_flags {
