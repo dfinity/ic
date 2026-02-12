@@ -498,7 +498,7 @@ def process_log(
             # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
             # We fork a thread for downloading the IC logs to speed up the whole process instead of doing it sequentially after downloading all test logs.
             download_ic_log_executor.submit(
-                download_ic_logs_for_system_test,
+                download_and_process_ic_logs_for_system_test,
                 attempt_dir,
                 group_name,
                 test_start_time,
@@ -630,15 +630,21 @@ def shorten(msg: str, max_length: int) -> str:
     return msg
 
 
-def download_ic_logs_for_system_test(
+def download_and_process_ic_logs_for_system_test(
     attempt_dir: Path,
     group_name: str,
     test_start_time: datetime,
     test_end_time: datetime,
     vm_ipv6s: dict[str, str],
 ):
-    ic_logs_dir = attempt_dir / "ic_logs"
-    ic_logs_dir.mkdir(exist_ok=True)
+    # Create a queue for passing hits from download thread to processing thread
+    hits_queue = Queue(maxsize=100)  # Limit memory usage with bounded queue
+
+    # Start processing thread
+    processing_thread = threading.Thread(
+        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, hits_queue, vm_ipv6s)
+    )
+    processing_thread.start()
 
     gte = test_start_time.isoformat()
     lte = test_end_time.isoformat()
@@ -664,50 +670,6 @@ def download_ic_logs_for_system_test(
         # Sort by timestamp, using _doc as a tie-breaker for stable pagination.
         "sort": [{"timestamp": {"order": "asc", "format": "strict_date_optional_time_nanos"}}, {"_doc": "asc"}],
     }
-
-    # Create a queue for passing hits from download thread to processing thread
-    hits_queue = Queue(maxsize=1000)  # Limit memory usage with bounded queue
-
-    def process_hits_from_queue():
-        """Consumer thread: Process hits from queue and write log files."""
-        logs_by_node = {}
-
-        while True:
-            hits = hits_queue.get()
-            for hit in hits:
-                # Sentinel value signals end of download
-                if hit is None:
-                    break
-
-                # Process the hit
-                if "_source" not in hit:
-                    continue
-                source = hit["_source"]
-                if "ic_node" not in source or "timestamp" not in source or "MESSAGE" not in source:
-                    continue
-
-                node = source["ic_node"]
-                try:
-                    timestamp = datetime.strptime(source["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
-                except ValueError:
-                    continue
-
-                logs_by_node.setdefault(node, []).append((timestamp, source["MESSAGE"]))
-
-        # Write all log files after processing all hits
-        for node, messages in logs_by_node.items():
-            log_file = ic_logs_dir / f"{node}.log"
-            if node in vm_ipv6s:
-                ipv6_symlink_path = ic_logs_dir / f"{vm_ipv6s[node]}.log"
-                ipv6_symlink_path.symlink_to(log_file.name)
-            log_file.write_text(
-                "\n".join([f"{timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')} {msg}" for timestamp, msg in messages])
-            )
-            print(f"Downloaded {len(messages)} log entries for node {node} to {log_file}", file=sys.stderr)
-
-    # Start processing thread
-    processing_thread = threading.Thread(target=process_hits_from_queue)
-    processing_thread.start()
 
     try:
         # Download logs from ElasticSearch (Producer):
@@ -750,6 +712,53 @@ def download_ic_logs_for_system_test(
         print(f"Error downloading IC logs for {group_name}: {e}", file=sys.stderr)
     except json.JSONDecodeError as e:
         print(f"Error parsing JSON response for {group_name}: {e}", file=sys.stderr)
+
+
+def process_elasticsearch_hits_from_queue(
+    attempt_dir: Path,
+    hits_queue: Queue,
+    vm_ipv6s: dict[str, str],
+):
+    """Consumer thread: Process ElasticSearch hits from queue and write IC node log files."""
+    logs_by_node = {}
+
+    ic_logs_dir = attempt_dir / "ic_logs"
+    ic_logs_dir.mkdir(exist_ok=True)
+
+    while True:
+        hits = hits_queue.get()
+        if hits is None:
+            break
+        for hit in hits:
+            # Sentinel value signals end of download
+            if hit is None:
+                break
+
+            # Process the hit
+            if "_source" not in hit:
+                continue
+            source = hit["_source"]
+            if "ic_node" not in source or "timestamp" not in source or "MESSAGE" not in source:
+                continue
+
+            node = source["ic_node"]
+            try:
+                timestamp = datetime.strptime(source["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            except ValueError:
+                continue
+
+            logs_by_node.setdefault(node, []).append((timestamp, source["MESSAGE"]))
+
+    # Write all log files after processing all hits
+    for node, messages in logs_by_node.items():
+        log_file = ic_logs_dir / f"{node}.log"
+        if node in vm_ipv6s:
+            ipv6_symlink_path = ic_logs_dir / f"{vm_ipv6s[node]}.log"
+            ipv6_symlink_path.symlink_to(log_file.name)
+        log_file.write_text(
+            "\n".join([f"{timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')} {msg}" for timestamp, msg in messages])
+        )
+        print(f"Downloaded {len(messages)} log entries for node {node} to {log_file}", file=sys.stderr)
 
 
 def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
