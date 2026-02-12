@@ -174,7 +174,7 @@ fn test_get_data() {
     assert_eq!((2, b"a tree".to_vec()), data[0]);
     assert_eq!((11, b"is known".to_vec()), data[1]);
     assert_eq!((23, b"by its fruit".to_vec()), data[2]);
-    let module = Module::parse(output.binary.as_slice(), false, false).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false).unwrap();
     if !module.data.is_empty() {
         panic!("instrumentation should have removed data sections");
     }
@@ -211,7 +211,7 @@ fn test_mixed_data_segments() {
     assert_eq!((32, b"active 4".to_vec()), data[2]);
     assert_eq!((48, b"active 6".to_vec()), data[3]);
     assert_eq!((64, b"active 7".to_vec()), data[4]);
-    let module = Module::parse(output.binary.as_slice(), false, false).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false).unwrap();
     assert_eq!(module.data.len(), 6);
     assert_eq!(&module.data[0].data, &b"passive 0");
     assert_eq!(module.data[1].data.len(), 0);
@@ -265,7 +265,7 @@ fn test_exports_only_reserved_symbols() {
         &wasm,
     )
     .unwrap();
-    let module = Module::parse(instrumentation_details.binary.as_slice(), true, false).unwrap();
+    let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
 
     for export in module.exports.iter() {
         assert!(RESERVED_SYMBOLS.contains(&&export.name[..]))
@@ -1366,7 +1366,7 @@ fn assert_memories_have_max_limit(wat: &str) {
             &wasm,
         )
         .unwrap();
-        let module = Module::parse(instrumentation_details.binary.as_slice(), true, false).unwrap();
+        let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
         assert!(
             module.memories.iter().count() >= 2,
             "Module should have at least a heap and stable memory"

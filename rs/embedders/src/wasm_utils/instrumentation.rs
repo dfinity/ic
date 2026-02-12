@@ -998,16 +998,10 @@ fn export_additional_symbols<'a>(
     ];
 
     let num_instructions = instructions.len();
-    // Convert Vec<Operator> to Vec<(Operator, usize)> with dummy offsets
-    let instructions_with_offsets: Vec<_> = instructions
-        .into_iter()
-        .enumerate()
-        .map(|(i, op)| (op, i))
-        .collect();
     let body = Body {
         locals: vec![(1, DataType::I64)],
         num_locals: 1,
-        instructions: Instructions::new(instructions_with_offsets, 0, false),
+        instructions: Instructions::new(instructions),
         num_instructions,
         name: None,
     };
@@ -1094,16 +1088,10 @@ fn export_additional_symbols<'a>(
     ];
 
     let num_instructions = instructions.len();
-    // Convert Vec<Operator> to Vec<(Operator, usize)> with dummy offsets
-    let instructions_with_offsets: Vec<_> = instructions
-        .into_iter()
-        .enumerate()
-        .map(|(i, op)| (op, i))
-        .collect();
     let body = Body {
         locals: vec![(4, DataType::I32)],
         num_locals: 4,
-        instructions: Instructions::new(instructions_with_offsets, 0, false),
+        instructions: Instructions::new(instructions),
         num_instructions,
         name: None,
     };
@@ -1451,13 +1439,7 @@ fn inject_try_grow_wasm_memory(
         }
         elems.extend_from_slice(&orig_elems[last_injection_position..]);
         let num_instructions = elems.len();
-        // Convert Vec<Operator> to Vec<(Operator, usize)> with dummy offsets
-        let elems_with_offsets: Vec<_> = elems
-            .into_iter()
-            .enumerate()
-            .map(|(i, op)| (op, i))
-            .collect();
-        func_body.instructions = Instructions::new(elems_with_offsets, 0, false);
+        func_body.instructions = Instructions::new(elems);
         func_body.num_instructions = num_instructions;
     }
 }

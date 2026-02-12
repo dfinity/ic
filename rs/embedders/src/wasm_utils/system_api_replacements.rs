@@ -31,17 +31,11 @@ fn make_body(
     locals: Vec<(u32, DataType)>,
     instructions: Vec<wirm::wasmparser::Operator>,
 ) -> wirm::ir::types::Body {
-    // Convert Vec<Operator> to Vec<(Operator, usize)> with dummy offsets
-    let instructions_with_offsets: Vec<_> = instructions
-        .into_iter()
-        .enumerate()
-        .map(|(i, op)| (op, i))
-        .collect();
     wirm::ir::types::Body {
         num_locals: locals.len() as u32,
-        num_instructions: instructions_with_offsets.len(),
+        num_instructions: instructions.len(),
         locals,
-        instructions: Instructions::new(instructions_with_offsets, 0, false),
+        instructions: Instructions::new(instructions),
         name: None,
     }
 }
