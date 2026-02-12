@@ -1,8 +1,7 @@
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_management_canister_types_private::{CanisterIdRecord, Payload};
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::Cycles;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
@@ -21,13 +20,21 @@ fn setup() -> Env {
     // - "local" (the `StateMachine`): (0, CANISTER_IDS_PER_SUBNET - 1),
     // - "remote" (in this test non-existent): (CANISTER_IDS_PER_SUBNET, 2 * CANISTER_IDS_PER_SUBNET - 1).
     let mut routing_table = RoutingTable::new();
-    let subnet_id = subnet_test_id(0);
+    // use a subnet ID of length 29 (as in production)
+    // so that it does not resemble a canister ID
+    let subnet_id_slice: &[u8] = &[42; 29];
+    let subnet_id_principal: PrincipalId = subnet_id_slice.try_into().unwrap();
+    let subnet_id = SubnetId::from(subnet_id_principal);
     let canister_id_range = CanisterIdRange {
         start: CanisterId::from_u64(0),
         end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
     };
     routing_table.insert(canister_id_range, subnet_id).unwrap();
-    let remote_subnet_id = subnet_test_id(1);
+    // use a subnet ID of length 29 (as in production)
+    // so that it does not resemble a canister ID
+    let remote_subnet_id_slice: &[u8] = &[64; 29];
+    let remote_subnet_id_principal: PrincipalId = remote_subnet_id_slice.try_into().unwrap();
+    let remote_subnet_id = SubnetId::from(remote_subnet_id_principal);
     let remote_canister_id_range = CanisterIdRange {
         start: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET),
         end: CanisterId::from_u64(2 * CANISTER_IDS_PER_SUBNET - 1),
@@ -148,7 +155,7 @@ fn reject_remote_callbacks() {
 }
 
 #[test]
-fn reject_remote_callbacks_preserves_local() {
+fn reject_remote_callbacks_preserves_local_calls() {
     let Env {
         sm,
         canister_id,
@@ -208,4 +215,49 @@ fn reject_remote_callbacks_preserves_local() {
     assert!(
         matches!(wasm_result(&sm, &local_msg_id), WasmResult::Reply(reply) if reply == "Made it!".as_bytes())
     );
+}
+
+#[test]
+fn reject_remote_callbacks_preserves_local_mgmt_canister_calls() {
+    let Env {
+        sm,
+        canister_id,
+        remote_canister_id: _,
+    } = setup();
+
+    // Send an ingress message to the main canister
+    // that calls the "local" management canister.
+    let mgmt_payload: CanisterIdRecord = canister_id.into();
+    let local_payload = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "canister_status",
+            CallArgs::default().other_side(mgmt_payload.encode()),
+        )
+        .build();
+    let local_msg_id = sm.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        local_payload,
+    );
+
+    // The "local" call should be still processing.
+    assert_processing(&sm, &local_msg_id);
+
+    // Now we reject remote callbacks and confirm that the "local" call is still processing.
+    sm.reject_remote_callbacks();
+    sm.tick();
+
+    assert_processing(&sm, &local_msg_id);
+
+    // Eventually the local callback should return.
+    for _ in 0..100 {
+        sm.tick();
+    }
+
+    assert!(matches!(
+        wasm_result(&sm, &local_msg_id),
+        WasmResult::Reply(_)
+    ));
 }

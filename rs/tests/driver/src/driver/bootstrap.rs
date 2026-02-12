@@ -542,12 +542,20 @@ fn create_guestos_config_for_node(
         vec![Url::parse("https://cloudflare.com/cdn-cgi/trace")?]
     };
 
+    let nns_pub_key_override_path = test_env.prep_dir("").map(|v| v.root_public_key_path());
+    let nns_pub_key_override = if let Some(v) = nns_pub_key_override_path {
+        Some(fs::read_to_string(&v).context("unable to read NNS public key override")?)
+    } else {
+        None
+    };
+
     let icos_settings = ICOSSettings {
         node_reward_type: None,
         mgmt_mac,
         deployment_environment,
         nns_urls,
-        use_node_operator_private_key: true,
+        use_node_operator_private_key: false,
+        node_operator_private_key: None,
         enable_trusted_execution_environment: false,
         use_ssh_authorized_keys: true,
         icos_dev_settings: ICOSDevSettings::default(),
@@ -572,6 +580,7 @@ fn create_guestos_config_for_node(
             .ok(),
         hostname: Some(node.node_id.to_string()),
         generate_ic_boundary_tls_cert: node.node_config.domain.clone(),
+        nns_pub_key_override,
     };
 
     let guestos_settings = GuestOSSettings {

@@ -69,7 +69,8 @@ fn generate_hostos_config() -> HostOSConfig {
         nns_urls: vec![
             url::Url::parse("https://icp-api.io,https://icp0.io,https://ic0.app").unwrap(),
         ],
-        use_node_operator_private_key: true,
+        use_node_operator_private_key: false,
+        node_operator_private_key: None,
         use_ssh_authorized_keys: false,
         icos_dev_settings: ICOSDevSettings::default(),
     };
