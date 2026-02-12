@@ -5011,6 +5011,11 @@ impl StateMachine {
             "StateMachine::reject_remote_callbacks must not be used in a multi-subnet setup."
         );
         let routing_table = self.get_routing_table();
+        let remote_subnets: BTreeSet<_> = routing_table
+            .iter()
+            .map(|(_, subnet_id)| subnet_id.get())
+            .filter(|subnet_id| *subnet_id != self.get_subnet_id().get())
+            .collect();
         let (height, mut replicated_state) = self.state_manager.take_tip();
         let mut synthetic_responses = vec![];
         for (canister_id, canister_state) in replicated_state.canister_states.iter_mut() {
@@ -5019,12 +5024,16 @@ impl StateMachine {
                 continue;
             };
             for (callback_id, callback) in call_context_manager.callbacks().iter() {
-                let is_remote =
-                    if let Some((_, subnet_id)) = routing_table.lookup_entry(callback.respondent) {
-                        subnet_id != self.get_subnet_id()
-                    } else {
-                        true // non-routable callees are treated as remote and synthetic rejects are produced
-                    };
+                let is_remote = if callback.respondent.get() == self.get_subnet_id().get() {
+                    false // calls to the "local" management canister
+                } else if remote_subnets.contains(&callback.respondent.get()) {
+                    true // calls to "remote" management canisters
+                } else if let Some((_, subnet_id)) = routing_table.lookup_entry(callback.respondent)
+                {
+                    subnet_id != self.get_subnet_id()
+                } else {
+                    true // non-routable callees are treated as remote and synthetic rejects are produced
+                };
                 let has_enqueued_response = canister_state
                     .system_state
                     .queues()
