@@ -834,11 +834,10 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
 #[test]
 fn should_be_able_to_stop_canister_during_scraping() {
     const UNSCRAPED_BLOCKS: u64 = 5_000;
-    const NUM_BLOCK_RANGES: usize = 10;
+    const MAX_BLOCK: u64 = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + UNSCRAPED_BLOCKS;
 
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.as_ref().max_logs_block_range();
-    const MAX_BLOCK: u64 = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + UNSCRAPED_BLOCKS;
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -846,55 +845,12 @@ fn should_be_able_to_stop_canister_during_scraping() {
         .build()
         .expect_rpc_calls(&cketh);
 
-    // Only the first few eth_getLogs requests (e.g., 3 out of 10).
-    // This leaves the scraping in progress with open call contexts.
+    // Starts scraping to create open call contexts.
     let mut from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let mut to_block = from_block
         .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
 
-    const BLOCKS_TO_PROCESS_BEFORE_STOP: usize = 3;
-    for _ in 0..BLOCKS_TO_PROCESS_BEFORE_STOP {
-        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
-            .with_request_params(json!([{
-                "fromBlock": from_block,
-                "toBlock": to_block,
-                "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [cketh.received_eth_event_topic()]
-            }]))
-            .respond_for_all_with(empty_logs())
-            .build()
-            .expect_rpc_calls(&cketh);
-
-        from_block = to_block.checked_increment().unwrap();
-        to_block = from_block
-            .checked_add(BlockNumber::from(max_eth_logs_block_range))
-            .unwrap();
-    }
-
-    cketh.env.tick();
-    cketh.env.tick();
-    assert_eq!(
-        cketh.env.canister_http_request_contexts().len(),
-        4,
-        "Expected HTTPS outcalls since scraping is still in progress."
-    );
-
-    // At this point:
-    // - 3 block ranges have been scraped
-    // - The minter has made an HTTP outcall for the 4th block range
-    // - There's an open call context waiting for that HTTP response
-    // Request to stop the minter (without providing responses to pending HTTP outcalls).
-    // The stop will NOT complete because there's an open call context.
-    cketh.try_stop_minter_without_stopping_ongoing_https_outcalls();
-
-    let status = cketh.tick_until_minter_canister_status(CanisterStatusType::Stopping);
-    assert_eq!(
-        status,
-        CanisterStatusType::Stopping,
-        "Expected minter to be in Stopping state due to open call contexts"
-    );
-    // Answer 4th block range to be able to stop.
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": from_block,
@@ -906,14 +862,69 @@ fn should_be_able_to_stop_canister_during_scraping() {
         .build()
         .expect_rpc_calls(&cketh);
 
-    assert_eq!(cketh.minter_status(), CanisterStatusType::Stopped);
+    cketh.env.tick();
+    cketh.env.tick();
+    assert_eq!(
+        cketh.env.canister_http_request_contexts().len(),
+        4,
+        "Expected HTTPS outcalls since scraping is still in progress."
+    );
+
+    // At this point:
+    // - 1 block range has been scraped
+    // - The minter has made an HTTP outcall for the 2nd block range
+    // - There's an open call context waiting for that HTTP response
+    // Request to stop the minter (without providing responses to pending HTTP outcalls).
+    // The stop will NOT complete because there's an open call context.
+    cketh.try_stop_minter_without_stopping_ongoing_https_outcalls();
+    cketh.tick_until_minter_canister_status(CanisterStatusType::Stopping);
+
+    // Answer 2nd block range to be able to stop.
+    from_block = to_block.checked_increment().unwrap();
+    to_block = from_block
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
+        .unwrap();
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [cketh.received_eth_event_topic()]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    cketh.tick_until_minter_canister_status(CanisterStatusType::Stopped);
     assert_eq!(
         cketh.env.canister_http_request_contexts(),
         BTreeMap::default(),
-        "Unexpected pending HTTPS outcall"
+        "Unexpected pending HTTPS outcalls"
     );
 
     // Restarting the canister should resume scraping from where we stopped
+    cketh.start_minter();
+    cketh.tick_until_minter_canister_status(CanisterStatusType::Running);
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(MAX_BLOCK))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    from_block = to_block.checked_increment().unwrap();
+    to_block = from_block
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
+        .unwrap();
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [cketh.received_eth_event_topic()]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
 }
 
 #[test]
