@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from queue import Queue
 from typing import List, Optional
 
 import codeowners
@@ -462,7 +463,7 @@ def process_log(
     # and to determine the group (testnet) name for downloading the IC logs from ElasticSearch.
     # Non-system-tests just get annotated with the last line of the log which usually contains the error message.
     if test_target.startswith("//rs/tests/"):
-        with open(download_to_path, 'r', encoding='utf-8') as f:
+        with open(download_to_path, "r", encoding="utf-8") as f:
             for line in f:
                 if len(line) < TIMESTAMP_LEN:
                     continue
@@ -664,47 +665,36 @@ def download_ic_logs_for_system_test(
         "sort": [{"timestamp": {"order": "asc", "format": "strict_date_optional_time_nanos"}}, {"_doc": "asc"}],
     }
 
-    try:
-        url = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search"
-        params = {"filter_path": "hits.hits"}
-        all_hits = []
-        while True:
-            print(
-                f"Downloading IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
-                file=sys.stderr,
-            )
-            response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
+    # Create a queue for passing hits from download thread to processing thread
+    hits_queue = Queue(maxsize=1000)  # Limit memory usage with bounded queue
 
-            if not response.ok:
-                print(
-                    f"Failed to download IC logs for {group_name}: {response.status_code} {response.text}",
-                    file=sys.stderr,
-                )
-                return
-
-            hits = response.json().get("hits", {}).get("hits", [])
-            all_hits.extend(hits)
-
-            if len(hits) < elasticsearch_query["size"]:
-                break
-
-            last_hit = hits[-1]
-            elasticsearch_query["search_after"] = last_hit["sort"]
-
+    def process_hits_from_queue():
+        """Consumer thread: Process hits from queue and write log files."""
         logs_by_node = {}
-        for hit in all_hits:
-            if "_source" not in hit:
-                continue
-            source = hit["_source"]
-            if "ic_node" not in source or "timestamp" not in source or "MESSAGE" not in source:
-                continue
-            node = source["ic_node"]
-            try:
-                timestamp = datetime.strptime(source["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
-            except ValueError:
-                continue
-            logs_by_node.setdefault(node, []).append((timestamp, source["MESSAGE"]))
 
+        while True:
+            hits = hits_queue.get()
+            for hit in hits:
+                # Sentinel value signals end of download
+                if hit is None:
+                    break
+
+                # Process the hit
+                if "_source" not in hit:
+                    continue
+                source = hit["_source"]
+                if "ic_node" not in source or "timestamp" not in source or "MESSAGE" not in source:
+                    continue
+
+                node = source["ic_node"]
+                try:
+                    timestamp = datetime.strptime(source["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
+                except ValueError:
+                    continue
+
+                logs_by_node.setdefault(node, []).append((timestamp, source["MESSAGE"]))
+
+        # Write all log files after processing all hits
         for node, messages in logs_by_node.items():
             log_file = ic_logs_dir / f"{node}.log"
             if node in vm_ipv6s:
@@ -714,6 +704,47 @@ def download_ic_logs_for_system_test(
                 "\n".join([f"{timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')} {msg}" for timestamp, msg in messages])
             )
             print(f"Downloaded {len(messages)} log entries for node {node} to {log_file}", file=sys.stderr)
+
+    # Start processing thread
+    processing_thread = threading.Thread(target=process_hits_from_queue)
+    processing_thread.start()
+
+    try:
+        # Download logs from ElasticSearch (Producer):
+        url = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search"
+        params = {"filter_path": "hits.hits"}
+
+        try:
+            while True:
+                print(
+                    f"Downloading IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
+                    file=sys.stderr,
+                )
+                response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
+
+                if not response.ok:
+                    print(
+                        f"Failed to download IC logs for {group_name}: {response.status_code} {response.text}",
+                        file=sys.stderr,
+                    )
+                    return
+
+                hits = response.json().get("hits", {}).get("hits", [])
+
+                # Push hits to queue for concurrent processing
+                hits_queue.put(hits)
+
+                if len(hits) < elasticsearch_query["size"]:
+                    break
+
+                last_hit = hits[-1]
+                elasticsearch_query["search_after"] = last_hit["sort"]
+
+        finally:
+            # Always send sentinel to signal completion, even if download fails
+            hits_queue.put(None)
+            # Wait for processing thread to finish
+            processing_thread.join()
 
     except requests.exceptions.RequestException as e:
         print(f"Error downloading IC logs for {group_name}: {e}", file=sys.stderr)
