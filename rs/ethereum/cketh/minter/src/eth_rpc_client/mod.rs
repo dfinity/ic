@@ -274,7 +274,23 @@ impl<T> ToReducedWithStrategy<T> for EvmMultiRpcResult<T> {
     }
 }
 
+impl<T> ToReducedWithStrategy<T> for Result<EvmMultiRpcResult<T>, IcError> {
+    fn reduce_with_strategy(
+        self,
+        strategy: impl ReductionStrategy<T>,
+    ) -> Result<T, MultiCallError<T>> {
+        match self {
+            Ok(result) => strategy.reduce(result),
+            Err(error) => Err(MultiCallError::from_client_error(error)),
+        }
+    }
+}
+
 impl<T> MultiCallError<T> {
+    pub fn from_client_error(error: IcError) -> Self {
+        MultiCallError::ConsistentError(ConsistentError::Client(error))
+    }
+
     pub fn has_http_outcall_error_matching<P: Fn(&HttpOutcallError) -> bool>(
         &self,
         predicate: P,
