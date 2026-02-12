@@ -977,17 +977,15 @@ impl Validator {
             .get_by_height_range(range)
         {
             // If we already have the block proposal in the validated pool, remove the duplicate.
-            if pool_reader.pool().validated().contains(&proposal.get_id()) {
-                change_set.push(ChangeAction::RemoveFromUnvalidated(proposal.into_message()));
-                continue;
-            } else if pool_reader
+            if pool_reader
                 .get_block(proposal.block_hash(), proposal.height())
                 .is_some()
             {
-                change_set.push(ChangeAction::HandleInvalid(
-                    proposal.into_message(),
-                    String::from("Duplicate block proposal"),
-                ));
+                change_set.push(ChangeAction::RemoveFromUnvalidated(proposal.into_message()));
+                self.metrics
+                    .duplicate_artifact
+                    .with_label_values(&["block_proposal"])
+                    .inc();
                 continue;
             }
 
@@ -4277,7 +4275,6 @@ pub mod test {
         artifacts: Vec<TestBlockBuilder>,
         expected_equivocations_count: usize,
         expected_validated_blocks_count: usize,
-        expected_invalidated_blocks_count: usize,
         expected_removed_blocks_count: usize,
     }
 
@@ -4290,7 +4287,6 @@ pub mod test {
         expected_equivocations_count: 1,
         expected_validated_blocks_count: 1,
         expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 0,
     })]
     #[case::issue_equivocation_proof_when_we_have_multiple_unvalidated_blocks_deduplicated(EquivocationProofTestCase {
         artifacts: vec![
@@ -4302,7 +4298,6 @@ pub mod test {
         expected_equivocations_count: 1,
         expected_validated_blocks_count: 1,
         expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 0,
     })]
     #[case::issue_equivocation_proof_when_we_already_have_a_valid_block(EquivocationProofTestCase {
         artifacts: vec![
@@ -4312,7 +4307,6 @@ pub mod test {
         expected_equivocations_count: 1,
         expected_validated_blocks_count: 0,
         expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 0,
     })]
     #[case::issue_equivocation_proof_when_we_already_have_a_valid_block_deduplicated(EquivocationProofTestCase {
         artifacts: vec![
@@ -4323,7 +4317,6 @@ pub mod test {
         expected_equivocations_count: 1,
         expected_validated_blocks_count: 0,
         expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 0,
     })]
     #[case::dont_issue_equivocation_proof_when_valid_notarization(EquivocationProofTestCase {
         artifacts: vec![
@@ -4333,7 +4326,6 @@ pub mod test {
         expected_equivocations_count: 0,
         expected_validated_blocks_count: 1,
         expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 0,
     })]
     #[case::dont_issue_equivocation_proof_when_valid_notarization_deduplicated(EquivocationProofTestCase {
         artifacts: vec![
@@ -4344,7 +4336,6 @@ pub mod test {
         expected_equivocations_count: 0,
         expected_validated_blocks_count: 1,
         expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 0,
     })]
     #[case(EquivocationProofTestCase {
         artifacts: vec![
@@ -4353,8 +4344,7 @@ pub mod test {
         ],
         expected_equivocations_count: 0,
         expected_validated_blocks_count: 0,
-        expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 1,
+        expected_removed_blocks_count: 1,
     })]
     #[case(EquivocationProofTestCase {
         artifacts: vec![
@@ -4364,7 +4354,6 @@ pub mod test {
         expected_equivocations_count: 0,
         expected_validated_blocks_count: 2,
         expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 0,
     })]
     #[case(EquivocationProofTestCase {
         artifacts: vec![
@@ -4374,8 +4363,7 @@ pub mod test {
         ],
         expected_equivocations_count: 0,
         expected_validated_blocks_count: 0,
-        expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 2,
+        expected_removed_blocks_count: 2,
     })]
     #[case(EquivocationProofTestCase {
         artifacts: vec![
@@ -4385,7 +4373,6 @@ pub mod test {
         expected_equivocations_count: 0,
         expected_validated_blocks_count: 0,
         expected_removed_blocks_count: 1,
-        expected_invalidated_blocks_count: 0,
     })]
     #[case::dont_issue_equivocation_when_two_blocks_with_different_signatures(EquivocationProofTestCase {
         artifacts: vec![
@@ -4395,7 +4382,6 @@ pub mod test {
         expected_equivocations_count: 0,
         expected_validated_blocks_count: 1,
         expected_removed_blocks_count: 0,
-        expected_invalidated_blocks_count: 0,
     })]
     #[trace]
     fn equivocation_proofs_test(#[case] test_case: EquivocationProofTestCase) {
@@ -4477,16 +4463,6 @@ pub mod test {
                     })
                     .count();
 
-                let invalidated_blocks_count = changeset
-                    .iter()
-                    .filter(|change| {
-                        matches!(
-                            change,
-                            ChangeAction::HandleInvalid(ConsensusMessage::BlockProposal(_), _)
-                        )
-                    })
-                    .count();
-
                 let removed_blocks_count = changeset
                     .iter()
                     .filter(|change| {
@@ -4508,10 +4484,6 @@ pub mod test {
                 assert_eq!(
                     removed_blocks_count, test_case.expected_removed_blocks_count,
                     "Wrong number of removed blocks"
-                );
-                assert_eq!(
-                    invalidated_blocks_count, test_case.expected_invalidated_blocks_count,
-                    "Wrong number of invalidated blocks"
                 );
             })
         });
