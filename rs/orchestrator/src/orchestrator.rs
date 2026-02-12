@@ -24,6 +24,7 @@ use ic_config::{
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
+use ic_http_utils::file_downloader::compute_sha256_hex;
 use ic_image_upgrader::ImageUpgrader;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
@@ -90,6 +91,8 @@ pub enum OrchestratorInstantiationError {
     KeyGenerationError(String),
     /// If an error occurs while reading the replica version from the file system
     VersionFileError,
+    /// If an error occurs while checking the replica hash from the current system
+    ReplicaHashError,
 }
 
 // Loads the replica version from the file specified as argument on
@@ -261,13 +264,23 @@ impl Orchestrator {
             registration.register_node().await;
         }
 
-        let disk_encryption_key_exchange_agent =
+        let upgrade_disk_encryption_key_exchange_agent =
+            new_disk_encryption_key_exchange_server_agent_for_orchestrator(
+                tokio::runtime::Handle::current(),
+                Arc::clone(&registry_client),
+            );
+
+        // NOTE: This should be a shared resource as two slow upgrades should not happen at once.
+        let slow_upgrade_disk_encryption_key_exchange_agent =
             new_disk_encryption_key_exchange_server_agent_for_orchestrator(
                 tokio::runtime::Handle::current(),
                 Arc::clone(&registry_client),
             );
 
         let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
+
+        let replica_hash = compute_sha256_hex(&ic_binary_directory.join("replica"))
+            .map_err(|_| OrchestratorInstantiationError::ReplicaHashError)?;
 
         let upgrade = Some(
             Upgrade::new(
@@ -277,6 +290,7 @@ impl Orchestrator {
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),
+                replica_hash,
                 args.replica_config_file.clone(),
                 node_id,
                 ic_binary_directory.clone(),
@@ -284,7 +298,7 @@ impl Orchestrator {
                 args.replica_binary_dir.clone(),
                 logger.clone(),
                 args.orchestrator_data_directory.clone(),
-                None,
+                upgrade_disk_encryption_key_exchange_agent,
             )
             .await,
         );
@@ -322,7 +336,7 @@ impl Orchestrator {
                 node_id,
                 args.replica_binary_dir.clone(),
                 ic_binary_directory.clone(),
-                disk_encryption_key_exchange_agent,
+                slow_upgrade_disk_encryption_key_exchange_agent,
                 logger.clone(),
             )
             .await,

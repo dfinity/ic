@@ -5,10 +5,7 @@ use crate::{
 use backoff::{ExponentialBackoff, backoff::Backoff};
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_image_upgrader::{
-    Rebooting,
-    error::{UpgradeError, UpgradeResult},
-};
+use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_types::{NodeId, ReplicaVersion};
@@ -115,13 +112,14 @@ impl SlowUpgrader {
                 .execute_upgrade(&node_guestos_version)
                 .await
                 .map_err(OrchestratorError::from)
-                .map(|Rebooting| SlowUpgradeControlFlow::Stop);
+                // Always reboot after "slow" upgrades
+                .map(|()| SlowUpgradeControlFlow::Stop);
         }
 
         Ok(SlowUpgradeControlFlow::Continue)
     }
 
-    async fn execute_upgrade(&mut self, version: &ReplicaVersion) -> UpgradeResult<Rebooting> {
+    async fn execute_upgrade(&mut self, version: &ReplicaVersion) -> UpgradeResult<()> {
         let replica_version_record = self
             .registry
             .get_replica_version_record(version.clone(), self.registry.get_latest_version())?;
@@ -184,7 +182,7 @@ impl SlowUpgrader {
         version: &ReplicaVersion,
         release_package_url: &str,
         hash: &str,
-    ) -> UpgradeResult<Rebooting> {
+    ) -> UpgradeResult<()> {
         let req = format!("Request to download image {version:?} from {release_package_url}");
         let file_downloader =
             FileDownloader::new_with_timeout(Some(self.logger.clone()), Duration::from_secs(60));
@@ -244,7 +242,7 @@ impl SlowUpgrader {
             ))
         } else {
             info!(self.logger, "Rebooting {:?}", out);
-            Ok(Rebooting)
+            Ok(())
         }
     }
 }
