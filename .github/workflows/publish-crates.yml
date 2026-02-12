@@ -1,4 +1,4 @@
-name: Publish Crate
+name: Publish ic crates to crates.io
 
 on:
   workflow_dispatch:
