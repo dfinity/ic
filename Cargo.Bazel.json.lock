@@ -1,5 +1,5 @@
 {
-  "checksum": "c5472ed299399183ec1f25266b366282fe52f0ce8c312605603278a8a806dfa7",
+  "checksum": "d2c6d275a6f0020ebb3daf33889dc800cc5c279e6c5b06af205976504b7d908e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11087,75 +11087,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "cached 0.52.0": {
-      "name": "cached",
-      "version": "0.52.0",
-      "package_url": "https://github.com/jaemk/cached",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cached/0.52.0/download",
-          "sha256": "a8466736fe5dbcaf8b8ee24f9bbefe43c884dc3e9ff7178da70f55bffca1133c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cached",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "cached",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "ahash"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ahash 0.8.11",
-              "target": "ahash"
-            },
-            {
-              "id": "hashbrown 0.14.5",
-              "target": "hashbrown"
-            },
-            {
-              "id": "instant 0.1.12",
-              "target": "instant"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.52.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "cached 0.54.0": {
       "name": "cached",
       "version": "0.54.0",
@@ -21723,7 +21654,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.0",
+              "id": "ic-bn-lib-common 0.1.4",
               "target": "ic_bn_lib_common"
             },
             {
@@ -28287,8 +28218,7 @@
           "common": [
             "default",
             "domain-label-cannot-start-or-end-with-hyphen",
-            "punycode",
-            "serde"
+            "punycode"
           ],
           "selects": {}
         },
@@ -28297,10 +28227,6 @@
             {
               "id": "punycode 0.4.1",
               "target": "punycode"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
             }
           ],
           "selects": {}
@@ -34480,238 +34406,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ic-agent 0.44.3": {
-      "name": "ic-agent",
-      "version": "0.44.3",
-      "package_url": "https://github.com/dfinity/agent-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-agent/0.44.3/download",
-          "sha256": "d5337598ec943bab711e0288319761abb5a7a7087ac226b03472441a90f88e0c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_agent",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_agent",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "_internal_dynamic-routing",
-            "default",
-            "pem",
-            "ring"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "arc-swap 1.7.1",
-              "target": "arc_swap"
-            },
-            {
-              "id": "async-channel 1.9.0",
-              "target": "async_channel"
-            },
-            {
-              "id": "async-lock 3.4.2",
-              "target": "async_lock"
-            },
-            {
-              "id": "async-watch 0.3.1",
-              "target": "async_watch"
-            },
-            {
-              "id": "backoff 0.4.0",
-              "target": "backoff"
-            },
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "cached 0.52.0",
-              "target": "cached"
-            },
-            {
-              "id": "candid 0.10.22",
-              "target": "candid"
-            },
-            {
-              "id": "der 0.7.7",
-              "target": "der"
-            },
-            {
-              "id": "ecdsa 0.16.9",
-              "target": "ecdsa"
-            },
-            {
-              "id": "ed25519-consensus 2.1.0",
-              "target": "ed25519_consensus"
-            },
-            {
-              "id": "elliptic-curve 0.13.8",
-              "target": "elliptic_curve"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "http-body 1.0.1",
-              "target": "http_body"
-            },
-            {
-              "id": "http-body-util 0.1.3",
-              "target": "http_body_util"
-            },
-            {
-              "id": "ic-certification 3.0.3",
-              "target": "ic_certification"
-            },
-            {
-              "id": "ic-ed25519 0.2.0",
-              "target": "ic_ed25519"
-            },
-            {
-              "id": "ic-transport-types 0.44.3",
-              "target": "ic_transport_types"
-            },
-            {
-              "id": "ic-verify-bls-signature 0.5.0",
-              "target": "ic_verify_bls_signature"
-            },
-            {
-              "id": "k256 0.13.4",
-              "target": "k256"
-            },
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            },
-            {
-              "id": "p256 0.13.2",
-              "target": "p256"
-            },
-            {
-              "id": "pem 3.0.6",
-              "target": "pem"
-            },
-            {
-              "id": "pkcs8 0.10.2",
-              "target": "pkcs8"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "rangemap 1.7.1",
-              "target": "rangemap"
-            },
-            {
-              "id": "reqwest 0.12.24",
-              "target": "reqwest"
-            },
-            {
-              "id": "ring 0.17.14",
-              "target": "ring"
-            },
-            {
-              "id": "sec1 0.7.3",
-              "target": "sec1"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            },
-            {
-              "id": "serde_cbor 0.11.2",
-              "target": "serde_cbor"
-            },
-            {
-              "id": "sha2 0.10.9",
-              "target": "sha2"
-            },
-            {
-              "id": "stop-token 0.7.0",
-              "target": "stop_token"
-            },
-            {
-              "id": "thiserror 2.0.17",
-              "target": "thiserror"
-            },
-            {
-              "id": "time 0.3.47",
-              "target": "time"
-            },
-            {
-              "id": "tower-service 0.3.3",
-              "target": "tower_service"
-            },
-            {
-              "id": "url 2.5.4",
-              "target": "url"
-            }
-          ],
-          "selects": {
-            "cfg(not(target_family = \"wasm\"))": [
-              {
-                "id": "tokio 1.48.0",
-                "target": "tokio"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            },
-            {
-              "id": "serde_repr 0.1.19",
-              "target": "serde_repr"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.44.3"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
     "ic-agent 0.45.0": {
       "name": "ic-agent",
       "version": "0.45.0",
@@ -35101,7 +34795,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-bn-lib-common 0.1.0",
+              "id": "ic-bn-lib-common 0.1.4",
               "target": "ic_bn_lib_common"
             },
             {
@@ -35313,14 +35007,14 @@
       ],
       "license_file": null
     },
-    "ic-bn-lib-common 0.1.0": {
+    "ic-bn-lib-common 0.1.4": {
       "name": "ic-bn-lib-common",
-      "version": "0.1.0",
+      "version": "0.1.4",
       "package_url": null,
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-bn-lib-common/0.1.0/download",
-          "sha256": "b3d1a86ec7b87371f84ff46c5b83589dae6f72769a9d8570bc3fb02697115d79"
+          "url": "https://static.crates.io/crates/ic-bn-lib-common/0.1.4/download",
+          "sha256": "33384b6a13e4aba516cab14aaa9cefa930aa56489fb0807b3ee926badde01a0a"
         }
       },
       "targets": [
@@ -35365,7 +35059,7 @@
               "target": "cloudflare"
             },
             {
-              "id": "fqdn 0.4.6",
+              "id": "fqdn 0.5.2",
               "target": "fqdn"
             },
             {
@@ -35381,10 +35075,6 @@
               "target": "http"
             },
             {
-              "id": "http-body 1.0.1",
-              "target": "http_body"
-            },
-            {
               "id": "humantime 2.2.0",
               "target": "humantime"
             },
@@ -35397,7 +35087,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "ic-agent 0.44.3",
+              "id": "ic-agent 0.45.0",
               "target": "ic_agent"
             },
             {
@@ -35469,19 +35159,17 @@
             {
               "id": "derive-new 0.7.0",
               "target": "derive_new"
-            },
-            {
-              "id": "strum_macros 0.27.1",
-              "target": "strum_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.1.0"
+        "version": "0.1.4"
       },
-      "license": null,
-      "license_ids": [],
-      "license_file": "LICENSE"
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "ic-btc-interface 0.2.3": {
       "name": "ic-btc-interface",
@@ -36423,7 +36111,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.0",
+              "id": "ic-bn-lib-common 0.1.4",
               "target": "ic_bn_lib_common"
             },
             {
@@ -36565,7 +36253,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.0",
+              "id": "ic-bn-lib-common 0.1.4",
               "target": "ic_bn_lib_common"
             },
             {
@@ -36753,7 +36441,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.0",
+              "id": "ic-bn-lib-common 0.1.4",
               "target": "ic_bn_lib_common"
             },
             {
@@ -36857,84 +36545,6 @@
         "Apache-2.0"
       ],
       "license_file": null
-    },
-    "ic-ed25519 0.2.0": {
-      "name": "ic-ed25519",
-      "version": "0.2.0",
-      "package_url": "https://github.com/dfinity/ic",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-ed25519/0.2.0/download",
-          "sha256": "b0a381e86a9d559c816a7ff4419e56f5d37f96357258fb63b0cb7026db0f729b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_ed25519",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_ed25519",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "rand"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "curve25519-dalek 4.1.3",
-              "target": "curve25519_dalek"
-            },
-            {
-              "id": "ed25519-dalek 2.2.0",
-              "target": "ed25519_dalek"
-            },
-            {
-              "id": "hkdf 0.12.4",
-              "target": "hkdf"
-            },
-            {
-              "id": "pem 1.1.1",
-              "target": "pem"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "thiserror 2.0.17",
-              "target": "thiserror"
-            },
-            {
-              "id": "zeroize 1.8.1",
-              "target": "zeroize"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.2.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
     },
     "ic-ed25519 0.5.0": {
       "name": "ic-ed25519",
@@ -37192,7 +36802,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.0",
+              "id": "ic-bn-lib-common 0.1.4",
               "target": "ic_bn_lib_common"
             },
             {
@@ -38222,94 +37832,6 @@
       ],
       "license_file": null
     },
-    "ic-transport-types 0.44.3": {
-      "name": "ic-transport-types",
-      "version": "0.44.3",
-      "package_url": "https://github.com/dfinity/agent-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-transport-types/0.44.3/download",
-          "sha256": "d5fec6355d0a542bfe484eb36343b6570047394124918cb8b435e22241c65427"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_transport_types",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_transport_types",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.22",
-              "target": "candid"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "ic-certification 3.0.3",
-              "target": "ic_certification"
-            },
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            },
-            {
-              "id": "serde_cbor 0.11.2",
-              "target": "serde_cbor"
-            },
-            {
-              "id": "sha2 0.10.9",
-              "target": "sha2"
-            },
-            {
-              "id": "thiserror 2.0.17",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "serde_repr 0.1.19",
-              "target": "serde_repr"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.44.3"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
     "ic-transport-types 0.45.0": {
       "name": "ic-transport-types",
       "version": "0.45.0",
@@ -38501,83 +38023,6 @@
           "selects": {}
         },
         "version": "0.45.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "ic-verify-bls-signature 0.5.0": {
-      "name": "ic-verify-bls-signature",
-      "version": "0.5.0",
-      "package_url": null,
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-verify-bls-signature/0.5.0/download",
-          "sha256": "d420b25c0091059f6c3c23a21427a81915e6e0aca3b79e0d403ed767f286a3b9"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_verify_bls_signature",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_verify_bls_signature",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "hex",
-            "lazy_static"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "ic_bls12_381 0.10.1",
-              "target": "ic_bls12_381",
-              "alias": "bls12_381"
-            },
-            {
-              "id": "lazy_static 1.5.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "pairing 0.23.0",
-              "target": "pairing"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "sha2 0.10.9",
-              "target": "sha2"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.5.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -56181,53 +55626,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "pem 1.1.1": {
-      "name": "pem",
-      "version": "1.1.1",
-      "package_url": "https://github.com/jcreekmore/pem-rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pem/1.1.1/download",
-          "sha256": "a8835c273a76a90455d7344889b0964598e3316e2a79ede8e36f16bdcf2228b8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pem",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pem",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.1.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE.md"
     },
     "pem 3.0.6": {
       "name": "pem",
@@ -98650,7 +98048,7 @@
     "hyper-util 0.1.12",
     "ic-agent 0.45.0",
     "ic-bn-lib 0.1.14",
-    "ic-bn-lib-common 0.1.0",
+    "ic-bn-lib-common 0.1.4",
     "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",
     "ic-canister-runtime 0.1.0",

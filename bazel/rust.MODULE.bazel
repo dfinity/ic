@@ -623,7 +623,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-bn-lib-common",
-    version = "0.1",
+    version = "0.1.4",
 )
 crate.spec(
     package = "ic-btc-interface",
