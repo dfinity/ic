@@ -17,10 +17,10 @@ concurrency:
 jobs:
   ci-main:
     name: CI Main
+    # if in the ic or ic-private repo:
+    # run on all events except for forked PRs
     if: |
-      # never run on forks
       contains(fromJson('["dfinity/ic","dfinity/ic-private"]'), github.repository) && 
-      # run on all events except for forked PRs
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
