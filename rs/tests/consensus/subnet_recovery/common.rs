@@ -331,9 +331,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
 
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let nns_canister = block_on(MessageCanister::new(
+    let nns_canister = block_on(MessageCanister::new_with_retries(
         &agent,
         nns_node.effective_canister_id(),
+        &logger,
+        Duration::from_secs(120),
+        Duration::from_secs(1),
     ));
 
     // The first application subnet encountered during iteration is the source subnet because it was inserted first.
