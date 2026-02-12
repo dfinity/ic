@@ -49,7 +49,7 @@ BOUNDARY_PID=""
 cleanup() {
     echo ""
     echo "Shutting down..."
-    [ -n "$BOUNDARY_PID" ]   && kill "$BOUNDARY_PID"   2>/dev/null || true
+    [ -n "$BOUNDARY_PID" ] && kill "$BOUNDARY_PID" 2>/dev/null || true
     [ -n "$REPLICATOR_PID" ] && kill "$REPLICATOR_PID" 2>/dev/null || true
     wait
     echo "Shutdown complete."

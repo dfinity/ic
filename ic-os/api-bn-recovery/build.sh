@@ -30,8 +30,8 @@ docker build -t "${IMAGE_NAME}:${IMAGE_TAG}" .
 
 echo "[4/4] Cleaning up build artifacts..."
 rm -f "${SCRIPT_DIR}/ic-boundary" \
-      "${SCRIPT_DIR}/ic-registry-replicator" \
-      "${SCRIPT_DIR}/nns_public_key.pem"
+    "${SCRIPT_DIR}/ic-registry-replicator" \
+    "${SCRIPT_DIR}/nns_public_key.pem"
 
 echo ""
 echo "============================================"
