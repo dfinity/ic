@@ -3845,11 +3845,19 @@ fn complete_canister_migration(
     }])
     .unwrap();
 
-    let mut routing_table = state.metadata.network_topology.routing_table().as_ref().clone();
+    let mut routing_table = state
+        .metadata
+        .network_topology
+        .routing_table()
+        .as_ref()
+        .clone();
     routing_table
         .assign_ranges(canister_id_ranges, destination)
         .unwrap();
-    state.metadata.network_topology.set_routing_table(routing_table);
+    state
+        .metadata
+        .network_topology
+        .set_routing_table(routing_table);
 
     state
 }

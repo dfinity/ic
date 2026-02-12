@@ -3477,7 +3477,9 @@ impl ExecutionEnvironment {
         let threshold_key = args.key_id();
 
         // Check if the key is enabled.
-        if !state.metadata.network_topology
+        if !state
+            .metadata
+            .network_topology
             .chain_key_enabled_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
         {

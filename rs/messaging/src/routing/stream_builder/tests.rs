@@ -11,9 +11,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology,
     metadata_state::testing::NetworkTopologyTesting,
-    testing::{
-        CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting,
-    },
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
@@ -868,10 +866,13 @@ fn build_streams_with_refunds(
         );
 
         // Set the type of both subnets.
-        provided_state.metadata.network_topology.set_subnets(btreemap! {
-            LOCAL_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
-            REMOTE_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
-        });
+        provided_state
+            .metadata
+            .network_topology
+            .set_subnets(btreemap! {
+                LOCAL_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
+                REMOTE_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
+            });
 
         // Map local canisters to `LOCAL_SUBNET`, remote canisters to `REMOTE_SUBNET`.
         provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(

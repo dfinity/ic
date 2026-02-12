@@ -57,7 +57,10 @@ fn make_network_topology(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -
     let mut topo = NetworkTopology::default();
     topo.routing_table_mut()
         .insert(
-            CanisterIdRange { start: CanisterId::from(0), end: CanisterId::from(0xff) },
+            CanisterIdRange {
+                start: CanisterId::from(0),
+                end: CanisterId::from(0xff),
+            },
             own_subnet_id,
         )
         .unwrap();

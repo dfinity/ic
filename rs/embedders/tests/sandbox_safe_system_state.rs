@@ -13,8 +13,8 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
-use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
@@ -638,7 +638,8 @@ fn two_subnet_topology(
     let mut topo = NetworkTopology::default();
     topo.nns_subnet_id = nns_subnet_id;
     topo.subnets_mut().insert(nns_subnet_id, Default::default());
-    topo.subnets_mut().insert(test_subnet_id, Default::default());
+    topo.subnets_mut()
+        .insert(test_subnet_id, Default::default());
     let nns_canister_range = CanisterIdRange {
         start: nns_canister_id,
         end: nns_canister_id,

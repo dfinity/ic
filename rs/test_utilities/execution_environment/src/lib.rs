@@ -173,13 +173,24 @@ pub fn generate_network_topology(
 ) -> NetworkTopology {
     let mut topo = NetworkTopology::default();
     topo.nns_subnet_id = nns_subnet_id;
-    topo.set_subnets(generate_subnets(subnets, nns_subnet_id, None, own_subnet_id, own_subnet_type, subnet_size, own_subnet_cost_schedule));
+    topo.set_subnets(generate_subnets(
+        subnets,
+        nns_subnet_id,
+        None,
+        own_subnet_id,
+        own_subnet_type,
+        subnet_size,
+        own_subnet_cost_schedule,
+    ));
     match routing_table {
         Some(rt) => topo.set_routing_table(rt),
         None => {
             topo.routing_table_mut()
                 .insert(
-                    CanisterIdRange { start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) },
+                    CanisterIdRange {
+                        start: CanisterId::from(0),
+                        end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1),
+                    },
                     own_subnet_id,
                 )
                 .unwrap();

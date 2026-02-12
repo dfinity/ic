@@ -1267,7 +1267,11 @@ fn online_split() {
         CanisterIdRange {start: CanisterId::from_u64(CANISTER_2_U64 + 1), end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
     })
     .unwrap();
-    fixture.state.metadata.network_topology.set_routing_table(routing_table.clone());
+    fixture
+        .state
+        .metadata
+        .network_topology
+        .set_routing_table(routing_table.clone());
 
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.

@@ -843,16 +843,22 @@ impl SchedulerTestBuilder {
 
         let mut registry_settings = self.registry_settings;
 
-        state.metadata.network_topology.set_subnets(generate_subnets(
-            vec![self.own_subnet_id, self.nns_subnet_id],
-            self.nns_subnet_id,
-            None,
-            self.own_subnet_id,
-            self.subnet_type,
-            registry_settings.subnet_size,
-            self.cost_schedule,
-        ));
-        state.metadata.network_topology.set_routing_table(routing_table);
+        state
+            .metadata
+            .network_topology
+            .set_subnets(generate_subnets(
+                vec![self.own_subnet_id, self.nns_subnet_id],
+                self.nns_subnet_id,
+                None,
+                self.own_subnet_id,
+                self.subnet_type,
+                registry_settings.subnet_size,
+                self.cost_schedule,
+            ));
+        state
+            .metadata
+            .network_topology
+            .set_routing_table(routing_table);
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.batch_time = self.batch_time;
 
