@@ -1588,14 +1588,26 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ProvisionalTopUpCanister) => {
                 let res = ProvisionalTopUpCanisterArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
-                    self.add_cycles(
-                        *msg.sender(),
-                        args.get_canister_id(),
-                        args.to_u128(),
+                    let op =
+                        |mut canister, round_limits, (sender, cycles, provisional_whitelist)| {
+                            self.canister_manager
+                                .add_cycles(sender, cycles, &mut canister, provisional_whitelist)
+                                .map(|()| {
+                                    (canister, round_limits, EmptyBlob.encode(), vec![], vec![])
+                                })
+                                .map_err(|err| (err.into(), Cycles::zero()))
+                        };
+                    let sender = *msg.sender();
+                    let cycles = args.to_u128();
+                    self.execute_mgmt_operation_on_canister(
+                        canister_id,
+                        op,
+                        (sender, cycles, &registry_settings.provisional_whitelist),
                         &mut state,
-                        &registry_settings.provisional_whitelist,
+                        round_limits,
+                        registry_settings,
                     )
-                    .map(|res| (res, Some(canister_id)))
+                    .map(|bytes| (bytes, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -2595,21 +2607,6 @@ impl ExecutionEnvironment {
                 refund: msg.take_cycles(),
             },
         }
-    }
-
-    fn add_cycles(
-        &self,
-        sender: PrincipalId,
-        canister_id: CanisterId,
-        cycles: Option<u128>,
-        state: &mut ReplicatedState,
-        provisional_whitelist: &ProvisionalWhitelist,
-    ) -> Result<Vec<u8>, UserError> {
-        let canister = get_canister_mut(canister_id, state)?;
-        self.canister_manager
-            .add_cycles(sender, cycles, canister, provisional_whitelist)
-            .map(|()| EmptyBlob.encode())
-            .map_err(|err| err.into())
     }
 
     fn upload_chunk(
