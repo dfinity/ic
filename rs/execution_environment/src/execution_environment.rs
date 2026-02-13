@@ -1731,7 +1731,7 @@ impl ExecutionEnvironment {
                         &mut state,
                         args,
                         round_limits,
-                        registry_settings.subnet_size,
+                        registry_settings,
                         &resource_saturation,
                     )
                     .map(|res| (res, Some(canister_id)))
@@ -2714,22 +2714,48 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         args: ClearChunkStoreArgs,
         round_limits: &mut RoundLimits,
-        subnet_size: usize,
+        registry_settings: &RegistryExecutionSettings,
         resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
-        let canister = get_canister_mut(args.get_canister_id(), state)?;
-        self.canister_manager
-            .clear_chunk_store(
+        let canister_id = args.get_canister_id();
+        let op = |mut canister,
+                  mut round_limits,
+                  (sender, subnet_size, cost_schedule, resource_saturation)| {
+            self.canister_manager
+                .clear_chunk_store(
+                    sender,
+                    &mut canister,
+                    &mut round_limits,
+                    subnet_size,
+                    cost_schedule,
+                    resource_saturation,
+                )
+                .map(|()| {
+                    (
+                        canister,
+                        round_limits,
+                        EmptyBlob.encode(),
+                        NumBytes::from(0),
+                        vec![],
+                        vec![],
+                    )
+                })
+                .map_err(|err| (err.into(), Cycles::zero()))
+        };
+        self.execute_mgmt_operation_on_canister(
+            canister_id,
+            op,
+            (
                 sender,
-                canister,
-                round_limits,
-                subnet_size,
+                registry_settings.subnet_size,
                 cost_schedule,
                 resource_saturation,
-            )
-            .map(|()| EmptyBlob.encode())
-            .map_err(|err| err.into())
+            ),
+            state,
+            round_limits,
+            registry_settings,
+        )
     }
 
     fn stored_chunks(
