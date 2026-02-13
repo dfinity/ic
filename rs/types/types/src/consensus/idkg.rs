@@ -27,7 +27,7 @@ use crate::{
         },
         crypto_hash,
     },
-    node_id_into_protobuf, node_id_try_from_option,
+    node_id_into_protobuf, node_id_try_from_option, node_id_try_from_protobuf,
 };
 use common::SignatureScheme;
 use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_option};
@@ -790,7 +790,7 @@ impl TryFrom<pb::IDkgReshareRequest> for IDkgReshareRequest {
         let receiving_node_ids = request
             .receiving_node_ids
             .into_iter()
-            .map(|node| node_id_try_from_option(Some(node)))
+            .map(node_id_try_from_protobuf)
             .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
 
         let master_key_id: MasterPublicKeyId =

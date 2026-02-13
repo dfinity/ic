@@ -299,7 +299,7 @@ impl TryFrom<(Time, pb_metadata::SetupInitialDkgContext)> for SetupInitialDkgCon
     ) -> Result<Self, Self::Error> {
         let mut nodes_in_target_subnet = BTreeSet::<NodeId>::new();
         for node_id in context.nodes_in_subnet {
-            nodes_in_target_subnet.insert(node_id_try_from_option(Some(node_id))?);
+            nodes_in_target_subnet.insert(node_id_try_from_protobuf(node_id)?);
         }
         Ok(SetupInitialDkgContext {
             request: try_from_option_field(context.request, "SetupInitialDkgContext::request")?,
@@ -600,7 +600,7 @@ impl TryFrom<(Time, pb_metadata::ReshareChainKeyContext)> for ReshareChainKeyCon
             nodes: context
                 .nodes
                 .into_iter()
-                .map(|node_id| node_id_try_from_option(Some(node_id)))
+                .map(node_id_try_from_protobuf)
                 .collect::<Result<_, _>>()?,
             registry_version: RegistryVersion::from(context.registry_version),
             time: context

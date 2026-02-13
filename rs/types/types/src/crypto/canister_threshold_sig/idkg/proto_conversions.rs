@@ -10,7 +10,9 @@ use crate::crypto::canister_threshold_sig::{
 };
 use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{Height, NodeIndex, node_id_into_protobuf, node_id_try_from_option};
+use crate::{
+    Height, NodeIndex, node_id_into_protobuf, node_id_try_from_option, node_id_try_from_protobuf,
+};
 use ic_base_types::{NodeId, RegistryVersion, subnet_id_into_protobuf, subnet_id_try_from_option};
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
@@ -422,7 +424,7 @@ fn idkg_transcript_params_struct(
     let receivers: Result<BTreeSet<_>, _> = proto
         .receivers
         .into_iter()
-        .map(|node_id| node_id_try_from_option(Some(node_id)))
+        .map(node_id_try_from_protobuf)
         .collect();
 
     let params = IDkgTranscriptParams::new(
@@ -475,7 +477,7 @@ fn idkg_transcript_struct(proto: IDkgTranscriptProto) -> Result<IDkgTranscript, 
     let receivers: Result<BTreeSet<_>, _> = proto
         .receivers
         .into_iter()
-        .map(|node_id| node_id_try_from_option(Some(node_id)))
+        .map(node_id_try_from_protobuf)
         .collect();
     let receivers = IDkgReceivers::new(receivers?).map_err(|e| {
         InitialIDkgDealingsValidationError::DeserializationError {
