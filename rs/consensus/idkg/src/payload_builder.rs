@@ -1745,7 +1745,9 @@ mod tests {
     fn assert_proposal_conversion(b: Block) {
         let artifact = BlockProposal::fake(b, node_test_id(333));
         let mut buf = Vec::new();
-        pb::BlockProposal::from(&artifact).encode(&mut buf).unwrap();
+        pb::BlockProposal::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             BlockProposal::try_from(pb::BlockProposal::decode(buf.as_slice()).unwrap()).unwrap()

@@ -99,14 +99,16 @@ impl CatchUpContent {
     }
 }
 
-impl From<&CatchUpContent> for pb::CatchUpContent {
-    fn from(content: &CatchUpContent) -> Self {
+impl From<CatchUpContent> for pb::CatchUpContent {
+    fn from(content: CatchUpContent) -> Self {
+        let (block_hash, block) = content.block.decompose();
+        let (beacon_hash, beacon) = content.random_beacon.decompose();
         Self {
-            block: Some(pb::Block::from(content.block.as_ref())),
-            random_beacon: Some(pb::RandomBeacon::from(content.random_beacon.as_ref())),
-            block_hash: content.block.get_hash().clone().get().0,
-            random_beacon_hash: content.random_beacon.get_hash().clone().get().0,
-            state_hash: content.state_hash.clone().get().0,
+            block: Some(pb::Block::from(&block)),
+            random_beacon: Some(pb::RandomBeacon::from(beacon)),
+            block_hash: block_hash.get().0,
+            random_beacon_hash: beacon_hash.get().0,
+            state_hash: content.state_hash.get().0,
             oldest_registry_version_in_use_by_replicated_state: content
                 .oldest_registry_version_in_use_by_replicated_state
                 .map(|v| v.get()),
@@ -142,7 +144,7 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
 
 impl SignedBytesWithoutDomainSeparator for CatchUpContent {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        pb::CatchUpContent::from(self).as_protobuf_vec()
+        pb::CatchUpContent::from(self.clone()).as_protobuf_vec()
     }
 }
 
@@ -204,19 +206,13 @@ impl CatchUpPackage {
 /// [`CatchUpContentHash`] is the type of a hashed [`CatchUpContent`]
 pub type CatchUpContentHash = CryptoHashOf<CatchUpContent>;
 
-impl From<&CatchUpPackage> for pb::CatchUpPackage {
-    fn from(cup: &CatchUpPackage) -> Self {
-        Self {
-            signer: Some(pb::NiDkgId::from(cup.signature.signer.clone())),
-            signature: cup.signature.signature.clone().get().0,
-            content: pb::CatchUpContent::from(&cup.content).as_protobuf_vec(),
-        }
-    }
-}
-
 impl From<CatchUpPackage> for pb::CatchUpPackage {
     fn from(cup: CatchUpPackage) -> Self {
-        Self::from(&cup)
+        Self {
+            signer: Some(pb::NiDkgId::from(cup.signature.signer)),
+            signature: cup.signature.signature.get().0,
+            content: pb::CatchUpContent::from(cup.content).as_protobuf_vec(),
+        }
     }
 }
 
@@ -262,14 +258,15 @@ impl From<&CatchUpContent> for CatchUpShareContent {
 /// [`CatchUpPackageShare`] is signed by individual members in a threshold committee.
 pub type CatchUpPackageShare = Signed<CatchUpShareContent, ThresholdSignatureShare<CatchUpContent>>;
 
-impl From<&CatchUpPackageShare> for pb::CatchUpPackageShare {
-    fn from(cup_share: &CatchUpPackageShare) -> Self {
+impl From<CatchUpPackageShare> for pb::CatchUpPackageShare {
+    fn from(cup_share: CatchUpPackageShare) -> Self {
+        let (beacon_hash, beacon) = cup_share.content.random_beacon.decompose();
         Self {
             version: cup_share.content.version.to_string(),
-            random_beacon: Some((&cup_share.content.random_beacon.value).into()),
-            state_hash: cup_share.content.state_hash.clone().get().0,
-            block_hash: cup_share.content.block.clone().get().0,
-            random_beacon_hash: cup_share.content.random_beacon.hash.clone().get().0,
+            random_beacon: Some(beacon.into()),
+            state_hash: cup_share.content.state_hash.get().0,
+            block_hash: cup_share.content.block.get().0,
+            random_beacon_hash: beacon_hash.get().0,
             signature: cup_share.signature.signature.clone().get().0,
             signer: Some(node_id_into_protobuf(cup_share.signature.signer)),
             oldest_registry_version_in_use_by_replicated_state: cup_share

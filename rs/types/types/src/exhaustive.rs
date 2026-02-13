@@ -1037,7 +1037,7 @@ mod tests {
 
         for (i, cup) in set.into_iter().enumerate() {
             assert!(cup.check_integrity(), "Integrity check failed");
-            let bytes = pb::CatchUpContent::from(&cup).encode_to_vec();
+            let bytes = pb::CatchUpContent::from(cup).encode_to_vec();
             let file_path = directory.join(format!("{i}.pb"));
             fs::write(file_path, bytes).expect("Failed to write bytes");
         }
@@ -1076,7 +1076,7 @@ mod tests {
         for cup in &set {
             assert!(cup.check_integrity());
             // serialize -> deserialize round-trip
-            let bytes = pb::CatchUpPackage::from(cup).encode_to_vec();
+            let bytes = pb::CatchUpPackage::from(cup.clone()).encode_to_vec();
             let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
             let new_cup = CatchUpPackage::try_from(&proto_cup).unwrap();
 
