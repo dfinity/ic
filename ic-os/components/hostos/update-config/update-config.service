@@ -3,6 +3,7 @@ Description=Update HostOS Configuration
 RequiresMountsFor=/boot/config
 Before=node_exporter.service
 Before=guestos.service
+Before=log-config.service
 
 [Service]
 Type=oneshot
