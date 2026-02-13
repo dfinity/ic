@@ -1,5 +1,5 @@
 {
-  "checksum": "095cb83926a31cecbc7f32edd5030da35be0de9f0ec4c3c85394d97b478a5c45",
+  "checksum": "8f5f7b44bb0dbcc7b5eb400434fe724e238d1ed475d0ff21979aca97212bb4b2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21702,6 +21702,18 @@
               "target": "ic_certified_map"
             },
             {
+              "id": "ic-custom-domains-backend 0.1.4",
+              "target": "ic_custom_domains_backend"
+            },
+            {
+              "id": "ic-custom-domains-base 0.1.4",
+              "target": "ic_custom_domains_base"
+            },
+            {
+              "id": "ic-custom-domains-canister-client 0.1.4",
+              "target": "ic_custom_domains_canister_client"
+            },
+            {
               "id": "ic-doge-interface 0.1.0",
               "target": "ic_doge_interface"
             },
@@ -28185,61 +28197,6 @@
       ],
       "license_file": "LICENSE.txt"
     },
-    "fqdn 0.4.6": {
-      "name": "fqdn",
-      "version": "0.4.6",
-      "package_url": "https://github.com/Orange-OpenSource/fqdn",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/fqdn/0.4.6/download",
-          "sha256": "c0f5d7f7b3eed2f771fc7f6fcb651f9560d7b0c483d75876082acb4649d266b3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fqdn",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "fqdn",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "domain-label-cannot-start-or-end-with-hyphen",
-            "punycode"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "punycode 0.4.1",
-              "target": "punycode"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.4.6"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
-    },
     "fqdn 0.5.2": {
       "name": "fqdn",
       "version": "0.5.2",
@@ -28271,12 +28228,17 @@
         ],
         "crate_features": {
           "common": [
+            "punycode",
             "serde"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
+            {
+              "id": "punycode 0.4.1",
+              "target": "punycode"
+            },
             {
               "id": "serde 1.0.228",
               "target": "serde"
@@ -36039,14 +36001,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-custom-domains-backend 0.1.1": {
+    "ic-custom-domains-backend 0.1.4": {
       "name": "ic-custom-domains-backend",
-      "version": "0.1.1",
+      "version": "0.1.4",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-backend/0.1.1/download",
-          "sha256": "48b9484c7b1b33c0e4e66f67a03850464fdcb421acae9790727910eda63a0ba6"
+          "url": "https://static.crates.io/crates/ic-custom-domains-backend/0.1.4/download",
+          "sha256": "85917759f25f5207fb72786ae7cf016512d4ca6d8dba166b6ed49c207873476e"
         }
       },
       "targets": [
@@ -36103,7 +36065,7 @@
               "target": "clap"
             },
             {
-              "id": "fqdn 0.4.6",
+              "id": "fqdn 0.5.2",
               "target": "fqdn"
             },
             {
@@ -36115,11 +36077,11 @@
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-base 0.1.1",
+              "id": "ic-custom-domains-base 0.1.4",
               "target": "ic_custom_domains_base"
             },
             {
-              "id": "ic-custom-domains-canister-client 0.1.1",
+              "id": "ic-custom-domains-canister-client 0.1.4",
               "target": "ic_custom_domains_canister_client"
             },
             {
@@ -36175,20 +36137,22 @@
           ],
           "selects": {}
         },
-        "version": "0.1.1"
+        "version": "0.1.4"
       },
-      "license": null,
-      "license_ids": [],
-      "license_file": "LICENSE"
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
-    "ic-custom-domains-base 0.1.1": {
+    "ic-custom-domains-base 0.1.4": {
       "name": "ic-custom-domains-base",
-      "version": "0.1.1",
+      "version": "0.1.4",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-base/0.1.1/download",
-          "sha256": "a438529a9c328ed08353d9caa42e6c9f3eb9bb9131696a786aedc093dcd00ed8"
+          "url": "https://static.crates.io/crates/ic-custom-domains-base/0.1.4/download",
+          "sha256": "720797c8546daf2e5138fd7640b0c46d84cd72369ae5499a22bb8e5a09a16b50"
         }
       },
       "targets": [
@@ -36237,7 +36201,7 @@
               "target": "clap"
             },
             {
-              "id": "fqdn 0.4.6",
+              "id": "fqdn 0.5.2",
               "target": "fqdn"
             },
             {
@@ -36257,7 +36221,7 @@
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-canister-api 0.1.1",
+              "id": "ic-custom-domains-canister-api 0.1.4",
               "target": "ic_custom_domains_canister_api"
             },
             {
@@ -36317,20 +36281,22 @@
           ],
           "selects": {}
         },
-        "version": "0.1.1"
+        "version": "0.1.4"
       },
-      "license": null,
-      "license_ids": [],
-      "license_file": "LICENSE"
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
-    "ic-custom-domains-canister-api 0.1.1": {
+    "ic-custom-domains-canister-api 0.1.4": {
       "name": "ic-custom-domains-canister-api",
-      "version": "0.1.1",
+      "version": "0.1.4",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-canister-api/0.1.1/download",
-          "sha256": "4eec3361ea94ea357a744d7b5330c78f73256e685c1354d155cc447b547ab40a"
+          "url": "https://static.crates.io/crates/ic-custom-domains-canister-api/0.1.4/download",
+          "sha256": "a70cbc0b49edf903593fe95fbc774240cd28622e342dbcaeeef32fb9d5a11bd3"
         }
       },
       "targets": [
@@ -36383,20 +36349,22 @@
           ],
           "selects": {}
         },
-        "version": "0.1.1"
+        "version": "0.1.4"
       },
-      "license": null,
-      "license_ids": [],
-      "license_file": "LICENSE"
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
-    "ic-custom-domains-canister-client 0.1.1": {
+    "ic-custom-domains-canister-client 0.1.4": {
       "name": "ic-custom-domains-canister-client",
-      "version": "0.1.1",
+      "version": "0.1.4",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-canister-client/0.1.1/download",
-          "sha256": "be76869a2bdfc168a94172cecb24783a9930edf89138cbbed7f1aa788e92a8da"
+          "url": "https://static.crates.io/crates/ic-custom-domains-canister-client/0.1.4/download",
+          "sha256": "f0124d2771e3649319e5080a4efa17f707b7afd3f56bd6d7702415510646c2ea"
         }
       },
       "targets": [
@@ -36433,7 +36401,7 @@
               "target": "candid"
             },
             {
-              "id": "fqdn 0.4.6",
+              "id": "fqdn 0.5.2",
               "target": "fqdn"
             },
             {
@@ -36445,11 +36413,11 @@
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-base 0.1.1",
+              "id": "ic-custom-domains-base 0.1.4",
               "target": "ic_custom_domains_base"
             },
             {
-              "id": "ic-custom-domains-canister-api 0.1.1",
+              "id": "ic-custom-domains-canister-api 0.1.4",
               "target": "ic_custom_domains_canister_api"
             },
             {
@@ -36481,11 +36449,13 @@
           ],
           "selects": {}
         },
-        "version": "0.1.1"
+        "version": "0.1.4"
       },
-      "license": null,
-      "license_ids": [],
-      "license_file": "LICENSE"
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "ic-doge-interface 0.1.0": {
       "name": "ic-doge-interface",
@@ -36806,11 +36776,11 @@
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-backend 0.1.1",
+              "id": "ic-custom-domains-backend 0.1.4",
               "target": "ic_custom_domains_backend"
             },
             {
-              "id": "ic-custom-domains-base 0.1.1",
+              "id": "ic-custom-domains-base 0.1.4",
               "target": "ic_custom_domains_base"
             },
             {
@@ -98060,6 +98030,9 @@
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
     "ic-certified-map 0.3.4",
+    "ic-custom-domains-backend 0.1.4",
+    "ic-custom-domains-base 0.1.4",
+    "ic-custom-domains-canister-client 0.1.4",
     "ic-doge-interface 0.1.0",
     "ic-gateway 0.2.0",
     "ic-http-certification 3.0.3",

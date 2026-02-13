@@ -681,6 +681,18 @@ crate.spec(
     rev = "339c9b0c678407d05577350ad2b069a806bf9495",
 )
 crate.spec(
+    package = "ic-custom-domains-backend",
+    version = "0.1.4",
+)
+crate.spec(
+    package = "ic-custom-domains-base",
+    version = "0.1.4",
+)
+crate.spec(
+    package = "ic-custom-domains-canister-client",
+    version = "0.1.4",
+)
+crate.spec(
     package = "ic-http-certification",
     version = "3.0.3",
 )
