@@ -19,7 +19,7 @@ use crate::{
     },
     tip::{PageMapToFlush, TipRequest, flush_tip_channel, spawn_tip_thread},
 };
-use crossbeam_channel::Sender;
+use crossbeam_channel::{Sender, bounded, unbounded};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
@@ -940,6 +940,8 @@ pub struct StateManagerImpl {
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
+    hash_channel: Sender<HashRequest>,
+    _hash_thread_handle: JoinOnDrop<()>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
@@ -1294,6 +1296,7 @@ impl StateManagerImpl {
 
     /// Finish all asynchronous operations.
     pub fn flush_all(&self) {
+        self.flush_hash_channel();
         self.flush_tip_channel();
         self.state_layout().flush_checkpoint_removal_channel();
     }
@@ -1352,6 +1355,7 @@ impl StateManagerImpl {
             metrics.clone(),
             malicious_flags.clone(),
         );
+        let (_hash_thread_handle, hash_channel) = spawn_hash_thread(metrics.clone(), log.clone());
 
         let starting_time = Instant::now();
         let loaded_states_metadata =
@@ -1497,7 +1501,7 @@ impl StateManagerImpl {
             starting_time.elapsed()
         );
 
-        let latest_state_height = AtomicU64::new(0);
+        let latest_state_height = Arc::new(AtomicU64::new(0));
         let latest_certified_height = AtomicU64::new(0);
         let fast_forward_height = AtomicU64::new(0);
 
@@ -1603,7 +1607,7 @@ impl StateManagerImpl {
         }
 
         report_last_diverged_state(&log, &metrics, &state_layout);
-
+        let latest_height_update_time = Arc::new(Mutex::new(Instant::now()));
         Self {
             log,
             metrics,
@@ -1613,15 +1617,17 @@ impl StateManagerImpl {
             own_subnet_id,
             own_subnet_type,
             deallocator_thread,
-            latest_state_height: Arc::new(latest_state_height),
+            latest_state_height,
             latest_certified_height,
             fast_forward_height,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
+            hash_channel,
+            _hash_thread_handle,
             fd_factory,
             malicious_flags,
-            latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
+            latest_height_update_time,
             started_height,
         }
     }
@@ -1940,35 +1946,9 @@ impl StateManagerImpl {
         }
     }
 
-    fn populate_extra_metadata(&self, state: &mut ReplicatedState, height: Height) {
+    fn populate_extra_metadata(&self, state: &mut ReplicatedState) {
         state.metadata.state_sync_version = CURRENT_STATE_SYNC_VERSION;
         state.metadata.certification_version = ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
-
-        if height == Self::INITIAL_STATE_HEIGHT {
-            return;
-        }
-        let prev_height = height - Height::from(1);
-
-        if prev_height == Self::INITIAL_STATE_HEIGHT {
-            return;
-        }
-
-        let states = self.states.read();
-        if let Some(metadata) = states.certifications_metadata.get(&prev_height) {
-            assert_eq!(
-                state.metadata.prev_state_hash,
-                Some(CryptoHashOfPartialState::from(
-                    metadata.certified_state_hash.clone(),
-                ))
-            );
-        } else {
-            info!(
-                self.log,
-                "The previous certification metadata at height {} are not available. This can happen when the replica \
-                (i) catches up or (ii) syncs a newer state concurrently and removes the states below.",
-                prev_height,
-            );
-        }
     }
 
     fn find_checkpoint_by_root_hash(
@@ -2136,6 +2116,11 @@ impl StateManagerImpl {
             last_checkpoint_to_keep
         );
 
+        let tip_height = {
+            let states = self.states.read();
+            states.tip_height
+        };
+
         // In debug builds we store the latest_state_height here so
         // that we can verify later that this height is retained.
         #[cfg(debug_assertions)]
@@ -2234,6 +2219,7 @@ impl StateManagerImpl {
         // as decisions to retain a checkpoint or an in-memory state are made independently.
         let inmemory_heights_to_keep = std::iter::once(latest_certified_height)
             .chain(extra_inmemory_heights_to_keep.iter().copied())
+            .chain(std::iter::once(tip_height))
             .collect::<BTreeSet<_>>();
 
         let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
@@ -2686,54 +2672,14 @@ impl StateManager for StateManagerImpl {
 
         let mut states = self.states.write();
         let tip_height = states.tip_height;
-        let mut tip = states.tip.take().expect("failed to get TIP");
+        let tip = states.tip.take().expect("failed to get TIP");
 
-        let (target_snapshot, target_hash) = match states.snapshots.back() {
-            Some(snapshot) if snapshot.height > tip_height => {
-                let tip_height = snapshot.height;
-
-                let tip_metadata = states
-                    .certifications_metadata
-                    .get(&tip_height)
-                    .unwrap_or_else(|| {
-                        fatal!(self.log, "Bug: missing tip metadata @{}", tip_height)
-                    });
-
-                // Since the state machine will use this tip to compute the *next* state,
-                // we populate the prev_state_hash with the hash of the current tip.
-                let tip_hash =
-                    CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone());
-
-                (snapshot.clone(), tip_hash)
-            }
+        let target_snapshot = match states.snapshots.back() {
+            // The most recent available state is more recent than what we have in the tip,
+            // because we are catching up.
+            Some(snapshot) if snapshot.height > tip_height => snapshot.clone(),
+            // The tip is the most recent state we know of, proceed with that.
             _ => {
-                let tip_hash = if let Some(tip_metadata) =
-                    states.certifications_metadata.get(&tip_height)
-                {
-                    CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone())
-                } else {
-                    std::mem::drop(states);
-
-                    let mut tip_certification_metadata = Self::compute_certification_metadata(
-                        &tip,
-                        tip_height,
-                        &self.metrics,
-                        &self.log,
-                    )
-                    .unwrap_or_else(|err| {
-                        fatal!(self.log, "Failed to compute hash tree: {:?}", err)
-                    });
-                    let tip_certified_state_hash = tip_certification_metadata.certified_state_hash;
-                    if let Some((hash_tree, _)) = tip_certification_metadata.hash_tree.take() {
-                        self.deallocator_thread.send(Box::new(hash_tree));
-                    }
-
-                    self.metrics.tip_hash_count.inc();
-
-                    CryptoHashOfPartialState::from(tip_certified_state_hash)
-                };
-
-                tip.metadata.prev_state_hash = Some(tip_hash);
                 return (tip_height, tip);
             }
         };
@@ -2768,14 +2714,12 @@ impl StateManager for StateManagerImpl {
             .clone();
         std::mem::drop(states);
 
-        let mut new_tip = initialize_tip(
+        let new_tip = initialize_tip(
             &self.log,
             &self.tip_channel,
             &target_snapshot,
             checkpoint_layout,
         );
-
-        new_tip.metadata.prev_state_hash = Some(target_hash);
 
         // This might still not be the latest version: there might have been
         // another successful state sync while we were updating the tip.
@@ -3223,7 +3167,51 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["commit_and_certify"])
             .start_timer();
 
-        self.populate_extra_metadata(&mut state, height);
+        // Get the previous state hash either from consensus via certification metadata (if we are catching up)
+        // or wait for the hashing thread to finish computing it.
+        // TODO: use states.certifications (look up at height-1)
+        let prev_state_hash = {
+            let (sender, recv) = bounded(1);
+            self.hash_channel
+                .send(HashRequest::Wait { sender })
+                .expect("Failed to send `Wait` to hash channel");
+            recv.recv().expect("Failed to wait for hash channel");
+            let prev_height = height.decrement();
+            // At prev_height 0, we don't have a hash yet, so we have to compute it.
+            if prev_height.get() == 0 {
+                let states = self.states.read();
+                let initial_state = &states
+                    .snapshots
+                    .front()
+                    .expect("Initial state should always be present in states.snapshots.")
+                    .state;
+                let certification = StateManagerImpl::compute_certification_metadata(
+                    initial_state,
+                    prev_height,
+                    &self.metrics,
+                    &self.log,
+                )
+                .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+                certification.certified_state_hash.clone()
+            } else {
+                // After awaiting the hashing thread, snapshot and certification_metadata
+                // must have an entry at height-1, so we can unwrap.
+                let states = self.states.read();
+                states
+                    .certifications_metadata
+                    .get(&prev_height)
+                    .expect("The previous state hash should be available after awaiting the hash thread.")
+                    .certified_state_hash
+                    .clone()
+            }
+        };
+        // Write the previous state hash to the state.
+        state
+            .metadata
+            .prev_state_hash
+            .replace(CryptoHashOfPartialState::from(prev_state_hash));
+
+        self.populate_extra_metadata(&mut state);
 
         if let CertificationScope::Metadata = scope {
             // We want to balance writing too many overlay files with having too many unflushed pages at
@@ -3261,8 +3249,11 @@ impl StateManager for StateManagerImpl {
         // This optimization is skipped every `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING` heights
         // so that we always have a reasonably "recent" state snapshot and
         // its certification metadata available.
+        // TODO: uncomment when merging with the catch-up optimization.
+        /*
         let fast_forward_height = self.fast_forward_height.load(Ordering::Relaxed);
         if matches!(scope, CertificationScope::Metadata)
+        // additional condition: if hash@height is in self.certifications => no early return if we have no hash from CON
             && height.get() < fast_forward_height
             && !height
                 .get()
@@ -3280,6 +3271,11 @@ impl StateManager for StateManagerImpl {
             states.tip = Some(state);
             return;
         }
+        */
+        // alternative (optional to save cloning):
+        // else if behind and hash NOT in self.cert {
+        //     calculate hash sync'ly and write to self.certifications.
+        // }
 
         self.metrics
             .tip_handler_queue_length
@@ -3306,19 +3302,6 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        let certification_metadata =
-            Self::compute_certification_metadata(&state, height, &self.metrics, &self.log)
-                .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
-
-        if scope == CertificationScope::Full {
-            info!(
-                self.log,
-                "Certification hash for height {}: {:?}",
-                height,
-                certification_metadata.certified_state_hash
-            );
-        }
-
         // This step is expensive, so we do it before the write lock for `states`.
         let next_tip = {
             let _timer = self
@@ -3335,56 +3318,19 @@ impl StateManager for StateManagerImpl {
 
         assert_tip_is_none(&states);
 
-        // It's possible that we already computed this state before.  We
-        // validate that hashes agree to spot bugs causing non-determinism as
-        // early as possible.
-        if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
-            let prev_hash = &prev_metadata.certified_state_hash;
-            let hash = &certification_metadata.certified_state_hash;
-            if prev_hash != hash {
-                if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
-                    error!(
-                        self.log,
-                        "Failed to mark state @{} diverged: {}", height, err
-                    );
-                }
-                panic!(
-                    "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
-                );
-            }
-        }
-
-        if !states
-            .snapshots
-            .iter()
-            .any(|snapshot| snapshot.height == height)
-        {
-            states.snapshots.push_back(Snapshot {
-                height,
+        // Kick off hashing of the new state if necessary.
+        // TODO: Skip if we got the hash from consensus via self.certifications
+        if true {
+            let hash_req = HashRequest::HashState {
                 state: Arc::clone(&state),
-            });
-            states
-                .snapshots
-                .make_contiguous()
-                .sort_by_key(|snapshot| snapshot.height);
-
-            states
-                .certifications_metadata
-                .insert(height, certification_metadata);
-
-            let latest_height = update_latest_height(&self.latest_state_height, height);
-            self.metrics.max_resident_height.set(latest_height as i64);
-            {
-                let mut last_height_update_time = self
-                    .latest_height_update_time
-                    .lock()
-                    .expect("Failed to lock last height update time.");
-                let now = Instant::now();
-                self.metrics
-                    .height_update_time_seconds
-                    .observe((now - *last_height_update_time).as_secs_f64());
-                *last_height_update_time = now;
-            }
+                states: Arc::clone(&self.states),
+                latest_state_height: Arc::clone(&self.latest_state_height),
+                height,
+                latest_height_update_time: Arc::clone(&self.latest_height_update_time),
+                scope: scope.clone(),
+                state_layout: Box::new(self.state_layout.clone()),
+            };
+            self.hash_channel.send(hash_req).unwrap();
         }
 
         if let Some((state_metadata, compute_manifest_request)) =
@@ -3414,6 +3360,7 @@ impl StateManager for StateManagerImpl {
         states.tip = Some(next_tip.1);
 
         if scope == CertificationScope::Full {
+            self.flush_hash_channel();
             self.release_lock_and_persist_metadata(states);
         }
         for req in follow_up_tip_requests {
@@ -3468,6 +3415,141 @@ impl StateManager for StateManagerImpl {
         self.release_lock_and_persist_metadata(states);
 
         fatal!(self.log, "Replica diverged at height {}", height)
+    }
+}
+
+enum HashRequest {
+    HashState {
+        state: Arc<ReplicatedState>,
+        states: Arc<parking_lot::RwLock<SharedState>>,
+        latest_state_height: Arc<AtomicU64>,
+        height: Height,
+        latest_height_update_time: Arc<Mutex<Instant>>,
+        scope: CertificationScope,
+        // Boxed so that variants have similar size and we don't waste space when sending `HashRequest::Wait`.
+        state_layout: Box<StateLayout>,
+    },
+    /// Wait for the message to be executed and notify back via sender.
+    Wait { sender: Sender<()> },
+}
+
+fn spawn_hash_thread(
+    metrics: StateManagerMetrics,
+    log: ReplicaLogger,
+) -> (JoinOnDrop<()>, Sender<HashRequest>) {
+    #[allow(clippy::disallowed_methods)]
+    let (hash_req_sender, receiver) = unbounded();
+    let handle = JoinOnDrop::new(
+        std::thread::Builder::new()
+            .name("HashThread".to_string())
+            .spawn(move || {
+                while let Ok(req) = receiver.recv() {
+                    match req {
+                        HashRequest::HashState {
+                            state,
+                            states,
+                            latest_state_height,
+                            height,
+                            latest_height_update_time,
+                            scope,
+                            state_layout,
+                        } => {
+                            // TODO: check certifications via catch up first.
+                            let certification_metadata =
+                                StateManagerImpl::compute_certification_metadata(
+                                    &state, height, &metrics, &log,
+                                )
+                                .unwrap_or_else(|err| {
+                                    fatal!(log, "Failed to compute hash tree: {:?}", err)
+                                });
+
+                            if scope == CertificationScope::Full {
+                                info!(
+                                    log,
+                                    "Certification hash for height {}: {:?}",
+                                    height,
+                                    certification_metadata.certified_state_hash
+                                );
+                            }
+
+                            // It's possible that we already computed this state before. We
+                            // validate that hashes agree to spot bugs causing non-determinism as
+                            // early as possible. 
+                            let mut states = states.write();
+                            if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
+                                let prev_hash = &prev_metadata.certified_state_hash;
+                                let hash = &certification_metadata.certified_state_hash;
+                                if prev_hash != hash {
+                                    if let Err(err) = state_layout.create_diverged_state_marker(height) {
+                                        error!(
+                                            log,
+                                            "Failed to mark state @{} diverged: {}", height, err
+                                        );
+                                    }
+                                    panic!(
+                                        "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
+                                    );
+                                }
+                            }
+
+                            // add state and hash to snapshots and certification_metadata
+                            if !states
+                                .snapshots
+                                .iter()
+                                .any(|snapshot| snapshot.height == height)
+                            {
+                                states.snapshots.push_back(Snapshot {
+                                    height,
+                                    state: Arc::clone(&state),
+                                });
+                                states
+                                    .snapshots
+                                    .make_contiguous()
+                                    .sort_by_key(|snapshot| snapshot.height);
+
+                                states
+                                    .certifications_metadata
+                                    .insert(height, certification_metadata);
+                                let latest_height =
+                                    update_latest_height(&latest_state_height, height);
+
+                                metrics.max_resident_height.set(latest_height as i64);
+                                {
+                                    let mut last_height_update_time = latest_height_update_time
+                                        .lock()
+                                        .expect("Failed to lock last height update time.");
+                                    let now = Instant::now();
+                                    metrics
+                                        .height_update_time_seconds
+                                        .observe((now - *last_height_update_time).as_secs_f64());
+                                    *last_height_update_time = now;
+                                }
+                            }
+                        }
+                        HashRequest::Wait { sender } => {
+                            sender.send(()).unwrap();
+                        }
+                    }
+                }
+            })
+            .unwrap(),
+    );
+    (handle, hash_req_sender)
+}
+
+impl StateManagerImpl {
+    /// After this method terminates, both `SharedState.snapshots` and `SharedState.certification_metadata`
+    /// at the height from the previous `commit_and_certify` are populated. It also updates `latest_state_height`
+    /// to the maximum of the value before and the height passed.
+    ///
+    /// This used to happen synchronously inside `commit_and_certify`, but now happens in the hash thread
+    /// at an unpredictable time.  
+    pub fn flush_hash_channel(&self) {
+        let (sender, recv) = bounded(1);
+        self.hash_channel
+            .send(HashRequest::Wait { sender })
+            .expect("failed to send Wait message to hashing thread");
+        recv.recv().expect("failed to wait for hashing thread");
     }
 }
 

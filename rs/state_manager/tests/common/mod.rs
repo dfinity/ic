@@ -153,7 +153,7 @@ pub fn encode_decode_stream_test<
         });
 
         state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata, None);
-
+        state_manager.flush_hash_channel();
         certify_height(&state_manager, Height::new(1));
 
         let slice = state_manager
@@ -215,7 +215,7 @@ pub fn encode_partial_slice_test(
         });
 
         state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Metadata, None);
-
+        state_manager.flush_hash_channel();
         certify_height(&state_manager, Height::new(1));
 
         let slice = state_manager
@@ -309,7 +309,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
     });
 
     state_manager.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
-
+    state_manager.flush_hash_channel();
     certify_height(state_manager, Height::new(2));
 
     let new_slice = state_manager

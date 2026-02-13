@@ -2941,6 +2941,7 @@ impl StateMachine {
             .process_batch(batch)
             .expect("Could not process batch");
 
+        self.state_manager.flush_hash_channel();
         if self.remove_old_states {
             self.state_manager.remove_states_below(batch_number);
         }
@@ -3051,6 +3052,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
         self.set_time(time.into());
         *self.time_of_last_round.write().unwrap() = time;
     }
@@ -3254,6 +3256,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
     }
 
     /// Enables checkpoints and makes a tick to write a checkpoint.
@@ -3293,6 +3296,7 @@ impl StateMachine {
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
         self.state_manager
             .commit_and_certify(state, h.increment(), CertificationScope::Full, None);
+        self.state_manager.flush_hash_channel();
         self.state_manager.remove_states_below(h.increment());
     }
 
@@ -3322,6 +3326,7 @@ impl StateMachine {
                 CertificationScope::Full,
                 None,
             );
+            self.state_manager.flush_hash_channel();
             self.state_manager.flush_tip_channel();
 
             other_env.import_canister_state(
@@ -3547,6 +3552,7 @@ impl StateMachine {
             CertificationScope::Full,
             None,
         );
+        self.state_manager.flush_hash_channel();
 
         Ok(env)
     }
@@ -4780,6 +4786,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the query stats of the specified canister.
@@ -4816,6 +4823,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the cycle balance of the specified canister.
@@ -4853,6 +4861,7 @@ impl StateMachine {
             CertificationScope::Metadata,
             None,
         );
+        self.state_manager.flush_hash_channel();
         balance
     }
 
@@ -5093,6 +5102,7 @@ pub fn certify_latest_state_helper(
             CertificationScope::Metadata,
             None,
         );
+        state_manager.flush_hash_channel();
     }
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
