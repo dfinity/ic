@@ -10,9 +10,7 @@ use ic_nns_constants::{
     NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::{
-    MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
-};
+use ic_nns_governance_api::{MonthlyNodeProviderRewards, Vote};
 use ic_nns_test_utils::state_test_helpers::{
     nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
 };
