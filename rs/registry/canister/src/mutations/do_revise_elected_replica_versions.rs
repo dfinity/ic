@@ -78,6 +78,7 @@ impl Registry {
                         guest_launch_measurements: payload.guest_launch_measurements,
                         replica_urls: payload.replica_urls,
                         replica_sha256_hex: payload.replica_sha256_hex,
+                        fast_upgrade: payload.fast_upgrade,
                     }
                     .encode_to_vec(),
                 },
@@ -95,6 +96,8 @@ impl Registry {
                 .encode_to_vec(),
             },
         );
+
+        // TODO XXX: If this is a fast upgrade, drop the versions set on each of the nodes in this subnet to avoid conflict.
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
@@ -239,6 +242,7 @@ pub struct ReviseElectedGuestosVersionsPayload {
 
     pub replica_urls: Vec<String>,
     pub replica_sha256_hex: Option<String>,
+    pub fast_upgrade: bool,
 }
 
 impl ReviseElectedGuestosVersionsPayload {

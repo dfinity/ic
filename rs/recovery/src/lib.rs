@@ -499,6 +499,7 @@ impl Recovery {
             guest_launch_measurements: Some(guest_launch_measurements),
             replica_sha256_hex: None,
             replica_urls: vec![],
+            fast_upgrade: false,
         };
 
         Ok(self.get_replay_step(

@@ -634,6 +634,7 @@ impl IcConfig {
             guest_launch_measurements: self.guest_launch_measurements,
             replica_urls: opturl_to_string_vec(self.initial_replica_url),
             replica_sha256_hex: self.initial_replica_sha256_hex,
+            fast_upgrade: false,
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {

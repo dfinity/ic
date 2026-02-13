@@ -15,6 +15,7 @@ message ReplicaVersionRecord {
 
   repeated string replica_urls = 10;
   optional string replica_sha256_hex = 11;
+  bool fast_upgrade = 12;
 
   reserved 1, 2, 3, 4, 5, 8;
   reserved "binary_url";

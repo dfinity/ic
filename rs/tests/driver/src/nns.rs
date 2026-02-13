@@ -624,6 +624,7 @@ pub async fn submit_update_elected_replica_versions_proposal(
     versions_to_unelect: Vec<ReplicaVersion>,
     replica_urls: Vec<String>,
     replica_sha256_hex: Option<String>,
+    fast_upgrade: bool,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -638,6 +639,7 @@ pub async fn submit_update_elected_replica_versions_proposal(
             guest_launch_measurements,
             replica_urls,
             replica_sha256_hex,
+            fast_upgrade,
         },
         match (version, sha256, versions_to_unelect.is_empty()) {
             (Some(v), Some(sha), _) => format!(

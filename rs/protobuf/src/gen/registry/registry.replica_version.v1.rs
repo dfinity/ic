@@ -16,6 +16,8 @@ pub struct ReplicaVersionRecord {
     pub replica_urls: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "11")]
     pub replica_sha256_hex: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(bool, tag = "12")]
+    pub fast_upgrade: bool,
 }
 #[derive(
     serde::Serialize,
