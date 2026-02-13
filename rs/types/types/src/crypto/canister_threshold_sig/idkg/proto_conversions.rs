@@ -569,9 +569,8 @@ fn basic_signature_batch_struct(
 fn initial_dealings_vec(
     dealing_tuple_protos: Vec<IDkgSignedDealingTupleProto>,
 ) -> Result<Vec<SignedIDkgDealing>, ProxyDecodeError> {
-    let mut result = Vec::new();
-    for proto in dealing_tuple_protos {
-        result.push(SignedIDkgDealing::try_from(proto)?);
-    }
-    Ok(result)
+    dealing_tuple_protos
+         .into_iter()
+         .map(SignedIDkgDealing::try_from)
+         .collect()
 }
