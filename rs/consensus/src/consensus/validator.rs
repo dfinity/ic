@@ -2633,7 +2633,7 @@ pub mod test {
             let rank = Rank(1);
             let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
 
-            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
+            let node_id = pool.get_block_maker_by_rank(test_block.height(), Some(rank));
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
@@ -2735,7 +2735,7 @@ pub mod test {
             let parent: &Block = block_chain.last().unwrap().as_ref();
             let rank = Rank(1);
             let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
-            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
+            let node_id = pool.get_block_maker_by_rank(test_block.height(), Some(rank));
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
@@ -2808,7 +2808,7 @@ pub mod test {
 
             let mut test_block = pool.make_next_block();
             test_block.signature.signer =
-                pool.get_block_maker_by_rank(test_block.height(), Rank(0));
+                pool.get_block_maker_by_rank(test_block.height(), Some(Rank(0)));
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             test_block.content.as_mut().context.certified_height = Height::from(1);
             test_block.content.as_mut().rank = Rank(0);
@@ -2824,7 +2824,8 @@ pub mod test {
 
             let rank = Rank(0);
             let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
-            next_block.signature.signer = pool.get_block_maker_by_rank(next_block.height(), rank);
+            next_block.signature.signer =
+                pool.get_block_maker_by_rank(next_block.height(), Some(rank));
             next_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             next_block.content.as_mut().context.certified_height = Height::from(1);
             next_block.content.as_mut().rank = rank;
@@ -3011,7 +3012,8 @@ pub mod test {
 
     fn make_next_block(pool: &TestConsensusPool) -> BlockProposal {
         let mut next_block = pool.make_next_block();
-        next_block.signature.signer = pool.get_block_maker_by_rank(next_block.height(), Rank(0));
+        next_block.signature.signer =
+            pool.get_block_maker_by_rank(next_block.height(), Some(Rank(0)));
         next_block.content.as_mut().rank = Rank(0);
         next_block.update_content();
         next_block
@@ -3616,7 +3618,8 @@ pub mod test {
             );
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
+            test_block.signature.signer =
+                pool.get_block_maker_by_rank(test_block.height(), Some(rank));
             test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
@@ -3668,7 +3671,8 @@ pub mod test {
             );
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
+            test_block.signature.signer =
+                pool.get_block_maker_by_rank(test_block.height(), Some(rank));
             test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
@@ -3722,7 +3726,7 @@ pub mod test {
             let parent_block = pool.make_next_block();
             let rank = Rank(0);
             let mut block = pool.make_next_block_from_parent(parent_block.as_ref(), rank);
-            block.signature.signer = pool.get_block_maker_by_rank(block.height(), rank);
+            block.signature.signer = pool.get_block_maker_by_rank(block.height(), Some(rank));
 
             block.update_content();
             let content = NotarizationContent::new(
@@ -3756,20 +3760,14 @@ pub mod test {
         })
     }
 
-    /// Returns a consensus pool, validator, membership, and a valid equivocation proof.
+    /// Returns a consensus pool, validator, and a valid equivocation proof.
     fn setup_equivocation_proof_test(
         pool_config: ArtifactPoolConfig,
-    ) -> (
-        TestConsensusPool,
-        Validator,
-        Arc<Membership>,
-        EquivocationProof,
-    ) {
+    ) -> (TestConsensusPool, Validator, EquivocationProof) {
         let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
         let ValidatorAndDependencies {
             validator,
             mut pool,
-            membership,
             replica_config,
             ..
         } = setup_dependencies(pool_config, &subnet_members);
@@ -3779,7 +3777,7 @@ pub mod test {
 
         let original = pool.make_next_block();
         let mut block = original.clone();
-        let correct_signer = pool.get_block_maker_by_rank(block.height(), Rank(0));
+        let correct_signer = pool.get_block_maker_by_rank(block.height(), Some(Rank(0)));
 
         // Create two different blocks from the same block maker
         let ingress = IngressPayload::from(vec![
@@ -3817,7 +3815,6 @@ pub mod test {
         (
             pool,
             validator,
-            membership,
             EquivocationProof {
                 signer: correct_signer,
                 version: block.content.as_ref().version.clone(),
@@ -3834,7 +3831,7 @@ pub mod test {
     #[test]
     fn test_equivocation_invalid_for_identical_hashes() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, _, mut proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Invalidate proof with identical hashes
             proof.hash2 = proof.hash1.clone();
             pool.insert_unvalidated(proof.clone());
@@ -3851,7 +3848,7 @@ pub mod test {
     #[test]
     fn test_equivocation_invalid_for_wrong_subnet_id() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, _, mut proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Invalidate proof with incorrect subnet ID
             proof.subnet_id = subnet_test_id(1337);
             pool.insert_unvalidated(proof.clone());
@@ -3868,7 +3865,7 @@ pub mod test {
     #[test]
     fn test_equivocation_invalid_for_signer_not_in_subnet() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, _, mut proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Don't validate if signer is not part of subnet
             proof.signer = node_test_id(10);
             pool.insert_unvalidated(proof.clone());
@@ -3885,21 +3882,9 @@ pub mod test {
     #[test]
     fn test_equivocation_invalid_for_signer_not_blockmaker() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, membership, mut proof) =
-                setup_equivocation_proof_test(pool_config);
-            // Find a node that's not a blockmaker at this height
-            let pool_reader = PoolReader::new(&pool);
-            let prev_beacon = pool_reader
-                .get_random_beacon(proof.height.decrement())
-                .unwrap();
-            let non_blockmaker_node = membership
-                .get_nodes(proof.height)
-                .unwrap()
-                .into_iter()
-                .find(|node| {
-                    membership.get_block_maker_rank(proof.height, &prev_beacon, *node) == Ok(None)
-                })
-                .expect("Should find a non-blockmaker node");
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Use a node that's not a blockmaker at this height
+            let non_blockmaker_node = pool.get_block_maker_by_rank(proof.height, None);
             assert!(non_blockmaker_node != proof.signer);
 
             proof.signer = non_blockmaker_node;
@@ -3917,7 +3902,7 @@ pub mod test {
     #[test]
     fn test_equivocation_validates() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, _, proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, proof) = setup_equivocation_proof_test(pool_config);
             // Validate a well-formed equivocation proof, with the correct subnet ID
             pool.insert_unvalidated(proof.clone());
             assert_matches!(
@@ -3932,7 +3917,7 @@ pub mod test {
     #[test]
     fn test_equivocation_ignored_if_below_finalized_height() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, _, _) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, _) = setup_equivocation_proof_test(pool_config);
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
@@ -3944,7 +3929,7 @@ pub mod test {
     #[test]
     fn test_equivocation_validate_only_one_per_height_and_signer() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let (mut pool, validator, _, mut proof) = setup_equivocation_proof_test(pool_config);
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
             // Insert two different proofs for the same height and signer
             pool.insert_unvalidated(proof.clone());
             let mut hash = proof.hash1.clone().get();
@@ -4102,7 +4087,7 @@ pub mod test {
             block_with_malicious_signer.content.as_mut().context.time += Duration::from_nanos(1);
             block_with_malicious_signer.update_content();
             block_with_malicious_signer.signature.signer =
-                pool.get_block_maker_by_rank(block.height(), Rank(1));
+                pool.get_block_maker_by_rank(block.height(), Some(Rank(1)));
 
             pool.insert_validated(block.clone());
             pool.insert_unvalidated(block_with_malicious_signer.clone());
