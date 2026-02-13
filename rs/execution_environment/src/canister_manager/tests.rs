@@ -2998,7 +2998,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         NumBytes::from(MIB)
     );
 
-    let round_limits = RoundLimits {
+    let mut round_limits = RoundLimits {
         instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
@@ -3006,11 +3006,11 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let canister_id = canister_test_id(0);
-    let canister = state.canister_state(&canister_id).cloned().unwrap();
-    let (canister, _, _) = canister_manager
+    let mut canister = state.canister_state(&canister_id).cloned().unwrap();
+    let _ = canister_manager
         .uninstall_code(
-            canister,
-            round_limits,
+            &mut canister,
+            &mut round_limits,
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
             state.time(),
         )

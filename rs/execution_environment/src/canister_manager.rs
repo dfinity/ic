@@ -930,23 +930,23 @@ impl CanisterManager {
     /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-uninstall_code
     pub(crate) fn uninstall_code(
         &self,
-        mut canister: CanisterState,
-        mut round_limits: RoundLimits,
+        canister: &mut CanisterState,
+        round_limits: &mut RoundLimits,
         origin: CanisterChangeOrigin,
         time: Time,
-    ) -> Result<(CanisterState, RoundLimits, Vec<Response>), CanisterManagerError> {
+    ) -> Result<Vec<Response>, CanisterManagerError> {
         let sender = origin.origin();
 
         // Skip the controller validation if the sender is the governance
         // canister. The governance canister can forcefully
         // uninstall the code of any canister.
         if sender != GOVERNANCE_CANISTER_ID.get() {
-            validate_controller(&canister, &sender)?
+            validate_controller(canister, &sender)?
         }
 
         let rejects = uninstall_canister(
-            &mut canister,
-            Some(&mut round_limits),
+            canister,
+            Some(round_limits),
             time,
             Arc::clone(&self.fd_factory),
             &self.log,
@@ -961,7 +961,7 @@ impl CanisterManager {
             .subnet_available_memory
             .update_execution_memory_unchecked(available_execution_memory_change);
 
-        Ok((canister, round_limits, rejects))
+        Ok(rejects)
     }
 
     /// Signals a canister to stop.

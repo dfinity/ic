@@ -499,7 +499,7 @@ impl ExecutionEnvironment {
     /// In particular, this means that a dedicated "out of cycles"
     /// error and no charge should be returned if the canister is
     /// completely out of cycles.
-    pub(crate) fn execute_mgmt_operation_on_canister<F, C>(
+    pub(crate) fn execute_mgmt_operation_on_canister<F, C, R>(
         &self,
         canister_id: CanisterId,
         op: F,
@@ -507,22 +507,22 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
-    ) -> Result<(), UserError>
+    ) -> Result<R, UserError>
     where
         F: FnOnce(
             CanisterState,
             RoundLimits,
             C,
         ) -> Result<
-            (CanisterState, RoundLimits, Vec<ExecEnvResponse>),
-            (CanisterManagerError, Cycles),
+            (CanisterState, RoundLimits, R, Vec<ExecEnvResponse>),
+            (UserError, Cycles),
         >,
     {
         let cost_schedule = state.get_own_cost_schedule();
         match state.canister_state_mut(&canister_id) {
             Some(clean_canister) => match op(clean_canister.clone(), round_limits.clone(), context)
             {
-                Ok((new_canister, new_round_limits, responses)) => {
+                Ok((new_canister, new_round_limits, bytes, responses)) => {
                     state.put_canister_state(new_canister);
                     *round_limits = new_round_limits;
                     crate::util::process_responses(
@@ -532,7 +532,7 @@ impl ExecutionEnvironment {
                         self.log.clone(),
                         self.canister_not_found_error(),
                     );
-                    Ok(())
+                    Ok(bytes)
                 }
                 Err((err, cycles)) => {
                     let memory_usage = clean_canister.memory_usage();
@@ -556,7 +556,7 @@ impl ExecutionEnvironment {
                             e
                         );
                     }
-                    Err(err.into())
+                    Err(err)
                 }
             },
             None => Err(UserError::new(
@@ -862,10 +862,13 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UninstallCode) => {
                 let res = UninstallCodeArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
-                    let op = |canister, round_limits, (origin, time)| {
+                    let op = |mut canister, mut round_limits, (origin, time)| {
                         self.canister_manager
-                            .uninstall_code(canister, round_limits, origin, time)
-                            .map_err(|err| (err, Cycles::zero()))
+                            .uninstall_code(&mut canister, &mut round_limits, origin, time)
+                            .map(|responses| {
+                                (canister, round_limits, EmptyBlob.encode(), responses)
+                            })
+                            .map_err(|err| (err.into(), Cycles::zero()))
                     };
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
                     let time = state.time();
@@ -877,7 +880,7 @@ impl ExecutionEnvironment {
                         round_limits,
                         registry_settings,
                     )
-                    .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
+                    .map(|bytes| (bytes, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -894,18 +897,47 @@ impl ExecutionEnvironment {
 
                         let canister_id = args.get_canister_id();
                         let sender_canister_version = args.get_sender_canister_version();
+                        let origin = msg.canister_change_origin(sender_canister_version);
+                        let cost_schedule = state.get_own_cost_schedule();
+                        let subnet_size = registry_settings.subnet_size;
 
+                        let op = |mut canister,
+                                  mut round_limits,
+                                  (
+                            settings,
+                            origin,
+                            timestamp_nanos,
+                            cost_schedule,
+                            subnet_size,
+                        )| {
+                            self.update_settings(
+                                &mut canister,
+                                &mut round_limits,
+                                settings,
+                                origin,
+                                timestamp_nanos,
+                                cost_schedule,
+                                subnet_size,
+                            )
+                            .map(|bytes| (canister, round_limits, bytes, vec![]))
+                            .map_err(|err| (err, Cycles::zero()))
+                        };
                         let result = match CanisterSettings::try_from(args.settings) {
                             Err(err) => Err(err.into()),
                             Ok(settings) => self
-                                .update_settings(
-                                    timestamp_nanos,
-                                    msg.canister_change_origin(sender_canister_version),
-                                    settings,
+                                .execute_mgmt_operation_on_canister(
                                     canister_id,
+                                    op,
+                                    (
+                                        settings,
+                                        origin,
+                                        timestamp_nanos,
+                                        cost_schedule,
+                                        subnet_size,
+                                    ),
                                     &mut state,
                                     round_limits,
-                                    registry_settings.subnet_size,
+                                    registry_settings,
                                 )
                                 .map(|res| (res, Some(canister_id))),
                         };
@@ -2330,16 +2362,14 @@ impl ExecutionEnvironment {
 
     fn update_settings(
         &self,
-        timestamp_nanos: Time,
-        origin: CanisterChangeOrigin,
-        settings: CanisterSettings,
-        canister_id: CanisterId,
-        state: &mut ReplicatedState,
+        canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
+        settings: CanisterSettings,
+        origin: CanisterChangeOrigin,
+        timestamp_nanos: Time,
+        cost_schedule: CanisterCyclesCostSchedule,
         subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
-        let cost_schedule = state.get_own_cost_schedule();
-        let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
             .update_settings(
                 timestamp_nanos,
