@@ -54,7 +54,11 @@ pub enum Commands {
     UpdateConfig {
         #[arg(long, default_value = config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         hostos_config_json_path: PathBuf,
-        #[arg(long, default_value = "/boot/config/node_operator_private_key.pem", value_name = "node_operator_private_key.pem")]
+        #[arg(
+            long,
+            default_value = "/boot/config/node_operator_private_key.pem",
+            value_name = "node_operator_private_key.pem"
+        )]
         node_operator_private_key_path: PathBuf,
     },
     /// Dumps OS configuration
@@ -252,7 +256,11 @@ pub fn main() -> Result<()> {
                 return Ok(());
             }
 
-            if hostos_config.icos_settings.node_operator_private_key.is_some() {
+            if hostos_config
+                .icos_settings
+                .node_operator_private_key
+                .is_some()
+            {
                 println!("Node operator private key already present in config. Skipping update.");
                 return Ok(());
             }
@@ -260,8 +268,7 @@ pub fn main() -> Result<()> {
             let node_operator_private_key = fs::read_to_string(&node_operator_private_key_path)
                 .context("unable to read node operator private key")?;
 
-            hostos_config.icos_settings.node_operator_private_key =
-                Some(node_operator_private_key);
+            hostos_config.icos_settings.node_operator_private_key = Some(node_operator_private_key);
             hostos_config.config_version = CONFIG_VERSION.to_string();
 
             serialize_and_write_config(&hostos_config_json_path, &hostos_config)?;
