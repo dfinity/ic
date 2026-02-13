@@ -5,13 +5,11 @@ use std::fs::read_to_string;
 use tempfile::tempdir;
 
 fn new_fstrim_tool_command() -> Command {
-    // Check if we're running in a Bazel environment
-    if std::env::var("TEST_TMPDIR").is_ok() {
+    match Command::cargo_bin("fstrim_tool") {
+        // When in Cargo environment. This should be removed after Bazel the migration is complete.
+        Ok(v) => v,
         // When in Bazel environment
-        Command::new("rs/ic_os/metrics/fstrim_tool/fstrim_tool_bin")
-    } else {
-        // When in Cargo environment
-        assert_cmd::cargo::cargo_bin_cmd!("fstrim_tool")
+        Err(_) => Command::new("rs/ic_os/metrics/fstrim_tool/fstrim_tool_bin"),
     }
 }
 
