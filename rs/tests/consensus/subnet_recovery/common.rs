@@ -806,8 +806,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     } else {
         info!(
             logger,
-            "Since the CUP is corrupted in a way that nodes cannot determine their subnet ID,
-             unassigned nodes should not have detected that they became unassigned and should
+            "Since the CUP is corrupted in a way that nodes cannot determine their subnet ID, \
+             unassigned nodes should not have detected that they became unassigned and should \
              still have their state and CUP. Checking..."
         );
         topology_snapshot.unassigned_nodes().for_each(|n| {
