@@ -1102,7 +1102,16 @@ impl ExecutionEnvironment {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => self.stop_canister(args.get_canister_id(), &msg, &mut state),
+                Ok(args) => {
+                    let canister_id = args.get_canister_id();
+                    self.stop_canister(
+                        canister_id,
+                        &mut state,
+                        round_limits,
+                        &mut msg,
+                        registry_settings,
+                    )
+                }
             },
 
             Ok(Ic00Method::DeleteCanister) => {
@@ -2523,8 +2532,10 @@ impl ExecutionEnvironment {
     fn stop_canister(
         &self,
         canister_id: CanisterId,
-        msg: &CanisterCall,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
+        msg: &mut CanisterCall,
+        registry_settings: &RegistryExecutionSettings,
     ) -> ExecuteSubnetMessageResult {
         let call_id = state
             .metadata
@@ -2534,25 +2545,39 @@ impl ExecutionEnvironment {
                 effective_canister_id: canister_id,
                 time: state.time(),
             });
-        match self.canister_manager.stop_canister(
+        let op = |mut canister, round_limits, (msg, call_id)| {
+            let res = self
+                .canister_manager
+                .stop_canister(&mut canister, StopCanisterContext::from((msg, call_id)));
+            Ok((canister, round_limits, res, vec![], vec![]))
+        };
+        let res = self.execute_mgmt_operation_on_canister(
             canister_id,
-            StopCanisterContext::from((msg.clone(), call_id)),
+            op,
+            (msg.clone(), call_id),
             state,
-        ) {
-            StopCanisterResult::RequestAccepted => ExecuteSubnetMessageResult::Processing,
-            StopCanisterResult::Failure {
+            round_limits,
+            registry_settings,
+        );
+        match res {
+            Ok(StopCanisterResult::RequestAccepted) => ExecuteSubnetMessageResult::Processing,
+            Ok(StopCanisterResult::Failure {
                 error,
                 cycles_to_return,
-            } => ExecuteSubnetMessageResult::Finished {
+            }) => ExecuteSubnetMessageResult::Finished {
                 response: Err(error.into()),
                 refund: cycles_to_return,
             },
-            StopCanisterResult::AlreadyStopped { cycles_to_return } => {
+            Ok(StopCanisterResult::AlreadyStopped { cycles_to_return }) => {
                 ExecuteSubnetMessageResult::Finished {
                     response: Ok((EmptyBlob.encode(), Some(canister_id))),
                     refund: cycles_to_return,
                 }
             }
+            Err(err) => ExecuteSubnetMessageResult::Finished {
+                response: Err(err),
+                refund: msg.take_cycles(),
+            },
         }
     }
 

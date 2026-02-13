@@ -947,8 +947,9 @@ fn stop_a_stopped_canister() {
             message_id: message_test_id(0),
             call_id: Some(StopCanisterCallId::new(0)),
         };
+        let mut canister = state.canister_state(&canister_id).unwrap().clone();
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state),
+            canister_manager.stop_canister(&mut canister, stop_context),
             StopCanisterResult::AlreadyStopped {
                 cycles_to_return: Cycles::zero()
             }
@@ -984,8 +985,9 @@ fn stop_a_stopped_canister_from_another_canister() {
             cycles: Cycles::from(cycles),
             deadline: NO_DEADLINE,
         };
+        let mut canister = state.canister_state(&canister_id).unwrap().clone();
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state),
+            canister_manager.stop_canister(&mut canister, stop_context),
             StopCanisterResult::AlreadyStopped {
                 cycles_to_return: Cycles::from(cycles)
             }

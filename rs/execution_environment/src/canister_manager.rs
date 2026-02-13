@@ -980,20 +980,9 @@ impl CanisterManager {
     /// If the canister is already stopped, then this function is a no-op.
     pub(crate) fn stop_canister(
         &self,
-        canister_id: CanisterId,
+        canister: &mut CanisterState,
         mut stop_context: StopCanisterContext,
-        state: &mut ReplicatedState,
     ) -> StopCanisterResult {
-        let canister = match state.canister_state_mut(&canister_id) {
-            None => {
-                return StopCanisterResult::Failure {
-                    error: CanisterManagerError::CanisterNotFound(canister_id),
-                    cycles_to_return: stop_context.take_cycles(),
-                };
-            }
-            Some(canister) => canister,
-        };
-
         if let Err(err) = validate_controller(canister, stop_context.sender()) {
             return StopCanisterResult::Failure {
                 error: err,
