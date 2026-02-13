@@ -678,7 +678,7 @@ impl ReplicatedState {
     }
 
     pub fn routing_table(&self) -> Arc<RoutingTable> {
-        Arc::clone(&self.metadata.network_topology.routing_table())
+        Arc::clone(self.metadata.network_topology.routing_table())
     }
 
     /// Returns the cost schedule of this subnet.

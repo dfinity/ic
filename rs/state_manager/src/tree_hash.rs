@@ -102,10 +102,7 @@ mod tests {
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
-    use std::{
-        collections::{BTreeMap, BTreeSet},
-        sync::Arc,
-    };
+    use std::collections::{BTreeMap, BTreeSet};
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 

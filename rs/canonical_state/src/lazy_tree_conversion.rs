@@ -426,7 +426,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
     );
     let own_subnet_id = state.metadata.own_subnet_id;
     let inverted_routing_table = Arc::new(invert_routing_table(
-        &state.metadata.network_topology.routing_table(),
+        state.metadata.network_topology.routing_table(),
     ));
     let split_routing_table = Arc::new(split_inverted_routing_table(
         &inverted_routing_table,
