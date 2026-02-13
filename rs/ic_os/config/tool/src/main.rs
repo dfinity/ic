@@ -262,6 +262,7 @@ pub fn main() -> Result<()> {
 
             hostos_config.icos_settings.node_operator_private_key =
                 Some(node_operator_private_key);
+            hostos_config.config_version = CONFIG_VERSION.to_string();
 
             serialize_and_write_config(&hostos_config_json_path, &hostos_config)?;
 
