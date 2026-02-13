@@ -4,7 +4,7 @@ use crate::guest_vm_config::DirectBootConfig;
 use anyhow::Context;
 use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
-use ic_device::mount::{FileSystem, MountOptions, PartitionProvider};
+use ic_device::mount::{FileSystem, MountOptions, PartitionProvider, PartitionSelector};
 use std::fs::File;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
@@ -73,7 +73,7 @@ pub async fn prepare_direct_boot(
 
     let grub_partition = guest_partition_provider
         .mount_partition(
-            GRUB_PARTITION_UUID,
+            PartitionSelector::ByUuid(GRUB_PARTITION_UUID),
             MountOptions {
                 file_system: GRUB_PARTITION_FS,
             },
@@ -107,7 +107,7 @@ pub async fn prepare_direct_boot(
 
     let boot_partition = guest_partition_provider
         .mount_partition(
-            boot_partition_uuid,
+            PartitionSelector::ByUuid(boot_partition_uuid),
             MountOptions {
                 file_system: BOOT_PARTITION_FS,
             },
@@ -309,9 +309,18 @@ mod tests {
             );
 
             let mut partitions = HashMap::new();
-            partitions.insert(GRUB_PARTITION_UUID, grub_partition.clone());
-            partitions.insert(A_BOOT_PARTITION_UUID, a_boot_partition);
-            partitions.insert(B_BOOT_PARTITION_UUID, b_boot_partition);
+            partitions.insert(
+                PartitionSelector::ByUuid(GRUB_PARTITION_UUID),
+                grub_partition.clone(),
+            );
+            partitions.insert(
+                PartitionSelector::ByUuid(A_BOOT_PARTITION_UUID),
+                a_boot_partition,
+            );
+            partitions.insert(
+                PartitionSelector::ByUuid(B_BOOT_PARTITION_UUID),
+                b_boot_partition,
+            );
 
             TestSetup {
                 partition_provider: MockPartitionProvider::new(partitions),
@@ -564,7 +573,10 @@ mod tests {
             boot_cycle: Some(BootCycle::Stable),
         }));
         let mut partitions = HashMap::new();
-        partitions.insert(GRUB_PARTITION_UUID, grub_partition);
+        partitions.insert(
+            PartitionSelector::ByUuid(GRUB_PARTITION_UUID),
+            grub_partition,
+        );
         let provider = MockPartitionProvider::new(partitions);
 
         let result = prepare_direct_boot(GuestVMType::Default, &provider).await;

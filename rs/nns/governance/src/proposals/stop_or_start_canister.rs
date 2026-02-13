@@ -99,7 +99,7 @@ impl CallCanister for StopOrStartCanister {
 
 impl LocallyDescribableProposalAction for StopOrStartCanister {
     const TYPE_NAME: &'static str = "Stop or Start Canister";
-    const TYPE_DESCRIPTION: &'static str = "Stops or starts an NNS canister.";
+    const TYPE_DESCRIPTION: &'static str = "Stop or start a canister controlled by the NNS.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         let Self {

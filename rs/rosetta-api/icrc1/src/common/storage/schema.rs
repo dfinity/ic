@@ -7,7 +7,7 @@ use crate::common::storage::{
 use anyhow::bail;
 use rusqlite::{Connection, params};
 
-pub const SCHEMA_VERSION: u64 = 1;
+pub const SCHEMA_VERSION: u64 = 2;
 
 /// Creates all the necessary tables for the ICRC1 Rosetta storage system.
 /// This function is used by both production code and tests to ensure consistency.

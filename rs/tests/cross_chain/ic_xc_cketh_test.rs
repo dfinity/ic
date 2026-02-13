@@ -31,7 +31,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCustomizations, SshSession,
-            get_dependency_path,
+            get_dependency_path_from_env,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -85,9 +85,7 @@ fn setup_with_system_and_application_subnets(env: TestEnv) {
 
 fn setup_anvil(env: &TestEnv) {
     UniversalVm::new(String::from(FOUNDRY_VM_NAME))
-        .with_config_img(get_dependency_path(
-            env::var("CKETH_UVM_CONFIG_PATH").expect("CKETH_UVM_CONFIG_PATH not set"),
-        ))
+        .with_config_img(get_dependency_path_from_env("CKETH_UVM_CONFIG_PATH"))
         .enable_ipv4() //forge needs to download the version of the solidity compiler indicated in the smart contracts that are being deployed
         .start(env)
         .expect("failed to setup universal VM");

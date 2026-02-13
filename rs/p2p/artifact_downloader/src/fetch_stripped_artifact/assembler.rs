@@ -436,7 +436,9 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        *payload = Some(pb::IngressPayload::from(IngressPayload::from(ingresses)));
+        *payload = Some(pb::IngressPayload::from(IngressPayload::from_iter(
+            ingresses,
+        )));
         Ok(())
     }
 }

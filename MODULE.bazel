@@ -19,19 +19,16 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "rules_cc", version = "0.2.16")
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "hermetic_cc_toolchain", version = "4.0.1")
-archive_override(
+bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
+single_version_override(
     module_name = "hermetic_cc_toolchain",
-    integrity = "sha256-ziFGNqyR/zQFkoqxcOdCAbAYnhNxXXObBfUjxO9LGoM=",
     patch_strip = 1,
     patches = [
         "//bazel:hermetic_cc_toolchain_strip.patch",
         "//bazel:hermetic_cc_toolchain_cache_dir.patch",
     ],
-    strip_prefix = "hermetic_cc_toolchain-32c6f9ec9e0b3aebfa92950e7019f1275390bda1",
-    urls = ["https://github.com/uber/hermetic_cc_toolchain/archive/32c6f9ec9e0b3aebfa92950e7019f1275390bda1.tar.gz"],
 )
 
 # configure/make dependencies
@@ -66,7 +63,7 @@ include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
-bazel_dep(name = "rules_python", version = "0.35.0")
+bazel_dep(name = "rules_python", version = "1.4.1")
 
 python_version = "3.12"
 
@@ -84,9 +81,7 @@ use_repo(pip, "python_deps")
 # Protobuf dependencies
 bazel_dep(
     name = "protobuf",
-    version = "29.1",
-    # We rename it to keep the legacy name used throughout our bazel files
-    repo_name = "com_google_protobuf",
+    version = "32.1",
 )
 
 # protobuf linter
@@ -289,6 +284,8 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
 
 # TLA+ tools
+bazel_dep(name = "rules_java", version = "9.3.0")
+
 http_jar(
     name = "tlaplus_community_modules",
     sha256 = "109e0828d192c33703d5cbc50b5b6e128acd816565616e27b3855949c7baba9c",
@@ -304,14 +301,10 @@ http_jar(
 # Apalache model checker for TLA+
 http_archive(
     name = "tla_apalache",
-    build_file_content = """
-package(default_visibility = ["//visibility:public"])
-
-exports_files([ "bin/apalache-mc" ])
-    """,
-    sha256 = "173a683707c2a639c955328746461cad39e4b8a5adff95e156ce3bf376ba293b",
-    strip_prefix = "apalache-0.44.11",
-    url = "https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz",
+    build_file = "@//third_party:BUILD.tla_apalache.bazel",
+    sha256 = "e0ebea7e45c8f99df8d92f2755101dda84ab71df06d1ec3a21955d3b53a886e2",
+    strip_prefix = "apalache-0.52.2",
+    url = "https://github.com/apalache-mc/apalache/releases/download/v0.52.2/apalache-0.52.2.tgz",
 )
 
 # Official WebAssembly test suite.
@@ -357,7 +350,16 @@ http_file(
     name = "btc_canister",
     downloaded_file_path = "ic-btc-canister.wasm.gz",
     sha256 = "f18d28cbebf49cbd2b6a3dba8f6da1399b95714c7cf100d3fb31ba9c33941daa",
-    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2024-07-28/ic-btc-canister.wasm.gz",
+    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release/2024-07-28/ic-btc-canister.wasm.gz",
+)
+
+# Dogecoin canister
+
+http_file(
+    name = "doge_canister",
+    downloaded_file_path = "ic-doge-canister.wasm.gz",
+    sha256 = "2efd5a5b28315a3d4896419df14a4aad8a346174f53cc7727a63b37ec086b3ac",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2025-12-10/ic-doge-canister.wasm.gz",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test
@@ -518,15 +520,6 @@ http_file(
     url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v1.0.3/cycles-ledger.wasm.gz",
 )
 
-# Subnet Rental Canister
-
-http_file(
-    name = "subnet_rental_canister",
-    downloaded_file_path = "subnet_rental_canister.wasm.gz",
-    sha256 = "860d30bc74facd4287b7af766004344e4cea4989ae0bf5408b4fb70ff337bc42",
-    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.3.0/subnet_rental_canister.wasm.gz",
-)
-
 # Financial Integration artifacts for upgrade testing
 
 # ic-icrc1-ledger releases without ICRC-3
@@ -681,7 +674,7 @@ http_file(
     name = "dogecoin_example_canister",
     downloaded_file_path = "basic_dogecoin.wasm",
     sha256 = "2eacb8de00dc2fc9bd43f7a5a8a4cd79c61c40ed3f761df84105a4a450f9e0c4",
-    url = "https://github.com/dfinity/dogecoin-canister/releases/download/example%2Fbasic-dogecoin%2F2025-11-12/basic_dogecoin.wasm",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/example/basic-dogecoin/2025-11-12/basic_dogecoin.wasm",
 )
 
 http_file(
@@ -889,6 +882,23 @@ http_archive(
     sha256 = "a817449d1f05ae58bcb7bf073b4cebe5d31512f859ba4b83951bd825d28d2114",
     strip_prefix = "pebble-challtestsrv-linux-amd64/linux/amd64",
     url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-amd64.tar.gz",
+)
+
+## For //ci/githubstats:query to query our BuildBuddy services via protobuf-based RPC to fetch logs
+
+http_archive(
+    name = "buildbuddy_proto",
+    files = {
+        "BUILD.bazel": "//ci/githubstats:BUILD.buildbuddy-proto.bazel",
+    },
+    patch_cmds = [
+        # Remove everything except ./proto/
+        "find . -mindepth 1 -maxdepth 1 ! -name proto -exec rm -rf {} +",
+        "find ./proto -name BUILD -delete",
+    ],
+    sha256 = "eff54923b6afdf4507f9b07fc9906f06580fdba72d96e9d58d8e6ea8ac4f71cd",
+    strip_prefix = "buildbuddy-89d510c91a18ec0469043a50750145ac51983f74",
+    url = "https://github.com/buildbuddy-io/buildbuddy/archive/89d510c91a18ec0469043a50750145ac51983f74.tar.gz",  # v2.242.0
 )
 
 ## shfmt, for formatting bash code
@@ -1104,15 +1114,11 @@ canisters(
         "ck_btc_archive": "ic-icrc1-archive.wasm.gz",
         "ck_btc_ledger": "ic-icrc1-ledger.wasm.gz",
         "ck_btc_ledger_v1": "ic-icrc1-ledger.wasm.gz",
-        "ck_btc_ledger_v2": "ic-icrc1-ledger.wasm.gz",
-        "ck_btc_ledger_v2_noledgerversion": "ic-icrc1-ledger.wasm.gz",
         "ck_btc_ledger_v3": "ic-icrc1-ledger.wasm.gz",
         "ck_btc_index": "ic-icrc1-index-ng.wasm.gz",
         "ck_eth_archive": "ic-icrc1-archive-u256.wasm.gz",
         "ck_eth_ledger": "ic-icrc1-ledger-u256.wasm.gz",
         "ck_eth_ledger_v1": "ic-icrc1-ledger-u256.wasm.gz",
-        "ck_eth_ledger_v2": "ic-icrc1-ledger-u256.wasm.gz",
-        "ck_eth_ledger_v2_noledgerversion": "ic-icrc1-ledger-u256.wasm.gz",
         "ck_eth_ledger_v3": "ic-icrc1-ledger-u256.wasm.gz",
         "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
         "sns_root": "sns-root-canister.wasm.gz",
@@ -1131,6 +1137,7 @@ canisters(
         "bitcoin_testnet": "ic-btc-canister.wasm.gz",
         "dogecoin": "ic-doge-canister.wasm.gz",
         "migration": "migration-canister.wasm.gz",
+        "subnet_rental": "subnet_rental_canister.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",
     repositories = {
@@ -1140,6 +1147,7 @@ canisters(
         "sns_aggregator_test": "dfinity/nns-dapp",
         "bitcoin_testnet": "dfinity/bitcoin-canister",
         "dogecoin": "dfinity/dogecoin-canister",
+        "subnet_rental": "dfinity/subnet-rental-canister",
     },
 )
 

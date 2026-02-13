@@ -32,7 +32,6 @@ use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::block_on;
 use ic_types::Height;
 use rejoin_test_lib::rejoin_test_large_state;
 use std::time::Duration;
@@ -121,10 +120,6 @@ fn setup(env: TestEnv, config: Config) {
 }
 
 fn test(env: TestEnv, config: Config) {
-    block_on(test_async(env, config));
-}
-
-async fn test_async(env: TestEnv, config: Config) {
     let mut nodes = env.topology_snapshot().root_subnet().nodes();
     let agent_node = nodes.next().unwrap();
     let rejoin_node = nodes.next().unwrap();
@@ -139,5 +134,4 @@ async fn test_async(env: TestEnv, config: Config) {
         agent_node.clone(),
         nodes.take(allowed_failures),
     )
-    .await;
 }

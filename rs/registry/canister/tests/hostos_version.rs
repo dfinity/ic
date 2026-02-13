@@ -3,8 +3,8 @@ use candid::Encode;
 use dfn_candid::candid;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value, get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
@@ -32,7 +32,7 @@ const GOOD_SHA256_HEX: &str = "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC
 
 #[test]
 fn test_the_anonymous_user_cannot_add_a_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -89,7 +89,7 @@ fn test_the_anonymous_user_cannot_add_a_version() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_add_a_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -143,7 +143,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_version() {
 
 #[test]
 fn test_the_governance_canister_can_add_a_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -197,7 +197,7 @@ fn test_the_governance_canister_can_add_a_version() {
 
 #[test]
 fn test_cannot_add_duplicate_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -280,7 +280,7 @@ fn test_cannot_add_duplicate_version() {
 
 #[test]
 fn test_cannot_add_invalid_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -382,7 +382,7 @@ fn test_cannot_add_invalid_version() {
 
 #[test]
 fn test_the_anonymous_user_cannot_remove_a_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // Set up with existing version
         let hostos_version_id = "1".to_string();
         let mut registry = set_up_registry_canister(
@@ -468,7 +468,7 @@ fn test_the_anonymous_user_cannot_remove_a_version() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_remove_a_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -550,7 +550,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_remove_a_version() 
 
 #[test]
 fn test_the_governance_canister_can_remove_a_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // Set up with existing version
         let hostos_version_id = "1".to_string();
         let registry = set_up_registry_canister(
@@ -628,7 +628,7 @@ fn test_the_governance_canister_can_remove_a_version() {
 
 #[test]
 fn test_cannot_remove_nonexistent_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -669,7 +669,7 @@ fn test_cannot_remove_nonexistent_version() {
 
 #[test]
 fn test_cannot_remove_used_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // Set up with existing version
         let hostos_version_id = "1".to_string();
         let (add_node_mutation, _) = prepare_registry_with_nodes_from_template(
@@ -759,7 +759,7 @@ fn test_cannot_remove_used_version() {
 
 #[test]
 fn test_the_anonymous_user_cannot_update_hostos_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let hostos_version_id = "1".to_string();
         let (add_node_mutation, node_ids) = prepare_registry_with_nodes(1, 1);
         let mut registry = set_up_registry_canister(
@@ -828,7 +828,7 @@ fn test_the_anonymous_user_cannot_update_hostos_version() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_update_hostos_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -894,7 +894,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_hostos_versi
 
 #[test]
 fn test_the_governance_canister_can_update_hostos_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let hostos_version_id = "1".to_string();
         let (add_node_mutation, node_ids) = prepare_registry_with_nodes(1, 1);
         let registry = set_up_registry_canister(
@@ -960,7 +960,7 @@ fn test_the_governance_canister_can_update_hostos_version() {
 
 #[test]
 fn test_can_unset_nodes_hostos_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let hostos_version_id = "1".to_string();
         let (add_node_mutation, node_ids) = prepare_registry_with_nodes(1, 1);
         let registry = set_up_registry_canister(
@@ -1047,7 +1047,7 @@ fn test_can_unset_nodes_hostos_version() {
 
 #[test]
 fn test_cannot_update_to_invalid_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let (add_node_mutation, node_ids) = prepare_registry_with_nodes(1, 1);
         let registry = set_up_registry_canister(
             &runtime,

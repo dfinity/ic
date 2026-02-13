@@ -7,7 +7,6 @@ use std::{
 use ic_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::CanisterMetrics;
 use ic_replicated_state::canister_state::system_state::LoadMetrics;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_state_layout::CompleteCheckpointLayout;
@@ -43,19 +42,21 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
     .map_err(|err| format!("Failed to write header: {err}"))?;
 
     // Write rows.
-    for (canister_id, canister_state) in replicated_state.canister_states {
-        let CanisterMetrics {
-            instructions_executed,
-            load_metrics:
-                LoadMetrics {
-                    ingress_messages_executed,
-                    remote_subnet_messages_executed,
-                    local_subnet_messages_executed,
-                    http_outcalls_executed,
-                    heartbeats_and_global_timers_executed,
-                },
-            ..
-        } = canister_state.system_state.canister_metrics;
+    for (canister_id, canister_state) in replicated_state.canister_states() {
+        let instructions_executed = canister_state
+            .system_state
+            .canister_metrics()
+            .instructions_executed();
+        let LoadMetrics {
+            ingress_messages_executed,
+            remote_subnet_messages_executed,
+            local_subnet_messages_executed,
+            http_outcalls_executed,
+            heartbeats_and_global_timers_executed,
+        } = canister_state
+            .system_state
+            .canister_metrics()
+            .load_metrics();
         writeln!(
             output_file,
             "{canister_id},{instructions_executed},{ingress_messages_executed},{remote_subnet_messages_executed},{local_subnet_messages_executed},{http_outcalls_executed},{heartbeats_and_global_timers_executed}"

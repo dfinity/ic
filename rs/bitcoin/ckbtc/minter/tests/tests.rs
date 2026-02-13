@@ -63,6 +63,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         btc_network: Network::Regtest,
         ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 2000,
+        deposit_btc_min_amount: None,
         ledger_id: CanisterId::from(0),
         max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
         min_confirmations: Some(MIN_CONFIRMATIONS),
@@ -1624,6 +1625,30 @@ fn test_transaction_finalization() {
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
 
     assert_eq!(ckbtc.get_known_utxos(user), vec![]);
+}
+
+#[test]
+fn test_min_deposit_amount() {
+    let ckbtc = CkBtcSetup::new();
+
+    let deposit_btc_min_amount = ckbtc.get_minter_info().deposit_btc_min_amount;
+    assert_eq!(deposit_btc_min_amount, Some(CHECK_FEE + 1));
+
+    ckbtc.upgrade_with(Some(UpgradeArgs {
+        deposit_btc_min_amount: Some(CHECK_FEE),
+        ..Default::default()
+    }));
+
+    let deposit_btc_min_amount = ckbtc.get_minter_info().deposit_btc_min_amount;
+    assert_eq!(deposit_btc_min_amount, Some(CHECK_FEE + 1));
+
+    ckbtc.upgrade_with(Some(UpgradeArgs {
+        check_fee: Some(CHECK_FEE - 2),
+        ..Default::default()
+    }));
+
+    let deposit_btc_min_amount = ckbtc.get_minter_info().deposit_btc_min_amount;
+    assert_eq!(deposit_btc_min_amount, Some(CHECK_FEE));
 }
 
 #[test]

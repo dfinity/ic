@@ -23,7 +23,7 @@ use ic_replicated_state::{
     replicated_state::ReplicatedStateMessageRouting,
 };
 use ic_types::{
-    CanisterId, NodeId, PrincipalId, SubnetId,
+    CanisterId, Height, NodeId, PrincipalId, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
@@ -417,7 +417,7 @@ fn split_inverted_routing_table(
 }
 
 /// Converts replicated state into a lazy tree.
-pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
+pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
         MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version
@@ -442,13 +442,13 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
                 )
             })
             .with("metadata", move || {
-                system_metadata_as_tree(&state.metadata, certification_version)
+                system_metadata_as_tree(&state.metadata, height, certification_version)
             })
             .with("streams", move || {
                 streams_as_tree(state.streams(), own_subnet_id, certification_version)
             })
             .with("canister", move || {
-                canisters_as_tree(&state.canister_states, certification_version)
+                canisters_as_tree(state.canister_states(), certification_version)
             })
             .with_tree(
                 "request_status",
@@ -550,11 +550,64 @@ fn streams_as_tree<'a>(
     }
 }
 
+const HEIGHT_LABEL: &[u8] = b"height";
+const PREV_STATE_HASH_LABEL: &[u8] = b"prev_state_hash";
+
+const METADATA_LABELS: [&[u8]; 2] = [HEIGHT_LABEL, PREV_STATE_HASH_LABEL];
+
+#[derive(Clone)]
+struct MetadataFork<'a> {
+    height: Height,
+    metadata: &'a SystemMetadata,
+}
+
+impl<'a> LazyFork<'a> for MetadataFork<'a> {
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
+        match label.as_bytes() {
+            HEIGHT_LABEL => Some(num(self.height.get())),
+            PREV_STATE_HASH_LABEL => self
+                .metadata
+                .prev_state_hash
+                .as_ref()
+                .map(|hash| Blob(hash.as_ref().0.as_slice(), None)),
+            _ => None,
+        }
+    }
+
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + 'a> {
+        let fork = self.clone();
+        Box::new(
+            METADATA_LABELS
+                .iter()
+                .filter(move |label| fork.edge(&Label::from(label)).is_some())
+                .map(From::from),
+        )
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
+        let fork = self.clone();
+        Box::new(METADATA_LABELS.iter().filter_map(move |label| {
+            let label = Label::from(label);
+            let edge = fork.edge(&label)?;
+            Some((label, edge))
+        }))
+    }
+
+    fn len(&self) -> usize {
+        self.labels().count()
+    }
+}
+
 fn system_metadata_as_tree(
-    m: &SystemMetadata,
-    certification_version: CertificationVersion,
+    metadata: &SystemMetadata,
+    height: Height,
+    version: CertificationVersion,
 ) -> LazyTree<'_> {
-    blob(move || encode_metadata(m, certification_version))
+    if version >= CertificationVersion::V24 {
+        fork(MetadataFork { height, metadata })
+    } else {
+        blob(move || encode_metadata(metadata, version))
+    }
 }
 
 struct IngressHistoryFork<'a>(&'a IngressHistoryState);

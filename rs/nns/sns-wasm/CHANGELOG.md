@@ -7,7 +7,26 @@ The process that populates this file is described in
 `rs/nervous_system/changelog_process.md`. In general though, the entries you see
 here were moved from the adjacent `unreleased_changelog.md` file.
 
+
 INSERT NEW RELEASES HERE
+
+
+# 2026-02-10: Proposal 140315
+
+http://dashboard.internetcomputer.org/proposal/140315
+
+## Added
+
+- Pass through a `CustomProposalCriticality` field so that SNSes can specify additional critical proposal types at launch.
+
+
+# 2026-01-23: Proposal 140098
+
+http://dashboard.internetcomputer.org/proposal/140098
+
+## Changed
+
+* Allow creating a service nervous system with up to 100 dapp canisters, instead of just 25.
 
 # 2024-10-03: Proposal 138826
 

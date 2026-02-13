@@ -556,6 +556,7 @@ pub mod proposal {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2492,7 +2493,6 @@ pub mod create_service_nervous_system {
         comparable::Comparable,
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
-        Copy,
         PartialEq,
         ::prost::Message,
     )]
@@ -2526,6 +2526,11 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "10")]
         pub voting_reward_parameters:
             ::core::option::Option<governance_parameters::VotingRewardParameters>,
+        /// Custom proposal criticality configuration. Allows specifying additional native function IDs
+        /// that should be considered critical, requiring a higher level of consensus.
+        #[prost(message, optional, tag = "11")]
+        pub custom_proposal_criticality:
+            ::core::option::Option<governance_parameters::CustomProposalCriticality>,
     }
     /// Nested message and enum types in `GovernanceParameters`.
     pub mod governance_parameters {
@@ -2550,6 +2555,20 @@ pub mod create_service_nervous_system {
             #[prost(message, optional, tag = "3")]
             pub reward_rate_transition_duration:
                 ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct CustomProposalCriticality {
+            #[prost(uint64, repeated, tag = "1")]
+            pub additional_critical_native_action_ids: ::prost::alloc::vec::Vec<u64>,
         }
     }
 }
@@ -2855,6 +2874,7 @@ pub struct BlessAlternativeGuestOsVersion {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,

@@ -60,13 +60,6 @@ pub mod common;
 pub mod ecdsa;
 pub mod schnorr;
 
-/// If enabled, pre-signature artifacts required to serve canister threshold signature requests
-/// (tECDSA/tSchnorr) will be stored in the pre-signature stash residing in replicated state.
-/// This means they will be immediately purged from the blockchain once delivered.
-/// If disabled, pre-signatures remain on the blockchain, until they are consumed by a signature
-/// request.
-pub const STORE_PRE_SIGNATURES_IN_STATE: bool = false;
-
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
 /// to prevent signatures from being reported more than once.
@@ -924,7 +917,7 @@ impl IDkgMessage {
 impl From<IDkgMessage> for pb::IDkgMessage {
     fn from(value: IDkgMessage) -> Self {
         use pb::i_dkg_message::Msg;
-        let msg = match &value {
+        let msg = match value {
             IDkgMessage::Dealing(x) => Msg::SignedDealing(x.into()),
             IDkgMessage::DealingSupport(x) => Msg::DealingSupport(x.into()),
             IDkgMessage::EcdsaSigShare(x) => Msg::EcdsaSigShare(x.into()),
@@ -942,10 +935,10 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
 
     fn try_from(proto: pb::IDkgMessage) -> Result<Self, Self::Error> {
         use pb::i_dkg_message::Msg;
-        let Some(msg) = &proto.msg else {
+        let Some(msg) = proto.msg else {
             return Err(ProxyDecodeError::MissingField("IDkgMessage::msg"));
         };
-        Ok(match &msg {
+        Ok(match msg {
             Msg::SignedDealing(x) => IDkgMessage::Dealing(x.try_into()?),
             Msg::DealingSupport(x) => IDkgMessage::DealingSupport(x.try_into()?),
             Msg::EcdsaSigShare(x) => IDkgMessage::EcdsaSigShare(x.try_into()?),
@@ -1450,27 +1443,27 @@ pub struct EcdsaSigShare {
     pub share: ThresholdEcdsaSigShare,
 }
 
-impl From<&EcdsaSigShare> for pb::EcdsaSigShare {
-    fn from(value: &EcdsaSigShare) -> Self {
+impl From<EcdsaSigShare> for pb::EcdsaSigShare {
+    fn from(value: EcdsaSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
             request_id: Some(pb::RequestId::from(value.request_id)),
-            sig_share_raw: value.share.sig_share_raw.clone(),
+            sig_share_raw: value.share.sig_share_raw,
         }
     }
 }
 
-impl TryFrom<&pb::EcdsaSigShare> for EcdsaSigShare {
+impl TryFrom<pb::EcdsaSigShare> for EcdsaSigShare {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::EcdsaSigShare) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::EcdsaSigShare) -> Result<Self, Self::Error> {
         Ok(Self {
-            signer_id: node_id_try_from_option(value.signer_id.clone())?,
+            signer_id: node_id_try_from_option(value.signer_id)?,
             request_id: try_from_option_field(
                 value.request_id.as_ref(),
                 "EcdsaSigShare::request_id",
             )?,
             share: ThresholdEcdsaSigShare {
-                sig_share_raw: value.sig_share_raw.clone(),
+                sig_share_raw: value.sig_share_raw,
             },
         })
     }
@@ -1499,27 +1492,27 @@ pub struct SchnorrSigShare {
     pub share: ThresholdSchnorrSigShare,
 }
 
-impl From<&SchnorrSigShare> for pb::SchnorrSigShare {
-    fn from(value: &SchnorrSigShare) -> Self {
+impl From<SchnorrSigShare> for pb::SchnorrSigShare {
+    fn from(value: SchnorrSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
             request_id: Some(pb::RequestId::from(value.request_id)),
-            sig_share_raw: value.share.sig_share_raw.clone(),
+            sig_share_raw: value.share.sig_share_raw,
         }
     }
 }
 
-impl TryFrom<&pb::SchnorrSigShare> for SchnorrSigShare {
+impl TryFrom<pb::SchnorrSigShare> for SchnorrSigShare {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::SchnorrSigShare) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::SchnorrSigShare) -> Result<Self, Self::Error> {
         Ok(Self {
-            signer_id: node_id_try_from_option(value.signer_id.clone())?,
+            signer_id: node_id_try_from_option(value.signer_id)?,
             request_id: try_from_option_field(
                 value.request_id.as_ref(),
                 "SchnorrSigShare::request_id",
             )?,
             share: ThresholdSchnorrSigShare {
-                sig_share_raw: value.sig_share_raw.clone(),
+                sig_share_raw: value.sig_share_raw,
             },
         })
     }
@@ -1548,31 +1541,29 @@ pub struct VetKdKeyShare {
     pub share: VetKdEncryptedKeyShare,
 }
 
-impl From<&VetKdKeyShare> for pb::VetKdKeyShare {
-    fn from(value: &VetKdKeyShare) -> Self {
+impl From<VetKdKeyShare> for pb::VetKdKeyShare {
+    fn from(value: VetKdKeyShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
             request_id: Some(pb::RequestId::from(value.request_id)),
-            encrypted_key_share: value.share.encrypted_key_share.0.clone(),
-            node_signature: value.share.node_signature.clone(),
+            encrypted_key_share: value.share.encrypted_key_share.0,
+            node_signature: value.share.node_signature,
         }
     }
 }
 
-impl TryFrom<&pb::VetKdKeyShare> for VetKdKeyShare {
+impl TryFrom<pb::VetKdKeyShare> for VetKdKeyShare {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::VetKdKeyShare) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::VetKdKeyShare) -> Result<Self, Self::Error> {
         Ok(Self {
-            signer_id: node_id_try_from_option(value.signer_id.clone())?,
+            signer_id: node_id_try_from_option(value.signer_id)?,
             request_id: try_from_option_field(
                 value.request_id.as_ref(),
                 "VetKdKeyShare::request_id",
             )?,
             share: VetKdEncryptedKeyShare {
-                encrypted_key_share: VetKdEncryptedKeyShareContent(
-                    value.encrypted_key_share.clone(),
-                ),
-                node_signature: value.node_signature.clone(),
+                encrypted_key_share: VetKdEncryptedKeyShareContent(value.encrypted_key_share),
+                node_signature: value.node_signature,
             },
         })
     }
@@ -1645,42 +1636,39 @@ impl SignedIDkgComplaint {
     }
 }
 
-impl From<&SignedIDkgComplaint> for pb::SignedIDkgComplaint {
-    fn from(value: &SignedIDkgComplaint) -> Self {
+impl From<SignedIDkgComplaint> for pb::SignedIDkgComplaint {
+    fn from(value: SignedIDkgComplaint) -> Self {
         Self {
-            content: Some((&value.content).into()),
-            signature: Some(value.signature.clone().into()),
+            content: Some(value.content.into()),
+            signature: Some(value.signature.into()),
         }
     }
 }
 
-impl TryFrom<&pb::SignedIDkgComplaint> for SignedIDkgComplaint {
+impl TryFrom<pb::SignedIDkgComplaint> for SignedIDkgComplaint {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::SignedIDkgComplaint) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::SignedIDkgComplaint) -> Result<Self, Self::Error> {
         Ok(Self {
-            content: try_from_option_field(value.content.as_ref(), "SignedIDkgComplaint::content")?,
-            signature: try_from_option_field(
-                value.signature.clone(),
-                "SignedIDkgComplaint::signature",
-            )?,
+            content: try_from_option_field(value.content, "SignedIDkgComplaint::content")?,
+            signature: try_from_option_field(value.signature, "SignedIDkgComplaint::signature")?,
         })
     }
 }
 
-impl From<&IDkgComplaintContent> for pb::IDkgComplaintContent {
-    fn from(value: &IDkgComplaintContent) -> Self {
+impl From<IDkgComplaintContent> for pb::IDkgComplaintContent {
+    fn from(value: IDkgComplaintContent) -> Self {
         Self {
-            idkg_complaint: Some((&value.idkg_complaint).into()),
+            idkg_complaint: Some(value.idkg_complaint.into()),
         }
     }
 }
 
-impl TryFrom<&pb::IDkgComplaintContent> for IDkgComplaintContent {
+impl TryFrom<pb::IDkgComplaintContent> for IDkgComplaintContent {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::IDkgComplaintContent) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::IDkgComplaintContent) -> Result<Self, Self::Error> {
         Ok(Self {
             idkg_complaint: try_from_option_field(
-                value.idkg_complaint.as_ref(),
+                value.idkg_complaint,
                 "IDkgComplaintContent::idkg_complaint",
             )?,
         })
@@ -1725,42 +1713,39 @@ impl SignedIDkgOpening {
     }
 }
 
-impl From<&SignedIDkgOpening> for pb::SignedIDkgOpening {
-    fn from(value: &SignedIDkgOpening) -> Self {
+impl From<SignedIDkgOpening> for pb::SignedIDkgOpening {
+    fn from(value: SignedIDkgOpening) -> Self {
         Self {
-            content: Some((&value.content).into()),
-            signature: Some(value.signature.clone().into()),
+            content: Some(value.content.into()),
+            signature: Some(value.signature.into()),
         }
     }
 }
 
-impl TryFrom<&pb::SignedIDkgOpening> for SignedIDkgOpening {
+impl TryFrom<pb::SignedIDkgOpening> for SignedIDkgOpening {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::SignedIDkgOpening) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::SignedIDkgOpening) -> Result<Self, Self::Error> {
         Ok(Self {
-            content: try_from_option_field(value.content.as_ref(), "SignedIDkgOpening::content")?,
-            signature: try_from_option_field(
-                value.signature.clone(),
-                "SignedIDkgOpening::signature",
-            )?,
+            content: try_from_option_field(value.content, "SignedIDkgOpening::content")?,
+            signature: try_from_option_field(value.signature, "SignedIDkgOpening::signature")?,
         })
     }
 }
 
-impl From<&IDkgOpeningContent> for pb::IDkgOpeningContent {
-    fn from(value: &IDkgOpeningContent) -> Self {
+impl From<IDkgOpeningContent> for pb::IDkgOpeningContent {
+    fn from(value: IDkgOpeningContent) -> Self {
         Self {
-            idkg_opening: Some((&value.idkg_opening).into()),
+            idkg_opening: Some(value.idkg_opening.into()),
         }
     }
 }
 
-impl TryFrom<&pb::IDkgOpeningContent> for IDkgOpeningContent {
+impl TryFrom<pb::IDkgOpeningContent> for IDkgOpeningContent {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::IDkgOpeningContent) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::IDkgOpeningContent) -> Result<Self, Self::Error> {
         Ok(Self {
             idkg_opening: try_from_option_field(
-                value.idkg_opening.as_ref(),
+                value.idkg_opening,
                 "IDkgOpeningContent::idkg_opening",
             )?,
         })

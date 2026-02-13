@@ -503,7 +503,6 @@ impl CyclesAccountManager {
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
-        canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
@@ -515,7 +514,7 @@ impl CyclesAccountManager {
             system_state.memory_allocation,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
-            canister_compute_allocation,
+            system_state.compute_allocation,
             subnet_size,
             cost_schedule,
             system_state.reserved_balance(),
@@ -543,14 +542,12 @@ impl CyclesAccountManager {
     ) -> Result<(), CanisterOutOfCyclesError> {
         let memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
-        let compute_allocation = canister.compute_allocation();
         let cycles = self.execution_cost(amount, subnet_size, cost_schedule, execution_mode);
         let reveal_top_up = canister.controllers().contains(sender);
         self.consume_cycles(
             &mut canister.system_state,
             memory_usage,
             message_memory,
-            compute_allocation,
             cycles,
             subnet_size,
             cost_schedule,
@@ -1024,7 +1021,6 @@ impl CyclesAccountManager {
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
-        canister_compute_allocation: ComputeAllocation,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         reveal_top_up: bool,
@@ -1034,7 +1030,7 @@ impl CyclesAccountManager {
             system_state.memory_allocation,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
-            canister_compute_allocation,
+            system_state.compute_allocation,
             subnet_size,
             cost_schedule,
             system_state.reserved_balance(),
@@ -1090,7 +1086,7 @@ impl CyclesAccountManager {
                 };
 
                 self.verify_cycles_balance_with_threshold(
-                    system_state.canister_id,
+                    system_state.canister_id(),
                     effective_cycles_balance,
                     cycles,
                     threshold,

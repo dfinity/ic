@@ -65,7 +65,7 @@ static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!(env!("MAINNET_ROUTING_TABLE
 
 #[derive(Parser)]
 #[clap(name = "pocket-ic-server")]
-#[clap(version = "11.0.0")]
+#[clap(version = "12.0.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]

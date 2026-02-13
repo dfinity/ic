@@ -1,7 +1,5 @@
-use std::time::Duration;
-
+use crate::units::GIB;
 use assert_matches::assert_matches;
-
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
@@ -18,6 +16,8 @@ use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
+use more_asserts::assert_gt;
+use std::time::Duration;
 
 use ic_config::embedders::StableMemoryPageLimit;
 use ic_test_utilities_execution_environment::{
@@ -1033,11 +1033,11 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts(
             .system_state
             .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
-        assert!(
+        assert_gt!(
             test.canister_state(a_id)
                 .system_state
-                .ingress_induction_cycles_debit()
-                > Cycles::zero()
+                .ingress_induction_cycles_debit(),
+            Cycles::zero()
         );
 
         test.abort_all_paused_executions();
@@ -1148,9 +1148,6 @@ fn stable_grow_updates_subnet_available_memory() {
 
 #[test]
 fn stable_grow_returns_allocated_memory_on_error() {
-    const KB: u64 = 1024;
-    const GB: u64 = KB * KB * KB;
-
     // Create a canister which already has stable memory too big for the 32-bit
     // API.
     let mut test = ExecutionTestBuilder::new().build();
@@ -1158,7 +1155,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
         .universal_canister_with_cycles(Cycles::new(100_000_000_000_000))
         .unwrap();
     let payload = wasm()
-        .stable64_grow((4 * GB / WASM_PAGE_SIZE_IN_BYTES as u64) + 1)
+        .stable64_grow((4 * GIB / WASM_PAGE_SIZE_IN_BYTES as u64) + 1)
         .int64_to_blob()
         .append_and_reply()
         .build();
@@ -1204,18 +1201,18 @@ fn test_call_context_instructions_executed_is_updated_on_ok_update() {
     // Enqueue ingress message to canister A.
     let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
     assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 1);
 
     // Execute canister A ingress.
     test.execute_message(a_id);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 2);
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
 
     // Make sure the `instructions_executed` is updated.
     let instructions_executed_a_1 = call_context.instructions_executed();
-    assert!(instructions_executed_a_1 > 0.into());
+    assert_gt!(instructions_executed_a_1, 0.into());
 }
 
 #[test]
@@ -1232,11 +1229,11 @@ fn test_call_context_instructions_executed_is_updated_on_err_update() {
     // Enqueue ingress message to canister A.
     let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
     assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 1);
 
     // Execute canister A ingress.
     test.execute_message(a_id);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 1);
 
     // Make sure the execution was not ok.
     let call_context_manager = test

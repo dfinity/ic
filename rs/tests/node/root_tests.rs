@@ -1,7 +1,7 @@
 use anyhow::Result;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{SshSession, get_dependency_path};
+use ic_system_test_driver::driver::test_env_api::{SshSession, get_dependency_path_from_env};
 use ic_system_test_driver::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_system_test_driver::systest;
 use slog::info;
@@ -13,9 +13,8 @@ fn setup(env: TestEnv) {
 
     info!(log, "Starting new universal VM");
     UniversalVm::new(UNIVERSAL_VM_NAME.into())
-        .with_config_img(get_dependency_path(
-            std::env::var("NODE_ROOT_TESTS_UVM_CONFIG_PATH")
-                .expect("NODE_ROOT_TESTS_UVM_CONFIG_PATH not set"),
+        .with_config_img(get_dependency_path_from_env(
+            "NODE_ROOT_TESTS_UVM_CONFIG_PATH",
         ))
         .start(&env)
         .expect("failed to setup universal VM");

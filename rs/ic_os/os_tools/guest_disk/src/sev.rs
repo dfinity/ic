@@ -4,8 +4,8 @@ use crate::crypt::{
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
 use config_types::GuestVMType;
-use ic_sev::guest::firmware::SevGuestFirmware;
-use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
+use sev_guest::firmware::SevGuestFirmware;
+use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::fs;
 use std::path::Path;
 

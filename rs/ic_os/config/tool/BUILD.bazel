@@ -12,7 +12,7 @@ DEPENDENCIES = [
     "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/networking/network",
-    "//rs/ic_os/sev",
+    "//rs/ic_os/sev/guest",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
@@ -25,9 +25,9 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:url",
-    "@crate_index//:walkdir",
 ]
 
 TEST_DEPENDENCIES = [
@@ -36,7 +36,9 @@ TEST_DEPENDENCIES = [
     "@crate_index//:tempfile",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:securefmt",
+]
 
 ALIASES = {}
 

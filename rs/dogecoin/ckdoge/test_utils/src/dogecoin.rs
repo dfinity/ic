@@ -141,6 +141,7 @@ impl DogecoinDaemon {
                     if start.elapsed() > TIMEOUT {
                         panic!("Timed out when waiting for dogecoind; last error: {err}");
                     }
+                    self.env.tick();
                     std::thread::sleep(WAITING);
                 }
                 Err(err) => panic!("Unexpected error when talking to dogecoind: {err:?}"),

@@ -9,8 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-backon = "0.4.1"
-base64 = { workspace = true }
+bare_metal_deployment = { path = "../../ic_os/dev_test_tools/bare_metal_deployment" }
 bincode = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
@@ -27,19 +26,15 @@ ed25519-dalek = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
-humantime = { workspace = true }
 humantime-serde = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
-ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-config = { path = "../../config" }
 ic-limits = { path = "../../limits" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-icrc1 = { path = "../../ledger_suite/icrc1" }
-ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
@@ -74,26 +69,22 @@ ic-sns-swap = { path = "../../sns/swap" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sys = { path = "../../sys" }
 ic-test-identity = { path = "../../test_utilities/identity" }
-ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
-json5 = "0.4.1"
 lazy_static = { workspace = true }
 macaddr = { workspace = true }
 nix = { workspace = true }
 num_cpus = "1.13.1"
 on_wire = { path = "../../rust_canisters/on_wire" }
-once_cell = "1.18.0"
 phantom_newtype = { path = "../../phantom_newtype" }
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 regex = { workspace = true }
-serde_regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
@@ -101,20 +92,17 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+serde_regex = { workspace = true }
 serde_yaml = { workspace = true }
 setupos-image-config = { path = "../../ic_os/dev_test_tools/setupos-image-config" }
 slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
 ssh2 = { workspace = true }
-strum = { workspace = true }
-strum_macros = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { workspace = true }
-tracing = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
 wat = { workspace = true }

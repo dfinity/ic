@@ -338,6 +338,11 @@ def parse_args() -> argparse.Namespace:
         default="systems",
         help="Which source to download from: .systems, .network, or both (default: systems).",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Dry-run: run script without running repro-check.",
+    )
 
     args = parser.parse_args()
     # If user didn't specify any OS flags, check all four
@@ -945,7 +950,7 @@ class ReproducibilityVerifier:
     # --------------------------------------------------------------------------
     # MAIN RUN
     # --------------------------------------------------------------------------
-    def run(self) -> None:
+    def run(self, dry_run: bool=False) -> None:
         """Main entry point for reproducibility verification logic."""
         start_time = time.time()
 
@@ -963,6 +968,11 @@ class ReproducibilityVerifier:
 
             # Environment checks can happen while downloads progress
             self.check_environment()
+
+            if dry_run:
+                build.result()
+                logger.info("Dry-run mode enabled and local build finished; exiting.")
+                return
 
             # Verifications after downloads.  They take futures and await for them to be finished.
             self.verify_proposal_artifacts(downloads_for_proposal)
@@ -996,7 +1006,8 @@ def main() -> None:
         keep_temp=bool(args.debug),
     )
     try:
-        verifier.run()
+        dry_run = True if args.dry_run else False
+        verifier.run(dry_run)
     except VerificationError as e:
         logger.critical("%s", e)
         sys.exit(1)

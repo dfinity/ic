@@ -9,7 +9,7 @@ use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::{
-    CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting,
+    CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting,
 };
 use ic_replicated_state::{CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology};
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -51,7 +51,7 @@ lazy_static! {
 }
 
 #[test]
-fn test_signals_end_metric_exported() {
+fn test_signals_metrics_exported() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut state, metrics_registry) = new_fixture(&log);
 
@@ -64,6 +64,10 @@ fn test_signals_end_metric_exported() {
 
         stream_builder.build_streams(state);
 
+        assert_eq!(
+            metric_vec(&[(&[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())], 42)]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_SIGNALS)
+        );
         assert_eq!(
             metric_vec(&[(
                 &[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())],
@@ -93,7 +97,7 @@ fn reject_local_request() {
 
         // With a reservation on an input queue.
         let payment = Cycles::new(100);
-        let callback_id = register_callback(&mut canister_state, sender, receiver, NO_DEADLINE);
+        let callback_id = register_callback(&mut canister_state, receiver, NO_DEADLINE);
         let msg = generate_message_for_test(
             sender,
             receiver,
@@ -203,7 +207,10 @@ fn build_streams_success() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -235,6 +242,10 @@ fn build_streams_success() {
                 expected_stream_begin
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN)
+        );
+        assert_eq!(
+            metric_vec(&[(&[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())], 0)]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_SIGNALS)
         );
         assert_eq!(
             metric_vec(&[(
@@ -305,7 +316,10 @@ fn build_streams_local_canisters() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -485,7 +499,10 @@ fn build_streams_respects_limits(
         // Act.
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 
@@ -564,7 +581,10 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -641,7 +661,10 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -1172,7 +1195,10 @@ fn build_streams_with_oversized_payloads() {
         // Act
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 
@@ -1581,8 +1607,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
 
         match msg {
             RequestOrResponse::Request(req) => {
-                let callback_id =
-                    register_callback(canister_state, req.sender, req.receiver, req.deadline);
+                let callback_id = register_callback(canister_state, req.receiver, req.deadline);
                 // Check the implicit assumption that the test messages were generated with a
                 // `sender_reply_callback` that is consistent with the callback IDs that the
                 // `CallContextManager` generates and registers.

@@ -6,11 +6,10 @@ mod api_native_conversion;
 
 use chrono::{DateTime, Datelike, NaiveDate};
 use rewards_calculation::AlgorithmVersion;
-use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
+use rewards_calculation::performance_based_algorithm::v2::RewardsCalculationV2;
 use std::fmt::Display;
 
 // This is the version of the rewards calculation algorithm that is used to calculate rewards.
-// Currently, RewardsCalculationV1::VERSION is the only algorithm version supported.
 #[derive(candid::CandidType, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RewardsCalculationAlgorithmVersion {
     pub version: u32,
@@ -19,7 +18,7 @@ pub struct RewardsCalculationAlgorithmVersion {
 impl Default for RewardsCalculationAlgorithmVersion {
     fn default() -> Self {
         Self {
-            version: RewardsCalculationV1::VERSION,
+            version: RewardsCalculationV2::VERSION,
         }
     }
 }

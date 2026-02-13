@@ -14,6 +14,9 @@ use crate::{
     range_size_in_bytes,
 };
 
+#[cfg(feature = "sigsegv_handler_checksum")]
+use crate::checksum;
+
 #[cfg(test)]
 mod tests;
 
@@ -480,52 +483,4 @@ pub fn prefetching_signal_handler(
 
 fn range_from_count(page: PageIndex, count: NumOsPages) -> Range<PageIndex> {
     PageIndex::new(page.get().saturating_sub(count.get()))..PageIndex::new(page.get() + count.get())
-}
-
-#[cfg(feature = "sigsegv_handler_checksum")]
-mod checksum {
-    use std::io::Write;
-
-    use crate::AccessKind;
-
-    #[derive(Default)]
-    pub(super) struct SigsegChecksum {
-        value: usize,
-        index: usize,
-    }
-
-    impl SigsegChecksum {
-        pub(super) fn record_access(
-            &mut self,
-            base_addr: usize,
-            access_addr: *const libc::c_void,
-            access_kind: AccessKind,
-        ) {
-            self.index += 1;
-            self.value += self
-                .index
-                .wrapping_mul(access_addr as usize - base_addr)
-                .wrapping_mul(match access_kind {
-                    AccessKind::Read => 1,
-                    AccessKind::Write => 1 << 32,
-                });
-        }
-    }
-
-    impl Drop for SigsegChecksum {
-        fn drop(&mut self) {
-            let output_file = std::env::var("CHECKSUM_FILE").unwrap();
-            let mut file = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(output_file)
-                .unwrap();
-            writeln!(
-                file,
-                "Memory tracker completed with checksum {}",
-                self.value
-            )
-            .unwrap();
-        }
-    }
 }

@@ -8,8 +8,8 @@ use config_types::GuestOSConfig;
 use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
 use guest_disk::sev::SevDiskEncryption;
 use guest_disk::{DEFAULT_PREVIOUS_SEV_KEY_PATH, DiskEncryption, Partition, crypt_name};
-use ic_sev::guest::firmware::SevGuestFirmware;
 use nix::unistd::getuid;
+use sev_guest::firmware::SevGuestFirmware;
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
     run(
         args,
         &guestos_config,
-        ic_sev::guest::is_sev_active().context("Failed to check if SEV is active")?,
+        sev_guest::is_sev_active().context("Failed to check if SEV is active")?,
         || {
             ::sev::firmware::guest::Firmware::open()
                 .context("Failed to open /dev/sev-guest")

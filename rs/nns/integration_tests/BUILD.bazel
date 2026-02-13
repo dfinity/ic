@@ -170,7 +170,7 @@ DEV_DATA = [
     "//rs/sns/swap:sns-swap-canister",
     "//rs/universal_canister/impl:universal_canister.wasm.gz",
     "@cycles-ledger.wasm.gz//file",
-    "@subnet_rental_canister//file",
+    "@mainnet_canisters//:subnet_rental.wasm.gz",
 ]
 
 DEV_ENV = {
@@ -201,7 +201,7 @@ DEV_ENV = {
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
-    "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:subnet_rental.wasm.gz)",
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
 }

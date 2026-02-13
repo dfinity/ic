@@ -1,4 +1,5 @@
 use crate::*;
+use ic_crypto_sha2::Sha256;
 use ic_types::NodeIndex;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -312,42 +313,32 @@ impl EccScalar {
     pub fn hash_to_scalar(
         curve: EccCurveType,
         input: &[u8],
-        domain_separator: &[u8],
+        dst: &[u8],
     ) -> CanisterThresholdResult<Self> {
-        let h = Self::hash_to_several_scalars(curve, 1, input, domain_separator)?;
-        Ok(h[0].clone())
+        match curve {
+            EccCurveType::Ed25519 | EccCurveType::K256 | EccCurveType::P256 => {
+                const XMD_LEN: usize = 48; // "L" in RFC 9380 for this curve
+                let ub = ic_crypto_internal_seed::xmd::<XMD_LEN, Sha256>(input, dst);
+                EccScalar::from_bytes_wide(curve, &ub)
+            }
+        }
     }
 
     /// Hash an input into multiple Scalar values
-    pub fn hash_to_several_scalars(
+    pub fn hash_to_two_scalars(
         curve: EccCurveType,
-        count: usize,
         input: &[u8],
-        domain_separator: &[u8],
-    ) -> CanisterThresholdResult<Vec<Self>> {
-        let s_bits = curve.scalar_bits();
-        let security_level = curve.security_level();
-
-        let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
-        let len_in_bytes = count * field_len;
-
-        let uniform_bytes = ic_crypto_internal_seed::xmd::<ic_crypto_sha2::Sha256>(
-            input,
-            domain_separator,
-            len_in_bytes,
-        )?;
-
-        let mut out = Vec::with_capacity(count);
-
-        for i in 0..count {
-            let s = EccScalar::from_bytes_wide(
-                curve,
-                &uniform_bytes[i * field_len..(i + 1) * field_len],
-            )?;
-            out.push(s);
+        dst: &[u8],
+    ) -> CanisterThresholdResult<(Self, Self)> {
+        match curve {
+            EccCurveType::Ed25519 | EccCurveType::K256 | EccCurveType::P256 => {
+                const XMD_LEN: usize = 48; // "L" in RFC 9380 for this curve
+                let ub = ic_crypto_internal_seed::xmd::<{ 2 * XMD_LEN }, Sha256>(input, dst);
+                let s0 = EccScalar::from_bytes_wide(curve, &ub[..XMD_LEN])?;
+                let s1 = EccScalar::from_bytes_wide(curve, &ub[XMD_LEN..])?;
+                Ok((s0, s1))
+            }
         }
-
-        Ok(out)
     }
 
     /// Deserialize a scalar value (with tag)

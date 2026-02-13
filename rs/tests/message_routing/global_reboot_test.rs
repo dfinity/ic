@@ -36,7 +36,7 @@ use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
-    get_dependency_path,
+    get_dependency_path_from_env,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
@@ -45,7 +45,6 @@ use ic_system_test_driver::util::{
 };
 use itertools::Itertools;
 use slog::{Logger, info};
-use std::env;
 use std::time::Duration;
 use tokio::time::sleep;
 use xnet_test::{Metrics, StartArgs};
@@ -98,9 +97,7 @@ pub fn test_on_subnets(env: TestEnv, subnets: Vec<SubnetSnapshot>) {
         .map(|n| runtime_from_url(n.get_public_url(), n.effective_canister_id()))
         .collect();
     // Step 1: Install Xnet canisters on each subnet.
-    let wasm = Wasm::from_file(get_dependency_path(
-        env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set"),
-    ));
+    let wasm = Wasm::from_file(get_dependency_path_from_env("XNET_TEST_CANISTER_WASM_PATH"));
     info!(log, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(&runtimes, SUBNETS_COUNT, CANISTERS_PER_SUBNET, wasm);
     let canisters_count = canisters.iter().map(Vec::len).sum::<usize>();
@@ -123,7 +120,7 @@ pub fn test_on_subnets(env: TestEnv, subnets: Vec<SubnetSnapshot>) {
     // Step 5: Reboot all nodes and wait till they become reachable again.
     info!(log, "Rebooting all nodes ...");
     for n in all_nodes.iter().cloned() {
-        block_on(async { n.vm().await.reboot().await });
+        n.vm().reboot();
         assert_nodes_health_statuses(log.clone(), &[n], EndpointsStatus::AllUnhealthy);
     }
     info!(log, "Waiting for endpoints to be reachable again ...");

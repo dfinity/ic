@@ -10,12 +10,14 @@ use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
+use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_nns_constants::{BITCOIN_MAINNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID};
 use ic_nns_governance_api::{
     SelfDescribingValue,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
+use ic_nns_handler_lifeline_interface::HardResetNnsRootToVersionPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use maplit::hashmap;
 use std::sync::Arc;
@@ -122,6 +124,8 @@ fn test_execute_nns_function_try_from_errors() {
     }
 }
 
+// This tests a "normal" NNS function where the payload is translated through a candid file fetched
+// by the `canister_metadata` method on the management canister.
 #[tokio::test]
 async fn test_to_self_describing_update_subnet_type() {
     // Minimal CMC candid file with only update_subnet_type method
@@ -230,9 +234,7 @@ async fn test_to_self_describing_uninstall_code() {
         SelfDescribingValue::from(result.value.unwrap()),
         SelfDescribingValue::Map(hashmap! {
             "canister_id".to_string() => SelfDescribingValue::from(target_canister.to_string()),
-            "sender_canister_version".to_string() => SelfDescribingValue::Array(vec![
-                SelfDescribingValue::from(42_u64),
-            ]),
+            "sender_canister_version".to_string() => SelfDescribingValue::from(42_u64),
         })
     );
 }
@@ -261,7 +263,7 @@ async fn test_to_self_describing_bitcoin_set_config() {
     assert!(
         result
             .type_description
-            .contains("set the configuration of the underlying Bitcoin")
+            .contains("Set the configuration of the underlying Bitcoin Canister")
     );
     assert_eq!(
         SelfDescribingValue::from(result.value.unwrap()),
@@ -299,7 +301,7 @@ async fn test_to_self_describing_subnet_rental_request() {
     assert!(
         result
             .type_description
-            .contains("A proposal to rent a subnet on the Internet Computer")
+            .contains("Rent a subnet on the Internet Computer")
     );
     assert_eq!(
         SelfDescribingValue::from(result.value.unwrap()),
@@ -415,4 +417,120 @@ fn test_re_encode_payload_to_target_canister_overrides_proposal_id_for_add_wasm(
 
     let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
     assert_eq!(decoded.wasm.unwrap().proposal_id.unwrap(), proposal_id);
+}
+
+#[tokio::test]
+async fn test_to_self_describing_nns_canister_install() {
+    let root_candid =
+        std::fs::read_to_string("rs/nns/handlers/root/impl/canister/root.did").unwrap();
+
+    let wasm_module = vec![0_u8, 0x61, 0x73, 0x6D, 1_u8, 0_u8, 0_u8, 0_u8];
+    let arg = vec![1_u8, 2_u8, 3_u8];
+
+    let request = AddCanisterRequest {
+        name: "test-canister".to_string(),
+        wasm_module: wasm_module.clone(),
+        arg: arg.clone(),
+        initial_cycles: 1_000_000_000_000_u64,
+        compute_allocation: None,
+        memory_allocation: None,
+    };
+    let payload = Encode!(&request).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::NnsCanisterInstall,
+        payload,
+    };
+
+    let metadata_request = CanisterMetadataRequest::new(
+        ic_nns_constants::ROOT_CANISTER_ID,
+        "candid:service".to_string(),
+    );
+    let metadata_response = CanisterMetadataResponse::new(root_candid.as_bytes().to_vec());
+
+    let expected_metadata_call = ExpectedCallCanisterMethodCallArguments::new(
+        CanisterId::ic_00(),
+        "canister_metadata",
+        Encode!(&metadata_request).unwrap(),
+    );
+
+    let env = Arc::new(MockEnvironment::new(
+        vec![(
+            expected_metadata_call,
+            Ok(Encode!(&metadata_response).unwrap()),
+        )],
+        0_u64,
+    ));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    let wasm_hash = Sha256::hash(&wasm_module).to_vec();
+    let arg_hash = Sha256::hash(&arg).to_vec();
+
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "wasm_module_hash".to_string() => SelfDescribingValue::from(wasm_hash),
+            "arg_hash".to_string() => SelfDescribingValue::from(arg_hash),
+            "initial_cycles".to_string() => SelfDescribingValue::from(1_000_000_000_000_u64),
+            "name".to_string() => SelfDescribingValue::from("test-canister"),
+            "memory_allocation".to_string() => SelfDescribingValue::Null,
+            "compute_allocation".to_string() => SelfDescribingValue::Null,
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_hard_reset_nns_root_to_version() {
+    let lifeline_candid =
+        std::fs::read_to_string("rs/nns/handlers/lifeline/impl/lifeline.did").unwrap();
+
+    let wasm_module = vec![0_u8, 0x61, 0x73, 0x6D, 1_u8, 0_u8, 0_u8, 0_u8];
+    let init_arg = vec![4_u8, 5_u8, 6_u8];
+
+    let request = HardResetNnsRootToVersionPayload {
+        wasm_module: wasm_module.clone(),
+        init_arg: init_arg.clone(),
+    };
+    let payload = Encode!(&request).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::HardResetNnsRootToVersion,
+        payload,
+    };
+
+    let metadata_request = CanisterMetadataRequest::new(
+        ic_nns_constants::LIFELINE_CANISTER_ID,
+        "candid:service".to_string(),
+    );
+    let metadata_response = CanisterMetadataResponse::new(lifeline_candid.as_bytes().to_vec());
+
+    let expected_metadata_call = ExpectedCallCanisterMethodCallArguments::new(
+        CanisterId::ic_00(),
+        "canister_metadata",
+        Encode!(&metadata_request).unwrap(),
+    );
+
+    let env = Arc::new(MockEnvironment::new(
+        vec![(
+            expected_metadata_call,
+            Ok(Encode!(&metadata_response).unwrap()),
+        )],
+        0_u64,
+    ));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    let wasm_hash = Sha256::hash(&wasm_module).to_vec();
+    let init_arg_hash = Sha256::hash(&init_arg).to_vec();
+
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "wasm_module_hash".to_string() => SelfDescribingValue::from(wasm_hash),
+            "init_arg_hash".to_string() => SelfDescribingValue::from(init_arg_hash),
+        })
+    );
 }

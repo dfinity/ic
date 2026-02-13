@@ -1,0 +1,53 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ic_os/command_runner",
+    "//rs/ic_os/config/tool:config_lib",
+    "//rs/ic_os/config/types:config_types",
+    "//rs/ic_os/device",
+    "//rs/ic_os/linux_kernel_command_line",
+    "//rs/ic_os/sev/attestation",
+    "//rs/ic_os/sev/guest",
+    "//rs/nns/common",
+    "//rs/nns/constants:constants",
+    "//rs/nns/governance/api",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:ic-certificate-verification",
+    "@crate_index//:ic-certification",
+    "@crate_index//:pem",
+    "@crate_index//:rand",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:sev",
+    "@crate_index//:uuid",
+]
+
+rust_binary(
+    name = "open_rootfs",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "open_rootfs_dev",
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = ["dev"],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "open_rootfs_test",
+    crate = ":open_rootfs",
+    crate_features = ["dev"],
+    deps = [
+        "//rs/certification/test-utils",
+        "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/ic_os/sev/guest/testing",
+        "@crate_index//:rand",
+        "@crate_index//:tempfile",
+    ],
+)

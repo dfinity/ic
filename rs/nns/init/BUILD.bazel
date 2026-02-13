@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance/api",
     "//rs/nns/test_utils",
     "//rs/registry/local_store",
     "//rs/registry/proto_data_provider",
@@ -18,9 +17,7 @@ DEPENDENCIES = [
     "//rs/sys",
     "//rs/test_utilities/identity",
     "//rs/types/base_types",
-    "@crate_index//:candid",
     "@crate_index//:clap",
-    "@crate_index//:prost",
     "@crate_index//:tokio",
     "@crate_index//:url",
 ]

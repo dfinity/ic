@@ -9,7 +9,7 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::{
-        call_or_task::execute_call_or_task, inspect_message, install_code::validate_controller,
+        call_or_task::execute_call_or_task, common::validate_controller, inspect_message,
         response::execute_response,
     },
     execution_environment_metrics::{
@@ -39,17 +39,17 @@ use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterMetadataRequest, CanisterStatusType, ClearChunkStoreArgs,
     CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, FetchCanisterLogsRequest, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method,
-    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
-    RenameCanisterArgs, ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs,
-    SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
-    VetKdPublicKeyArgs, VetKdPublicKeyResult,
+    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
+    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
+    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -80,9 +80,10 @@ use ic_types::{
     messages::{
         CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, RejectContext, Request, Response,
-        SignedIngress, StopCanisterCallId, StopCanisterContext, extract_effective_canister_id,
+        SignedIngress, StopCanisterCallId, StopCanisterContext, SubnetMessage,
+        extract_effective_canister_id,
     },
-    methods::SystemMethod,
+    methods::{Callback, SystemMethod},
     nominal_cycles::NominalCycles,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
@@ -383,8 +384,9 @@ impl ExecutionEnvironment {
         scheduler_cores: usize,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
-        assert!(
-            config.canister_sandboxing_flag == FlagStatus::Enabled,
+        assert_eq!(
+            config.canister_sandboxing_flag,
+            FlagStatus::Enabled,
             "Deterministic time slicing works only with canister sandboxing."
         );
 
@@ -491,7 +493,7 @@ impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_subnet_message(
         &self,
-        msg: CanisterMessage,
+        msg: SubnetMessage,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
@@ -505,7 +507,7 @@ impl ExecutionEnvironment {
         let cost_schedule = state.get_own_cost_schedule();
 
         let mut msg = match msg {
-            CanisterMessage::Response(response) => {
+            SubnetMessage::Response(response) => {
                 let context = state
                     .metadata
                     .subnet_call_context_manager
@@ -594,12 +596,9 @@ impl ExecutionEnvironment {
                     }
                 };
             }
-            CanisterMessage::NewResponse { .. } => {
-                unreachable!("NewResponse is only used during state loading")
-            }
 
-            CanisterMessage::Ingress(msg) => CanisterCall::Ingress(msg),
-            CanisterMessage::Request(msg) => CanisterCall::Request(msg),
+            SubnetMessage::Ingress(msg) => CanisterCall::Ingress(msg),
+            SubnetMessage::Request(msg) => CanisterCall::Request(msg),
         };
 
         let timestamp_nanos = state.time();
@@ -848,7 +847,6 @@ impl ExecutionEnvironment {
                                     &mut canister.system_state,
                                     memory_usage,
                                     message_memory_usage,
-                                    canister.scheduler_state.compute_allocation,
                                     induction_cost,
                                     registry_settings.subnet_size,
                                     cost_schedule,
@@ -1003,6 +1001,27 @@ impl ExecutionEnvironment {
                 Ok(args) => self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state),
             },
 
+            Ok(Ic00Method::FlexibleHttpRequest) => match &msg {
+                CanisterCall::Request(_) => {
+                    match FlexibleCanisterHttpRequestArgs::decode(payload) {
+                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(err),
+                            refund: msg.take_cycles(),
+                        },
+                        Ok(_) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                "FlexibleHttpRequest is not yet implemented".to_string(),
+                            )),
+                            refund: msg.take_cycles(),
+                        },
+                    }
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
+                }
+            },
+
             Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
                 true => match &msg {
                     CanisterCall::Request(request) => {
@@ -1017,6 +1036,7 @@ impl ExecutionEnvironment {
                                     request.as_ref(),
                                     args,
                                     &registry_settings.node_ids,
+                                    registry_settings.subnet_size,
                                     rng,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
@@ -1909,8 +1929,8 @@ impl ExecutionEnvironment {
             if let Some(canister_stats) = state.canister_state_mut(&request.sender) {
                 canister_stats
                     .system_state
-                    .canister_metrics
-                    .load_metrics
+                    .canister_metrics_mut()
+                    .load_metrics_mut()
                     .http_outcalls_executed += 1;
             }
             self.metrics.observe_message_with_label(
@@ -2019,10 +2039,11 @@ impl ExecutionEnvironment {
                     subnet_size,
                 );
             }
-            CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
+            CanisterMessageOrTask::Message(CanisterMessage::Response { response, callback }) => {
                 return self.execute_canister_response(
                     canister,
                     response,
+                    callback,
                     instruction_limits,
                     time,
                     network_topology,
@@ -2030,9 +2051,6 @@ impl ExecutionEnvironment {
                     subnet_size,
                     cost_schedule,
                 );
-            }
-            CanisterMessageOrTask::Message(CanisterMessage::NewResponse { .. }) => {
-                unreachable!("NewResponse is only used during state loading")
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
                 CanisterCall::Request(request)
@@ -2920,6 +2938,7 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         response: Arc<Response>,
+        callback: Arc<Callback>,
         instruction_limits: InstructionLimits,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -2957,6 +2976,7 @@ impl ExecutionEnvironment {
         execute_response(
             canister,
             response,
+            callback,
             time,
             execution_parameters,
             round,
@@ -3016,7 +3036,6 @@ impl ExecutionEnvironment {
                     cost,
                     paying_canister.memory_usage(),
                     paying_canister.message_memory_usage(),
-                    paying_canister.scheduler_state.compute_allocation,
                     subnet_size,
                     state.get_own_cost_schedule(),
                     reveal_top_up,
@@ -4251,7 +4270,7 @@ impl ExecutionEnvironment {
                     }
                 });
             if stopped {
-                canister.system_state.canister_version += 1;
+                canister.system_state.bump_canister_version();
             }
             for stop_context in stop_contexts.iter() {
                 self.reply_to_stop_context(
@@ -4451,7 +4470,10 @@ fn execute_canister_input(
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
     let info = input.to_string();
-    let load_metrics = &mut canister.system_state.canister_metrics.load_metrics;
+    let load_metrics = &mut canister
+        .system_state
+        .canister_metrics_mut()
+        .load_metrics_mut();
     match &input {
         CanisterMessageOrTask::Message(CanisterMessage::Ingress(_)) => {
             load_metrics.ingress_messages_executed += 1
@@ -4463,8 +4485,7 @@ fn execute_canister_input(
                 load_metrics.remote_subnet_messages_executed += 1;
             }
         }
-        CanisterMessageOrTask::Message(CanisterMessage::Response(response))
-        | CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
+        CanisterMessageOrTask::Message(CanisterMessage::Response {
             response,
             callback: _,
         }) => {

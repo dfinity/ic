@@ -16,6 +16,7 @@ use ic_universal_canister::{call_args, wasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -33,9 +34,9 @@ use icrc_ledger_types::icrc21::errors::Icrc21Error;
 use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
 use icrc_ledger_types::icrc21::responses::ConsentInfo;
 use num_traits::ToPrimitive;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::time::{Instant, UNIX_EPOCH};
-use std::{collections::BTreeMap, time::Duration};
 
 pub trait AllowanceProvider: Sized {
     fn get_allowance(
@@ -585,12 +586,12 @@ pub fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo>
     .expect("failed to decode archives response")
 }
 
-pub fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
+pub fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<MetadataKey, Value> {
     Decode!(
         &env.query(ledger, "icrc1_metadata", Encode!().unwrap())
             .expect("failed to query metadata")
             .bytes(),
-        Vec<(String, Value)>
+        Vec<(MetadataKey, Value)>
     )
     .expect("failed to decode metadata response")
     .into_iter()
@@ -772,29 +773,6 @@ pub fn transfer(
             memo: None,
         },
     )
-}
-
-pub fn wait_ledger_ready(env: &StateMachine, ledger: CanisterId, num_waits: u16) {
-    let is_ledger_ready = || {
-        Decode!(
-            &env.query(ledger, "is_ledger_ready", Encode!().unwrap())
-                .expect("failed to call is_ledger_ready")
-                .bytes(),
-            bool
-        )
-        .expect("failed to decode is_ledger_ready response")
-    };
-    for i in 0..num_waits {
-        if is_ledger_ready() {
-            println!("ready after {i} waits");
-            return;
-        }
-        env.advance_time(Duration::from_secs(10));
-        env.tick();
-    }
-    if !is_ledger_ready() {
-        panic!("canister not ready!");
-    }
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {

@@ -4,6 +4,7 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::canister_state::system_state::testing::CallContextManagerTesting;
 use ic_replicated_state::{CallContextManager, ExecutionTask};
 use ic_replicated_state::{
     NumWasmPages, canister_state::system_state::CanisterHistory,
@@ -14,11 +15,10 @@ use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    NO_DEADLINE,
+    CallContextId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, NO_DEADLINE,
 };
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::time::UNIX_EPOCH;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use itertools::Itertools;
 use proptest::prelude::*;
 use std::fs::File;
@@ -41,8 +41,8 @@ fn default_canister_state_bits() -> CanisterStateBits {
         reserved_balance: Cycles::zero(),
         reserved_balance_limit: None,
         status: CanisterStatus::Stopped,
+        rounds_scheduled: 0,
         scheduled_as_first: 0,
-        skipped_round_due_to_no_messages: 0,
         executed: 0,
         interrupted_during_execution: 0,
         certified_data: vec![],
@@ -311,6 +311,17 @@ fn test_encode_decode_task_queue() {
             .respondent(canister_test_id(42))
             .build(),
     );
+    let callback = Arc::new(Callback {
+        call_context_id: 1.into(),
+        respondent: canister_test_id(43),
+        cycles_sent: Cycles::new(6),
+        prepayment_for_response_execution: Cycles::new(169),
+        prepayment_for_response_transmission: Cycles::new(2197),
+        on_reply: WasmClosure::new(13, 14),
+        on_reject: WasmClosure::new(15, 16),
+        on_cleanup: Some(WasmClosure::new(17, 18)),
+        deadline: CoarseTime::from_secs_since_unix_epoch(44),
+    });
     for task in [
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
@@ -327,7 +338,10 @@ fn test_encode_decode_task_queue() {
             call_id: InstallCodeCallId::new(3u64),
         },
         ExecutionTask::AbortedExecution {
-            input: CanisterMessageOrTask::Message(CanisterMessage::Response(Arc::clone(&response))),
+            input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+                response: Arc::clone(&response),
+                callback: Arc::clone(&callback),
+            }),
             prepaid_execution_cycles: Cycles::new(4),
         },
         ExecutionTask::AbortedExecution {
@@ -1191,15 +1205,15 @@ fn test_encode_task_queue_with_paused_task_fails() {
     let _ = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
 }
 
-/// Test forward compatibility of decoding `TaskQueue`: encode a
-/// `CanisterStateBits` with a `NewResponse` task and a callback; expect to
-/// decode a `CanisterStateBits` with a `Response` task and two callbacks.
+/// Test backward compatibile decoding `TaskQueue`: encode a `CanisterStateBits`
+/// with a legacy `Response` aborted execution task and two callbacks (including
+/// the one matching the `Response`); expect to decode a `CanisterStateBits`
+/// with a new `Response` task (bundling its callback) plus the other callback.
 #[test]
-fn test_decode_task_queue_forward_compatibility() {
+fn test_decode_task_queue_backward_compatibility() {
     let make_callback = |respondent: CanisterId| {
         Arc::new(Callback {
             call_context_id: CallContextId::new(1),
-            originator: canister_test_id(0),
             respondent,
             cycles_sent: Cycles::new(100),
             prepayment_for_response_execution: Cycles::zero(),
@@ -1210,9 +1224,11 @@ fn test_decode_task_queue_forward_compatibility() {
             deadline: NO_DEADLINE,
         })
     };
+    let mut call_context_manager = CallContextManager::default();
 
-    let callback_id1 = CallbackId::new(1);
+    // Response and its matching callback.
     let callback1 = make_callback(canister_test_id(1));
+    let callback_id1 = call_context_manager.with_callback(callback1.as_ref().clone());
     let response1 = Arc::new(
         ResponseBuilder::new()
             .respondent(canister_test_id(1))
@@ -1220,44 +1236,54 @@ fn test_decode_task_queue_forward_compatibility() {
             .build(),
     );
 
-    let callback_id2 = CallbackId::new(3);
-    let callback2 = make_callback(canister_test_id(3));
+    // A second callback.
+    let callback2 = make_callback(canister_test_id(2));
+    let _callback_id2 = call_context_manager.with_callback(callback2.as_ref().clone());
 
-    // A canister state with a `NewResponse` aborted execution (corresponding to
-    // `callback1`); and a second callback (`callback2`).
-    let mut task_queue = TaskQueue::default();
-    task_queue.enqueue(ExecutionTask::AbortedExecution {
-        input: CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
-            response: response1.clone(),
-            callback: callback1.clone(),
-        }),
-        prepaid_execution_cycles: Cycles::new(10),
-    });
-
-    let mut call_context_manager = CallContextManager::default();
-    call_context_manager.insert_callback(callback_id2, callback2.as_ref().clone());
-
+    // Encode the call context manager with the two callbacks.
     let canister_state_bits = CanisterStateBits {
-        task_queue: task_queue.clone(),
         status: CanisterStatus::Running {
             call_context_manager,
         },
         ..default_canister_state_bits()
     };
+    let mut proto_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
 
-    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    // Manually insert a legacy `Response` task into the proto.
+    let aborted_execution = pb_canister_state_bits::execution_task::AbortedExecution {
+        prepaid_execution_cycles: Some(Cycles::new(10).into()),
+        input: Some(
+            pb_canister_state_bits::execution_task::aborted_execution::Input::Response(
+                response1.as_ref().into(),
+            ),
+        ),
+    };
+    proto_bits.tasks.as_mut().unwrap().paused_or_aborted_task =
+        Some(pb_canister_state_bits::ExecutionTask {
+            task: Some(
+                pb_canister_state_bits::execution_task::Task::AbortedExecution(aborted_execution),
+            ),
+        });
 
+    // Decode the proto.
+    let canister_state_bits = CanisterStateBits::try_from(proto_bits).unwrap();
+
+    // Expect to get back a task queue with a new `Response` task...
     let mut expected_task_queue = TaskQueue::default();
     expected_task_queue.enqueue(ExecutionTask::AbortedExecution {
-        input: CanisterMessageOrTask::Message(CanisterMessage::Response(response1)),
+        input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+            response: response1,
+            callback: callback1.clone(),
+        }),
         prepaid_execution_cycles: Cycles::new(10),
     });
     assert_eq!(expected_task_queue, canister_state_bits.task_queue);
 
+    // ... and a call context manager with only the other callback.
     let mut expected_call_context_manager = CallContextManager::default();
-    expected_call_context_manager.insert_callback(callback_id1, callback1.as_ref().clone());
-    expected_call_context_manager.insert_callback(callback_id2, callback2.as_ref().clone());
+    expected_call_context_manager.with_callback(callback1.as_ref().clone());
+    expected_call_context_manager.unregister_callback(callback_id1);
+    expected_call_context_manager.with_callback(callback2.as_ref().clone());
     assert_eq!(
         CanisterStatus::Running {
             call_context_manager: expected_call_context_manager
@@ -1275,6 +1301,7 @@ mod mainnet_compatibility_tests {
     #[cfg(test)]
     mod task_queue_compatibility_test {
         use ic_types::CanisterId;
+        use ic_types::messages::CallbackId;
 
         use super::super::*;
         use super::*;
@@ -1285,7 +1312,6 @@ mod mainnet_compatibility_tests {
             let make_callback = |respondent: CanisterId| {
                 Arc::new(Callback {
                     call_context_id: CallContextId::new(1),
-                    originator: canister_test_id(0),
                     respondent,
                     cycles_sent: Cycles::new(100),
                     prepayment_for_response_execution: Cycles::zero(),
@@ -1309,16 +1335,19 @@ mod mainnet_compatibility_tests {
             let callback_id2 = CallbackId::new(3);
             let callback2 = make_callback(canister_test_id(3));
 
-            // A canister state with a `NewResponse` aborted execution (corresponding to
-            // `callback1`); and a second callback (`callback2`).
+            // A task queue with a `Response` aborted execution bundling `response1` and
+            // `callback1`.
             let mut task_queue = TaskQueue::default();
             task_queue.enqueue(ExecutionTask::AbortedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response1)),
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+                    response: response1,
+                    callback: callback1,
+                }),
                 prepaid_execution_cycles: Cycles::new(10),
             });
 
+            // And a `CallContextManager` with the second callback only.
             let mut call_context_manager = CallContextManager::default();
-            call_context_manager.insert_callback(callback_id1, callback1.as_ref().clone());
             call_context_manager.insert_callback(callback_id2, callback2.as_ref().clone());
 
             CanisterStateBits {

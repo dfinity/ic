@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/recovery",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
-    "//rs/replay",
     "//rs/state_layout",
     "//rs/state_manager",
     "//rs/state_tool:state_tool_lib",

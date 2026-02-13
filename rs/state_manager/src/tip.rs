@@ -18,17 +18,15 @@ use ic_protobuf::state::{
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_snapshots::CanisterSnapshot;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
-use ic_replicated_state::{
-    CanisterState, NumWasmPages, PageMap, ReplicatedState,
-    page_map::{PAGE_SIZE, StorageLayout},
+use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
+use ic_replicated_state::page_map::{
+    MAX_NUMBER_OF_FILES, MergeCandidate, PAGE_SIZE, PageAllocatorFileDescriptor, StorageLayout,
+    StorageMetrics, StorageResult,
 };
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshot,
-    page_map::{MAX_NUMBER_OF_FILES, MergeCandidate, StorageMetrics, StorageResult},
-};
-use ic_replicated_state::{
-    metadata_state::UnflushedCheckpointOp, page_map::PageAllocatorFileDescriptor,
+    CanisterPriority, CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
     CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ExecutionStateBits, PageMapLayout,
@@ -575,8 +573,8 @@ fn switch_to_checkpoint(
     layout: &CheckpointLayout<ReadOnly>,
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
-    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
-        let canister_layout = layout.canister(tip_id).unwrap();
+    for tip_canister in tip.canisters_iter_mut() {
+        let canister_layout = layout.canister(&tip_canister.canister_id()).unwrap();
         tip_canister
             .system_state
             .wasm_chunk_store
@@ -666,9 +664,10 @@ fn switch_to_checkpoint(
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
-    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+    for tip_canister in tip.canisters_iter_mut() {
+        let tip_id = tip_canister.canister_id();
         if let Some(tip_state) = &mut tip_canister.execution_state {
-            let canister_layout = layout.canister(tip_id).unwrap();
+            let canister_layout = layout.canister(&tip_id).unwrap();
 
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
@@ -1104,7 +1103,11 @@ fn serialize_protos_to_checkpoint_readwrite(
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_protos_to_checkpoint_readwrite(canister_state, checkpoint_readwrite)
+        serialize_canister_protos_to_checkpoint_readwrite(
+            canister_state,
+            state.canister_priority(&canister_state.canister_id()),
+            checkpoint_readwrite,
+        )
     });
 
     for result in results.into_iter() {
@@ -1257,6 +1260,7 @@ fn serialize_snapshot_wasm_binary_and_pagemaps(
 
 fn serialize_canister_protos_to_checkpoint_readwrite(
     canister_state: &CanisterState,
+    canister_priority: &CanisterPriority,
     checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
     let canister_id = canister_state.canister_id();
@@ -1279,16 +1283,19 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });
 
-    let load_metrics_bits = &canister_state.system_state.canister_metrics.load_metrics;
+    let load_metrics_bits = canister_state
+        .system_state
+        .canister_metrics()
+        .load_metrics();
 
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
-            last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
-            compute_allocation: canister_state.scheduler_state.compute_allocation,
-            priority_credit: canister_state.scheduler_state.priority_credit,
-            long_execution_mode: canister_state.scheduler_state.long_execution_mode,
-            accumulated_priority: canister_state.scheduler_state.accumulated_priority,
+            last_full_execution_round: canister_priority.last_full_execution_round,
+            compute_allocation: canister_state.compute_allocation(),
+            priority_credit: canister_priority.priority_credit,
+            long_execution_mode: canister_priority.long_execution_mode,
+            accumulated_priority: canister_priority.accumulated_priority,
             memory_allocation: canister_state.system_state.memory_allocation,
             wasm_memory_threshold: canister_state.system_state.wasm_memory_threshold,
             freeze_threshold: canister_state.system_state.freeze_threshold,
@@ -1298,21 +1305,24 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
             status: canister_state.system_state.get_status().clone(),
+            rounds_scheduled: canister_state
+                .system_state
+                .canister_metrics()
+                .rounds_scheduled(),
             scheduled_as_first: canister_state
                 .system_state
-                .canister_metrics
-                .scheduled_as_first,
-            skipped_round_due_to_no_messages: canister_state
-                .system_state
-                .canister_metrics
-                .skipped_round_due_to_no_messages,
-            executed: canister_state.system_state.canister_metrics.executed,
+                .canister_metrics()
+                .scheduled_as_first(),
+            executed: canister_state.system_state.canister_metrics().executed(),
             interrupted_during_execution: canister_state
                 .system_state
-                .canister_metrics
-                .interrupted_during_execution,
+                .canister_metrics()
+                .interrupted_during_execution(),
             certified_data: canister_state.system_state.certified_data.clone(),
-            consumed_cycles: canister_state.system_state.canister_metrics.consumed_cycles,
+            consumed_cycles: canister_state
+                .system_state
+                .canister_metrics()
+                .consumed_cycles(),
             stable_memory_size: canister_state
                 .execution_state
                 .as_ref()
@@ -1321,7 +1331,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
             install_code_debit: canister_state.scheduler_state.install_code_debit,
             time_of_last_allocation_charge_nanos: canister_state
-                .scheduler_state
+                .system_state
                 .time_of_last_allocation_charge
                 .as_nanos_since_unix_epoch(),
             task_queue: canister_state.system_state.task_queue.clone(),
@@ -1329,11 +1339,11 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .system_state
                 .global_timer
                 .to_nanos_since_unix_epoch(),
-            canister_version: canister_state.system_state.canister_version,
+            canister_version: canister_state.system_state.canister_version(),
             consumed_cycles_by_use_cases: canister_state
                 .system_state
-                .canister_metrics
-                .get_consumed_cycles_by_use_cases()
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
                 .clone(),
             canister_history: canister_state.system_state.get_canister_history().clone(),
             wasm_chunk_store_metadata: canister_state
@@ -1341,12 +1351,12 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .wasm_chunk_store
                 .metadata()
                 .clone(),
-            total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
+            total_query_stats: canister_state.system_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
             log_memory_limit: canister_state.system_state.log_memory_limit,
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
-            next_snapshot_id: canister_state.system_state.next_snapshot_id,
+            next_snapshot_id: canister_state.system_state.next_snapshot_id(),
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
             environment_variables: canister_state
                 .system_state
@@ -1355,8 +1365,8 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .into(),
             instructions_executed: canister_state
                 .system_state
-                .canister_metrics
-                .instructions_executed,
+                .canister_metrics()
+                .instructions_executed(),
             ingress_messages_executed: load_metrics_bits.ingress_messages_executed,
             remote_subnet_messages_executed: load_metrics_bits.remote_subnet_messages_executed,
             local_subnet_messages_executed: load_metrics_bits.local_subnet_messages_executed,
@@ -1556,6 +1566,11 @@ fn handle_compute_manifest_request(
             .inc();
     }
 
+    let base_manifest = base_manifest_info
+        .as_ref()
+        .map(|base| base.base_manifest.clone());
+    drop(base_manifest_info);
+
     let mut states = states.write();
 
     if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height()) {
@@ -1593,12 +1608,8 @@ fn handle_compute_manifest_request(
     drop(timer);
 
     let timer = request_timer(metrics, "observe_file_sizes");
-    if let Some(base_manifest_info) = &base_manifest_info {
-        crate::manifest::observe_file_sizes(
-            &manifest,
-            &base_manifest_info.base_manifest,
-            &metrics.manifest_metrics,
-        );
+    if let Some(base_manifest) = &base_manifest {
+        crate::manifest::observe_file_sizes(&manifest, base_manifest, &metrics.manifest_metrics);
     }
     drop(timer);
 

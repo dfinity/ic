@@ -37,7 +37,7 @@ use k256::elliptic_curve::SecretKey;
 use rand::{SeedableRng, rngs::OsRng};
 use rand_chacha::ChaChaRng;
 use slog::info;
-use std::{env, net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 
 use ic_agent::{
@@ -50,14 +50,13 @@ use ic_agent::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    driver::test_env_api::NnsInstallationBuilder,
     driver::{
         group::SystemTestGroup,
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
             GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            get_dependency_path,
+            NnsInstallationBuilder, get_dependency_path_from_env,
         },
     },
     retry_with_msg_async, systest,
@@ -121,9 +120,7 @@ async fn test_async(env: TestEnv) {
         .await
         .unwrap();
 
-    let path_to_wasm = get_dependency_path(
-        env::var("RATE_LIMIT_CANISTER_WASM_PATH").expect("RATE_LIMIT_CANISTER_WASM_PATH not set"),
-    );
+    let path_to_wasm = get_dependency_path_from_env("RATE_LIMIT_CANISTER_WASM_PATH");
 
     let wasm: Wasm = Wasm::from_file(path_to_wasm.clone());
 
