@@ -74,7 +74,7 @@ impl HasHash for ConsensusMessageId {
 impl From<ConsensusMessageId> for pb::ConsensusMessageId {
     fn from(value: ConsensusMessageId) -> Self {
         Self {
-            hash: Some(pb::ConsensusMessageHash::from(&value.hash)),
+            hash: Some(pb::ConsensusMessageHash::from(value.hash)),
             height: value.height.get(),
         }
     }
