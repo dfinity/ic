@@ -1447,21 +1447,22 @@ impl SystemState {
         }
     }
 
-    /// Returns `true` if there are any ingress messages in the queue that satisfy
-    /// the filter, `false` otherwise.
-    pub fn any_ingress_messages<F>(&self, filter: F) -> bool
+    /// Returns `true` if all ingress messages in the canister's ingress queue
+    /// satisfy the predicate, `false` otherwise.
+    pub fn all_ingress_messages<F>(&self, predicate: F) -> bool
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.queues.any_ingress_messages(filter)
+        self.queues.all_ingress_messages(predicate)
     }
 
-    /// See `IngressQueue::filter_messages()` for documentation.
-    pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
+    /// Retains only the ingress messages that satisfy the predicate, removing and
+    /// returning all the ingress messages that don't.
+    pub fn retain_ingress_messages<F>(&mut self, predicate: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.queues.filter_ingress_messages(filter)
+        self.queues.retain_ingress_messages(predicate)
     }
 
     /// Returns the memory currently used by or reserved for guaranteed response
@@ -1592,7 +1593,6 @@ impl SystemState {
 
     /// Returns `true` if calling `garbage_collect_canister_queues()` would actually
     /// mutate the canister queues.
-    #[allow(dead_code)]
     pub(crate) fn can_garbage_collect_canister_queues(&self) -> bool {
         self.queues.can_garbage_collect()
     }
@@ -1615,7 +1615,7 @@ impl SystemState {
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) {
@@ -1654,7 +1654,7 @@ impl SystemState {
         &mut self,
         current_time: CoarseTime,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) -> (usize, Vec<StateError>) {
         if self.status == CanisterStatus::Stopped {
             // Stopped canisters have no call context manager, so no callbacks.
@@ -1710,7 +1710,7 @@ impl SystemState {
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) -> bool {
@@ -1734,7 +1734,7 @@ impl SystemState {
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) {
         self.queues
             .split_input_schedules(own_canister_id, local_canisters);
@@ -2228,7 +2228,7 @@ pub mod testing {
         fn split_input_schedules(
             &mut self,
             own_canister_id: &CanisterId,
-            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+            local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         );
     }
 
@@ -2305,7 +2305,7 @@ pub mod testing {
         fn split_input_schedules(
             &mut self,
             own_canister_id: &CanisterId,
-            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+            local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         ) {
             self.split_input_schedules(own_canister_id, local_canisters)
         }

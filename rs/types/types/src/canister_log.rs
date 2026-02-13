@@ -274,6 +274,11 @@ impl CanisterLog {
     pub fn clear_delta_log_sizes(&mut self) {
         self.delta_log_sizes.clear();
     }
+
+    /// Returns true if the canister log has delta log sizes.
+    pub fn has_delta_log_sizes(&self) -> bool {
+        !self.delta_log_sizes.is_empty()
+    }
 }
 
 #[cfg(test)]
