@@ -503,12 +503,17 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     }
     assert_subnet_is_broken(&app_node.get_public_url(), app_can_id, msg, true, &logger);
 
-    let (download_pool_node, download_state_node, upload_node, admin_nodes, replay_height) =
-        if ssh_readonly_pub_key_deployed.is_some() {
-            get_recovery_parameters_when_ssh_key_can_be_deployed(&env, &app_subnet, &logger)
-        } else {
-            get_recovery_parameters_when_ssh_key_cannot_be_deployed(&env, &app_node, &logger)
-        };
+    let ScenarioParameters {
+        download_pool_node,
+        download_state_node,
+        upload_node,
+        admin_nodes,
+        replay_height,
+    } = if ssh_readonly_pub_key_deployed.is_some() {
+        get_recovery_parameters_when_ssh_key_can_be_deployed(&env, &app_subnet, &logger)
+    } else {
+        get_recovery_parameters_when_ssh_key_cannot_be_deployed(&env, &app_node, &logger)
+    };
     info!(
         logger,
         "Using node {} to download the consensus pool, node {} to download the state, and node {} to upload the state. \
@@ -957,6 +962,14 @@ fn enable_chain_key_on_new_subnet(
     app_keys
 }
 
+struct ScenarioParameters {
+    download_pool_node: IcNodeSnapshot,
+    download_state_node: IcNodeSnapshot,
+    upload_node: IcNodeSnapshot,
+    admin_nodes: Vec<IcNodeSnapshot>,
+    replay_height: u64,
+}
+
 /// If we can deploy read-only access to the subnet, then:
 ///   - We can download the consensus pool from the node with highest certification and
 ///   CUP share height.
@@ -969,13 +982,7 @@ fn get_recovery_parameters_when_ssh_key_can_be_deployed(
     env: &TestEnv,
     app_subnet: &SubnetSnapshot,
     logger: &Logger,
-) -> (
-    IcNodeSnapshot,      // Download pool node
-    IcNodeSnapshot,      // Download state node
-    IcNodeSnapshot,      // Upload node
-    Vec<IcNodeSnapshot>, // Admin nodes
-    u64,                 // Replay height
-) {
+) -> ScenarioParameters {
     let (download_pool_node, highest_cert_share, highest_cup) =
         node_with_highest_cert_share_and_cup_heights(&app_subnet, &logger);
 
@@ -1003,13 +1010,13 @@ fn get_recovery_parameters_when_ssh_key_can_be_deployed(
 
     let replay_height = highest_cert_share;
 
-    (
+    ScenarioParameters {
         download_pool_node,
         download_state_node,
         upload_node,
         admin_nodes,
         replay_height,
-    )
+    }
 }
 
 /// If we cannot deploy read-only access to the subnet, this would mean that the CUP is
@@ -1028,13 +1035,7 @@ fn get_recovery_parameters_when_ssh_key_cannot_be_deployed(
     env: &TestEnv,
     app_node: &IcNodeSnapshot,
     logger: &Logger,
-) -> (
-    IcNodeSnapshot,      // Download pool node
-    IcNodeSnapshot,      // Download state node
-    IcNodeSnapshot,      // Upload node
-    Vec<IcNodeSnapshot>, // Admin nodes
-    u64,                 // Replay height
-) {
+) -> ScenarioParameters {
     let download_pool_node = app_node.clone();
 
     let download_state_node = download_pool_node.clone();
@@ -1045,15 +1046,15 @@ fn get_recovery_parameters_when_ssh_key_cannot_be_deployed(
         .next()
         .unwrap_or_else(|| download_state_node.clone());
 
-    let replay_height = get_node_certification_share_height(&download_state_node, &logger).unwrap();
-
     let admin_nodes = vec![upload_node.clone(), download_state_node.clone()];
 
-    (
+    let replay_height = get_node_certification_share_height(&download_state_node, &logger).unwrap();
+
+    ScenarioParameters {
         download_pool_node,
         download_state_node,
         upload_node,
         admin_nodes,
         replay_height,
-    )
+    }
 }
