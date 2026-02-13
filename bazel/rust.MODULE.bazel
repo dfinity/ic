@@ -678,7 +678,7 @@ crate.spec(
     default_features = False,
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    tag = "v0.4.0",
+    rev = "339c9b0c678407d05577350ad2b069a806bf9495",
 )
 crate.spec(
     package = "ic-http-certification",
@@ -687,7 +687,7 @@ crate.spec(
 crate.spec(
     git = "https://github.com/dfinity/http-gateway",
     package = "ic-http-gateway",
-    tag = "v0.4.2",
+    rev = "f748a05585d626acf9db7d6fb5355629ea2ec639",
 )
 crate.spec(
     package = "ic-identity-hsm",
