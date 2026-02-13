@@ -82,8 +82,6 @@ use_repo(pip, "python_deps")
 bazel_dep(
     name = "protobuf",
     version = "32.1",
-    # We rename it to keep the legacy name used throughout our bazel files
-    repo_name = "com_google_protobuf",
 )
 
 # protobuf linter
@@ -898,9 +896,9 @@ http_archive(
         "find . -mindepth 1 -maxdepth 1 ! -name proto -exec rm -rf {} +",
         "find ./proto -name BUILD -delete",
     ],
-    sha256 = "9c675c30ae4c7e41018ad5539fc27287221d31fc3ab7c6439a30f46c4325c56a",
-    strip_prefix = "buildbuddy-2.241.0",
-    url = "https://github.com/buildbuddy-io/buildbuddy/archive/refs/tags/v2.241.0.tar.gz",
+    sha256 = "eff54923b6afdf4507f9b07fc9906f06580fdba72d96e9d58d8e6ea8ac4f71cd",
+    strip_prefix = "buildbuddy-89d510c91a18ec0469043a50750145ac51983f74",
+    url = "https://github.com/buildbuddy-io/buildbuddy/archive/89d510c91a18ec0469043a50750145ac51983f74.tar.gz",  # v2.242.0
 )
 
 ## shfmt, for formatting bash code

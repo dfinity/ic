@@ -1970,8 +1970,7 @@ fn canister_snapshots_after_split() {
 fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls: usize) {
     // Collect all `StopCanisterContexts` from all stopping canisters.
     let canister_stop_canister_contexts: Vec<_> = state
-        .canister_states
-        .values()
+        .canisters_iter()
         .filter_map(|canister| {
             if let CanisterStatus::Stopping {
                 call_context_manager: _,

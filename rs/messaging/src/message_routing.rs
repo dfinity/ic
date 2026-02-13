@@ -751,7 +751,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let mut total_memory_usage = NumBytes::new(0);
         let mut wasm_custom_sections_memory_usage = NumBytes::new(0);
         let mut canister_history_memory_usage = NumBytes::new(0);
-        for canister in state.canister_states.values() {
+        for canister in state.canisters_iter() {
             // Export the total canister memory usage; execution and wasm custom section
             // memory are included in `memory_usage()`; message memory is added separately.
             total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
@@ -1373,12 +1373,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             node_public_keys,
             api_boundary_nodes,
         );
+        // Prune any orphaned canister priorities.
+        state_after_round.garbage_collect_subnet_schedule();
         // Garbage collect empty canister queue pairs before checkpointing.
         if certification_scope == CertificationScope::Full {
             state_after_round.garbage_collect_canister_queues();
         }
         state_after_round.metadata.subnet_metrics.num_canisters =
-            state_after_round.canister_states.len() as u64;
+            state_after_round.canister_states().len() as u64;
         let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
         state_after_round
             .metadata

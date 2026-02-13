@@ -60,10 +60,10 @@ impl Membership {
 
     /// Return a shuffled list of the node IDs at a given height using the given
     /// previous beacon.
-    // Here we asserts that the given random beacon is from the previous height.
+    // Here we assert that the given random beacon is from the previous height.
     // Note, if we'd wait until the random beacon is available for the current
     // height, we'd sequentialize the making of the random beacon and block
-    // proposals.  One consequence of this design, is that the randomness
+    // proposals. One consequence of this design, is that the randomness
     // derived from the genesis random beacon at height 1 is predictable,
     // because the beacon from the genesis height is preconstructed and known in
     // advance

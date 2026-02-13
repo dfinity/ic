@@ -165,9 +165,6 @@ mkdir -p "${ZIG_CACHE}"
 ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
-MISC_TMP_DIR="/tmp/misc"
-mkdir -p "${MISC_TMP_DIR}"
-
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
 

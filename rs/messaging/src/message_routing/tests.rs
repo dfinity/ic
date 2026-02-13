@@ -1823,8 +1823,7 @@ fn process_batch_updates_subnet_metrics() {
 
         let latest_state = state_manager.get_latest_state().take();
         let canister_state = latest_state
-            .canister_states
-            .values()
+            .canisters_iter()
             .map(|canister| canister.memory_usage())
             .sum();
         assert_eq!(
