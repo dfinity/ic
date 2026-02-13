@@ -406,6 +406,7 @@ fn install_code(
     execution_parameters.compute_allocation = old_canister.compute_allocation();
     execution_parameters.memory_allocation = old_canister.memory_allocation();
 
+    let old_canister = Arc::unwrap_or_clone(old_canister);
     let dts_result = canister_manager.install_code_dts(
         context,
         CanisterCall::Ingress(Arc::new(ingress)),
@@ -426,14 +427,21 @@ fn install_code(
     // Canister manager tests do not trigger DTS executions.
     let (result, instructions_used, canister) = match dts_result {
         DtsInstallCodeResult::Finished {
-            mut canister,
+            canister,
             call_id: _,
             message: _,
             instructions_used,
             result,
         } => {
+            // `update_on_low_wasm_memory_hook_condition()` requires an `Arc<CanisterState>`
+            // so we need to jump through this hoop to make it work.
+            let mut canister = Arc::new(canister);
             canister.update_on_low_wasm_memory_hook_condition();
-            (result, instructions_used, Some(canister))
+            (
+                result,
+                instructions_used,
+                Some(Arc::unwrap_or_clone(canister)),
+            )
         }
         DtsInstallCodeResult::Paused {
             canister: _,

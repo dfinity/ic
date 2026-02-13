@@ -864,7 +864,7 @@ fn api_boundary_nodes_as_tree(
 }
 
 fn canisters_as_tree(
-    canisters: &BTreeMap<CanisterId, CanisterState>,
+    canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
     fork(MapTransformFork {

@@ -276,6 +276,8 @@ fn strip_page_map_deltas(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
     for canister in state.canisters_iter_mut() {
+        // FIXME: Check if canister has deltas before making a mutable reference.
+        let canister = Arc::make_mut(canister);
         canister
             .system_state
             .wasm_chunk_store
@@ -314,6 +316,10 @@ fn strip_page_map_deltas(
     // Reset the sandbox state to force full synchronization on the next execution
     // since the page deltas are out of sync now.
     for canister in state.canisters_iter_mut() {
+        if canister.execution_state.is_none() {
+            continue;
+        }
+        let canister = Arc::make_mut(canister);
         if let Some(execution_state) = &mut canister.execution_state {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
             execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
@@ -358,6 +364,8 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
     };
 
     for canister in tip_state.canisters_iter_mut() {
+        // FIXME: Filter out canisters with no heap deltas before making a mutable reference.
+        let canister = Arc::make_mut(canister);
         let id = canister.canister_id();
         add_to_pagemaps_and_strip(
             PageMapType::WasmChunkStore(id),
@@ -505,7 +513,7 @@ impl CheckpointLoader {
     fn load_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(BTreeMap<CanisterId, CanisterState>, SubnetSchedule), CheckpointError> {
+    ) -> Result<(BTreeMap<CanisterId, Arc<CanisterState>>, SubnetSchedule), CheckpointError> {
         let _timer = self
             .metrics
             .load_checkpoint_step_duration
@@ -527,7 +535,7 @@ impl CheckpointLoader {
         for result in results.into_iter() {
             let (canister_state, canister_priority, durations) = result?;
             priorities.insert(canister_state.canister_id(), canister_priority);
-            canister_states.insert(canister_state.canister_id(), canister_state);
+            canister_states.insert(canister_state.canister_id(), Arc::new(canister_state));
 
             durations.apply(&self.metrics);
         }
@@ -538,7 +546,7 @@ impl CheckpointLoader {
     fn validate_eq_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-        ref_canister_states: &BTreeMap<CanisterId, CanisterState>,
+        ref_canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) -> Result<BTreeMap<CanisterId, CanisterPriority>, String> {
         let on_disk_canister_ids = self
             .checkpoint_layout
