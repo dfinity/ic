@@ -1163,7 +1163,16 @@ impl ExecutionEnvironment {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state),
+                Ok(args) => {
+                    let canister_id = args.get_canister_id();
+                    self.deposit_cycles(
+                        canister_id,
+                        &mut state,
+                        round_limits,
+                        &mut msg,
+                        registry_settings,
+                    )
+                }
             },
 
             Ok(Ic00Method::FlexibleHttpRequest) => match &msg {
@@ -2433,37 +2442,44 @@ impl ExecutionEnvironment {
     fn deposit_cycles(
         &self,
         canister_id: CanisterId,
-        msg: &mut CanisterCall,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
+        msg: &mut CanisterCall,
+        registry_settings: &RegistryExecutionSettings,
     ) -> ExecuteSubnetMessageResult {
-        match state.canister_state_mut(&canister_id) {
-            None => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                )),
+        let op = |mut canister: CanisterState, round_limits, msg: &mut CanisterCall| {
+            let cycles = msg.take_cycles();
+            canister
+                .system_state
+                .add_cycles(cycles, CyclesUseCase::NonConsumed);
+            if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+                info!(
+                    self.log,
+                    "Canister {} deposited {} cycles to canister {}.",
+                    msg.sender(),
+                    cycles,
+                    canister_id.get(),
+                );
+            }
+            Ok((canister, round_limits, EmptyBlob.encode(), vec![], vec![]))
+        };
+        let res = self.execute_mgmt_operation_on_canister(
+            canister_id,
+            op,
+            msg,
+            state,
+            round_limits,
+            registry_settings,
+        );
+        match res {
+            Ok(bytes) => ExecuteSubnetMessageResult::Finished {
+                response: Ok((bytes, Some(canister_id))),
+                refund: Cycles::zero(),
+            },
+            Err(err) => ExecuteSubnetMessageResult::Finished {
+                response: Err(err),
                 refund: msg.take_cycles(),
             },
-
-            Some(canister_state) => {
-                let cycles = msg.take_cycles();
-                canister_state
-                    .system_state
-                    .add_cycles(cycles, CyclesUseCase::NonConsumed);
-                if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
-                    info!(
-                        self.log,
-                        "Canister {} deposited {} cycles to canister {}.",
-                        msg.sender(),
-                        cycles,
-                        canister_id.get(),
-                    );
-                }
-                ExecuteSubnetMessageResult::Finished {
-                    response: Ok((EmptyBlob.encode(), Some(canister_id))),
-                    refund: Cycles::zero(),
-                }
-            }
         }
     }
 
