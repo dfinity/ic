@@ -87,6 +87,10 @@ const APP_NODES_LARGE: usize = 37;
 /// plus 14 as a safety margin
 const DKG_INTERVAL_LARGE: u64 = 4 * NNS_NODES_LARGE as u64 + 14;
 
+/// A very large DKG interval to test recovery when the subnet stalls during its first DKG
+/// interval.
+const DKG_INTERVAL_HUGE: u64 = 1000;
+
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
 
@@ -157,6 +161,19 @@ pub fn setup_large_chain_keys(env: TestEnv) {
             app_nodes: 0,
             unassigned_nodes: APP_NODES_LARGE,
             dkg_interval: DKG_INTERVAL_LARGE,
+        },
+    );
+}
+
+pub fn setup_same_nodes_huge_dkg_interval(env: TestEnv) {
+    setup(
+        env,
+        SetupConfig {
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: APP_NODES,
+            unassigned_nodes: 0,
+            dkg_interval: DKG_INTERVAL_HUGE,
         },
     );
 }
