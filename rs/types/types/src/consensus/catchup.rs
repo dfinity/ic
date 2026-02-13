@@ -267,7 +267,7 @@ impl From<CatchUpPackageShare> for pb::CatchUpPackageShare {
             state_hash: cup_share.content.state_hash.get().0,
             block_hash: cup_share.content.block.get().0,
             random_beacon_hash: beacon_hash.get().0,
-            signature: cup_share.signature.signature.clone().get().0,
+            signature: cup_share.signature.signature.get().0,
             signer: Some(node_id_into_protobuf(cup_share.signature.signer)),
             oldest_registry_version_in_use_by_replicated_state: cup_share
                 .content
