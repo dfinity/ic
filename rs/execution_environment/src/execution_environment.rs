@@ -518,6 +518,7 @@ impl ExecutionEnvironment {
                 CanisterState,
                 RoundLimits,
                 R,
+                NumBytes,
                 Vec<ExecEnvResponse>,
                 Vec<StopCanisterContext>,
             ),
@@ -528,9 +529,17 @@ impl ExecutionEnvironment {
         match state.canister_state_mut(&canister_id) {
             Some(clean_canister) => match op(clean_canister.clone(), round_limits.clone(), context)
             {
-                Ok((new_canister, new_round_limits, bytes, responses, stop_contexts)) => {
+                Ok((
+                    new_canister,
+                    new_round_limits,
+                    bytes,
+                    heap_delta_increase,
+                    responses,
+                    stop_contexts,
+                )) => {
                     state.put_canister_state(new_canister);
                     *round_limits = new_round_limits;
+                    state.metadata.heap_delta_estimate += heap_delta_increase;
                     crate::util::process_responses(
                         responses,
                         state,
@@ -877,6 +886,7 @@ impl ExecutionEnvironment {
                                     canister,
                                     round_limits,
                                     EmptyBlob.encode(),
+                                    NumBytes::from(0),
                                     responses,
                                     vec![],
                                 )
@@ -932,7 +942,16 @@ impl ExecutionEnvironment {
                                 cost_schedule,
                                 subnet_size,
                             )
-                            .map(|bytes| (canister, round_limits, bytes, vec![], vec![]))
+                            .map(|bytes| {
+                                (
+                                    canister,
+                                    round_limits,
+                                    bytes,
+                                    NumBytes::from(0),
+                                    vec![],
+                                    vec![],
+                                )
+                            })
                             .map_err(|err| (err, Cycles::zero()))
                         };
                         let result = match CanisterSettings::try_from(args.settings) {
@@ -1075,6 +1094,7 @@ impl ExecutionEnvironment {
                                     canister,
                                     round_limits,
                                     EmptyBlob.encode(),
+                                    NumBytes::from(0),
                                     vec![],
                                     stop_contexts,
                                 )
@@ -1593,7 +1613,14 @@ impl ExecutionEnvironment {
                             self.canister_manager
                                 .add_cycles(sender, cycles, &mut canister, provisional_whitelist)
                                 .map(|()| {
-                                    (canister, round_limits, EmptyBlob.encode(), vec![], vec![])
+                                    (
+                                        canister,
+                                        round_limits,
+                                        EmptyBlob.encode(),
+                                        NumBytes::from(0),
+                                        vec![],
+                                        vec![],
+                                    )
                                 })
                                 .map_err(|err| (err.into(), Cycles::zero()))
                         };
@@ -1683,7 +1710,7 @@ impl ExecutionEnvironment {
                         &mut state,
                         args,
                         round_limits,
-                        registry_settings.subnet_size,
+                        registry_settings,
                         &resource_saturation,
                     )
                     .map(|res| (res, Some(canister_id)))
@@ -2473,7 +2500,14 @@ impl ExecutionEnvironment {
                     canister_id.get(),
                 );
             }
-            Ok((canister, round_limits, EmptyBlob.encode(), vec![], vec![]))
+            Ok((
+                canister,
+                round_limits,
+                EmptyBlob.encode(),
+                NumBytes::from(0),
+                vec![],
+                vec![],
+            ))
         };
         let res = self.execute_mgmt_operation_on_canister(
             canister_id,
@@ -2577,7 +2611,14 @@ impl ExecutionEnvironment {
             let res = self
                 .canister_manager
                 .stop_canister(&mut canister, StopCanisterContext::from((msg, call_id)));
-            Ok((canister, round_limits, res, vec![], vec![]))
+            Ok((
+                canister,
+                round_limits,
+                res,
+                NumBytes::from(0),
+                vec![],
+                vec![],
+            ))
         };
         let res = self.execute_mgmt_operation_on_canister(
             canister_id,
@@ -2615,31 +2656,56 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         args: UploadChunkArgs,
         round_limits: &mut RoundLimits,
-        subnet_size: usize,
+        registry_settings: &RegistryExecutionSettings,
         resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
-        let canister = get_canister_mut(args.get_canister_id(), state)?;
-        self.canister_manager
-            .upload_chunk(
+        let canister_id = args.get_canister_id();
+        let op =
+            |mut canister,
+             mut round_limits,
+             (sender, chunk, subnet_size, cost_schedule, resource_saturation)| {
+                self.canister_manager
+                    .upload_chunk(
+                        sender,
+                        &mut canister,
+                        chunk,
+                        &mut round_limits,
+                        subnet_size,
+                        cost_schedule,
+                        resource_saturation,
+                    )
+                    .map(
+                        |UploadChunkResult {
+                             reply,
+                             heap_delta_increase,
+                         }| {
+                            (
+                                canister,
+                                round_limits,
+                                reply.encode(),
+                                heap_delta_increase,
+                                vec![],
+                                vec![],
+                            )
+                        },
+                    )
+                    .map_err(|(err, cycles)| (err.into(), cycles))
+            };
+        self.execute_mgmt_operation_on_canister(
+            canister_id,
+            op,
+            (
                 sender,
-                canister,
                 args.chunk,
-                round_limits,
-                subnet_size,
+                registry_settings.subnet_size,
                 cost_schedule,
                 resource_saturation,
-            )
-            .map(
-                |UploadChunkResult {
-                     reply,
-                     heap_delta_increase,
-                 }| {
-                    state.metadata.heap_delta_estimate += heap_delta_increase;
-                    reply.encode()
-                },
-            )
-            .map_err(|err| err.into())
+            ),
+            state,
+            round_limits,
+            registry_settings,
+        )
     }
 
     fn clear_chunk_store(

@@ -1538,6 +1538,7 @@ impl CanisterManager {
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))
     }
 
+    #[allow(clippy::result_large_err)]
     pub(crate) fn upload_chunk(
         &self,
         sender: PrincipalId,
@@ -1547,30 +1548,46 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<UploadChunkResult, CanisterManagerError> {
+    ) -> Result<UploadChunkResult, (CanisterManagerError, Cycles)> {
         // Allow the canister itself to perform this operation.
         if sender != canister.canister_id().into() {
-            validate_controller(canister, &sender)?
+            validate_controller(canister, &sender).map_err(|err| (err, Cycles::zero()))?
         }
 
         // Charge for the upload. We charge before checking if the chunk has already been uploaded
         // since that check involves hash computation that we also want to charge for.
         let instructions = self.config.upload_wasm_chunk_instructions;
+        // For the `upload_chunk` operation, it does not matter if this is a Wasm64 or Wasm32 module
+        // since the number of instructions charged depends on a constant fee
+        // and Wasm64 does not bring any additional overhead for this operation.
+        // The only overhead is during execution time.
+        let execution_mode = WasmExecutionMode::Wasm32;
+        let cycles = self.cycles_account_manager.execution_cost(
+            instructions,
+            subnet_size,
+            cost_schedule,
+            execution_mode,
+        );
+        let memory_usage = canister.memory_usage();
+        let message_memory_usage = canister.message_memory_usage();
         self.cycles_account_manager
-            .consume_cycles_for_instructions(
-                &sender,
-                canister,
-                instructions,
+            .consume_cycles(
+                &mut canister.system_state,
+                memory_usage,
+                message_memory_usage,
+                cycles,
                 subnet_size,
                 cost_schedule,
-                // For the `upload_chunk` operation, it does not matter if this is a Wasm64 or Wasm32 module
-                // since the number of instructions charged depends on a constant fee
-                // and Wasm64 does not bring any additional overhead for this operation.
-                // The only overhead is during execution time.
-                WasmExecutionMode::Wasm32,
+                CyclesUseCase::Instructions,
+                true, // chunks can only be uploaded by controllers => reveal top up balance
             )
-            .map_err(|err| CanisterManagerError::WasmChunkStoreError {
-                message: format!("Error charging for 'upload_chunk': {err}"),
+            .map_err(|err| {
+                (
+                    CanisterManagerError::WasmChunkStoreError {
+                        message: format!("Error charging for 'upload_chunk': {err}"),
+                    },
+                    Cycles::zero(),
+                )
             })?;
 
         let validated_chunk = match canister
@@ -1589,7 +1606,10 @@ impl CanisterManager {
                 });
             }
             ChunkValidationResult::ValidationError(err) => {
-                return Err(CanisterManagerError::WasmChunkStoreError { message: err });
+                return Err((
+                    CanisterManagerError::WasmChunkStoreError { message: err },
+                    cycles,
+                ));
             }
         };
 
@@ -1599,26 +1619,32 @@ impl CanisterManager {
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
-            return Err(CanisterManagerError::WasmChunkStoreError {
-                message: format!(
-                    "Canister is heap delta rate limited. Current delta debit: {}, limit: {}",
-                    canister.scheduler_state.heap_delta_debit, self.config.heap_delta_rate_limit
-                ),
-            });
+            return Err((
+                CanisterManagerError::WasmChunkStoreError {
+                    message: format!(
+                        "Canister is heap delta rate limited. Current delta debit: {}, limit: {}",
+                        canister.scheduler_state.heap_delta_debit,
+                        self.config.heap_delta_rate_limit
+                    ),
+                },
+                cycles,
+            ));
         }
 
         let memory_usage = canister.memory_usage();
-        let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
-            subnet_size,
-            cost_schedule,
-            canister,
-            sender,
-            Cycles::zero(),
-            round_limits,
-            new_memory_usage,
-            memory_usage,
-            resource_saturation,
-        )?;
+        let validated_cycles_and_memory_usage = self
+            .cycles_and_memory_usage_checks(
+                subnet_size,
+                cost_schedule,
+                canister,
+                sender,
+                Cycles::zero(),
+                round_limits,
+                new_memory_usage,
+                memory_usage,
+                resource_saturation,
+            )
+            .map_err(|err| (err, cycles))?;
         self.cycles_and_memory_usage_updates(
             subnet_size,
             cost_schedule,
