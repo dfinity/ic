@@ -514,7 +514,13 @@ impl ExecutionEnvironment {
             RoundLimits,
             C,
         ) -> Result<
-            (CanisterState, RoundLimits, R, Vec<ExecEnvResponse>),
+            (
+                CanisterState,
+                RoundLimits,
+                R,
+                Vec<ExecEnvResponse>,
+                Vec<StopCanisterContext>,
+            ),
             (UserError, Cycles),
         >,
     {
@@ -522,7 +528,7 @@ impl ExecutionEnvironment {
         match state.canister_state_mut(&canister_id) {
             Some(clean_canister) => match op(clean_canister.clone(), round_limits.clone(), context)
             {
-                Ok((new_canister, new_round_limits, bytes, responses)) => {
+                Ok((new_canister, new_round_limits, bytes, responses, stop_contexts)) => {
                     state.put_canister_state(new_canister);
                     *round_limits = new_round_limits;
                     crate::util::process_responses(
@@ -532,6 +538,7 @@ impl ExecutionEnvironment {
                         self.log.clone(),
                         self.canister_not_found_error(),
                     );
+                    self.reject_stop_requests(canister_id, stop_contexts, state);
                     Ok(bytes)
                 }
                 Err((err, cycles)) => {
@@ -866,7 +873,13 @@ impl ExecutionEnvironment {
                         self.canister_manager
                             .uninstall_code(&mut canister, &mut round_limits, origin, time)
                             .map(|responses| {
-                                (canister, round_limits, EmptyBlob.encode(), responses)
+                                (
+                                    canister,
+                                    round_limits,
+                                    EmptyBlob.encode(),
+                                    responses,
+                                    vec![],
+                                )
                             })
                             .map_err(|err| (err.into(), Cycles::zero()))
                     };
@@ -919,7 +932,7 @@ impl ExecutionEnvironment {
                                 cost_schedule,
                                 subnet_size,
                             )
-                            .map(|bytes| (canister, round_limits, bytes, vec![]))
+                            .map(|bytes| (canister, round_limits, bytes, vec![], vec![]))
                             .map_err(|err| (err, Cycles::zero()))
                         };
                         let result = match CanisterSettings::try_from(args.settings) {
@@ -1052,8 +1065,31 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::StartCanister) => {
                 let res = CanisterIdRecord::decode(payload).and_then(|args| {
-                    self.start_canister(args.get_canister_id(), *msg.sender(), &mut state)
-                        .map(|res| (res, Some(args.get_canister_id())))
+                    let canister_id = args.get_canister_id();
+                    let sender = *msg.sender();
+                    let op = |mut canister, round_limits, sender| {
+                        self.canister_manager
+                            .start_canister(sender, &mut canister)
+                            .map(|stop_contexts| {
+                                (
+                                    canister,
+                                    round_limits,
+                                    EmptyBlob.encode(),
+                                    vec![],
+                                    stop_contexts,
+                                )
+                            })
+                            .map_err(|err| (err.into(), Cycles::zero()))
+                    };
+                    self.execute_mgmt_operation_on_canister(
+                        canister_id,
+                        op,
+                        sender,
+                        &mut state,
+                        round_limits,
+                        registry_settings,
+                    )
+                    .map(|bytes| (bytes, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -2383,26 +2419,6 @@ impl ExecutionEnvironment {
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
-    }
-
-    fn start_canister(
-        &self,
-        canister_id: CanisterId,
-        sender: PrincipalId,
-        state: &mut ReplicatedState,
-    ) -> Result<Vec<u8>, UserError> {
-        let canister = get_canister_mut(canister_id, state)?;
-
-        let result = self.canister_manager.start_canister(sender, canister);
-
-        match result {
-            Ok(stop_contexts) => {
-                // Reject outstanding stop messages (if any).
-                self.reject_stop_requests(canister_id, stop_contexts, state);
-                Ok(EmptyBlob.encode())
-            }
-            Err(err) => Err(err.into()),
-        }
     }
 
     fn deposit_cycles(

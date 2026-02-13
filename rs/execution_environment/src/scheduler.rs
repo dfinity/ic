@@ -957,7 +957,7 @@ impl SchedulerImpl {
                 // Burn the remaining balance of the canister.
                 canister.system_state.burn_remaining_balance_for_uninstall();
 
-                Ok((canister, round_limits, (), responses))
+                Ok((canister, round_limits, (), responses, vec![]))
             };
             if let Err(e) = self.exec_env.execute_mgmt_operation_on_canister(
                 canister_id,
