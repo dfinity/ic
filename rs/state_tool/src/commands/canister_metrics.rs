@@ -7,7 +7,6 @@ use std::{
 use ic_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::LoadMetrics;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_state_layout::CompleteCheckpointLayout;
 use ic_state_manager::{CheckpointMetrics, checkpoint::load_checkpoint};
@@ -47,16 +46,12 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
             .system_state
             .canister_metrics()
             .instructions_executed();
-        let LoadMetrics {
-            ingress_messages_executed,
-            remote_subnet_messages_executed,
-            local_subnet_messages_executed,
-            http_outcalls_executed,
-            heartbeats_and_global_timers_executed,
-        } = canister_state
-            .system_state
-            .canister_metrics()
-            .load_metrics();
+        let load_metrics = canister_state.system_state.canister_metrics().load_metrics();
+            let ingress_messages_executed = load_metrics.ingress_messages_executed();
+            let remote_subnet_messages_executed = load_metrics.remote_subnet_messages_executed();
+            let local_subnet_messages_executed = load_metrics.local_subnet_messages_executed();
+            let http_outcalls_executed = load_metrics.http_outcalls_executed();
+            let heartbeats_and_global_timers_executed = load_metrics.heartbeats_and_global_timers_executed();
         writeln!(
             output_file,
             "{canister_id},{instructions_executed},{ingress_messages_executed},{remote_subnet_messages_executed},{local_subnet_messages_executed},{http_outcalls_executed},{heartbeats_and_global_timers_executed}"

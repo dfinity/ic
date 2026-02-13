@@ -1931,7 +1931,7 @@ impl ExecutionEnvironment {
                     .system_state
                     .canister_metrics_mut()
                     .load_metrics_mut()
-                    .http_outcalls_executed += 1;
+                    .observe_http_outcall();
             }
             self.metrics.observe_message_with_label(
                 &request.method_name,
@@ -4476,13 +4476,13 @@ fn execute_canister_input(
         .load_metrics_mut();
     match &input {
         CanisterMessageOrTask::Message(CanisterMessage::Ingress(_)) => {
-            load_metrics.ingress_messages_executed += 1
+            load_metrics.observe_ingress_message();
         }
         CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
             if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) {
-                load_metrics.local_subnet_messages_executed += 1;
+                load_metrics.observe_local_subnet_message();
             } else {
-                load_metrics.remote_subnet_messages_executed += 1;
+                load_metrics.observe_remote_subnet_message();
             }
         }
         CanisterMessageOrTask::Message(CanisterMessage::Response {
@@ -4490,13 +4490,13 @@ fn execute_canister_input(
             callback: _,
         }) => {
             if network_topology.route(response.respondent.get()) == Some(exec_env.own_subnet_id) {
-                load_metrics.local_subnet_messages_executed += 1;
+                load_metrics.observe_local_subnet_message();
             } else {
-                load_metrics.remote_subnet_messages_executed += 1;
+                load_metrics.observe_remote_subnet_message();
             }
         }
         CanisterMessageOrTask::Task(CanisterTask::GlobalTimer | CanisterTask::Heartbeat) => {
-            load_metrics.heartbeats_and_global_timers_executed += 1;
+            load_metrics.observe_heartbeat_or_global_timer();
         }
         CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
     }

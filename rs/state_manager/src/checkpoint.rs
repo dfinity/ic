@@ -865,14 +865,12 @@ pub fn load_canister_state(
         canister_state_bits.consumed_cycles,
         canister_state_bits.consumed_cycles_by_use_cases,
         canister_state_bits.instructions_executed,
-        LoadMetrics {
-            ingress_messages_executed: canister_state_bits.ingress_messages_executed,
-            remote_subnet_messages_executed: canister_state_bits.remote_subnet_messages_executed,
-            local_subnet_messages_executed: canister_state_bits.local_subnet_messages_executed,
-            http_outcalls_executed: canister_state_bits.http_outcalls_executed,
-            heartbeats_and_global_timers_executed: canister_state_bits
-                .heartbeats_and_global_timers_executed,
-        },
+        LoadMetrics::new(
+            canister_state_bits.ingress_messages_executed,
+            canister_state_bits.remote_subnet_messages_executed,
+            canister_state_bits.local_subnet_messages_executed,
+            canister_state_bits.http_outcalls_executed,
+            canister_state_bits.heartbeats_and_global_timers_executed)
     );
 
     let starting_time = Instant::now();

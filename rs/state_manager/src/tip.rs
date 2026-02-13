@@ -1367,12 +1367,12 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .system_state
                 .canister_metrics()
                 .instructions_executed(),
-            ingress_messages_executed: load_metrics_bits.ingress_messages_executed,
-            remote_subnet_messages_executed: load_metrics_bits.remote_subnet_messages_executed,
-            local_subnet_messages_executed: load_metrics_bits.local_subnet_messages_executed,
-            http_outcalls_executed: load_metrics_bits.http_outcalls_executed,
+            ingress_messages_executed: load_metrics_bits.ingress_messages_executed(),
+            remote_subnet_messages_executed: load_metrics_bits.remote_subnet_messages_executed(),
+            local_subnet_messages_executed: load_metrics_bits.local_subnet_messages_executed(),
+            http_outcalls_executed: load_metrics_bits.http_outcalls_executed(),
             heartbeats_and_global_timers_executed: load_metrics_bits
-                .heartbeats_and_global_timers_executed,
+                .heartbeats_and_global_timers_executed(),
         }
         .into(),
     )?;

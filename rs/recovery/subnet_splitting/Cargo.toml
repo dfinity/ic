@@ -20,11 +20,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-recovery = { path = "../" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-<<<<<<< HEAD
-ic-replay = { path = "../../replay" }
 ic-state-layout = { path = "../../state_layout" }
-=======
->>>>>>> master
 ic-state-manager = { path = "../../state_manager" }
 ic-state-tool = { path = "../../state_tool" }
 ic-types = { path = "../../types/types" }

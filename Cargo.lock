@@ -14539,12 +14539,8 @@ dependencies = [
  "ic-recovery",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
-<<<<<<< HEAD
- "ic-replay",
  "ic-state-layout",
  "ic-state-machine-tests",
-=======
->>>>>>> master
  "ic-state-manager",
  "ic-state-tool",
  "ic-test-utilities-logger",

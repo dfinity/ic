@@ -120,11 +120,64 @@ enum ConsumingCycles {
 /// canisters contribute to heavy subnet load.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct LoadMetrics {
-    pub ingress_messages_executed: u64,
-    pub remote_subnet_messages_executed: u64,
-    pub local_subnet_messages_executed: u64,
-    pub http_outcalls_executed: u64,
-    pub heartbeats_and_global_timers_executed: u64,
+    ingress_messages_executed: u64,
+    remote_subnet_messages_executed: u64,
+    local_subnet_messages_executed: u64,
+    http_outcalls_executed: u64,
+    heartbeats_and_global_timers_executed: u64,
+}
+
+impl LoadMetrics {
+    pub fn new(
+        ingress_messages_executed: u64,
+        remote_subnet_messages_executed: u64,
+        local_subnet_messages_executed: u64,
+        http_outcalls_executed: u64,
+        heartbeats_and_global_timers_executed: u64,
+    ) -> Self {
+        Self {
+            ingress_messages_executed,
+            remote_subnet_messages_executed,
+            local_subnet_messages_executed,
+            http_outcalls_executed,
+            heartbeats_and_global_timers_executed,
+        }
+    }
+
+    pub fn ingress_messages_executed(&self) -> u64 {
+        self.ingress_messages_executed
+    }
+    pub fn observe_ingress_message(&mut self) {
+        self.ingress_messages_executed += 1;
+    }
+
+    pub fn remote_subnet_messages_executed(&self) -> u64 {
+        self.remote_subnet_messages_executed
+    }
+    pub fn observe_remote_subnet_message(&mut self) {
+        self.remote_subnet_messages_executed += 1;
+    }
+
+    pub fn local_subnet_messages_executed(&self) -> u64 {
+        self.local_subnet_messages_executed
+    }
+    pub fn observe_local_subnet_message(&mut self) {
+        self.local_subnet_messages_executed += 1;
+    }
+
+    pub fn http_outcalls_executed(&self) -> u64 {
+        self.http_outcalls_executed
+    }
+    pub fn observe_http_outcall(&mut self) {
+        self.http_outcalls_executed += 1;
+    }
+
+    pub fn heartbeats_and_global_timers_executed(&self) -> u64 {
+        self.heartbeats_and_global_timers_executed
+    }
+    pub fn observe_heartbeat_or_global_timer(&mut self) {
+        self.heartbeats_and_global_timers_executed += 1;
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
