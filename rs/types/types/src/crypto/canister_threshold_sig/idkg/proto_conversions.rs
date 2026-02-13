@@ -570,7 +570,7 @@ fn initial_dealings_vec(
     dealing_tuple_protos: Vec<IDkgSignedDealingTupleProto>,
 ) -> Result<Vec<SignedIDkgDealing>, ProxyDecodeError> {
     dealing_tuple_protos
-         .into_iter()
-         .map(SignedIDkgDealing::try_from)
-         .collect()
+        .into_iter()
+        .map(SignedIDkgDealing::try_from)
+        .collect()
 }
