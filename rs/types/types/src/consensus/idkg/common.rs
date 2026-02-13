@@ -1,6 +1,6 @@
 //! Canister threshold transcripts and references related defininitions.
 use crate::consensus::get_faults_tolerated;
-use crate::{Height, RegistryVersion, node_id_try_from_protobuf};
+use crate::{Height, RegistryVersion};
 use crate::{
     consensus::idkg::{
         IDkgPayload, ecdsa::PreSignatureQuadrupleError, schnorr::PreSignatureTranscriptError,
@@ -314,7 +314,7 @@ impl TryFrom<pb::IDkgTranscriptAttributes> for IDkgTranscriptAttributes {
     fn try_from(attributes: pb::IDkgTranscriptAttributes) -> Result<Self, Self::Error> {
         let mut receivers = BTreeSet::new();
         for pb_node_id in attributes.receivers {
-            let node_id = node_id_try_from_protobuf(pb_node_id)?;
+            let node_id = crate::node_id_try_from_protobuf(pb_node_id)?;
             receivers.insert(node_id);
         }
         Ok(IDkgTranscriptAttributes::new(
@@ -883,13 +883,13 @@ impl TryFrom<pb::IDkgTranscriptParamsRef> for IDkgTranscriptParamsRef {
 
         let mut dealers = BTreeSet::new();
         for pb_node_id in params.dealers {
-            let node_id = node_id_try_from_protobuf(pb_node_id)?;
+            let node_id = crate::node_id_try_from_protobuf(pb_node_id)?;
             dealers.insert(node_id);
         }
 
         let mut receivers = BTreeSet::new();
         for pb_node_id in params.receivers {
-            let node_id = node_id_try_from_protobuf(pb_node_id)?;
+            let node_id = crate::node_id_try_from_protobuf(pb_node_id)?;
             receivers.insert(node_id);
         }
 
