@@ -1053,13 +1053,12 @@ impl From<&ConsensusMessageHash> for pb::ConsensusMessageHash {
     }
 }
 
-impl TryFrom<&pb::ConsensusMessageHash> for ConsensusMessageHash {
+impl TryFrom<pb::ConsensusMessageHash> for ConsensusMessageHash {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::ConsensusMessageHash) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ConsensusMessageHash) -> Result<Self, Self::Error> {
         use pb::consensus_message_hash::Kind;
         let kind = value
             .kind
-            .clone()
             .ok_or_else(|| ProxyDecodeError::MissingField("ConsensusMessageHash::kind"))?;
 
         Ok(match kind {
