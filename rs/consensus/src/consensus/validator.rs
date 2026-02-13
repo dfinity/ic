@@ -981,10 +981,11 @@ impl Validator {
                 .get_block(proposal.block_hash(), proposal.height())
                 .is_some()
             {
-                change_set.push(ChangeAction::HandleInvalid(
-                    proposal.into_message(),
-                    String::from("Duplicate block proposal"),
-                ));
+                change_set.push(ChangeAction::RemoveFromUnvalidated(proposal.into_message()));
+                self.metrics
+                    .duplicate_artifact
+                    .with_label_values(&["block_proposal"])
+                    .inc();
                 continue;
             }
 
@@ -4021,9 +4022,8 @@ pub mod test {
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_matches!(
                 changeset[..],
-                [ChangeAction::HandleInvalid(
+                [ChangeAction::RemoveFromUnvalidated(
                     ConsensusMessage::BlockProposal(_),
-                    _
                 )]
             );
             pool.apply(changeset);
@@ -4468,7 +4468,7 @@ pub mod test {
                     .filter(|change| {
                         matches!(
                             change,
-                            ChangeAction::HandleInvalid(ConsensusMessage::BlockProposal(_), _)
+                            ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(_),)
                         )
                     })
                     .count();
