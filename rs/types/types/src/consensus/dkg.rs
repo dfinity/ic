@@ -114,6 +114,18 @@ impl From<Message> for pb::DkgMessage {
     }
 }
 
+impl From<&Message> for pb::DkgMessage {
+    fn from(message: &Message) -> Self {
+        Self {
+            replica_version: message.content.version.to_string(),
+            dkg_id: Some(pb::NiDkgId::from(message.content.dkg_id.clone())),
+            dealing: bincode::serialize(&message.content.dealing).unwrap(),
+            signature: message.signature.signature.clone().get().0,
+            signer: Some(crate::node_id_into_protobuf(message.signature.signer)),
+        }
+    }
+}
+
 impl TryFrom<pb::DkgMessage> for Message {
     type Error = ProxyDecodeError;
 
@@ -535,11 +547,9 @@ impl From<&DkgDataPayload> for pb::DkgPayload {
     fn from(data_payload: &DkgDataPayload) -> Self {
         Self {
             val: Some(pb::dkg_payload::Val::DataPayload(pb::DkgDataPayload {
-                // TODO do we need this clone
                 dealings: data_payload
                     .messages
                     .iter()
-                    .cloned()
                     .map(pb::DkgMessage::from)
                     .collect(),
                 summary_height: data_payload.start_height.get(),

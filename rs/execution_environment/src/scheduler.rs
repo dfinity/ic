@@ -765,17 +765,13 @@ impl SchedulerImpl {
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
     ) {
         let current_time = state.time();
-        let not_expired_yet = |ingress: &Ingress| ingress.expiry_time >= current_time;
-        let mut expired_ingress_messages =
-            state.filter_subnet_queues_ingress_messages(not_expired_yet);
+        let not_expired = |ingress: &Ingress| ingress.expiry_time >= current_time;
+        let mut expired_ingress_messages = state.subnet_queues_retain_ingress_messages(not_expired);
         for canister in state.canisters_iter_mut() {
-            if canister.system_state.any_ingress_messages(not_expired_yet) {
+            if !canister.system_state.all_ingress_messages(not_expired) {
                 let canister = Arc::make_mut(canister);
-                expired_ingress_messages.extend(
-                    canister
-                        .system_state
-                        .filter_ingress_messages(not_expired_yet),
-                );
+                expired_ingress_messages
+                    .extend(canister.system_state.retain_ingress_messages(not_expired));
             }
         }
         for ingress in expired_ingress_messages.iter() {
@@ -1440,7 +1436,6 @@ impl Scheduler for SchedulerImpl {
                 &mut csprng,
                 registry_settings,
                 self.metrics.as_ref(),
-                &self.config,
                 &round_log,
             );
         }
@@ -1489,22 +1484,27 @@ impl Scheduler for SchedulerImpl {
                             };
                     }
 
+                    let log_memory_usage = canister.system_state.canister_log.bytes_used();
                     self.metrics
                         .canister_log_memory_usage_v2
-                        .observe(canister.system_state.canister_log.bytes_used() as f64);
+                        .observe(log_memory_usage as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
-                        .observe(canister.system_state.canister_log.bytes_used() as f64);
+                        .observe(log_memory_usage as f64);
+
                     if canister.system_state.canister_log.has_delta_log_sizes() {
                         let canister = Arc::make_mut(canister);
-                        for memory_usage in
-                            canister.system_state.canister_log.take_delta_log_sizes()
-                        {
+                        let delta_log_sizes = canister.system_state.canister_log.delta_log_sizes();
+                        // IMPORTANT: clear_delta_log_sizes() must be called to make sure
+                        // that the delta log sizes are always empty at the end of the round.
+                        canister.system_state.canister_log.clear_delta_log_sizes();
+                        for size in delta_log_sizes {
                             self.metrics
                                 .canister_log_delta_memory_usage
-                                .observe(memory_usage as f64);
+                                .observe(size as f64);
                         }
                     }
+
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_allocated_bytes += canister
                         .memory_allocation()

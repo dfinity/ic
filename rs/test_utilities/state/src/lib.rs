@@ -774,10 +774,7 @@ pub fn get_initial_state_with_balance(
 
 /// Returns the ordered IDs of the canisters contained within `state`.
 pub fn canister_ids(state: &ReplicatedState) -> Vec<CanisterId> {
-    state
-        .canisters_iter()
-        .map(|canister_state| canister_state.canister_id())
-        .collect()
+    state.canister_states().keys().cloned().collect()
 }
 
 pub fn new_canister_state(

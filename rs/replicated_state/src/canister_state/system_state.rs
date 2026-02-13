@@ -1447,21 +1447,22 @@ impl SystemState {
         }
     }
 
-    /// Returns `true` if there are any ingress messages in the queue that satisfy
-    /// the filter, `false` otherwise.
-    pub fn any_ingress_messages<F>(&self, filter: F) -> bool
+    /// Returns `true` if all ingress messages in the canister's ingress queue
+    /// satisfy the predicate, `false` otherwise.
+    pub fn all_ingress_messages<F>(&self, predicate: F) -> bool
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.queues.any_ingress_messages(filter)
+        self.queues.all_ingress_messages(predicate)
     }
 
-    /// See `IngressQueue::filter_messages()` for documentation.
-    pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
+    /// Retains only the ingress messages that satisfy the predicate, removing and
+    /// returning all the ingress messages that don't.
+    pub fn retain_ingress_messages<F>(&mut self, predicate: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.queues.filter_ingress_messages(filter)
+        self.queues.retain_ingress_messages(predicate)
     }
 
     /// Returns the memory currently used by or reserved for guaranteed response

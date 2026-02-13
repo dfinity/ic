@@ -447,7 +447,6 @@ fn idkg_transcript_proto(idkg_transcript: &IDkgTranscript) -> IDkgTranscriptProt
         .iter()
         .map(|(node_index, signed_dealing)| verified_idkg_dealing_proto(node_index, signed_dealing))
         .collect();
-    // TODO(CRP-1403): construct real `dealers` once `IDkgTranscript.dealers` exists.
     let dealers = vec![];
     IDkgTranscriptProto {
         transcript_id: Some(IDkgTranscriptIdProto::from(&idkg_transcript.transcript_id)),

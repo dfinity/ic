@@ -177,7 +177,6 @@ mod tests {
     use super::*;
     use tempfile::tempdir as tempdir_deleted_at_end_of_scope;
 
-    // TODO(CRP-1338): review the creation/usage of the temp dirs.
     pub fn mk_temp_dir_with_permissions(mode: u32) -> TempDir {
         let dir = tempdir_deleted_at_end_of_scope().unwrap();
         fs::set_permissions(dir.path(), Permissions::from_mode(mode))

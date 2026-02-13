@@ -68,13 +68,6 @@ system_test_nns(
     ],
 )
 
-filegroup(
-    name = "erc20_contract",
-    srcs = [
-        "ERC20.sol",
-    ],
-)
-
 oci_tar(
     name = "foundry.tar",
     image = "@foundry",
@@ -83,11 +76,11 @@ oci_tar(
 
 uvm_config_image(
     name = "cketh_uvm_config_image",
-    srcs = [
-        ":erc20_contract",
-        ":foundry.tar",
-        "//rs/ethereum/cketh/minter:helper_contracts",
-    ],
+    srcmap = {
+        ":ERC20.sol": "ERC20.sol",
+        ":foundry.tar": "foundry.tar",
+        "//rs/ethereum/cketh/minter:helper_contracts": "/",
+    },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
@@ -98,13 +91,10 @@ exports_files([
 
 uvm_config_image(
     name = "btc_uvm_config_image",
-    srcs = [
-        ":bitcoind.tar",
-        ":btc_integration/bitcoin.conf",
-        ":btc_integration/btc_activate.sh",
-    ],
-    remap_paths = {
-        "btc_activate.sh": "activate",
+    srcmap = {
+        ":bitcoind.tar": "bitcoind.tar",
+        ":btc_integration/bitcoin.conf": "bitcoin.conf",
+        ":btc_integration/btc_activate.sh": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

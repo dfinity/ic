@@ -1,6 +1,5 @@
 [package]
 name = "open_rootfs"
-version = "0.1.0"
 edition.workspace = true
 
 [features]
@@ -13,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-ic-agent = { workspace = true }
+ic-certificate-verification = { workspace = true }
 ic-certification = { workspace = true }
 pem = { workspace = true }
 rand = { workspace = true }
@@ -26,6 +25,7 @@ command_runner = { path = "../command_runner" }
 config_tool = { path = "../config/tool" }
 config_types = { path = "../config/types" }
 ic_device = { path = "../device" }
+ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 sev_guest = { path = "../sev/guest" }

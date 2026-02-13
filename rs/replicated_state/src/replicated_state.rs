@@ -668,7 +668,7 @@ impl ReplicatedState {
     ///
     /// Intended to work around borrow checker limitations and allow inspecting
     /// and/or mutating the two collections concurrently.
-    pub fn subnet_schedule_mut(
+    pub fn canisters_and_schedule_mut(
         &mut self,
     ) -> (
         &mut BTreeMap<CanisterId, Arc<CanisterState>>,
@@ -1138,12 +1138,13 @@ impl ReplicatedState {
         self.refunds.retain(|refund| !f(refund));
     }
 
-    /// See `IngressQueue::filter_messages()` for documentation.
-    pub fn filter_subnet_queues_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
+    /// In the subnet queues, retains only the ingress messages that satisfy the
+    /// predicate, removing and returning all the ingress messages that don't.
+    pub fn subnet_queues_retain_ingress_messages<F>(&mut self, predicate: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.subnet_queues.filter_ingress_messages(filter)
+        self.subnet_queues.retain_ingress_messages(predicate)
     }
 
     /// Returns an immutable reference to `self.epoch_query_stats`.
@@ -1524,7 +1525,6 @@ impl ReplicatedState {
         // subnet A', ensuring consistency across subnet and canister states.
         if metadata.split_from != Some(metadata.own_subnet_id) {
             for canister_state in canister_states.values_mut() {
-                // TODO Check if canister has call contexts before making a mutable reference.
                 Arc::make_mut(canister_state).drop_in_progress_management_calls_after_split();
             }
         }
@@ -1650,7 +1650,6 @@ impl ReplicatedState {
             // The corresponding calls are rejected by the *subnet A'* call context manager,
             // ensuring consistency across subnet call context manager and canister states.
             for canister_state in canister_states.values_mut() {
-                // TODO Check if canister has call contexts before making a mutable reference.
                 Arc::make_mut(canister_state).drop_in_progress_management_calls_after_split();
             }
         }

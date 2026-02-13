@@ -219,7 +219,7 @@ impl RoundSchedule {
         self.long_executions_count = 0;
         self.long_executions_compute_allocation = AccumulatedPriority::new(0);
 
-        let (canister_states, subnet_schedule) = state.subnet_schedule_mut();
+        let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
         // TODO(DSM-102): Consider using `left_outer_join()` here.
         self.schedule = canister_states
@@ -444,7 +444,7 @@ impl RoundSchedule {
     }
 
     pub(crate) fn finish_round(&self, state: &mut ReplicatedState, current_round: ExecutionRound) {
-        let (canister_states, subnet_schedule) = state.subnet_schedule_mut();
+        let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
         // Charge canisters for full executions in this round.
         //

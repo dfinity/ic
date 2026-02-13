@@ -433,6 +433,8 @@ fn install_code(
             instructions_used,
             result,
         } => {
+            // `update_on_low_wasm_memory_hook_condition()` requires an `Arc<CanisterState>`
+            // so we need to jump through this hoop to make it work.
             let mut canister = Arc::new(canister);
             canister.update_on_low_wasm_memory_hook_condition();
             (

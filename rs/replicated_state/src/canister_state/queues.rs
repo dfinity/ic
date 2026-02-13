@@ -697,21 +697,22 @@ impl CanisterQueues {
         CanisterOutputQueuesIterator::new(&mut self.canister_queues, &mut self.store)
     }
 
-    /// Returns `true` if there are any ingress messages in the queue that satisfy
-    /// the filter, `false` otherwise.
-    pub fn any_ingress_messages<F>(&self, filter: F) -> bool
+    /// Returns `true` if all enqueued ingress messages satisfy the predicate,
+    /// `false` otherwise.
+    pub(crate) fn all_ingress_messages<F>(&self, predicate: F) -> bool
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.ingress_queue.any_messages(filter)
+        self.ingress_queue.all_messages(predicate)
     }
 
-    /// See `IngressQueue::filter_messages()` for documentation.
-    pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
+    /// Retains only the ingress messages that satisfy the predicate, removing and
+    /// returning all the ingress messages that don't.
+    pub(crate) fn retain_ingress_messages<F>(&mut self, predicate: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.ingress_queue.filter_messages(filter)
+        self.ingress_queue.retain_messages(predicate)
     }
 
     /// Enqueues a canister-to-canister message into the induction pool.

@@ -629,22 +629,18 @@ impl StateMachine for FakeStateMachine {
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.node_public_keys = node_public_keys;
         state.metadata.api_boundary_nodes = api_boundary_nodes;
-        let mut canister_states = BTreeMap::new();
-        canister_states.insert(
-            canister_test_id(1),
+        state.put_canister_state(
             CanisterStateBuilder::new()
+                .with_canister_id(canister_test_id(1))
                 .with_wasm(vec![2; 1024 * 1024]) // 1MiB wasm
-                .build()
-                .into(),
+                .build(),
         );
-        canister_states.insert(
-            canister_test_id(2),
+        state.put_canister_state(
             CanisterStateBuilder::new()
+                .with_canister_id(canister_test_id(2))
                 .with_wasm(vec![5; 10 * 1024]) // 10 KiB wasm
-                .build()
-                .into(),
+                .build(),
         );
-        state.put_canister_states(canister_states);
         *self.0.lock().unwrap() = registry_settings.clone();
         state
     }
@@ -1835,8 +1831,7 @@ fn process_batch_updates_subnet_metrics() {
 
         let latest_state = state_manager.get_latest_state().take();
         let canister_state = latest_state
-            .canister_states()
-            .values()
+            .canisters_iter()
             .map(|canister| canister.memory_usage())
             .sum();
         assert_eq!(
