@@ -49,6 +49,14 @@ pub enum Commands {
         #[arg(long, default_value = config_tool::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
     },
+    /// Updates the HostOS config by reading the node operator private key from
+    /// disk and injecting it into the config struct
+    UpdateConfig {
+        #[arg(long, default_value = config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        hostos_config_json_path: PathBuf,
+        #[arg(long, default_value = "/boot/config/node_operator_private_key.pem", value_name = "node_operator_private_key.pem")]
+        node_operator_private_key_path: PathBuf,
+    },
     /// Dumps OS configuration
     DumpOSConfig {
         /// Type of the operating system to select the right config
@@ -226,6 +234,43 @@ pub fn main() -> Result<()> {
                 config_tool::deserialize_config(&guestos_config_json_path)?;
 
             generate_ic_config::generate_ic_config(&guestos_config, &output_path)
+        }
+        Some(Commands::UpdateConfig {
+            hostos_config_json_path,
+            node_operator_private_key_path,
+        }) => {
+            println!("Updating HostOS configuration");
+
+            let mut hostos_config: HostOSConfig =
+                config_tool::deserialize_config(&hostos_config_json_path)?;
+
+            if !node_operator_private_key_path.exists() {
+                println!(
+                    "Node operator private key file not found at {}. Skipping update.",
+                    node_operator_private_key_path.display()
+                );
+                return Ok(());
+            }
+
+            if hostos_config.icos_settings.node_operator_private_key.is_some() {
+                println!("Node operator private key already present in config. Skipping update.");
+                return Ok(());
+            }
+
+            let node_operator_private_key = fs::read_to_string(&node_operator_private_key_path)
+                .context("unable to read node operator private key")?;
+
+            hostos_config.icos_settings.node_operator_private_key =
+                Some(node_operator_private_key);
+
+            serialize_and_write_config(&hostos_config_json_path, &hostos_config)?;
+
+            println!(
+                "HostOS config updated with node operator private key and written to {}",
+                hostos_config_json_path.display()
+            );
+
+            Ok(())
         }
         Some(Commands::DumpOSConfig { os_type }) => {
             println!("Dumping OS configuration");
