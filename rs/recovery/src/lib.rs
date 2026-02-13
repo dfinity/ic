@@ -367,22 +367,26 @@ impl Recovery {
         )
     }
 
-    /// Return the list of paths to include when downloading a node's state with rsync. One of them
-    /// is a checkpoint:
+    /// Return the list of paths to include when downloading a node's "production" state (i.e. at
+    /// /var/lib/ic/data) with rsync.
+    /// One of them is a checkpoint, which is looked up remotely via ssh if an `ssh_helper` is
+    /// given, or locally on disk otherwise:
     /// If we have downloaded the consensus pool before, then download the checkpoint corresponding
     /// to the latest CUP height since we start replaying from there. If the checkpoint does not
     /// exist, return an error, except if it is a genesis CUP, where it is expected that there is
     /// no checkpoint.
     /// If we have not downloaded the consensus pool, then fall back to the latest checkpoint,
     /// returning an error if there are no checkpoints.
+    ///
     /// In almost all cases, the latest CUP checkpoint and the latest one in absolute should be the
     /// same, but we could imagine a scenario where the subnet stalled after the checkpoint was
     /// created but before the CUP was created, at which point the latest checkpoint would be ahead
     /// of the latest CUP. In that case, we would definitely want the checkpoint at the previous
     /// CUP height.
+    ///
     /// The existence check is done remotely via ssh if an `ssh_helper` is given, or locally on
     /// disk otherwise.
-    pub fn get_ic_state_includes_with_paths(
+    fn get_ic_state_includes_with_paths(
         logger: &Logger,
         checkpoints_path: &Path,
         consensus_pool_path: &Path,
@@ -519,11 +523,14 @@ impl Recovery {
 
     /// Return a [CopyLocalIcStateStep] copying the ic_state of the current
     /// node to the recovery data directory.
-    pub fn get_copy_local_state_step(&self) -> impl Step + use<> {
+    pub fn get_copy_local_state_step(&self) -> RecoveryResult<impl Step + use<>> {
+        let data_includes = self.get_ic_state_includes(None)?;
+
         CopyLocalIcStateStep {
             logger: self.logger.clone(),
             working_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
+            data_includes,
         }
     }
 

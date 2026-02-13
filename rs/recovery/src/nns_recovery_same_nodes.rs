@@ -380,7 +380,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::DownloadState => match self.params.admin_access_location {
                 Some(DataLocation::Local) => {
-                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
+                    Ok(Box::new(self.recovery.get_copy_local_state_step()?))
                 }
                 Some(DataLocation::Remote(node_ip)) => {
                     Ok(Box::new(self.recovery.get_download_state_step(

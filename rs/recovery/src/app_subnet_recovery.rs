@@ -404,7 +404,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::DownloadState => match self.params.download_state_method {
                 Some(DataLocation::Local) => {
-                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
+                    Ok(Box::new(self.recovery.get_copy_local_state_step()?))
                 }
                 Some(DataLocation::Remote(node_ip)) => {
                     let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {

@@ -367,6 +367,7 @@ pub struct CopyLocalIcStateStep {
     pub logger: Logger,
     pub working_dir: PathBuf,
     pub require_confirmation: bool,
+    pub data_includes: Vec<PathBuf>,
 }
 
 impl Step for CopyLocalIcStateStep {
@@ -383,13 +384,7 @@ impl Step for CopyLocalIcStateStep {
         let log = self.require_confirmation.then_some(&self.logger);
 
         // State
-        let includes = Recovery::get_ic_state_includes_with_paths(
-            &self.logger,
-            &PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH),
-            &self.working_dir.join("data").join(IC_CONSENSUS_POOL_PATH),
-            None,
-        )?;
-        for include in includes.iter() {
+        for include in self.data_includes.iter() {
             let src = PathBuf::from(IC_DATA_PATH).join(include);
             let dst_parent = self
                 .working_dir
