@@ -895,17 +895,19 @@ def last(args):
     that have either succeeded, flaked, timed out or failed
     in the specified period.
     """
-    overall_statuses = []
+    overall_statuses = set()
     if args.success:
-        overall_statuses.append(1)
+        overall_statuses.add(1)
     if args.flaky:
-        overall_statuses.append(2)
+        overall_statuses.add(2)
     if args.timedout:
-        overall_statuses.append(3)
+        overall_statuses.add(3)
     if args.failed:
-        overall_statuses.append(4)
+        overall_statuses.add(4)
+    if args.non_success:
+        overall_statuses.update({2, 3, 4})
     if len(overall_statuses) == 0:
-        overall_statuses = [1, 2, 3, 4]
+        overall_statuses = {1, 2, 3, 4}
 
     query = sql.SQL((THIS_SCRIPT_DIR / "last.sql").read_text()).format(
         test_target=sql.Literal(args.test_target),
@@ -1131,6 +1133,9 @@ Examples:
 """,
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
+    last_runs_parser.add_argument(
+        "--non_success", action="store_true", help="Include non-successful runs (i.e. flaky, failed and timed-out)"
+    )
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
     last_runs_parser.add_argument("--failed", action="store_true", help="Include failed runs")
     last_runs_parser.add_argument("--timedout", action="store_true", help="Include timed-out runs")
