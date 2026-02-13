@@ -1341,4 +1341,28 @@ mod cketh_evm_rpc {
             .build()
             .expect_rpc_calls(&cketh);
     }
+
+    #[test]
+    fn should_not_panic_when_evm_rpc_canister_is_stopped() {
+        let cketh = CkEthSetup::default();
+        // The minter starts right away by scraping the logs,
+        // which leads the state machine to panic if we were to stop directly the EVM RPC canister.
+        // So we first stop the minter to start fresh.
+        cketh.stop_minter();
+        cketh
+            .env
+            .stop_canister(cketh.evm_rpc_id)
+            .expect("Failed to stop EVM RPC canister");
+        cketh.start_minter();
+
+        cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+
+        for _ in 0..10 {
+            cketh.env.tick();
+            let logs = cketh.minter_canister_logs();
+            if let Some(panicking_log) = logs.iter().find(|l| l.content.contains("ic0.trap")) {
+                panic!("Minter panicked: {}", panicking_log.content);
+            }
+        }
+    }
 }
