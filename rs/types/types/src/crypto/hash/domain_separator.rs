@@ -60,6 +60,7 @@ pub enum DomainSeparator {
     SignedIDkgOpening,
     CanisterHttpResponse,
     CryptoHashOfCanisterHttpResponseMetadata,
+    CanisterHttpPaymentMetadata,
     CanisterHttpResponseShare,
 }
 
@@ -125,6 +126,9 @@ impl DomainSeparator {
             DomainSeparator::CanisterHttpResponse => "ic-canister-http-response-domain",
             DomainSeparator::CryptoHashOfCanisterHttpResponseMetadata => {
                 "ic-crypto-hash-of-canister-http-response-metadata-domain"
+            }
+            DomainSeparator::CanisterHttpPaymentMetadata => {
+                "ic-canister-http-payment-metadata-domain"
             }
             DomainSeparator::CanisterHttpResponseShare => "ic-canister-http-response-share-domain",
         }
@@ -248,6 +252,10 @@ fn domain_separators_are_stable() {
         (
             "CryptoHashOfCanisterHttpResponseMetadata",
             "ic-crypto-hash-of-canister-http-response-metadata-domain",
+        ),
+        (
+            "CanisterHttpPaymentMetadata",
+            "ic-canister-http-payment-metadata-domain",
         ),
         (
             "CanisterHttpResponseShare",

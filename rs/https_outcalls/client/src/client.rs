@@ -1,6 +1,5 @@
 use crate::metrics::Metrics;
 use candid::Encode;
-use futures::future::TryFutureExt;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_pricing::{
     AdapterLimits, BudgetTracker, NetworkUsage, PricingError, PricingFactory,
@@ -18,12 +17,12 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{
     CanisterId, NumBytes, NumInstructions,
     canister_http::{
-        CanisterHttpMethod, CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext,
-        CanisterHttpResponse, CanisterHttpResponseContent, Transform,
+        CanisterHttpMethod, CanisterHttpPaymentMetadata, CanisterHttpReject, CanisterHttpRequest,
+        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent, Transform,
         validate_http_headers_and_body,
     },
     ingress::WasmResult,
-    messages::{Query, QuerySource, Request},
+    messages::{Query, QuerySource},
 };
 use std::{
     sync::{Arc, atomic::AtomicU64},
@@ -45,7 +44,7 @@ use tracing::instrument;
 pub struct BrokenCanisterHttpClient {}
 
 impl NonBlockingChannel<CanisterHttpRequest> for BrokenCanisterHttpClient {
-    type Response = CanisterHttpResponse;
+    type Response = (CanisterHttpResponse, CanisterHttpPaymentMetadata);
     fn send(
         &self,
         _canister_http_request: CanisterHttpRequest,
@@ -53,7 +52,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for BrokenCanisterHttpClient {
         Err(SendError::BrokenConnection)
     }
 
-    fn try_receive(&mut self) -> Result<CanisterHttpResponse, TryReceiveError> {
+    fn try_receive(&mut self) -> Result<Self::Response, TryReceiveError> {
         Err(TryReceiveError::Empty)
     }
 }
@@ -62,8 +61,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for BrokenCanisterHttpClient {
 pub struct CanisterHttpAdapterClientImpl {
     rt_handle: Handle,
     grpc_channel: Channel,
-    tx: Sender<CanisterHttpResponse>,
-    rx: Receiver<CanisterHttpResponse>,
+    tx: Sender<(CanisterHttpResponse, CanisterHttpPaymentMetadata)>,
+    rx: Receiver<(CanisterHttpResponse, CanisterHttpPaymentMetadata)>,
     query_service: TransformExecutionService,
     metrics: Metrics,
     log: ReplicaLogger,
@@ -92,8 +91,114 @@ impl CanisterHttpAdapterClientImpl {
     }
 }
 
+fn validate_response(
+    response: HttpsOutcallResponse,
+) -> Result<CanisterHttpResponsePayload, (RejectCode, String)> {
+    let canister_http_payload =
+        CanisterHttpResponsePayload {
+            status: response.status as u128,
+            headers: response
+                .headers
+                .into_iter()
+                .map(|HttpHeader { name, value }| {
+                    ic_management_canister_types_private::HttpHeader { name, value }
+                })
+                .collect(),
+            body: response.content,
+        };
+    validate_http_headers_and_body(&canister_http_payload.headers, &canister_http_payload.body)
+        .map_err(
+            |e: ic_types::canister_http::CanisterHttpRequestContextError| {
+                (
+                    RejectCode::SysFatal,
+                    UserError::from(e).description().to_string(),
+                )
+            },
+        )?;
+    Ok(canister_http_payload)
+}
+
+async fn execute_http_request(
+    adapter_client: &mut HttpsOutcallsServiceClient<Channel>,
+    context: &CanisterHttpRequestContext,
+    socks_proxy_addrs: &[String],
+    budget: &mut Box<dyn BudgetTracker>,
+) -> Result<(HttpsOutcallResponse, u64), (RejectCode, String)> {
+    let AdapterLimits {
+        max_response_size,
+        max_response_time,
+    } = budget.get_adapter_limits();
+
+    let proto_req = HttpsOutcallRequest {
+        url: context.url.clone(),
+        method: match context.http_method {
+            CanisterHttpMethod::GET => HttpMethod::Get.into(),
+            CanisterHttpMethod::POST => HttpMethod::Post.into(),
+            CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
+        },
+        max_response_size_bytes: max_response_size.get(),
+        headers: context
+            .headers
+            .iter()
+            .map(|h| HttpHeader {
+                name: h.name.clone(),
+                value: h.value.clone(),
+            })
+            .collect(),
+        body: context.body.clone().unwrap_or_default(),
+        socks_proxy_addrs: socks_proxy_addrs.to_vec(),
+    };
+
+    let (adapter_response, elapsed) =
+        timeout_with_capped_metric(max_response_time, adapter_client.https_outcall(proto_req))
+            .await
+            .map_err(|_| (RejectCode::SysTransient, "Deadline Exceeded".to_string()))?;
+
+    let adapter_response = adapter_response.map_err(|grpc_status| {
+        (
+            grpc_status_code_to_reject(grpc_status.code()),
+            grpc_status.message().to_string(),
+        )
+    })?;
+
+    let HttpsOutcallResult {
+        metrics: adapter_metrics,
+        result,
+    } = adapter_response.into_inner();
+
+    let network_usage = NetworkUsage {
+        response_size: NumBytes::from(adapter_metrics.map_or(0, |m| m.downloaded_bytes)),
+        response_time: elapsed,
+    };
+    let response_size = network_usage.response_size.get();
+    budget
+        .subtract_network_usage(network_usage)
+        .map_err(|PricingError::InsufficientCycles| {
+            (RejectCode::SysFatal, "Insufficient cycles".to_string())
+        })?;
+
+    match result {
+        Some(https_outcall_result::Result::Response(r)) => Ok((r, response_size)),
+        Some(https_outcall_result::Result::Error(e)) => {
+            // Map specific adapter errors to reject codes
+            let code = match e.kind() {
+                CanisterHttpErrorKind::InvalidInput => RejectCode::SysFatal,
+                CanisterHttpErrorKind::Connection => RejectCode::SysTransient,
+                CanisterHttpErrorKind::LimitExceeded => RejectCode::SysFatal,
+                CanisterHttpErrorKind::Internal => RejectCode::SysTransient,
+                CanisterHttpErrorKind::Unspecified => RejectCode::SysFatal,
+            };
+            Err((code, e.message))
+        }
+        None => Err((
+            RejectCode::SysFatal,
+            "Adapter returned empty result".to_string(),
+        )),
+    }
+}
+
 impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
-    type Response = CanisterHttpResponse;
+    type Response = (CanisterHttpResponse, CanisterHttpPaymentMetadata);
     /// Enqueues a request that will be send to the canister http adapter iff we don't have
     /// more than 'inflight_requests' requests waiting to be consumed by the
     /// client.
@@ -129,33 +234,21 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         // Once final response is available send the response over to the channel making it available to the client.
 
         self.rt_handle.spawn(async move {
-            let mut budget = PricingFactory::new_tracker(&canister_http_request.context);
-
-            let request_size = canister_http_request.context.variable_parts_size();
-            // Destruct canister http request to avoid partial moves of the canister http request.
             let CanisterHttpRequest {
                 id: request_id,
                 timeout: request_timeout,
-                context:
-                    CanisterHttpRequestContext {
-                        request:
-                            Request {
-                                sender: request_sender,
-                                sender_reply_callback: reply_callback_id,
-                                ..
-                            },
-                        url: request_url,
-                        headers: request_headers,
-                        body: request_body,
-                        http_method: request_http_method,
-                        transform: request_transform,
-                        pricing_version: request_pricing_version,
-                        ..
-                    },
+                context: request_context,
                 socks_proxy_addrs,
+                ..
             } = canister_http_request;
 
-            if request_pricing_version == ic_types::canister_http::PricingVersion::PayAsYouGo {
+            let mut budget = PricingFactory::new_tracker(&request_context);
+            let request_size = request_context.variable_parts_size();
+
+            if request_context.pricing_version
+                == ic_types::canister_http::PricingVersion::PayAsYouGo
+            {
+                let request_sender = request_context.request.sender;
                 warn!(
                     log,
                     "Canister HTTP request with PayAsYouGo pricing is not supported yet: \
@@ -164,145 +257,61 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     request_sender,
                     std::process::id(),
                 );
-                let _ = permit.send(CanisterHttpResponse {
-                    id: request_id,
-                    timeout: request_timeout,
-                    canister_id: request_sender,
-                    content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                        reject_code: RejectCode::SysFatal,
-                        message: "Canister HTTP request with PayAsYouGo pricing is not supported"
-                            .to_string(),
-                    }),
-                });
+                let _ = permit.send((
+                    CanisterHttpResponse {
+                        id: request_id,
+                        timeout: request_timeout,
+                        canister_id: request_sender,
+                        content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                            reject_code: RejectCode::SysFatal,
+                            message:
+                                "Canister HTTP request with PayAsYouGo pricing is not supported"
+                                    .to_string(),
+                        }),
+                    },
+                    CanisterHttpPaymentMetadata {
+                        id: request_id,
+                        receipt: budget.create_payment_receipt(),
+                    },
+                ));
                 return;
             }
 
-            let AdapterLimits {
-                max_response_size,
-                max_response_time,
-            } = budget.get_adapter_limits();
-            let max_response_size_bytes = max_response_size.get();
+            let payload = async {
+                let start_time = Instant::now();
 
-            // Build future that sends and transforms request.
-            let adapter_canister_http_response = async move {
-                let (result, elapsed) = timeout_with_capped_metric(
-                    max_response_time,
-                    http_adapter_client.https_outcall(HttpsOutcallRequest {
-                        url: request_url,
-                        method: match request_http_method {
-                            CanisterHttpMethod::GET => HttpMethod::Get.into(),
-                            CanisterHttpMethod::POST => HttpMethod::Post.into(),
-                            CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
-                        },
-                        max_response_size_bytes,
-                        headers: request_headers
-                            .into_iter()
-                            .map(|h| HttpHeader {
-                                name: h.name,
-                                value: h.value,
-                            })
-                            .collect(),
-                        body: request_body.unwrap_or_default(),
-                        socks_proxy_addrs,
-                    }),
+                let max_response_size_bytes = budget.get_adapter_limits().max_response_size.get();
+
+                let (adapter_result, download_bytes) = execute_http_request(
+                    &mut http_adapter_client,
+                    &request_context,
+                    &socks_proxy_addrs,
+                    &mut budget,
                 )
-                .await
-                .map_err(|_: tokio::time::error::Elapsed| {
-                    tonic::Status::new(Code::DeadlineExceeded, "Deadline Exceeded")
-                })?;
-
-                result.map(|res| (res, elapsed))
-            }
-            .map_err(|grpc_status| {
-                (
-                    grpc_status_code_to_reject(grpc_status.code()),
-                    grpc_status.message().to_string(),
-                )
-            })
-            .and_then(|(adapter_response, elapsed)| async move {
-                let HttpsOutcallResult {
-                    metrics: adapter_metrics,
-                    result,
-                } = adapter_response.into_inner();
-
-                let network_usage = NetworkUsage {
-                    response_size: NumBytes::from(
-                        adapter_metrics.map_or(0, |m| m.downloaded_bytes),
-                    ),
-                    response_time: elapsed,
-                };
-
-                budget.subtract_network_usage(network_usage).map_err(
-                    |PricingError::InsufficientCycles| {
-                        (RejectCode::SysFatal, "Insufficient cycles".to_string())
-                    },
-                )?;
-
-                let response = match result {
-                    Some(https_outcall_result::Result::Response(https_outcall_response)) => {
-                        Ok(https_outcall_response)
-                    }
-                    Some(https_outcall_result::Result::Error(canister_http_error)) => {
-                        let code = match canister_http_error.kind() {
-                            CanisterHttpErrorKind::InvalidInput => RejectCode::SysFatal,
-                            CanisterHttpErrorKind::Connection => RejectCode::SysTransient,
-                            CanisterHttpErrorKind::LimitExceeded => RejectCode::SysFatal,
-                            CanisterHttpErrorKind::Internal => RejectCode::SysTransient,
-                            CanisterHttpErrorKind::Unspecified => RejectCode::SysFatal,
-                        };
-                        Err((code, canister_http_error.message))
-                    }
-                    None => Err((
-                        RejectCode::SysFatal,
-                        "Adapter returned empty result".to_string(),
-                    )),
-                }?;
-
-                let HttpsOutcallResponse {
-                    status,
-                    headers,
-                    content: body,
-                } = response;
-
-                let canister_http_payload = CanisterHttpResponsePayload {
-                    status: status as u128,
-                    headers: headers
-                        .into_iter()
-                        .map(|HttpHeader { name, value }| {
-                            ic_management_canister_types_private::HttpHeader { name, value }
-                        })
-                        .collect(),
-                    body,
-                };
+                .await?;
+                let payload = validate_response(adapter_result)?;
 
                 metrics
                     .http_request_duration
-                    .with_label_values(&[status.to_string().as_str(), request_http_method.as_str()])
-                    .observe(elapsed.as_secs_f64());
+                    .with_label_values(&[
+                        payload.status.to_string().as_str(),
+                        request_context.http_method.as_str(),
+                    ])
+                    .observe(start_time.elapsed().as_secs_f64());
 
-                validate_http_headers_and_body(
-                    &canister_http_payload.headers,
-                    &canister_http_payload.body,
-                )
-                .map_err(|e| {
-                    (
-                        RejectCode::SysFatal,
-                        UserError::from(e).description().to_string(),
-                    )
-                })?;
-
-                // Only apply the transform if a function name is specified
                 let transform_timer = metrics.transform_execution_duration.start_timer();
-                let transform_response = match &request_transform {
+
+                let transformed_payload = match &request_context.transform {
                     Some(transform) => {
                         let (transform_result, instruction_count) = transform_adapter_response(
                             &mut budget,
                             query_handler,
-                            canister_http_payload,
-                            request_sender,
+                            payload,
+                            request_context.request.sender,
                             transform,
                         )
                         .await;
+
                         let transform_result_size = match &transform_result {
                             Ok(data) => data.len(),
                             Err((_, msg)) => msg.len(),
@@ -315,10 +324,10 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             sender {}, process_id: {}, transformed_response_size: {}, \
                             transform_instructions_used: {}, max_response_size: {}",
                             request_size,
-                            elapsed.as_millis(),
-                            adapter_metrics.map_or(0, |m| m.downloaded_bytes),
-                            reply_callback_id,
-                            request_sender,
+                            start_time.elapsed().as_millis(),
+                            download_bytes,
+                            request_context.request.sender_reply_callback,
+                            request_context.request.sender,
                             std::process::id(),
                             transform_result_size,
                             instruction_count,
@@ -334,7 +343,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                         transform_result
                     }
-                    None => Encode!(&canister_http_payload).map_err(|encode_error| {
+                    None => Encode!(&payload).map_err(|encode_error| {
                         (
                             RejectCode::SysFatal,
                             format!(
@@ -344,40 +353,49 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         )
                     }),
                 };
-
                 transform_timer.observe_duration();
+                transformed_payload
+            }
+            .await;
 
-                transform_response
-            });
-
+            let receipt = budget.create_payment_receipt();
             // Drive created future to completion and make response available on the channel.
-            permit.send(CanisterHttpResponse {
-                id: request_id,
-                timeout: request_timeout,
-                canister_id: request_sender,
-                content: match adapter_canister_http_response.await {
-                    Ok(resp) => {
-                        metrics
-                            .request_total
-                            .with_label_values(&["success", request_http_method.as_str()])
-                            .inc();
-                        CanisterHttpResponseContent::Success(resp)
-                    }
-                    Err((reject_code, message)) => {
-                        metrics
-                            .request_total
-                            .with_label_values(&[
-                                reject_code.as_str(),
-                                request_http_method.as_str(),
-                            ])
-                            .inc();
-                        CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                            reject_code,
-                            message,
-                        })
-                    }
+            permit.send((
+                CanisterHttpResponse {
+                    id: request_id,
+                    timeout: request_timeout,
+                    canister_id: request_context.request.sender,
+                    content: match payload {
+                        Ok(resp) => {
+                            metrics
+                                .request_total
+                                .with_label_values(&[
+                                    "success",
+                                    request_context.http_method.as_str(),
+                                ])
+                                .inc();
+                            CanisterHttpResponseContent::Success(resp)
+                        }
+                        Err((reject_code, message)) => {
+                            metrics
+                                .request_total
+                                .with_label_values(&[
+                                    reject_code.as_str(),
+                                    request_context.http_method.as_str(),
+                                ])
+                                .inc();
+                            CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                                reject_code,
+                                message,
+                            })
+                        }
+                    },
                 },
-            });
+                CanisterHttpPaymentMetadata {
+                    id: request_id,
+                    receipt,
+                },
+            ));
         });
         Ok(())
     }
@@ -517,7 +535,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::{
-        MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
+        CanisterHttpPaymentReceipt, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus,
+        Replication, Transform,
     };
     use ic_types::{
         Time, canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
@@ -746,9 +765,10 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
+                //TODO(urgent): perhaps we should check the payment metadata as well.
+                Ok((response, payment_metadata)) => {
                     assert_eq!(
-                        r,
+                        response,
                         build_mock_canister_http_response_success(
                             420,
                             UNIX_EPOCH,
@@ -756,6 +776,14 @@ mod tests {
                             adapter_headers,
                             adapter_body
                         )
+                    );
+                    assert_eq!(
+                        payment_metadata,
+                        CanisterHttpPaymentMetadata {
+                            id: CallbackId::from(420),
+                            //Legacy always returns the default receipt.
+                            receipt: CanisterHttpPaymentReceipt::default(),
+                        }
                     );
                     break;
                 }
@@ -796,9 +824,9 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
+                Ok((response, _payment_metadata)) => {
                     assert_eq!(
-                        r,
+                        response,
                         build_mock_canister_http_response_reject(
                             420,
                             UNIX_EPOCH,
@@ -860,9 +888,9 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
+                Ok((response, _payment_metadata)) => {
                     assert_eq!(
-                        r,
+                        response,
                         build_mock_canister_http_response_reject(
                             420,
                             UNIX_EPOCH,
@@ -914,9 +942,9 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
+                Ok((response, _payment_metadata)) => {
                     assert_eq!(
-                        r,
+                        response,
                         build_mock_canister_http_response_reject(
                             420,
                             UNIX_EPOCH,
@@ -1005,9 +1033,9 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
+                Ok((response, _payment_metadata)) => {
                     assert_eq!(
-                        r,
+                        response,
                         build_mock_canister_http_response_success(
                             420,
                             UNIX_EPOCH,
@@ -1076,9 +1104,9 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
+                Ok((response, _payment_metadata)) => {
                     assert_eq!(
-                        r,
+                        response,
                         build_mock_canister_http_response_reject(
                             420,
                             UNIX_EPOCH,
@@ -1138,9 +1166,9 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
+                Ok((response, _payment_metadata)) => {
                     assert_eq!(
-                        r,
+                        response,
                         build_mock_canister_http_response_reject(
                             420,
                             UNIX_EPOCH,
@@ -1161,9 +1189,9 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
+                Ok((response, _payment_metadata)) => {
                     assert_eq!(
-                        r,
+                        response,
                         build_mock_canister_http_response_reject(
                             421,
                             UNIX_EPOCH,
@@ -1178,9 +1206,9 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
+                Ok((response, _payment_metadata)) => {
                     assert_eq!(
-                        r,
+                        response,
                         build_mock_canister_http_response_reject(
                             423,
                             UNIX_EPOCH,

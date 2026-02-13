@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
-use ic_types::{NumBytes, NumInstructions, canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES};
+use ic_types::{
+    NumBytes, NumInstructions,
+    canister_http::{CanisterHttpPaymentReceipt, MAX_CANISTER_HTTP_RESPONSE_BYTES},
+};
 
 use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError};
 
@@ -40,5 +43,9 @@ impl BudgetTracker for LegacyTracker {
 
     fn subtract_transform_usage(&mut self, _usage: NumInstructions) -> Result<(), PricingError> {
         Ok(())
+    }
+
+    fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
+        CanisterHttpPaymentReceipt::default()
     }
 }
