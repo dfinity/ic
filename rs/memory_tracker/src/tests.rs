@@ -13,7 +13,6 @@ use rstest::rstest;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::sync::Mutex;
 
 use crate::{
@@ -89,6 +88,7 @@ fn setup(
                         max_accessed_pages: NumOsPages::new(memory_pages as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
+                    Arc::new(Mutex::new(|_| {})),
                 )
                 .unwrap(),
             );
@@ -107,6 +107,7 @@ fn setup(
                         max_accessed_pages: NumOsPages::new(memory_pages as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
+                    Arc::new(Mutex::new(|_| {})),
                 )
                 .unwrap(),
             );
