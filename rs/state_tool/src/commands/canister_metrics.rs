@@ -46,12 +46,16 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
             .system_state
             .canister_metrics()
             .instructions_executed();
-        let load_metrics = canister_state.system_state.canister_metrics().load_metrics();
-            let ingress_messages_executed = load_metrics.ingress_messages_executed();
-            let remote_subnet_messages_executed = load_metrics.remote_subnet_messages_executed();
-            let local_subnet_messages_executed = load_metrics.local_subnet_messages_executed();
-            let http_outcalls_executed = load_metrics.http_outcalls_executed();
-            let heartbeats_and_global_timers_executed = load_metrics.heartbeats_and_global_timers_executed();
+        let load_metrics = canister_state
+            .system_state
+            .canister_metrics()
+            .load_metrics();
+        let ingress_messages_executed = load_metrics.ingress_messages_executed();
+        let remote_subnet_messages_executed = load_metrics.remote_subnet_messages_executed();
+        let local_subnet_messages_executed = load_metrics.local_subnet_messages_executed();
+        let http_outcalls_executed = load_metrics.http_outcalls_executed();
+        let heartbeats_and_global_timers_executed =
+            load_metrics.heartbeats_and_global_timers_executed();
         writeln!(
             output_file,
             "{canister_id},{instructions_executed},{ingress_messages_executed},{remote_subnet_messages_executed},{local_subnet_messages_executed},{http_outcalls_executed},{heartbeats_and_global_timers_executed}"

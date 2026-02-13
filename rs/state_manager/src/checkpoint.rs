@@ -870,7 +870,8 @@ pub fn load_canister_state(
             canister_state_bits.remote_subnet_messages_executed,
             canister_state_bits.local_subnet_messages_executed,
             canister_state_bits.http_outcalls_executed,
-            canister_state_bits.heartbeats_and_global_timers_executed)
+            canister_state_bits.heartbeats_and_global_timers_executed,
+        ),
     );
 
     let starting_time = Instant::now();
