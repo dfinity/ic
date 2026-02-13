@@ -3244,7 +3244,7 @@ impl StateMachine {
         // Repartition input schedules; Required step for migrating canisters.
         canister_state
             .system_state
-            .split_input_schedules(&canister_id, &state.canister_states);
+            .split_input_schedules(&canister_id, state.canister_states());
 
         state.put_canister_state(canister_state);
 
@@ -4232,7 +4232,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
+            .canister_states()
             .contains_key(&canister)
     }
 
@@ -4241,7 +4241,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
+            .canister_states()
             .keys()
             .cloned()
             .collect()
@@ -4252,8 +4252,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
-            .get(&canister)
+            .canister_state(&canister)
             .map(|canister| canister.execution_state.is_some())
             .unwrap_or_default()
     }
@@ -5011,20 +5010,29 @@ impl StateMachine {
             "StateMachine::reject_remote_callbacks must not be used in a multi-subnet setup."
         );
         let routing_table = self.get_routing_table();
+        let remote_subnets: BTreeSet<_> = routing_table
+            .iter()
+            .map(|(_, subnet_id)| subnet_id.get())
+            .filter(|subnet_id| *subnet_id != self.get_subnet_id().get())
+            .collect();
         let (height, mut replicated_state) = self.state_manager.take_tip();
         let mut synthetic_responses = vec![];
-        for (canister_id, canister_state) in replicated_state.canister_states.iter_mut() {
+        for canister_state in replicated_state.canisters_iter_mut() {
             let Some(call_context_manager) = canister_state.system_state.call_context_manager()
             else {
                 continue;
             };
             for (callback_id, callback) in call_context_manager.callbacks().iter() {
-                let is_remote =
-                    if let Some((_, subnet_id)) = routing_table.lookup_entry(callback.respondent) {
-                        subnet_id != self.get_subnet_id()
-                    } else {
-                        true // non-routable callees are treated as remote and synthetic rejects are produced
-                    };
+                let is_remote = if callback.respondent.get() == self.get_subnet_id().get() {
+                    false // calls to the "local" management canister
+                } else if remote_subnets.contains(&callback.respondent.get()) {
+                    true // calls to "remote" management canisters
+                } else if let Some((_, subnet_id)) = routing_table.lookup_entry(callback.respondent)
+                {
+                    subnet_id != self.get_subnet_id()
+                } else {
+                    true // non-routable callees are treated as remote and synthetic rejects are produced
+                };
                 let has_enqueued_response = canister_state
                     .system_state
                     .queues()
@@ -5036,7 +5044,7 @@ impl StateMachine {
                     );
                     let response_payload = MsgPayload::Reject(reject_context);
                     let response = Response {
-                        originator: *canister_id,
+                        originator: canister_state.canister_id(),
                         respondent: callback.respondent,
                         originator_reply_callback: *callback_id,
                         refund: Cycles::zero(),

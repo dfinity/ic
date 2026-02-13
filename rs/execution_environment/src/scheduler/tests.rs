@@ -1331,7 +1331,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    for (_, canister) in test.state().canister_states.iter() {
+    for canister in test.state().canisters_iter() {
         assert!(canister.execution_state.is_none());
         assert_eq!(canister.compute_allocation(), ComputeAllocation::zero());
         assert_eq!(
@@ -1363,7 +1363,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         None,
         Some(canister_test_id(10).get()),
     );
-    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
             .canister_snapshots
@@ -1470,7 +1470,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         None,
         Some(canister_test_id(10).get()),
     );
-    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
             .canister_snapshots
@@ -1734,27 +1734,27 @@ fn execute_idle_and_canisters_with_messages() {
 
     // We won't update `last_full_execution_round` for the canister without any
     // input messages.
-    let idle = test.canister_state(idle);
     assert_eq!(
         test.state()
-            .canister_priority(&idle.canister_id())
+            .canister_priority(&idle)
             .last_full_execution_round,
         test.last_round()
     );
+    let idle = test.canister_state(idle);
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
 
-    let active = test.canister_state(active);
-    let system_state = &active.system_state;
     assert_eq!(
         test.state()
-            .canister_priority(&active.canister_id())
+            .canister_priority(&active)
             .last_full_execution_round,
         ExecutionRound::from(1)
     );
-    assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
+    let active = test.canister_state(active);
+    assert_eq!(active.system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
     assert_eq!(
-        system_state
+        active
+            .system_state
             .canister_metrics()
             .interrupted_during_execution(),
         0
@@ -2763,7 +2763,7 @@ fn can_record_metrics_for_a_round() {
         }
     }
 
-    for canister in test.state_mut().canister_states.values_mut() {
+    for canister in test.state_mut().canisters_iter_mut() {
         canister.system_state.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
     }
     test.state_mut().metadata.batch_time = UNIX_EPOCH
@@ -4494,9 +4494,7 @@ fn construct_scheduler_for_prop_test(
             None,
         );
         test.state_mut()
-            .metadata
-            .subnet_schedule
-            .get_mut(canister)
+            .canister_priority_mut(canister)
             .last_full_execution_round = last_round;
         for _ in 0..messages_per_canister {
             test.send_ingress(canister, ingress(instructions_per_message as u64));
@@ -4706,9 +4704,9 @@ fn scheduler_does_not_lose_canisters(
     ),
 ) {
     let (mut test, _scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
-    let canisters_before = test.state().canisters_iter().count();
+    let canisters_before = test.state().canister_states().len();
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let canisters_after = test.state().canisters_iter().count();
+    let canisters_after = test.state().canister_states().len();
     assert_eq!(canisters_before, canisters_after);
 }
 
@@ -4725,7 +4723,7 @@ fn scheduler_respects_compute_allocation(
 ) {
     let (mut test, scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
     let replicated_state = test.state();
-    let number_of_canisters = replicated_state.canister_states.len();
+    let number_of_canisters = replicated_state.canister_states().len();
     let total_compute_allocation = replicated_state.total_compute_allocation();
     prop_assert!(total_compute_allocation <= 100 * scheduler_cores as u64);
 
@@ -4738,7 +4736,7 @@ fn scheduler_respects_compute_allocation(
     // for free, i.e. `100 * number_of_canisters` rounds.
     let number_of_rounds = 100 * number_of_canisters;
 
-    let canister_ids: Vec<_> = test.state().canister_states.iter().map(|x| *x.0).collect();
+    let canister_ids: Vec<_> = test.state().canister_states().keys().cloned().collect();
 
     // Add one more round as we update the accumulated priorities at the end of the round now.
     for _ in 0..=number_of_rounds {
@@ -4746,7 +4744,7 @@ fn scheduler_respects_compute_allocation(
             test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
-        for (canister_id, _) in test.state().canister_states.iter() {
+        for canister_id in test.state().canister_states().keys() {
             let priority = test.state().canister_priority(canister_id);
             if priority.last_full_execution_round == test.last_round() {
                 let count = scheduled_first_counters.entry(*canister_id).or_insert(0);
@@ -4756,7 +4754,7 @@ fn scheduler_respects_compute_allocation(
     }
 
     // Check that the compute allocations of the canisters are respected.
-    for (canister_id, canister) in test.state().canister_states.iter() {
+    for (canister_id, canister) in test.state().canister_states().iter() {
         let compute_allocation = canister.compute_allocation().as_percent() as usize;
 
         let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);
@@ -5682,9 +5680,9 @@ fn test_is_next_method_added_to_task_queue() {
     let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
     assert!(
         !test
-            .canister_state_mut(canister)
+            .canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
@@ -5721,16 +5719,13 @@ fn test_is_next_method_added_to_task_queue() {
         });
 
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
-        != NextScheduledMethod::Message
+    while test.canister_state(canister).get_next_scheduled_method() != NextScheduledMethod::Message
     {
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
@@ -5746,7 +5741,7 @@ fn test_is_next_method_added_to_task_queue() {
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
     // and GlobalTimer are added to the queue.
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .is_empty()
@@ -5754,9 +5749,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::Heartbeat
     {
         test.canister_state_mut(canister)
@@ -5774,7 +5767,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5787,7 +5780,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5803,9 +5796,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     heartbeat_and_timer_canister_ids = BTreeSet::new();
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::GlobalTimer
     {
         test.canister_state_mut(canister)
@@ -5822,7 +5813,7 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5835,7 +5826,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5878,21 +5869,9 @@ fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
@@ -5916,22 +5895,10 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone()).try_into().unwrap();
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
@@ -5947,28 +5914,26 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
         },
     )]));
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If the stash is enabled, deliver pre-signatures only once.
-        // They should be stored in the stash and don't have to be delivered in every round.
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // If the stash is enabled, deliver pre-signatures only once.
+    // They should be stored in the stash and don't have to be delivered in every round.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        test.deliver_pre_signatures(BTreeMap::from_iter([(
-            master_key_id.clone(),
-            AvailablePreSignatures {
-                key_transcript: key_transcript.clone(),
-                pre_signatures: BTreeMap::new(),
-            },
-        )]));
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.deliver_pre_signatures(BTreeMap::from_iter([(
+        master_key_id.clone(),
+        AvailablePreSignatures {
+            key_transcript: key_transcript.clone(),
+            pre_signatures: BTreeMap::new(),
+        },
+    )]));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 1);
-        assert!(
-            stashes[&master_key_id]
-                .pre_signatures
-                .contains_key(&pre_sig_id),
-        );
-    }
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 1);
+    assert!(
+        stashes[&master_key_id]
+            .pre_signatures
+            .contains_key(&pre_sig_id),
+    );
 
     inject_ecdsa_signing_request(&mut test, &key_id);
 
@@ -6004,12 +5969,10 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If pre-signatures were stored in the state, they should now have been consumed.
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 1);
-        assert!(stashes[&master_key_id].pre_signatures.is_empty());
-    }
+    // If pre-signatures were stored in the state, they should now have been consumed.
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 1);
+    assert!(stashes[&master_key_id].pre_signatures.is_empty());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let contexts = test
@@ -6055,18 +6018,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     let key_ids: Vec<_> = (0..3).map(make_ecdsa_key_id).collect();
     let master_key_ids: Vec<_> = key_ids
         .iter()
@@ -6075,7 +6027,6 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
         .flat_map(IDkgMasterPublicKeyId::try_from)
         .collect();
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_keys(
             key_ids
                 .iter()
@@ -6112,22 +6063,20 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
     ]);
     test.deliver_pre_signatures(pre_signatures.clone());
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If the stash is enabled, deliver pre-signatures only once.
-        // They should be stored in the stash and don't have to be delivered in every round.
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Pre-signatures are delivered only once.
+    // They should be stored in the stash and don't have to be delivered in every round.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        pre_signatures
-            .values_mut()
-            .for_each(|pre_sigs| pre_sigs.pre_signatures.clear());
-        test.deliver_pre_signatures(pre_signatures);
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    pre_signatures
+        .values_mut()
+        .for_each(|pre_sigs| pre_sigs.pre_signatures.clear());
+    test.deliver_pre_signatures(pre_signatures);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 2);
-        assert_eq!(stashes[&master_key_ids[0]].pre_signatures, pre_sigs0);
-        assert_eq!(stashes[&master_key_ids[1]].pre_signatures, pre_sigs1);
-    }
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 2);
+    assert_eq!(stashes[&master_key_ids[0]].pre_signatures, pre_sigs0);
+    assert_eq!(stashes[&master_key_ids[1]].pre_signatures, pre_sigs1);
 
     // Inject 3 contexts requesting the third, second and first key in order
     for i in (0..3).rev() {
@@ -6138,18 +6087,16 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
     for _ in 0..2 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        if store_pre_signatures_in_state == FlagStatus::Enabled {
-            // If pre-signatures were stored in the state, they should now have been consumed.
-            let stashes = test.state().pre_signature_stashes();
-            assert_eq!(stashes.len(), 2);
-            assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
-            assert!(
-                stashes[&master_key_ids[0]]
-                    .pre_signatures
-                    .contains_key(&PreSigId(1))
-            );
-            assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
-        }
+        // Pre-signatures in the state should now have been consumed.
+        let stashes = test.state().pre_signature_stashes();
+        assert_eq!(stashes.len(), 2);
+        assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
+        assert!(
+            stashes[&master_key_ids[0]]
+                .pre_signatures
+                .contains_key(&PreSigId(1))
+        );
+        assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
     }
 
     let sign_with_ecdsa_contexts = &test
@@ -6747,7 +6694,7 @@ fn charge_idle_canisters_for_full_execution_round() {
         }
     }
 
-    let multiplier = scheduler_cores * test.state().canister_states.len();
+    let multiplier = scheduler_cores * test.state().canister_states().len();
     for round in 0..num_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
