@@ -591,7 +591,7 @@ impl Recovery {
                 "ls -1 {} | sort | tail -n 1",
                 checkpoints_path.display()
             ))
-            .and_then(|output| output.map(|output| output.trim().to_string()))
+            .map(|output| output.map(|output| output.trim().to_string()))
     }
 
     /// Get the name and the height of the latest checkpoint currently on disk, if any.
