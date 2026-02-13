@@ -158,7 +158,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             let key_id =
                 IDkgMasterPublicKeyId::try_from(master_key_id).map_err(ProxyDecodeError::Other)?;
             let key_transcript: IDkgTranscript = try_from_option_field(
-                entry.key_transcript.as_ref(),
+                entry.key_transcript,
                 "SystemMetadata::PreSignatureStash::IDkgTranscript",
             )?;
             let mut pre_signatures = BTreeMap::new();
@@ -166,7 +166,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 pre_signatures.insert(
                     PreSigId(pre_signature.pre_sig_id),
                     try_from_option_field(
-                        pre_signature.pre_signature.as_ref(),
+                        pre_signature.pre_signature,
                         "SystemMetadata::PreSignatureStash::PreSignature",
                     )?,
                 );
@@ -364,11 +364,11 @@ impl TryFrom<pb_types::EcdsaMatchedPreSignature> for EcdsaMatchedPreSignature {
             id: PreSigId(proto.pre_signature_id),
             height: Height::from(proto.height),
             pre_signature: Arc::new(try_from_option_field(
-                proto.pre_signature.as_ref(),
+                proto.pre_signature,
                 "EcdsaMatchedPreSignature::pre_signature",
             )?),
             key_transcript: Arc::new(try_from_option_field(
-                proto.key_transcript.as_ref(),
+                proto.key_transcript,
                 "EcdsaMatchedPreSignature::key_transcript",
             )?),
         })
@@ -424,11 +424,11 @@ impl TryFrom<pb_types::SchnorrMatchedPreSignature> for SchnorrMatchedPreSignatur
             id: PreSigId(proto.pre_signature_id),
             height: Height::from(proto.height),
             pre_signature: Arc::new(try_from_option_field(
-                proto.pre_signature.as_ref(),
+                proto.pre_signature,
                 "SchnorrMatchedPreSignature::pre_signature",
             )?),
             key_transcript: Arc::new(try_from_option_field(
-                proto.key_transcript.as_ref(),
+                proto.key_transcript,
                 "SchnorrMatchedPreSignature::key_transcript",
             )?),
         })

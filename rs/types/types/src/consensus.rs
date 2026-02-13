@@ -1387,20 +1387,12 @@ impl TryFrom<pb::Block> for Block {
                 // If after conversion, the summary block is intend to get a different
                 // height value (e.g. when a new CUP is created), then a call to
                 // idkg.update_refs(height) should be manually called.
-                let idkg = block
-                    .idkg_payload
-                    .as_ref()
-                    .map(|idkg| idkg.try_into())
-                    .transpose()?;
+                let idkg = block.idkg_payload.map(|idkg| idkg.try_into()).transpose()?;
 
                 BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
             DkgPayload::Data(dkg) => {
-                let idkg = block
-                    .idkg_payload
-                    .as_ref()
-                    .map(|idkg| idkg.try_into())
-                    .transpose()?;
+                let idkg = block.idkg_payload.map(|idkg| idkg.try_into()).transpose()?;
 
                 BlockPayload::Data(DataPayload { batch, dkg, idkg })
             }
