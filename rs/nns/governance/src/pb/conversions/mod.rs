@@ -3023,6 +3023,8 @@ impl From<pb::governance::GovernanceCachedMetrics> for api::governance::Governan
             fully_lost_voting_power_neuron_subset_metrics: item
                 .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
+            total_maturity_disbursements_in_progress_e8s_equivalent: item
+                .total_maturity_disbursements_in_progress_e8s_equivalent,
         }
     }
 }
@@ -3087,6 +3089,8 @@ impl From<api::governance::GovernanceCachedMetrics> for pb::governance::Governan
             fully_lost_voting_power_neuron_subset_metrics: item
                 .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
+            total_maturity_disbursements_in_progress_e8s_equivalent: item
+                .total_maturity_disbursements_in_progress_e8s_equivalent,
         }
     }
 }
