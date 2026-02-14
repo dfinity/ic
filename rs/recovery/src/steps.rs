@@ -325,21 +325,23 @@ impl Step for DownloadIcDataStep {
             &self.working_dir
         };
 
-        self.ssh_helper.rsync_includes(
-            &self.data_includes,
-            self.ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH)),
-            target.join("data").join(""),
-        )?;
-
-        if self.keep_downloaded_data {
-            rsync_includes(
-                &self.logger,
+        if !self.data_includes.is_empty() {
+            self.ssh_helper.rsync_includes(
                 &self.data_includes,
-                target.join("data"),
-                self.working_dir.join("data").join(""),
-                false,
-                None,
+                self.ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH)),
+                target.join("data").join(""),
             )?;
+
+            if self.keep_downloaded_data {
+                rsync_includes(
+                    &self.logger,
+                    &self.data_includes,
+                    target.join("data"),
+                    self.working_dir.join("data").join(""),
+                    false,
+                    None,
+                )?;
+            }
         }
 
         if self.include_config {
@@ -632,8 +634,11 @@ impl Step for UploadStateAndRestartStep {
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
             let copy_from = ic_checkpoints_path.join(
-                Recovery::get_latest_checkpoint_name_remotely(&ssh_helper, &ic_checkpoints_path)
-                    .unwrap_or_default(),
+                Recovery::get_maybe_latest_checkpoint_name_remotely(
+                    &ssh_helper,
+                    &ic_checkpoints_path,
+                )?
+                .unwrap_or_default(),
             );
             // path and name of checkpoint after replay
             let copy_to = upload_dir.join(CHECKPOINTS).join(max_checkpoint);
