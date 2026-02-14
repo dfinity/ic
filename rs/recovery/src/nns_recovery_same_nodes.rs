@@ -330,7 +330,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                             &format!(
                                 "Would you like to recover the admin node now, i.e. upload the CUP and registry local store to it? ({ip})"
                             ),
-                            ).then_some(ip)
+                        ).then_some(ip)
                     } else {
                         read_optional(
                             &self.logger,
@@ -471,9 +471,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::UploadState => {
                 if let Some(method) = self.params.admin_access_location {
-                    Ok(Box::new(
-                        self.recovery.get_upload_state_and_restart_step(method),
-                    ))
+                    Ok(Box::new(self.recovery.get_upload_state_and_restart_step(
+                        SshUser::Admin,
+                        method,
+                        self.recovery.admin_key_file.clone(),
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

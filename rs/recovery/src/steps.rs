@@ -540,6 +540,7 @@ impl Step for ValidateReplayStep {
 
 pub struct UploadStateAndRestartStep {
     pub logger: Logger,
+    pub ssh_user: SshUser,
     pub upload_method: DataLocation,
     pub work_dir: PathBuf,
     pub data_src: PathBuf,
@@ -591,7 +592,6 @@ impl Step for UploadStateAndRestartStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let ssh_user = SshUser::Admin;
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
@@ -619,7 +619,7 @@ impl Step for UploadStateAndRestartStep {
         if let DataLocation::Remote(node_ip) = self.upload_method {
             let ssh_helper = SshHelper::new(
                 self.logger.clone(),
-                ssh_user.clone(),
+                self.ssh_user.clone(),
                 node_ip,
                 self.require_confirmation,
                 self.key_file.clone(),
@@ -645,6 +645,7 @@ impl Step for UploadStateAndRestartStep {
             let cmd_create_and_copy_checkpoint_dir = format!(
                 "sudo mkdir -p {copy_to_parent}; {cp}; sudo chown -R {ssh_user} {upload_dir};",
                 copy_to_parent = copy_to.parent().unwrap().display(),
+                ssh_user = self.ssh_user,
                 upload_dir = upload_dir.display()
             );
 

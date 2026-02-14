@@ -435,9 +435,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::UploadStateToChildNNSHost => {
                 if let Some(method) = self.params.upload_method {
-                    Ok(Box::new(
-                        self.recovery.get_upload_state_and_restart_step(method),
-                    ))
+                    Ok(Box::new(self.recovery.get_upload_state_and_restart_step(
+                        SshUser::Admin,
+                        method,
+                        self.recovery.admin_key_file.clone(),
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
