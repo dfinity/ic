@@ -64,7 +64,7 @@ mod tests {
             ExecutionState, ExportedFunctions, NumWasmPages,
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         },
-        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
+        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology, testing::NetworkTopologyTesting},
         page_map::PageMap,
         testing::{ReplicatedStateTesting, StreamTesting},
     };
@@ -82,7 +82,6 @@ mod tests {
     use maplit::btreemap;
     use std::collections::{BTreeSet, VecDeque};
     use std::convert::TryFrom;
-    use std::sync::Arc;
     use std::time::Duration;
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -768,7 +767,7 @@ mod tests {
     fn test_traverse_subnet() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.subnets = btreemap! {
+        state.metadata.network_topology.set_subnets(btreemap! {
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
                 nodes: BTreeSet::new(),
@@ -785,8 +784,8 @@ mod tests {
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
             }
-        };
-        state.metadata.network_topology.routing_table = Arc::new(
+        });
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 id_range(0, 10) => subnet_test_id(0),
                 id_range(11, 20) => subnet_test_id(1),
@@ -933,7 +932,7 @@ mod tests {
     fn test_traverse_large_or_empty_routing_table() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.subnets = btreemap! {
+        state.metadata.network_topology.set_subnets(btreemap! {
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
                 nodes: BTreeSet::new(),
@@ -950,8 +949,8 @@ mod tests {
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
             }
-        };
-        state.metadata.network_topology.routing_table = Arc::new(
+        });
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 id_range(0, 10) => subnet_test_id(0),
                 id_range(21, 30) => subnet_test_id(0),

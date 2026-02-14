@@ -995,7 +995,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                 let remote_subnet_type = state
                     .metadata
                     .network_topology
-                    .subnets
+                    .subnets()
                     .get(&subnet_id)
                     // The lookup may fail if the subnet is new and the context state still uses an
                     // old registry version. Default to `Application` in that case.
