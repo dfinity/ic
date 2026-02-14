@@ -211,15 +211,15 @@ fn compute_transcript(
                 .to_vec()
         };
 
-        let mut combined = vec![];
+        let mut combined = Vec::with_capacity(threshold.get() as usize);
 
         for i in 0..threshold.get() as usize {
-            let points = individual_public_coefficients
-                .iter()
-                .map(|pts| pts.1.coefficients[i].0.clone())
-                .collect::<Vec<_>>();
+            let points: Vec<_> = individual_public_coefficients
+                .values()
+                .map(|pc| &pc.coefficients[i].0)
+                .collect();
             combined.push(crate::types::PublicKey(
-                G2Projective::muln_affine_vartime(&points, &coefficients).to_affine(),
+                G2Projective::muln_affine_vartime_ref(&points, &coefficients).to_affine(),
             ));
         }
 
