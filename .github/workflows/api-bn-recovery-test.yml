@@ -37,7 +37,7 @@ jobs:
 
       - name: Install dfx
         run: |
-          sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+          DFXVM_INIT_YES=1 sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
           echo "$HOME/.local/share/dfx/bin" >> "$GITHUB_PATH"
 
       - name: Run smoke test
