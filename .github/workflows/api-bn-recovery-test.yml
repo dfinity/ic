@@ -1,0 +1,40 @@
+name: API BN Recovery Test
+
+on:
+  workflow_dispatch:  # manual trigger for testing
+  schedule:
+    - cron: '0 6 * * 1'  # weekly on Monday at 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: API BN Recovery Smoke Test
+    runs-on:
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host
+        --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build binaries with Bazel
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel build \
+              //rs/boundary_node/ic_boundary:ic-boundary \
+              //rs/orchestrator/registry_replicator:ic-registry-replicator
+
+      - name: Install dfx
+        run: |
+          sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+          echo "$HOME/.local/share/dfx/bin" >> "$GITHUB_PATH"
+
+      - name: Run smoke test
+        run: ./ic-os/api-bn-recovery/test.sh
