@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER_NAME="api-bn-test-$$"
 IMAGE_NAME="api-boundary-node"
 IMAGE_TAG="test"
-MAX_WAIT=300  # 5 minutes for registry sync + replica discovery
+MAX_WAIT=300 # 5 minutes for registry sync + replica discovery
 
 cleanup() {
     echo "Cleaning up..."
