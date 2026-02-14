@@ -11,6 +11,7 @@ use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeRewardType},
+    replica_version::v1::ReplicaVersionRecord,
 };
 use idna::domain_to_ascii_strict;
 use std::fmt::Display;
@@ -30,7 +31,7 @@ use crate::mutations::node_management::{
 use crate::rate_limits::{commit_add_node_capacity, try_reserve_add_node_capacity};
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::{AddNodePayload, NodeRegistrationAttestationCustomData};
-use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
+use ic_registry_keys::{NODE_REWARDS_TABLE_KEY, make_replica_version_key};
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
 
@@ -275,6 +276,26 @@ impl Registry {
         );
 
         Ok(Some(chip_id))
+    }
+
+    pub fn get_all_blessed_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
+        let version = self.latest_version();
+        self.get_blessed_replica_version_ids()
+            .iter()
+            .filter_map(|version_id| {
+                self.get(make_replica_version_key(version_id).as_bytes(), version)
+                    .and_then(|reg_value| {
+                        ReplicaVersionRecord::decode(reg_value.value.as_slice())
+                            .ok()?
+                            .guest_launch_measurements
+                    })
+            })
+            .flat_map(|glm| {
+                glm.guest_launch_measurements
+                    .into_iter()
+                    .map(|m| m.measurement)
+            })
+            .collect()
     }
 }
 
