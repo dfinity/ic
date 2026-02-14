@@ -880,7 +880,6 @@ impl Step for CreateRegistryTarStep {
 
 pub struct UploadCUPAndTarStep {
     pub logger: Logger,
-    pub registry_helper: RegistryHelper,
     pub node_ip: IpAddr,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,

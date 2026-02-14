@@ -990,7 +990,6 @@ impl Recovery {
     pub fn get_upload_cup_and_tar_step(&self, node_ip: IpAddr) -> impl Step + use<> {
         UploadCUPAndTarStep {
             logger: self.logger.clone(),
-            registry_helper: self.registry_helper.clone(),
             node_ip,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
