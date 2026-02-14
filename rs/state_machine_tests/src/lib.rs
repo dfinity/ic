@@ -982,12 +982,10 @@ impl StateManager for StateMachineStateManager {
     fn commit_and_certify(
         &self,
         state: ReplicatedState,
-        height: Height,
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
-        self.deref()
-            .commit_and_certify(state, height, scope, batch_summary)
+        self.deref().commit_and_certify(state, scope, batch_summary)
     }
 
     fn take_tip(&self) -> (Height, ReplicatedState) {
@@ -3041,14 +3039,10 @@ impl StateMachine {
             .unwrap()
             .as_nanos() as u64;
         let time = Time::from_nanos_since_unix_epoch(t);
-        let (height, mut replicated_state) = self.state_manager.take_tip();
+        let (_height, mut replicated_state) = self.state_manager.take_tip();
         replicated_state.metadata.batch_time = time;
-        self.state_manager.commit_and_certify(
-            replicated_state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        self.state_manager
+            .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
         self.set_time(time.into());
         *self.time_of_last_round.write().unwrap() = time;
     }
@@ -3237,7 +3231,7 @@ impl StateMachine {
         })
         .0;
 
-        let (h, mut state) = self.state_manager.take_tip();
+        let (_h, mut state) = self.state_manager.take_tip();
 
         // Repartition input schedules; Required step for migrating canisters.
         canister_state
@@ -3246,12 +3240,8 @@ impl StateMachine {
 
         state.put_canister_state(canister_state);
 
-        self.state_manager.commit_and_certify(
-            state,
-            h.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        self.state_manager
+            .commit_and_certify(state, CertificationScope::Metadata, None);
     }
 
     /// Enables checkpoints and makes a tick to write a checkpoint.
@@ -3290,7 +3280,7 @@ impl StateMachine {
         let (h, mut state) = self.state_manager.take_tip();
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
         self.state_manager
-            .commit_and_certify(state, h.increment(), CertificationScope::Full, None);
+            .commit_and_certify(state, CertificationScope::Full, None);
         self.state_manager.remove_states_below(h.increment());
     }
 
@@ -3314,12 +3304,8 @@ impl StateMachine {
 
         let (height, mut state) = self.state_manager.take_tip();
         if state.take_canister_state(&canister_id).is_some() {
-            self.state_manager.commit_and_certify(
-                state,
-                height.increment(),
-                CertificationScope::Full,
-                None,
-            );
+            self.state_manager
+                .commit_and_certify(state, CertificationScope::Full, None);
             self.state_manager.flush_tip_channel();
 
             other_env.import_canister_state(
@@ -3520,31 +3506,23 @@ impl StateMachine {
         }
 
         // Perform the split on `self`.
-        let (height, state) = self.state_manager.take_tip();
+        let (_height, state) = self.state_manager.take_tip();
         let mut state = state.split(self.get_subnet_id(), &routing_table, None)?;
         state.after_split();
 
-        self.state_manager.commit_and_certify(
-            state,
-            height.increment(),
-            CertificationScope::Full,
-            None,
-        );
+        self.state_manager
+            .commit_and_certify(state, CertificationScope::Full, None);
 
         // Perform the split on `env`, which requires preserving the `prev_state_hash`
         // (as opposed to MVP subnet splitting where it is adjusted manually).
-        let (height, state) = env.state_manager.take_tip();
+        let (_height, state) = env.state_manager.take_tip();
         let prev_state_hash = state.metadata.prev_state_hash.clone();
         let mut state = state.split(env.get_subnet_id(), &routing_table, None)?;
         state.metadata.prev_state_hash = prev_state_hash;
         state.after_split();
 
-        env.state_manager.commit_and_certify(
-            state,
-            height.increment(),
-            CertificationScope::Full,
-            None,
-        );
+        env.state_manager
+            .commit_and_certify(state, CertificationScope::Full, None);
 
         Ok(env)
     }
@@ -4761,7 +4739,7 @@ impl StateMachine {
     ///   * The specified canister does not exist.
     ///   * The specified canister does not have a module installed.
     pub fn set_stable_memory(&self, canister_id: CanisterId, data: &[u8]) {
-        let (height, mut replicated_state) = self.state_manager.take_tip();
+        let (_height, mut replicated_state) = self.state_manager.take_tip();
         let canister_state = replicated_state
             .canister_state_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
@@ -4772,12 +4750,8 @@ impl StateMachine {
             .as_mut()
             .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory = memory;
-        self.state_manager.commit_and_certify(
-            replicated_state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        self.state_manager
+            .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
     }
 
     /// Returns the query stats of the specified canister.
@@ -4801,19 +4775,15 @@ impl StateMachine {
         canister_id: &CanisterId,
         total_query_stats: TotalQueryStats,
     ) {
-        let (h, mut state) = self.state_manager.take_tip();
+        let (_h, mut state) = self.state_manager.take_tip();
         state
             .canister_state_mut(canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .system_state
             .total_query_stats = total_query_stats;
 
-        self.state_manager.commit_and_certify(
-            state,
-            h.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        self.state_manager
+            .commit_and_certify(state, CertificationScope::Metadata, None);
     }
 
     /// Returns the cycle balance of the specified canister.
@@ -4837,7 +4807,7 @@ impl StateMachine {
     ///
     /// This function panics if the specified canister does not exist.
     pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
-        let (height, mut state) = self.state_manager.take_tip();
+        let (_height, mut state) = self.state_manager.take_tip();
         let canister_state = state
             .canister_state_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
@@ -4845,12 +4815,8 @@ impl StateMachine {
             .system_state
             .add_cycles(Cycles::from(amount), CyclesUseCase::NonConsumed);
         let balance = canister_state.system_state.balance().get();
-        self.state_manager.commit_and_certify(
-            state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        self.state_manager
+            .commit_and_certify(state, CertificationScope::Metadata, None);
         balance
     }
 
@@ -5013,7 +4979,7 @@ impl StateMachine {
             .map(|(_, subnet_id)| subnet_id.get())
             .filter(|subnet_id| *subnet_id != self.get_subnet_id().get())
             .collect();
-        let (height, mut replicated_state) = self.state_manager.take_tip();
+        let (_height, mut replicated_state) = self.state_manager.take_tip();
         let mut synthetic_responses = vec![];
         for canister_state in replicated_state.canisters_iter_mut() {
             let Some(call_context_manager) = canister_state.system_state.call_context_manager()
@@ -5068,12 +5034,8 @@ impl StateMachine {
                 )
                 .unwrap();
         }
-        self.state_manager.commit_and_certify(
-            replicated_state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        self.state_manager
+            .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
     }
 }
 
@@ -5084,13 +5046,8 @@ pub fn certify_latest_state_helper(
     subnet_id: SubnetId,
 ) {
     if state_manager.latest_state_height() == Height::from(0) {
-        let (height, replicated_state) = state_manager.take_tip();
-        state_manager.commit_and_certify(
-            replicated_state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        let (_height, replicated_state) = state_manager.take_tip();
+        state_manager.commit_and_certify(replicated_state, CertificationScope::Metadata, None);
     }
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
