@@ -48,6 +48,9 @@ usbutils
 zstd
 logrotate
 
+# Network configuration tools
+netplan.io
+
 # SELinux support
 selinux-policy-default
 selinux-utils
