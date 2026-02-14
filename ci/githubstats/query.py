@@ -369,9 +369,13 @@ def execute_download_tasks(
 ):
     print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
-    # This executor is used for downloading IC logs from ElasticSearch concurrently.
-    # Limit to 10 concurrent downloads to not overwhelm ElasticSearch.
-    with ThreadPoolExecutor(max_workers=10) as download_ic_log_executor:
+    # These executors are used for downloading IC logs from ElasticSearch
+    # and console logs from Farm concurrently. Limit to 10 concurrent downloads
+    # to not overwhelm both services.
+    with (
+        ThreadPoolExecutor(max_workers=10) as download_ic_log_executor,
+        ThreadPoolExecutor(max_workers=10) as download_console_log_executor,
+    ):
 
         def download_log(task):
             row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path = task
@@ -395,6 +399,7 @@ def execute_download_tasks(
                             download_to_path,
                             df,
                             download_ic_logs,
+                            download_console_log_executor,
                             download_ic_log_executor,
                         ),
                     )
@@ -444,6 +449,7 @@ def process_log(
     download_to_path: Path,
     df: pd.DataFrame,
     download_ic_logs: bool,
+    download_console_log_executor: ThreadPoolExecutor,
     download_ic_log_executor: ThreadPoolExecutor,
 ):
     """
@@ -458,6 +464,7 @@ def process_log(
     group_name = None
     summary = None
     vm_ipv6s = {}
+    vm_console_links = {}
 
     # system-tests have structured logs with JSON objects that we can parse to get more detailed error summaries
     # and to determine the group (testnet) name for downloading the IC logs from ElasticSearch.
@@ -488,11 +495,25 @@ def process_log(
                         case "farm_vm_created_event":
                             farm_vm_created = FarmVMCreated.from_dict(log_event.body)
                             vm_ipv6s[farm_vm_created.vm_name] = farm_vm_created.ipv6
+                        case "vm_console_link_created_event":
+                            console_link = ConsoleLink.from_dict(log_event.body)
+                            vm_console_links[console_link.vm_name] = f"{console_link.url}raw"
                         case "json_report_created_event":
                             summary = SystemGroupSummary.from_dict(log_event.body)
                             break
                 except (ValueError, dacite.DaciteError):
                     continue
+
+        if len(vm_console_links) > 0:
+            console_logs_dir = attempt_dir / "console_logs"
+            console_logs_dir.mkdir(exist_ok=True)
+        for vm_name, console_link_raw in vm_console_links.items():
+            # Fork threads for downloading console logs from Farm concurrently to speed up the whole process.
+            download_console_log_executor.submit(
+                download_console_log,
+                console_link_raw,
+                console_logs_dir / f"{vm_name}.log",
+            )
 
         if group_name is not None and download_ic_logs:
             # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
@@ -565,6 +586,14 @@ class FarmVMCreated(DataClassJsonMixin):
 
 
 @dataclass
+class ConsoleLink(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::farm::ConsoleLink`"""
+
+    url: str
+    vm_name: str
+
+
+@dataclass
 class TaskReport:
     """Matches the Rust struct `ic_system_test_driver::report::TaskReport`"""
 
@@ -628,6 +657,24 @@ def shorten(msg: str, max_length: int) -> str:
     if len(msg) > max_length:
         return msg[:max_length] + "..."
     return msg
+
+
+def download_console_log(console_link_raw: str, output_path: Path):
+    """Download the log of the console of a Farm VM"""
+    try:
+        response = requests.get(console_link_raw, timeout=60, stream=True)
+        if response.ok:
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print(f"Downloaded console log to {output_path}", file=sys.stderr)
+        else:
+            print(
+                f"Failed to download console log from {console_link_raw} with HTTP {response.status_code}: '{response.text.strip()}'",
+                file=sys.stderr,
+            )
+    except Exception as e:
+        print(f"Error downloading console log from {console_link_raw}: {e}", file=sys.stderr)
 
 
 def download_and_process_ic_logs_for_system_test(
