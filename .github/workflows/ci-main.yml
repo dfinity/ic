@@ -624,6 +624,7 @@ jobs:
     name: Cargo  ${{ matrix.name }} Linux
     runs-on:
       labels: dind-small
+      group: dm2
     container: *container-setup
     timeout-minutes: 30
     steps:

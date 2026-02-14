@@ -36,6 +36,7 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
     runs-on: &dind-small-setup
       labels: dind-small
+      group: dm2
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
       options: >-
