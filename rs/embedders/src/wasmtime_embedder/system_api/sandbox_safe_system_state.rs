@@ -5,6 +5,7 @@ use super::{
     routing::ResolveDestinationError,
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
@@ -334,6 +335,22 @@ impl SystemStateModifications {
         is_composite_query: bool,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
+        // Append delta logs.
+        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            let log_memory_store = &mut system_state.log_memory_store;
+            // TODO(DSM-11): cleanup population logic after migration is done.
+            // We need to copy existing canister_log to log_memory_store in order
+            // not to loose any log records until the migration is complete.
+            let old_total = &system_state.canister_log;
+            if log_memory_store.is_empty() && !old_total.is_empty() {
+                log_memory_store.append_delta_log(&mut old_total.clone());
+            }
+            log_memory_store.append_delta_log(&mut self.canister_log.clone());
+        }
+        system_state
+            .canister_log
+            .append_delta_log(&mut self.canister_log);
+
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
@@ -515,11 +532,6 @@ impl SystemStateModifications {
         if let Some(new_global_timer) = self.new_global_timer {
             system_state.global_timer = new_global_timer;
         }
-
-        // Append delta log to the total canister log.
-        system_state
-            .canister_log
-            .append_delta_log(&mut self.canister_log);
 
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {
