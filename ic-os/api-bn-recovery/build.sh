@@ -6,6 +6,16 @@ IC_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 IMAGE_NAME="${IMAGE_NAME:-api-boundary-node}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 
+# Use docker if available, fall back to podman
+if command -v docker &>/dev/null; then
+    CONTAINER_CMD=docker
+elif command -v podman &>/dev/null; then
+    CONTAINER_CMD=podman
+else
+    echo "ERROR: Neither docker nor podman found."
+    exit 1
+fi
+
 echo "============================================"
 echo "  Building API Boundary Node Docker Image"
 echo "============================================"
@@ -33,7 +43,7 @@ trap cleanup_artifacts EXIT
 
 echo "[3/4] Building Docker image..."
 cd "${SCRIPT_DIR}"
-docker build -t "${IMAGE_NAME}:${IMAGE_TAG}" .
+$CONTAINER_CMD build -t "${IMAGE_NAME}:${IMAGE_TAG}" .
 
 echo "[4/4] Cleaning up build artifacts..."
 cleanup_artifacts

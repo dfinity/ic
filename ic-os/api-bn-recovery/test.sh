@@ -10,9 +10,19 @@ IMAGE_NAME="api-boundary-node"
 IMAGE_TAG="test"
 MAX_WAIT=300 # 5 minutes for registry sync + replica discovery
 
+# Use docker if available, fall back to podman
+if command -v docker &>/dev/null; then
+    CONTAINER_CMD=docker
+elif command -v podman &>/dev/null; then
+    CONTAINER_CMD=podman
+else
+    echo "ERROR: Neither docker nor podman found."
+    exit 1
+fi
+
 cleanup() {
     echo "Cleaning up..."
-    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+    $CONTAINER_CMD rm -f "$CONTAINER_NAME" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -29,16 +39,16 @@ IMAGE_NAME="$IMAGE_NAME" IMAGE_TAG="$IMAGE_TAG" "${SCRIPT_DIR}/build.sh"
 
 # ─── Run ───
 echo "=== Starting container ==="
-docker run -d --name "$CONTAINER_NAME" --network host "${IMAGE_NAME}:${IMAGE_TAG}"
+$CONTAINER_CMD run -d --name "$CONTAINER_NAME" --network host "${IMAGE_NAME}:${IMAGE_TAG}"
 
 # ─── Wait for readiness ───
 echo "=== Waiting for boundary node to become ready (up to ${MAX_WAIT}s) ==="
 WAITED=0
 while true; do
     # Check container is still running
-    if ! docker inspect --format='{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q true; then
+    if ! $CONTAINER_CMD inspect --format='{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q true; then
         echo "FAIL: Container exited unexpectedly."
-        docker logs "$CONTAINER_NAME" 2>&1 | tail -30
+        $CONTAINER_CMD logs "$CONTAINER_NAME" 2>&1 | tail -30
         exit 1
     fi
 
@@ -50,7 +60,7 @@ while true; do
 
     if [ "$WAITED" -ge "$MAX_WAIT" ]; then
         echo "FAIL: Boundary node did not become healthy within ${MAX_WAIT}s."
-        docker logs "$CONTAINER_NAME" 2>&1 | tail -30
+        $CONTAINER_CMD logs "$CONTAINER_NAME" 2>&1 | tail -30
         exit 1
     fi
 
