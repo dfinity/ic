@@ -838,6 +838,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         },
                     };
 
+                    let request_id = MessageId::from(content.representation_independent_hash());
                     let signature = signer.sign_update(&content);
 
                     let response = send_request(
@@ -850,6 +851,14 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         signature,
                     )
                     .await;
+
+                    // v3/v4 sync calls may return 202 under load
+                    let response =
+                        if api_ver >= 3 && response.status() == 202 && include_mgmt_canister_id {
+                            await_ingress_via_read_state(&test_info, sender, request_id).await
+                        } else {
+                            response
+                        };
 
                     if include_mgmt_canister_id {
                         response.expect_update_ok(api_ver);
@@ -901,7 +910,14 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         )
                         .await;
 
-                        assert_eq!(response.status(), 200);
+                        // v3 sync call may return 202 under load; use read_state
+                        // to wait for the ingress to be processed
+                        if response.status() == 202 {
+                            await_ingress_via_read_state(&test_info, sender, request_id.clone())
+                                .await;
+                        } else {
+                            assert_eq!(response.status(), 200);
+                        }
 
                         request_id
                     };
@@ -1481,6 +1497,49 @@ async fn send_request<C: serde::ser::Serialize>(
     ReplicaResponse { status, body }
 }
 
+/// When a v3/v4 sync update call returns 202 (the replica's internal timeout
+/// was exceeded before the ingress message was processed), fall back to polling
+/// read_state until a certificate is available.
+async fn await_ingress_via_read_state(
+    test: &TestInformation,
+    sender: &GenericIdentity<'_>,
+    request_id: MessageId,
+) -> ReplicaResponse {
+    for attempt in 0..30 {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        let content = HttpReadStateContent::ReadState {
+            read_state: HttpReadState {
+                sender: Blob(sender.principal().as_slice().to_vec()),
+                paths: vec![vec!["request_status".into(), request_id.clone().into()].into()],
+                ingress_expiry: expiry_time().as_nanos() as u64,
+                nonce: None,
+            },
+        };
+
+        let signature = sender.sign_read_state(&content);
+
+        let response = send_request(
+            3,
+            test,
+            "read_state",
+            content,
+            sender.public_key_der(),
+            None,
+            signature,
+        )
+        .await;
+
+        if response.status() == 200 {
+            return response;
+        }
+    }
+
+    panic!("Timed out waiting for ingress message to be processed via read_state polling");
+}
+
 async fn perform_query_call_with_delegations(
     api_ver: usize,
     test: &TestInformation,
@@ -1531,9 +1590,10 @@ async fn perform_update_call_with_delegations(
         },
     };
 
+    let request_id = MessageId::from(content.representation_independent_hash());
     let signature = signer.sign_update(&content);
 
-    send_request(
+    let response = send_request(
         api_ver,
         test,
         "call",
@@ -1542,7 +1602,14 @@ async fn perform_update_call_with_delegations(
         Some(delegations.to_vec()),
         signature,
     )
-    .await
+    .await;
+
+    // v3/v4 sync calls may return 202 under load; fall back to read_state polling
+    if api_ver >= 3 && response.status() == 202 {
+        return await_ingress_via_read_state(test, sender, request_id).await;
+    }
+
+    response
 }
 
 async fn perform_read_state_call_with_delegations(
@@ -1575,7 +1642,7 @@ async fn perform_read_state_call_with_delegations(
         // otherwise we have to wait until the call executes before checking the read state, which
         // requires a potentially flaky retry loop.
 
-        let _response = send_request(
+        let response = send_request(
             /*api_ver=*/ 3,
             test,
             "call",
@@ -1585,6 +1652,12 @@ async fn perform_read_state_call_with_delegations(
             signature,
         )
         .await;
+
+        // v3 sync call may return 202 under load; use read_state
+        // to wait for the ingress to be processed
+        if response.status() == 202 {
+            await_ingress_via_read_state(test, sender, request_id.clone()).await;
+        }
 
         request_id
     };
