@@ -18,8 +18,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
-    ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor, IngressFilterMetrics,
-    InternalHttpQueryHandler, RoundInstructions, RoundLimits, execute_canister,
+    ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
+    IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+    execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -247,6 +248,9 @@ pub struct ExecutionTest {
     executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
     execution_cost: HashMap<CanisterId, Cycles>,
+    // The cost of a paused subnet message execution per canister.
+    // The value is reset when the execution finishes or gets aborted.
+    paused_subnet_message_cost: HashMap<CanisterId, NumInstructions>,
     // Messages to canisters on other subnets.
     xnet_messages: Vec<RequestOrResponse>,
     // Messages that couldn't be delivered to other canisters
@@ -1221,7 +1225,6 @@ impl ExecutionTest {
         self.state = Some(state);
         self.update_execution_stats(
             canister_id,
-            self.instruction_limits.message(),
             result.instructions_used.unwrap(),
             cost_schedule,
         );
@@ -1351,12 +1354,7 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
         state.metadata.heap_delta_estimate += heap_delta;
-        self.update_execution_stats(
-            canister_id,
-            self.instruction_limits.message(),
-            instructions_used,
-            cost_schedule,
-        );
+        self.update_execution_stats(canister_id, instructions_used, cost_schedule);
         state.put_canister_state(canister);
         self.state = Some(state);
         response
@@ -1440,7 +1438,8 @@ impl ExecutionTest {
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
 
-        let (new_state, instructions_used) = self.exec_env.execute_subnet_message(
+        let remaining_round_instructions_before = round_limits.instructions;
+        let (new_state, execute_subnet_message_result_type) = self.exec_env.execute_subnet_message(
             message,
             state,
             self.install_code_instruction_limits.clone(),
@@ -1451,18 +1450,31 @@ impl ExecutionTest {
             self.current_round,
             &mut round_limits,
         );
+        let instructions_used = remaining_round_instructions_before - round_limits.instructions;
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
-        if let Some(canister_id) = maybe_canister_id
-            && let Some(instructions_used) = instructions_used
-        {
-            self.update_execution_stats(
-                canister_id,
-                self.install_code_instruction_limits.message(),
-                instructions_used,
-                cost_schedule,
-            );
+        if let Some(canister_id) = maybe_canister_id {
+            match execute_subnet_message_result_type {
+                ExecuteSubnetMessageResultType::Finished => {
+                    self.update_execution_stats(
+                        canister_id,
+                        NumInstructions::from(instructions_used.get() as u64),
+                        cost_schedule,
+                    );
+                }
+                ExecuteSubnetMessageResultType::Processing => {
+                    // such subnet messages should not consume any instructions
+                    assert_eq!(instructions_used.get(), 0);
+                }
+                ExecuteSubnetMessageResultType::Paused => {
+                    *self
+                        .paused_subnet_message_cost
+                        .entry(canister_id)
+                        .or_insert(NumInstructions::from(0)) =
+                        NumInstructions::from(instructions_used.get() as u64);
+                }
+            }
         }
         true
     }
@@ -1521,12 +1533,7 @@ impl ExecutionTest {
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 if let Some(instructions_used) = result.instructions_used {
-                    self.update_execution_stats(
-                        canister_id,
-                        self.instruction_limits.message(),
-                        instructions_used,
-                        cost_schedule,
-                    );
+                    self.update_execution_stats(canister_id, instructions_used, cost_schedule);
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
@@ -1580,24 +1587,45 @@ impl ExecutionTest {
                     compute_allocation_used,
                     subnet_memory_reservation: self.subnet_memory_reservation,
                 };
-                let (new_state, instructions_used) = self.exec_env.resume_install_code(
-                    state,
-                    &canister_id,
-                    self.install_code_instruction_limits.clone(),
-                    &mut round_limits,
-                    self.subnet_size(),
-                );
+                let remaining_round_instructions_before = round_limits.instructions;
+                let (new_state, execute_subnet_message_result_type) =
+                    self.exec_env.resume_install_code(
+                        state,
+                        &canister_id,
+                        self.install_code_instruction_limits.clone(),
+                        &mut round_limits,
+                        self.subnet_size(),
+                    );
+                let instructions_used =
+                    remaining_round_instructions_before - round_limits.instructions;
                 state = new_state;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
-                if let Some(instructions_used) = instructions_used {
-                    self.update_execution_stats(
-                        canister_id,
-                        self.install_code_instruction_limits.message(),
-                        instructions_used,
-                        cost_schedule,
-                    );
-                }
+
+                match execute_subnet_message_result_type {
+                    ExecuteSubnetMessageResultType::Finished => {
+                        let instructions_used_before = self
+                            .paused_subnet_message_cost
+                            .remove(&canister_id)
+                            .unwrap_or_default();
+                        self.update_execution_stats(
+                            canister_id,
+                            NumInstructions::from(instructions_used.get() as u64)
+                                + instructions_used_before,
+                            cost_schedule,
+                        );
+                    }
+                    ExecuteSubnetMessageResultType::Processing => {
+                        unreachable!()
+                    }
+                    ExecuteSubnetMessageResultType::Paused => {
+                        *self
+                            .paused_subnet_message_cost
+                            .entry(canister_id)
+                            .or_insert(NumInstructions::from(0)) +=
+                            NumInstructions::from(instructions_used.get() as u64);
+                    }
+                };
             }
             NextExecution::StartNew | NextExecution::ContinueLong => {
                 let mut round_limits = RoundLimits {
@@ -1622,12 +1650,7 @@ impl ExecutionTest {
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
                 if let Some(instructions_used) = result.instructions_used {
-                    self.update_execution_stats(
-                        canister_id,
-                        self.instruction_limits.message(),
-                        instructions_used,
-                        cost_schedule,
-                    );
+                    self.update_execution_stats(canister_id, instructions_used, cost_schedule);
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
@@ -1646,6 +1669,7 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         self.exec_env
             .abort_all_paused_executions(&mut state, &self.log);
+        self.paused_subnet_message_cost = HashMap::default();
         self.state = Some(state);
     }
 
@@ -1653,39 +1677,27 @@ impl ExecutionTest {
     fn update_execution_stats(
         &mut self,
         canister_id: CanisterId,
-        limit: NumInstructions,
         executed: NumInstructions,
         cost_schedule: CanisterCyclesCostSchedule,
     ) {
-        let left = limit - executed;
         let mgr = &self.cycles_account_manager;
         *self
             .executed_instructions
             .entry(canister_id)
-            .or_insert(NumInstructions::new(0)) += limit - left;
+            .or_insert(NumInstructions::new(0)) += executed;
 
         let is_wasm64_execution = self.canister_wasm_execution_mode(canister_id);
 
-        // Ideally we would simply add `execution_cost(limit - left)`
-        // but that leads to small precision errors because 1 Cycle = 0.4 Instructions.
-        let fixed_cost = mgr.execution_cost(
-            NumInstructions::from(0),
+        let instruction_cost = mgr.execution_cost(
+            executed,
             self.subnet_size(),
             cost_schedule,
             is_wasm64_execution,
         );
-        let instruction_cost =
-            mgr.execution_cost(
-                limit,
-                self.subnet_size(),
-                cost_schedule,
-                is_wasm64_execution,
-            ) - mgr.execution_cost(left, self.subnet_size(), cost_schedule, is_wasm64_execution);
-
         *self
             .execution_cost
             .entry(canister_id)
-            .or_insert(Cycles::new(0)) += instruction_cost + fixed_cost;
+            .or_insert(Cycles::new(0)) += instruction_cost;
     }
 
     /// Inducts messages between canisters and pushes all cross-net messages to
@@ -2693,6 +2705,7 @@ impl ExecutionTestBuilder {
             message_id: 0,
             executed_instructions: HashMap::new(),
             execution_cost: HashMap::new(),
+            paused_subnet_message_cost: HashMap::new(),
             xnet_messages: vec![],
             lost_messages: vec![],
             subnet_available_memory,
