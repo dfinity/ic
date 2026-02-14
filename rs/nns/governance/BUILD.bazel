@@ -424,6 +424,7 @@ filegroup(
 
 rust_test_suite_with_extra_srcs(
     name = "governance_integration_test",
+    timeout = "long",  # the "governance" and "merge_neurons" tests often take more than 5 minutes
     srcs = glob(
         ["tests/*.rs"],
         exclude = [
