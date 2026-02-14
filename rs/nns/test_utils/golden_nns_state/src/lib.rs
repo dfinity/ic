@@ -8,9 +8,12 @@ use ic_nns_test_utils_prepare_golden_state::{
     StateSource, maybe_download_and_untar_golden_state_or_panic,
 };
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
+use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 // TODO: Add support for PocketIc.
+
+static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!(env!("MAINNET_ROUTING_TABLE"));
 
 const NNS_CANISTER_ID_RANGE: RangeInclusive<u64> = 0..=(CANISTER_IDS_PER_SUBNET - 1);
 
@@ -39,17 +42,19 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
         PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap(),
     );
-    // using the canister ranges of both the NNS and II subnets. Note. The
-    // last canister ID in the canister range of the II subnet is omitted so
-    // that the canister range of the II subnet is not used for automatic
-    // generation of new canister IDs.
-    let routing_table = create_routing_table(
-        vec![NNS_CANISTER_ID_RANGE, 0x2100000..=0x21FFFFE],
-        nns_subnet_id,
-    );
+    let mainnet_routing_table_json = MAINNET_ROUTING_TABLE.to_vec();
+    let mainnet_routing_table_vec: Vec<(CanisterIdRange, SubnetId)> =
+        serde_json::from_slice(&mainnet_routing_table_json)
+            .expect("Failed to parse mainnet routing table");
+    let mainnet_routing_table = RoutingTable::try_from(
+        mainnet_routing_table_vec
+            .into_iter()
+            .collect::<BTreeMap<_, _>>(),
+    )
+    .expect("Failed to build mainnet routing table");
     let setup_config = SetupConfig {
         state_source: StateSource::Nns,
-        routing_table,
+        routing_table: mainnet_routing_table,
         hypervisor_config: None,
         subnet_id: nns_subnet_id,
         subnet_type: SubnetType::System,

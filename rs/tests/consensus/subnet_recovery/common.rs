@@ -83,9 +83,9 @@ const UNASSIGNED_NODES: usize = 4;
 
 const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
-/// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
-/// plus 4 to make checkpoint heights more predictable
-const DKG_INTERVAL_LARGE: u64 = 124;
+/// 40 dealings * 4 transcripts being reshared (high/local, low/local, high/remote, low/remote)
+/// plus 14 as a safety margin
+const DKG_INTERVAL_LARGE: u64 = 4 * NNS_NODES_LARGE as u64 + 14;
 
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";

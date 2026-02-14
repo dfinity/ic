@@ -614,8 +614,9 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                         // Which error code is returned depends on API version and the specific scenario
                         assert!(
                             response.status() == 400 || response.status() == 403,
-                            "Test scenario {} (read_state) using {api_ver} unexpectedly succeeded",
-                            scenario.note
+                            "Test scenario {} (read_state) using {api_ver} unexpectedly succeeded with code {}",
+                            scenario.note,
+                            response.status()
                         );
 
                         let err_msg = scenario.expected_err.clone().unwrap();
