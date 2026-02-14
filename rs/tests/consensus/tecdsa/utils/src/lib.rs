@@ -1096,6 +1096,7 @@ pub async fn create_new_subnet_with_keys(
         ssh_backup_access: vec![],
         chain_key_config: Some(chain_key_config),
         canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+        subnet_admins: Some(vec![]),
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),

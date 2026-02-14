@@ -602,6 +602,7 @@ mod test {
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: 0,
+            subnet_admins: vec![],
         }
     }
 
