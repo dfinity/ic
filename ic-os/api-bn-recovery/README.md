@@ -10,7 +10,7 @@ This directory contains a Docker setup that packages `ic-boundary` and `ic-regis
 ## Prerequisites
 
 In order to reach mainnet, the server running this container must have an IPv6 address in 
-a prefix that has been to the registry firewall rules.
+the set of allowlisted prefixes in the registry firewall rules.
 
 ## Usage
 
