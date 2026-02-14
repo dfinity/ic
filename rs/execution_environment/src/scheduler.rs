@@ -475,15 +475,15 @@ impl SchedulerImpl {
                 scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
             }
 
-            let measurement_scope =
-                MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
-            let mut round_limits = scheduler_round_limits.canister_round_limits();
-            let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-
             // Add `Heartbeat` and `GlobalTimer` tasks to be executed before input messages.
             if is_first_iteration {
                 heartbeat_and_timer_canister_ids = self.initialize_inner_round(&mut state);
             }
+
+            let measurement_scope =
+                MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
+            let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
+            let mut round_limits = scheduler_round_limits.canister_round_limits();
 
             // Update subnet available memory before taking out the canisters.
             round_limits.subnet_available_memory =
@@ -770,7 +770,6 @@ impl SchedulerImpl {
         let mut executed_canister_ids = BTreeSet::new();
         let mut fully_executed_canister_ids = vec![];
         let mut ingress_results = Vec::new();
-        let mut total_instructions_executed = NumInstructions::from(0);
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
         let mut heap_delta = NumBytes::from(0);
         let mut callbacks_created = 0;
@@ -782,7 +781,6 @@ impl SchedulerImpl {
             let instructions_executed = as_num_instructions(
                 round_limits_per_thread.instructions - result.round_limits.instructions,
             );
-            total_instructions_executed += instructions_executed;
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
 
@@ -814,9 +812,6 @@ impl SchedulerImpl {
 
         round_limits.subnet_available_callbacks -= callbacks_created;
 
-        self.metrics
-            .instructions_consumed_per_round
-            .observe(total_instructions_executed.get() as f64);
         (
             canisters,
             executed_canister_ids,
@@ -1720,11 +1715,6 @@ fn observe_instructions_consumed_per_message(
     consumed_instructions: NumInstructions,
     instruction_limit_per_message: NumInstructions,
 ) {
-    // If the message consumed any non-zero instructions, count it towards the
-    // messages we are going to charge cycles for.
-    if consumed_instructions.get() > 0 {
-        metrics.canister_messages_where_cycles_were_charged.inc();
-    }
     metrics
         .instructions_consumed_per_message
         .observe(consumed_instructions.get() as f64);
@@ -1825,11 +1815,6 @@ fn execute_canisters_on_thread(
                     .observe_interrupted_during_execution();
                 break;
             }
-            let measurement_scope = MeasurementScope::nested(
-                &metrics.round_inner_iteration_thread_message,
-                &measurement_scope,
-            )
-            .dont_record_zeros();
             let timer = metrics.msg_execution_duration.start_timer();
 
             let instructions_before = round_limits.instructions;
@@ -1851,35 +1836,41 @@ fn execute_canisters_on_thread(
                 subnet_size,
                 cost_schedule,
             );
-            if instructions_used.is_some_and(|instructions| instructions.get() > 0) {
-                // We only want to count the canister as executed if it used instructions.
-                executed_canister_ids.insert(new_canister.canister_id());
-            }
             ingress_results.extend(ingress_status);
             let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
-            let messages = NumMessages::from(
-                instructions_used
-                    .map(|n| if n.get() > 0 { 1 } else { 0 })
-                    .unwrap_or(0),
-            );
-            measurement_scope.add(
-                round_instructions_executed,
-                NumSlices::from(messages.get()),
-                messages,
-            );
-            if let Some(instructions_used) = instructions_used {
-                total_instructions_used += instructions_used;
-                total_messages_executed.inc_assign();
-                observe_instructions_consumed_per_message(
-                    &logger,
-                    &metrics,
-                    &new_canister,
-                    instructions_used,
-                    instruction_limits.message(),
-                );
+
+            // A message was executed iff a non-zero number of instructions was consumed.
+            // A paused execution outputs `instructions_used == None` and it also counts as
+            // an executed message slice.
+            let mut messages = NumMessages::from(0);
+            match instructions_used {
+                // Message completed.
+                Some(instructions) => {
+                    if instructions.get() > 0 {
+                        // Message actually executed.
+                        messages = NumMessages::from(1);
+                        total_slices_executed.inc_assign();
+                        executed_canister_ids.insert(new_canister.canister_id());
+                        total_instructions_used += instructions;
+                    }
+
+                    observe_instructions_consumed_per_message(
+                        &logger,
+                        &metrics,
+                        &new_canister,
+                        instructions,
+                        instruction_limits.message(),
+                    );
+                }
+                // Paused execution.
+                None => {
+                    total_slices_executed.inc_assign();
+                    executed_canister_ids.insert(new_canister.canister_id());
+                }
             }
-            total_slices_executed.inc_assign();
+            measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
+            total_messages_executed += messages;
             canister_arc = new_canister;
             canister = Arc::make_mut(&mut canister_arc);
             round_limits.instructions -=
@@ -1902,7 +1893,6 @@ fn execute_canisters_on_thread(
                 }
             } else {
                 timer.stop_and_discard();
-                metrics.zero_instruction_messages.inc();
             }
             if total_heap_delta >= config.max_heap_delta_per_iteration {
                 break;
