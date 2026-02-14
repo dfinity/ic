@@ -29,7 +29,7 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
@@ -226,13 +226,12 @@ where
             )));
 
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-            let runtime = tokio::runtime::Runtime::new().unwrap();
             let mut ingress_manager = IngressManager::new(
                 time_source.clone(),
                 Arc::new(consensus_time),
                 Box::new(ingress_hist_reader),
                 ingress_pool,
-                setup_registry(subnet_id, runtime.handle().clone()),
+                setup_registry(subnet_id),
                 ingress_signature_crypto,
                 metrics_registry,
                 subnet_id,
@@ -363,7 +362,7 @@ fn handle_ingress(criterion: &mut Criterion) {
 }
 
 /// Sets up a registry client.
-fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<dyn RegistryClient> {
+fn setup_registry(subnet_id: SubnetId) -> Arc<dyn RegistryClient> {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let subnet_record = test_subnet_record();
     registry_data_provider
@@ -373,11 +372,10 @@ fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<d
             Some(subnet_record),
         )
         .expect("Failed to add subnet record.");
-    let registry = Arc::new(RegistryClientImpl::new(
-        Arc::clone(&registry_data_provider) as Arc<_>,
-        None,
+    let registry = Arc::new(FakeRegistryClient::new(
+        Arc::clone(&registry_data_provider) as Arc<_>
     ));
-    runtime.block_on(async { registry.as_ref().fetch_and_start_polling().unwrap() });
+    registry.update_to_latest_version();
     registry
 }
 

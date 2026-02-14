@@ -41,6 +41,12 @@ message SubnetRecord {
   // Max number of ingress messages per block.
   uint64 max_ingress_messages_per_block = 18;
 
+  // Max number of ingress bytes per block. Note that this value can be larger than
+  // [`Self::max_block_payload_size`].
+  // A value of 0 means that the default value [`ic_limits::MAX_INGRESS_BYTES_PER_BLOCK`] will be
+  // used.
+  uint64 max_ingress_bytes_per_block = 31;
+
   // The maximum combined size of the ingress and xnet messages that fit into a block.
   uint64 max_block_payload_size = 19;
 

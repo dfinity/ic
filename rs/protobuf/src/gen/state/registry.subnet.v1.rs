@@ -37,6 +37,12 @@ pub struct SubnetRecord {
     /// Max number of ingress messages per block.
     #[prost(uint64, tag = "18")]
     pub max_ingress_messages_per_block: u64,
+    /// Max number of ingress bytes per block. Note that this value can be larger than
+    /// \[`Self::max_block_payload_size`\].
+    /// A value of 0 means that the default value \[`ic_limits::MAX_INGRESS_BYTES_PER_BLOCK`\] will be
+    /// used.
+    #[prost(uint64, tag = "31")]
+    pub max_ingress_bytes_per_block: u64,
     /// The maximum combined size of the ingress and xnet messages that fit into a block.
     #[prost(uint64, tag = "19")]
     pub max_block_payload_size: u64,

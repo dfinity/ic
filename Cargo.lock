@@ -10556,7 +10556,7 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
- "ic-registry-client",
+ "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
@@ -10576,7 +10576,6 @@ dependencies = [
  "rand 0.8.5",
  "rstest",
  "slog",
- "tokio",
 ]
 
 [[package]]
