@@ -224,6 +224,67 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
+def filter_columns(columns_metadata, columns_list):
+    """
+    Filter and reorder columns based on user specification.
+
+    Args:
+        columns_metadata: List of 4-tuples (user_facing_name, dataframe_column, header, alignment)
+        columns_list: List of column names like ["label", "total", "non_success"] or ["-owners", "-timeout"]
+
+    Returns:
+        Filtered/reordered colalignments list of 3-tuples (dataframe_column, header, alignment)
+
+    """
+    if not columns_list:
+        # Return colalignments (without user_facing_name)
+        return [(df_col, header, align) for _, df_col, header, align in columns_metadata]
+
+    # Build mappings
+    available_columns = {user_name: (df_col, header, align) for user_name, df_col, header, align in columns_metadata}
+
+    # Check if all columns start with '-' (exclusion mode)
+    if all(col.startswith("-") for col in columns_list):
+        # Exclusion mode: start with all columns, remove specified ones
+        exclude_set = {col[1:] for col in columns_list}
+
+        # Validate that excluded columns exist
+        invalid_cols = exclude_set - set(available_columns.keys())
+        if invalid_cols:
+            die(
+                f"Invalid column names: {', '.join(sorted(invalid_cols))}\n"
+                f"Available columns: {', '.join(sorted(available_columns.keys()))}"
+            )
+
+        return [
+            (df_col, header, align)
+            for user_name, df_col, header, align in columns_metadata
+            if user_name not in exclude_set
+        ]
+
+    # Check if any columns start with '-' (mixed mode - not allowed)
+    if any(col.startswith("-") for col in columns_list):
+        die(
+            "Cannot mix inclusion and exclusion modes. Either specify columns to include, or prefix all with '-' to exclude."
+        )
+
+    # Inclusion mode: return only specified columns in specified order
+    # Validate that all columns exist
+    invalid_cols = set(columns_list) - set(available_columns.keys())
+    if invalid_cols:
+        die(
+            f"Invalid column names: {', '.join(sorted(invalid_cols))}\n"
+            f"Available columns: {', '.join(sorted(available_columns.keys()))}"
+        )
+
+    result = [available_columns[col] for col in columns_list if col in available_columns]
+
+    if not result:
+        die("No valid columns to display after filtering.")
+
+    return result
+
+
 def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs: bool, df: pd.DataFrame):
     """
     Download the logs of all runs of test_target in the given DataFrame,
@@ -868,25 +929,33 @@ def top(args):
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
-    colalignments = [
-        # (column, alignment)
-        ("label", "left"),
-        ("total", "decimal"),
-        ("non_success", "decimal"),
-        ("flaky", "decimal"),
-        ("timeout", "decimal"),
-        ("fail", "decimal"),
-        ("non_success%", "decimal"),
-        ("flaky%", "decimal"),
-        ("timeout%", "decimal"),
-        ("fail%", "decimal"),
-        ("impact", "right"),
-        ("duration_p90", "right"),
-        ("owners", "left"),
+    # Define columns with user-facing names, DataFrame column names, headers, and alignments
+    # Format: (user_facing_name, dataframe_column, header, alignment)
+    columns_metadata = [
+        ("label", "label", "label", "left"),
+        ("total", "total", "total", "decimal"),
+        ("non_success", "non_success", "non_success", "decimal"),
+        ("flaky", "flaky", "flaky", "decimal"),
+        ("timeout", "timeout", "timeout", "decimal"),
+        ("fail", "fail", "fail", "decimal"),
+        ("non_success%", "non_success%", "non_success%", "decimal"),
+        ("flaky%", "flaky%", "flaky%", "decimal"),
+        ("timeout%", "timeout%", "timeout%", "decimal"),
+        ("fail%", "fail%", "fail%", "decimal"),
+        ("impact", "impact", "impact", "right"),
+        ("duration_p90", "duration_p90", "duration_p90", "right"),
+        ("owners", "owners", "owners", "left"),
     ]
 
-    columns, alignments = zip(*colalignments)
-    print(tabulate(df[list(columns)], headers="keys", tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)))
+    # Apply column filtering if --columns is specified, otherwise use all columns
+    colalignments = filter_columns(columns_metadata, args.columns)
+
+    columns, headers, alignments = zip(*colalignments)
+    print(
+        tabulate(
+            df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)
+        )
+    )
 
 
 def last(args):
@@ -955,16 +1024,22 @@ def last(args):
     if not args.skip_download:
         download_and_process_logs(args.logs_base_dir, args.test_target, args.download_ic_logs, df)
 
-    colalignments = [
-        # (column, header, alignment)
-        ("last started at (UTC)", "last started at (UTC)", "right"),
-        ("duration", "duration", "right"),
-        ("status", "status", "left"),
-        ("branch_link", "branch", "left"),
-        ("PR_link", "PR", "left"),
-        ("commit_link", "commit", "left"),
-        ("buildbuddy_links", "buildbuddy", "left"),
-    ] + ([] if args.skip_download else [("errors", "errors per attempt", "left")])
+    # Define columns with user-facing names, DataFrame column names, headers, and alignments
+    # Format: (user_facing_name, dataframe_column, header, alignment)
+    columns_metadata = [
+        ("last_started_at", "last started at (UTC)", "last started at (UTC)", "right"),
+        ("duration", "duration", "duration", "right"),
+        ("status", "status", "status", "left"),
+        ("branch", "branch_link", "branch", "left"),
+        ("PR", "PR_link", "PR", "left"),
+        ("commit", "commit_link", "commit", "left"),
+        ("buildbuddy", "buildbuddy_links", "buildbuddy", "left"),
+    ]
+    if not args.skip_download:
+        columns_metadata.append(("errors", "errors", "errors per attempt", "left"))
+
+    # Apply column filtering if --columns is specified, otherwise use all columns
+    colalignments = filter_columns(columns_metadata, args.columns)
 
     columns, headers, alignments = zip(*colalignments)
     print(
@@ -1111,6 +1186,18 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
         help="Table format. See: https://pypi.org/project/tabulate/",
     )
 
+    top_parser.add_argument(
+        "--columns",
+        metavar="COLS",
+        type=lambda s: [col.strip() for col in s.split(",")],
+        help="""Comma-separated list of columns to display, in order.
+Available columns: label, total, non_success, flaky, timeout, fail, non_success%%, flaky%%, timeout%%, fail%%, impact, duration_p90, owners
+Examples:
+  --columns=label,flaky%%,impact,owners    Show only these columns
+  --columns=-owners,-timeout              Show all columns except these
+If omitted, all columns are shown.""",
+    )
+
     ## last ###################################################################
 
     last_runs_parser = subparsers.add_parser(
@@ -1189,6 +1276,18 @@ logs
         type=str,
         default="fancy_grid",
         help="Table format. See: https://pypi.org/project/tabulate/",
+    )
+
+    last_runs_parser.add_argument(
+        "--columns",
+        metavar="COLS",
+        type=lambda s: [col.strip() for col in s.split(",")],
+        help="""Comma-separated list of columns to display, in order.
+Available columns: last_started_at, duration, status, branch, PR, commit, buildbuddy, errors
+Examples:
+  --columns=last_started_at,status,buildbuddy    Show only these columns
+  --columns=-branch,-PR                          Show all columns except these
+If omitted, all columns are shown.""",
     )
 
     ###########################################################################
