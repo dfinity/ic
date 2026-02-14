@@ -17,6 +17,7 @@ use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_
 use ic_state_machine_tests::{StateMachine, UserError};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use lazy_static::lazy_static;
 use std::str::FromStr;
 use std::time::Duration;
@@ -186,7 +187,11 @@ impl LedgerSuiteConfig {
         }
     }
 
-    fn perform_upgrade_downgrade_testing(&self, state_machine: &StateMachine) {
+    fn perform_upgrade_downgrade_testing(
+        &self,
+        state_machine: &StateMachine,
+        expect_107_block: bool,
+    ) {
         println!(
             "Processing {}, ledger id: {}, index id: {}",
             self.canister_name, self.ledger_id, self.index_id
@@ -219,6 +224,18 @@ impl LedgerSuiteConfig {
         // Upgrade to the new canister versions
         self.upgrade_to_master(state_machine);
         if self.extended_testing {
+            if expect_107_block {
+                let blocks = previous_ledger_state
+                    .as_mut()
+                    .expect("extended testing should have a state")
+                    .fetch_and_ingest_next_ledger_and_archive_blocks(
+                        state_machine,
+                        ledger_canister_id,
+                        None,
+                    );
+                assert_eq!(blocks.blocks.len(), 1);
+                assert_eq!(blocks.blocks[0].btype, Some(BTYPE_107.to_string()));
+            }
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
                 state_machine,
                 ledger_canister_id,
@@ -616,7 +633,7 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
         Some(burns_without_spender),
         true,
     )
-    .perform_upgrade_downgrade_testing(&state_machine);
+    .perform_upgrade_downgrade_testing(&state_machine, true);
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -747,7 +764,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
     for canister_config in canister_configs {
-        canister_config.perform_upgrade_downgrade_testing(&state_machine);
+        canister_config.perform_upgrade_downgrade_testing(&state_machine, true);
     }
 }
 
@@ -991,7 +1008,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_sns_state_or_panic();
 
     for canister_config in canister_configs {
-        canister_config.perform_upgrade_downgrade_testing(&state_machine);
+        canister_config.perform_upgrade_downgrade_testing(&state_machine, false);
     }
 }
 
