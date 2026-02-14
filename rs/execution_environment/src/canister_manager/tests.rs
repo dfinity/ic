@@ -1,6 +1,6 @@
 use super::InstallCodeResult;
 use crate::{
-    IngressHistoryWriterImpl, RoundLimits, as_num_instructions,
+    RoundLimits, as_num_instructions,
     canister_manager::{
         CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
         InstallCodeContext, MAX_SLICE_SIZE_BYTES, StopCanisterResult, WasmSource,
@@ -257,15 +257,6 @@ impl CanisterManagerBuilder {
     fn build(self) -> CanisterManager {
         let subnet_type = SubnetType::Application;
         let metrics_registry = MetricsRegistry::new();
-        let state_reader = Arc::new(FakeStateManager::new());
-        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
-        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
-            Config::default(),
-            no_op_logger(),
-            &metrics_registry,
-            completed_execution_messages_tx,
-            state_reader,
-        ));
         let cycles_account_manager = Arc::new(self.cycles_account_manager);
         let hypervisor = Hypervisor::new(
             Config::default(),
@@ -288,7 +279,6 @@ impl CanisterManagerBuilder {
                 self.rate_limiting_of_instructions,
             ),
             cycles_account_manager,
-            ingress_history_writer,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
             FlagStatus::Disabled,
         )
@@ -957,8 +947,9 @@ fn stop_a_stopped_canister() {
             message_id: message_test_id(0),
             call_id: Some(StopCanisterCallId::new(0)),
         };
+        let mut canister = state.canister_state(&canister_id).unwrap().clone();
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state),
+            canister_manager.stop_canister(&mut canister, stop_context),
             StopCanisterResult::AlreadyStopped {
                 cycles_to_return: Cycles::zero()
             }
@@ -994,8 +985,9 @@ fn stop_a_stopped_canister_from_another_canister() {
             cycles: Cycles::from(cycles),
             deadline: NO_DEADLINE,
         };
+        let mut canister = state.canister_state(&canister_id).unwrap().clone();
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state),
+            canister_manager.stop_canister(&mut canister, stop_context),
             StopCanisterResult::AlreadyStopped {
                 cycles_to_return: Cycles::from(cycles)
             }
@@ -2302,13 +2294,13 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
 fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
     assert_eq!(
         uninstall_canister(
-            &no_op_logger(),
             &mut CanisterStateBuilder::new()
                 .with_call_context(CallContextBuilder::new().with_responded(true).build())
                 .build(),
             None,
             UNIX_EPOCH,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
+            &no_op_logger(),
         ),
         Vec::new()
     );
@@ -2318,7 +2310,6 @@ fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
 fn uninstall_canister_responds_to_unresponded_call_contexts() {
     assert_eq!(
         uninstall_canister(
-            &no_op_logger(),
             &mut CanisterStateBuilder::new()
                 .with_canister_id(canister_test_id(789))
                 .with_call_context(
@@ -2335,6 +2326,7 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
             None,
             UNIX_EPOCH,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
+            &no_op_logger(),
         )[0],
         Response::Ingress(IngressResponse {
             message_id: message_test_id(456),
@@ -3008,7 +3000,6 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         NumBytes::from(MIB)
     );
 
-    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
@@ -3016,15 +3007,17 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         compute_allocation_used: state.total_compute_allocation(),
         subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
-    canister_manager
+    let canister_id = canister_test_id(0);
+    let mut canister = state.canister_state(&canister_id).cloned().unwrap();
+    let _ = canister_manager
         .uninstall_code(
-            canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
-            canister_test_id(0),
-            &mut state,
+            &mut canister,
             &mut round_limits,
-            &no_op_counter,
+            canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
+            state.time(),
         )
         .unwrap();
+    state.put_canister_state(canister);
 
     // The execution state of the canister should be removed.
     assert_eq!(
