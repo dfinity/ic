@@ -347,6 +347,7 @@ jobs:
           touch  ~/.netrc
           chmod 600 ~/.netrc
           echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
+          echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
           echo "Current GitHub API rate limits:"
           curl -s --netrc https://api.github.com/rate_limit | jq
 
