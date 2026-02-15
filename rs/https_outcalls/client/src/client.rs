@@ -765,7 +765,6 @@ mod tests {
         loop {
             match client.try_receive() {
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                //TODO(urgent): perhaps we should check the payment metadata as well.
                 Ok((response, payment_metadata)) => {
                     assert_eq!(
                         response,

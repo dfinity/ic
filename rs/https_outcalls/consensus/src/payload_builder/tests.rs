@@ -11,6 +11,7 @@ use crate::payload_builder::{
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_error_types::RejectCode;
+use ic_https_outcalls_pricing::PricingCalculator;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     canister_http::{
@@ -31,14 +32,14 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    Height, NumBytes, RegistryVersion, ReplicaVersion, Time,
+    Cycles, Height, NumBytes, RegistryVersion, ReplicaVersion, Time,
     batch::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext},
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
-        CanisterHttpPaymentMetadata, CanisterHttpPaymentReceipt, CanisterHttpPaymentShare,
-        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseArtifact,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        CanisterHttpPaymentMetadata, CanisterHttpPaymentProof, CanisterHttpPaymentReceipt,
+        CanisterHttpPaymentShare, CanisterHttpRequestContext, CanisterHttpResponse,
+        CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -50,7 +51,7 @@ use ic_types::{
 use rand::Rng;
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ops::DerefMut,
     sync::{Arc, RwLock},
     time::Duration,
@@ -214,6 +215,9 @@ fn multiple_payload_test() {
                         signature: BasicSignatureBatch {
                             signatures_map: BTreeMap::new(),
                         },
+                    },
+                    payment_proof: CanisterHttpPaymentProof {
+                        payment_shares: vec![],
                     },
                 }],
                 timeouts: vec![],
@@ -1543,6 +1547,292 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
     });
 }
 
+#[test]
+fn validate_payload_fails_if_share_exceeds_per_replica_allowance() {
+    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+        let callback_id = CallbackId::from(800);
+
+        // Setup: 25 cycles per replica allowance
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::FullyReplicated,
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus {
+                refundable_cycles: Cycles::new(100),
+                per_replica_allowance: Cycles::new(25), // Limit is 25
+                refunded_cycles: Cycles::zero(),
+                refunding_nodes: BTreeSet::new(),
+            },
+        };
+
+        // Inject context
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // Create Payload
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+
+        // BAD SHARE: Refund is 30 (Limit is 25)
+        let payment_share = Signed {
+            content: CanisterHttpPaymentMetadata {
+                id: callback_id,
+                receipt: CanisterHttpPaymentReceipt {
+                    refund: Cycles::new(30),
+                },
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
+                signer: node_test_id(0),
+            },
+        };
+        proof.payment_proof.payment_shares = vec![payment_share];
+
+        for i in 0..3 {
+            proof
+                .proof
+                .signature
+                .signatures_map
+                .insert(node_test_id(i), BasicSigOf::new(BasicSig(vec![])));
+        }
+
+        let payload = CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+
+        let result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        // Expect Failure
+        match result {
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::RefundShareExceedsAllowance {
+                        share_refund,
+                        per_replica_allowance,
+                        ..
+                    },
+                ),
+            )) => {
+                assert_eq!(share_refund, Cycles::new(30));
+                assert_eq!(per_replica_allowance, Cycles::new(25));
+            }
+            res => panic!("Expected RefundShareExceedsAllowance, got {res:?}"),
+        }
+    });
+}
+
+#[test]
+fn payload_builder_drops_candidate_when_cost_exceeds_refunds() {
+    test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
+        // Inject the mock pricing factory. This ensures the calculated cost is 1000.
+        payload_builder = payload_builder.with_pricing_factory(mock_factory);
+
+        let callback_id = CallbackId::from(1001);
+
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::FullyReplicated,
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus {
+                refundable_cycles: Cycles::new(5000),
+                per_replica_allowance: Cycles::new(1250),
+                refunded_cycles: Cycles::zero(),
+                refunding_nodes: BTreeSet::new(),
+            },
+        };
+
+        // Inject context into state
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // Create Shares with Low Refunds
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let content_shares = metadata_to_shares(4, &metadata);
+
+        {
+            let mut pool_access = canister_http_pool.write().unwrap();
+            for (i, content_share) in content_shares.into_iter().enumerate() {
+                // Refund 10 cycles per node. Total = 40.
+                // 40 < 1000 (Cost). Should be dropped.
+                let refund_amount = Cycles::new(10);
+
+                let payment_share = Signed {
+                    content: CanisterHttpPaymentMetadata {
+                        id: callback_id,
+                        receipt: CanisterHttpPaymentReceipt {
+                            refund: refund_amount,
+                        },
+                    },
+                    signature: BasicSignature {
+                        signature: BasicSigOf::new(BasicSig(vec![])),
+                        signer: node_test_id(i as u64),
+                    },
+                };
+
+                pool_access.apply(vec![CanisterHttpChangeAction::AddToValidated(
+                    content_share,
+                    payment_share,
+                    response.clone(),
+                )]);
+            }
+        }
+
+        let payload = payload_builder.build_payload(
+            Height::new(1),
+            NumBytes::new(4 * 1024 * 1024),
+            &[],
+            &default_validation_context(),
+        );
+
+        // Assert that the candidate is dropped because the refunds are less than the cost.
+        let parsed = bytes_to_payload(&payload).expect("Failed to parse payload");
+        assert_eq!(
+            parsed.num_responses(),
+            0,
+            "Builder should drop candidate because Refunds (40) < Cost (1000)"
+        );
+    });
+}
+
+#[test]
+fn payload_builder_includes_candidate_when_refunds_cover_cost() {
+    test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
+        // Inject the mock pricing factory. This ensures the calculated cost is 1000.
+        payload_builder = payload_builder.with_pricing_factory(mock_factory);
+
+        let callback_id = CallbackId::from(1002);
+
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::FullyReplicated,
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+            refund_status: ic_types::canister_http::RefundStatus {
+                refundable_cycles: Cycles::new(5000),
+                per_replica_allowance: Cycles::new(1250),
+                refunded_cycles: Cycles::zero(),
+                refunding_nodes: BTreeSet::new(),
+            },
+        };
+
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // Create Shares with High Refunds
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let content_shares = metadata_to_shares(4, &metadata);
+
+        {
+            let mut pool_access = canister_http_pool.write().unwrap();
+            for (i, content_share) in content_shares.into_iter().enumerate() {
+                // Refund 300 cycles per node. Total = 1200.
+                // 1200 > 1000 (Cost). Should be included.
+                let refund_amount = Cycles::new(300);
+
+                let payment_share = Signed {
+                    content: CanisterHttpPaymentMetadata {
+                        id: callback_id,
+                        receipt: CanisterHttpPaymentReceipt {
+                            refund: refund_amount,
+                        },
+                    },
+                    signature: BasicSignature {
+                        signature: BasicSigOf::new(BasicSig(vec![])),
+                        signer: node_test_id(i as u64),
+                    },
+                };
+
+                pool_access.apply(vec![CanisterHttpChangeAction::AddToValidated(
+                    content_share,
+                    payment_share,
+                    response.clone(),
+                )]);
+            }
+        }
+
+        let payload = payload_builder.build_payload(
+            Height::new(1),
+            NumBytes::new(4 * 1024 * 1024),
+            &[],
+            &default_validation_context(),
+        );
+
+        // Assert that the candidate is included because the refunds cover the cost.
+        let parsed = bytes_to_payload(&payload).expect("Failed to parse payload");
+        assert_eq!(
+            parsed.num_responses(),
+            1,
+            "Builder should include candidate because Refunds (1200) > Cost (1000)"
+        );
+    });
+}
+
 /// Build some test metadata and response, which is valid and can be used in
 /// different tests
 pub(crate) fn test_response_and_metadata(
@@ -1712,6 +2002,9 @@ pub(crate) fn response_and_metadata_to_proof(
                 signatures_map: BTreeMap::new(),
             },
         },
+        payment_proof: CanisterHttpPaymentProof {
+            payment_shares: vec![],
+        },
     }
 }
 
@@ -1820,5 +2113,21 @@ where
             &payload,
             &[],
         )
+    })
+}
+
+struct MockPricingCalculator {
+    fixed_cost: Cycles,
+}
+
+impl PricingCalculator for MockPricingCalculator {
+    fn consensus_cost(&self, _response: &CanisterHttpResponse) -> Cycles {
+        self.fixed_cost
+    }
+}
+
+fn mock_factory(_: &CanisterHttpRequestContext) -> Box<dyn PricingCalculator> {
+    Box::new(MockPricingCalculator {
+        fixed_cost: Cycles::new(1000),
     })
 }

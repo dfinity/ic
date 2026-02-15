@@ -105,6 +105,15 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
     ) -> Option<CanisterHttpResponseShare> {
         self.validated.get(share).map(|_| share.clone())
     }
+
+    fn get_validated_payment_share(
+        &self,
+        share: &CanisterHttpResponseShare,
+    ) -> Option<CanisterHttpPaymentShare> {
+        // Since 'validated' is PoolSection<CanisterHttpResponseShare, CanisterHttpPaymentShare>
+        // getting by key returns the payment share.
+        self.validated.get(share).cloned()
+    }
 }
 
 impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {

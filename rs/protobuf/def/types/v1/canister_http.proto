@@ -61,6 +61,7 @@ message CanisterHttpResponseWithConsensus {
   reserved 5;
   reserved 6;
   repeated CanisterHttpResponseSignature signatures = 7;
+  repeated CanisterHttpPaymentShare payment_shares = 9;
 }
 
 message CanisterHttpShare {
