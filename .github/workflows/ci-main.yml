@@ -348,7 +348,7 @@ jobs:
           chmod 600 ~/.netrc
           echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
           echo "Current GitHub API rate limits:"
-          curl -s https://api.github.com/rate_limit | jq
+          curl -s --netrc https://api.github.com/rate_limit | jq
 
           mkdir -p /tmp/zig-cache
 
