@@ -224,6 +224,67 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
+def filter_columns(columns_metadata, columns_list):
+    """
+    Filter and reorder columns based on user specification.
+
+    Args:
+        columns_metadata: List of 3-tuples (column_name, header, alignment)
+        columns_list: List of column names like ["label", "total", "non_success"] or ["-owners", "-timeout"]
+
+    Returns:
+        Filtered/reordered colalignments list of 3-tuples (dataframe_column, header, alignment)
+
+    """
+    if not columns_list:
+        # Return colalignments (without user_facing_name)
+        return [(column_name, header, align) for column_name, header, align in columns_metadata]
+
+    # Build mappings
+    available_columns = {column_name: (column_name, header, align) for column_name, header, align in columns_metadata}
+
+    # Check if all columns start with '-' (exclusion mode)
+    if all(col.startswith("-") for col in columns_list):
+        # Exclusion mode: start with all columns, remove specified ones
+        exclude_set = {col[1:] for col in columns_list}
+
+        # Validate that excluded columns exist
+        invalid_cols = exclude_set - set(available_columns.keys())
+        if invalid_cols:
+            die(
+                f"Invalid column names: {', '.join(sorted(invalid_cols))}\n"
+                f"Available columns: {', '.join(sorted(available_columns.keys()))}"
+            )
+
+        return [
+            (column_name, header, align)
+            for column_name, header, align in columns_metadata
+            if column_name not in exclude_set
+        ]
+
+    # Check if any columns start with '-' (mixed mode - not allowed)
+    if any(col.startswith("-") for col in columns_list):
+        die(
+            "Cannot mix inclusion and exclusion modes. Either specify columns to include, or prefix all with '-' to exclude."
+        )
+
+    # Inclusion mode: return only specified columns in specified order
+    # Validate that all columns exist
+    invalid_cols = set(columns_list) - set(available_columns.keys())
+    if invalid_cols:
+        die(
+            f"Invalid column names: {', '.join(sorted(invalid_cols))}\n"
+            f"Available columns: {', '.join(sorted(available_columns.keys()))}"
+        )
+
+    result = [available_columns[col] for col in columns_list if col in available_columns]
+
+    if not result:
+        die("No valid columns to display after filtering.")
+
+    return result
+
+
 def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs: bool, df: pd.DataFrame):
     """
     Download the logs of all runs of test_target in the given DataFrame,
@@ -251,8 +312,8 @@ def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs:
         row["lock"] = threading.Lock()
 
         buildbuddy_url = row["buildbuddy_url"]
-        invocation_id = row["invocation_id"]
-        last_started_at = row["last_started_at"].strftime("%Y-%m-%dT%H:%M:%S")
+        invocation_id = row["build_id"]
+        last_started_at = row["first_start_time"].strftime("%Y-%m-%dT%H:%M:%S")
         invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
 
         # Parse the BuildBuddy URL to extract the cluster and its base URL for use with gRPC later.
@@ -761,24 +822,62 @@ def process_elasticsearch_hits_from_queue(
         print(f"Downloaded {len(messages)} log entries for node {node} to {log_file}", file=sys.stderr)
 
 
+# fmt: off
+TOP_COLUMNS = [
+    # (column_name,     header,                  alignment)
+    ("label",           "label",                 "left"),
+    ("total",           "total",                 "decimal"),
+    ("non_success",     "non_success",           "decimal"),
+    ("flaky",           "flaky",                 "decimal"),
+    ("timeout",         "timeout",               "decimal"),
+    ("fail",            "fail",                  "decimal"),
+    ("non_success%",    "non_success%",          "decimal"),
+    ("flaky%",          "flaky%",                "decimal"),
+    ("timeout%",        "timeout%",              "decimal"),
+    ("fail%",           "fail%",                 "decimal"),
+    ("impact",          "impact",                "right"),
+    ("total_duration",  "total duration",        "right"),
+    ("duration_p90",    "duration_p90",          "right"),
+    ("owners",          "owners",                "left"),
+]
+
+LAST_COLUMNS = [
+    # (column_name,      header,                  alignment)
+    ("last_started_at",  "last started at (UTC)", "right"),
+    ("duration",         "duration",              "right"),
+    ("status",           "status",                "left"),
+    ("branch",           "branch",                "left"),
+    ("PR",               "PR",                    "left"),
+    ("commit",           "commit",                "left"),
+    ("buildbuddy",       "buildbuddy",            "left"),
+    ("errors",           "errors per attempt",    "left")
+]
+# fmt: on
+
+
 def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
     """
     Write a nice README.md in the log output directory describing the //ci/githubstats:query invocation
     that was used to generate the log output directory. This is useful when the invocation has to be redone or tweaked later.
     """
+    # fmt: off
     colalignments = [
-        ("last started at (UTC)", "right"),
-        ("duration", "right"),
-        ("status", "left"),
-        ("branch", "left"),
-        ("PR", "left"),
-        ("commit", "left"),
-        ("buildbuddy_url", "left"),
+        # (df_column,           header,                  alignment)
+        ("last_started_at",     "last started at (UTC)", "right"),
+        ("duration",            "duration",              "right"),
+        ("status",              "status",                "left"),
+        ("head_branch",         "branch",                "left"),
+        ("pull_request_number", "PR",                    "left"),
+        ("head_sha",            "commit",                "left"),
+        ("buildbuddy_url",      "buildbuddy",            "left"),
     ]
+    # fmt: on
 
     cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
-    columns, alignments = zip(*colalignments)
-    table_md = tabulate(df[list(columns)], headers="keys", tablefmt="github", colalign=["decimal"] + list(alignments))
+    columns, headers, alignments = zip(*colalignments)
+    table_md = tabulate(
+        df[list(columns)], headers=list(headers), tablefmt="github", colalign=["decimal"] + list(alignments)
+    )
     readme = f"""Logs of `{test_target}`
 ===
 Generated at {timestamp} using:
@@ -869,26 +968,15 @@ def top(args):
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
-    colalignments = [
-        # (column, alignment)
-        ("label", "left"),
-        ("total", "decimal"),
-        ("non_success", "decimal"),
-        ("flaky", "decimal"),
-        ("timeout", "decimal"),
-        ("fail", "decimal"),
-        ("non_success%", "decimal"),
-        ("flaky%", "decimal"),
-        ("timeout%", "decimal"),
-        ("fail%", "decimal"),
-        ("impact", "right"),
-        ("total_duration", "right"),
-        ("duration_p90", "right"),
-        ("owners", "left"),
-    ]
+    # Apply column filtering if --columns is specified, otherwise use all columns
+    colalignments = filter_columns(TOP_COLUMNS, args.columns)
 
-    columns, alignments = zip(*colalignments)
-    print(tabulate(df[list(columns)], headers="keys", tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)))
+    columns, headers, alignments = zip(*colalignments)
+    print(
+        tabulate(
+            df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)
+        )
+    )
 
 
 def last(args):
@@ -933,22 +1021,23 @@ def last(args):
         return f"{redirect}?target={args.test_target}" if redirect else url
 
     with ThreadPoolExecutor() as executor:
-        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["invocation_id"]))
+        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["build_id"]))
 
-    df["buildbuddy_links"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
+    df["buildbuddy"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
-    df["commit_link"] = df["commit"].apply(
+    df["commit"] = df["head_sha"].apply(
         lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/{ORG}/{REPO}/commit/{commit}")
     )
 
-    df["last started at (UTC)"] = df["last_started_at"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
+    # Bazel's first_start_time is really the time the last attempt started.
+    df["last_started_at"] = df["first_start_time"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
 
-    df["branch_link"] = df["branch"].apply(
+    df["branch"] = df["head_branch"].apply(
         lambda branch: terminal_hyperlink(shorten(branch, 16), f"https://github.com/{ORG}/{REPO}/tree/{branch}")
     )
 
-    df["PR_link"] = df["PR"].apply(
+    df["PR"] = df["pull_request_number"].apply(
         lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
     )
 
@@ -957,16 +1046,13 @@ def last(args):
     if not args.skip_download:
         download_and_process_logs(args.logs_base_dir, args.test_target, args.download_ic_logs, df)
 
-    colalignments = [
-        # (column, header, alignment)
-        ("last started at (UTC)", "last started at (UTC)", "right"),
-        ("duration", "duration", "right"),
-        ("status", "status", "left"),
-        ("branch_link", "branch", "left"),
-        ("PR_link", "PR", "left"),
-        ("commit_link", "commit", "left"),
-        ("buildbuddy_links", "buildbuddy", "left"),
-    ] + ([] if args.skip_download else [("errors", "errors per attempt", "left")])
+    columns_metadata = LAST_COLUMNS
+    # When downlods are skipped we don't have any error information so skip the "errors" column.
+    if args.skip_download:
+        columns_metadata = [col for col in columns_metadata if col[0] != "errors"]
+
+    # Apply column filtering if --columns is specified, otherwise use all columns
+    colalignments = filter_columns(columns_metadata, args.columns)
 
     columns, headers, alignments = zip(*colalignments)
     print(
@@ -979,6 +1065,16 @@ def last(args):
 # argparse formatter to allow newlines in --help.
 class RawDefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
     pass
+
+
+def add_columns_argument(parser, columns_metadata):
+    parser.add_argument(
+        "--columns",
+        metavar="COLS",
+        type=lambda s: [col.strip() for col in s.split(",")],
+        help=f"""Comma-separated list of columns to display in order or hide if preceded by '-'. Available columns:
+{",".join([column_name.replace("%", "%%") for column_name, _, _ in columns_metadata])}""",
+    )
 
 
 def main():
@@ -1115,6 +1211,8 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
         help="Table format. See: https://pypi.org/project/tabulate/",
     )
 
+    add_columns_argument(top_parser, TOP_COLUMNS)
+
     ## last ###################################################################
 
     last_runs_parser = subparsers.add_parser(
@@ -1194,6 +1292,8 @@ logs
         default="fancy_grid",
         help="Table format. See: https://pypi.org/project/tabulate/",
     )
+
+    add_columns_argument(last_runs_parser, LAST_COLUMNS)
 
     ###########################################################################
 
