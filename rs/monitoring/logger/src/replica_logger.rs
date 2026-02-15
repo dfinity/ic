@@ -1,5 +1,8 @@
+use slog::{Drain, Level};
 use std::{
     collections::HashMap,
+    io::{self, stderr},
+    str::FromStr,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -23,6 +26,32 @@ pub fn no_op_logger() -> ReplicaLogger {
         ic_config::logger::Level::Critical,
     )
     .into()
+}
+
+/// A logger that logs to stdout/stderr if the environment variable `RUST_LOG`
+/// or the input parameter specify a log level (in this order of precedence).
+/// Used in tests.
+pub fn test_logger(log_level: Option<Level>) -> ReplicaLogger {
+    if let Some(log_level) = std::env::var("RUST_LOG")
+        .ok()
+        .and_then(|level| Level::from_str(&level).ok())
+        .or(log_level)
+    {
+        let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
+            Box::new(stderr())
+        } else {
+            Box::new(slog_term::TestStdoutWriter)
+        };
+        let decorator = slog_term::PlainSyncDecorator::new(writer);
+        let drain = slog_term::FullFormat::new(decorator)
+            .build()
+            .filter_level(log_level)
+            .fuse();
+        let logger = slog::Logger::root(drain, slog::o!());
+        logger.into()
+    } else {
+        no_op_logger()
+    }
 }
 
 impl From<LogEntryLogger> for ReplicaLogger {

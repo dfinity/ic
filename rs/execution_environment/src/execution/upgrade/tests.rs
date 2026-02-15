@@ -1,5 +1,4 @@
 use ic_error_types::ErrorCode;
-use ic_logger::replica_logger::LogEntryLogger;
 use ic_management_canister_types_private::{CanisterUpgradeOptions, EmptyBlob, Payload};
 use ic_replicated_state::{
     CanisterState, canister_state::NextExecution,
@@ -77,13 +76,6 @@ enum Execution {
 /// Returns `ExecutionTest` with instruction limit set for `max_rounds`
 fn execution_test_with_max_rounds(max_rounds: u64) -> ExecutionTest {
     ExecutionTestBuilder::new()
-        .with_log(
-            LogEntryLogger::new(
-                slog::Logger::root(slog::Discard, slog::o!()),
-                ic_config::logger::Level::Trace,
-            )
-            .into(),
-        )
         .with_install_code_slice_instruction_limit(MAX_INSTRUCTIONS_PER_SLICE)
         .with_install_code_instruction_limit(MAX_INSTRUCTIONS_PER_SLICE * max_rounds)
         .with_cost_to_compile_wasm_instruction(0)
