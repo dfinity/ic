@@ -898,7 +898,8 @@ http_archive(
     ],
     sha256 = "eff54923b6afdf4507f9b07fc9906f06580fdba72d96e9d58d8e6ea8ac4f71cd",
     strip_prefix = "buildbuddy-89d510c91a18ec0469043a50750145ac51983f74",
-    url = "https://github.com/buildbuddy-io/buildbuddy/archive/89d510c91a18ec0469043a50750145ac51983f74.tar.gz",  # v2.242.0
+    type = "tar.gz",
+    url = "https://codeload.github.com/buildbuddy-io/buildbuddy/tar.gz/89d510c91a18ec0469043a50750145ac51983f74",  # v2.242.0
 )
 
 ## shfmt, for formatting bash code
