@@ -229,7 +229,7 @@ crate.spec(
 )
 crate.spec(
     package = "bytes",
-    version = "^1.9.0",
+    version = "^1.11.1",
 )
 crate.spec(
     default_features = False,
@@ -1666,7 +1666,7 @@ crate.spec(
 )
 crate.spec(
     package = "time",
-    version = "^0.3.36",
+    version = "^0.3.47",
 )
 crate.spec(
     features = ["full"],
