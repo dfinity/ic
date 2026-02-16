@@ -114,7 +114,7 @@ where
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),
-            (&make_genesis(summary)).into(),
+            make_genesis(summary).into(),
             pool_config.clone(),
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),

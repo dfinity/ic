@@ -127,8 +127,8 @@ use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
 use ic_test_utilities_metrics::{
-    Labels, fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
-    fetch_int_gauge_vec,
+    Labels, fetch_counter_vec, fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_counter,
+    fetch_int_gauge, fetch_int_gauge_vec, labels,
 };
 use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
@@ -2964,21 +2964,19 @@ impl StateMachine {
     /// Returns the total number of Wasm instructions this state machine consumed in replicated
     /// message execution (ingress messages, inter-canister messages, and heartbeats).
     pub fn instructions_consumed(&self) -> f64 {
-        fetch_histogram_stats(
-            &self.metrics_registry,
-            "scheduler_instructions_consumed_per_round",
-        )
-        .map(|stats| stats.sum)
-        .unwrap_or(0.0)
+        fetch_histogram_stats(&self.metrics_registry, "execution_round_instructions")
+            .map(|stats| stats.sum)
+            .unwrap_or(0.0)
     }
 
     /// Returns the total number of Wasm instructions executed when executing subnet
     /// messages (IC00 messages addressed to the subnet).
     pub fn subnet_message_instructions(&self) -> f64 {
-        fetch_histogram_stats(
+        fetch_histogram_vec_stats(
             &self.metrics_registry,
-            "execution_round_subnet_queue_instructions",
+            "execution_round_inner_phase_instructions",
         )
+        .get(&labels(&[("phase", "subnet")]))
         .map(|stats| stats.sum)
         .unwrap_or(0.0)
     }

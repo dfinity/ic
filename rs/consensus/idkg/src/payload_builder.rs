@@ -1722,7 +1722,7 @@ mod tests {
 
             // Convert to proto format and back
             let mut summary_proto = pb::IDkgPayload::from(&summary);
-            let summary_from_proto = IDkgPayload::try_from(&summary_proto).unwrap();
+            let summary_from_proto = IDkgPayload::try_from(summary_proto.clone()).unwrap();
             assert_eq!(summary, summary_from_proto);
 
             // Check signature_agreement upgrade compatibility
@@ -1732,7 +1732,7 @@ mod tests {
                     pseudo_random_id: vec![4; 32],
                     unreported: None,
                 });
-            let summary_from_proto = IDkgPayload::try_from(&summary_proto).unwrap();
+            let summary_from_proto = IDkgPayload::try_from(summary_proto).unwrap();
             // Make sure the previous RequestId record can be retrieved by its pseudo_random_id.
             assert!(
                 summary_from_proto
@@ -1745,7 +1745,9 @@ mod tests {
     fn assert_proposal_conversion(b: Block) {
         let artifact = BlockProposal::fake(b, node_test_id(333));
         let mut buf = Vec::new();
-        pb::BlockProposal::from(&artifact).encode(&mut buf).unwrap();
+        pb::BlockProposal::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             BlockProposal::try_from(pb::BlockProposal::decode(buf.as_slice()).unwrap()).unwrap()
