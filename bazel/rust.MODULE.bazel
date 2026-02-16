@@ -715,7 +715,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-response-verification",
-    version = "3.0.3",
+    version = "3.1.0",
 )
 crate.spec(
     package = "ic-sha3",
