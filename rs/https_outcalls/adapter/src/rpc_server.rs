@@ -290,6 +290,8 @@ impl HttpsOutcallsService for CanisterHttp {
                     HttpMethod::Get => Ok(Method::GET),
                     HttpMethod::Post => Ok(Method::POST),
                     HttpMethod::Head => Ok(Method::HEAD),
+                    HttpMethod::Put => Ok(Method::PUT),
+                    HttpMethod::Delete => Ok(Method::DELETE),
                     _ => {
                         self.metrics
                             .request_errors
