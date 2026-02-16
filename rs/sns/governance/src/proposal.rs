@@ -5559,6 +5559,7 @@ Payload rendering here"#
             max_age_bonus_percentage: None,
             maturity_modulation_disabled: None,
             automatically_advance_target_version: None,
+            custom_proposal_criticality: None,
         };
 
         let result = validate_and_render_manage_nervous_system_parameters(

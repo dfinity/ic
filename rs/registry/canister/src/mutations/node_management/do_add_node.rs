@@ -189,7 +189,7 @@ impl Registry {
             ));
         }
 
-        let chip_id = extract_chip_id_from_payload(&payload)?;
+        let chip_id = self.extract_chip_id_from_payload(&payload)?;
 
         // Create the Node Record
         let node_record = NodeRecord {
@@ -234,6 +234,48 @@ impl Registry {
         self.get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
             .is_some()
     }
+
+    /// Extracts the chip_id from the AddNodePayload.
+    ///
+    /// If `node_registration_attestation` is provided, it will be parsed and verified,
+    /// and the chip_id will be extracted from the attestation report.
+    ///
+    /// If `node_registration_attestation` is not provided, returns `None` (non-SEV node).
+    fn extract_chip_id_from_payload(
+        &self,
+        payload: &AddNodePayload,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let Some(attestation_package) = &payload.node_registration_attestation else {
+            return Ok(None);
+        };
+
+        let expected_custom_data = NodeRegistrationAttestationCustomData {
+            node_signing_pk: OctetStringRef::new(&payload.node_signing_pk)
+                .expect("node_signing_pk must be valid"),
+        };
+
+        #[cfg(not(test))]
+        let root_cert_verification = SevRootCertificateVerification::Verify;
+        #[cfg(test)]
+        let root_cert_verification = SevRootCertificateVerification::TestOnlySkipVerification;
+
+        let parsed =
+            ParsedSevAttestationPackage::parse(attestation_package.clone(), root_cert_verification)
+                .verify_custom_data(&expected_custom_data)
+                .verify_measurement(&self.get_all_blessed_guest_launch_measurements())
+                .map_err(|e| {
+                    format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}")
+                })?;
+
+        let chip_id = parsed.attestation_report().chip_id.to_vec();
+
+        println!(
+            "{LOG_PREFIX}do_add_node: Successfully extracted chip_id from attestation report: {}",
+            hex::encode(&chip_id)
+        );
+
+        Ok(Some(chip_id))
+    }
 }
 
 // try to convert input string into NodeRewardType enum
@@ -263,41 +305,6 @@ pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
             port: sa.port() as u32, // because protobufs don't have u16
         },
     }
-}
-
-/// Extracts the chip_id from the AddNodePayload.
-///
-/// If `node_registration_attestation` is provided, it will be parsed and verified,
-/// and the chip_id will be extracted from the attestation report.
-///
-/// If `node_registration_attestation` is not provided, returns `None` (non-SEV node).
-fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u8>>, String> {
-    let Some(attestation_package) = &payload.node_registration_attestation else {
-        return Ok(None);
-    };
-
-    // Compute the expected custom data using the node signing public key
-    // This ensures the attestation was generated specifically for this node
-    let expected_custom_data = NodeRegistrationAttestationCustomData {
-        node_signing_pk: OctetStringRef::new(&payload.node_signing_pk)
-            .expect("node_signing_pk must be valid"),
-    };
-
-    let parsed = ParsedSevAttestationPackage::parse(
-        attestation_package.clone(),
-        SevRootCertificateVerification::Verify,
-    )
-    .verify_custom_data(&expected_custom_data)
-    .map_err(|e| format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}"))?;
-
-    let chip_id = parsed.attestation_report().chip_id.to_vec();
-
-    println!(
-        "{LOG_PREFIX}do_add_node: Successfully extracted chip_id from attestation report: {}",
-        hex::encode(&chip_id)
-    );
-
-    Ok(Some(chip_id))
 }
 
 /// Validates the payload and extracts node's public keys
@@ -385,16 +392,22 @@ mod tests {
         registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
     };
     use crate::rate_limits::get_available_add_node_capacity;
+    use attestation::SevAttestationPackage;
+    use attestation_testing::attestation_package::ParsedSevAttestationPackageBuilder;
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
+    use ic_protobuf::registry::replica_version::v1::{
+        GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
+    };
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
     };
-    use ic_registry_canister_api::IPv4Config;
+    use ic_registry_canister_api::{IPv4Config, NodeRegistrationAttestationCustomData};
     use ic_registry_keys::{
         make_api_boundary_node_record_key, make_node_operator_record_key, make_node_record_key,
+        make_replica_version_key,
     };
     use ic_registry_transport::{delete, insert, update};
     use ic_types::ReplicaVersion;
@@ -1335,5 +1348,158 @@ mod tests {
                 "Attempt {i} should succeed but got {result:?}"
             );
         }
+    }
+
+    // --- SEV attestation helpers ---
+
+    const SEV_TEST_MEASUREMENT: [u8; 48] = [42; 48];
+    const SEV_TEST_CHIP_ID: [u8; 64] = [3; 64];
+
+    /// Creates a mock `SevAttestationPackage` for testing node registration.
+    fn create_mock_sev_attestation_package(
+        node_signing_pk: &[u8],
+        measurement: [u8; 48],
+        chip_id: [u8; 64],
+    ) -> SevAttestationPackage {
+        let custom_data = NodeRegistrationAttestationCustomData {
+            node_signing_pk: der::asn1::OctetStringRef::new(node_signing_pk)
+                .expect("node_signing_pk must be valid"),
+        };
+
+        ParsedSevAttestationPackageBuilder::new()
+            .with_custom_data(&custom_data)
+            .with_measurement(measurement)
+            .with_chip_id(chip_id)
+            .build()
+            .into()
+    }
+
+    fn add_blessed_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
+        let replica_version_id = ReplicaVersion::default().to_string();
+        let replica_version = ReplicaVersionRecord {
+            release_package_sha256_hex: "".to_string(),
+            release_package_urls: vec![],
+            guest_launch_measurements: Some(GuestLaunchMeasurements {
+                guest_launch_measurements: vec![GuestLaunchMeasurement {
+                    measurement: measurement.to_vec(),
+                    metadata: None,
+                }],
+            }),
+        };
+        registry.maybe_apply_mutation_internal(vec![update(
+            make_replica_version_key(replica_version_id).as_bytes(),
+            replica_version.encode_to_vec(),
+        )]);
+    }
+
+    // --- SEV attestation tests ---
+
+    #[test]
+    fn should_succeed_for_adding_node_with_valid_sev_attestation() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        add_blessed_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
+
+        let node_operator_record = NodeOperatorRecord {
+            max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::new_user_test_id(0);
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
+        payload.node_registration_attestation = Some(create_mock_sev_attestation_package(
+            &payload.node_signing_pk,
+            SEV_TEST_MEASUREMENT,
+            SEV_TEST_CHIP_ID,
+        ));
+
+        // Act
+        let node_id = registry
+            .do_add_node_(payload.clone(), node_operator_id, now_system_time())
+            .expect("failed to add node with SEV attestation");
+
+        // Assert: the node record should contain the chip_id
+        let node_record = registry.get_node_or_panic(node_id);
+        assert_eq!(
+            node_record.chip_id,
+            Some(SEV_TEST_CHIP_ID.to_vec()),
+            "Node record should contain the chip_id from the attestation report"
+        );
+    }
+
+    #[test]
+    fn should_fail_for_sev_attestation_with_unblessed_measurement() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        // Add a blessed measurement that does NOT match what we'll put in the attestation
+        let different_measurement: [u8; 48] = [99; 48];
+        add_blessed_measurement_to_registry(&mut registry, &different_measurement);
+
+        let node_operator_record = NodeOperatorRecord {
+            max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::new_user_test_id(0);
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
+        payload.node_registration_attestation = Some(create_mock_sev_attestation_package(
+            &payload.node_signing_pk,
+            SEV_TEST_MEASUREMENT, // This won't match the blessed measurement
+            SEV_TEST_CHIP_ID,
+        ));
+
+        // Act
+        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+
+        // Assert
+        let err = result.expect_err("should fail with unblessed measurement");
+        assert!(
+            err.contains("Attestation verification failed"),
+            "Expected attestation verification error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn should_fail_for_sev_attestation_with_wrong_custom_data() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        add_blessed_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
+
+        let node_operator_record = NodeOperatorRecord {
+            max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::new_user_test_id(0);
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
+        // Create attestation with a DIFFERENT node_signing_pk than what's in the payload
+        let wrong_node_signing_pk = vec![0u8; payload.node_signing_pk.len()];
+        payload.node_registration_attestation = Some(create_mock_sev_attestation_package(
+            &wrong_node_signing_pk,
+            SEV_TEST_MEASUREMENT,
+            SEV_TEST_CHIP_ID,
+        ));
+
+        // Act
+        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+
+        // Assert
+        let err = result.expect_err("should fail with wrong custom data");
+        assert!(
+            err.contains("Attestation verification failed"),
+            "Expected attestation verification error, got: {err}"
+        );
     }
 }

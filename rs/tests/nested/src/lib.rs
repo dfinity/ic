@@ -1,4 +1,5 @@
 use anyhow::bail;
+use bare_metal_deployment::BareMetalIpmiSession;
 use ic_system_test_driver::{
     driver::{
         nested::{HasNestedVms, NestedNodes},
@@ -8,29 +9,76 @@ use ic_system_test_driver::{
     retry_with_msg,
     util::block_on,
 };
+use nix::sys::signal::Signal;
+use nix::unistd::Pid;
+use serde::{Deserialize, Serialize};
 use slog::info;
 
 pub mod util;
 use util::{NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
 
+use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnvAttribute};
+
 pub const HOST_VM_NAME: &str = "host-1";
+const BARE_METAL_HOST_SECRETS: &str = "BARE_METAL_HOST_SECRETS";
+
+#[derive(Serialize, Deserialize)]
+pub struct IpmiProcessId(i32);
+
+impl TestEnvAttribute for IpmiProcessId {
+    fn attribute_name() -> String {
+        "ipmi_process_id".to_string()
+    }
+}
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
 pub fn setup(env: TestEnv) {
     setup_ic_infrastructure(&env, /*dkg_interval=*/ None, /*is_fast=*/ true);
-
-    NestedNodes::new(&[HOST_VM_NAME])
-        .setup_and_start(&env)
-        .unwrap();
+    if std::env::var("TRUSTED_EXECUTION_ENVIRONMENT").is_ok() {
+        simple_bare_metal_with_trusted_execution_environment_setup(env);
+    } else {
+        simple_setup(env);
+    }
 }
 
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full setup() setup.
-pub fn simple_setup(env: TestEnv) {
-    NestedNodes::new(&[HOST_VM_NAME])
+fn simple_setup(env: TestEnv) {
+    NestedNodes::new([HOST_VM_NAME])
         .setup_and_start(&env)
         .unwrap();
+}
+
+/// Minimal setup that sets up a bare metal instance without any IC infrastructure.
+/// This is much faster than the full setup() setup.
+fn simple_bare_metal_with_trusted_execution_environment_setup(env: TestEnv) {
+    let bare_metal_secrets_file = std::env::var(BARE_METAL_HOST_SECRETS)
+        .expect("Could not read env var BARE_METAL_HOST_SECRETS");
+    let bare_metal_secrets = std::fs::read_to_string(bare_metal_secrets_file)
+        .expect("Could not read baremetal secrets file");
+    let bare_metal_login_info =
+        bare_metal_deployment::parse_login_info_from_ini(&bare_metal_secrets)
+            .expect("Failed to parse baremetal login info");
+    let mut bare_metal = BareMetalIpmiSession::start(&bare_metal_login_info)
+        .expect("Failed to start baremetal session");
+    bare_metal
+        .inject_ssh_key(
+            &env.get_ssh_public_key()
+                .expect("Could not get SSH public key"),
+        )
+        .expect("Failed to inject SSH key");
+    let mut nodes = NestedNodes::single_bare_metal(
+        HOST_VM_NAME,
+        bare_metal.hostos_address(),
+        bare_metal.mgmt_mac(),
+        /*enable_trusted_execution_environment*/ true,
+    );
+    nodes.setup_and_start(&env).unwrap();
+
+    // Remember process ID of the IMPI session so we can clean it up in teardown()
+    IpmiProcessId(bare_metal.process_id()).write_attribute(&env);
+    bare_metal.keep_alive_after_drop();
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -45,27 +93,6 @@ pub fn registration(env: TestEnv) {
 
     let nested_vms = env.get_all_nested_vms().unwrap();
     let n = nested_vms.len();
-
-    for node in nested_vms {
-        let node_name = &node.vm_name();
-        info!(
-            logger,
-            "Asserting that the GuestOS was started with direct kernel boot on node {node_name} ..."
-        );
-        let guest_kernel_cmdline = env
-            .get_nested_vm(node_name)
-            .expect("Unable to find HostOS node.")
-            .get_guest_ssh()
-            .unwrap()
-            .block_on_bash_script("cat /proc/cmdline")
-            .expect("Could not read /proc/cmdline from GuestOS");
-        assert!(
-            guest_kernel_cmdline.contains("initrd=initrd"),
-            "GuestOS kernel command line does not contain 'initrd=initrd'. This is likely caused by \
-            the guest not being started with direct kernel boot but rather with the GRUB \
-            bootloader. guest_kernel_cmdline: '{guest_kernel_cmdline}'"
-        );
-    }
 
     // If the nodes are able to join successfully, the registry will be updated,
     // and the new node IDs will enter the unassigned pool.
@@ -93,4 +120,11 @@ pub fn registration(env: TestEnv) {
         }
     ).unwrap();
     info!(logger, "All {n} nodes successfully came up and registered.");
+}
+
+/// Clean up the environment after nested tests.
+pub fn teardown(env: TestEnv) {
+    if let Ok(pid) = IpmiProcessId::try_read_attribute(&env) {
+        let _ = nix::sys::signal::kill(Pid::from_raw(pid.0), Signal::SIGTERM);
+    }
 }

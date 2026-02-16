@@ -774,10 +774,7 @@ pub fn get_initial_state_with_balance(
 
 /// Returns the ordered IDs of the canisters contained within `state`.
 pub fn canister_ids(state: &ReplicatedState) -> Vec<CanisterId> {
-    state
-        .canisters_iter()
-        .map(|canister_state| canister_state.canister_id())
-        .collect()
+    state.canister_states().keys().cloned().collect()
 }
 
 pub fn new_canister_state(
@@ -818,7 +815,6 @@ pub fn new_canister_state_with_execution(
 /// Helper function to register a callback.
 pub fn register_callback(
     canister_state: &mut CanisterState,
-    originator: CanisterId,
     respondent: CanisterId,
     deadline: CoarseTime,
 ) -> CallbackId {
@@ -836,7 +832,6 @@ pub fn register_callback(
         .system_state
         .register_callback(Callback::new(
             call_context_id,
-            originator,
             respondent,
             Cycles::zero(),
             Cycles::new(42),

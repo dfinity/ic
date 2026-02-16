@@ -1251,10 +1251,14 @@ pub fn wait_for_canister_upgrade_to_succeed(
     new_wasm_hash: &[u8; 32],
     // For most NNS canisters, ROOT_CANISTER_ID would be passed here (modulo conversion).
     controller_principal_id: PrincipalId,
+    reject_remote_callbacks_while_waiting: bool,
 ) {
     let mut last_status = None;
     for i in 0..25 {
         state_machine.tick();
+        if reject_remote_callbacks_while_waiting {
+            state_machine.reject_remote_callbacks();
+        }
 
         // Fetch status of the canister being upgraded.
         let status_result = get_canister_status(

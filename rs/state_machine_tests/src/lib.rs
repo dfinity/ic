@@ -52,7 +52,8 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{
-    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager, StateReader,
+    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateHashMetadata,
+    StateManager, StateReader,
 };
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::no_op_logger;
@@ -93,6 +94,7 @@ use ic_protobuf::{
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
+    routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_keys::{
@@ -125,8 +127,8 @@ use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
 use ic_test_utilities_metrics::{
-    Labels, fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
-    fetch_int_gauge_vec,
+    Labels, fetch_counter_vec, fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_counter,
+    fetch_int_gauge, fetch_int_gauge_vec, labels,
 };
 use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
@@ -167,7 +169,7 @@ use ic_types::{
         Blob, CallbackId, Certificate, CertificateDelegation, CertificateDelegationMetadata,
         EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
         HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        SignedIngress, extract_effective_canister_id,
+        RequestOrResponse, Response, SignedIngress, extract_effective_canister_id,
     },
     nominal_cycles::NominalCycles,
     signature::ThresholdSignature,
@@ -938,7 +940,7 @@ impl Deref for StateMachineStateManager {
 }
 
 impl StateManager for StateMachineStateManager {
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.deref().list_state_hashes_to_certify()
     }
 
@@ -1142,6 +1144,7 @@ pub struct StateMachine {
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
     cost_schedule: CanisterCyclesCostSchedule,
+    hypervisor_config: HypervisorConfig,
 }
 
 impl Default for StateMachine {
@@ -2023,7 +2026,7 @@ impl StateMachine {
             Arc::clone(&state_manager) as _,
             Arc::clone(&execution_services.ingress_history_writer) as _,
             execution_services.scheduler,
-            hypervisor_config,
+            hypervisor_config.clone(),
             Arc::clone(&execution_services.cycles_account_manager),
             subnet_id,
             max_stream_messages,
@@ -2251,6 +2254,7 @@ impl StateMachine {
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
             cost_schedule,
+            hypervisor_config,
         }
     }
 
@@ -2962,21 +2966,19 @@ impl StateMachine {
     /// Returns the total number of Wasm instructions this state machine consumed in replicated
     /// message execution (ingress messages, inter-canister messages, and heartbeats).
     pub fn instructions_consumed(&self) -> f64 {
-        fetch_histogram_stats(
-            &self.metrics_registry,
-            "scheduler_instructions_consumed_per_round",
-        )
-        .map(|stats| stats.sum)
-        .unwrap_or(0.0)
+        fetch_histogram_stats(&self.metrics_registry, "execution_round_instructions")
+            .map(|stats| stats.sum)
+            .unwrap_or(0.0)
     }
 
     /// Returns the total number of Wasm instructions executed when executing subnet
     /// messages (IC00 messages addressed to the subnet).
     pub fn subnet_message_instructions(&self) -> f64 {
-        fetch_histogram_stats(
+        fetch_histogram_vec_stats(
             &self.metrics_registry,
-            "execution_round_subnet_queue_instructions",
+            "execution_round_inner_phase_instructions",
         )
+        .get(&labels(&[("phase", "subnet")]))
         .map(|stats| stats.sum)
         .unwrap_or(0.0)
     }
@@ -3240,7 +3242,7 @@ impl StateMachine {
         // Repartition input schedules; Required step for migrating canisters.
         canister_state
             .system_state
-            .split_input_schedules(&canister_id, &state.canister_states);
+            .split_input_schedules(&canister_id, state.canister_states());
 
         state.put_canister_state(canister_state);
 
@@ -3468,8 +3470,6 @@ impl StateMachine {
     /// Returns an error if the routing table does not contain the subnet Id of the new `env` that
     /// was just created or if the split itself fails.
     pub fn split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
-        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
-
         // Write a checkpoint.
         self.checkpointed_tick();
         self.state_manager.flush_tip_channel();
@@ -3512,12 +3512,7 @@ impl StateMachine {
         self.registry_client.update_to_latest_version();
 
         // Get the routing table.
-        let last_version = self.registry_client.get_latest_version();
-        let routing_table = self
-            .registry_client
-            .get_routing_table(last_version)
-            .expect("malformed routing table")
-            .expect("missing routing table");
+        let routing_table = self.get_routing_table();
 
         // Check the new subnet is in this routing table.
         if routing_table.ranges(env.get_subnet_id()).is_empty() {
@@ -3573,8 +3568,6 @@ impl StateMachine {
     /// Returns an error if the routing table does not contain the subnet ID of the
     /// new `env` that was just created or if the split itself fails.
     pub fn online_split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
-        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
-
         // Write a checkpoint.
         self.checkpointed_tick();
         self.state_manager.flush_tip_channel();
@@ -3617,12 +3610,7 @@ impl StateMachine {
         self.registry_client.update_to_latest_version();
 
         // Check that the new subnet is in the routing table.
-        let last_version = self.registry_client.get_latest_version();
-        let routing_table = self
-            .registry_client
-            .get_routing_table(last_version)
-            .expect("malformed routing table")
-            .expect("missing routing table");
+        let routing_table = self.get_routing_table();
         if routing_table.ranges(env.get_subnet_id()).is_empty() {
             return Err("Routing table does not contain the new subnet".to_string());
         }
@@ -4242,7 +4230,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
+            .canister_states()
             .contains_key(&canister)
     }
 
@@ -4251,7 +4239,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
+            .canister_states()
             .keys()
             .cloned()
             .collect()
@@ -4262,8 +4250,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
-            .get(&canister)
+            .canister_state(&canister)
             .map(|canister| canister.execution_state.is_some())
             .unwrap_or_default()
     }
@@ -5003,6 +4990,91 @@ impl StateMachine {
             .get_canister_history()
             .clone()
     }
+
+    fn get_routing_table(&self) -> RoutingTable {
+        let last_version = self.registry_client.get_latest_version();
+        self.registry_client
+            .get_routing_table(last_version)
+            .expect("malformed routing table")
+            .expect("missing routing table")
+    }
+
+    /// Pushes synthetic reject responses for callbacks to remote subnets.
+    /// This function should only be used if this state machine is used "in isolation",
+    /// i.e., it should not be used in a "multi-subnet setup".
+    pub fn reject_remote_callbacks(&self) {
+        assert!(
+            self.pocket_xnet.read().unwrap().is_none(),
+            "StateMachine::reject_remote_callbacks must not be used in a multi-subnet setup."
+        );
+        let routing_table = self.get_routing_table();
+        let remote_subnets: BTreeSet<_> = routing_table
+            .iter()
+            .map(|(_, subnet_id)| subnet_id.get())
+            .filter(|subnet_id| *subnet_id != self.get_subnet_id().get())
+            .collect();
+        let (height, mut replicated_state) = self.state_manager.take_tip();
+        let mut synthetic_responses = vec![];
+        for canister_state in replicated_state.canisters_iter_mut() {
+            let Some(call_context_manager) = canister_state.system_state.call_context_manager()
+            else {
+                continue;
+            };
+            for (callback_id, callback) in call_context_manager.callbacks().iter() {
+                let is_remote = if callback.respondent.get() == self.get_subnet_id().get() {
+                    false // calls to the "local" management canister
+                } else if remote_subnets.contains(&callback.respondent.get()) {
+                    true // calls to "remote" management canisters
+                } else if let Some((_, subnet_id)) = routing_table.lookup_entry(callback.respondent)
+                {
+                    subnet_id != self.get_subnet_id()
+                } else {
+                    true // non-routable callees are treated as remote and synthetic rejects are produced
+                };
+                let has_enqueued_response = canister_state
+                    .system_state
+                    .queues()
+                    .has_enqueued_response(callback_id);
+                if is_remote && !has_enqueued_response {
+                    let reject_context = RejectContext::new(
+                        RejectCode::SysTransient,
+                        "Remote callback rejected by StateMachine test.",
+                    );
+                    let response_payload = MsgPayload::Reject(reject_context);
+                    let response = Response {
+                        originator: canister_state.canister_id(),
+                        respondent: callback.respondent,
+                        originator_reply_callback: *callback_id,
+                        refund: Cycles::zero(),
+                        response_payload,
+                        deadline: callback.deadline,
+                    };
+                    synthetic_responses.push(response);
+                }
+            }
+        }
+        let mut available_guaranteed_response_memory = self
+            .hypervisor_config
+            .guaranteed_response_message_memory_capacity
+            .get() as i64
+            - replicated_state
+                .guaranteed_response_message_memory_taken()
+                .get() as i64;
+        for response in synthetic_responses {
+            replicated_state
+                .push_input(
+                    RequestOrResponse::Response(Arc::new(response)),
+                    &mut available_guaranteed_response_memory,
+                )
+                .unwrap();
+        }
+        self.state_manager.commit_and_certify(
+            replicated_state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
+    }
 }
 
 /// Make sure the latest state is certified.
@@ -5023,9 +5095,13 @@ pub fn certify_latest_state_helper(
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
         let state_hashes = state_manager.list_state_hashes_to_certify();
-        let (height, hash) = state_hashes.last().unwrap();
-        state_manager
-            .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
+        let state_hash_metadata = state_hashes.last().unwrap();
+        state_manager.deliver_state_certification(certify_hash(
+            secret_key,
+            subnet_id,
+            &state_hash_metadata.height,
+            &state_hash_metadata.hash,
+        ));
     }
     assert_eq!(
         state_manager.latest_certified_height(),
