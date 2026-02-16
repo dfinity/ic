@@ -1,7 +1,7 @@
 //! This module implements the IDKG payload builder.
 use crate::{
     metrics::{CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING, IDkgPayloadMetrics},
-    pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl},
+    pre_signer::IDkgTranscriptBuilder,
     signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl},
     utils::{InvalidChainCacheError, block_chain_reader, get_idkg_chain_key_config_if_enabled},
 };
@@ -26,7 +26,9 @@ use ic_types::{
             MasterKeyTranscript, TranscriptAttributes,
         },
     },
-    crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings},
+    crypto::canister_threshold_sig::idkg::{
+        IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings, SignedIDkgDealing,
+    },
     messages::CallbackId,
 };
 use rayon::{
@@ -460,6 +462,20 @@ fn is_time_to_reshare_key_transcript(
     Ok(false)
 }
 
+struct PoolTranscriptBuilder<'a> {
+    idkg_pool: &'a dyn IDkgPool,
+}
+
+impl<'a> IDkgTranscriptBuilder for PoolTranscriptBuilder<'a> {
+    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+        self.idkg_pool.get_completed_transcript(transcript_id)
+    }
+
+    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
+        self.idkg_pool.get_validated_dealings(transcript_id)
+    }
+}
+
 /// Creates an IDKG batch payload.
 pub fn create_data_payload(
     subnet_id: SubnetId,
@@ -510,20 +526,12 @@ pub fn create_data_payload(
         log,
     )?;
     let idkg_pool = idkg_pool.read().unwrap();
+    let idkg_pool = idkg_pool.deref();
 
-    let signature_builder = ThresholdSignatureBuilderImpl::new(
-        crypto,
-        idkg_pool.deref(),
-        idkg_payload_metrics,
-        log.clone(),
-    );
-    let transcript_builder = IDkgTranscriptBuilderImpl::new(
-        &block_reader,
-        crypto,
-        idkg_pool.deref(),
-        idkg_payload_metrics,
-        log.clone(),
-    );
+    let signature_builder =
+        ThresholdSignatureBuilderImpl::new(crypto, idkg_pool, idkg_payload_metrics, log.clone());
+    let transcript_builder = PoolTranscriptBuilder { idkg_pool };
+
     let new_payload = create_data_payload_helper(
         subnet_id,
         context,
