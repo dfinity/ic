@@ -175,8 +175,8 @@ async fn stable_grow(unican: &UniversalCanister<'_>, num_pages: u32) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .without_assert_no_critical_errors()
         .add_test(systest!(test))
+        .remove_metrics_to_check("critical_errors")
         .execute_from_args()?;
     Ok(())
 }

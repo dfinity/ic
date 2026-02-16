@@ -669,7 +669,6 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         subnet_size: 0,
         node_ids: BTreeSet::new(),
         registry_version: RegistryVersion::default(),
-        canister_cycles_cost_schedule: ic_types::batch::CanisterCyclesCostSchedule::Normal,
     }));
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),
@@ -1834,8 +1833,7 @@ fn process_batch_updates_subnet_metrics() {
 
         let latest_state = state_manager.get_latest_state().take();
         let canister_state = latest_state
-            .canister_states
-            .values()
+            .canisters_iter()
             .map(|canister| canister.memory_usage())
             .sum();
         assert_eq!(
