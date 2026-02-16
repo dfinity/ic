@@ -500,8 +500,10 @@ mod tests {
                 (9, 303, b"delta #6"),
             ]))
         );
+        assert!(main.has_delta_log_sizes());
         assert_eq!(main.delta_log_sizes(), vec![size_b, size_c]);
         main.clear_delta_log_sizes();
+        assert!(!main.has_delta_log_sizes());
         assert_eq!(main.delta_log_sizes(), Vec::<usize>::new()); // Call after clear_delta_log_sizes.
         assert_eq!(main.bytes_used(), size_a + size_b + size_c);
     }
