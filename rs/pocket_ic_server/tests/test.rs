@@ -150,7 +150,11 @@ fn test_creation_of_instance_extended() {
 #[test]
 fn test_blob_store() {
     let url = start_server();
-    let client = Client::new();
+    // Disable automatic decompression to test the blobstore's raw behavior
+    let client = Client::builder()
+        .no_gzip()
+        .build()
+        .unwrap();
     let blob_1 = "decafbad".as_bytes();
     let blob_2 = "deadbeef".as_bytes();
 
