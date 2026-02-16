@@ -323,7 +323,7 @@ system_test(
     ],
 )
 
-system_test_nns(
+consensus_performance = system_test_nns(
     name = "consensus_performance",
     additional_colocate_tags = [
         "system_test_benchmark",
@@ -362,6 +362,22 @@ system_test_nns(
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
+)
+
+system_test_nns(
+    name = "consensus_performance_4MB",
+    test_driver_target = consensus_performance.test_driver_target,
+    env = {
+        "MAX_INGRESS_BYTES_PER_BLOCK": "4194304",
+    },
+)
+
+system_test_nns(
+    name = "consensus_performance_8MB",
+    test_driver_target = consensus_performance.test_driver_target,
+    env = {
+        "MAX_INGRESS_BYTES_PER_BLOCK": "8388608",
+    },
 )
 
 system_test_nns(

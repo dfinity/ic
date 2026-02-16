@@ -347,6 +347,7 @@ pub async fn persist_metrics(
     latency: Duration,
     bandwidth_bits_per_seconds: u32,
     subnet_size: usize,
+    max_ingress_bytes_per_block: Option<u64>, // None means the default value
     log: &Logger,
 ) {
     // elastic search url
@@ -367,6 +368,7 @@ pub async fn persist_metrics(
                 "latency_seconds": latency.as_secs_f64(),
                 "bandwith_bits_per_second": bandwidth_bits_per_seconds,
                 "subnet_size": subnet_size,
+                "max_ingress_bytse_per_block": max_ingress_bytes_per_block.unwrap_or(4 * 1024 * 1024),
             },
             "benchmark_results": {
                 "success_rate": metrics.success_rate,
