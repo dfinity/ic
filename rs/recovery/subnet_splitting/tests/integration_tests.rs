@@ -17,7 +17,8 @@ macro_rules! assert_near {
         let relative_error = ($left.abs_diff($right) as f64) / ($right as f64);
         assert!(
             relative_error <= $max_relative_error,
-            "The relative error {} exceeds {}",
+            "The relative error of {} {} exceeds {}",
+            stringify!($left),
             relative_error,
             $max_relative_error
         );
@@ -90,6 +91,7 @@ fn load_metrics_e2e_test() {
     let (
         StateSizeEstimates { states_sizes_bytes },
         LoadEstimates {
+            canisters_installed,
             instructions_executed,
             ingress_messages_executed,
             remote_subnet_messages_executed_lower_bound,
@@ -107,6 +109,13 @@ fn load_metrics_e2e_test() {
         .expect("Should succeed given valid inputs")
     );
 
+    assert_eq!(
+        canisters_installed,
+        Estimates {
+            source: 99,
+            destination: 101,
+        }
+    );
     // Accept up to 10% error. The precise values are not important here and they're very sensitive
     // to the changes to the replicated state / execution. It's mostly a sanity check that the
     // returned values are not too ridiculous and they might have to be updated once in a while.

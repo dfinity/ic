@@ -127,6 +127,7 @@ fn read_load_samples(path: &Path) -> anyhow::Result<BTreeMap<CanisterId, LoadSam
 
 #[derive(Debug, Default)]
 pub struct LoadEstimates {
+    pub canisters_installed: Estimates,
     pub instructions_executed: Estimates,
     pub ingress_messages_executed: Estimates,
     /// Note: it could happen that canisters which communicate with each other end up on different
@@ -139,6 +140,34 @@ pub struct LoadEstimates {
     pub heartbeats_and_global_timers_executed: Estimates,
 }
 
+macro_rules! observe_sample {
+    ($load_estimates:expr, $load_sample:expr, $subnet:ident) => {
+        let LoadSample {
+            canister_id: _,
+            instructions_executed,
+            ingress_messages_executed,
+            remote_subnet_messages_executed,
+            local_subnet_messages_executed,
+            http_outcalls_executed,
+            heartbeats_and_global_timers_executed,
+        } = $load_sample;
+
+        $load_estimates.canisters_installed.$subnet += 1;
+        $load_estimates.instructions_executed.$subnet += instructions_executed;
+        $load_estimates.ingress_messages_executed.$subnet += ingress_messages_executed;
+        $load_estimates
+            .remote_subnet_messages_executed_lower_bound
+            .$subnet += remote_subnet_messages_executed;
+        $load_estimates
+            .local_subnet_messages_executed_upper_bound
+            .$subnet += local_subnet_messages_executed;
+        $load_estimates.http_outcalls_executed.$subnet += http_outcalls_executed;
+        $load_estimates
+            .heartbeats_and_global_timers_executed
+            .$subnet += heartbeats_and_global_timers_executed;
+    };
+}
+
 fn estimate_loads(
     load_samples: &BTreeMap<CanisterId, LoadSample>,
     canister_ranges_to_move: &CanisterIdRanges,
@@ -147,32 +176,9 @@ fn estimate_loads(
 
     for (canister_id, load_sample) in load_samples {
         if canister_ranges_to_move.contains(canister_id) {
-            load_estimates.instructions_executed.destination += load_sample.instructions_executed;
-            load_estimates.ingress_messages_executed.destination +=
-                load_sample.ingress_messages_executed;
-            load_estimates
-                .remote_subnet_messages_executed_lower_bound
-                .destination += load_sample.remote_subnet_messages_executed;
-            load_estimates
-                .local_subnet_messages_executed_upper_bound
-                .destination += load_sample.local_subnet_messages_executed;
-            load_estimates.http_outcalls_executed.destination += load_sample.http_outcalls_executed;
-            load_estimates
-                .heartbeats_and_global_timers_executed
-                .destination += load_sample.heartbeats_and_global_timers_executed;
+            observe_sample!(load_estimates, load_sample, destination);
         } else {
-            load_estimates.instructions_executed.source += load_sample.instructions_executed;
-            load_estimates.ingress_messages_executed.source +=
-                load_sample.ingress_messages_executed;
-            load_estimates
-                .remote_subnet_messages_executed_lower_bound
-                .source += load_sample.remote_subnet_messages_executed;
-            load_estimates
-                .local_subnet_messages_executed_upper_bound
-                .source += load_sample.local_subnet_messages_executed;
-            load_estimates.http_outcalls_executed.source += load_sample.http_outcalls_executed;
-            load_estimates.heartbeats_and_global_timers_executed.source +=
-                load_sample.heartbeats_and_global_timers_executed;
+            observe_sample!(load_estimates, load_sample, source);
         }
     }
 
