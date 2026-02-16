@@ -343,7 +343,7 @@ type deposit_cycles_args = record {
 type http_request_args = record {
     url : text;
     max_response_bytes : opt nat64;
-    method : variant { get; head; post };
+    method : variant { get; head; post; put; delete };
     headers : vec http_header;
     body : opt blob;
     transform : opt record {
