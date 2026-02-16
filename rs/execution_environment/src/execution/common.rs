@@ -2,7 +2,10 @@
 // TODO(RUN-60): Move helper functions here.
 
 use crate::execution_environment::ExecutionResponse;
-use crate::{ExecuteMessageResult, RoundLimits, as_round_instructions, metrics::CallTreeMetrics};
+use crate::{
+    ExecuteMessageResult, RoundLimits, as_round_instructions,
+    canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
+};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
@@ -28,7 +31,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::time::CoarseTime;
-use ic_types::{Cycles, NumInstructions, Time, UserId};
+use ic_types::{Cycles, NumInstructions, PrincipalId, Time, UserId};
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
 use std::sync::Arc;
@@ -45,20 +48,6 @@ lazy_static! {
 const LOG_ONE_SYSTEM_TASK_OUT_OF: u64 = 100;
 /// How many first system task messages to log unconditionally.
 const LOG_FIRST_N_SYSTEM_TASKS: u64 = 50;
-
-pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
-    if CanisterStatusType::Running != canister.status() {
-        let canister_id = canister.canister_id();
-        let err_code = match canister.status() {
-            CanisterStatusType::Running => unreachable!(),
-            CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
-            CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
-        };
-        let err_msg = format!("Canister {canister_id} is not running");
-        return Err(UserError::new(err_code, err_msg));
-    }
-    Ok(())
-}
 
 pub(crate) fn action_to_response(
     canister: &CanisterState,
@@ -334,6 +323,34 @@ pub(crate) fn validate_message(
     validate_method(wasm_method, canister)
         .map_err(|err| err.into_user_error(&canister.canister_id()))?;
 
+    Ok(())
+}
+
+pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
+    if CanisterStatusType::Running != canister.status() {
+        let canister_id = canister.canister_id();
+        let err_code = match canister.status() {
+            CanisterStatusType::Running => unreachable!(),
+            CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
+            CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
+        };
+        let err_msg = format!("Canister {canister_id} is not running");
+        return Err(UserError::new(err_code, err_msg));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_controller(
+    canister: &CanisterState,
+    controller: &PrincipalId,
+) -> Result<(), CanisterManagerError> {
+    if !canister.controllers().contains(controller) {
+        return Err(CanisterManagerError::CanisterInvalidController {
+            canister_id: canister.canister_id(),
+            controllers_expected: canister.system_state.controllers.clone(),
+            controller_provided: *controller,
+        });
+    }
     Ok(())
 }
 
