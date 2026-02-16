@@ -19,7 +19,7 @@ use ic_consensus_system_test_utils::{
     upgrade::bless_replica_version,
 };
 use ic_recovery::{
-    IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE, RecoveryArgs,
+    IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE, RECOVERY_DIRECTORY_NAME, RecoveryArgs,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs, StepType},
     ssh_helper::SshHelper as RecoverySshHelper,
     steps::CreateNNSRecoveryTarStep,
