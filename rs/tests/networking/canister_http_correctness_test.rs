@@ -125,10 +125,10 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_post_call))
                 .add_test(systest!(test_head_call))
                 .add_test(systest!(test_put_call))
-                // TODO: Uncomment this test when PUT is supported in replicated mode.
+                // TODO(CON-1636): Uncomment this test when PUT is supported in replicated mode.
                 // .add_test(systest!(test_put_without_non_replicated_rejected))
                 .add_test(systest!(test_delete_call))
-                // TODO: Uncomment this test when DELETE is supported in replicated mode.
+                // TODO(CON-1636): Uncomment this test when DELETE is supported in replicated mode.
                 // .add_test(systest!(test_delete_without_non_replicated_rejected))
                 .add_test(systest!(test_max_possible_request_size))
                 .add_test(systest!(test_max_possible_request_size_exceeded))
@@ -1846,7 +1846,7 @@ fn test_put_call(env: TestEnv) {
         assert!(reject_message.contains("PUT and DELETE are not supported yet"));
     });
 
-    // TODO: Switch to this assertion once PUT is supported in replicated mode.
+    // TODO(CON-1636): Switch to this assertion once PUT is supported in non-replicated mode.
     // assert_matches!(response, Ok(response) => {
     //     assert_matches!(response, RemoteHttpResponse { status: 200, .. });
     //     assert_distinct_headers(&response);
@@ -1915,7 +1915,7 @@ fn test_delete_call(env: TestEnv) {
         assert!(reject_message.contains("PUT and DELETE are not supported yet"));
     });
 
-    // TODO: Switch to this assertion once DELETE is supported in replicated mode.
+    // TODO(CON-1636): Switch to this assertion once DELETE is supported in non-replicated mode.
     // assert_matches!(response, Ok(response) => {
     //     assert_matches!(response, RemoteHttpResponse { status: 200, .. });
     //     assert_distinct_headers(&response);
