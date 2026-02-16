@@ -1384,9 +1384,7 @@ mod tests {
     use super::*;
     use crate::test_utils::*;
     use assert_matches::assert_matches;
-    use ic_crypto_test_utils_canister_threshold_sigs::{
-        CanisterThresholdSigTestEnvironment, IDkgParticipants, setup_masked_random_params,
-    };
+    use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_test_utilities_consensus::{IDkgStatsNoOp, idkg::*};
@@ -1395,11 +1393,10 @@ mod tests {
     use ic_types::{
         Height, RegistryVersion,
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject},
-        crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash},
+        crypto::{BasicSig, BasicSigOf, CryptoHash},
         time::UNIX_EPOCH,
     };
     use ic_types_test_utils::ids::node_test_id;
-    use std::{collections::HashSet, ops::Deref};
 
     impl IDkgPreSignerImpl {
         fn validated_dealing_supports(

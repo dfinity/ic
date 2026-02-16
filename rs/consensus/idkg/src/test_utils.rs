@@ -772,32 +772,32 @@ pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
     (node_id, params, transcript)
 }
 
-pub(crate) fn get_dealings_and_support(
-    env: &CanisterThresholdSigTestEnvironment,
-    params: &IDkgTranscriptParams,
-) -> (BTreeMap<NodeId, SignedIDkgDealing>, Vec<IDkgDealingSupport>) {
-    let dealings = env.nodes.create_and_verify_signed_dealings(params);
-    let supports = dealings
-        .iter()
-        .flat_map(|(_, dealing)| {
-            env.nodes.filter_by_receivers(&params).map(|signer| {
-                let c: Arc<dyn ConsensusCrypto> = signer.crypto();
-                let sig_share = c
-                    .sign(dealing, signer.id(), params.registry_version())
-                    .unwrap();
+// pub(crate) fn get_dealings_and_support(
+//     env: &CanisterThresholdSigTestEnvironment,
+//     params: &IDkgTranscriptParams,
+// ) -> (BTreeMap<NodeId, SignedIDkgDealing>, Vec<IDkgDealingSupport>) {
+//     let dealings = env.nodes.create_and_verify_signed_dealings(params);
+//     let supports = dealings
+//         .iter()
+//         .flat_map(|(_, dealing)| {
+//             env.nodes.filter_by_receivers(&params).map(|signer| {
+//                 let c: Arc<dyn ConsensusCrypto> = signer.crypto();
+//                 let sig_share = c
+//                     .sign(dealing, signer.id(), params.registry_version())
+//                     .unwrap();
 
-                IDkgDealingSupport {
-                    transcript_id: params.transcript_id(),
-                    dealer_id: dealing.dealer_id(),
-                    dealing_hash: ic_types::crypto::crypto_hash(dealing),
-                    sig_share,
-                }
-            })
-        })
-        .collect();
+//                 IDkgDealingSupport {
+//                     transcript_id: params.transcript_id(),
+//                     dealer_id: dealing.dealer_id(),
+//                     dealing_hash: ic_types::crypto::crypto_hash(dealing),
+//                     sig_share,
+//                 }
+//             })
+//         })
+//         .collect();
 
-    (dealings, supports)
-}
+//     (dealings, supports)
+// }
 
 // Creates a test dealing
 fn create_dealing_content(transcript_id: IDkgTranscriptId) -> IDkgDealing {
