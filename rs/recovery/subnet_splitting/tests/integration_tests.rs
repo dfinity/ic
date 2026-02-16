@@ -268,6 +268,11 @@ fn set_up(
 
         previous_canister_id = Some(canister_id);
     }
+
+    println!(
+        "Number of running canisters: {}",
+        state_machine.num_running_canisters()
+    );
 }
 
 fn create_canister(state_machine: &StateMachine, module: Vec<u8>) -> CanisterId {
