@@ -10016,6 +10016,7 @@ dependencies = [
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-error-types 0.2.0",
+ "ic-https-outcalls-pricing",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
  "ic-interfaces-registry",

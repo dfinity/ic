@@ -596,6 +596,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub replica_version: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "7")]
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
+    #[prost(message, repeated, tag = "9")]
+    pub payment_shares: ::prost::alloc::vec::Vec<CanisterHttpPaymentShare>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpShare {
@@ -630,9 +632,37 @@ pub mod canister_http_response_message {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentReceipt {
+    #[prost(message, optional, tag = "1")]
+    pub refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentMetadata {
+    #[prost(uint64, tag = "1")]
+    pub id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub receipt: ::core::option::Option<CanisterHttpPaymentReceipt>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentSignature {
+    #[prost(bytes = "vec", tag = "1")]
+    pub signer: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentShare {
+    #[prost(message, optional, tag = "1")]
+    pub metadata: ::core::option::Option<CanisterHttpPaymentMetadata>,
+    #[prost(message, optional, tag = "2")]
+    pub signature: ::core::option::Option<CanisterHttpPaymentSignature>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpArtifact {
     #[prost(message, optional, tag = "1")]
     pub share: ::core::option::Option<CanisterHttpShare>,
+    #[prost(message, optional, tag = "3")]
+    pub payment_share: ::core::option::Option<CanisterHttpPaymentShare>,
     #[prost(message, optional, tag = "2")]
     pub response: ::core::option::Option<CanisterHttpResponse>,
 }

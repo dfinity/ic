@@ -11,6 +11,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
 use ic_error_types::RejectCode;
+use ic_https_outcalls_pricing::{PricingCalculator, PricingFactory};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
@@ -34,9 +35,10 @@ use ic_types::{
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
-        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseWithConsensus, Replication,
+        CanisterHttpPaymentProof, CanisterHttpPaymentShare, CanisterHttpRequestContext,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
+        Replication,
     },
     consensus::Committee,
     crypto::Signed,
@@ -75,10 +77,13 @@ enum CandidateOrDivergence {
             CanisterHttpResponseMetadata,
             BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
             CanisterHttpResponse,
+            Vec<CanisterHttpPaymentShare>,
         ),
     ),
     Divergence(CanisterHttpResponseDivergence),
 }
+
+pub type PricingCalculatorFn = fn(&CanisterHttpRequestContext) -> Box<dyn PricingCalculator>;
 
 /// Implementation of the [`BatchPayloadBuilder`] for the canister http feature.
 pub struct CanisterHttpPayloadBuilderImpl {
@@ -91,6 +96,7 @@ pub struct CanisterHttpPayloadBuilderImpl {
     registry: Arc<dyn RegistryClient>,
     metrics: CanisterHttpPayloadBuilderMetrics,
     log: ReplicaLogger,
+    pricing_factory: PricingCalculatorFn,
 }
 
 impl CanisterHttpPayloadBuilderImpl {
@@ -117,7 +123,14 @@ impl CanisterHttpPayloadBuilderImpl {
             registry,
             metrics: CanisterHttpPayloadBuilderMetrics::new(metrics_registry),
             log,
+            pricing_factory: PricingFactory::new_calculator,
         }
+    }
+
+    #[cfg(test)]
+    pub fn with_pricing_factory(mut self, pricing_factory: PricingCalculatorFn) -> Self {
+        self.pricing_factory = pricing_factory;
+        self
     }
 
     /// Returns true, if the canister http feature is enabled in the registry
@@ -137,6 +150,7 @@ impl CanisterHttpPayloadBuilderImpl {
         metadata: CanisterHttpResponseMetadata,
         shares: BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
         content: CanisterHttpResponse,
+        payment_shares: Vec<CanisterHttpPaymentShare>,
     ) -> Option<CanisterHttpResponseWithConsensus> {
         match self
             .crypto
@@ -155,8 +169,24 @@ impl CanisterHttpPayloadBuilderImpl {
                     content: metadata,
                     signature,
                 },
+                payment_proof: CanisterHttpPaymentProof { payment_shares },
             }),
         }
+    }
+
+    fn check_consensus_cost(
+        &self,
+        content: &CanisterHttpResponse,
+        payment_shares: &[CanisterHttpPaymentShare],
+        context: &CanisterHttpRequestContext,
+    ) -> bool {
+        let calculator = (self.pricing_factory)(context);
+        let consensus_cost = calculator.consensus_cost(content);
+        let total_refunded = payment_shares
+            .iter()
+            .map(|s| s.content.receipt.refund)
+            .sum();
+        consensus_cost <= total_refunded
     }
 
     fn get_canister_http_payload_impl(
@@ -321,12 +351,34 @@ impl CanisterHttpPayloadBuilderImpl {
                     if let Some((metadata, shares)) = consensus_candidate {
                         pool_access
                             .get_response_content_by_hash(&metadata.content_hash)
-                            .map(|content| {
-                                CandidateOrDivergence::Candidate((
+                            .and_then(|content| {
+                                let context = canister_http_request_contexts.get(&metadata.id)?;
+                                let payment_shares: Vec<_> = shares
+                                    .iter()
+                                    .filter_map(|share| {
+                                        pool_access.get_validated_payment_share(share)
+                                    })
+                                    .collect();
+
+                                if !self.check_consensus_cost(&content, &payment_shares, context) {
+                                    // Not enough cycles were refunded yet, waiting for more shares.
+                                    return None;
+                                }
+
+                                if !utils::check_payment_shares_against_context(
+                                    &payment_shares,
+                                    context,
+                                ) {
+                                    // This should never happen, as we validated the artifact.
+                                    return None;
+                                }
+
+                                Some(CandidateOrDivergence::Candidate((
                                     metadata.clone(),
                                     shares.iter().map(|share| share.signature.clone()).collect(),
                                     content,
-                                ))
+                                    payment_shares,
+                                )))
                             })
                     } else {
                         // No set of grouped shares large enough was found
@@ -353,12 +405,17 @@ impl CanisterHttpPayloadBuilderImpl {
             for candidate_or_divergence in candidates_and_divergences {
                 unique_includable_responses += 1;
                 match candidate_or_divergence {
-                    CandidateOrDivergence::Candidate((metadata, shares, content)) => {
+                    CandidateOrDivergence::Candidate((
+                        metadata,
+                        shares,
+                        content,
+                        payment_shares,
+                    )) => {
                         let candidate_size =
                             size_of::<CanisterHttpResponseProof>() + content.count_bytes();
                         let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                         if size < max_payload_size {
-                            candidates.push((metadata.clone(), shares, content));
+                            candidates.push((metadata.clone(), shares, content, payment_shares));
                             responses_included += 1;
                             accumulated_size += candidate_size;
                         }
@@ -391,8 +448,14 @@ impl CanisterHttpPayloadBuilderImpl {
         CanisterHttpPayload {
             responses: candidates
                 .drain(..)
-                .filter_map(|(metadata, shares, content)| {
-                    self.aggregate(consensus_registry_version, metadata, shares, content)
+                .filter_map(|(metadata, shares, content, payment_shares)| {
+                    self.aggregate(
+                        consensus_registry_version,
+                        metadata,
+                        shares,
+                        content,
+                        payment_shares,
+                    )
                 })
                 .collect(),
             timeouts,
@@ -471,6 +534,13 @@ impl CanisterHttpPayloadBuilderImpl {
 
         // Check conditions on individual responses
         for response in &payload.responses {
+            let request = http_contexts.get(&response.content.id).ok_or(
+                CanisterHttpPayloadValidationError::InvalidArtifact(
+                    InvalidCanisterHttpPayloadReason::UnknownCallbackId(response.content.id),
+                ),
+            )?;
+            utils::check_total_cost(response, request)
+                .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
             // Check that response is consistent
             utils::check_response_consistency(response)
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
@@ -579,6 +649,33 @@ impl CanisterHttpPayloadBuilderImpl {
                         InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
                     )
                 })?;
+
+            for payment_share in &response.payment_proof.payment_shares {
+                if !effective_committee.contains(&payment_share.signature.signer) {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignersNotMembers {
+                        invalid_signers: vec![payment_share.signature.signer],
+                        committee: effective_committee.clone(),
+                        valid_signers: vec![],
+                    });
+                }
+
+                self.crypto
+                    .verify(payment_share, consensus_registry_version)
+                    .map_err(|err| {
+                        CanisterHttpPayloadValidationError::InvalidArtifact(
+                            InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
+                        )
+                    })?;
+
+                if payment_share.content.id != response.content.id {
+                    return invalid_artifact(
+                        InvalidCanisterHttpPayloadReason::PaymentShareDoesNotMatchResponse {
+                            payment_share_id: payment_share.content.id,
+                            response_id: response.content.id,
+                        },
+                    );
+                }
+            }
         }
 
         let faults_tolerated = match self.membership.get_canister_http_committee(height) {

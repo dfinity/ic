@@ -146,8 +146,9 @@ use ic_types::{
         SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
     },
     canister_http::{
-        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpPaymentMetadata, CanisterHttpPaymentReceipt, CanisterHttpRequestContext,
+        CanisterHttpRequestId, CanisterHttpResponse, CanisterHttpResponseContent,
+        CanisterHttpResponseMetadata,
     },
     consensus::{
         block_maker::SubnetRecords,
@@ -2567,8 +2568,23 @@ impl StateMachine {
                 content: response_metadata,
                 signature,
             };
+            let payment_metadata = CanisterHttpPaymentMetadata {
+                id: CallbackId::from(request_id),
+                receipt: CanisterHttpPaymentReceipt::default(),
+            };
+            let payment_signature = CryptoReturningOk::default()
+                .sign(&payment_metadata, node.node_id, registry_version)
+                .unwrap();
+            let payment_share = Signed {
+                content: payment_metadata,
+                signature: payment_signature,
+            };
             self.canister_http_pool.write().unwrap().apply(vec![
-                CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
+                CanisterHttpChangeAction::AddToValidated(
+                    share.clone(),
+                    payment_share.clone(),
+                    response.clone(),
+                ),
             ]);
         }
     }

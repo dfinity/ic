@@ -3,10 +3,11 @@ use crate::validation::ValidationError;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    NodeId, Time,
+    Cycles, NodeId, Time,
     artifact::CanisterHttpResponseId,
     canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseShare,
+        CanisterHttpPaymentShare, CanisterHttpResponse, CanisterHttpResponseArtifact,
+        CanisterHttpResponseShare,
     },
     consensus::Threshold,
     crypto::{CryptoError, CryptoHashOf},
@@ -72,6 +73,22 @@ pub enum InvalidCanisterHttpPayloadReason {
     DivergenceProofDoesNotMeetDivergenceCriteria,
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
+    InsufficientCycles {
+        expected: Cycles,
+        received: Cycles,
+    },
+    PaymentShareDoesNotMatchResponse {
+        payment_share_id: CallbackId,
+        response_id: CallbackId,
+    },
+    RefundShareExceedsAllowance {
+        share_refund: Cycles,
+        per_replica_allowance: Cycles,
+    },
+    TotalRefundExceedsRefundableCycles {
+        refundable_cycles: Cycles,
+        initial_refunded: Cycles,
+    },
 }
 
 /// A transient failure that can occur during validation of a [`CanisterHttpPayload`]
@@ -92,8 +109,16 @@ pub type CanisterHttpPayloadValidationError =
 
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
-    AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
-    AddToValidatedAndGossipResponse(CanisterHttpResponseShare, CanisterHttpResponse),
+    AddToValidated(
+        CanisterHttpResponseShare,
+        CanisterHttpPaymentShare,
+        CanisterHttpResponse,
+    ),
+    AddToValidatedAndGossipResponse(
+        CanisterHttpResponseShare,
+        CanisterHttpPaymentShare,
+        CanisterHttpResponse,
+    ),
     MoveToValidated(CanisterHttpResponseShare),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
@@ -127,4 +152,9 @@ pub trait CanisterHttpPool: Send + Sync {
         &self,
         msg_id: &CanisterHttpResponseId,
     ) -> Option<CanisterHttpResponseShare>;
+
+    fn get_validated_payment_share(
+        &self,
+        share: &CanisterHttpResponseShare,
+    ) -> Option<CanisterHttpPaymentShare>;
 }

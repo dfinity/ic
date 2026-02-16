@@ -1,7 +1,8 @@
 use crate::{
     ReplicaVersion, Time,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
+        CanisterHttpPaymentMetadata, CanisterHttpPaymentProof, CanisterHttpPaymentReceipt,
+        CanisterHttpPaymentShare, CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
         CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
@@ -72,6 +73,13 @@ impl From<&CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCo
                     signature: signature.clone().get().0,
                 })
                 .collect(),
+            payment_shares: payload
+                .payment_proof
+                .payment_shares
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect(),
         }
     }
 }
@@ -97,6 +105,11 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
             response.canister_id,
             "CanisterHttpResponseWithConsensus::canister_id",
         )?;
+        let payment_shares = payload
+            .payment_shares
+            .into_iter()
+            .map(TryFrom::try_from)
+            .collect::<Result<Vec<CanisterHttpPaymentShare>, ProxyDecodeError>>()?;
 
         Ok(CanisterHttpResponseWithConsensus {
             content: CanisterHttpResponse {
@@ -132,6 +145,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                         .collect::<Result<BTreeMap<NodeId, BasicSigOf<_>>, ProxyDecodeError>>()?,
                 },
             },
+            payment_proof: CanisterHttpPaymentProof { payment_shares },
         })
     }
 }
@@ -250,6 +264,91 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
     }
 }
 
+impl From<CanisterHttpPaymentReceipt> for pb::CanisterHttpPaymentReceipt {
+    fn from(receipt: CanisterHttpPaymentReceipt) -> Self {
+        pb::CanisterHttpPaymentReceipt {
+            refund: Some(receipt.refund.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpPaymentReceipt> for CanisterHttpPaymentReceipt {
+    type Error = ProxyDecodeError;
+    fn try_from(receipt: pb::CanisterHttpPaymentReceipt) -> Result<Self, Self::Error> {
+        Ok(CanisterHttpPaymentReceipt {
+            refund: receipt.refund.map(Into::into).unwrap_or_default(),
+        })
+    }
+}
+
+impl From<CanisterHttpPaymentMetadata> for pb::CanisterHttpPaymentMetadata {
+    fn from(metadata: CanisterHttpPaymentMetadata) -> Self {
+        pb::CanisterHttpPaymentMetadata {
+            id: metadata.id.get(),
+            receipt: Some(metadata.receipt.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpPaymentMetadata> for CanisterHttpPaymentMetadata {
+    type Error = ProxyDecodeError;
+    fn try_from(metadata: pb::CanisterHttpPaymentMetadata) -> Result<Self, Self::Error> {
+        let id = CanisterHttpRequestId::new(metadata.id);
+        let receipt = metadata.receipt.ok_or(ProxyDecodeError::MissingField(
+            "CanisterHttpPaymentMetadata::receipt",
+        ))?;
+        Ok(CanisterHttpPaymentMetadata {
+            id,
+            receipt: receipt.try_into()?,
+        })
+    }
+}
+
+impl From<BasicSignature<CanisterHttpPaymentMetadata>> for pb::CanisterHttpPaymentSignature {
+    fn from(signature: BasicSignature<CanisterHttpPaymentMetadata>) -> Self {
+        pb::CanisterHttpPaymentSignature {
+            signer: signature.signer.get().into_vec(),
+            signature: signature.signature.clone().get().0,
+        }
+    }
+}
+
+impl From<CanisterHttpPaymentShare> for pb::CanisterHttpPaymentShare {
+    fn from(share: CanisterHttpPaymentShare) -> Self {
+        pb::CanisterHttpPaymentShare {
+            metadata: Some(share.content.into()),
+            signature: Some(share.signature.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpPaymentShare> for CanisterHttpPaymentShare {
+    type Error = ProxyDecodeError;
+    fn try_from(share: pb::CanisterHttpPaymentShare) -> Result<Self, Self::Error> {
+        let metadata = share
+            .metadata
+            .ok_or(ProxyDecodeError::MissingField("share.metadata"))?;
+        let id = CanisterHttpRequestId::new(metadata.id);
+        let receipt = metadata
+            .receipt
+            .map(|receipt| receipt.try_into())
+            .transpose()?;
+        let signature = share
+            .signature
+            .ok_or(ProxyDecodeError::MissingField("share.signature"))?;
+        Ok(Signed {
+            content: CanisterHttpPaymentMetadata {
+                id,
+                receipt: receipt.unwrap_or_default(),
+            },
+            signature: BasicSignature {
+                signer: NodeId::from(PrincipalId::try_from(signature.signer)?),
+                signature: BasicSigOf::new(BasicSig(signature.signature)),
+            },
+        })
+    }
+}
+
 impl TryFrom<pb::CanisterHttpResponse> for CanisterHttpResponse {
     type Error = ProxyDecodeError;
 
@@ -287,8 +386,15 @@ impl TryFrom<pb::CanisterHttpArtifact> for CanisterHttpResponseArtifact {
             "CanisterHttpArtifact::share",
         ))?;
 
+        let payment_share = artifact
+            .payment_share
+            .ok_or(ProxyDecodeError::MissingField(
+                "CanisterHttpArtifact::payment_share",
+            ))?;
+
         Ok(CanisterHttpResponseArtifact {
             share: share.try_into()?,
+            payment_share: payment_share.try_into()?,
             response: artifact
                 .response
                 .map(|response| response.try_into())
@@ -301,6 +407,7 @@ impl From<CanisterHttpResponseArtifact> for pb::CanisterHttpArtifact {
     fn from(artifact: CanisterHttpResponseArtifact) -> Self {
         pb::CanisterHttpArtifact {
             share: Some(artifact.share.into()),
+            payment_share: Some(artifact.payment_share.into()),
             response: artifact.response.map(|response| response.into()),
         }
     }
@@ -352,6 +459,18 @@ mod tests {
                     .into_iter()
                     .collect(),
                 },
+            },
+            payment_proof: CanisterHttpPaymentProof {
+                payment_shares: vec![CanisterHttpPaymentShare {
+                    content: CanisterHttpPaymentMetadata {
+                        id: CanisterHttpRequestId::new(1),
+                        receipt: CanisterHttpPaymentReceipt::default(),
+                    },
+                    signature: BasicSignature {
+                        signer: NodeId::from(PrincipalId::new_node_test_id(1)),
+                        signature: BasicSigOf::new(BasicSig(vec![0, 1, 2, 3])),
+                    },
+                }],
             },
         };
         let pb_payload = pb::CanisterHttpResponseWithConsensus::from(&payload);
@@ -423,6 +542,16 @@ mod tests {
                 signature: BasicSigOf::new(BasicSig(vec![4, 5, 6, 7])),
             },
         };
+        let payment_share = Signed {
+            content: CanisterHttpPaymentMetadata {
+                id: CanisterHttpRequestId::new(2),
+                receipt: CanisterHttpPaymentReceipt::default(),
+            },
+            signature: BasicSignature {
+                signer: NodeId::from(PrincipalId::new_node_test_id(2)),
+                signature: BasicSigOf::new(BasicSig(vec![4, 5, 6, 7])),
+            },
+        };
 
         let response = CanisterHttpResponse {
             id: CanisterHttpRequestId::new(2),
@@ -434,6 +563,7 @@ mod tests {
         // Case 1: Artifact with both share and response
         let artifact_with_response = CanisterHttpResponseArtifact {
             share: share.clone(),
+            payment_share: payment_share.clone(),
             response: Some(response.clone()),
         };
 
@@ -446,6 +576,7 @@ mod tests {
         // Case 2: Artifact with only a share
         let artifact_without_response = CanisterHttpResponseArtifact {
             share,
+            payment_share: payment_share.clone(),
             response: None,
         };
 

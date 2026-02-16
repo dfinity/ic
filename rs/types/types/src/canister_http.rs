@@ -773,12 +773,18 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
     pub proof: CanisterHttpResponseProof,
+    pub payment_proof: CanisterHttpPaymentProof,
 }
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponseWithConsensus { content, proof } = &self;
-        proof.count_bytes() + content.count_bytes()
+        let CanisterHttpResponseWithConsensus {
+            content,
+            proof,
+            payment_proof,
+        } = &self;
+        //TODO(urgent): what happens if we add payment_proof to the size calculation?
+        proof.count_bytes() + content.count_bytes() + payment_proof.count_bytes()
     }
 }
 
@@ -796,6 +802,39 @@ impl CountBytes for CanisterHttpResponseDivergence {
     fn count_bytes(&self) -> usize {
         let CanisterHttpResponseDivergence { shares } = &self;
         shares.iter().map(|share| share.count_bytes()).sum()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpPaymentReceipt {
+    pub refund: Cycles,
+}
+
+impl Default for CanisterHttpPaymentReceipt {
+    fn default() -> Self {
+        CanisterHttpPaymentReceipt {
+            refund: Cycles::zero(),
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpPaymentMetadata {
+    pub id: CallbackId,
+    pub receipt: CanisterHttpPaymentReceipt,
+}
+
+impl CountBytes for CanisterHttpPaymentMetadata {
+    fn count_bytes(&self) -> usize {
+        size_of::<CanisterHttpPaymentMetadata>()
+    }
+}
+
+impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpPaymentMetadata {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).unwrap()
     }
 }
 
@@ -826,12 +865,16 @@ impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMe
 pub type CanisterHttpResponseShare =
     Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
 
+pub type CanisterHttpPaymentShare =
+    Signed<CanisterHttpPaymentMetadata, BasicSignature<CanisterHttpPaymentMetadata>>;
+
 /// Contains a share and optionally the full response.
 ///
 /// This is the artifact that will actually be gossiped.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CanisterHttpResponseArtifact {
     pub share: CanisterHttpResponseShare,
+    pub payment_share: CanisterHttpPaymentShare,
     // The response should not be included in the case of fully replicated outcalls.
     pub response: Option<CanisterHttpResponse>,
 }
@@ -858,6 +901,18 @@ pub type CanisterHttpResponseProof =
 impl CountBytes for CanisterHttpResponseProof {
     fn count_bytes(&self) -> usize {
         size_of::<CanisterHttpResponseProof>()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpPaymentProof {
+    pub payment_shares: Vec<CanisterHttpPaymentShare>,
+}
+
+impl CountBytes for CanisterHttpPaymentProof {
+    fn count_bytes(&self) -> usize {
+        size_of::<CanisterHttpPaymentProof>()
     }
 }
 

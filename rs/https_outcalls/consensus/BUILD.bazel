@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
     "//rs/consensus/utils",
+    "//rs/https_outcalls/pricing",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
     "//rs/interfaces/registry",

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package types.v1;
 
+import "state/queues/v1/queues.proto";
 import "types/v1/errors.proto";
 import "types/v1/types.proto";
 
@@ -60,6 +61,7 @@ message CanisterHttpResponseWithConsensus {
   reserved 5;
   reserved 6;
   repeated CanisterHttpResponseSignature signatures = 7;
+  repeated CanisterHttpPaymentShare payment_shares = 9;
 }
 
 message CanisterHttpShare {
@@ -79,7 +81,27 @@ message CanisterHttpResponseMessage {
   }
 }
 
+message CanisterHttpPaymentReceipt {
+  state.queues.v1.Cycles refund = 1;
+}
+
+message CanisterHttpPaymentMetadata {
+  uint64 id = 1;
+  CanisterHttpPaymentReceipt receipt = 2;
+}
+
+message CanisterHttpPaymentSignature {
+  bytes signer = 1;
+  bytes signature = 2;
+}
+
+message CanisterHttpPaymentShare {
+  CanisterHttpPaymentMetadata metadata = 1;
+  CanisterHttpPaymentSignature signature = 2;
+}
+
 message CanisterHttpArtifact {
   CanisterHttpShare share = 1;
+  CanisterHttpPaymentShare payment_share = 3;
   optional CanisterHttpResponse response = 2;
 }
