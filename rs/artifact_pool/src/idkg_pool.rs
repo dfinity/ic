@@ -505,9 +505,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                     unvalidated_ops.insert(IDkgMessage::Transcript(transcript));
                 }
                 IDkgChangeAction::RemoveValidated(msg_id) => {
-                    if !matches!(msg_id, IDkgArtifactId::Transcript(_, _)) {
-                        transmits.push(ArtifactTransmit::Abort(msg_id.clone()));
-                    }
+                    transmits.push(ArtifactTransmit::Abort(msg_id.clone()));
                     validated_ops.remove(msg_id);
                 }
                 IDkgChangeAction::RemoveUnvalidated(msg_id) => {
