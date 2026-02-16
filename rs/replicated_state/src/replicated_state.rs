@@ -660,6 +660,11 @@ impl ReplicatedState {
         self.metadata.subnet_schedule.get_mut(canister_id)
     }
 
+    /// Returns a reference to the subnet schedule.
+    pub fn canister_priorities(&self) -> &SubnetSchedule {
+        &self.metadata.subnet_schedule
+    }
+
     /// Returns mutable references to the canister states and subnet schedule.
     ///
     /// Intended to work around borrow checker limitations and allow inspecting
@@ -834,6 +839,8 @@ impl ReplicatedState {
     }
 
     /// Computes the memory taken by different types of memory resources.
+    ///
+    /// Time complexity: `O(|canister_states|)`.
     pub fn memory_taken(&self) -> MemoryTaken {
         let (
             raw_memory_taken,
@@ -883,8 +890,10 @@ impl ReplicatedState {
 
     /// Computes the memory taken by guaranteed response messages.
     ///
-    /// This is a more efficient alternative to `memory_taken()` for cases when only
-    /// the message memory usage is necessary.
+    /// This is a more efficient alternative (by a constant factor) to
+    /// `memory_taken()` for cases when only the message memory usage is necessary.
+    ///
+    /// Time complexity: `O(|canister_states|)`.
     pub fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
             .canisters_iter()
@@ -901,6 +910,8 @@ impl ReplicatedState {
     }
 
     /// Computes the memory taken by best-effort response messages.
+    ///
+    /// Time complexity: `O(|canister_states|)`.
     pub fn best_effort_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
             .canisters_iter()
@@ -913,11 +924,15 @@ impl ReplicatedState {
     }
 
     /// Returns the total memory taken by the ingress history in bytes.
+    ///
+    /// Time complexity: `O(1)`.
     pub fn total_ingress_memory_taken(&self) -> NumBytes {
         self.metadata.ingress_history.memory_usage()
     }
 
-    /// Returns the total number of callbacks across all canisters.
+    /// Computes the total number of callbacks across all canisters.
+    ///
+    /// Time complexity: `O(|canister_states|)`.
     pub fn callback_count(&self) -> usize {
         self.canisters_iter()
             .map(|canister| {
