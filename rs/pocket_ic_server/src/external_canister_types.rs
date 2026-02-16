@@ -1,7 +1,5 @@
 use candid::{CandidType, Principal};
-use ic_doge_interface::{
-    InitConfig as DogecoinInitConfig, SetConfigRequest as DogecoinSetConfigRequest,
-};
+use ic_doge_interface::{Fees, Flag, InitConfig as DogecoinInitConfig};
 use icrc_ledger_types::icrc1::account::Account;
 
 /* NNS dapp */
@@ -134,6 +132,22 @@ pub struct InternetIdentityInit {
 }
 
 /* Dogecoin canister */
+
+/// TODO(DEFI-2672): use SetConfigRequest from new version of ic-doge-interface once published
+/// Matches the canister's set_config_request (release/2026-02-06). ic-doge-interface
+/// SetConfigRequest is missing burn_cycles, so we define the full shape here for Candid equality.
+#[derive(CandidType, serde::Deserialize)]
+pub struct DogecoinSetConfigRequest {
+    pub stability_threshold: Option<u128>,
+    pub syncing: Option<Flag>,
+    pub fees: Option<Fees>,
+    pub api_access: Option<Flag>,
+    pub disable_api_if_not_fully_synced: Option<Flag>,
+    pub watchdog_canister: Option<Option<Principal>>,
+    pub burn_cycles: Option<Flag>,
+    pub lazily_evaluate_fee_percentiles: Option<Flag>,
+}
+
 #[derive(CandidType, serde::Deserialize)]
 pub enum DogecoinCanisterArg {
     #[serde(rename = "init")]
