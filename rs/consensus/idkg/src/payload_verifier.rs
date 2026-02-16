@@ -623,7 +623,7 @@ fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidID
         }
     };
 
-    InitialIDkgDealings::try_from(&initial_dealings)
+    InitialIDkgDealings::try_from(initial_dealings)
         .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{err:?}")))
 }
 
