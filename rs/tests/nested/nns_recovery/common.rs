@@ -364,6 +364,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     );
 
     let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    let mut skipped_steps = vec![StepType::Cleanup]; // Skip Cleanup to keep the output directory
     if maybe_healthy_node.is_none() {
         // If all nodes are broken, the registry canister will not be able to respond to
         // `get_certified_changes_since` calls to initialize the local store of `ic-recovery`.
@@ -392,6 +393,10 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 &local_store_path_dest,
             )
             .expect("Failed to manually initialize the local store of ic-recovery by downloading it from a node");
+
+        // Skip validating the output if all nodes are broken, as in this case no replica will be
+        // running to compare the heights to.
+        skipped_steps.push(StepType::ValidateReplayOutput);
     }
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
@@ -426,7 +431,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         backup_key_file: Some(ssh_backup_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
-        skip: Some(vec![StepType::Cleanup]), // Skip Cleanup to keep the output directory
+        skip: Some(skipped_steps),
     };
 
     info!(
