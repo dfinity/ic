@@ -1,4 +1,7 @@
 use candid::{CandidType, Principal};
+use ic_doge_interface::{
+    InitConfig as DogecoinInitConfig, SetConfigRequest as DogecoinSetConfigRequest,
+};
 use icrc_ledger_types::icrc1::account::Account;
 
 /* NNS dapp */
@@ -128,4 +131,13 @@ pub struct InternetIdentityInit {
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
+}
+
+/* Dogecoin canister */
+#[derive(Clone, Debug, CandidType, serde::Deserialize)]
+pub enum DogecoinCanisterArg {
+    #[serde(rename = "init")]
+    Init(DogecoinInitConfig),
+    #[serde(rename = "upgrade")]
+    Upgrade(Option<DogecoinSetConfigRequest>),
 }
