@@ -72,7 +72,6 @@ pub(crate) struct CanisterMemoryHandling {
 pub(crate) enum InstallCodeStep {
     ValidateInput,
     ReplaceExecutionStateAndAllocations {
-        instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
         memory_handling: CanisterMemoryHandling,
     },
@@ -91,6 +90,9 @@ pub(crate) enum InstallCodeStep {
         output: WasmExecutionOutput,
     },
     ChargeForLargeWasmAssembly {
+        instructions: NumInstructions,
+    },
+    ChargeForCompilation {
         instructions: NumInstructions,
     },
 }
@@ -194,6 +196,12 @@ impl InstallCodeHelper {
     pub fn charge_for_large_wasm_assembly(&mut self, instructions: NumInstructions) {
         self.steps
             .push(InstallCodeStep::ChargeForLargeWasmAssembly { instructions });
+        self.reduce_instructions_by(instructions);
+    }
+
+    pub fn charge_for_compilation(&mut self, instructions: NumInstructions) {
+        self.steps
+            .push(InstallCodeStep::ChargeForCompilation { instructions });
         self.reduce_instructions_by(instructions);
     }
 
@@ -517,18 +525,14 @@ impl InstallCodeHelper {
     /// values in `original` context.
     pub fn replace_execution_state_and_allocations(
         &mut self,
-        instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
         memory_handling: CanisterMemoryHandling,
     ) -> Result<(), CanisterManagerError> {
         self.steps
             .push(InstallCodeStep::ReplaceExecutionStateAndAllocations {
-                instructions_from_compilation,
                 maybe_execution_state: maybe_execution_state.clone(),
                 memory_handling,
             });
-
-        self.reduce_instructions_by(instructions_from_compilation);
 
         let old_memory_usage = self.canister.memory_usage();
         let memory_allocation = self.canister.system_state.memory_allocation;
@@ -743,14 +747,11 @@ impl InstallCodeHelper {
         match step {
             InstallCodeStep::ValidateInput => self.validate_input(original),
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
-                instructions_from_compilation,
                 maybe_execution_state,
                 memory_handling,
-            } => self.replace_execution_state_and_allocations(
-                instructions_from_compilation,
-                maybe_execution_state,
-                memory_handling,
-            ),
+            } => {
+                self.replace_execution_state_and_allocations(maybe_execution_state, memory_handling)
+            }
             InstallCodeStep::ClearCertifiedData => {
                 self.clear_certified_data();
                 Ok(())
@@ -786,6 +787,10 @@ impl InstallCodeHelper {
             }
             InstallCodeStep::ChargeForLargeWasmAssembly { instructions } => {
                 self.charge_for_large_wasm_assembly(instructions);
+                Ok(())
+            }
+            InstallCodeStep::ChargeForCompilation { instructions } => {
+                self.charge_for_compilation(instructions);
                 Ok(())
             }
         }
