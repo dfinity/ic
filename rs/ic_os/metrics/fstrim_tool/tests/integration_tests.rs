@@ -6,8 +6,8 @@ use tempfile::tempdir;
 
 fn new_fstrim_tool_command() -> Command {
     match Command::cargo_bin("fstrim_tool") {
-        // When in Cargo environment. This should be removed after Bazel the migration is complete.
-        Ok(v) => v,
+        // When in Cargo environment.
+        Ok(cmd) => cmd,
         // When in Bazel environment
         Err(_) => Command::new("rs/ic_os/metrics/fstrim_tool/fstrim_tool_bin"),
     }
