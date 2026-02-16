@@ -134,7 +134,7 @@ pub struct InternetIdentityInit {
 }
 
 /* Dogecoin canister */
-#[derive(Clone, Debug, CandidType, serde::Deserialize)]
+#[derive(CandidType, serde::Deserialize)]
 pub enum DogecoinCanisterArg {
     #[serde(rename = "init")]
     Init(DogecoinInitConfig),
