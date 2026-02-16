@@ -40,6 +40,7 @@ use ic_types::{
         CanisterHttpPaymentShare, CanisterHttpRequestContext, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
         CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        PricingVersion, RefundStatus,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -77,45 +78,51 @@ fn single_request_test() {
     let context = default_validation_context();
 
     for subnet_size in 1..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(true, subnet_size, |payload_builder, canister_http_pool| {
-            let (response, metadata) = test_response_and_metadata(0);
-            let shares = metadata_to_shares(subnet_size, &metadata);
+        test_config_with_http_feature(
+            true,
+            subnet_size,
+            |mut payload_builder, canister_http_pool| {
+                inject_contexts(&mut payload_builder, vec![(0, default_request_context())]);
+                let (response, metadata) = test_response_and_metadata(0);
+                let shares = metadata_to_shares(subnet_size, &metadata);
 
-            {
-                // Add response and shares to pool
-                // NOTE: We are only adding the required minimum of shares to the pool
-                let mut pool_access = canister_http_pool.write().unwrap();
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size - get_faults_tolerated(subnet_size)].to_vec(),
+                {
+                    // Add response and shares to pool
+                    // NOTE: We are only adding the required minimum of shares to the pool
+                    let mut pool_access = canister_http_pool.write().unwrap();
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size - get_faults_tolerated(subnet_size)].to_vec(),
+                    );
+                }
+
+                // Build a payload
+                let payload = payload_builder.build_payload(
+                    Height::new(1),
+                    NumBytes::new(4 * 1024 * 1024),
+                    &[],
+                    &context,
                 );
-            }
 
-            // Build a payload
-            let payload = payload_builder.build_payload(
-                Height::new(1),
-                NumBytes::new(4 * 1024 * 1024),
-                &[],
-                &context,
-            );
+                //  Make sure the response is contained in the payload
+                let parsed_payload =
+                    bytes_to_payload(&payload).expect("Failed to parse the payload");
+                assert_eq!(parsed_payload.num_responses(), 1);
+                assert_eq!(parsed_payload.responses[0].content, response);
 
-            //  Make sure the response is contained in the payload
-            let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse the payload");
-            assert_eq!(parsed_payload.num_responses(), 1);
-            assert_eq!(parsed_payload.responses[0].content, response);
-
-            assert!(
-                payload_builder
-                    .validate_payload(
-                        Height::new(1),
-                        &test_proposal_context(&context),
-                        &payload,
-                        &[],
-                    )
-                    .is_ok()
-            );
-        });
+                assert!(
+                    payload_builder
+                        .validate_payload(
+                            Height::new(1),
+                            &test_proposal_context(&context),
+                            &payload,
+                            &[],
+                        )
+                        .is_ok()
+                );
+            },
+        );
 
         // TODO: Test that the payload building fails, if the use threshold -1 many shares.
     }
@@ -138,171 +145,188 @@ fn multiple_payload_test() {
 
     // Run the test over a range of subnet configurations
     for subnet_size in 1..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(true, subnet_size, |payload_builder, canister_http_pool| {
-            // Add response and shares to pool
-            let (past_response, past_metadata) = {
-                let mut pool_access = canister_http_pool.write().unwrap();
+        test_config_with_http_feature(
+            true,
+            subnet_size,
+            |mut payload_builder, canister_http_pool| {
+                // This test needs 6 contexts.
+                let contexts: Vec<_> = (0..=5).map(|i| (i, default_request_context())).collect();
+                inject_contexts(&mut payload_builder, contexts);
+                // Add response and shares to pool
+                let (past_response, past_metadata) = {
+                    let mut pool_access = canister_http_pool.write().unwrap();
 
-                // Add the valid response into the pool
-                let shares = metadata_to_shares(subnet_size, &valid_metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &valid_response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                    // Add the valid response into the pool
+                    let shares = metadata_to_shares(subnet_size, &valid_metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &valid_response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size].to_vec(),
+                    );
 
-                // NOTE: This makes only sense for 3+ Nodes and is skipped for less
-                if subnet_size > 2 {
-                    // Add a valid response into the pool but only half of the shares
-                    let (response, metadata) = test_response_and_metadata(1);
+                    // NOTE: This makes only sense for 3+ Nodes and is skipped for less
+                    if subnet_size > 2 {
+                        // Add a valid response into the pool but only half of the shares
+                        let (response, metadata) = test_response_and_metadata(1);
+                        let shares = metadata_to_shares(subnet_size, &metadata);
+                        add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                        add_received_shares_to_pool(
+                            pool_access.deref_mut(),
+                            shares[1..subnet_size / 2].to_vec(),
+                        );
+                    }
+
+                    // Add a response that is already timed out
+                    let (mut response, mut metadata) = test_response_and_metadata(2);
+                    response.timeout = UNIX_EPOCH;
+                    metadata.timeout = UNIX_EPOCH;
                     let shares = metadata_to_shares(subnet_size, &metadata);
                     add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
                     add_received_shares_to_pool(
                         pool_access.deref_mut(),
-                        shares[1..subnet_size / 2].to_vec(),
+                        shares[1..subnet_size].to_vec(),
                     );
-                }
 
-                // Add a response that is already timed out
-                let (mut response, mut metadata) = test_response_and_metadata(2);
-                response.timeout = UNIX_EPOCH;
-                metadata.timeout = UNIX_EPOCH;
-                let shares = metadata_to_shares(subnet_size, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                    // Add a response with mismatching registry version
+                    let (response, mut metadata) = test_response_and_metadata(3);
+                    metadata.registry_version = RegistryVersion::new(5);
+                    let shares = metadata_to_shares(subnet_size, &metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size].to_vec(),
+                    );
 
-                // Add a response with mismatching registry version
-                let (response, mut metadata) = test_response_and_metadata(3);
-                metadata.registry_version = RegistryVersion::new(5);
-                let shares = metadata_to_shares(subnet_size, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                    // Add a oversized response
+                    let (mut response, metadata) = test_response_and_metadata(4);
+                    response.content =
+                        CanisterHttpResponseContent::Success(vec![123; 2 * 1024 * 1024]);
+                    let shares = metadata_to_shares(subnet_size, &metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size].to_vec(),
+                    );
 
-                // Add a oversized response
-                let (mut response, metadata) = test_response_and_metadata(4);
-                response.content = CanisterHttpResponseContent::Success(vec![123; 2 * 1024 * 1024]);
-                let shares = metadata_to_shares(subnet_size, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                    // Add response which is valid but we will put it into past_payloads
+                    let (past_response, past_metadata) = test_response_and_metadata(5);
+                    let shares = metadata_to_shares(subnet_size, &past_metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &past_response);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        shares[1..subnet_size].to_vec(),
+                    );
 
-                // Add response which is valid but we will put it into past_payloads
-                let (past_response, past_metadata) = test_response_and_metadata(5);
-                let shares = metadata_to_shares(subnet_size, &past_metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &past_response);
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    shares[1..subnet_size].to_vec(),
-                );
+                    (past_response, past_metadata)
+                };
 
-                (past_response, past_metadata)
-            };
-
-            // Set up past payload
-            let past_payload = CanisterHttpPayload {
-                responses: vec![CanisterHttpResponseWithConsensus {
-                    content: past_response,
-                    proof: Signed {
-                        content: past_metadata,
-                        signature: BasicSignatureBatch {
-                            signatures_map: BTreeMap::new(),
+                // Set up past payload
+                let past_payload = CanisterHttpPayload {
+                    responses: vec![CanisterHttpResponseWithConsensus {
+                        content: past_response,
+                        proof: Signed {
+                            content: past_metadata,
+                            signature: BasicSignatureBatch {
+                                signatures_map: BTreeMap::new(),
+                            },
                         },
-                    },
-                    payment_proof: CanisterHttpPaymentProof {
-                        payment_shares: vec![],
-                    },
-                }],
-                timeouts: vec![],
-                divergence_responses: vec![],
-            };
-            let past_payload = payload_to_bytes(&past_payload, NumBytes::new(4 * 1024 * 1024));
+                        payment_proof: CanisterHttpPaymentProof {
+                            payment_shares: vec![],
+                        },
+                    }],
+                    timeouts: vec![],
+                    divergence_responses: vec![],
+                };
+                let past_payload = payload_to_bytes(&past_payload, NumBytes::new(4 * 1024 * 1024));
 
-            let past_payloads = vec![PastPayload {
-                height: Height::from(0),
-                time: UNIX_EPOCH,
-                block_hash: CryptoHashOf::from(CryptoHash(vec![])),
-                payload: &past_payload,
-            }];
+                let past_payloads = vec![PastPayload {
+                    height: Height::from(0),
+                    time: UNIX_EPOCH,
+                    block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+                    payload: &past_payload,
+                }];
 
-            let validation_context = ValidationContext {
-                registry_version: RegistryVersion::new(1),
-                certified_height: Height::new(0),
-                time: UNIX_EPOCH + Duration::from_secs(3),
-            };
+                let validation_context = ValidationContext {
+                    registry_version: RegistryVersion::new(1),
+                    certified_height: Height::new(0),
+                    time: UNIX_EPOCH + Duration::from_secs(3),
+                };
 
-            // Build a payload
-            let payload = payload_builder.build_payload(
-                Height::new(1),
-                NumBytes::new(4 * 1024 * 1024),
-                &past_payloads,
-                &validation_context,
-            );
-
-            //  Make sure the response is not contained in the payload
-            payload_builder
-                .validate_payload(
+                // Build a payload
+                let payload = payload_builder.build_payload(
                     Height::new(1),
-                    &test_proposal_context(&validation_context),
-                    &payload,
+                    NumBytes::new(4 * 1024 * 1024),
                     &past_payloads,
-                )
-                .unwrap();
+                    &validation_context,
+                );
 
-            let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
-            assert_eq!(parsed_payload.num_responses(), 1);
-            assert_eq!(parsed_payload.responses[0].content, valid_response);
-        });
+                //  Make sure the response is not contained in the payload
+                payload_builder
+                    .validate_payload(
+                        Height::new(1),
+                        &test_proposal_context(&validation_context),
+                        &payload,
+                        &past_payloads,
+                    )
+                    .unwrap();
+
+                let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+                assert_eq!(parsed_payload.num_responses(), 1);
+                assert_eq!(parsed_payload.responses[0].content, valid_response);
+            },
+        );
     }
 }
 
 #[test]
 fn multiple_share_same_source_test() {
     for subnet_size in 3..MAX_SUBNET_SIZE {
-        test_config_with_http_feature(true, subnet_size, |payload_builder, canister_http_pool| {
-            {
-                let mut pool_access = canister_http_pool.write().unwrap();
+        test_config_with_http_feature(
+            true,
+            subnet_size,
+            |mut payload_builder, canister_http_pool| {
+                inject_contexts(&mut payload_builder, vec![(1, default_request_context())]);
+                {
+                    let mut pool_access = canister_http_pool.write().unwrap();
 
-                let (response, metadata) = test_response_and_metadata(1);
+                    let (response, metadata) = test_response_and_metadata(1);
 
-                let shares = metadata_to_shares(10, &metadata);
-                add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    let shares = metadata_to_shares(10, &metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
 
-                // Ensure that multiple shares from a single source does not result in inclusion
-                add_received_shares_to_pool(
-                    pool_access.deref_mut(),
-                    (0..subnet_size)
-                        .map(|i| {
-                            metadata_to_share_with_signature(7, &metadata, i.to_be_bytes().to_vec())
-                        })
-                        .collect(),
+                    // Ensure that multiple shares from a single source does not result in inclusion
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        (0..subnet_size)
+                            .map(|i| {
+                                metadata_to_share_with_signature(
+                                    7,
+                                    &metadata,
+                                    i.to_be_bytes().to_vec(),
+                                )
+                            })
+                            .collect(),
+                    );
+                }
+
+                let validation_context = ValidationContext {
+                    registry_version: RegistryVersion::new(1),
+                    certified_height: Height::new(0),
+                    time: UNIX_EPOCH + Duration::from_secs(3),
+                };
+
+                // Build a payload
+                let payload = payload_builder.build_payload(
+                    Height::new(1),
+                    NumBytes::new(4 * 1024 * 1024),
+                    &[],
+                    &validation_context,
                 );
-            }
 
-            let validation_context = ValidationContext {
-                registry_version: RegistryVersion::new(1),
-                certified_height: Height::new(0),
-                time: UNIX_EPOCH + Duration::from_secs(3),
-            };
-
-            // Build a payload
-            let payload = payload_builder.build_payload(
-                Height::new(1),
-                NumBytes::new(4 * 1024 * 1024),
-                &[],
-                &validation_context,
-            );
-
-            let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
-            assert_eq!(parsed_payload.num_responses(), 0);
-        });
+                let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+                assert_eq!(parsed_payload.num_responses(), 0);
+            },
+        );
     }
 }
 
@@ -642,7 +666,8 @@ fn feature_disabled_validation() {
 /// Test that duplicate payloads don't validate
 #[test]
 fn duplicate_validation() {
-    test_config_with_http_feature(true, 4, |payload_builder, _| {
+    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+        inject_contexts(&mut payload_builder, vec![(0, default_request_context())]);
         let (response, metadata) = test_response_and_metadata(0);
 
         let payload = CanisterHttpPayload {
@@ -1833,6 +1858,55 @@ fn payload_builder_includes_candidate_when_refunds_cover_cost() {
     });
 }
 
+fn default_request_context() -> CanisterHttpRequestContext {
+    CanisterHttpRequestContext {
+        request: RequestBuilder::default().build(),
+        url: "http://example.com".to_string(),
+        max_response_bytes: None,
+        headers: vec![],
+        body: None,
+        http_method: CanisterHttpMethod::GET,
+        transform: None,
+        time: UNIX_EPOCH,
+        replication: ic_types::canister_http::Replication::FullyReplicated,
+        // Legacy = 0 Cost, so checks pass easily
+        pricing_version: PricingVersion::Legacy,
+        // Ample refund allowance
+        refund_status: RefundStatus {
+            refundable_cycles: Cycles::new(1_000_000_000),
+            per_replica_allowance: Cycles::new(1_000_000_000),
+            refunded_cycles: Cycles::zero(),
+            refunding_nodes: BTreeSet::new(),
+        },
+    }
+}
+
+fn inject_contexts(
+    payload_builder: &mut CanisterHttpPayloadBuilderImpl,
+    contexts: Vec<(u64, CanisterHttpRequestContext)>,
+) {
+    let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+
+    for (id, context) in contexts {
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(CallbackId::from(id), context);
+    }
+
+    let state_manager = Arc::new(RefMockStateManager::default());
+    state_manager
+        .get_mut()
+        .expect_get_state_at()
+        .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+            Height::new(0),
+            Arc::new(init_state),
+        )));
+
+    payload_builder.state_reader = state_manager;
+}
+
 /// Build some test metadata and response, which is valid and can be used in
 /// different tests
 pub(crate) fn test_response_and_metadata(
@@ -2096,7 +2170,8 @@ fn run_validatation_test<F>(
 where
     F: FnMut(&mut CanisterHttpResponse, &mut CanisterHttpResponseMetadata),
 {
-    test_config_with_http_feature(https_feature_flag, 4, |payload_builder, _| {
+    test_config_with_http_feature(https_feature_flag, 4, |mut payload_builder, _| {
+        inject_contexts(&mut payload_builder, vec![(0, default_request_context())]);
         let (mut response, mut metadata) = test_response_and_metadata(0);
         modify(&mut response, &mut metadata);
 
