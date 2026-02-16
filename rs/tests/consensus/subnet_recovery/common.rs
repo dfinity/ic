@@ -66,10 +66,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env_api::{get_dependency_path_from_env, scp_send_to};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
-use ic_types::{
-    Height, ReplicaVersion, SubnetId,
-    consensus::{CatchUpPackage, idkg::STORE_PRE_SIGNATURES_IN_STATE},
-};
+use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
 use prost::Message;
 use slog::{Logger, info};
 use std::{
@@ -86,9 +83,9 @@ const UNASSIGNED_NODES: usize = 4;
 
 const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
-/// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
-/// plus 4 to make checkpoint heights more predictable
-const DKG_INTERVAL_LARGE: u64 = 124;
+/// 40 dealings * 4 transcripts being reshared (high/local, low/local, high/remote, low/remote)
+/// plus 14 as a safety margin
+const DKG_INTERVAL_LARGE: u64 = 4 * NNS_NODES_LARGE as u64 + 14;
 
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
@@ -334,9 +331,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
 
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let nns_canister = block_on(MessageCanister::new(
+    let nns_canister = block_on(MessageCanister::new_with_retries(
         &agent,
         nns_node.effective_canister_id(),
+        &logger,
+        Duration::from_secs(120),
+        Duration::from_secs(1),
     ));
 
     // The first application subnet encountered during iteration is the source subnet because it was inserted first.
@@ -426,8 +426,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
 
     // Only check that the pre-signature stash is purged in one test case (chain keys + corrupt CUP)
-    let check_pre_signature_stash_is_purged =
-        cfg.chain_key && cfg.corrupt_cup && STORE_PRE_SIGNATURES_IN_STATE;
+    let check_pre_signature_stash_is_purged = cfg.chain_key && cfg.corrupt_cup;
     if check_pre_signature_stash_is_purged {
         // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
         await_pre_signature_stash_size(
