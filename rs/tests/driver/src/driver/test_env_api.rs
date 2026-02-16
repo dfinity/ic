@@ -1203,7 +1203,7 @@ impl IcNodeSnapshot {
                     value[0], 0,
                     "The metric `{name}` on node {} has non-zero value. \
                     If the metric is allowed to be non-zero in the test, \
-                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")",
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
                     self.node_id,
                 );
             }

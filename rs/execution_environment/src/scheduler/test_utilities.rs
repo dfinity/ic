@@ -40,6 +40,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
+    metadata_state::testing::NetworkTopologyTesting,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
@@ -89,40 +90,52 @@ use ic_types::time::UNIX_EPOCH;
 /// test.execute_round(ExecutionRoundType::OrdinaryRound);
 /// ```
 pub(crate) struct SchedulerTest {
-    // The current replicated state. The option type allows taking the state for
-    // execution and then putting it back afterwards.
+    /// The current replicated state. The option type allows taking the state for
+    /// execution and then putting it back afterwards.
     state: Option<ReplicatedState>,
-    // Monotonically increasing counter used during canister creation.
+    /// Monotonically increasing counter used during canister creation.
     next_canister_id: u64,
-    // Monotonically increasing counter that specifies the current round.
+    /// Monotonically increasing counter that specifies the current round.
     round: ExecutionRound,
     /// Round summary collected form the last DKG summary block.
     round_summary: Option<ExecutionRoundSummary>,
-    // The amount of cycles that new canisters have by default.
+    /// The amount of cycles that new canisters have by default.
     initial_canister_cycles: Cycles,
-    // The id of the user that sends ingress messages.
+    /// The id of the user that sends ingress messages.
     user_id: UserId,
-    // The id of a canister that is guaranteed to be xnet.
+    /// The id of a canister that is guaranteed to be xnet.
     xnet_canister_id: CanisterId,
-    // The actual scheduler.
+    /// The actual scheduler.
     scheduler: SchedulerImpl,
-    // The fake Wasm executor.
+    /// The fake Wasm executor.
     wasm_executor: Arc<TestWasmExecutor>,
-    // Registry Execution Settings.
+    /// Registry Execution Settings.
     registry_settings: RegistryExecutionSettings,
-    // Metrics Registry.
+    /// Metrics Registry.
     metrics_registry: MetricsRegistry,
-    // Chain key subnet public keys.
+    /// Chain key subnet public keys.
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    // Available pre-signatures.
+    /// Available pre-signatures.
     idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
-    // Version of the running replica, not the registry's Entry
+    /// Version of the running replica, not the registry's Entry
     replica_version: ReplicaVersion,
 }
 
 impl std::fmt::Debug for SchedulerTest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SchedulerTest").finish()
+        f.debug_struct("SchedulerTest")
+            .field("scheduler_cores", &self.scheduler.config.scheduler_cores)
+            .field("canisters", &self.state().canister_states().len())
+            .field(
+                "compute_allocations",
+                &self
+                    .state()
+                    .canister_states()
+                    .values()
+                    .map(|state| state.compute_allocation().as_percent())
+                    .collect::<Vec<_>>(),
+            )
+            .finish()
     }
 }
 
@@ -841,26 +854,30 @@ impl SchedulerTestBuilder {
 
     pub fn build(self) -> SchedulerTest {
         let first_xnet_canister = u64::MAX / 2;
-        let routing_table = Arc::new(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: CanisterId::from(0x0), end: CanisterId::from(first_xnet_canister) } => self.own_subnet_id,
-            }).unwrap()
-        );
+        let routing_table = RoutingTable::try_from(btreemap! {
+            CanisterIdRange { start: CanisterId::from(0x0), end: CanisterId::from(first_xnet_canister) } => self.own_subnet_id,
+        }).unwrap();
 
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
         let mut registry_settings = self.registry_settings;
 
-        state.metadata.network_topology.subnets = generate_subnets(
-            vec![self.own_subnet_id, self.nns_subnet_id],
-            self.nns_subnet_id,
-            None,
-            self.own_subnet_id,
-            self.subnet_type,
-            registry_settings.subnet_size,
-            self.cost_schedule,
-        );
-        state.metadata.network_topology.routing_table = routing_table;
+        state
+            .metadata
+            .network_topology
+            .set_subnets(generate_subnets(
+                vec![self.own_subnet_id, self.nns_subnet_id],
+                self.nns_subnet_id,
+                None,
+                self.own_subnet_id,
+                self.subnet_type,
+                registry_settings.subnet_size,
+                self.cost_schedule,
+            ));
+        state
+            .metadata
+            .network_topology
+            .set_routing_table(routing_table);
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.batch_time = self.batch_time;
 
@@ -874,7 +891,7 @@ impl SchedulerTestBuilder {
             state
                 .metadata
                 .network_topology
-                .subnets
+                .subnets_mut()
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
                 .chain_keys_held
@@ -1002,14 +1019,14 @@ impl SchedulerTestBuilder {
 ///   8 instructions.
 #[derive(Clone, Debug)]
 pub(crate) struct TestMessage {
-    // The canister id is optional and is inferred from the context if not
-    // provided.
+    /// The canister id is optional and is inferred from the context if not
+    /// provided.
     canister: Option<CanisterId>,
-    // The number of instructions that execution of this message will use.
+    /// The number of instructions that execution of this message will use.
     instructions: NumInstructions,
-    // The number of 4KiB pages that execution of this message will writes to.
+    /// The number of 4KiB pages that execution of this message will writes to.
     dirty_pages: usize,
-    // The outgoing calls that will be produced by execution of this message.
+    /// The outgoing calls that will be produced by execution of this message.
     calls: Vec<TestCall>,
 }
 
@@ -1030,12 +1047,12 @@ impl TestMessage {
     }
 }
 
-// An internal helper struct to store the description of an inter-canister call.
+/// An internal helper struct to store the description of an inter-canister call.
 #[derive(Clone, Debug)]
 struct TestCall {
-    // The message to execute on the callee side.
+    /// The message to execute on the callee side.
     other_side: TestMessage,
-    // The response handler to execute on the caller side.
+    /// The response handler to execute on the caller side.
     on_response: TestMessage,
 }
 
@@ -1094,8 +1111,8 @@ pub(crate) fn instructions(instructions: u64) -> TestMessage {
     }
 }
 
-// A wrapper around the fake Wasm executor.
-// This wrapper is needs to guaranteed thread-safety.
+/// A wrapper around the fake Wasm executor.
+/// This wrapper is needed to guarantee thread-safety.
 struct TestWasmExecutor {
     core: Mutex<TestWasmExecutorCore>,
 }
@@ -1112,10 +1129,10 @@ impl TestWasmExecutor {
 }
 
 impl WasmExecutor for TestWasmExecutor {
-    // The entry point of the Wasm executor.
-    //
-    // It finds the test message corresponding to the given input and "executes"
-    // it by interpreting its description.
+    /// The entry point of the Wasm executor.
+    ///
+    /// It finds the test message corresponding to the given input and "executes"
+    /// it by interpreting its description.
     fn execute(
         self: Arc<Self>,
         input: WasmExecutionInput,
@@ -1152,15 +1169,15 @@ impl WasmExecutor for TestWasmExecutor {
     }
 }
 
-// A fake Wasm executor that works as follows:
-// - The test helper registers incoming test messages with this executor.
-// - Each registered test message has a unique `u32` id.
-// - For each registered test message, the corresponding real message
-//   is created such that the test message id is encoded in the real message:
-//   either in the payload (for calls) or in the environment of the callback
-//   (for reply/reject).
-// - In the `execute` function, the executor looks up the corresponding
-//   test message and interprets its description.
+/// A fake Wasm executor that works as follows:
+/// - The test helper registers incoming test messages with this executor.
+/// - Each registered test message has a unique `u32` id.
+/// - For each registered test message, the corresponding real message
+///   is created such that the test message id is encoded in the real message:
+///   either in the payload (for calls) or in the environment of the callback
+///   (for reply/reject).
+/// - In the `execute` function, the executor looks up the corresponding
+///   test message and interprets its description.
 struct TestWasmExecutorCore {
     messages: HashMap<u32, TestMessage>,
     system_tasks: HashMap<CanisterId, VecDeque<TestMessage>>,
@@ -1184,7 +1201,7 @@ impl TestWasmExecutorCore {
         }
     }
 
-    // Advances progress of the given paused execution by executing one slice.
+    /// Advances progress of the given paused execution by executing one slice.
     fn execute_slice(
         &mut self,
         mut paused: Box<TestPausedWasmExecution>,
@@ -1339,7 +1356,7 @@ impl TestWasmExecutorCore {
         system_state.take_changes()
     }
 
-    // Create the request and callback corresponding to the given test call.
+    /// Creates the request and callback corresponding to the given test call.
     fn perform_call(
         &mut self,
         system_state: &mut SandboxSafeSystemState,
@@ -1402,7 +1419,7 @@ impl TestWasmExecutorCore {
         Ok(())
     }
 
-    // Returns the test message corresponding to the given input.
+    /// Returns the test message corresponding to the given input.
     fn take_message(
         &mut self,
         input: &WasmExecutionInput,
@@ -1511,7 +1528,7 @@ impl TestWasmExecutorCore {
     }
 }
 
-/// Represent fake Wasm execution that can be paused and resumed.
+/// Represents a fake Wasm execution that can be paused and resumed.
 struct TestPausedWasmExecution {
     message_id: u32,
     message: TestMessage,

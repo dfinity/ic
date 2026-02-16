@@ -40,9 +40,10 @@ pub(crate) fn update_signature_request_contexts(
     // match with a pre-signature.
     for context in &mut contexts {
         if context.nonce.is_none()
+            && context.key_id().requires_pre_signatures()
             && context
-                .matched_pre_signature
-                .is_some_and(|(_, height)| height.get() + 1 == current_round.get())
+                .height()
+                .is_some_and(|height| height.get() + 1 == current_round.get())
         {
             let mut nonce = [0u8; 32];
             csprng.fill_bytes(&mut nonce);
@@ -359,7 +360,7 @@ mod tests {
             delivered_pre_signatures,
             vec![],
             pre_signature_stashes,
-            &mut Csprng::from_seed_and_purpose(
+            &mut Csprng::from_randomness_and_purpose(
                 &Randomness::new([1; 32]),
                 &ic_crypto_prng::RandomnessPurpose::ExecutionThread(1),
             ),
