@@ -377,8 +377,8 @@ mod tests {
         let delta_bytes_used = delta.bytes_used();
 
         // Act.
-        let mut metrics = TestMetrics::default();
-        main.append_delta_log(&mut delta, &mut metrics);
+        let metrics = TestMetrics::default();
+        main.append_delta_log(&mut delta, &metrics);
 
         // Assert.
         assert_eq!(
@@ -415,8 +415,8 @@ mod tests {
         let delta_bytes_used = delta.bytes_used();
 
         // Act.
-        let mut metrics = TestMetrics::default();
-        main.append_delta_log(&mut delta, &mut metrics);
+        let metrics = TestMetrics::default();
+        main.append_delta_log(&mut delta, &metrics);
 
         // Assert main log had data loss.
         assert_eq!(
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn test_canister_log_record_used_space() {
         let (size_a, size_b, size_c) = (3 * 48, 3 * 48, 4 * 48);
-        let mut metrics = TestMetrics::default();
+        let metrics = TestMetrics::default();
         // Batch A.
         let mut main = CanisterLog::new_aggregate(
             3,
@@ -454,7 +454,7 @@ mod tests {
         delta.add_record(201, b"delta #1".to_vec());
         delta.add_record(202, b"delta #2".to_vec());
         assert_eq!(delta.bytes_used(), size_b);
-        main.append_delta_log(&mut delta, &mut metrics);
+        main.append_delta_log(&mut delta, &metrics);
 
         // Batch C.
         let mut delta =
@@ -464,7 +464,7 @@ mod tests {
         delta.add_record(302, b"delta #5".to_vec());
         delta.add_record(303, b"delta #6".to_vec());
         assert_eq!(delta.bytes_used(), size_c);
-        main.append_delta_log(&mut delta, &mut metrics);
+        main.append_delta_log(&mut delta, &metrics);
 
         // Assert main log has all records and correct used space.
         assert_eq!(
