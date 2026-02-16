@@ -690,7 +690,7 @@ ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "339c9b0c678
 ic-http-certification = "3.0.3"
 ic-identity-hsm = "0.45.0"
 ic-management-canister-types = "0.5.0"
-ic-response-verification = "3.0.3"
+ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.45.0" }
