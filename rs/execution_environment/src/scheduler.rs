@@ -2284,10 +2284,10 @@ fn get_instructions_limits_for_subnet_message(
 }
 
 /// If the canister has a heartbeat method or an active global timer; and the
-/// "next scheduled method" is `Heartbeat` or, respectively, `GlobalTimer`) then
-/// it enqueues the respective task; the other of the two tasks, if applicable;
-/// and adds the canister ID to `heartbeat_and_timer_canisters`. Otherwise, or
-/// if the task at the front of the queue is a hook, does nothing.
+/// "next scheduled method" is `Heartbeat` or `GlobalTimer`, respectively; then
+/// it enqueues the respective task and the other of the two tasks, if
+/// applicable; and adds the canister ID to `heartbeat_and_timer_canisters`.
+/// Otherwise, or if the task at the front of the queue is a hook, does nothing.
 fn maybe_add_heartbeat_or_global_timer_tasks(
     canister: &mut CanisterState,
     has_heartbeat: bool,
