@@ -82,8 +82,8 @@ rust_ic_test(
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
-        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":subnet_splitting",

@@ -63,10 +63,5 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
         .map_err(|err| format!("Failed to write row: {err}"))?;
     }
 
-    println!(
-        "Number of canisters: {}",
-        replicated_state.canister_states().len()
-    );
-
     Ok(())
 }

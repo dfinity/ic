@@ -57,23 +57,26 @@ fn load_metrics_e2e_test() {
     state_machine.checkpointed_tick();
     state_machine.state_manager.flush_tip_channel();
     let state_layout = state_machine.state_manager.state_layout();
-    let checkpoint_dir = std::fs::read_dir(state_layout.checkpoints())
+    let mut checkpoint_dirs = std::fs::read_dir(state_layout.checkpoints())
         .unwrap()
-        .last()
-        .expect("There should be at least one checkpoint")
-        .unwrap()
-        .path();
+        .map(|dir| dir.unwrap().path())
+        .collect::<Vec<_>>();
+    // Note: there could be multiple checkpoints so we sort them and take the latest one.
+    checkpoint_dirs.sort();
+    let checkpoint_dir = checkpoint_dirs.last().expect(
+        "There should be at least one checkpoint because we did `checkpointed_tick()` above",
+    );
 
     // Use `state-tool` to compute the state manifest.
     let manifest_path = dir.path().join("manifest.data");
-    let content = ic_state_tool::commands::manifest::compute_manifest(&checkpoint_dir)
+    let content = ic_state_tool::commands::manifest::compute_manifest(checkpoint_dir)
         .expect("Should compute the manifest for a valid checkpoint");
     let mut output_file = std::fs::File::create(&manifest_path).unwrap();
     write!(output_file, "{content}").unwrap();
 
     // Use `state-tool` to extract the canister metrics from the replicated state.
     let load_samples_path = dir.path().join("load_samples.csv");
-    ic_state_tool::commands::canister_metrics::get(checkpoint_dir, &load_samples_path)
+    ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
         .expect("Should compute canister metrics for a valid checkpoint");
 
     // TODO(CON-1569): use a tool for finding a good split, once it's in the `ic-public` repo.
@@ -268,11 +271,6 @@ fn set_up(
 
         previous_canister_id = Some(canister_id);
     }
-
-    println!(
-        "Number of running canisters: {}",
-        state_machine.num_running_canisters()
-    );
 }
 
 fn create_canister(state_machine: &StateMachine, module: Vec<u8>) -> CanisterId {
