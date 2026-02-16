@@ -20,10 +20,12 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
     canister_state::system_state::{CyclesUseCase, PausedExecutionId},
-    metadata_state::subnet_call_context_manager::EcdsaMatchedPreSignature,
+    metadata_state::{
+        subnet_call_context_manager::EcdsaMatchedPreSignature, testing::NetworkTopologyTesting,
+    },
+    testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
@@ -3555,8 +3557,10 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(1)));
     state.put_canister_state(get_running_canister(canister_test_id(2)));
 
-    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    routing_table
+    state
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .insert(
             CanisterIdRange {
                 start: canister_test_id(0),
@@ -3628,8 +3632,10 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(2)));
     state.put_canister_state(get_running_canister(canister_test_id(100)));
 
-    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    routing_table
+    state
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .insert(
             CanisterIdRange {
                 start: canister_test_id(0),
@@ -6254,7 +6260,10 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
     assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id, own_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -6270,7 +6279,10 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates the canister to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 

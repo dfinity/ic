@@ -2766,6 +2766,8 @@ impl StateManager for StateManagerImpl {
             .as_ref()
             .expect("Missing CheckpointLayout")
             .clone();
+
+        states.tip_height = target_snapshot.height;
         std::mem::drop(states);
 
         let mut new_tip = initialize_tip(
@@ -3213,7 +3215,6 @@ impl StateManager for StateManagerImpl {
     fn commit_and_certify(
         &self,
         mut state: Self::State,
-        height: Height,
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
@@ -3222,6 +3223,11 @@ impl StateManager for StateManagerImpl {
             .api_call_duration
             .with_label_values(&["commit_and_certify"])
             .start_timer();
+
+        let height = {
+            let states = self.states.read();
+            states.tip_height.increment()
+        };
 
         self.populate_extra_metadata(&mut state, height);
 

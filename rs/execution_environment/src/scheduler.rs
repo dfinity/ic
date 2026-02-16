@@ -1272,7 +1272,7 @@ impl Scheduler for SchedulerImpl {
             // passing the number of scheduler cores is ok. It would need to be
             // updated in case the execution of subnet messages is running across
             // many threads to ensure a unique execution thread id.
-            csprng = Csprng::from_seed_and_purpose(
+            csprng = Csprng::from_randomness_and_purpose(
                 &randomness,
                 &ExecutionThread(self.config.scheduler_cores as u32),
             );
