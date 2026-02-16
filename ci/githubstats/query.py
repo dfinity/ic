@@ -875,9 +875,8 @@ def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, 
 
     cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
     columns, headers, alignments = zip(*colalignments)
-    table_md = tabulate(
-        df[list(columns)], headers=list(headers), tablefmt="github", colalign=["decimal"] + list(alignments)
-    )
+    kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
+    table_md = tabulate(df[list(columns)], headers=list(headers), tablefmt="github", **kwargs)
     readme = f"""Logs of `{test_target}`
 ===
 Generated at {timestamp} using:
@@ -972,11 +971,8 @@ def top(args):
     colalignments = filter_columns(TOP_COLUMNS, args.columns)
 
     columns, headers, alignments = zip(*colalignments)
-    print(
-        tabulate(
-            df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)
-        )
-    )
+    kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
+    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
 
 
 def last(args):
@@ -1055,11 +1051,8 @@ def last(args):
     colalignments = filter_columns(columns_metadata, args.columns)
 
     columns, headers, alignments = zip(*colalignments)
-    print(
-        tabulate(
-            df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, colalign=["decimal"] + list(alignments)
-        )
-    )
+    kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
+    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
 
 
 # argparse formatter to allow newlines in --help.
