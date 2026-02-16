@@ -554,6 +554,9 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        // One of the nodes produces blocks with invalid ingress messages which should be invaldated
+        // by the peers, so it's expected that the metric is increased.
+        .remove_metrics_to_check("consensus_invalidated_artifacts")
         .execute_from_args()?;
 
     Ok(())

@@ -61,7 +61,7 @@ const DEFAULT_LOG_LEVELS: &str = "pocket_ic_server=info,tower_http=info,axum::re
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
-static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!("mainnet-routing-table.json");
+static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!(env!("MAINNET_ROUTING_TABLE"));
 
 #[derive(Parser)]
 #[clap(name = "pocket-ic-server")]

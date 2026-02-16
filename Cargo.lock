@@ -871,6 +871,7 @@ dependencies = [
 name = "attestation_testing"
 version = "0.0.0"
 dependencies = [
+ "attestation",
  "der 0.7.9",
  "ic-interfaces-registry-mocks",
  "ic-protobuf",
@@ -1782,9 +1783,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.11.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
+checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 dependencies = [
  "serde",
 ]
@@ -1934,9 +1935,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.20"
+version = "0.10.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8037a01ec09d6c06883a38bad4f47b8d06158ad360b841e0ae5707c9884dfaf6"
+checksum = "3b64a1b8e8c368f8ffd2aaa64c7189d0a84783ba162f64de647cefedb4f12c88"
 dependencies = [
  "anyhow",
  "binread",
@@ -1966,9 +1967,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.20"
+version = "0.10.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb45f4d5eff3805598ee633dd80f8afb306c023249d34b5b7dfdc2080ea1df2e"
+checksum = "8a3ad1d26683b72c7fd16c8b2e3ebacf8785c9532389286c89971c1770ee57ce"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -2565,14 +2566,15 @@ dependencies = [
  "once_cell",
  "regex",
  "rust-ini",
+ "securefmt",
  "serde",
  "serde_json",
  "serde_with 1.14.0",
  "sev_guest",
+ "strum 0.26.3",
  "tempfile",
  "url",
  "utils",
- "walkdir",
 ]
 
 [[package]]
@@ -2581,6 +2583,7 @@ version = "1.0.0"
 dependencies = [
  "ic-types",
  "macaddr",
+ "securefmt",
  "serde",
  "serde_json",
  "serde_with 1.14.0",
@@ -2595,7 +2598,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "config_types",
- "macaddr",
  "serde",
  "serde_json",
  "url",
@@ -3661,12 +3663,12 @@ dependencies = [
 
 [[package]]
 name = "deranged"
-version = "0.3.11"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b42b6fa04a440b495c8b04d0e71b707c585f83cb9cb28cf8cd0d976c315e31b4"
+checksum = "cc3dc5ad92c2e2d1c193bbbbdf2ea477cb81331de4f3103f267ca18368b988c4"
 dependencies = [
  "powerfmt",
- "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -5480,7 +5482,6 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
- "url",
  "uuid",
  "virt",
 ]
@@ -5495,7 +5496,6 @@ dependencies = [
  "config_types",
  "indoc 1.0.9",
  "network",
- "regex",
  "utils",
 ]
 
@@ -8685,7 +8685,7 @@ dependencies = [
 name = "ic-crypto-prng"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-sha2",
+ "ic-crypto-internal-seed",
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
@@ -9603,7 +9603,6 @@ dependencies = [
  "clap 4.5.27",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-sys",
- "maplit",
  "predicates",
  "rand 0.8.5",
  "regex",
@@ -12360,6 +12359,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
+ "serde_json",
  "tempfile",
 ]
 
@@ -13576,7 +13576,7 @@ dependencies = [
 
 [[package]]
 name = "ic-secp256r1"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "hex-literal 0.4.1",
@@ -14574,6 +14574,7 @@ dependencies = [
  "anyhow",
  "assert_matches",
  "async-trait",
+ "bare_metal_deployment",
  "bincode",
  "candid",
  "canister-test",
@@ -14586,6 +14587,7 @@ dependencies = [
  "deterministic_ips",
  "dfn_candid",
  "dfn_protobuf",
+ "ed25519-dalek",
  "futures",
  "hex",
  "http 1.3.1",
@@ -16079,7 +16081,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-client-cdk"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "async-trait",
  "candid",
@@ -17134,6 +17136,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libfuzzer-sys"
+version = "0.4.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5037190e1f70cbeef565bd267599242926f724d3b8a9f510fd7e0b540cfa4404"
+dependencies = [
+ "arbitrary",
+ "cc",
+]
+
+[[package]]
 name = "libloading"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18004,6 +18016,7 @@ name = "nested"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "bare_metal_deployment",
  "canister-test",
  "ic-canister-client",
  "ic-nervous-system-common-test-keys",
@@ -18016,9 +18029,11 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
+ "nix 0.24.3",
  "prost 0.13.4",
  "regex",
  "reqwest",
+ "serde",
  "slog",
 ]
 
@@ -18457,9 +18472,9 @@ dependencies = [
 
 [[package]]
 name = "num-conv"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
+checksum = "cf97ec579c3c42f953ef76dbf8d55ac91fb219dde70e49aa4a6b7d74e9919050"
 
 [[package]]
 name = "num-format"
@@ -18683,7 +18698,7 @@ dependencies = [
 
 [[package]]
 name = "open_rootfs"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "attestation",
@@ -18691,17 +18706,16 @@ dependencies = [
  "command_runner",
  "config_tool",
  "config_types",
- "hex",
- "ic-agent 0.40.1",
+ "ic-certificate-verification",
  "ic-certification 3.0.3",
  "ic-certification-test-utils",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic_device",
  "linux_kernel_command_line",
- "mockall",
  "pem 3.0.6",
  "rand 0.8.5",
  "serde_cbor",
@@ -20984,6 +20998,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "attestation",
+ "attestation_testing",
  "build-info",
  "build-info-build",
  "canbench-rs",
@@ -21150,7 +21165,6 @@ version = "0.0.0"
 dependencies = [
  "attestation",
  "prost 0.13.4",
- "prost-build 0.13.4",
  "tonic 0.12.3",
  "tonic-build",
 ]
@@ -22165,6 +22179,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "securefmt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95d159bf5e6b8c35033c3742a00cb8e7370a217af82e5d304a0d3ce4930e41fe"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.110",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "security-framework"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22478,7 +22504,6 @@ dependencies = [
  "partition_tools",
  "regex",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -22492,7 +22517,6 @@ dependencies = [
  "partition_tools",
  "serde_json",
  "tempfile",
- "tokio",
  "url",
 ]
 
@@ -23777,9 +23801,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.37"
+version = "0.3.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35e7868883861bd0e56d9ac6efcaaca0d6d5d82a2a7ec8209ff492c07cf37b21"
+checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
 dependencies = [
  "deranged",
  "itoa",
@@ -23788,22 +23812,22 @@ dependencies = [
  "num-conv",
  "num_threads",
  "powerfmt",
- "serde",
+ "serde_core",
  "time-core",
  "time-macros",
 ]
 
 [[package]]
 name = "time-core"
-version = "0.1.2"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef927ca75afb808a4d64dd374f00a2adf8d0fcff8e7b184af886c3c87ec4a3f3"
+checksum = "7694e1cfe791f8d31026952abf09c69ca6f6fa4e1a1229e18988f06a04a12dca"
 
 [[package]]
 name = "time-macros"
-version = "0.2.19"
+version = "0.2.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2834e6017e3e5e4b9834939793b282bc03b37a3336245fa820e35e233e2a85de"
+checksum = "2e70e4c5a0e0a8a4823ad65dfe1a6930e4f4d756dcd9dd7939022b5e8c501215"
 dependencies = [
  "num-conv",
  "time-core",
@@ -25144,6 +25168,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-smith"
+version = "0.243.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "119b7dd7690868543d344025ee894271d9c66fa00d5c1cd233a5c72eb7a2ea03"
+dependencies = [
+ "anyhow",
+ "arbitrary",
+ "flagset",
+ "wasm-encoder 0.243.0",
+ "wasmparser 0.243.0",
+]
+
+[[package]]
 name = "wasm-streams"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -25154,6 +25191,39 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "wasm_fuzzers"
+version = "0.9.0"
+dependencies = [
+ "arbitrary",
+ "clap 4.5.27",
+ "futures",
+ "ic-config",
+ "ic-cycles-account-manager",
+ "ic-embedders",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-management-canister-types-private",
+ "ic-metrics",
+ "ic-registry-subnet-type",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-embedders",
+ "ic-test-utilities-state",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-wasm-types",
+ "lazy_static",
+ "libfuzzer-sys",
+ "num-traits",
+ "tokio",
+ "wasm-encoder 0.243.0",
+ "wasm-smith",
+ "wasmparser 0.243.0",
+ "wasmprinter",
+ "wasmtime",
 ]
 
 [[package]]

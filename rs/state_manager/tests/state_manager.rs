@@ -20,14 +20,14 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting};
 use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
     canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
-    metadata_state::ApiBoundaryNodeEntry,
+    metadata_state::{ApiBoundaryNodeEntry, testing::NetworkTopologyTesting},
     page_map::{PageIndex, Shard, StorageLayout},
+    testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
 use ic_state_layout::{
     CANISTER_FILE, CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE, StateLayout, WASM_FILE,
@@ -2515,11 +2515,11 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 
 /// Asserts that all error counters in the state manager are still 0
 fn assert_error_counters(metrics: &MetricsRegistry) {
+    let critical_errors = fetch_int_counter_vec(metrics, "critical_errors");
     assert_eq!(
         0,
-        fetch_int_counter_vec(metrics, "critical_errors")
-            .values()
-            .sum::<u64>()
+        critical_errors.values().sum::<u64>(),
+        "critical_errors: {critical_errors:?}"
     );
 }
 
@@ -5552,11 +5552,9 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
             },
         );
 
-        let network_topology = NetworkTopology {
-            subnets,
-            nns_subnet_id: subnet_test_id(42),
-            ..Default::default()
-        };
+        let mut network_topology = NetworkTopology::default();
+        network_topology.nns_subnet_id = subnet_test_id(42);
+        network_topology.set_subnets(subnets);
 
         state.metadata.network_topology = network_topology;
         state.metadata.node_public_keys = node_public_keys;
@@ -5962,11 +5960,9 @@ fn certified_read_can_exclude_canister_ranges() {
                 .unwrap();
         }
 
-        let network_topology = NetworkTopology {
-            subnets,
-            routing_table: Arc::new(routing_table),
-            ..Default::default()
-        };
+        let mut network_topology = NetworkTopology::default();
+        network_topology.set_subnets(subnets);
+        network_topology.set_routing_table(routing_table);
 
         state.metadata.network_topology = network_topology;
 
@@ -8143,7 +8139,10 @@ fn can_split_with_inflight_restore_snapshot() {
                 CanisterIdRange {start: CANISTER_3, end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
             })
             .unwrap();
-            state.metadata.network_topology.routing_table = Arc::new(routing_table.clone());
+            state
+                .metadata
+                .network_topology
+                .set_routing_table(routing_table.clone());
 
             // Expected state after splitting.
             let mut expected = state.clone();
@@ -8155,11 +8154,11 @@ fn can_split_with_inflight_restore_snapshot() {
             if subnet_id == SUBNET_A {
                 other_subnet_id = SUBNET_B;
                 // `SUBNET_A` should only host `CANISTER_1` (and preserve its snapshot).
-                expected.canister_states.remove(&CANISTER_2);
+                expected.remove_canister(&CANISTER_2);
             } else if subnet_id == SUBNET_B {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
-                expected.canister_states.remove(&CANISTER_1);
+                expected.remove_canister(&CANISTER_1);
                 // And the snapshot of `CANISTER_1` should be deleted.
                 expected.canister_snapshots = Default::default();
             } else {
@@ -8208,6 +8207,12 @@ fn can_split_with_inflight_restore_snapshot() {
 fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: CanisterId) {
     // Take canister out.
     let mut canister = state.take_canister_state(&old_id).unwrap();
+
+    // Migrate the canister priority.
+    state
+        .metadata
+        .subnet_schedule
+        .rename_canister(&old_id, new_id);
 
     canister.system_state.set_canister_id(new_id);
     state

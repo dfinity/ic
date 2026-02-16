@@ -1,9 +1,10 @@
 use crate::ic_wasm::{generate_exports, ic_wasm_config};
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::{WasmtimeEmbedder, wasm_utils::compile};
+use ic_embedders::{SerializedModuleBytes, WasmtimeEmbedder, wasm_utils::compile};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use wasm_smith::{Config, MemoryOffsetChoices, Module};
@@ -96,6 +97,8 @@ pub fn run_fuzzer(bytes: &[u8]) {
             .map(|(_, compilation_result)| {
                 if let Ok(mut r) = compilation_result {
                     r.0.compilation_time = Duration::from_millis(1);
+                    // SerializedModuleBytes is not required to be deterministic
+                    r.1.bytes = Arc::new(SerializedModuleBytes::empty());
                     Ok(r)
                 } else {
                     compilation_result

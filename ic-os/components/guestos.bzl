@@ -84,7 +84,6 @@ def component_files(mode):
         Label("guestos/misc/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
         Label("guestos/misc/hsm/pcscd"): "/etc/default/pcscd",
         Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
-        Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
         Label("guestos/misc/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
         Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
         Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
