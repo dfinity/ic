@@ -116,12 +116,12 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
     let mut ic = InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .with_dkg_interval_length(Height::from(cfg.nns_dkg_interval))
                 .add_nodes(cfg.nns_nodes),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .with_dkg_interval_length(Height::from(cfg.app_dkg_interval))
                 .add_nodes(cfg.source_nodes)
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs,
@@ -134,7 +134,7 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
     if cfg.app_nodes > 0 {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(cfg.dkg_interval))
+                .with_dkg_interval_length(Height::from(cfg.app_dkg_interval))
                 .add_nodes(cfg.app_nodes),
         );
     }
@@ -149,7 +149,8 @@ struct SetupConfig {
     source_nodes: usize,
     app_nodes: usize,
     unassigned_nodes: usize,
-    dkg_interval: u64,
+    nns_dkg_interval: u64,
+    app_dkg_interval: u64,
 }
 
 pub fn setup_large_chain_keys(env: TestEnv) {
@@ -160,7 +161,8 @@ pub fn setup_large_chain_keys(env: TestEnv) {
             source_nodes: APP_NODES_LARGE,
             app_nodes: 0,
             unassigned_nodes: APP_NODES_LARGE,
-            dkg_interval: DKG_INTERVAL_LARGE,
+            nns_dkg_interval: DKG_INTERVAL_LARGE,
+            app_dkg_interval: DKG_INTERVAL_LARGE,
         },
     );
 }
@@ -173,7 +175,8 @@ pub fn setup_same_nodes_huge_dkg_interval(env: TestEnv) {
             source_nodes: APP_NODES,
             app_nodes: APP_NODES,
             unassigned_nodes: 0,
-            dkg_interval: DKG_INTERVAL_HUGE,
+            nns_dkg_interval: DKG_INTERVAL,
+            app_dkg_interval: DKG_INTERVAL_HUGE,
         },
     );
 }
@@ -186,7 +189,8 @@ pub fn setup_same_nodes_chain_keys(env: TestEnv) {
             source_nodes: APP_NODES,
             app_nodes: 0,
             unassigned_nodes: APP_NODES,
-            dkg_interval: DKG_INTERVAL,
+            nns_dkg_interval: DKG_INTERVAL,
+            app_dkg_interval: DKG_INTERVAL,
         },
     );
 }
@@ -199,7 +203,8 @@ pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
             source_nodes: APP_NODES,
             app_nodes: 0,
             unassigned_nodes: APP_NODES + UNASSIGNED_NODES,
-            dkg_interval: DKG_INTERVAL,
+            nns_dkg_interval: DKG_INTERVAL,
+            app_dkg_interval: DKG_INTERVAL,
         },
     );
 }
@@ -212,7 +217,8 @@ pub fn setup_same_nodes(env: TestEnv) {
             source_nodes: APP_NODES,
             app_nodes: APP_NODES,
             unassigned_nodes: 0,
-            dkg_interval: DKG_INTERVAL,
+            nns_dkg_interval: DKG_INTERVAL,
+            app_dkg_interval: DKG_INTERVAL,
         },
     );
 }
@@ -225,7 +231,8 @@ pub fn setup_failover_nodes(env: TestEnv) {
             source_nodes: APP_NODES,
             app_nodes: APP_NODES,
             unassigned_nodes: UNASSIGNED_NODES,
-            dkg_interval: DKG_INTERVAL,
+            nns_dkg_interval: DKG_INTERVAL,
+            app_dkg_interval: DKG_INTERVAL,
         },
     );
 }
