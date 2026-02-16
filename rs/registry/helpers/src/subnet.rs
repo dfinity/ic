@@ -41,11 +41,11 @@ pub struct IngressMessageSettings {
     /// Maximum number of bytes per message. This is a hard cap, which means
     /// ingress messages greater than the limit will be dropped.
     pub max_ingress_bytes_per_message: usize,
-    /// Maximum number of messages per block. This is a hard cap, which means
-    /// blocks will never have more than this number of messages.
-    pub max_ingress_bytes_per_block: usize,
     /// Maximum number of ingress bytes per block. This is a hard cap, which means
     /// blocks will never have more than this number of ingress bytes.
+    pub max_ingress_bytes_per_block: usize,
+    /// Maximum number of messages per block. This is a hard cap, which means
+    /// blocks will never have more than this number of messages.
     pub max_ingress_messages_per_block: usize,
 }
 

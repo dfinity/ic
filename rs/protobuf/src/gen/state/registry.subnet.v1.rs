@@ -37,13 +37,22 @@ pub struct SubnetRecord {
     /// Max number of ingress messages per block.
     #[prost(uint64, tag = "18")]
     pub max_ingress_messages_per_block: u64,
-    /// Max number of ingress bytes per block. Note that this value can be larger than
-    /// \[`Self::max_block_payload_size`\].
+    /// How big an ingress payload can be *when stored in memory*. Setting this value too high
+    /// could lead to large memory usage of replicas.
+    /// Note that with hashes-in-blocks feature enabled, increasing this value doesn't necessarily mean
+    /// that we would send more data to peers when transmitting a block, because ingress messages are
+    /// stripped before disseminating blocks.
+    /// Note that this value can be larger than \[`Self::max_block_payload_size`\].
     /// A value of 0 means that the default value \[`ic_limits::MAX_INGRESS_BYTES_PER_BLOCK`\] will be
     /// used.
     #[prost(uint64, tag = "31")]
     pub max_ingress_bytes_per_block: u64,
-    /// The maximum combined size of the ingress and xnet messages that fit into a block.
+    /// Maximum size, in bytes, a \[`BatchPayload`\] can have *when sent over wire*.
+    /// Setting this value too hight could result in longer delivery times of blocks to peers, which
+    /// could lead to forks as higher rank blocks could be proposed meanwhile.
+    /// Note that with hashes-in-blocks feature enabled, the blocks sent over wire are typically smaller
+    /// than their representation in memory, because we strip some of the data before broadcasting them
+    /// to peers.
     #[prost(uint64, tag = "19")]
     pub max_block_payload_size: u64,
     /// Information on whether a feature is supported by this subnet.

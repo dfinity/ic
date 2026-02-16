@@ -60,13 +60,22 @@ pub struct SubnetConfig {
     /// maximum size of an ingress message
     pub max_ingress_bytes_per_message: u64,
 
-    /// maximum number of an ingress bytes per block
-    pub max_ingress_bytes_per_block: u64,
-
     /// maximum number of ingress message per block
     pub max_ingress_messages_per_block: u64,
 
-    /// maximum size in byte, payload can have in total
+    /// How big an ingress payload can be *when stored in memory*. Setting this value too large could lead to
+    /// large memory usage of replicas.
+    /// Note that with hashes-in-blocks feature enabled, increasing this value doesn't necessarily mean
+    /// that we would send more data to peers when transmitting a block, because ingress messages are
+    /// stripped before disseminating blocks.
+    pub max_ingress_bytes_per_block: u64,
+
+    /// Maximum size, in bytes, a [`BatchPayload`] can have *when sent over wire*.
+    /// Setting this value too high could result in longer delivery times of blocks to peers, which
+    /// could lead to forks as higher rank blocks could be proposed meanwhile.
+    /// Note that with hashes-in-blocks feature enabled, the blocks sent over wire are typically smaller
+    /// than their representation in memory, because we strip some of the data before broadcasting them
+    /// to peers.
     pub max_block_payload_size: u64,
 
     /// Notarization delay parameters.
