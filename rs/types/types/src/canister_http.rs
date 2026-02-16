@@ -477,7 +477,15 @@ impl CanisterHttpRequestContext {
             request_body.as_ref().unwrap_or(&vec![]),
         )?;
 
-        // Allow PUT and DELETE only in non-replicated mode to avoid race conditions.
+        // Allow PUT and DELETE only in non-replicated mode to avoid confusing
+        // race conditions that may occur.
+        // For example, if first a DELETE outcall for resource R is made,
+        // directly followed by a PUT or POST outcall for R, in replicated
+        // mode it may happen that R is actually deleted after the PUT/POST
+        // outcall has finished, because the IC does not necessarily wait for
+        // all outcalls to complete before a result is delivered back to the
+        // canister: The IC only waits for sufficient calls to complete to
+        // reach consensus on the result.
         if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
             && args.is_replicated != Some(false)
         {
