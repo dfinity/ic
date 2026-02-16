@@ -867,7 +867,7 @@ def top(args):
         else (None, None)
     )
     if value is not None:
-        if args.order_by in ("impact", "duration_p90"):
+        if args.order_by in ("impact", "total_duration", "duration_p90"):
             try:
                 value = pd.Timedelta(value).to_pytimedelta()
             except ValueError as e:
@@ -905,6 +905,7 @@ def top(args):
         df = pd.DataFrame(cursor, columns=headers)
 
     df["impact"] = df["impact"].apply(normalize_duration)
+    df["total_duration"] = df["total_duration"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
 
     # Find the CODEOWNERS for each test target:
@@ -938,6 +939,7 @@ def top(args):
         ("timeout%", "decimal"),
         ("fail%", "decimal"),
         ("impact", "right"),
+        ("total_duration", "right"),
         ("duration_p90", "right"),
         ("owners", "left"),
     ]
@@ -1127,6 +1129,7 @@ Examples:
             "timeout%",
             "fail%",
             "impact",
+            "total_duration",
             "duration_p90",
         ],
         help="""COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to.
@@ -1140,7 +1143,8 @@ non_success%%:\tPercentage of non-successful runs in the specified period
 flaky%%:\t\tPercentage of flaky runs in the specified period
 timeout%%:\tPercentage of timed-out runs in the specified period
 fail%%:\t\tPercentage of failed runs in the specified period
-impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures
+impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures in the specified period
+total_duration:\ttotal * duration_p90. A rough estimate on the total duration of all runs in the specified period
 duration_p90:\t90th percentile duration of all runs in the specified period""",
     )
 
