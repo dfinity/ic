@@ -2828,7 +2828,7 @@ impl PocketIc {
                     let subnet_id = metadata.own_subnet_id;
                     let ranges: Vec<_> = metadata
                         .network_topology
-                        .routing_table
+                        .routing_table()
                         .ranges(subnet_id)
                         .iter()
                         .cloned()
