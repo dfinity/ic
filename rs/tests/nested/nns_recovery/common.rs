@@ -263,7 +263,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
     let f = (subnet_size - 1) / 3;
     assert!(
-        f + 1 <= cfg.num_broken_nodes && cfg.num_broken_nodes <= subnet_size,
+        f < cfg.num_broken_nodes && cfg.num_broken_nodes <= subnet_size,
         "Number of broken nodes must be between f+1 and the subnet size, but got {} broken nodes with f={}",
         cfg.num_broken_nodes,
         f
@@ -320,7 +320,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 .join("data")
                 .join(IC_REGISTRY_LOCAL_STORE);
 
-            std::fs::create_dir_all(local_store_path_dest).unwrap();
+            std::fs::create_dir_all(&local_store_path_dest).unwrap();
             let ssh_helper = RecoverySshHelper::new(
                 logger.clone(),
                 RecoverySshUser::Admin,
