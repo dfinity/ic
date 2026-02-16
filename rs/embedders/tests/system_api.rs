@@ -27,6 +27,7 @@ use ic_types::{
     CanisterTimer, CountBytes, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumInstructions, PrincipalId,
     SubnetId, Time,
     batch::CanisterCyclesCostSchedule,
+    canister_log::CanisterLogMetrics,
     messages::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, RejectContext, RequestOrResponse,
     },
@@ -259,6 +260,12 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
     // the semantics of "*" is to cover all modes except for "s"
     matrix.get(&api_type).unwrap().contains(&context)
         || (context != "s" && matrix.get(&api_type).unwrap().contains(&"*"))
+}
+
+struct NoOpMetrics {}
+impl CanisterLogMetrics for NoOpMetrics {
+    // No-op.
+    fn observe_delta_log_size(&self, _size: usize) {}
 }
 
 fn api_availability_test(
@@ -1230,6 +1237,7 @@ fn certified_data_set() {
             &default_network_topology(),
             subnet_test_id(1),
             false,
+            &NoOpMetrics {},
             &no_op_logger(),
         )
         .unwrap();
@@ -1417,6 +1425,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             &default_network_topology(),
             subnet_test_id(1),
             false,
+            &NoOpMetrics {},
             &no_op_logger(),
         )
         .unwrap();
@@ -1569,6 +1578,7 @@ fn helper_test_on_low_wasm_memory(
             &default_network_topology(),
             subnet_test_id(1),
             false,
+            &NoOpMetrics {},
             &no_op_logger(),
         )
         .unwrap();
@@ -1790,6 +1800,7 @@ fn push_output_request_respects_memory_limits() {
             &default_network_topology(),
             subnet_test_id(1),
             false,
+            &NoOpMetrics {},
             &no_op_logger(),
         )
         .unwrap();
@@ -1906,6 +1917,7 @@ fn push_output_request_oversized_request_memory_limits() {
             &default_network_topology(),
             subnet_test_id(1),
             false,
+            &NoOpMetrics {},
             &no_op_logger(),
         )
         .unwrap();
@@ -1943,6 +1955,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
             &default_network_topology(),
             subnet_test_id(1),
             false,
+            &NoOpMetrics {},
             &no_op_logger(),
         )
         .unwrap();
@@ -2192,6 +2205,7 @@ fn ic0_call_with_best_effort_response() {
                 &default_network_topology(),
                 own_subnet_id,
                 false,
+                &NoOpMetrics {},
                 &no_op_logger(),
             )
             .unwrap();

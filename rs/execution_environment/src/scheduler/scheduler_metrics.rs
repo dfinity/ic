@@ -37,7 +37,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_binary_size: Histogram,
     pub(super) canister_log_memory_usage_v2: Histogram,
     pub(super) canister_log_memory_usage_v3: Histogram,
-    pub(super) canister_log_delta_memory_usage: Histogram,
     pub(super) canister_wasm_memory_usage: Histogram,
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
@@ -184,12 +183,6 @@ impl SchedulerMetrics {
                 "Canisters log memory usage distribution in bytes.",
                 // 4 KiB (2^12) .. 8 GiB (2^33), plus zero — 23 total buckets (0 + 22 powers).
                 binary_buckets_with_zero(12, 33)
-            ),
-            canister_log_delta_memory_usage: metrics_registry.histogram(
-                "canister_log_delta_memory_usage_bytes",
-                "Canisters log delta (per single execution) memory usage distribution in bytes.",
-                // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
-                binary_buckets_with_zero(10, 23)
             ),
             canister_wasm_memory_usage: memory_histogram(
                 "canister_wasm_memory_usage_bytes",

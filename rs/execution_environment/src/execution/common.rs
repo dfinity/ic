@@ -3,7 +3,7 @@
 
 use crate::execution_environment::ExecutionResponse;
 use crate::{
-    ExecuteMessageResult, RoundLimits, as_round_instructions,
+    ExecuteMessageResult, HypervisorMetrics, RoundLimits, as_round_instructions,
     canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
 };
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -444,6 +444,7 @@ fn try_apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     is_composite_query: bool,
+    metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
@@ -460,6 +461,7 @@ fn try_apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
+        metrics,
         log,
     )
 }
@@ -483,6 +485,7 @@ pub fn apply_canister_state_changes(
     time: Time,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
+    metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
     state_changes_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
@@ -509,6 +512,7 @@ pub fn apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
+        metrics,
         log,
     ) {
         Ok(request_stats) => {
