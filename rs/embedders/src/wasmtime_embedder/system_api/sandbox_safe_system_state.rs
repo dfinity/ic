@@ -398,7 +398,7 @@ impl SystemStateModifications {
         let mut callback_changes = BTreeMap::new();
         let nns_subnet_id = network_topology.nns_subnet_id;
         let subnet_ids: BTreeSet<PrincipalId> =
-            network_topology.subnets.keys().map(|s| s.get()).collect();
+            network_topology.subnets().keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
             if msg.receiver == IC_00 {
                 match Self::validate_sender_canister_version(&msg, system_state.canister_version())
@@ -784,7 +784,7 @@ impl SandboxSafeSystemState {
         // slots across any queue to a subnet explicitly, the bitcoin canisters or
         // IC_00 itself.
         let mut ic00_aliases: BTreeSet<CanisterId> = network_topology
-            .subnets
+            .subnets()
             .keys()
             .map(|id| CanisterId::unchecked_from_principal(id.get()))
             .collect();
@@ -1410,7 +1410,7 @@ impl SandboxSafeSystemState {
     pub fn get_root_key(&self) -> Vec<u8> {
         let root_subnet_id = self.network_topology.nns_subnet_id;
         self.network_topology
-            .subnets
+            .subnets()
             .get(&root_subnet_id)
             .map(|subnet_topology| subnet_topology.public_key.clone())
             .unwrap_or(IC_ROOT_KEY.to_vec())
@@ -1439,7 +1439,7 @@ impl SandboxSafeSystemState {
                     // unwraps: we got the subnet_id from the same collection
                     self.network_topology.get_subnet_size(subnet_id).unwrap(),
                     self.network_topology
-                        .subnets
+                        .subnets()
                         .get(subnet_id)
                         .unwrap()
                         .cost_schedule,
