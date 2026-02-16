@@ -3958,7 +3958,6 @@ pub mod test {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
-                membership,
                 mut pool,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
@@ -3967,19 +3966,8 @@ pub mod test {
 
             let mut block = pool.make_next_block();
 
-            // Find a node that is NOT a block maker at this height.
-            let pool_reader = PoolReader::new(&pool);
-            let prev_beacon = pool_reader
-                .get_random_beacon(block.height().decrement())
-                .unwrap();
-            let incorrect_signer = membership
-                .get_nodes(block.height())
-                .unwrap()
-                .into_iter()
-                .find(|node| {
-                    membership.get_block_maker_rank(block.height(), &prev_beacon, *node) == Ok(None)
-                })
-                .expect("Should find a non-blockmaker node");
+            // Use a node that is NOT a block maker at this height.
+            let incorrect_signer = pool.get_block_maker_by_rank(block.height(), None);
 
             // Insert notarization into unvalidated pool, not the block
             let mut notarization = Notarization::fake(NotarizationContent::new(
