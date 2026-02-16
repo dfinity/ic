@@ -328,10 +328,12 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 false,
                 Some(ssh_admin_priv_key_path.clone()),
             );
-            ssh_helper.rsync(
-                ssh_helper.remote_path(&local_store_path_src),
-                &local_store_path_dest,
-            );
+            ssh_helper
+                .rsync(
+                    ssh_helper.remote_path(&local_store_path_src),
+                    &local_store_path_dest,
+                )
+                .expect("Failed to manually initialize the local store of ic-recovery by downloading it from a node");
         }
         Some(healthy_node) => {
             assert_subnet_is_broken(
