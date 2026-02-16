@@ -285,7 +285,9 @@ def filter_columns(columns_metadata, columns_list):
     return result
 
 
-def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs: bool, df: pd.DataFrame):
+def download_and_process_logs(
+    logs_base_dir, test_target: str, download_console_logs: bool, download_ic_logs: bool, df: pd.DataFrame
+):
     """
     Download the logs of all runs of test_target in the given DataFrame,
     save them to the specified logs_base_dir
@@ -329,7 +331,7 @@ def download_and_process_logs(logs_base_dir, test_target: str, download_ic_logs:
             download_to_path = attempt_dir / f"{attempt_status}.log"
             download_tasks.append((row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path))
 
-    execute_download_tasks(download_tasks, test_target, output_dir, download_ic_logs, df)
+    execute_download_tasks(download_tasks, test_target, output_dir, download_console_logs, download_ic_logs, df)
 
     write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
 
@@ -426,7 +428,12 @@ def convert_download_url(uri, cluster) -> str:
 
 
 def execute_download_tasks(
-    download_tasks: list, test_target: str, output_dir: Path, download_ic_logs: bool, df: pd.DataFrame
+    download_tasks: list,
+    test_target: str,
+    output_dir: Path,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+    df: pd.DataFrame,
 ):
     print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
@@ -459,6 +466,7 @@ def execute_download_tasks(
                             attempt_dir,
                             download_to_path,
                             df,
+                            download_console_logs,
                             download_ic_logs,
                             download_console_log_executor,
                             download_ic_log_executor,
@@ -509,6 +517,7 @@ def process_log(
     attempt_dir: Path,
     download_to_path: Path,
     df: pd.DataFrame,
+    download_console_logs: bool,
     download_ic_logs: bool,
     download_console_log_executor: ThreadPoolExecutor,
     download_ic_log_executor: ThreadPoolExecutor,
@@ -565,16 +574,17 @@ def process_log(
                 except (ValueError, dacite.DaciteError):
                     continue
 
-        if len(vm_console_links) > 0:
-            console_logs_dir = attempt_dir / "console_logs"
-            console_logs_dir.mkdir(exist_ok=True)
-        for vm_name, console_link_raw in vm_console_links.items():
-            # Fork threads for downloading console logs from Farm concurrently to speed up the whole process.
-            download_console_log_executor.submit(
-                download_console_log,
-                console_link_raw,
-                console_logs_dir / f"{vm_name}.log",
-            )
+        if download_console_logs:
+            if len(vm_console_links) > 0:
+                console_logs_dir = attempt_dir / "console_logs"
+                console_logs_dir.mkdir(exist_ok=True)
+            for vm_name, console_link_raw in vm_console_links.items():
+                # Fork threads for downloading console logs from Farm concurrently to speed up the whole process.
+                download_console_log_executor.submit(
+                    download_console_log,
+                    console_link_raw,
+                    console_logs_dir / f"{vm_name}.log",
+                )
 
         if group_name is not None and download_ic_logs:
             # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
@@ -1098,7 +1108,9 @@ def last(args):
     df["duration"] = df["duration"].apply(normalize_duration)
 
     if not args.skip_download:
-        download_and_process_logs(args.logs_base_dir, args.test_target, args.download_ic_logs, df)
+        download_and_process_logs(
+            args.logs_base_dir, args.test_target, args.download_console_logs, args.download_ic_logs, df
+        )
 
     columns_metadata = LAST_COLUMNS
     # When downlods are skipped we don't have any error information so skip the "errors" column.
@@ -1292,6 +1304,12 @@ Examples:
 
     last_runs_parser.add_argument(
         "--skip-download", action="store_true", help="Don't download logs of the runs, just show the table"
+    )
+
+    last_runs_parser.add_argument(
+        "--download-console-logs",
+        action="store_true",
+        help="Download console logs from farm.dfinity.systems for every VM in system-tests",
     )
 
     last_runs_parser.add_argument(
