@@ -8685,7 +8685,7 @@ dependencies = [
 name = "ic-crypto-prng"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-sha2",
+ "ic-crypto-internal-seed",
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
