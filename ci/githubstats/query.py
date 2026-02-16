@@ -430,9 +430,13 @@ def execute_download_tasks(
 ):
     print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
 
-    # This executor is used for downloading IC logs from ElasticSearch concurrently.
-    # Limit to 10 concurrent downloads to not overwhelm ElasticSearch.
-    with ThreadPoolExecutor(max_workers=10) as download_ic_log_executor:
+    # These executors are used for downloading IC logs from ElasticSearch
+    # and console logs from Farm concurrently. Limit to 10 concurrent downloads
+    # to not overwhelm both services.
+    with (
+        ThreadPoolExecutor(max_workers=10) as download_ic_log_executor,
+        ThreadPoolExecutor(max_workers=10) as download_console_log_executor,
+    ):
 
         def download_log(task):
             row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path = task
@@ -456,6 +460,7 @@ def execute_download_tasks(
                             download_to_path,
                             df,
                             download_ic_logs,
+                            download_console_log_executor,
                             download_ic_log_executor,
                         ),
                     )
@@ -505,6 +510,7 @@ def process_log(
     download_to_path: Path,
     df: pd.DataFrame,
     download_ic_logs: bool,
+    download_console_log_executor: ThreadPoolExecutor,
     download_ic_log_executor: ThreadPoolExecutor,
 ):
     """
@@ -519,6 +525,7 @@ def process_log(
     group_name = None
     summary = None
     vm_ipv6s = {}
+    vm_console_links = {}
 
     # system-tests have structured logs with JSON objects that we can parse to get more detailed error summaries
     # and to determine the group (testnet) name for downloading the IC logs from ElasticSearch.
@@ -549,11 +556,25 @@ def process_log(
                         case "farm_vm_created_event":
                             farm_vm_created = FarmVMCreated.from_dict(log_event.body)
                             vm_ipv6s[farm_vm_created.vm_name] = farm_vm_created.ipv6
+                        case "vm_console_link_created_event":
+                            console_link = ConsoleLink.from_dict(log_event.body)
+                            vm_console_links[console_link.vm_name] = f"{console_link.url}raw"
                         case "json_report_created_event":
                             summary = SystemGroupSummary.from_dict(log_event.body)
                             break
                 except (ValueError, dacite.DaciteError):
                     continue
+
+        if len(vm_console_links) > 0:
+            console_logs_dir = attempt_dir / "console_logs"
+            console_logs_dir.mkdir(exist_ok=True)
+        for vm_name, console_link_raw in vm_console_links.items():
+            # Fork threads for downloading console logs from Farm concurrently to speed up the whole process.
+            download_console_log_executor.submit(
+                download_console_log,
+                console_link_raw,
+                console_logs_dir / f"{vm_name}.log",
+            )
 
         if group_name is not None and download_ic_logs:
             # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
@@ -626,6 +647,14 @@ class FarmVMCreated(DataClassJsonMixin):
 
 
 @dataclass
+class ConsoleLink(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::farm::ConsoleLink`"""
+
+    url: str
+    vm_name: str
+
+
+@dataclass
 class TaskReport:
     """Matches the Rust struct `ic_system_test_driver::report::TaskReport`"""
 
@@ -691,6 +720,24 @@ def shorten(msg: str, max_length: int) -> str:
     return msg
 
 
+def download_console_log(console_link_raw: str, output_path: Path):
+    """Download the log of the console of a Farm VM"""
+    try:
+        response = requests.get(console_link_raw, timeout=60, stream=True)
+        if response.ok:
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print(f"Downloaded console log to {output_path}", file=sys.stderr)
+        else:
+            print(
+                f"Failed to download console log from {console_link_raw} with HTTP {response.status_code}: '{response.text.strip()}'",
+                file=sys.stderr,
+            )
+    except Exception as e:
+        print(f"Error downloading console log from {console_link_raw}: {e}", file=sys.stderr)
+
+
 def download_and_process_ic_logs_for_system_test(
     attempt_dir: Path,
     group_name: str,
@@ -703,15 +750,17 @@ def download_and_process_ic_logs_for_system_test(
 
     # Start processing thread
     processing_thread = threading.Thread(
-        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, hits_queue, vm_ipv6s)
+        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, group_name, hits_queue, vm_ipv6s)
     )
     processing_thread.start()
 
     gte = test_start_time.isoformat()
     lte = test_end_time.isoformat()
 
+    max_size = 10000
+
     elasticsearch_query = {
-        "size": 10000,
+        "size": max_size,
         "query": {
             "bool": {
                 "must": [
@@ -727,7 +776,7 @@ def download_and_process_ic_logs_for_system_test(
                 ]
             }
         },
-        "_source": ["MESSAGE", "ic_subnet", "ic_node", "timestamp"],
+        "_source": ["timestamp", "ic_node", "MESSAGE"],
         # Sort by timestamp, using _doc as a tie-breaker for stable pagination.
         "sort": [{"timestamp": {"order": "asc", "format": "strict_date_optional_time_nanos"}}, {"_doc": "asc"}],
     }
@@ -740,7 +789,7 @@ def download_and_process_ic_logs_for_system_test(
         try:
             while True:
                 print(
-                    f"Downloading IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
+                    f"Downloading a maximum  {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
                     file=sys.stderr,
                 )
                 response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
@@ -757,7 +806,7 @@ def download_and_process_ic_logs_for_system_test(
                 # Push hits to queue for concurrent processing
                 hits_queue.put(hits)
 
-                if len(hits) < elasticsearch_query["size"]:
+                if len(hits) < max_size:
                     break
 
                 last_hit = hits[-1]
@@ -777,49 +826,57 @@ def download_and_process_ic_logs_for_system_test(
 
 def process_elasticsearch_hits_from_queue(
     attempt_dir: Path,
+    group_name: str,
     hits_queue: Queue,
     vm_ipv6s: dict[str, str],
 ):
     """Consumer thread: Process ElasticSearch hits from queue and write IC node log files."""
-    logs_by_node = {}
+    log_file_by_node = {}
 
     ic_logs_dir = attempt_dir / "ic_logs"
     ic_logs_dir.mkdir(exist_ok=True)
 
-    while True:
-        hits = hits_queue.get()
-        if hits is None:
-            break
-        for hit in hits:
-            # Sentinel value signals end of download
-            if hit is None:
+    try:
+        while True:
+            hits = hits_queue.get()
+            if hits is None:
                 break
 
-            # Process the hit
-            if "_source" not in hit:
-                continue
-            source = hit["_source"]
-            if "ic_node" not in source or "timestamp" not in source or "MESSAGE" not in source:
-                continue
+            print(
+                f"Processing and writing {len(hits)} IC logs for attempt {attempt_dir.name} for testnet {group_name} ...",
+                file=sys.stderr,
+            )
+            for hit in hits:
+                # Sentinel value signals end of download
+                if hit is None:
+                    break
 
-            node = source["ic_node"]
-            try:
-                timestamp = datetime.strptime(source["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
-            except ValueError:
-                continue
+                # Process the hit
+                if "_source" not in hit:
+                    continue
+                source = hit["_source"]
+                if "ic_node" not in source or "timestamp" not in source or "MESSAGE" not in source:
+                    continue
 
-            logs_by_node.setdefault(node, []).append((timestamp, source["MESSAGE"]))
+                node = source["ic_node"]
+                try:
+                    timestamp = datetime.strptime(source["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
+                except ValueError:
+                    continue
 
-    # Write all log files after processing all hits
-    for node, messages in logs_by_node.items():
-        log_file = ic_logs_dir / f"{node}.log"
-        if node in vm_ipv6s:
-            ipv6_symlink_path = ic_logs_dir / f"{vm_ipv6s[node]}.log"
-            ipv6_symlink_path.symlink_to(log_file.name)
-        log_file.write_text(
-            "\n".join([f"{timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')} {msg}" for timestamp, msg in messages])
-        )
-        print(f"Downloaded {len(messages)} log entries for node {node} to {log_file}", file=sys.stderr)
+                if node in log_file_by_node:
+                    log_file = log_file_by_node[node]
+                else:
+                    log_file_name = f"{node}.log"
+                    log_file = open(ic_logs_dir / log_file_name, "w", encoding="utf-8")
+                    log_file_by_node[node] = log_file
+                    if node in vm_ipv6s:
+                        (ic_logs_dir / f"{vm_ipv6s[node]}.log").symlink_to(log_file_name)
+
+                log_file.write(f"{timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')} {source["MESSAGE"]}\n")
+    finally:
+        for log_file in log_file_by_node.values():
+            log_file.close()
 
 
 # fmt: off
@@ -969,7 +1026,6 @@ def top(args):
 
     # Apply column filtering if --columns is specified, otherwise use all columns
     colalignments = filter_columns(TOP_COLUMNS, args.columns)
-
     columns, headers, alignments = zip(*colalignments)
     kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
     print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
@@ -981,17 +1037,19 @@ def last(args):
     that have either succeeded, flaked, timed out or failed
     in the specified period.
     """
-    overall_statuses = []
+    overall_statuses = set()
     if args.success:
-        overall_statuses.append(1)
+        overall_statuses.add(1)
     if args.flaky:
-        overall_statuses.append(2)
+        overall_statuses.add(2)
     if args.timedout:
-        overall_statuses.append(3)
+        overall_statuses.add(3)
     if args.failed:
-        overall_statuses.append(4)
+        overall_statuses.add(4)
+    if args.non_success:
+        overall_statuses.update({2, 3, 4})
     if len(overall_statuses) == 0:
-        overall_statuses = [1, 2, 3, 4]
+        overall_statuses = {1, 2, 3, 4}
 
     query = sql.SQL((THIS_SCRIPT_DIR / "last.sql").read_text()).format(
         test_target=sql.Literal(args.test_target),
@@ -1049,7 +1107,6 @@ def last(args):
 
     # Apply column filtering if --columns is specified, otherwise use all columns
     colalignments = filter_columns(columns_metadata, args.columns)
-
     columns, headers, alignments = zip(*colalignments)
     kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
     print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
@@ -1226,6 +1283,9 @@ Examples:
 """,
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
+    last_runs_parser.add_argument(
+        "--non_success", action="store_true", help="Include non-successful runs (i.e. flaky, failed and timed-out)"
+    )
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
     last_runs_parser.add_argument("--failed", action="store_true", help="Include failed runs")
     last_runs_parser.add_argument("--timedout", action="store_true", help="Include timed-out runs")
