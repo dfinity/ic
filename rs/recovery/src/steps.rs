@@ -452,8 +452,12 @@ impl Step for ReplayStep {
     fn exec(&self) -> RecoveryResult<()> {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
-        let checkpoint_height =
+        let checkpoint_height = if checkpoint_path.exists() {
             Recovery::remove_all_but_highest_checkpoints(&checkpoint_path, &self.logger)?;
+        } else {
+            // If there is no checkpoint, we assume the replay starts from genesis
+            Height::from(0)
+        };
 
         let state_params = block_on(replay_helper::replay(
             self.subnet_id,
