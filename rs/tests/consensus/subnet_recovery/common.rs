@@ -252,7 +252,7 @@ pub fn test_provisioning_write_access(env: TestEnv) {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: false,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
             provision_write_access: true,
         },
