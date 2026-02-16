@@ -222,7 +222,7 @@ impl ValidFulfillSubnetRentalRequest {
             1
         });
         let create_subnet_payload = Encode!(&CreateSubnetPayload {
-            // This is the main thing that distinguishes this subnet from "normal" subnets.
+            // These are the main things that distinguish this subnet from "normal" subnets.
             canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Free),
             subnet_admins: Some(vec![self.user]),
 
