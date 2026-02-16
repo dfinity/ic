@@ -1373,7 +1373,7 @@ impl CanisterManager {
             });
         }
 
-        if state.canister_states.contains_key(&new_canister_id) {
+        if state.canister_states().contains_key(&new_canister_id) {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
 

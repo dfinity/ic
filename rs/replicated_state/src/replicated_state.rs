@@ -9,7 +9,9 @@ use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
 use crate::metadata_state::{IngressHistoryState, Stream, StreamMap, SystemMetadata};
-use crate::{CanisterPriority, CanisterQueues, CanisterState, DroppedMessageMetrics};
+use crate::{
+    CanisterPriority, CanisterQueues, CanisterState, DroppedMessageMetrics, SubnetSchedule,
+};
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
@@ -401,9 +403,9 @@ impl MemoryTaken {
 // our OP layer.
 #[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct ReplicatedState {
-    /// States of all canisters, indexed by canister ids.
+    /// Canister states indexed by canister ID.
     #[validate_eq(CompareWithValidateEq)]
-    pub canister_states: BTreeMap<CanisterId, CanisterState>,
+    canister_states: BTreeMap<CanisterId, CanisterState>,
 
     /// Deterministic processing metadata.
     #[validate_eq(CompareWithValidateEq)]
@@ -531,24 +533,10 @@ impl ReplicatedState {
         self.canister_states.remove(canister_id)
     }
 
-    /// Permanently removes the canister and its scheduling priority from the subnet
-    /// schedule.
-    pub fn remove_canister(&mut self, canister_id: &CanisterId) -> Option<CanisterState> {
-        self.metadata.subnet_schedule.remove(canister_id);
-        self.canister_states.remove(canister_id)
-    }
-
-    pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, CanisterState> {
-        std::mem::take(&mut self.canister_states)
-    }
-
-    pub fn routing_table(&self) -> Arc<RoutingTable> {
-        Arc::clone(&self.metadata.network_topology.routing_table)
-    }
-
-    /// Insert the canister state into the replicated state. If a canister
-    /// already exists for the given canister ID, it will be replaced. It is the
-    /// responsibility of the caller of this function to ensure that any
+    /// Inserts the canister state into the replicated state.
+    ///
+    /// If a canister already exists for the given canister ID, it will be replaced.
+    /// It is the responsibility of the caller of this function to ensure that any
     /// relevant state associated with the older canister state are properly
     /// cleaned up.
     pub fn put_canister_state(&mut self, canister_state: CanisterState) {
@@ -559,6 +547,27 @@ impl ReplicatedState {
             .get_mut(canister_state.canister_id());
         self.canister_states
             .insert(canister_state.canister_id(), canister_state);
+    }
+
+    /// Permanently removes the canister and its scheduling priority from the subnet
+    /// schedule.
+    pub fn remove_canister(&mut self, canister_id: &CanisterId) -> Option<CanisterState> {
+        self.metadata.subnet_schedule.remove(canister_id);
+        self.canister_states.remove(canister_id)
+    }
+
+    /// Returns a reference to the canister states.
+    pub fn canister_states(&self) -> &BTreeMap<CanisterId, CanisterState> {
+        &self.canister_states
+    }
+
+    /// Takes the canister states out of the replicated state, with the expectation
+    /// that they will be replaced using `put_canister_states()`.
+    ///
+    /// Intended to work around borrow checker limitations (e.g. routing messages
+    /// from one canister's output queues into another canister's input queues).
+    pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, CanisterState> {
+        std::mem::take(&mut self.canister_states)
     }
 
     /// Replaces the content of `self.canister_states` with the provided `canisters`.
@@ -618,6 +627,28 @@ impl ReplicatedState {
         self.metadata.subnet_schedule.get(canister_id)
     }
 
+    /// Returns a mutable reference to the scheduling priority for the given
+    /// canister, inserting the default priority if not found.
+    pub fn canister_priority_mut(&mut self, canister_id: CanisterId) -> &mut CanisterPriority {
+        self.metadata.subnet_schedule.get_mut(canister_id)
+    }
+
+    /// Returns mutable references to the canister states and subnet schedule.
+    ///
+    /// Intended to work around borrow checker limitations and allow inspecting
+    /// and/or mutating the two collections concurrently.
+    pub fn canisters_and_schedule_mut(
+        &mut self,
+    ) -> (
+        &mut BTreeMap<CanisterId, CanisterState>,
+        &mut SubnetSchedule,
+    ) {
+        (
+            &mut self.canister_states,
+            &mut self.metadata.subnet_schedule,
+        )
+    }
+
     /// Time complexity: `O(n)` in the number of active canisters.
     pub fn canister_accumulated_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
         self.canister_states
@@ -644,6 +675,10 @@ impl ReplicatedState {
 
     pub fn system_metadata(&self) -> &SystemMetadata {
         &self.metadata
+    }
+
+    pub fn routing_table(&self) -> Arc<RoutingTable> {
+        Arc::clone(&self.metadata.network_topology.routing_table)
     }
 
     /// Returns the cost schedule of this subnet.
@@ -962,11 +997,10 @@ impl ReplicatedState {
             self.subnet_queues.push_ingress(msg);
         } else {
             let canister_id = msg.receiver;
-            let canister = match self.canister_states.get_mut(&canister_id) {
-                Some(canister) => canister,
+            match self.canister_state_mut(&canister_id) {
+                Some(canister) => canister.push_ingress(msg),
                 None => return Err(IngressInductionError::CanisterNotFound(canister_id)),
-            };
-            canister.push_ingress(msg);
+            }
         }
         Ok(())
     }
@@ -976,7 +1010,7 @@ impl ReplicatedState {
     /// Returns `true` if the recipient canister exists and was credited, `false`
     /// otherwise.
     pub fn credit_refund(&mut self, refund: &Refund) -> bool {
-        if let Some(canister) = self.canister_states.get_mut(&refund.recipient()) {
+        if let Some(canister) = self.canister_state_mut(&refund.recipient()) {
             canister
                 .system_state
                 .add_cycles(refund.amount(), CyclesUseCase::NonConsumed);
@@ -1066,7 +1100,7 @@ impl ReplicatedState {
     /// See `IngressQueue::filter_messages()` for documentation.
     pub fn filter_subnet_queues_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
-        F: FnMut(&Arc<Ingress>) -> bool,
+        F: FnMut(&Ingress) -> bool,
     {
         self.subnet_queues.filter_ingress_messages(filter)
     }

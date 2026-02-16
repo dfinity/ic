@@ -83,9 +83,9 @@ const UNASSIGNED_NODES: usize = 4;
 
 const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
-/// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
-/// plus 4 to make checkpoint heights more predictable
-const DKG_INTERVAL_LARGE: u64 = 124;
+/// 40 dealings * 4 transcripts being reshared (high/local, low/local, high/remote, low/remote)
+/// plus 14 as a safety margin
+const DKG_INTERVAL_LARGE: u64 = 4 * NNS_NODES_LARGE as u64 + 14;
 
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
@@ -331,9 +331,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
 
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let nns_canister = block_on(MessageCanister::new(
+    let nns_canister = block_on(MessageCanister::new_with_retries(
         &agent,
         nns_node.effective_canister_id(),
+        &logger,
+        Duration::from_secs(120),
+        Duration::from_secs(1),
     ));
 
     // The first application subnet encountered during iteration is the source subnet because it was inserted first.

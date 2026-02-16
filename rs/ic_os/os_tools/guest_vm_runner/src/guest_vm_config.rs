@@ -49,7 +49,6 @@ pub fn assemble_config_media(
     .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
-
     bootstrap_options.build_bootstrap_config_image(media_path)?;
 
     println!(
@@ -60,12 +59,14 @@ pub fn assemble_config_media(
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn make_bootstrap_options(
     hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
 ) -> Result<BootstrapOptions> {
+    #[allow(unused_mut)]
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(guestos_config),
+        guestos_config: Some(guestos_config.clone()),
         ..Default::default()
     };
 
@@ -75,16 +76,6 @@ fn make_bootstrap_options(
             bootstrap_options.accounts_ssh_authorized_keys =
                 Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
         }
-
-        let nns_key_override_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
-        if nns_key_override_path.exists() {
-            bootstrap_options.nns_public_key_override = Some(nns_key_override_path);
-        }
-    }
-
-    if hostos_config.icos_settings.use_node_operator_private_key {
-        bootstrap_options.node_operator_private_key =
-            Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
     Ok(bootstrap_options)
@@ -215,7 +206,6 @@ mod tests {
     fn test_make_bootstrap_options() {
         let mut config = create_test_hostos_config();
         config.icos_settings.use_ssh_authorized_keys = true;
-        config.icos_settings.use_node_operator_private_key = true;
 
         let guestos_config =
             generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
@@ -226,10 +216,29 @@ mod tests {
             options,
             BootstrapOptions {
                 guestos_config: Some(guestos_config),
-                nns_public_key_override: None,
-                node_operator_private_key: Some(PathBuf::from(
-                    "/boot/config/node_operator_private_key.pem"
+                #[cfg(feature = "dev")]
+                accounts_ssh_authorized_keys: Some(PathBuf::from(
+                    "/boot/config/ssh_authorized_keys"
                 )),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn test_make_bootstrap_options_operator_key_from_file() {
+        let mut config = create_test_hostos_config();
+        config.icos_settings.use_ssh_authorized_keys = true;
+
+        let guestos_config =
+            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
+
+        let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
+
+        assert_eq!(
+            options,
+            BootstrapOptions {
+                guestos_config: Some(guestos_config),
                 #[cfg(feature = "dev")]
                 accounts_ssh_authorized_keys: Some(PathBuf::from(
                     "/boot/config/ssh_authorized_keys"
