@@ -373,6 +373,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             .join(IC_REGISTRY_LOCAL_STORE)
             .join("");
         let local_store_path_dest = recovery_dir
+            .join(RECOVERY_DIRECTORY_NAME)
             .join("working_dir")
             .join("data")
             .join(IC_REGISTRY_LOCAL_STORE);
