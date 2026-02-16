@@ -349,7 +349,7 @@ jobs:
           echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
           echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
           echo "Current GitHub API rate limits:"
-          curl -s --netrc https://api.github.com/rate_limit | jq
+          curl -s --netrc https://api.github.com/rate_limit | jq '.resources.core'
 
           mkdir -p /tmp/zig-cache
 
