@@ -1512,6 +1512,7 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
                 let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
+                let mut total_canister_delta_log_sizes = NumBytes::new(0);
                 for canister in state.canisters_iter_mut() {
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                     self.metrics
@@ -1560,6 +1561,7 @@ impl Scheduler for SchedulerImpl {
                         self.metrics
                             .canister_log_delta_memory_usage
                             .observe(size as f64);
+                        total_canister_delta_log_sizes += NumBytes::from(size as u64);
                     }
 
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
@@ -1582,6 +1584,9 @@ impl Scheduler for SchedulerImpl {
                 self.metrics
                     .total_canister_reserved_balance
                     .set(total_canister_reserved_balance.get() as f64);
+
+                // Count total delta log sizes for heap_delta_estimate.
+                state.metadata.heap_delta_estimate += total_canister_delta_log_sizes;
 
                 // TODO(EXC-1124): Re-enable the check below once it's fixed.
                 //
