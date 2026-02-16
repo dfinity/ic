@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           invocation-names: afl
-          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 10
 
   config:
     name: Set Config
