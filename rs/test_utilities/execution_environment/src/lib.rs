@@ -1453,7 +1453,7 @@ impl ExecutionTest {
 
         let remaining_round_instructions_before = round_limits.instructions;
         let (new_state, message_instructions_used) = self.exec_env.execute_subnet_message(
-            message.clone(),
+            message,
             state,
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
@@ -1470,16 +1470,17 @@ impl ExecutionTest {
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             if let Some(message_instructions_used) = message_instructions_used {
+                let capped_slice_instructions_used = std::cmp::min(
+                    slice_instructions_used.get() as u64,
+                    self.install_code_instruction_limits.message().get(),
+                );
                 assert_eq!(
                     message_instructions_used.get(),
-                    std::cmp::min(
-                        slice_instructions_used.get() as u64,
-                        self.install_code_instruction_limits.message().get()
-                    )
+                    capped_slice_instructions_used
                 );
                 self.update_execution_stats(
                     canister_id,
-                    NumInstructions::from(slice_instructions_used.get() as u64),
+                    NumInstructions::from(capped_slice_instructions_used),
                     cost_schedule,
                 );
             } else {
@@ -1623,14 +1624,16 @@ impl ExecutionTest {
                     let instructions_used =
                         NumInstructions::from(slice_instructions_used.get() as u64)
                             + instructions_used_before;
-                    assert_eq!(
-                        message_instructions_used,
-                        std::cmp::min(
-                            instructions_used,
-                            self.install_code_instruction_limits.message()
-                        )
+                    let capped_instructions_used = std::cmp::min(
+                        instructions_used,
+                        self.install_code_instruction_limits.message(),
                     );
-                    self.update_execution_stats(canister_id, instructions_used, cost_schedule);
+                    assert_eq!(message_instructions_used, capped_instructions_used);
+                    self.update_execution_stats(
+                        canister_id,
+                        capped_instructions_used,
+                        cost_schedule,
+                    );
                 } else {
                     *self
                         .paused_subnet_message_instructions
