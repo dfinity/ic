@@ -155,7 +155,10 @@ fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
 }
 
 fn install_counter_canister(env: &TestEnv, app_node: &IcNodeSnapshot) -> Principal {
-    let canister_id = app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+    let canister_id = app_node.create_and_install_canister_with_arg(
+        &env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+        None,
+    );
     info!(
         env.logger(),
         "Counter canister with id={canister_id} installed on subnet with id={}",

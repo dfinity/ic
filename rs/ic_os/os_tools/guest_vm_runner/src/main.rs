@@ -6,14 +6,15 @@ use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use clap::{Parser, ValueEnum};
+use command_runner::{AsyncCommandRunner, RealAsyncCommandRunner};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use ic_device::device_mapping::MappedDevice;
 use ic_device::mount::{GptPartitionProvider, PartitionProvider};
 use ic_metrics_tool::{Metric, MetricsWriter};
-use ic_sev::host::HostSevCertificateProvider;
 use nix::unistd::getuid;
+use sev_host::HostSevCertificateProvider;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::Write;
@@ -21,10 +22,10 @@ use std::path::{Path, PathBuf};
 use std::pin::pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use strum_macros::AsRefStr;
 use sysinfo::{ProcessRefreshKind, RefreshKind};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -61,7 +62,8 @@ const GUESTOS_BOOT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
 const GUESTOS_BOOT_FAILURE_MARKER: &str = "GUESTOS BOOT FAILURE";
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum GuestVMType {
     Default,
     Upgrade,
@@ -91,9 +93,16 @@ pub async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    match args.vm_type {
-        GuestVMType::Default => println!("Starting GuestOS service"),
-        GuestVMType::Upgrade => println!("Starting Upgrade GuestOS service"),
+    let startup_message = match args.vm_type {
+        GuestVMType::Default => "Launching GuestOS Virtual Machine...",
+        GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
+    };
+    println!("{startup_message}");
+    for path in [CONSOLE_TTY1_PATH, CONSOLE_TTY_SERIAL_PATH] {
+        if let Ok(mut tty) = File::options().write(true).open(path) {
+            let _ = writeln!(tty, "\n{startup_message}\n");
+            let _ = tty.flush();
+        }
     }
 
     let termination_token = CancellationToken::new();
@@ -140,10 +149,8 @@ impl VirtualMachine {
         config_media: NamedTempFile,
         direct_boot: Option<DirectBoot>,
         vm_domain_name: &str,
+        command_runner: Arc<dyn AsyncCommandRunner>,
     ) -> Result<Self, GuestVmServiceError> {
-        // Check if a domain with the same name already exists and, if so, try to destroy it
-        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).await?;
-
         let mut retries = 3;
         let domain = loop {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
@@ -160,7 +167,12 @@ impl VirtualMachine {
                             "VM domain '{}' exists even though create_xml failed, attempting to destroy it before retry",
                             vm_domain_name
                         );
-                        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).await?;
+                        Self::try_destroy_existing_vm(
+                            libvirt_connect,
+                            vm_domain_name,
+                            command_runner.as_ref(),
+                        )
+                        .await?;
                     }
                     retries -= 1;
                     continue;
@@ -180,6 +192,7 @@ impl VirtualMachine {
     async fn try_destroy_existing_vm(
         libvirt_connect: &Connect,
         vm_domain_name: &str,
+        command_runner: &dyn AsyncCommandRunner,
     ) -> Result<(), GuestVmServiceError> {
         let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) else {
             eprintln!("No existing domain found to destroy");
@@ -214,7 +227,7 @@ impl VirtualMachine {
             }
             Ok(())
         } else {
-            Self::debug_inactive_domain(vm_domain_name).await;
+            Self::debug_inactive_domain(vm_domain_name, command_runner).await;
             Err(GuestVmServiceError::UnrecoverableNeedsReboot)
         }
     }
@@ -222,7 +235,7 @@ impl VirtualMachine {
     /// In a small amount of cases, the QEMU process gets stuck after the VM shuts down.
     /// We don't know why it's happening. This method attempts to gather information about the
     /// QEMU process which helps with debugging.
-    async fn debug_inactive_domain(vm_domain_name: &str) {
+    async fn debug_inactive_domain(vm_domain_name: &str, command_runner: &dyn AsyncCommandRunner) {
         let sysinfo = sysinfo::System::new_with_specifics(
             RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
         );
@@ -249,12 +262,9 @@ impl VirtualMachine {
             eprintln!("QEMU process: {qemu_process:?}");
             eprintln!("Process status: {:?}", qemu_process.status());
             eprintln!("Running lsof for QEMU process {}", qemu_process.pid());
-            let lsof_status = Command::new("lsof")
-                .arg("-p")
-                .arg(qemu_process.pid().to_string())
-                .status()
-                .await;
-            if let Err(err) = lsof_status {
+            let mut lsof_cmd = tokio::process::Command::new("lsof");
+            lsof_cmd.arg("-p").arg(qemu_process.pid().to_string());
+            if let Err(err) = command_runner.status(&mut lsof_cmd).await {
                 eprintln!("Failed to run lsof: {err:?}");
             }
 
@@ -266,20 +276,14 @@ impl VirtualMachine {
         }
 
         eprintln!("Will run strace for 60s");
-        let strace_status = Command::new("timeout")
+        let mut strace_cmd = tokio::process::Command::new("timeout");
+        strace_cmd
             .arg("60")
             .arg("strace")
             .arg("-p")
-            .arg(
-                qemu_processes
-                    .iter()
-                    .map(|p| p.pid().to_string())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-            )
-            .status()
-            .await;
-        if let Err(e) = strace_status {
+            // pass all QEMU PIDs
+            .args(qemu_processes.iter().map(|p| p.pid().to_string()));
+        if let Err(e) = command_runner.status(&mut strace_cmd).await {
             eprintln!("Failed to run strace: {e}");
         }
     }
@@ -382,6 +386,7 @@ pub struct GuestVmService {
     _upgrade_mapped_device: Option<MappedDevice>,
     guestos_boot_timeout: Duration,
     vm_serial_log_path: PathBuf,
+    command_runner: Arc<dyn AsyncCommandRunner>,
 }
 
 impl GuestVmService {
@@ -395,7 +400,7 @@ impl GuestVmService {
         let metrics_writer = MetricsWriter::new(PathBuf::from(Self::metrics_path(guest_vm_type)));
         let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
-            config::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
+            config_tool::deserialize_config(config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
         let console_tty1 = File::options()
             .write(true)
@@ -448,6 +453,7 @@ impl GuestVmService {
             _upgrade_mapped_device: upgrade_mapped_device,
             guestos_boot_timeout: GUESTOS_BOOT_TIMEOUT,
             vm_serial_log_path: serial_log_path(guest_vm_type).to_path_buf(),
+            command_runner: Arc::new(RealAsyncCommandRunner),
         })
     }
 
@@ -476,7 +482,8 @@ impl GuestVmService {
                 },
                 Err(GuestVmServiceError::UnrecoverableNeedsReboot) => {
                     println!("Issuing HostOS reboot");
-                    Command::new("reboot").status().await?;
+                    let mut cmd = tokio::process::Command::new("reboot");
+                    self.command_runner.status(&mut cmd).await?;
                     bail!("Found unrecoverable error, issued reboot");
                 }
                 Err(GuestVmServiceError::Other(err)) => {
@@ -501,7 +508,8 @@ impl GuestVmService {
                         "hostos_guestos_service_start",
                         1.0,
                         "GuestOS virtual machine define state",
-                    )])?;
+                    )
+                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
                 virtual_machine
             }
             Err(err) => {
@@ -510,7 +518,8 @@ impl GuestVmService {
                         "hostos_guestos_service_start",
                         0.0,
                         "GuestOS virtual machine define state",
-                    )])?;
+                    )
+                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
                 return Err(err);
             }
         };
@@ -528,6 +537,14 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
+        // Try to destroy any existing VM, if this fails, don't even try to create the configuration
+        VirtualMachine::try_destroy_existing_vm(
+            &self.libvirt_connection,
+            vm_domain_name(self.guest_vm_type),
+            self.command_runner.as_ref(),
+        )
+        .await?;
+
         let config_media = NamedTempFile::with_prefix("config_media")
             .context("Failed to create config media file")?;
 
@@ -586,6 +603,7 @@ impl GuestVmService {
             config_media,
             direct_boot,
             vm_domain_name(self.guest_vm_type),
+            self.command_runner.clone(),
         )
         .await?;
 
@@ -623,7 +641,6 @@ impl GuestVmService {
         let generated_mac = calculate_deterministic_mac(
             &self.hostos_config.icos_settings.mgmt_mac,
             self.hostos_config.icos_settings.deployment_environment,
-            IpVariant::V6,
             NodeType::HostOS,
         );
 
@@ -750,18 +767,21 @@ impl Drop for GuestVmService {
 mod tests {
     use super::*;
     use crate::systemd_notifier::testing::MockSystemdNotifier;
+    use anyhow::ensure;
+    use command_runner::MockAsyncCommandRunner;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSDevSettings, HostOSSettings,
         ICOSSettings, NetworkSettings,
     };
     use ic_device::mount::GptPartitionProvider;
     use ic_device::mount::testing::ExtractingFilesystemMounter;
-    use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
+    use sev_host::testing::mock_host_sev_certificate_provider;
     use std::fs::File;
     use std::path::PathBuf;
     use std::sync::LazyLock;
+    use std::time::Instant;
     use tempfile::TempDir;
     use tokio::task::JoinHandle;
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
@@ -805,6 +825,21 @@ mod tests {
         _sev_certificate_cache_dir: TempDir,
     }
 
+    async fn assert_with_retry(check: impl Fn() -> Result<(), Error>) {
+        const DEFAULT_ACTION_TIMEOUT: Duration = Duration::from_secs(5);
+
+        let start = Instant::now();
+        loop {
+            let Err(e) = check() else {
+                return;
+            };
+            if start.elapsed() > DEFAULT_ACTION_TIMEOUT {
+                panic!("{}", e);
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    }
+
     impl TestServiceInstance {
         async fn wait_for_systemd_ready(&mut self) {
             tokio::select! {
@@ -816,31 +851,35 @@ mod tests {
             }
         }
 
-        async fn wait_for_vm_shutdown(&mut self) {
-            loop {
-                if Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name).is_err() {
-                    return;
-                }
-                sleep(Duration::from_millis(100)).await;
-            }
-        }
-
         fn get_domain(&self) -> Domain {
             Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name)
                 .expect("Failed to find VM domain")
         }
 
-        fn assert_vm_running(&self) {
-            let domain = self.get_domain();
-            assert_eq!(
-                domain.get_state(),
-                Ok((VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED as _))
+        fn check_vm_running(&self) -> Result<()> {
+            let domain = Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name)
+                .context("Failed to find VM domain")?;
+            ensure!(
+                domain.get_state() == Ok((VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED as _)),
+                "VM is not running"
             );
+            Ok(())
         }
 
-        fn assert_vm_not_exists(&self) {
-            Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name)
-                .expect_err("Expected VM domain to not exist");
+        fn check_vm_shutdown(&self) -> Result<()> {
+            ensure!(
+                Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name).is_err(),
+                "VM is still running"
+            );
+            Ok(())
+        }
+
+        fn check_vm_not_exists(&self) -> Result<()> {
+            ensure!(
+                Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name).is_err(),
+                "Expected VM domain to not exist"
+            );
+            Ok(())
         }
 
         fn read_console(&self) -> String {
@@ -849,41 +888,25 @@ mod tests {
             String::from_utf8(console_content).expect("Console log is not valid UTF-8")
         }
 
-        fn assert_metrics_contains(&self, expected: &str) {
-            let metrics = std::fs::read_to_string(&self.metrics_file).unwrap();
-            assert!(
+        fn check_metrics_contains(&self, expected: &str) -> Result<()> {
+            let metrics = std::fs::read_to_string(&self.metrics_file)
+                .context("Failed to read metrics file")?;
+            ensure!(
                 metrics.contains(expected),
-                "Metrics file does not contain expected content '{expected}'\n\
-                Metrics content:\n{metrics}",
+                "Metrics file does not contain expected content '{expected}'\nMetrics content:\n{metrics}"
             );
+            Ok(())
         }
 
-        async fn wait_for_console_contains(&self, expected_parts: &[&str]) {
-            const MAX_ATTEMPTS: u64 = 20;
-            'retry: for attempt in 1..=MAX_ATTEMPTS {
-                let console_content = self.read_console();
-                for part in expected_parts {
-                    if !console_content.contains(part) {
-                        if attempt == MAX_ATTEMPTS {
-                            panic!(
-                                "Console content does not contain '{part}'\nConsole content:\n{console_content}"
-                            );
-                        }
-                        sleep(Duration::from_millis(attempt * 50)).await;
-                        continue 'retry;
-                    };
-                }
-            }
-        }
-
-        fn assert_console_contains(&self, expected_parts: &[&str]) {
+        fn check_console_contains(&self, expected_parts: &[&str]) -> Result<()> {
             let console_content = self.read_console();
             for part in expected_parts {
-                assert!(
+                ensure!(
                     console_content.contains(part),
                     "Console content does not contain '{part}'\nConsole content:\n{console_content}"
                 );
             }
+            Ok(())
         }
 
         fn get_config_media_path(&self) -> PathBuf {
@@ -934,6 +957,7 @@ mod tests {
         _libvirt_definition: NamedTempFile,
         guestos_boot_timeout: Duration,
         guest_serial_log: NamedTempFile,
+        command_runner: Arc<MockAsyncCommandRunner>,
     }
 
     impl TestFixture {
@@ -956,6 +980,7 @@ mod tests {
                 _libvirt_definition: libvirt_definition,
                 guestos_boot_timeout: GUESTOS_BOOT_TIMEOUT,
                 guest_serial_log: NamedTempFile::new().unwrap(),
+                command_runner: Arc::new(MockAsyncCommandRunner::new()),
             }
         }
 
@@ -991,6 +1016,7 @@ mod tests {
                 _upgrade_mapped_device: None,
                 guestos_boot_timeout: self.guestos_boot_timeout,
                 vm_serial_log_path: self.guest_serial_log.path().to_path_buf(),
+                command_runner: self.command_runner.clone(),
             };
 
             // Start the service in the background
@@ -1012,35 +1038,26 @@ mod tests {
 
     fn valid_hostos_config() -> HostOSConfig {
         HostOSConfig {
-            config_version: "".to_string(),
             network_settings: NetworkSettings {
                 ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
                     prefix: "2001:db8::".to_string(),
                     prefix_length: 64,
                     gateway: "2001:db8::1".parse().unwrap(),
                 }),
-                ipv4_config: None,
-                domain_name: None,
+                ..Default::default()
             },
             icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Mainnet,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
-                enable_trusted_execution_environment: false,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
+                ..Default::default()
             },
             hostos_settings: HostOSSettings {
-                verbose: false,
                 hostos_dev_settings: HostOSDevSettings {
-                    vm_memory: 16,
                     vm_cpu: "qemu".to_string(),
-                    vm_nr_of_vcpus: 56,
+                    ..Default::default()
                 },
+                ..Default::default()
             },
-            guestos_settings: Default::default(),
+            ..HostOSConfig::default()
         }
     }
 
@@ -1068,12 +1085,16 @@ mod tests {
         // Wait for the service to start the VM and notify systemd
         service.wait_for_systemd_ready().await;
 
-        service.assert_metrics_contains("hostos_guestos_service_start 1");
-        service.assert_vm_running();
-        service.assert_console_contains(&[
-            "GuestOS virtual machine launched",
-            "2001:db8::6800:d8ff:fecb:f597",
-        ]);
+        service
+            .check_metrics_contains("hostos_guestos_service_start{vm_type=\"default\"} 1")
+            .unwrap();
+        service.check_vm_running().unwrap();
+        service
+            .check_console_contains(&[
+                "GuestOS virtual machine launched",
+                "2001:db8::6800:d8ff:fecb:f597",
+            ])
+            .unwrap();
 
         // Ensure that the config media and kernel exist
         let config_media_path = service.get_config_media_path();
@@ -1083,9 +1104,7 @@ mod tests {
 
         nix::sys::signal::raise(SIGTERM).expect("Failed to send SIGTERM");
 
-        tokio::time::timeout(Duration::from_secs(2), service.wait_for_vm_shutdown())
-            .await
-            .expect("VM did not shut down within 2 seconds");
+        assert_with_retry(|| service.check_vm_shutdown()).await;
         service
             .task
             .await
@@ -1104,9 +1123,7 @@ mod tests {
         service.get_domain().destroy().unwrap();
 
         // Assert that the VM is running again after a short delay
-        sleep(Duration::from_millis(200)).await;
-
-        service.assert_vm_running();
+        assert_with_retry(|| service.check_vm_running()).await;
     }
 
     #[tokio::test]
@@ -1120,9 +1137,13 @@ mod tests {
             .expect("Service should have failed but did not")
             .unwrap_err();
 
-        service.assert_metrics_contains("hostos_guestos_service_start 0");
-        service.assert_vm_not_exists();
-        service.assert_console_contains(&["Failed to create domain"]);
+        service
+            .check_metrics_contains("hostos_guestos_service_start{vm_type=\"default\"} 0")
+            .unwrap();
+        service.check_vm_not_exists().unwrap();
+        service
+            .check_console_contains(&["Failed to create domain"])
+            .unwrap();
     }
 
     #[tokio::test]
@@ -1140,7 +1161,7 @@ mod tests {
         Domain::lookup_by_id(&fixture.libvirt_connection, domain_id1)
             .expect_err("Expected domain to not exist");
 
-        service2.assert_vm_running();
+        service2.check_vm_running().unwrap();
     }
 
     #[tokio::test]
@@ -1154,11 +1175,19 @@ mod tests {
         service2.wait_for_systemd_ready().await;
 
         // Assert that both VMs are running
-        service1.assert_vm_running();
-        service2.assert_vm_running();
+        service1.check_vm_running().unwrap();
+        service2.check_vm_running().unwrap();
 
-        assert!(service1.get_kernel_cmdline().contains("root=/dev/vda5"));
-        assert!(service2.get_kernel_cmdline().contains("root=/dev/vda8"));
+        assert!(
+            service1
+                .get_kernel_cmdline()
+                .contains("root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7")
+        );
+        assert!(
+            service2
+                .get_kernel_cmdline()
+                .contains("root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5")
+        );
     }
 
     #[tokio::test]
@@ -1171,9 +1200,7 @@ mod tests {
             "foo bar\n{GUESTOS_BOOT_SUCCESS_MARKER}"
         )
         .unwrap();
-        service
-            .wait_for_console_contains(&["GuestOS boot succeeded"])
-            .await;
+        assert_with_retry(|| service.check_console_contains(&["GuestOS boot succeeded"])).await;
     }
 
     #[tokio::test]
@@ -1186,9 +1213,7 @@ mod tests {
             "foo bar\n{GUESTOS_BOOT_FAILURE_MARKER}"
         )
         .unwrap();
-        service
-            .wait_for_console_contains(&["GuestOS boot failed"])
-            .await;
+        assert_with_retry(|| service.check_console_contains(&["GuestOS boot failed"])).await;
     }
 
     #[tokio::test]
@@ -1199,8 +1224,6 @@ mod tests {
         service.wait_for_systemd_ready().await;
         writeln!(fixture.guest_serial_log, "foo bar").unwrap();
         sleep(Duration::from_millis(500)).await;
-        service
-            .wait_for_console_contains(&["GuestOS boot timed out"])
-            .await;
+        assert_with_retry(|| service.check_console_contains(&["GuestOS boot timed out"])).await;
     }
 }

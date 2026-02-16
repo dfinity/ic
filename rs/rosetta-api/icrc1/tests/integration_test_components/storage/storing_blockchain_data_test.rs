@@ -85,10 +85,10 @@ proptest! {
             });
 
             // Create the storage client where blocks will be stored
-            let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+            let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
 
             // No blocks have been synched. The update should succeed with no accounts being updated
-            storage_client.update_account_balances().unwrap();
+            storage_client.update_account_balances().await.unwrap();
 
             // A mapping between accounts, block indices and their respective balances
             let mut account_balance_at_block_idx = HashMap::new();
@@ -141,7 +141,7 @@ proptest! {
             }
 
             blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10,Arc::new(AsyncMutex::new(vec![])), RecurrencyMode::OneShot, Box::new(|| {})).await.unwrap();
-            storage_client.update_account_balances().unwrap();
+            storage_client.update_account_balances().await.unwrap();
 
             let mut block_indices_iter = block_indices.into_iter().collect::<Vec<u64>>();
             block_indices_iter.sort();
@@ -150,14 +150,14 @@ proptest! {
             for idx in block_indices_iter.into_iter(){
                 for account in accounts.clone().into_iter(){
                     account_balance_at_block_idx.contains_key(&(account,idx)).then(|| current_balances.entry(account).and_modify(|balance| *balance = account_balance_at_block_idx.get(&(account,idx)).unwrap().clone()));
-                    assert_eq!(*current_balances.get(&account).unwrap(),storage_client.get_account_balance_at_block_idx(&account,idx).unwrap().unwrap_or(Nat(BigUint::zero())));
+                    assert_eq!(*current_balances.get(&account).unwrap(),storage_client.get_account_balance_at_block_idx(&account,idx).await.unwrap().unwrap_or(Nat(BigUint::zero())));
                 }
             }
 
             // Check that the current balances of the ledger and rosetta storage match up
             for account  in accounts.clone().into_iter(){
                 let balance_ledger = agent.balance_of(account,CallMode::Query).await.unwrap();
-                let balance_rosetta = storage_client.get_account_balance(&account).unwrap().unwrap_or(Nat(BigUint::zero()));
+                let balance_rosetta = storage_client.get_account_balance(&account).await.unwrap().unwrap_or(Nat(BigUint::zero()));
                 assert_eq!(balance_ledger,balance_rosetta);
             }
         });
@@ -190,7 +190,7 @@ fn test_self_transfer() {
             agent: local_replica::get_testing_agent(port).await,
             ledger_canister_id: icrc_ledger_canister_id,
         });
-        let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+        let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
 
         blocks_synchronizer::start_synching_blocks(
             agent.clone(),
@@ -202,13 +202,14 @@ fn test_self_transfer() {
         )
         .await
         .unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         let balance = agent.balance_of(account, CallMode::Query).await.unwrap();
         assert_eq!(balance, Nat::from(100_000_000_u64));
         assert_eq!(
             storage_client
                 .get_account_balance(&account)
+                .await
                 .unwrap()
                 .unwrap(),
             Nat::from(100_000_000_u64)
@@ -237,13 +238,14 @@ fn test_self_transfer() {
         )
         .await
         .unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         let balance = agent.balance_of(account, CallMode::Query).await.unwrap();
         assert_eq!(balance, Nat::from(100_000_000 - DEFAULT_TRANSFER_FEE));
         assert_eq!(
             storage_client
                 .get_account_balance(&account)
+                .await
                 .unwrap()
                 .unwrap(),
             Nat::from(100_000_000 - DEFAULT_TRANSFER_FEE)
@@ -289,7 +291,7 @@ fn test_burn_and_mint_fee() {
             agent: local_replica::get_testing_agent(port).await,
             ledger_canister_id: icrc_ledger_canister_id,
         });
-        let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+        let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
 
         const FEE_COLLECTOR: Account = Account {
             owner: PrincipalId::new_user_test_id(2).0,
@@ -321,11 +323,12 @@ fn test_burn_and_mint_fee() {
         )
         .await
         .unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         assert_eq!(
             storage_client
                 .get_account_balance(&TEST_ACCOUNT)
+                .await
                 .unwrap()
                 .unwrap(),
             Nat::from(850u64) // mint 1000 - mint fee 50 - burn 50 - burn fee 50
@@ -333,6 +336,7 @@ fn test_burn_and_mint_fee() {
         assert!(
             storage_client
                 .get_account_balance(&FEE_COLLECTOR)
+                .await
                 .unwrap()
                 .is_none()
         ); // no fee collector in the first 2 blocks
@@ -365,11 +369,12 @@ fn test_burn_and_mint_fee() {
         )
         .await
         .unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         assert_eq!(
             storage_client
                 .get_account_balance(&TEST_ACCOUNT)
+                .await
                 .unwrap()
                 .unwrap(),
             Nat::from(800u64) // 850 + mint 100 - mint fee 50 - burn 50 - burn fee 50
@@ -377,6 +382,7 @@ fn test_burn_and_mint_fee() {
         assert_eq!(
             storage_client
                 .get_account_balance(&FEE_COLLECTOR)
+                .await
                 .unwrap()
                 .unwrap(),
             Nat::from(100u64) // mint fee 50 + burn fee 50

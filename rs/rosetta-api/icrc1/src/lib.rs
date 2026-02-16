@@ -6,13 +6,11 @@ use common::storage::types::MetadataEntry;
 use ic_base_types::CanisterId;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use num_traits::ToPrimitive;
 use rosetta_core::objects::Currency;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex as AsyncMutex;
 pub mod common;
 pub mod config;
@@ -26,7 +24,7 @@ pub mod ledger_blocks_synchronization;
 pub struct AppState {
     pub icrc1_agent: Arc<Icrc1Agent>,
     pub ledger_id: CanisterId,
-    pub synched: Arc<Mutex<Option<bool>>>,
+    pub synched: Arc<AsyncMutex<Option<bool>>>,
     pub archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
     pub storage: Arc<StorageClient>,
     pub metadata: Metadata,
@@ -64,8 +62,8 @@ impl From<Metadata> for Currency {
 }
 
 impl Metadata {
-    const METADATA_DECIMALS_KEY: &'static str = "icrc1:decimals";
-    const METADATA_SYMBOL_KEY: &'static str = "icrc1:symbol";
+    const METADATA_DECIMALS_KEY: &'static str = MetadataKey::ICRC1_DECIMALS;
+    const METADATA_SYMBOL_KEY: &'static str = MetadataKey::ICRC1_SYMBOL;
 
     pub fn from_args(symbol: String, decimals: u8) -> Self {
         Self { symbol, decimals }

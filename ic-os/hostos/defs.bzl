@@ -33,7 +33,7 @@ def image_deps(mode, _malicious = False):
             "//rs/ic_os/release:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
             "//rs/ic_os/release:guest_vm_runner": "/opt/ic/bin/guest_vm_runner:0755",
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
-            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+            "//rs/ic_os/release:config_tool": "/opt/ic/bin/config_tool:0755",
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
 
             # additional libraries to install
@@ -74,8 +74,8 @@ def image_deps(mode, _malicious = False):
 
     # Update dev rootfs
     if "dev" in mode:
-        deps["rootfs"].pop("//rs/ic_os/release:config", None)
-        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+        deps["rootfs"].pop("//rs/ic_os/release:config_tool", None)
+        deps["rootfs"].update({"//rs/ic_os/release:config_tool_dev": "/opt/ic/bin/config_tool:0755"})
 
         deps["rootfs"].pop("//rs/ic_os/release:hostos_tool", None)
         deps["rootfs"].update({"//rs/ic_os/release:hostos_tool_dev": "/opt/ic/bin/hostos_tool:0755"})

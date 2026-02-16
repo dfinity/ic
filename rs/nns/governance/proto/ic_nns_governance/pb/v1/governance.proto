@@ -707,7 +707,19 @@ message Proposal {
     // Allow node operators to manually intervene in case of disaster to run
     // (NNS-approved) new software.
     BlessAlternativeGuestOsVersion bless_alternative_guest_os_version = 31;
+    // Take a canister snapshot.
+    TakeCanisterSnapshot take_canister_snapshot = 32;
+    // Load a canister snapshot.
+    LoadCanisterSnapshot load_canister_snapshot = 33;
   }
+}
+
+// Take a canister snapshot.
+message TakeCanisterSnapshot {
+  // The canister being snapshotted.
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+  // If set, the existing snapshot with this content will be replaced.
+  optional bytes replace_snapshot = 2;
 }
 
 // Empty message to use in oneof fields that represent empty
@@ -1839,6 +1851,14 @@ message CreateServiceNervousSystem {
     }
 
     VotingRewardParameters voting_reward_parameters = 10;
+
+    message CustomProposalCriticality {
+      repeated uint64 additional_critical_native_action_ids = 1;
+    }
+
+    // Custom proposal criticality configuration. Allows specifying additional native function IDs
+    // that should be considered critical, requiring a higher level of consensus.
+    optional CustomProposalCriticality custom_proposal_criticality = 11;
   }
 
   GovernanceParameters governance_parameters = 10;
@@ -1929,6 +1949,14 @@ message BlessAlternativeGuestOsVersion {
   repeated bytes chip_ids = 1;
   string rootfs_hash = 2;
   registry.replica_version.v1.GuestLaunchMeasurements base_guest_launch_measurements = 3;
+}
+
+message LoadCanisterSnapshot {
+  // The ID of the canister to load the snapshot into.
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // The ID of the snapshot to load.
+  bytes snapshot_id = 2;
 }
 
 // This represents the whole NNS governance system. It contains all
@@ -2651,6 +2679,8 @@ message SelfDescribingValue {
     bytes int = 4;
     SelfDescribingValueArray array = 5;
     SelfDescribingValueMap map = 6;
+    Empty null = 7;
+    bool bool = 8;
   }
 }
 

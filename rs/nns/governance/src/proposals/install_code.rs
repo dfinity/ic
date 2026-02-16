@@ -170,8 +170,8 @@ impl CallCanister for InstallCode {
 
 impl LocallyDescribableProposalAction for InstallCode {
     const TYPE_NAME: &'static str = "Install Code";
-    const TYPE_DESCRIPTION: &'static str =
-        "Installs, reinstalls, or upgrades the code of an NNS canister.";
+    const TYPE_DESCRIPTION: &'static str = "Install, reinstall or upgrade code of a canister \
+        controlled by the NNS.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         let Self {
@@ -187,10 +187,10 @@ impl LocallyDescribableProposalAction for InstallCode {
         let install_mode = install_mode.map(SelfDescribingProstEnum::<CanisterInstallMode>::new);
 
         ValueBuilder::new()
-            .add_field_with_empty_as_fallback("canister_id", *canister_id)
-            .add_field_with_empty_as_fallback("install_mode", install_mode)
-            .add_field_with_empty_as_fallback("wasm_module_hash", wasm_module_hash.clone())
-            .add_field_with_empty_as_fallback("arg_hash", arg_hash.clone())
+            .add_field("canister_id", *canister_id)
+            .add_field("install_mode", install_mode)
+            .add_field("wasm_module_hash", wasm_module_hash.clone())
+            .add_field("arg_hash", arg_hash.clone())
             .add_field(
                 "skip_stopping_before_installing",
                 skip_stopping_before_installing.unwrap_or_default(),
@@ -453,8 +453,6 @@ mod tests {
 
     #[test]
     fn test_install_code_to_self_describing() {
-        use SelfDescribingValue::*;
-
         let wasm_hash = Sha256::hash(&[1, 2, 3]).to_vec();
         let arg_hash = Sha256::hash(&[4, 5, 6]).to_vec();
 
@@ -474,19 +472,17 @@ mod tests {
         assert_eq!(
             value,
             SelfDescribingValue::Map(hashmap! {
-                "canister_id".to_string() => Text(REGISTRY_CANISTER_ID.get().to_string()),
-                "install_mode".to_string() => Text("Upgrade".to_string()),
-                "wasm_module_hash".to_string() => Blob(wasm_hash),
-                "arg_hash".to_string() => Blob(arg_hash),
-                "skip_stopping_before_installing".to_string() => Nat(candid::Nat::from(1_u8)),
+                "canister_id".to_string() => SelfDescribingValue::from(REGISTRY_CANISTER_ID.get().to_string()),
+                "install_mode".to_string() => SelfDescribingValue::from("Upgrade"),
+                "wasm_module_hash".to_string() => SelfDescribingValue::from(wasm_hash),
+                "arg_hash".to_string() => SelfDescribingValue::from(arg_hash),
+                "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(true),
             })
         );
     }
 
     #[test]
     fn test_install_code_to_self_describing_install_mode() {
-        use SelfDescribingValue::*;
-
         let install_code = InstallCode {
             canister_id: Some(REGISTRY_CANISTER_ID.get()),
             wasm_module: Some(vec![1, 2, 3]),
@@ -502,12 +498,12 @@ mod tests {
 
         assert_eq!(
             value,
-            Map(hashmap! {
-                "canister_id".to_string() => Text(REGISTRY_CANISTER_ID.get().to_string()),
-                "install_mode".to_string() => Text("Install".to_string()),
-                "wasm_module_hash".to_string() => Blob(Sha256::hash(&[1, 2, 3]).to_vec()),
-                "arg_hash".to_string() => Blob(Sha256::hash(&[]).to_vec()),
-                "skip_stopping_before_installing".to_string() => Nat(candid::Nat::from(0_u8)),
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => SelfDescribingValue::from(REGISTRY_CANISTER_ID.get().to_string()),
+                "install_mode".to_string() => SelfDescribingValue::from("Install"),
+                "wasm_module_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&[1, 2, 3]).to_vec()),
+                "arg_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&[]).to_vec()),
+                "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(false),
             })
         );
     }

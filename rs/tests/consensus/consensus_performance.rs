@@ -63,11 +63,11 @@ use ic_consensus_system_test_utils::performance::{persist_metrics, setup_jaeger_
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::get_current_branch_version;
+use ic_system_test_driver::driver::test_env_api::get_ic_build_version;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
@@ -99,11 +99,6 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
 const SHOULD_SPAWN_JAEGER_VM: bool = false;
 
 fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
     let mut ic_builder = InternetComputer::new();
 
     if SHOULD_SPAWN_JAEGER_VM {
@@ -141,7 +136,6 @@ fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    env.sync_with_prometheus();
 
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
@@ -175,7 +169,7 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     )
     .unwrap();
     if cfg!(feature = "upload_perf_systest_results") {
-        let branch_version = get_current_branch_version();
+        let branch_version = get_ic_build_version();
 
         rt.block_on(persist_metrics(
             branch_version,

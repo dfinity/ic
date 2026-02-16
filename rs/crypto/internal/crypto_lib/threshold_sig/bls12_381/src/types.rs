@@ -27,7 +27,7 @@ pub(super) type Signature = G1Affine;
 pub(super) type IndividualSignature = Signature;
 
 /// A serialized individual BLS signature.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct IndividualSignatureBytes(pub [u8; G1Affine::BYTES]);
 ic_crypto_internal_types::derive_serde!(IndividualSignatureBytes, IndividualSignatureBytes::SIZE);
 impl IndividualSignatureBytes {
@@ -37,7 +37,7 @@ impl IndividualSignatureBytes {
 pub(super) type CombinedSignature = Signature;
 
 /// A serialized combined (threshold-signed) BLS signature.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct CombinedSignatureBytes(pub [u8; G1Affine::BYTES]);
 ic_crypto_internal_types::derive_serde!(CombinedSignatureBytes, CombinedSignatureBytes::SIZE);
 impl CombinedSignatureBytes {

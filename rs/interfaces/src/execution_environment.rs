@@ -10,7 +10,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
     ReplicaVersion, Time,
-    batch::{CanisterCyclesCostSchedule, ChainKeyData},
+    batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
     messages::{
         CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
@@ -22,7 +22,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt,
     ops::{AddAssign, SubAssign},
-    sync::Arc,
+    sync::{Arc, atomic::AtomicU64},
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -590,6 +590,8 @@ pub type QueryExecutionService =
 #[derive(Debug)]
 pub struct TransformExecutionInput {
     pub query: Query,
+    pub instruction_observation: Arc<AtomicU64>,
+    pub max_instructions: NumInstructions,
 }
 
 /// Interface for the component to execute canister http transform.
@@ -1455,14 +1457,13 @@ pub struct RegistryExecutionSettings {
     pub subnet_size: usize,
     pub node_ids: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
-    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
 }
 
 /// Chain key configuration of execution that comes from the registry.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
-    pub pre_signatures_to_create_in_advance: u32,
+    pub pre_signatures_to_create_in_advance: Option<u32>,
 }
 
 pub trait Scheduler: Send {

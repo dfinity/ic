@@ -19,6 +19,7 @@ use std::collections::{BTreeMap, HashMap};
 pub mod results;
 pub mod test_utils;
 pub mod v1;
+pub mod v2;
 
 // ================================================================================================
 // VERSIONING SAFETY WARNING
@@ -446,35 +447,63 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
                 base_rewards_type3
                     .entry(region_key.clone())
-                    .and_modify(
-                        |(rates, coeffs): &mut (Vec<Decimal>, Vec<RewardsCoefficientPercent>)| {
-                            rates.push(base_rewards_daily);
-                            coeffs.push(coefficient);
-                        },
-                    )
-                    .or_insert((vec![base_rewards_daily], vec![coefficient]));
+                    .and_modify(|entries: &mut Vec<(Decimal, RewardsCoefficientPercent)>| {
+                        entries.push((base_rewards_daily, coefficient));
+                    })
+                    .or_insert(vec![(base_rewards_daily, coefficient)]);
             }
         }
 
         let base_rewards_type3 = base_rewards_type3
             .into_iter()
-            .map(|(region, (rates, coeff))| {
-                let nodes_count = rates.len();
-                let avg_rate = avg(rates.as_slice()).unwrap_or_default();
-                let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
+            .map(|(region, mut entries)| {
+                let nodes_count = entries.len();
 
-                let mut running_coefficient = dec!(1);
-                let mut region_rewards = Vec::new();
-                for _ in 0..nodes_count {
-                    region_rewards.push(avg_rate * running_coefficient);
-                    running_coefficient *= avg_coeff;
+                if Self::VERSION == 1 {
+                    let (rates, coeff): (Vec<Decimal>, Vec<RewardsCoefficientPercent>) =
+                        entries.into_iter().unzip();
+                    let avg_rate = avg(rates.as_slice()).unwrap_or_default();
+                    let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
+
+                    let mut running_coefficient = dec!(1);
+                    let mut region_rewards = Vec::new();
+                    for _ in 0..nodes_count {
+                        region_rewards.push(avg_rate * running_coefficient);
+                        running_coefficient *= avg_coeff;
+                    }
+                    let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
+
+                    (
+                        region,
+                        (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
+                    )
+                } else {
+                    // Sort entries first by Base Reward (Desc) then by Coefficient (Desc) to process high-value nodes first.
+                    entries.sort_by(|(r1, c1), (r2, c2)| r2.cmp(r1).then_with(|| c2.cmp(c1)));
+
+                    let mut total_rewards = Decimal::ZERO;
+                    let mut running_coeff = dec!(1);
+
+                    // We also need averages for the reporting/Result struct later.
+                    let mut total_rate_sum = Decimal::ZERO;
+                    let mut total_coeff_sum = Decimal::ZERO;
+
+                    for (rate, coeff) in &entries {
+                        total_rewards += rate * running_coeff;
+                        running_coeff *= coeff;
+
+                        total_rate_sum += rate;
+                        total_coeff_sum += coeff;
+                    }
+                    let avg_rate = total_rate_sum / Decimal::from(nodes_count);
+                    let avg_coeff = total_coeff_sum / Decimal::from(nodes_count);
+                    let region_rewards_avg = total_rewards / Decimal::from(nodes_count);
+
+                    (
+                        region,
+                        (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
+                    )
                 }
-                let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
-
-                (
-                    region,
-                    (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
-                )
             })
             .collect::<BTreeMap<_, _>>();
 

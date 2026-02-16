@@ -138,14 +138,14 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
         ts: Option<u64>,
-        op: Option<String>,
+        mthd: Option<String>,
     ) -> FeeCollectorBuilder<Tokens> {
         FeeCollectorBuilder {
             builder: self,
             fee_collector,
             caller,
             ts,
-            op,
+            mthd,
         }
     }
 
@@ -355,7 +355,7 @@ pub struct FeeCollectorBuilder<Tokens: TokensType> {
     fee_collector: Option<Account>,
     caller: Option<Principal>,
     ts: Option<u64>,
-    op: Option<String>,
+    mthd: Option<String>,
 }
 
 impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
@@ -374,8 +374,10 @@ impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
         if let Some(ts) = self.ts {
             tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
         }
-        self.builder
-            .build_with_operation(self.op.as_deref(), tx_fields)
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd.to_string()));
+        }
+        self.builder.build_with_operation(None, tx_fields)
     }
 }
 

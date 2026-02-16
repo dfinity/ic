@@ -137,4 +137,10 @@ profile.json
 test_tmpdir/**
 
 # Bare metal deployment secrets files
-zh2-dll01.csv
+zh2-dll01.*
+
+# Claude Code settings
+.claude/settings.local.json
+
+# Directories of downloaded test logs by //ci/githubstats:query
+logs/**

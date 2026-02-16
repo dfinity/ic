@@ -114,6 +114,18 @@ impl From<Message> for pb::DkgMessage {
     }
 }
 
+impl From<&Message> for pb::DkgMessage {
+    fn from(message: &Message) -> Self {
+        Self {
+            replica_version: message.content.version.to_string(),
+            dkg_id: Some(pb::NiDkgId::from(message.content.dkg_id.clone())),
+            dealing: bincode::serialize(&message.content.dealing).unwrap(),
+            signature: message.signature.signature.clone().get().0,
+            signer: Some(crate::node_id_into_protobuf(message.signature.signer)),
+        }
+    }
+}
+
 impl TryFrom<pb::DkgMessage> for Message {
     type Error = ProxyDecodeError;
 
@@ -357,8 +369,7 @@ fn build_tagged_transcripts_map(
     transcripts
         .iter()
         .map(|transcript_pb| {
-            let transcript =
-                NiDkgTranscript::try_from(transcript_pb).map_err(ProxyDecodeError::Other)?;
+            let transcript = NiDkgTranscript::try_from(transcript_pb)?;
             Ok((transcript.dkg_id.dkg_tag.clone(), transcript))
         })
         .collect::<Result<BTreeMap<_, _>, _>>()
@@ -411,9 +422,9 @@ fn build_transcript_result(
         .as_ref()
         .ok_or("Val missing in DkgPayload::Summary::IdedNiDkgTranscript::NiDkgTranscriptResult")?
     {
-        pb::ni_dkg_transcript_result::Val::Transcript(transcript) => {
-            Ok(Ok(NiDkgTranscript::try_from(transcript)?))
-        }
+        pb::ni_dkg_transcript_result::Val::Transcript(transcript) => Ok(Ok(
+            NiDkgTranscript::try_from(transcript).map_err(|e| e.to_string())?,
+        )),
         pb::ni_dkg_transcript_result::Val::ErrorString(error_string) => {
             Ok(Err(std::str::from_utf8(error_string)
                 .map_err(|e| format!("Failed to convert ErrorString: {e:?}"))?
@@ -432,8 +443,7 @@ impl TryFrom<pb::Summary> for DkgSummary {
                 .configs
                 .into_iter()
                 .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c)))
-                .collect::<Result<BTreeMap<_, _>, _>>()
-                .map_err(ProxyDecodeError::Other)?,
+                .collect::<Result<BTreeMap<_, _>, _>>()?,
             current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
             next_transcripts: build_tagged_transcripts_map(&summary.next_transcripts)?,
             interval_length: Height::from(summary.interval_length),
@@ -537,11 +547,9 @@ impl From<&DkgDataPayload> for pb::DkgPayload {
     fn from(data_payload: &DkgDataPayload) -> Self {
         Self {
             val: Some(pb::dkg_payload::Val::DataPayload(pb::DkgDataPayload {
-                // TODO do we need this clone
                 dealings: data_payload
                     .messages
                     .iter()
-                    .cloned()
                     .map(pb::DkgMessage::from)
                     .collect(),
                 summary_height: data_payload.start_height.get(),

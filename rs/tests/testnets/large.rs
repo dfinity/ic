@@ -48,7 +48,6 @@ use ic_system_test_driver::driver::ic::{
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
@@ -70,10 +69,6 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    // start p8s for metrics and dashboards
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
@@ -110,7 +105,6 @@ pub fn setup(env: TestEnv) {
     }
     let ic_gateway = env.get_deployed_ic_gateway("ic-gateway-0").unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
-    env.sync_with_prometheus();
 
     // pick an SNS subnet among the application subnets
     let topology = env.topology_snapshot();

@@ -10,7 +10,7 @@ use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::{
-    FarmBaseUrl, SshSession, get_dependency_path, scp_recv_from, scp_send_to,
+    FarmBaseUrl, SshSession, scp_recv_from, scp_send_to,
 };
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
@@ -26,11 +26,9 @@ use std::str;
 use std::time::Duration;
 
 const UVM_NAME: &str = "colocated-test-driver";
-const COLOCATED_TEST: &str = "COLOCATED_TEST";
-const COLOCATED_TEST_BIN: &str = "COLOCATED_TEST_BIN";
 const EXTRA_TIME_LOG_COLLECTION: Duration = Duration::from_secs(10);
 
-pub const RUNFILES_TAR_ZST: &str = "runfiles.tar.zst";
+pub const RUNTIME_DEPS_TAR_ZST: &str = "runtime_deps.tar.zst";
 pub const ENV_TAR_ZST: &str = "env.tar.zst";
 const DASHBOARDS_TAR_ZST: &str = "dashboards.tar.zst";
 
@@ -47,16 +45,14 @@ fn main() -> Result<()> {
 }
 
 fn setup(env: TestEnv) {
-    let colocated_test = env::var(COLOCATED_TEST)
-        .unwrap_or_else(|_| panic!("Expected environment variable {COLOCATED_TEST} to be set!"));
-    let colocated_test_bin = env::var(COLOCATED_TEST_BIN).unwrap_or_else(|_| {
-        panic!("Expected environment variable {COLOCATED_TEST_BIN} to be set!")
-    });
+    let colocated_test_name = env::var("COLOCATED_TEST_NAME").unwrap();
+    let colocated_test_bin = env::var("TEST_BIN").unwrap();
+
     let log = env.logger();
 
     info!(
         log,
-        "Preparing Universal VM {UVM_NAME} which is going to run {colocated_test}..."
+        "Preparing Universal VM {UVM_NAME} which is going to run {colocated_test_name}..."
     );
 
     let host_features: Vec<HostFeature> =
@@ -73,9 +69,9 @@ fn setup(env: TestEnv) {
     let uvm = UniversalVm::new(UVM_NAME.to_string())
         .with_required_host_features(host_features)
         .with_vm_resources(vm_resources)
-        .with_config_img(get_dependency_path(
-            "rs/tests/colocate_uvm_config_image.zst",
-        ));
+        .with_config_img(
+            Path::new(&env::var("COLOCATED_UVM_CONFIG_IMAGE_PATH").unwrap()).to_path_buf(),
+        );
 
     let uvm = if env::var("COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4").is_ok() {
         uvm.enable_ipv4()
@@ -87,33 +83,24 @@ fn setup(env: TestEnv) {
         .unwrap_or_else(|e| panic!("Failed to setup Universal VM {UVM_NAME} because: {e}"));
     info!(log, "Universal VM {UVM_NAME} installed!");
 
-    // Create a tarball of the runfiles (runtime dependencies) such that they can be copied to the UVM.
-    let runfiles_tar_path = env.get_path(RUNFILES_TAR_ZST);
-    let runfiles = std::env::var("RUNFILES")
-        .expect("Expected the environment variable RUNFILES to be defined!");
-    info!(log, "Creating {runfiles_tar_path:?} ...");
+    // Create a tarball of the runtime dependencies such that they can be copied to the UVM.
+    let runtime_deps_tar_path = env.get_path(RUNTIME_DEPS_TAR_ZST);
+    info!(log, "Creating {runtime_deps_tar_path:?} ...");
     let output = Command::new("tar")
         .arg("--create")
         .arg("--file")
-        .arg(&runfiles_tar_path)
+        .arg(&runtime_deps_tar_path)
         .arg("--auto-compress")
         .arg("--directory")
-        .arg(runfiles)
+        .arg("runtime_deps")
         .arg("--dereference")
-        .arg("--exclude=rs/tests/colocate_test_bin")
-        .arg("--exclude=rs/tests/colocate_uvm_config_image.zst")
-        // Avoid packing in ic-os images. Those are runtime dependencies for the
-        // top-level test runner which uploads them to shared storage; after that
-        // they are not used anymore and are only referenced by URL (propagated
-        // through env vars).
-        .arg("--exclude=**/*.tar.zst")
         .arg(".")
         .output()
-        .unwrap_or_else(|e| panic!("Failed to tar the runfiles directory because: {e}"));
+        .unwrap_or_else(|e| panic!("Failed to tar the runtime_deps directory because: {e}"));
 
     if !output.status.success() {
         let err = str::from_utf8(&output.stderr).unwrap_or("");
-        panic!("Tarring the runfiles directory failed with error: {err}");
+        panic!("Tarring the runtime_deps directory failed with error: {err}");
     }
 
     // Create a tarball of some required files in the environment directory such that they can be copied to the UVM.
@@ -148,8 +135,8 @@ fn setup(env: TestEnv) {
     scp_send_to(
         log.clone(),
         &session,
-        &runfiles_tar_path,
-        &Path::new("/home/admin").join(RUNFILES_TAR_ZST),
+        &runtime_deps_tar_path,
+        &Path::new("/home/admin").join(RUNTIME_DEPS_TAR_ZST),
         0o644,
     );
     scp_send_to(
@@ -160,12 +147,10 @@ fn setup(env: TestEnv) {
         0o644,
     );
 
-    // Create a temporary environment file that we SCP into the UVM. These environment
+    // Create an environment file that we SCP into the UVM. These environment
     // variables are then forward to the docker container with --env-file.
-    // (scoped to delete tempfile asap)
     {
-        let tmpdir = tempfile::tempdir().expect("Could not create tempdir");
-        let filepath = tmpdir.path().join("env");
+        let filepath = env.get_path("env_vars");
         let mut file = File::create(filepath.clone()).expect("Could not create tempfile");
 
         // We remove some problematic (and unnecessary) environment variables
@@ -242,6 +227,11 @@ fn setup(env: TestEnv) {
     let forward_ssh_agent =
         env::var("COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT").unwrap_or("".to_string());
 
+    let metrics_flag = match env::var("ENABLE_METRICS") {
+        Ok(val) if val == "1" || val.eq_ignore_ascii_case("true") => "--enable-metrics".to_string(),
+        _ => "".to_string(),
+    };
+
     let logs_flag = if env::var("VECTOR_VM_PATH").is_err() {
         "--no-logs".to_string()
     } else {
@@ -261,7 +251,7 @@ set -e
 
 # Unpack uploaded tarballs under /home/admin/test which will become the test's working directory:
 mkdir -p /home/admin/test
-tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level="/home/admin/runfiles"
+tar -xf /home/admin/{RUNTIME_DEPS_TAR_ZST} --one-top-level="/home/admin/test/runtime_deps"
 tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level="/home/admin/test/root_env"
 chmod 700 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
 chmod 600 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
@@ -287,17 +277,17 @@ docker run \
   --name {COLOCATE_CONTAINER_NAME} \
   --network host \
   -v /home/admin/test:/home/root/test \
-  -v /home/admin/runfiles:/home/root/runfiles \
   -v /home/admin/dashboards:{dashboards_path_in_docker}:ro \
+  --workdir /home/root/test \
   --env-file /home/admin/env_vars \
-  --env RUNFILES=/home/root/runfiles \
   "${{DOCKER_RUN_ARGS[@]}}" \
   ubuntu_test_runtime:image \
-  /home/root/runfiles/{colocated_test_bin} \
+  '{colocated_test_bin}' \
     --working-dir /home/root/test \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
-    --group-base-name {colocated_test} \
+    --group-base-name {colocated_test_name} \
+    {metrics_flag} \
     {logs_flag} \
     {exclude_logs_args} \
     run

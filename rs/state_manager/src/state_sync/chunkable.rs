@@ -267,7 +267,9 @@ impl IncompleteState {
             height,
             root_hash,
             state: DownloadState::Blank,
-            manifest_with_checkpoint_layout: state_sync.state_manager.latest_manifest(),
+            manifest_with_checkpoint_layout: state_sync
+                .state_manager
+                .latest_checkpoint_with_manifest(),
             metrics: state_sync.state_manager.metrics.clone(),
             started_at: Instant::now(),
             fetch_started_at: None,
@@ -968,6 +970,15 @@ impl IncompleteState {
         let scratchpad_layout =
             CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
                 .expect("failed to create checkpoint layout");
+
+        scratchpad_layout
+            .create_state_sync_checkpoint_marker()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to create state sync checkpoint marker for scratchpad @height {height}: {err}",
+                );
+            });
 
         match state_layout.promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height) {
             Ok(_) => {
@@ -1780,8 +1791,8 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
             .state_sync_metrics
             .add_chunk_duration
             .with_label_values(&[
-                &state_before,
-                &state_after,
+                state_before.as_str(),
+                state_after.as_str(),
                 if success { "ok" } else { "err" },
             ])
             .observe(started_at.elapsed().as_secs_f64());

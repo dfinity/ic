@@ -4,7 +4,8 @@
 //! Multisignatures using BLS12-381.
 mod api;
 mod crypto;
-#[cfg(test)]
-mod tests;
 pub mod types;
 pub use api::*;
+
+#[cfg(test)]
+mod tests;

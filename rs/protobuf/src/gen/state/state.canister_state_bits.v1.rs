@@ -3,8 +3,8 @@
 pub struct CallContext {
     #[prost(bool, tag = "5")]
     pub responded: bool,
-    #[prost(message, optional, tag = "6")]
-    pub available_funds: ::core::option::Option<super::super::queues::v1::Funds>,
+    #[prost(message, optional, tag = "13")]
+    pub available_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(bool, tag = "8")]
     pub deleted: bool,
     #[prost(uint64, tag = "9")]
@@ -90,8 +90,6 @@ pub struct Callback {
     pub on_cleanup: ::core::option::Option<WasmClosure>,
     #[prost(message, optional, tag = "5")]
     pub cycles_sent: ::core::option::Option<super::super::queues::v1::Cycles>,
-    #[prost(message, optional, tag = "6")]
-    pub originator: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag = "7")]
     pub respondent: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag = "8")]
@@ -272,8 +270,6 @@ pub mod stop_canister_context {
         pub sender: ::core::option::Option<super::super::super::super::types::v1::CanisterId>,
         #[prost(uint64, tag = "2")]
         pub reply_callback: u64,
-        #[prost(message, optional, tag = "3")]
-        pub funds: ::core::option::Option<super::super::super::queues::v1::Funds>,
         #[prost(message, optional, tag = "4")]
         pub cycles: ::core::option::Option<super::super::super::queues::v1::Cycles>,
         #[prost(uint64, optional, tag = "5")]
@@ -318,17 +314,27 @@ pub mod execution_task {
         #[prost(message, optional, tag = "4")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
-        #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 3, 5")]
+        #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 6, 3, 5")]
         pub input: ::core::option::Option<aborted_execution::Input>,
     }
     /// Nested message and enum types in `AbortedExecution`.
     pub mod aborted_execution {
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct AbortedResponse {
+            #[prost(message, optional, tag = "7")]
+            pub response: ::core::option::Option<super::super::super::super::queues::v1::Response>,
+            #[prost(message, optional, tag = "8")]
+            pub callback: ::core::option::Option<super::super::Callback>,
+        }
         #[derive(Clone, PartialEq, ::prost::Oneof)]
         pub enum Input {
             #[prost(message, tag = "1")]
             Request(super::super::super::super::queues::v1::Request),
+            /// TODO(DSM-95): Remove after we have switched to `AbortedResponse`.
             #[prost(message, tag = "2")]
             Response(super::super::super::super::queues::v1::Response),
+            #[prost(message, tag = "6")]
+            AbortedResponse(AbortedResponse),
             #[prost(message, tag = "3")]
             Ingress(super::super::super::super::ingress::v1::Ingress),
             #[prost(enumeration = "super::CanisterTask", tag = "5")]
@@ -614,7 +620,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 57
+/// Next ID: 58
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -627,10 +633,10 @@ pub struct CanisterStateBits {
     pub execution_state_bits: ::core::option::Option<ExecutionStateBits>,
     #[prost(uint64, tag = "8")]
     pub memory_allocation: u64,
+    #[prost(uint64, tag = "57")]
+    pub rounds_scheduled: u64,
     #[prost(uint64, tag = "15")]
     pub scheduled_as_first: u64,
-    #[prost(uint64, tag = "17")]
-    pub skipped_round_due_to_no_messages: u64,
     /// In how many rounds a canister is executed.
     #[prost(uint64, tag = "18")]
     pub executed: u64,

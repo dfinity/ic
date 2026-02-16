@@ -11,9 +11,7 @@ use ic_consensus_idkg::utils::{
     generate_responses_to_signature_request_contexts,
     get_idkg_subnet_public_keys_and_pre_signatures,
 };
-use ic_consensus_utils::{
-    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
-};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
@@ -29,7 +27,7 @@ use ic_protobuf::{
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
 use ic_types::{
-    Height, PrincipalId, Randomness, SubnetId,
+    Height, PrincipalId, SubnetId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
         ConsensusResponse,
@@ -38,6 +36,7 @@ use ic_types::{
         Block, BlockPayload, HasVersion,
         idkg::{self},
     },
+    crypto::randomness_from_crypto_hashable,
     crypto::threshold_sig::{
         ThresholdSigPublicKey,
         ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
@@ -167,7 +166,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             }
         }
 
-        let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
+        let randomness = randomness_from_crypto_hashable(&tape);
 
         // Retrieve the dkg summary block
         let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
@@ -570,7 +569,7 @@ mod tests {
         const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = vec![
+        let transcripts_for_remote_subnets = [
             (
                 NiDkgId {
                     start_block_height: Height::from(0),
@@ -624,7 +623,7 @@ mod tests {
         });
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = vec![(
+        let transcripts_for_remote_subnets = [(
             NiDkgId {
                 start_block_height: Height::from(0),
                 dealer_subnet: subnet_test_id(0),

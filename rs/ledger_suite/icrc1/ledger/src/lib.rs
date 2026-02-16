@@ -35,6 +35,7 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_stable_structures::{Storable, storable::Bound};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
+    icrc::metadata_key::MetadataKey,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
 };
 use icrc_ledger_types::{
@@ -70,13 +71,6 @@ const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 #[allow(dead_code)]
 const MAX_U64_ENCODING_BYTES: usize = 10;
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
-const METADATA_DECIMALS: &str = "icrc1:decimals";
-const METADATA_NAME: &str = "icrc1:name";
-const METADATA_SYMBOL: &str = "icrc1:symbol";
-const METADATA_FEE: &str = "icrc1:fee";
-const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
-const METADATA_PUBLIC_ALLOWANCES: &str = "icrc103:public_allowances";
-const METADATA_MAX_TAKE_ALLOWANCES: &str = "icrc103:max_take_value";
 const MAX_TAKE_ALLOWANCES: u64 = 500;
 
 #[cfg(not(feature = "u256-tokens"))]
@@ -229,8 +223,10 @@ impl InitArgsBuilder {
         self
     }
 
-    pub fn with_metadata_entry(mut self, name: impl ToString, value: impl Into<Value>) -> Self {
-        self.0.metadata.push((name.to_string(), value.into()));
+    pub fn with_metadata_entry(mut self, key: &str, value: impl Into<Value>) -> Self {
+        // Validate the key format at build time
+        MetadataKey::parse(key).unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
+        self.0.metadata.push((key.to_string(), value.into()));
         self
     }
 
@@ -525,8 +521,6 @@ thread_local! {
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
-    pub static LEDGER_STATE: RefCell<LedgerState> = const { RefCell::new(LedgerState::Ready) };
-
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<AccountSpender, StorableAllowance, VirtualMemory<DefaultMemoryImpl>>> =
@@ -546,26 +540,6 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 
     static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
-}
-
-#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
-pub enum LedgerField {
-    Allowances,
-    AllowancesExpirations,
-    Balances,
-    Blocks,
-}
-
-#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
-pub enum LedgerState {
-    Migrating(LedgerField),
-    Ready,
-}
-
-impl Default for LedgerState {
-    fn default() -> Self {
-        Self::Ready
-    }
 }
 
 type StableLedgerBalances = Balances<StableBalances>;
@@ -591,7 +565,7 @@ pub struct Ledger {
 
     token_symbol: String,
     token_name: String,
-    metadata: Vec<(String, StoredValue)>,
+    metadata: Vec<(MetadataKey, StoredValue)>,
     #[serde(default = "default_max_memo_length")]
     max_memo_length: u16,
 
@@ -647,23 +621,48 @@ pub fn wasm_token_type() -> String {
     Tokens::TYPE.to_string()
 }
 
-fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, StoredValue)> {
+/// Validates and converts string metadata keys to checked keys.
+///
+/// # Arguments
+/// * `arg_metadata` - Metadata with string keys from init/upgrade args
+/// * `require_valid` - If true, traps on invalid keys. If false, accepts any key for backwards compat.
+fn map_metadata_or_trap(
+    arg_metadata: Vec<(String, Value)>,
+    require_valid: bool,
+    sink: impl Sink + Clone,
+) -> Vec<(MetadataKey, StoredValue)> {
     const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
-        METADATA_DECIMALS,
-        METADATA_NAME,
-        METADATA_SYMBOL,
-        METADATA_FEE,
-        METADATA_MAX_MEMO_LENGTH,
-        METADATA_PUBLIC_ALLOWANCES,
-        METADATA_MAX_TAKE_ALLOWANCES,
+        MetadataKey::ICRC1_DECIMALS,
+        MetadataKey::ICRC1_NAME,
+        MetadataKey::ICRC1_SYMBOL,
+        MetadataKey::ICRC1_FEE,
+        MetadataKey::ICRC1_MAX_MEMO_LENGTH,
+        MetadataKey::ICRC103_PUBLIC_ALLOWANCES,
+        MetadataKey::ICRC103_MAX_TAKE_VALUE,
     ];
     arg_metadata
         .into_iter()
-        .map(|(k, v)| {
-            if DISALLOWED_METADATA_FIELDS.contains(&k.as_str()) {
-                ic_cdk::trap(format!("Metadata field {k} is reserved and cannot be set"));
+        .map(|(key_str, v)| {
+            if DISALLOWED_METADATA_FIELDS.contains(&key_str.as_str()) {
+                ic_cdk::trap(format!(
+                    "Metadata field {} is reserved and cannot be set",
+                    key_str
+                ));
             }
-            (k, StoredValue::from(v))
+            let metadata_key = MetadataKey::parse(&key_str).unwrap_or_else(|e| {
+                if require_valid {
+                    ic_cdk::trap(format!("invalid metadata key '{}': {}", key_str, e))
+                } else {
+                    // For backwards compat with ledgers that have legacy invalid keys
+                    log!(
+                        sink,
+                        "Warning: accepting invalid metadata key '{}' for backwards compatibility",
+                        key_str
+                    );
+                    MetadataKey::unchecked_from_string(key_str)
+                }
+            });
+            (metadata_key, StoredValue::from(v))
         })
         .collect()
 }
@@ -709,7 +708,7 @@ impl Ledger {
             token_symbol,
             token_name,
             decimals: decimals.unwrap_or_else(default_decimals),
-            metadata: map_metadata_or_trap(metadata),
+            metadata: map_metadata_or_trap(metadata, true, sink), // require_valid=true for init
             max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
             feature_flags: feature_flags.unwrap_or_default(),
             maximum_number_of_accounts: 0,
@@ -736,52 +735,6 @@ impl Ledger {
 
         ledger
     }
-
-    pub fn migrate_one_allowance(&mut self) -> bool {
-        match self.approvals.allowances_data.pop_first_allowance() {
-            Some((account_spender, allowance)) => {
-                self.stable_approvals
-                    .allowances_data
-                    .set_allowance(account_spender, allowance);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_expiration(&mut self) -> bool {
-        match self.approvals.allowances_data.pop_first_expiry() {
-            Some((timestamp, account_spender)) => {
-                self.stable_approvals
-                    .allowances_data
-                    .insert_expiry(timestamp, account_spender);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_balance(&mut self) -> bool {
-        match self.balances.store.pop_first() {
-            Some((account, tokens)) => {
-                self.stable_balances.credit(&account, tokens);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_block(&mut self) -> bool {
-        self.blockchain.migrate_one_block()
-    }
-
-    pub fn clear_arrivals(&mut self) {
-        self.approvals.allowances_data.clear_arrivals();
-    }
-
-    pub fn copy_token_pool(&mut self) {
-        self.stable_balances.token_pool = self.balances.token_pool;
-    }
 }
 
 impl LedgerContext for Ledger {
@@ -791,22 +744,18 @@ impl LedgerContext for Ledger {
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
-        panic_if_not_ready();
         &self.stable_balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        panic_if_not_ready();
         &mut self.stable_balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
-        panic_if_not_ready();
         &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
-        panic_if_not_ready();
         &mut self.stable_approvals
     }
 
@@ -910,35 +859,44 @@ impl Ledger {
         MAX_TAKE_ALLOWANCES
     }
 
-    pub fn metadata(&self) -> Vec<(String, Value)> {
-        let mut records: Vec<(String, Value)> = self
+    pub fn metadata(&self) -> Vec<(MetadataKey, Value)> {
+        let mut records: Vec<(MetadataKey, Value)> = self
             .metadata
             .clone()
             .into_iter()
             .map(|(k, v)| (k, StoredValue::into(v)))
             .collect();
-        records.push(Value::entry(METADATA_DECIMALS, self.decimals() as u64));
-        records.push(Value::entry(METADATA_NAME, self.token_name()));
-        records.push(Value::entry(METADATA_SYMBOL, self.token_symbol()));
-        records.push(Value::entry(METADATA_FEE, Nat::from(self.transfer_fee())));
-        records.push(Value::entry(
-            METADATA_MAX_MEMO_LENGTH,
-            self.max_memo_length() as u64,
-        ));
-        records.push(Value::entry(METADATA_PUBLIC_ALLOWANCES, "true"));
-        records.push(Value::entry(
-            METADATA_MAX_TAKE_ALLOWANCES,
-            Nat::from(self.max_take_allowances()),
-        ));
+        records.push(Value::entry(MetadataKey::ICRC1_DECIMALS, self.decimals() as u64).unwrap());
+        records.push(Value::entry(MetadataKey::ICRC1_NAME, self.token_name()).unwrap());
+        records.push(Value::entry(MetadataKey::ICRC1_SYMBOL, self.token_symbol()).unwrap());
+        records.push(Value::entry(MetadataKey::ICRC1_FEE, Nat::from(self.transfer_fee())).unwrap());
+        records.push(
+            Value::entry(
+                MetadataKey::ICRC1_MAX_MEMO_LENGTH,
+                self.max_memo_length() as u64,
+            )
+            .unwrap(),
+        );
+        records.push(Value::entry(MetadataKey::ICRC103_PUBLIC_ALLOWANCES, "true").unwrap());
+        records.push(
+            Value::entry(
+                MetadataKey::ICRC103_MAX_TAKE_VALUE,
+                Nat::from(self.max_take_allowances()),
+            )
+            .unwrap(),
+        );
         // When adding new entries that cannot be set by the user
         // (e.g. because they are fixed or computed dynamically)
         // please also add them to `map_metadata_or_trap` to prevent
         // the entry being set using init or upgrade arguments.
         if let Some(index_principal) = self.index_principal() {
-            records.push(Value::entry(
-                "icrc106:index_principal",
-                index_principal.to_text(),
-            ));
+            records.push(
+                Value::entry(
+                    MetadataKey::ICRC106_INDEX_PRINCIPAL,
+                    index_principal.to_text(),
+                )
+                .unwrap(),
+            );
         }
         records
     }
@@ -949,7 +907,11 @@ impl Ledger {
 
     pub fn upgrade(&mut self, sink: impl Sink + Clone, args: UpgradeArgs) {
         if let Some(upgrade_metadata_args) = args.metadata {
-            self.metadata = map_metadata_or_trap(upgrade_metadata_args);
+            // Only enforce strict validation if existing metadata has no invalid keys.
+            // This allows ledgers with legacy invalid keys to still be upgraded.
+            let existing_all_valid = self.metadata.iter().all(|(k, _)| k.is_valid());
+            self.metadata =
+                map_metadata_or_trap(upgrade_metadata_args, existing_all_valid, sink.clone());
         }
         if let Some(token_name) = args.token_name {
             self.token_name = token_name;
@@ -1196,45 +1158,6 @@ impl Ledger {
     }
 }
 
-pub fn is_ready() -> bool {
-    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
-}
-
-pub fn panic_if_not_ready() {
-    if !is_ready() {
-        ic_cdk::trap("The Ledger is not ready");
-    }
-}
-
-pub fn ledger_state() -> LedgerState {
-    LEDGER_STATE.with(|s| *s.borrow())
-}
-
-pub fn set_ledger_state(ledger_state: LedgerState) {
-    LEDGER_STATE.with(|s| *s.borrow_mut() = ledger_state);
-}
-
-pub fn clear_stable_allowance_data() {
-    ALLOWANCES_MEMORY.with_borrow_mut(|allowances| {
-        allowances.clear_new();
-    });
-    ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
-        expirations.clear_new();
-    });
-}
-
-pub fn clear_stable_balances_data() {
-    BALANCES_MEMORY.with_borrow_mut(|balances| {
-        balances.clear_new();
-    });
-}
-
-pub fn clear_stable_blocks_data() {
-    BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-        blocks.clear_new();
-    });
-}
-
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }
@@ -1366,12 +1289,6 @@ impl AllowancesData for StableAllowancesData {
         let result = ALLOWANCES_EXPIRATIONS_MEMORY
             .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0));
         result.map(|e| (e.timestamp, e.account_spender.into()))
-    }
-
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
-        panic!("The method `pop_first_allowance` should not be called for StableAllowancesData")
     }
 
     fn len_allowances(&self) -> usize {

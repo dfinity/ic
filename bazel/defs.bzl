@@ -85,12 +85,24 @@ def _mcopy(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
 
     command = "cp -p {fs} {output} && chmod +w {output} ".format(fs = ctx.file.fs.path, output = out.path)
-    for src in ctx.files.srcs:
-        command += "&& mcopy -mi {output} -sQ {src_path} ::/{filename} ".format(output = out.path, src_path = src.path, filename = ctx.attr.remap_paths.get(src.basename, src.basename))
+    inputs = []
+    for srcs, dest in ctx.attr.srcmap.items():
+        src_files = srcs[DefaultInfo].files.to_list()
+        for src_file in src_files:
+            inputs.append(src_file)
+            if dest.endswith("/"):
+                dest_path = dest + src_file.basename
+            else:
+                dest_path = dest
+            command += "&& mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
+                output = out.path,
+                src_path = src_file.path,
+                dest = dest_path.removeprefix("/"),
+            )
 
     ctx.actions.run_shell(
         command = command,
-        inputs = ctx.files.srcs + [ctx.file.fs],
+        inputs = inputs + [ctx.file.fs],
         outputs = [out],
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -98,9 +110,8 @@ def _mcopy(ctx):
 mcopy = rule(
     implementation = _mcopy,
     attrs = {
-        "srcs": attr.label_list(allow_files = True),
+        "srcmap": attr.label_keyed_string_dict(allow_files = True),
         "fs": attr.label(allow_single_file = True),
-        "remap_paths": attr.string_dict(),
     },
 )
 
@@ -279,49 +290,40 @@ def rust_ic_bench(env = {}, data = [], **kwargs):
         **kwargs
     )
 
-def _symlink_dir_test(ctx):
+def _copy_binary_test(ctx):
     """
-    Create a symlink to have a stable location for Rust (and maybe other) test binaries
-
-    `rust_test` creates a binary as an output, so you can use that binary in
-    other targets, including Rust tests, e.g., as a `data` dependency. But for a
-    `rust_test` target `tgt`, the location of the binary in RUNFILES_DIR is
-    unpredictable (Bazel will put it in a dir called something like
-    `tgt_451223`). This rule creates a symlink to the binary in a stable location.
+    Copy the test binary to have a stable location for a Rust test binary
     """
+    src_exe = ctx.attr.test_target[DefaultInfo].files.to_list()[0]
+    dst_exe = ctx.actions.declare_file(ctx.attr.name)
 
-    # Use the no-op script as the executable
-    no_op_output = ctx.actions.declare_file("no_op")
-    ctx.actions.write(output = no_op_output, content = ":")
+    ctx.actions.run_shell(
+        command = "cp {src} {dst} && chmod +x {dst}".format(
+            src = src_exe.path,
+            dst = dst_exe.path,
+        ),
+        inputs = [src_exe],
+        outputs = [dst_exe],
+    )
 
-    dirname = ctx.attr.name
-    lns = []
-    for target, canister_name in ctx.attr.targets.items():
-        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
-        file = target[DefaultInfo].files.to_list()[0]
-        ctx.actions.symlink(
-            output = ln,
-            target_file = file,
-        )
-        lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns), executable = no_op_output)]
+    return [DefaultInfo(files = depset(direct = [dst_exe]), executable = dst_exe)]
 
-symlink_dir_test = rule(
-    implementation = _symlink_dir_test,
+copy_binary_test = rule(
+    implementation = _copy_binary_test,
     test = True,
     attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
+        "test_target": attr.label(allow_files = True),
     },
 )
 
 def rust_test_with_binary(name, binary_name, **kwargs):
     """
-    A `rust_test` with a stable link to its produced test binary.
+    A `rust_test` with a stable copy of its produced test binary.
 
     Plain `rust_test` is problematic when one wants to use the produced test binary in
     other Bazel targets (e.g., upgrade/downgrade compatibility tests), as Bazel does not
     provide a stable way to refer to the binary produced by a test. This rule is a thin
-    wrapper around `rust_test` that symlinks the test binary to a stable location provided
+    wrapper around `rust_test` that copies the test binary to a stable location provided
     by `binary_name`, which can then be used in other tests.
 
     Usage example:
@@ -337,15 +339,13 @@ def rust_test_with_binary(name, binary_name, **kwargs):
     This will generate a rust_test target named `my_test` whose corresponding binary
     will be available as the `my_test_binary` target.
     """
-    symlink_dir_test(
-        name = binary_name,
-        targets = {
-            name: binary_name,
-        },
-    )
     rust_test(
         name = name,
         **kwargs
+    )
+    copy_binary_test(
+        name = binary_name,
+        test_target = name,
     )
 
 def _symlink_dir(ctx):

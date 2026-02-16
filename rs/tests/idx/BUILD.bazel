@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -27,32 +27,27 @@ rust_binary(
 
 system_test(
     name = "basic_health_test",
-    env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,  # flakiness rate of 1.22% over the month from 2025-02-11 till 2025-03-11
-    tags = [
-        "long_test",
-    ],
+    enable_metrics = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
     ],
 )
 
 system_test(
     name = "ii_delegation_test",
-    env = UNIVERSAL_CANISTER_ENV | {
-        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-    },
     tags = [
         "long_test",
     ],
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
-        "@ii_dev_canister//file",
-    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS | {
+        "II_WASM_PATH": "@ii_dev_canister//file",
+    },
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -74,45 +69,12 @@ system_test(
     deps = [
         # Keep sorted.
         "//rs/prep",
-        "//rs/registry/local_store",
-        "//rs/registry/local_store/artifacts",
         "//rs/registry/regedit",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:tokio",
-    ],
-)
-
-system_test(
-    name = "remote_replicable_mock_test",
-    tags = [
-        "manual",
-    ],
-    runtime_deps = [":replicable_mock_test_uvm_config_image"],
-    deps = [
-        # Keep sorted.
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-        "@crate_index//:slog",
-    ],
-)
-
-# The target is used for testing the following scenarios:
-# Scenario A: running the test directly
-#    bazel test //rs/tests:replicable_mock_test --test_tag_filters="system_test"
-# Scanario B: Runs the test via Docker
-# 1. bazel build //rs/tests:replicable_mock_test_image.tar # Dockerizes the test
-# 2. docker load -i bazel-out/.../bin/rs/tests/replicable_mock_test_image.tar # Loads the Docker image
-# 3. docker run -it bazel/rs/tests:replicable_mock_test_image
-system_test(
-    name = "replicable_mock_test",
-    deps = [
-        # Keep sorted.
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-        "@crate_index//:slog",
     ],
 )
 

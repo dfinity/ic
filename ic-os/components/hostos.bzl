@@ -13,8 +13,6 @@ component_files = {
     Label("hostos/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
-    Label("hostos/misc/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
-    Label("hostos/misc/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
     Label("hostos/misc/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
 
     # early-boot
@@ -75,7 +73,6 @@ component_files = {
     Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
     Label("misc/log-config/log-config-hostos.service"): "/etc/systemd/system/log-config.service",
-    Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
     Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
     Label("monitoring/hostos/export-guestos-serial-logs.sh"): "/opt/ic/bin/export-guestos-serial-logs.sh",
@@ -98,10 +95,13 @@ component_files = {
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys-hostos.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
 
+    # TODO: remove in NODE-1859
+    Label("hostos/update-config/update-config.service"): "/etc/systemd/system/update-config.service",
+
     # upgrade
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
-    Label("upgrade/grub.sh"): "/opt/ic/bin/grub.sh",
+    Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",
 }

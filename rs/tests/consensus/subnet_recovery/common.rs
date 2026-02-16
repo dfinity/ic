@@ -38,9 +38,8 @@ use anyhow::bail;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
-    node::assert_node_is_unassigned_with_ssh_session,
+    node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
     rw_message::{install_nns_and_check_progress, store_message},
-    set_sandbox_env_vars,
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
         assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
@@ -64,13 +63,10 @@ use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, 
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env_api::scp_send_to;
+use ic_system_test_driver::driver::test_env_api::{get_dependency_path_from_env, scp_send_to};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
-use ic_types::{
-    Height, ReplicaVersion, SubnetId,
-    consensus::{CatchUpPackage, idkg::STORE_PRE_SIGNATURES_IN_STATE},
-};
+use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
 use prost::Message;
 use slog::{Logger, info};
 use std::{
@@ -87,11 +83,12 @@ const UNASSIGNED_NODES: usize = 4;
 
 const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
-/// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
-/// plus 4 to make checkpoint heights more predictable
-const DKG_INTERVAL_LARGE: u64 = 124;
+/// 40 dealings * 4 transcripts being reshared (high/local, low/local, high/remote, low/remote)
+/// plus 14 as a safety margin
+const DKG_INTERVAL_LARGE: u64 = 4 * NNS_NODES_LARGE as u64 + 14;
 
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
+const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
@@ -105,11 +102,9 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
         .into_iter()
         .map(|key_id| KeyConfig {
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
-                PRE_SIGNATURES_TO_CREATE_IN_ADVANCE
-            } else {
-                0
-            },
+            pre_signatures_to_create_in_advance: key_id
+                .requires_pre_signatures()
+                .then_some(PRE_SIGNATURES_TO_CREATE_IN_ADVANCE),
             key_id,
         })
         .collect();
@@ -218,11 +213,34 @@ pub fn setup_failover_nodes(env: TestEnv) {
     );
 }
 
+enum CupCorruption {
+    NotCorrupted,
+    CorruptedWithValidNiDkgId,
+    CorruptedIncludingInvalidNiDkgId,
+}
+
+impl CupCorruption {
+    fn is_corrupted(&self) -> bool {
+        match self {
+            CupCorruption::NotCorrupted => false,
+            CupCorruption::CorruptedWithValidNiDkgId
+            | CupCorruption::CorruptedIncludingInvalidNiDkgId => true,
+        }
+    }
+
+    fn can_determine_subnet_id(&self) -> bool {
+        match self {
+            CupCorruption::NotCorrupted | CupCorruption::CorruptedWithValidNiDkgId => true,
+            CupCorruption::CorruptedIncludingInvalidNiDkgId => false,
+        }
+    }
+}
+
 struct TestConfig {
     subnet_size: usize,
     upgrade: bool,
     chain_key: bool,
-    corrupt_cup: bool,
+    corrupt_cup: CupCorruption,
     local_recovery: bool,
 }
 
@@ -233,28 +251,42 @@ pub fn test_with_chain_keys(env: TestEnv) {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: true,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
         },
     );
 }
 
 pub fn test_without_chain_keys(env: TestEnv) {
+    // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
+    // not be able to see the recovery CUP in the registry
+    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
+        CupCorruption::CorruptedIncludingInvalidNiDkgId
+    } else {
+        CupCorruption::NotCorrupted
+    };
     app_subnet_recovery_test(
         env,
         TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: false,
-            corrupt_cup: false,
+            corrupt_cup,
             local_recovery: false,
         },
     );
 }
 
 pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
-    // Test the corrupt CUP case only when recovering an app subnet with chain keys without upgrade
-    let corrupt_cup = env.topology_snapshot().unassigned_nodes().count() > 0;
+    // Test the recoverable corrupt CUP case only when recovering an app subnet with chain keys
+    // without upgrade
+    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
+        // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
+        // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
+        CupCorruption::CorruptedWithValidNiDkgId
+    } else {
+        CupCorruption::NotCorrupted
+    };
     app_subnet_recovery_test(
         env,
         TestConfig {
@@ -274,7 +306,7 @@ pub fn test_large_with_chain_keys(env: TestEnv) {
             subnet_size: APP_NODES_LARGE,
             upgrade: false,
             chain_key: true,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
         },
     );
@@ -287,7 +319,7 @@ pub fn test_no_upgrade_without_chain_keys(env: TestEnv) {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: false,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
         },
     );
@@ -300,7 +332,7 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: false,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: true,
         },
     );
@@ -309,16 +341,6 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
-    if cfg.local_recovery {
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe {
-            std::env::set_var(
-                "IC_ADMIN_BIN",
-                get_dependency_path_from_env("IC_ADMIN_PATH"),
-            )
-        };
-    }
-
     let AdminAndUserKeys {
         ssh_admin_priv_key_path,
         admin_auth,
@@ -326,8 +348,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         ssh_user_pub_key: ssh_readonly_pub_key,
         ..
     } = get_admin_keys_and_generate_readonly_keys(&env);
-    // If the latest CUP is corrupted we can't deploy read-only access
-    let ssh_readonly_pub_key_deployed = (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key);
+    // We can deploy the read-only key only if the CUP is not corrupted in a way that prevents
+    // nodes from determining their subnet ID.
+    let ssh_readonly_pub_key_deployed = cfg
+        .corrupt_cup
+        .can_determine_subnet_id()
+        .then_some(ssh_readonly_pub_key);
 
     let current_version = get_guestos_img_version();
     info!(logger, "Current GuestOS version: {:?}", current_version);
@@ -346,9 +372,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
 
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let nns_canister = block_on(MessageCanister::new(
+    let nns_canister = block_on(MessageCanister::new_with_retries(
         &agent,
         nns_node.effective_canister_id(),
+        &logger,
+        Duration::from_secs(120),
+        Duration::from_secs(1),
     ));
 
     // The first application subnet encountered during iteration is the source subnet because it was inserted first.
@@ -437,9 +466,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
 
-    // Only check that the pre-signature stash is purged in one test case (chain keys + corrupt CUP)
+    // Only check that the pre-signature stash is purged in one test case (chain keys + recoverable
+    // corrupt CUP)
     let check_pre_signature_stash_is_purged =
-        cfg.chain_key && cfg.corrupt_cup && STORE_PRE_SIGNATURES_IN_STATE;
+        cfg.chain_key && matches!(cfg.corrupt_cup, CupCorruption::CorruptedWithValidNiDkgId);
     if check_pre_signature_stash_is_purged {
         // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
         await_pre_signature_stash_size(
@@ -478,17 +508,15 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     let maybe_upgrade_version = (cfg.upgrade && unassigned_nodes_ids.is_empty())
         .then_some(get_guestos_update_img_version());
-
-    let recovery_dir = get_dependency_path("rs/tests");
-    let binaries_dir = recovery_dir.join("recovery/binaries");
-    set_sandbox_env_vars(binaries_dir.clone());
+    std::fs::write(
+        env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
+        serde_json::to_string(&get_guestos_launch_measurements()).unwrap(),
+    )
+    .expect("Could not write guest launch measurements to file");
 
     let app_subnet_id = app_subnet.subnet_id;
     let admin_helper = AdminHelper::new(
-        match std::env::var("IC_ADMIN_PATH") {
-            Ok(path) => get_dependency_path(path),
-            Err(_) => binaries_dir.join("ic-admin"),
-        },
+        get_dependency_path_from_env("IC_ADMIN_PATH"),
         nns_node.get_public_url(),
         None,
     );
@@ -569,9 +597,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         (download_pool_node, node_cert_share, admins)
     };
 
-    if cfg.corrupt_cup {
+    if cfg.corrupt_cup.is_corrupted() {
         info!(logger, "Corrupting the latest CUP on all nodes");
-        corrupt_latest_cup(&app_subnet, &admin_helper, &logger);
+        corrupt_latest_cup(&app_subnet, &cfg.corrupt_cup, &admin_helper, &logger);
         assert_subnet_is_broken(
             &download_state_node.get_public_url(),
             app_can_id,
@@ -615,6 +643,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         );
     }
 
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
@@ -632,6 +661,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         upgrade_version: maybe_upgrade_version.clone(),
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
+        upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: Some(replay_height),
         readonly_pub_key: ssh_readonly_pub_key_deployed,
@@ -647,6 +677,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         // running to compare the heights to.
         skip: cfg
             .corrupt_cup
+            .is_corrupted()
             .then_some(vec![StepType::ValidateReplayOutput]),
     };
 
@@ -763,13 +794,33 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         }
     }
 
-    info!(
-        logger,
-        "Making sure unassigned nodes deleted their state..."
-    );
-    topology_snapshot.unassigned_nodes().for_each(|n| {
-        assert_node_is_unassigned_with_ssh_session(&n, admin_ssh_sessions.get(&n.node_id), &logger);
-    });
+    if cfg.corrupt_cup.can_determine_subnet_id() {
+        info!(
+            logger,
+            "Making sure unassigned nodes deleted their state..."
+        );
+        topology_snapshot.unassigned_nodes().for_each(|n| {
+            assert_node_is_unassigned_with_ssh_session(
+                &n,
+                admin_ssh_sessions.get(&n.node_id),
+                &logger,
+            );
+        });
+    } else {
+        info!(
+            logger,
+            "Since the CUP is corrupted in a way that nodes cannot determine their subnet ID, \
+             unassigned nodes should not have detected that they became unassigned and should \
+             still have their state and CUP. Checking..."
+        );
+        topology_snapshot.unassigned_nodes().for_each(|n| {
+            assert_node_is_assigned_with_ssh_session(
+                &n,
+                admin_ssh_sessions.get(&n.node_id),
+                &logger,
+            );
+        });
+    }
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
@@ -790,7 +841,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
 
     let command_args = app_subnet_recovery_local_cli_args(node, &session, &subnet_recovery, logger);
     let command = format!(
-        r#"IC_ADMIN_BIN="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
+        r#"IC_ADMIN_PATH="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
         {command_args}
         "#
     );
@@ -802,9 +853,21 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     }
 }
 
-// Corrupt the latest cup of all subnet nodes by change the CUP's replica version field.
-// This will change the hash of the block, thus making the CUP non-deserializable.
-fn corrupt_latest_cup(subnet: &SubnetSnapshot, admin_helper: &AdminHelper, logger: &Logger) {
+// Corrupt the latest cup of all subnet nodes by changing the CUP's replica version field for
+// recoverable corruptions where the NiDkgId can still be parsed. This will change the hash of the
+// block, thus making the CUP non-deserializable.
+// For unrecoverable corruptions, we change the NiDkgId field itself.
+fn corrupt_latest_cup(
+    subnet: &SubnetSnapshot,
+    cup_corruption: &CupCorruption,
+    admin_helper: &AdminHelper,
+    logger: &Logger,
+) {
+    assert!(
+        cup_corruption.is_corrupted(),
+        "cup_corruption must indicate some kind of corruption"
+    );
+
     const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
     const NEW_CUP_PATH: &str = "/var/lib/ic/data/cups/new_cup.pb";
 
@@ -829,11 +892,24 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, admin_helper: &AdminHelper, logge
     let mut bytes = Vec::new();
     channel.read_to_end(&mut bytes).unwrap();
 
-    info!(logger, "Modifying CUP replica version");
     let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
     let mut cup = CatchUpPackage::try_from(&proto_cup).unwrap();
-    cup.content.block.as_mut().version = ReplicaVersion::try_from("invalid_version").unwrap();
-    let bytes = pb::CatchUpPackage::from(cup).encode_to_vec();
+    let corrupted_proto_cup = match cup_corruption {
+        CupCorruption::CorruptedWithValidNiDkgId => {
+            info!(logger, "Modifying CUP replica version");
+            cup.content.block.as_mut().version =
+                ReplicaVersion::try_from("invalid_version").unwrap();
+            pb::CatchUpPackage::from(cup)
+        }
+        CupCorruption::CorruptedIncludingInvalidNiDkgId => {
+            info!(logger, "Modifying CUP NiDkgId");
+            let mut proto = pb::CatchUpPackage::from(cup);
+            proto.signer = None;
+            proto
+        }
+        CupCorruption::NotCorrupted => unreachable!(),
+    };
+    let bytes = corrupted_proto_cup.encode_to_vec();
 
     for node in subnet.nodes() {
         info!(

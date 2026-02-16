@@ -55,12 +55,12 @@ impl DeregisterKnownNeuron {
 
 impl LocallyDescribableProposalAction for DeregisterKnownNeuron {
     const TYPE_NAME: &'static str = "Deregister Known Neuron";
-    const TYPE_DESCRIPTION: &'static str = "Deregisters a known neuron, removing its known neuron \
-        data (name, description, etc.) and making it a regular neuron.";
+    const TYPE_DESCRIPTION: &'static str = "Deregister an existing neuron as a \"known neuron\" \
+        and remove it from the list of known neurons.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
-            .add_field_with_empty_as_fallback("neuron_id", self.id.map(|id| id.id))
+            .add_field("neuron_id", self.id.map(|id| id.id))
             .build()
     }
 }

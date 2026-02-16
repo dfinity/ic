@@ -74,6 +74,10 @@ impl Task for SubprocessTask {
             .arg("--group-base-name")
             .arg(self.group_ctx.group_base_name.clone());
 
+        if self.group_ctx.enable_metrics {
+            child_cmd.arg("--enable-metrics");
+        }
+
         if !self.group_ctx.logs_enabled {
             child_cmd.arg("--no-logs");
         }

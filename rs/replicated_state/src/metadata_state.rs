@@ -1,10 +1,12 @@
 pub mod proto;
 pub mod subnet_call_context_manager;
+pub mod subnet_schedule;
 #[cfg(test)]
 mod tests;
 
+use self::subnet_call_context_manager::SubnetCallContextManager;
+use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
-use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use crate::{CheckpointLoadingMetrics, canister_state::system_state::CyclesUseCase};
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
@@ -30,7 +32,7 @@ use ic_types::{
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion},
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
+    subnet_id_into_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
@@ -63,6 +65,10 @@ pub struct SystemMetadata {
     /// XNet stream state indexed by the _destination_ subnet id.
     pub(super) streams: Arc<StreamMap>,
 
+    /// Scheduling priorities of the canisters on this subnet.
+    #[validate_eq(CompareWithValidateEq)]
+    pub subnet_schedule: SubnetSchedule,
+
     /// The canister ID ranges from which this subnet generates canister IDs.
     canister_allocation_ranges: CanisterIdRanges,
     /// The last generated canister ID; or `None` if this subnet has not
@@ -88,10 +94,6 @@ pub struct SystemMetadata {
     pub own_subnet_type: SubnetType,
 
     pub own_subnet_features: SubnetFeatures,
-
-    /// This flag determines whether cycles are charged. The flag is pulled from
-    /// the registry every round.
-    pub cost_schedule: CanisterCyclesCostSchedule,
 
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
@@ -185,10 +187,10 @@ pub struct SystemMetadata {
 /// use.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NetworkTopology {
-    pub subnets: BTreeMap<SubnetId, SubnetTopology>,
+    subnets: BTreeMap<SubnetId, SubnetTopology>,
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-    pub routing_table: Arc<RoutingTable>,
+    routing_table: Arc<RoutingTable>,
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub canister_migrations: Arc<CanisterMigrations>,
@@ -235,6 +237,37 @@ impl Default for NetworkTopology {
 }
 
 impl NetworkTopology {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        subnets: BTreeMap<SubnetId, SubnetTopology>,
+        routing_table: Arc<RoutingTable>,
+        canister_migrations: Arc<CanisterMigrations>,
+        nns_subnet_id: SubnetId,
+        chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
+        bitcoin_testnet_canister_id: Option<CanisterId>,
+        bitcoin_mainnet_canister_id: Option<CanisterId>,
+    ) -> Self {
+        Self {
+            subnets,
+            routing_table,
+            canister_migrations,
+            nns_subnet_id,
+            chain_key_enabled_subnets,
+            bitcoin_testnet_canister_id,
+            bitcoin_mainnet_canister_id,
+        }
+    }
+
+    /// Returns a reference to the subnets map.
+    pub fn subnets(&self) -> &BTreeMap<SubnetId, SubnetTopology> {
+        &self.subnets
+    }
+
+    /// Returns a reference to the routing table.
+    pub fn routing_table(&self) -> &Arc<RoutingTable> {
+        &self.routing_table
+    }
+
     /// Returns a list of subnets where the chain key feature is enabled.
     pub fn chain_key_enabled_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
         self.chain_key_enabled_subnets
@@ -366,6 +399,7 @@ impl SystemMetadata {
             own_subnet_type,
             ingress_history: Default::default(),
             streams: Default::default(),
+            subnet_schedule: Default::default(),
             canister_allocation_ranges: Default::default(),
             last_generated_canister_id: None,
             batch_time: UNIX_EPOCH,
@@ -389,7 +423,6 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 
@@ -580,6 +613,11 @@ impl SystemMetadata {
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
 
+        // "Preserve" the subnet schedule. This is actually persisted per-canister, as
+        // part of the respective canister state, so will only actually be retained for
+        // local canisters.
+        res.subnet_schedule = self.subnet_schedule;
+
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
         // `self.batch_time`.
@@ -645,6 +683,7 @@ impl SystemMetadata {
         let &mut SystemMetadata {
             ref mut ingress_history,
             streams: _,
+            ref mut subnet_schedule,
             canister_allocation_ranges: _,
             last_generated_canister_id: _,
             prev_state_hash: _,
@@ -674,8 +713,6 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            cost_schedule: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -691,6 +728,9 @@ impl SystemMetadata {
                 // Or this is subnet A' and message is addressed to the management canister.
                 || split_from_subnet == *own_subnet_id && canister_id == IC_00
         });
+
+        // Only retain canister priorities for hosted canisters.
+        subnet_schedule.split(&is_local_canister);
 
         // Split complete, reset split marker.
         *split_from = None;
@@ -754,6 +794,7 @@ impl SystemMetadata {
         let Self {
             mut ingress_history,
             mut streams,
+            mut subnet_schedule,
             mut canister_allocation_ranges,
             mut last_generated_canister_id,
             prev_state_hash,
@@ -775,7 +816,6 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
-            cost_schedule,
         } = self;
 
         assert_eq!(None, split_from);
@@ -844,6 +884,9 @@ impl SystemMetadata {
         // Set the split marker to the original subnet ID, on both subnets.
         subnet_split_from = Some(own_subnet_id);
 
+        // Only retain canister priorities for hosted canisters.
+        subnet_schedule.split(is_local_canister);
+
         // Only retain Bitcoin responses for hosted canisters.
         bitcoin_get_successors_follow_up_responses
             .retain(|canister_id, _| is_local_canister(*canister_id));
@@ -851,6 +894,7 @@ impl SystemMetadata {
         Ok(Self {
             ingress_history,
             streams,
+            subnet_schedule,
             // Already populated from the registry for subnet B.
             canister_allocation_ranges,
             last_generated_canister_id,
@@ -880,7 +924,6 @@ impl SystemMetadata {
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
-            cost_schedule,
         })
     }
 
@@ -1027,19 +1070,32 @@ pub struct Stream {
     /// Indexed queue of outgoing messages.
     messages: StreamIndexedQueue<StreamMessage>,
 
+    /// Index of the first signal that may not have been observed by the remote
+    /// subnet, updated from the `begin` in the reverse stream header.
+    ///
+    /// If `messages` is empty and this is equal to `signals_end`, then there is
+    /// definitely nothing in this stream for the remote subnet to induct.
+    signals_begin: StreamIndex,
+
     /// Index of the next expected reverse stream message.
     ///
     /// Conceptually we use a gap-free queue containing one signal for each
-    /// inducted message; but because these signals are all "Accept" (as we
-    /// generate responses when rejecting messages), that queue can be safely
-    /// represented by its end index (pointing just beyond the last signal).
+    /// inducted message; but except for any reject signals, that queue can be
+    /// fully represented by its end index (pointing just beyond the last signal).
     signals_end: StreamIndex,
 
     /// Reject signals, in ascending stream index order.
+    ///
+    /// Invariants:
+    ///  * `reject_signals[i].index < reject_signals[i+1].index`
+    ///  * `signals_begin <= reject_signals[i].index < signals_end`
     reject_signals: VecDeque<RejectSignal>,
 
     /// Estimated byte size of `self.messages`.
     messages_size_bytes: usize,
+
+    /// Number of `Refund` messages in the stream.
+    refund_count: usize,
 
     /// Stream flags observed in the header of the reverse stream.
     reverse_stream_flags: StreamFlags,
@@ -1051,18 +1107,22 @@ pub struct Stream {
 impl Default for Stream {
     fn default() -> Self {
         let messages = Default::default();
+        let signals_begin = Default::default();
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
+        let refund_count = Self::calculate_refund_count(&messages);
         let reverse_stream_flags = StreamFlags {
             deprecated_responses_only: false,
         };
         let guaranteed_response_counts = BTreeMap::default();
         Self {
             messages,
+            signals_begin,
             signals_end,
             reject_signals,
             messages_size_bytes,
+            refund_count,
             reverse_stream_flags,
             guaranteed_response_counts,
         }
@@ -1070,38 +1130,6 @@ impl Default for Stream {
 }
 
 impl Stream {
-    /// Creates a new `Stream` with the given `messages` and `signals_end`.
-    pub fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Self {
-        let messages_size_bytes = Self::calculate_size_bytes(&messages);
-        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
-        Self {
-            messages,
-            signals_end,
-            reject_signals: VecDeque::new(),
-            messages_size_bytes,
-            reverse_stream_flags: Default::default(),
-            guaranteed_response_counts,
-        }
-    }
-
-    /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
-    pub fn with_signals(
-        messages: StreamIndexedQueue<StreamMessage>,
-        signals_end: StreamIndex,
-        reject_signals: VecDeque<RejectSignal>,
-    ) -> Self {
-        let messages_size_bytes = Self::calculate_size_bytes(&messages);
-        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
-        Self {
-            messages,
-            signals_end,
-            reject_signals,
-            messages_size_bytes,
-            reverse_stream_flags: Default::default(),
-            guaranteed_response_counts,
-        }
-    }
-
     /// Creates a slice starting from index `from` and containing at most
     /// `count` messages from this stream.
     pub fn slice(&self, from: StreamIndex, count: Option<usize>) -> StreamSlice {
@@ -1135,6 +1163,11 @@ impl Stream {
         self.messages.end()
     }
 
+    /// Returns the number of `Refund` messages in the stream.
+    pub fn refund_count(&self) -> usize {
+        self.refund_count
+    }
+
     /// Returns the number of guaranteed responses in the stream for each responding canister.
     pub fn guaranteed_response_counts(&self) -> &BTreeMap<CanisterId, usize> {
         &self.guaranteed_response_counts
@@ -1143,6 +1176,9 @@ impl Stream {
     /// Appends the given message to the tail of the stream.
     pub fn push(&mut self, message: StreamMessage) {
         self.messages_size_bytes += message.count_bytes();
+        if let StreamMessage::Refund(_) = &message {
+            self.refund_count += 1;
+        }
         if let StreamMessage::Response(response) = &message
             && !response.is_best_effort()
         {
@@ -1155,6 +1191,10 @@ impl Stream {
         debug_assert_eq!(
             Self::calculate_size_bytes(&self.messages),
             self.messages_size_bytes
+        );
+        debug_assert_eq!(
+            Self::calculate_refund_count(&self.messages),
+            self.refund_count
         );
         debug_assert_eq!(
             Self::calculate_guaranteed_response_counts(&self.messages),
@@ -1204,23 +1244,32 @@ impl Stream {
                 self.messages_size_bytes
             );
 
-            if let StreamMessage::Response(response) = &msg
-                && !response.is_best_effort()
-            {
-                match self
-                    .guaranteed_response_counts
-                    .get_mut(&response.respondent)
-                {
-                    Some(0) | None => {
-                        debug_assert!(false);
-                        self.guaranteed_response_counts.remove(&response.respondent);
-                    }
-                    Some(1) => {
-                        self.guaranteed_response_counts.remove(&response.respondent);
-                    }
-                    Some(count) => *count -= 1,
+            // Update the message-type-specific stats.
+            match &msg {
+                StreamMessage::Refund(_) => {
+                    self.refund_count -= 1;
                 }
+                StreamMessage::Response(response) if !response.is_best_effort() => {
+                    match self
+                        .guaranteed_response_counts
+                        .get_mut(&response.respondent)
+                    {
+                        Some(0) | None => {
+                            debug_assert!(false);
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(1) => {
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(count) => *count -= 1,
+                    }
+                }
+                _ => {}
             }
+            debug_assert_eq!(
+                Self::calculate_refund_count(&self.messages),
+                self.refund_count
+            );
             debug_assert_eq!(
                 Self::calculate_guaranteed_response_counts(&self.messages),
                 self.guaranteed_response_counts
@@ -1240,6 +1289,10 @@ impl Stream {
 
     /// Garbage collects signals before `new_signals_begin`.
     pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
+        debug_assert!(new_signals_begin >= self.signals_begin);
+        debug_assert!(new_signals_begin <= self.signals_end);
+
+        self.signals_begin = new_signals_begin;
         while let Some(reject_signal) = self.reject_signals.front() {
             if reject_signal.index < new_signals_begin {
                 self.reject_signals.pop_front();
@@ -1252,6 +1305,17 @@ impl Stream {
     /// Returns a reference to the reject signals.
     pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
         &self.reject_signals
+    }
+
+    /// Returns the index of the first signal that may not have been observed by
+    /// the remote subnet.
+    pub fn signals_begin(&self) -> StreamIndex {
+        self.signals_begin
+    }
+
+    /// Returns `true` if the stream is empty, i.e. it holds no messages or signals.
+    pub fn is_empty(&self) -> bool {
+        self.messages.is_empty() && self.signals_end == self.signals_begin
     }
 
     /// Returns the index just beyond the last sent signal.
@@ -1275,7 +1339,15 @@ impl Stream {
 
     /// Calculates the estimated byte size of the given messages.
     fn calculate_size_bytes(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
-        messages.iter().map(|(_, m)| m.count_bytes()).sum()
+        messages.iter().map(|(_, msg)| msg.count_bytes()).sum()
+    }
+
+    /// Calculates the estimated byte size of all `Refunds` in `messages`.
+    fn calculate_refund_count(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
+        messages
+            .iter()
+            .filter(|(_, msg)| matches!(msg, StreamMessage::Refund(_)))
+            .count()
     }
 
     fn calculate_guaranteed_response_counts(
@@ -1818,8 +1890,76 @@ impl UnflushedCheckpointOps {
     }
 }
 
-pub(crate) mod testing {
+pub mod testing {
     use super::*;
+
+    /// Exposes `NetworkTopology` internals for use in tests.
+    pub trait NetworkTopologyTesting {
+        /// Returns a mutable reference to the subnets map.
+        fn subnets_mut(&mut self) -> &mut BTreeMap<SubnetId, SubnetTopology>;
+        /// Sets the subnets map.
+        fn set_subnets(&mut self, subnets: BTreeMap<SubnetId, SubnetTopology>);
+        /// Returns a mutable reference to the routing table.
+        fn routing_table_mut(&mut self) -> &mut RoutingTable;
+        /// Sets the routing table.
+        fn set_routing_table(&mut self, routing_table: RoutingTable);
+    }
+
+    impl NetworkTopologyTesting for NetworkTopology {
+        fn subnets_mut(&mut self) -> &mut BTreeMap<SubnetId, SubnetTopology> {
+            &mut self.subnets
+        }
+        fn set_subnets(&mut self, subnets: BTreeMap<SubnetId, SubnetTopology>) {
+            self.subnets = subnets;
+        }
+        fn routing_table_mut(&mut self) -> &mut RoutingTable {
+            Arc::make_mut(&mut self.routing_table)
+        }
+        fn set_routing_table(&mut self, routing_table: RoutingTable) {
+            self.routing_table = Arc::new(routing_table);
+        }
+    }
+
+    pub trait StreamTesting {
+        /// Creates a new `Stream` with the given `messages` and `signals_end`.
+        #[allow(clippy::new_ret_no_self)]
+        fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Stream;
+
+        /// Creates a new `Stream` with the given `messages` and signals.
+        fn with_signals(
+            messages: StreamIndexedQueue<StreamMessage>,
+            signals_begin: StreamIndex,
+            signals_end: StreamIndex,
+            reject_signals: VecDeque<RejectSignal>,
+        ) -> Stream;
+    }
+
+    impl StreamTesting for Stream {
+        fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Stream {
+            Stream::with_signals(messages, StreamIndex::new(0), signals_end, VecDeque::new())
+        }
+
+        fn with_signals(
+            messages: StreamIndexedQueue<StreamMessage>,
+            signals_begin: StreamIndex,
+            signals_end: StreamIndex,
+            reject_signals: VecDeque<RejectSignal>,
+        ) -> Self {
+            let messages_size_bytes = Self::calculate_size_bytes(&messages);
+            let refund_count = Self::calculate_refund_count(&messages);
+            let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
+            Self {
+                messages,
+                signals_begin,
+                signals_end,
+                reject_signals,
+                messages_size_bytes,
+                refund_count,
+                reverse_stream_flags: Default::default(),
+                guaranteed_response_counts,
+            }
+        }
+    }
 
     /// Early warning system / stumbling block forcing the authors of changes adding
     /// or removing replicated state fields to think about and/or ask the Message
@@ -1853,6 +1993,7 @@ pub(crate) mod testing {
             ingress_history,
             // No need to cover streams, they always stay with the subnet.
             streams: Default::default(),
+            subnet_schedule: Default::default(),
             canister_allocation_ranges: Default::default(),
             last_generated_canister_id: None,
             batch_time: UNIX_EPOCH,
@@ -1861,7 +2002,6 @@ pub(crate) mod testing {
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,

@@ -27,13 +27,11 @@ use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::block_on;
 use ic_types::Height;
 use rejoin_test_lib::rejoin_test_large_state;
 use std::time::Duration;
@@ -94,10 +92,6 @@ fn setup(env: TestEnv, config: Config) {
         config.nodes_count >= 4,
         "at least 4 nodes are required for state sync"
     );
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -123,15 +117,9 @@ fn setup(env: TestEnv, config: Config) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-
-    env.sync_with_prometheus();
 }
 
 fn test(env: TestEnv, config: Config) {
-    block_on(test_async(env, config));
-}
-
-async fn test_async(env: TestEnv, config: Config) {
     let mut nodes = env.topology_snapshot().root_subnet().nodes();
     let agent_node = nodes.next().unwrap();
     let rejoin_node = nodes.next().unwrap();
@@ -146,5 +134,4 @@ async fn test_async(env: TestEnv, config: Config) {
         agent_node.clone(),
         nodes.take(allowed_failures),
     )
-    .await;
 }

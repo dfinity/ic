@@ -42,7 +42,6 @@ use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::HasTopologySnapshot,
 };
@@ -58,10 +57,6 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
@@ -78,8 +73,6 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup ic-gateway");
     let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
-    env.sync_with_prometheus();
-
     install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
     set_authorized_subnets(&env);
 }

@@ -201,9 +201,9 @@ impl CanisterHttp {
                     self.metrics
                         .socks_connection_attempts
                         .with_label_values(&[
-                            &tries.to_string(),
+                            tries.to_string().as_str(),
                             "success",
-                            socks_proxy_addr,
+                            socks_proxy_addr.as_str(),
                             url_format,
                         ])
                         .inc();
@@ -213,9 +213,9 @@ impl CanisterHttp {
                     self.metrics
                         .socks_connection_attempts
                         .with_label_values(&[
-                            &tries.to_string(),
+                            tries.to_string().as_str(),
                             "failure",
-                            socks_proxy_addr,
+                            socks_proxy_addr.as_str(),
                             url_format,
                         ])
                         .inc();
@@ -352,7 +352,7 @@ impl HttpsOutcallsService for CanisterHttp {
                             CanisterHttpError {
                                 kind: CanisterHttpErrorKind::Connection as i32,
                                 message: format!(
-                                    "Connecting to {:.50} failed: direct connect {direct_err:?} 
+                                    "Connecting to {:.50} failed: direct connect {direct_err:?}
                                     and connect through socks {socks_err:?}",
                                     uri.host().unwrap_or(""),
                                 ),

@@ -1,20 +1,18 @@
 use crate::pb::proposal_conversions::{ProposalDisplayOptions, convert_proposal};
 use crate::pb::v1 as pb;
 
-use candid::{Int, Nat};
 use ic_crypto_sha2::Sha256;
-use ic_nns_governance_api as pb_api;
+use ic_nns_governance_api as api;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement as PbGuestLaunchMeasurement,
     GuestLaunchMeasurementMetadata as PbGuestLaunchMeasurementMetadata,
     GuestLaunchMeasurements as PbGuestLaunchMeasurements,
 };
-use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests;
 
-impl From<pb::NodeProvider> for pb_api::NodeProvider {
+impl From<pb::NodeProvider> for api::NodeProvider {
     fn from(item: pb::NodeProvider) -> Self {
         let reward_account = item.reward_account.map(|account| {
             match icp_ledger::AccountIdentifier::try_from(&account) {
@@ -33,8 +31,8 @@ impl From<pb::NodeProvider> for pb_api::NodeProvider {
         }
     }
 }
-impl From<pb_api::NodeProvider> for pb::NodeProvider {
-    fn from(item: pb_api::NodeProvider) -> Self {
+impl From<api::NodeProvider> for pb::NodeProvider {
+    fn from(item: api::NodeProvider) -> Self {
         Self {
             id: item.id,
             reward_account: item.reward_account,
@@ -42,34 +40,34 @@ impl From<pb_api::NodeProvider> for pb::NodeProvider {
     }
 }
 
-impl From<pb::UpdateNodeProvider> for pb_api::UpdateNodeProvider {
+impl From<pb::UpdateNodeProvider> for api::UpdateNodeProvider {
     fn from(item: pb::UpdateNodeProvider) -> Self {
         Self {
             reward_account: item.reward_account,
         }
     }
 }
-impl From<pb_api::UpdateNodeProvider> for pb::UpdateNodeProvider {
-    fn from(item: pb_api::UpdateNodeProvider) -> Self {
+impl From<api::UpdateNodeProvider> for pb::UpdateNodeProvider {
+    fn from(item: api::UpdateNodeProvider) -> Self {
         Self {
             reward_account: item.reward_account,
         }
     }
 }
 
-impl From<pb_api::DeregisterKnownNeuron> for pb::DeregisterKnownNeuron {
-    fn from(item: pb_api::DeregisterKnownNeuron) -> Self {
+impl From<api::DeregisterKnownNeuron> for pb::DeregisterKnownNeuron {
+    fn from(item: api::DeregisterKnownNeuron) -> Self {
         Self { id: item.id }
     }
 }
 
-impl From<pb::DeregisterKnownNeuron> for pb_api::DeregisterKnownNeuron {
+impl From<pb::DeregisterKnownNeuron> for api::DeregisterKnownNeuron {
     fn from(item: pb::DeregisterKnownNeuron) -> Self {
         Self { id: item.id }
     }
 }
 
-impl From<pb::BallotInfo> for pb_api::BallotInfo {
+impl From<pb::BallotInfo> for api::BallotInfo {
     fn from(item: pb::BallotInfo) -> Self {
         Self {
             proposal_id: item.proposal_id,
@@ -77,8 +75,8 @@ impl From<pb::BallotInfo> for pb_api::BallotInfo {
         }
     }
 }
-impl From<pb_api::BallotInfo> for pb::BallotInfo {
-    fn from(item: pb_api::BallotInfo) -> Self {
+impl From<api::BallotInfo> for pb::BallotInfo {
+    fn from(item: api::BallotInfo) -> Self {
         Self {
             proposal_id: item.proposal_id,
             vote: item.vote,
@@ -86,7 +84,7 @@ impl From<pb_api::BallotInfo> for pb::BallotInfo {
     }
 }
 
-impl From<pb::NeuronStakeTransfer> for pb_api::NeuronStakeTransfer {
+impl From<pb::NeuronStakeTransfer> for api::NeuronStakeTransfer {
     fn from(item: pb::NeuronStakeTransfer) -> Self {
         Self {
             transfer_timestamp: item.transfer_timestamp,
@@ -99,8 +97,8 @@ impl From<pb::NeuronStakeTransfer> for pb_api::NeuronStakeTransfer {
         }
     }
 }
-impl From<pb_api::NeuronStakeTransfer> for pb::NeuronStakeTransfer {
-    fn from(item: pb_api::NeuronStakeTransfer) -> Self {
+impl From<api::NeuronStakeTransfer> for pb::NeuronStakeTransfer {
+    fn from(item: api::NeuronStakeTransfer) -> Self {
         Self {
             transfer_timestamp: item.transfer_timestamp,
             from: item.from,
@@ -113,42 +111,42 @@ impl From<pb_api::NeuronStakeTransfer> for pb::NeuronStakeTransfer {
     }
 }
 
-impl From<pb::Followees> for pb_api::neuron::Followees {
+impl From<pb::Followees> for api::neuron::Followees {
     fn from(item: pb::Followees) -> Self {
         Self {
             followees: item.followees,
         }
     }
 }
-impl From<pb_api::neuron::Followees> for pb::Followees {
-    fn from(item: pb_api::neuron::Followees) -> Self {
+impl From<api::neuron::Followees> for pb::Followees {
+    fn from(item: api::neuron::Followees) -> Self {
         Self {
             followees: item.followees,
         }
     }
 }
 
-impl From<pb::Visibility> for pb_api::Visibility {
+impl From<pb::Visibility> for api::Visibility {
     fn from(item: pb::Visibility) -> Self {
         match item {
-            pb::Visibility::Unspecified => pb_api::Visibility::Unspecified,
-            pb::Visibility::Private => pb_api::Visibility::Private,
-            pb::Visibility::Public => pb_api::Visibility::Public,
+            pb::Visibility::Unspecified => api::Visibility::Unspecified,
+            pb::Visibility::Private => api::Visibility::Private,
+            pb::Visibility::Public => api::Visibility::Public,
         }
     }
 }
 
-impl From<pb_api::Visibility> for pb::Visibility {
-    fn from(item: pb_api::Visibility) -> Self {
+impl From<api::Visibility> for pb::Visibility {
+    fn from(item: api::Visibility) -> Self {
         match item {
-            pb_api::Visibility::Unspecified => pb::Visibility::Unspecified,
-            pb_api::Visibility::Private => pb::Visibility::Private,
-            pb_api::Visibility::Public => pb::Visibility::Public,
+            api::Visibility::Unspecified => pb::Visibility::Unspecified,
+            api::Visibility::Private => pb::Visibility::Private,
+            api::Visibility::Public => pb::Visibility::Public,
         }
     }
 }
 
-impl From<pb::ExecuteNnsFunction> for pb_api::ExecuteNnsFunction {
+impl From<pb::ExecuteNnsFunction> for api::ExecuteNnsFunction {
     fn from(item: pb::ExecuteNnsFunction) -> Self {
         Self {
             nns_function: item.nns_function,
@@ -156,8 +154,8 @@ impl From<pb::ExecuteNnsFunction> for pb_api::ExecuteNnsFunction {
         }
     }
 }
-impl From<pb_api::ExecuteNnsFunction> for pb::ExecuteNnsFunction {
-    fn from(item: pb_api::ExecuteNnsFunction) -> Self {
+impl From<api::ExecuteNnsFunction> for pb::ExecuteNnsFunction {
+    fn from(item: api::ExecuteNnsFunction) -> Self {
         Self {
             nns_function: item.nns_function,
             payload: item.payload,
@@ -165,77 +163,77 @@ impl From<pb_api::ExecuteNnsFunction> for pb::ExecuteNnsFunction {
     }
 }
 
-impl From<pb::Motion> for pb_api::Motion {
+impl From<pb::Motion> for api::Motion {
     fn from(item: pb::Motion) -> Self {
         Self {
             motion_text: item.motion_text,
         }
     }
 }
-impl From<pb_api::Motion> for pb::Motion {
-    fn from(item: pb_api::Motion) -> Self {
+impl From<api::Motion> for pb::Motion {
+    fn from(item: api::Motion) -> Self {
         Self {
             motion_text: item.motion_text,
         }
     }
 }
 
-impl From<pb::ApproveGenesisKyc> for pb_api::ApproveGenesisKyc {
+impl From<pb::ApproveGenesisKyc> for api::ApproveGenesisKyc {
     fn from(item: pb::ApproveGenesisKyc) -> Self {
         Self {
             principals: item.principals,
         }
     }
 }
-impl From<pb_api::ApproveGenesisKyc> for pb::ApproveGenesisKyc {
-    fn from(item: pb_api::ApproveGenesisKyc) -> Self {
+impl From<api::ApproveGenesisKyc> for pb::ApproveGenesisKyc {
+    fn from(item: api::ApproveGenesisKyc) -> Self {
         Self {
             principals: item.principals,
         }
     }
 }
 
-impl From<pb::AddOrRemoveNodeProvider> for pb_api::AddOrRemoveNodeProvider {
+impl From<pb::AddOrRemoveNodeProvider> for api::AddOrRemoveNodeProvider {
     fn from(item: pb::AddOrRemoveNodeProvider) -> Self {
         Self {
             change: item.change.map(|x| x.into()),
         }
     }
 }
-impl From<pb_api::AddOrRemoveNodeProvider> for pb::AddOrRemoveNodeProvider {
-    fn from(item: pb_api::AddOrRemoveNodeProvider) -> Self {
+impl From<api::AddOrRemoveNodeProvider> for pb::AddOrRemoveNodeProvider {
+    fn from(item: api::AddOrRemoveNodeProvider) -> Self {
         Self {
             change: item.change.map(|x| x.into()),
         }
     }
 }
 
-impl From<pb::add_or_remove_node_provider::Change> for pb_api::add_or_remove_node_provider::Change {
+impl From<pb::add_or_remove_node_provider::Change> for api::add_or_remove_node_provider::Change {
     fn from(item: pb::add_or_remove_node_provider::Change) -> Self {
         match item {
             pb::add_or_remove_node_provider::Change::ToAdd(v) => {
-                pb_api::add_or_remove_node_provider::Change::ToAdd(v.into())
+                api::add_or_remove_node_provider::Change::ToAdd(v.into())
             }
             pb::add_or_remove_node_provider::Change::ToRemove(v) => {
-                pb_api::add_or_remove_node_provider::Change::ToRemove(v.into())
+                api::add_or_remove_node_provider::Change::ToRemove(v.into())
             }
         }
     }
 }
-impl From<pb_api::add_or_remove_node_provider::Change> for pb::add_or_remove_node_provider::Change {
-    fn from(item: pb_api::add_or_remove_node_provider::Change) -> Self {
+impl From<api::add_or_remove_node_provider::Change> for pb::add_or_remove_node_provider::Change {
+    fn from(item: api::add_or_remove_node_provider::Change) -> Self {
         match item {
-            pb_api::add_or_remove_node_provider::Change::ToAdd(v) => {
+            api::add_or_remove_node_provider::Change::ToAdd(v) => {
                 pb::add_or_remove_node_provider::Change::ToAdd(v.into())
             }
-            pb_api::add_or_remove_node_provider::Change::ToRemove(v) => {
+            api::add_or_remove_node_provider::Change::ToRemove(v) => {
                 pb::add_or_remove_node_provider::Change::ToRemove(v.into())
             }
         }
     }
 }
 
-impl From<pb::RewardNodeProvider> for pb_api::RewardNodeProvider {
+impl From<pb::RewardNodeProvider> for api::RewardNodeProvider {
     fn from(item: pb::RewardNodeProvider) -> Self {
         Self {
             node_provider: item.node_provider.map(|x| x.into()),
@@ -244,8 +242,8 @@ impl From<pb::RewardNodeProvider> for pb_api::RewardNodeProvider {
         }
     }
 }
-impl From<pb_api::RewardNodeProvider> for pb::RewardNodeProvider {
-    fn from(item: pb_api::RewardNodeProvider) -> Self {
+impl From<api::RewardNodeProvider> for pb::RewardNodeProvider {
+    fn from(item: api::RewardNodeProvider) -> Self {
         Self {
             node_provider: item.node_provider.map(|x| x.into()),
             amount_e8s: item.amount_e8s,
@@ -254,19 +252,15 @@ impl From<pb_api::RewardNodeProvider> for pb::RewardNodeProvider {
     }
 }
 
-impl From<pb::reward_node_provider::RewardToNeuron>
-    for pb_api::reward_node_provider::RewardToNeuron
-{
+impl From<pb::reward_node_provider::RewardToNeuron> for api::reward_node_provider::RewardToNeuron {
     fn from(item: pb::reward_node_provider::RewardToNeuron) -> Self {
         Self {
             dissolve_delay_seconds: item.dissolve_delay_seconds,
         }
     }
 }
-impl From<pb_api::reward_node_provider::RewardToNeuron>
-    for pb::reward_node_provider::RewardToNeuron
-{
-    fn from(item: pb_api::reward_node_provider::RewardToNeuron) -> Self {
+impl From<api::reward_node_provider::RewardToNeuron> for pb::reward_node_provider::RewardToNeuron {
+    fn from(item: api::reward_node_provider::RewardToNeuron) -> Self {
         Self {
             dissolve_delay_seconds: item.dissolve_delay_seconds,
         }
@@ -274,7 +268,7 @@ impl From<pb_api::reward_node_provider::RewardToNeuron>
 }
 
 impl From<pb::reward_node_provider::RewardToAccount>
-    for pb_api::reward_node_provider::RewardToAccount
+    for api::reward_node_provider::RewardToAccount
 {
     fn from(item: pb::reward_node_provider::RewardToAccount) -> Self {
         let to_account = item.to_account.map(|account| {
@@ -292,42 +286,42 @@ impl From<pb::reward_node_provider::RewardToAccount>
     }
 }
 
-impl From<pb_api::reward_node_provider::RewardToAccount>
+impl From<api::reward_node_provider::RewardToAccount>
     for pb::reward_node_provider::RewardToAccount
 {
-    fn from(item: pb_api::reward_node_provider::RewardToAccount) -> Self {
+    fn from(item: api::reward_node_provider::RewardToAccount) -> Self {
         Self {
             to_account: item.to_account,
         }
     }
 }
 
-impl From<pb::reward_node_provider::RewardMode> for pb_api::reward_node_provider::RewardMode {
+impl From<pb::reward_node_provider::RewardMode> for api::reward_node_provider::RewardMode {
     fn from(item: pb::reward_node_provider::RewardMode) -> Self {
         match item {
             pb::reward_node_provider::RewardMode::RewardToNeuron(v) => {
-                pb_api::reward_node_provider::RewardMode::RewardToNeuron(v.into())
+                api::reward_node_provider::RewardMode::RewardToNeuron(v.into())
             }
             pb::reward_node_provider::RewardMode::RewardToAccount(v) => {
-                pb_api::reward_node_provider::RewardMode::RewardToAccount(v.into())
+                api::reward_node_provider::RewardMode::RewardToAccount(v.into())
             }
         }
     }
 }
-impl From<pb_api::reward_node_provider::RewardMode> for pb::reward_node_provider::RewardMode {
-    fn from(item: pb_api::reward_node_provider::RewardMode) -> Self {
+impl From<api::reward_node_provider::RewardMode> for pb::reward_node_provider::RewardMode {
+    fn from(item: api::reward_node_provider::RewardMode) -> Self {
         match item {
-            pb_api::reward_node_provider::RewardMode::RewardToNeuron(v) => {
+            api::reward_node_provider::RewardMode::RewardToNeuron(v) => {
                 pb::reward_node_provider::RewardMode::RewardToNeuron(v.into())
             }
-            pb_api::reward_node_provider::RewardMode::RewardToAccount(v) => {
+            api::reward_node_provider::RewardMode::RewardToAccount(v) => {
                 pb::reward_node_provider::RewardMode::RewardToAccount(v.into())
             }
         }
     }
 }
 
-impl From<pb::RewardNodeProviders> for pb_api::RewardNodeProviders {
+impl From<pb::RewardNodeProviders> for api::RewardNodeProviders {
     fn from(item: pb::RewardNodeProviders) -> Self {
         Self {
             rewards: item.rewards.into_iter().map(|x| x.into()).collect(),
@@ -335,8 +329,8 @@ impl From<pb::RewardNodeProviders> for pb_api::RewardNodeProviders {
         }
     }
 }
-impl From<pb_api::RewardNodeProviders> for pb::RewardNodeProviders {
-    fn from(item: pb_api::RewardNodeProviders) -> Self {
+impl From<api::RewardNodeProviders> for pb::RewardNodeProviders {
+    fn from(item: api::RewardNodeProviders) -> Self {
         Self {
             rewards: item.rewards.into_iter().map(|x| x.into()).collect(),
             use_registry_derived_rewards: item.use_registry_derived_rewards,
@@ -344,7 +338,7 @@ impl From<pb_api::RewardNodeProviders> for pb::RewardNodeProviders {
     }
 }
 
-impl From<pb::SetDefaultFollowees> for pb_api::SetDefaultFollowees {
+impl From<pb::SetDefaultFollowees> for api::SetDefaultFollowees {
     fn from(item: pb::SetDefaultFollowees) -> Self {
         Self {
             default_followees: item
@@ -355,8 +349,8 @@ impl From<pb::SetDefaultFollowees> for pb_api::SetDefaultFollowees {
         }
     }
 }
-impl From<pb_api::SetDefaultFollowees> for pb::SetDefaultFollowees {
-    fn from(item: pb_api::SetDefaultFollowees) -> Self {
+impl From<api::SetDefaultFollowees> for pb::SetDefaultFollowees {
+    fn from(item: api::SetDefaultFollowees) -> Self {
         Self {
             default_followees: item
                 .default_followees
@@ -367,7 +361,7 @@ impl From<pb_api::SetDefaultFollowees> for pb::SetDefaultFollowees {
     }
 }
 
-impl From<pb::SetSnsTokenSwapOpenTimeWindow> for pb_api::SetSnsTokenSwapOpenTimeWindow {
+impl From<pb::SetSnsTokenSwapOpenTimeWindow> for api::SetSnsTokenSwapOpenTimeWindow {
     fn from(item: pb::SetSnsTokenSwapOpenTimeWindow) -> Self {
         Self {
             swap_canister_id: item.swap_canister_id,
@@ -375,8 +369,8 @@ impl From<pb::SetSnsTokenSwapOpenTimeWindow> for pb_api::SetSnsTokenSwapOpenTime
         }
     }
 }
-impl From<pb_api::SetSnsTokenSwapOpenTimeWindow> for pb::SetSnsTokenSwapOpenTimeWindow {
-    fn from(item: pb_api::SetSnsTokenSwapOpenTimeWindow) -> Self {
+impl From<api::SetSnsTokenSwapOpenTimeWindow> for pb::SetSnsTokenSwapOpenTimeWindow {
+    fn from(item: api::SetSnsTokenSwapOpenTimeWindow) -> Self {
         Self {
             swap_canister_id: item.swap_canister_id,
             request: item.request,
@@ -384,8 +378,8 @@ impl From<pb_api::SetSnsTokenSwapOpenTimeWindow> for pb::SetSnsTokenSwapOpenTime
     }
 }
 
-impl From<pb_api::Proposal> for pb::Proposal {
-    fn from(item: pb_api::Proposal) -> Self {
+impl From<api::Proposal> for pb::Proposal {
+    fn from(item: api::Proposal) -> Self {
         Self {
             title: item.title,
             summary: item.summary,
@@ -395,8 +389,8 @@ impl From<pb_api::Proposal> for pb::Proposal {
         }
     }
 }
-impl From<pb_api::MakeProposalRequest> for pb::Proposal {
-    fn from(item: pb_api::MakeProposalRequest) -> Self {
+impl From<api::MakeProposalRequest> for pb::Proposal {
+    fn from(item: api::MakeProposalRequest) -> Self {
         Self {
             title: item.title,
             summary: item.summary,
@@ -407,130 +401,142 @@ impl From<pb_api::MakeProposalRequest> for pb::Proposal {
     }
 }
 
-impl From<pb_api::proposal::Action> for pb::proposal::Action {
-    fn from(item: pb_api::proposal::Action) -> Self {
+impl From<api::proposal::Action> for pb::proposal::Action {
+    fn from(item: api::proposal::Action) -> Self {
         match item {
-            pb_api::proposal::Action::ManageNeuron(v) => {
+            api::proposal::Action::ManageNeuron(v) => {
                 pb::proposal::Action::ManageNeuron(Box::new((*v).into()))
             }
-            pb_api::proposal::Action::ManageNetworkEconomics(v) => {
+            api::proposal::Action::ManageNetworkEconomics(v) => {
                 pb::proposal::Action::ManageNetworkEconomics(v.into())
             }
-            pb_api::proposal::Action::Motion(v) => pb::proposal::Action::Motion(v.into()),
-            pb_api::proposal::Action::ExecuteNnsFunction(v) => {
+            api::proposal::Action::Motion(v) => pb::proposal::Action::Motion(v.into()),
+            api::proposal::Action::ExecuteNnsFunction(v) => {
                 pb::proposal::Action::ExecuteNnsFunction(v.into())
             }
-            pb_api::proposal::Action::ApproveGenesisKyc(v) => {
+            api::proposal::Action::ApproveGenesisKyc(v) => {
                 pb::proposal::Action::ApproveGenesisKyc(v.into())
             }
-            pb_api::proposal::Action::AddOrRemoveNodeProvider(v) => {
+            api::proposal::Action::AddOrRemoveNodeProvider(v) => {
                 pb::proposal::Action::AddOrRemoveNodeProvider(v.into())
             }
-            pb_api::proposal::Action::RewardNodeProvider(v) => {
+            api::proposal::Action::RewardNodeProvider(v) => {
                 pb::proposal::Action::RewardNodeProvider(v.into())
             }
-            pb_api::proposal::Action::SetDefaultFollowees(v) => {
+            api::proposal::Action::SetDefaultFollowees(v) => {
                 pb::proposal::Action::SetDefaultFollowees(v.into())
             }
-            pb_api::proposal::Action::RewardNodeProviders(v) => {
+            api::proposal::Action::RewardNodeProviders(v) => {
                 pb::proposal::Action::RewardNodeProviders(v.into())
             }
-            pb_api::proposal::Action::RegisterKnownNeuron(v) => {
+            api::proposal::Action::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
             }
-            pb_api::proposal::Action::DeregisterKnownNeuron(v) => {
+            api::proposal::Action::DeregisterKnownNeuron(v) => {
                 pb::proposal::Action::DeregisterKnownNeuron(v.into())
             }
-            pb_api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
+            api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
                 pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
             }
-            pb_api::proposal::Action::OpenSnsTokenSwap(v) => {
+            api::proposal::Action::OpenSnsTokenSwap(v) => {
                 pb::proposal::Action::OpenSnsTokenSwap(v.into())
             }
-            pb_api::proposal::Action::CreateServiceNervousSystem(v) => {
+            api::proposal::Action::CreateServiceNervousSystem(v) => {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
             }
-            pb_api::proposal::Action::InstallCode(v) => pb::proposal::Action::InstallCode(v.into()),
-            pb_api::proposal::Action::StopOrStartCanister(v) => {
+            api::proposal::Action::InstallCode(v) => pb::proposal::Action::InstallCode(v.into()),
+            api::proposal::Action::StopOrStartCanister(v) => {
                 pb::proposal::Action::StopOrStartCanister(v.into())
             }
-            pb_api::proposal::Action::UpdateCanisterSettings(v) => {
+            api::proposal::Action::UpdateCanisterSettings(v) => {
                 pb::proposal::Action::UpdateCanisterSettings(v.into())
             }
-            pb_api::proposal::Action::FulfillSubnetRentalRequest(v) => {
+            api::proposal::Action::FulfillSubnetRentalRequest(v) => {
                 pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
             }
-            pb_api::proposal::Action::BlessAlternativeGuestOsVersion(v) => {
+            api::proposal::Action::BlessAlternativeGuestOsVersion(v) => {
                 pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
+            }
+            api::proposal::Action::TakeCanisterSnapshot(v) => {
+                pb::proposal::Action::TakeCanisterSnapshot(v.into())
+            }
+            api::proposal::Action::LoadCanisterSnapshot(v) => {
+                pb::proposal::Action::LoadCanisterSnapshot(v.into())
             }
         }
     }
 }
-impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
-    fn from(item: pb_api::ProposalActionRequest) -> Self {
+impl From<api::ProposalActionRequest> for pb::proposal::Action {
+    fn from(item: api::ProposalActionRequest) -> Self {
         match item {
-            pb_api::ProposalActionRequest::ManageNeuron(v) => {
+            api::ProposalActionRequest::ManageNeuron(v) => {
                 pb::proposal::Action::ManageNeuron(Box::new((*v).into()))
             }
-            pb_api::ProposalActionRequest::ManageNetworkEconomics(v) => {
+            api::ProposalActionRequest::ManageNetworkEconomics(v) => {
                 pb::proposal::Action::ManageNetworkEconomics(v.into())
             }
-            pb_api::ProposalActionRequest::Motion(v) => pb::proposal::Action::Motion(v.into()),
-            pb_api::ProposalActionRequest::ExecuteNnsFunction(v) => {
+            api::ProposalActionRequest::Motion(v) => pb::proposal::Action::Motion(v.into()),
+            api::ProposalActionRequest::ExecuteNnsFunction(v) => {
                 pb::proposal::Action::ExecuteNnsFunction(v.into())
             }
-            pb_api::ProposalActionRequest::ApproveGenesisKyc(v) => {
+            api::ProposalActionRequest::ApproveGenesisKyc(v) => {
                 pb::proposal::Action::ApproveGenesisKyc(v.into())
             }
-            pb_api::ProposalActionRequest::AddOrRemoveNodeProvider(v) => {
+            api::ProposalActionRequest::AddOrRemoveNodeProvider(v) => {
                 pb::proposal::Action::AddOrRemoveNodeProvider(v.into())
             }
-            pb_api::ProposalActionRequest::RewardNodeProvider(v) => {
+            api::ProposalActionRequest::RewardNodeProvider(v) => {
                 pb::proposal::Action::RewardNodeProvider(v.into())
             }
-            pb_api::ProposalActionRequest::RewardNodeProviders(v) => {
+            api::ProposalActionRequest::RewardNodeProviders(v) => {
                 pb::proposal::Action::RewardNodeProviders(v.into())
             }
-            pb_api::ProposalActionRequest::RegisterKnownNeuron(v) => {
+            api::ProposalActionRequest::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
             }
-            pb_api::ProposalActionRequest::DeregisterKnownNeuron(v) => {
+            api::ProposalActionRequest::DeregisterKnownNeuron(v) => {
                 pb::proposal::Action::DeregisterKnownNeuron(v.into())
             }
-            pb_api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
+            api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
             }
-            pb_api::ProposalActionRequest::InstallCode(v) => {
+            api::ProposalActionRequest::InstallCode(v) => {
                 pb::proposal::Action::InstallCode(v.into())
             }
-            pb_api::ProposalActionRequest::StopOrStartCanister(v) => {
+            api::ProposalActionRequest::StopOrStartCanister(v) => {
                 pb::proposal::Action::StopOrStartCanister(v.into())
             }
-            pb_api::ProposalActionRequest::UpdateCanisterSettings(v) => {
+            api::ProposalActionRequest::UpdateCanisterSettings(v) => {
                 pb::proposal::Action::UpdateCanisterSettings(v.into())
             }
-            pb_api::ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
+            api::ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
                 pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
             }
-            pb_api::ProposalActionRequest::BlessAlternativeGuestOsVersion(v) => {
+            api::ProposalActionRequest::BlessAlternativeGuestOsVersion(v) => {
                 pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
+            }
+            api::ProposalActionRequest::TakeCanisterSnapshot(v) => {
+                pb::proposal::Action::TakeCanisterSnapshot(v.into())
+            }
+            api::ProposalActionRequest::LoadCanisterSnapshot(v) => {
+                pb::proposal::Action::LoadCanisterSnapshot(v.into())
             }
         }
     }
 }
 
-impl From<pb::Empty> for pb_api::Empty {
+impl From<pb::Empty> for api::Empty {
     fn from(_: pb::Empty) -> Self {
         Self {}
     }
 }
-impl From<pb_api::Empty> for pb::Empty {
-    fn from(_: pb_api::Empty) -> Self {
+impl From<api::Empty> for pb::Empty {
+    fn from(_: api::Empty) -> Self {
         Self {}
     }
 }
 
-impl From<pb::ManageNeuron> for pb_api::ManageNeuronProposal {
+impl From<pb::ManageNeuron> for api::ManageNeuronProposal {
     fn from(item: pb::ManageNeuron) -> Self {
         Self {
             id: item.id,
@@ -539,8 +545,8 @@ impl From<pb::ManageNeuron> for pb_api::ManageNeuronProposal {
         }
     }
 }
-impl From<pb_api::ManageNeuronProposal> for pb::ManageNeuron {
-    fn from(item: pb_api::ManageNeuronProposal) -> Self {
+impl From<api::ManageNeuronProposal> for pb::ManageNeuron {
+    fn from(item: api::ManageNeuronProposal) -> Self {
         Self {
             id: item.id,
             neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
@@ -548,8 +554,8 @@ impl From<pb_api::ManageNeuronProposal> for pb::ManageNeuron {
         }
     }
 }
-impl From<pb_api::ManageNeuronRequest> for pb::ManageNeuron {
-    fn from(item: pb_api::ManageNeuronRequest) -> Self {
+impl From<api::ManageNeuronRequest> for pb::ManageNeuron {
+    fn from(item: api::ManageNeuronRequest) -> Self {
         Self {
             id: item.id,
             neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
@@ -558,116 +564,112 @@ impl From<pb_api::ManageNeuronRequest> for pb::ManageNeuron {
     }
 }
 
-impl From<pb::manage_neuron::IncreaseDissolveDelay>
-    for pb_api::manage_neuron::IncreaseDissolveDelay
-{
+impl From<pb::manage_neuron::IncreaseDissolveDelay> for api::manage_neuron::IncreaseDissolveDelay {
     fn from(item: pb::manage_neuron::IncreaseDissolveDelay) -> Self {
         Self {
             additional_dissolve_delay_seconds: item.additional_dissolve_delay_seconds,
         }
     }
 }
-impl From<pb_api::manage_neuron::IncreaseDissolveDelay>
-    for pb::manage_neuron::IncreaseDissolveDelay
-{
-    fn from(item: pb_api::manage_neuron::IncreaseDissolveDelay) -> Self {
+impl From<api::manage_neuron::IncreaseDissolveDelay> for pb::manage_neuron::IncreaseDissolveDelay {
+    fn from(item: api::manage_neuron::IncreaseDissolveDelay) -> Self {
         Self {
             additional_dissolve_delay_seconds: item.additional_dissolve_delay_seconds,
         }
     }
 }
 
-impl From<pb::manage_neuron::StartDissolving> for pb_api::manage_neuron::StartDissolving {
+impl From<pb::manage_neuron::StartDissolving> for api::manage_neuron::StartDissolving {
     fn from(_: pb::manage_neuron::StartDissolving) -> Self {
         Self {}
     }
 }
-impl From<pb_api::manage_neuron::StartDissolving> for pb::manage_neuron::StartDissolving {
-    fn from(_: pb_api::manage_neuron::StartDissolving) -> Self {
+impl From<api::manage_neuron::StartDissolving> for pb::manage_neuron::StartDissolving {
+    fn from(_: api::manage_neuron::StartDissolving) -> Self {
         Self {}
     }
 }
 
-impl From<pb::manage_neuron::StopDissolving> for pb_api::manage_neuron::StopDissolving {
+impl From<pb::manage_neuron::StopDissolving> for api::manage_neuron::StopDissolving {
     fn from(_: pb::manage_neuron::StopDissolving) -> Self {
         Self {}
     }
 }
-impl From<pb_api::manage_neuron::StopDissolving> for pb::manage_neuron::StopDissolving {
-    fn from(_: pb_api::manage_neuron::StopDissolving) -> Self {
+impl From<api::manage_neuron::StopDissolving> for pb::manage_neuron::StopDissolving {
+    fn from(_: api::manage_neuron::StopDissolving) -> Self {
         Self {}
     }
 }
 
-impl From<pb::manage_neuron::AddHotKey> for pb_api::manage_neuron::AddHotKey {
+impl From<pb::manage_neuron::AddHotKey> for api::manage_neuron::AddHotKey {
     fn from(item: pb::manage_neuron::AddHotKey) -> Self {
         Self {
             new_hot_key: item.new_hot_key,
         }
     }
 }
-impl From<pb_api::manage_neuron::AddHotKey> for pb::manage_neuron::AddHotKey {
-    fn from(item: pb_api::manage_neuron::AddHotKey) -> Self {
+impl From<api::manage_neuron::AddHotKey> for pb::manage_neuron::AddHotKey {
+    fn from(item: api::manage_neuron::AddHotKey) -> Self {
         Self {
             new_hot_key: item.new_hot_key,
         }
     }
 }
 
-impl From<pb::manage_neuron::RemoveHotKey> for pb_api::manage_neuron::RemoveHotKey {
+impl From<pb::manage_neuron::RemoveHotKey> for api::manage_neuron::RemoveHotKey {
     fn from(item: pb::manage_neuron::RemoveHotKey) -> Self {
         Self {
             hot_key_to_remove: item.hot_key_to_remove,
         }
     }
 }
-impl From<pb_api::manage_neuron::RemoveHotKey> for pb::manage_neuron::RemoveHotKey {
-    fn from(item: pb_api::manage_neuron::RemoveHotKey) -> Self {
+impl From<api::manage_neuron::RemoveHotKey> for pb::manage_neuron::RemoveHotKey {
+    fn from(item: api::manage_neuron::RemoveHotKey) -> Self {
         Self {
             hot_key_to_remove: item.hot_key_to_remove,
         }
     }
 }
 
-impl From<pb::manage_neuron::SetDissolveTimestamp> for pb_api::manage_neuron::SetDissolveTimestamp {
+impl From<pb::manage_neuron::SetDissolveTimestamp> for api::manage_neuron::SetDissolveTimestamp {
     fn from(item: pb::manage_neuron::SetDissolveTimestamp) -> Self {
         Self {
             dissolve_timestamp_seconds: item.dissolve_timestamp_seconds,
         }
     }
 }
-impl From<pb_api::manage_neuron::SetDissolveTimestamp> for pb::manage_neuron::SetDissolveTimestamp {
-    fn from(item: pb_api::manage_neuron::SetDissolveTimestamp) -> Self {
+impl From<api::manage_neuron::SetDissolveTimestamp> for pb::manage_neuron::SetDissolveTimestamp {
+    fn from(item: api::manage_neuron::SetDissolveTimestamp) -> Self {
         Self {
             dissolve_timestamp_seconds: item.dissolve_timestamp_seconds,
         }
     }
 }
 
-impl From<pb::manage_neuron::JoinCommunityFund> for pb_api::manage_neuron::JoinCommunityFund {
+impl From<pb::manage_neuron::JoinCommunityFund> for api::manage_neuron::JoinCommunityFund {
     fn from(_: pb::manage_neuron::JoinCommunityFund) -> Self {
         Self {}
     }
 }
-impl From<pb_api::manage_neuron::JoinCommunityFund> for pb::manage_neuron::JoinCommunityFund {
-    fn from(_: pb_api::manage_neuron::JoinCommunityFund) -> Self {
+impl From<api::manage_neuron::JoinCommunityFund> for pb::manage_neuron::JoinCommunityFund {
+    fn from(_: api::manage_neuron::JoinCommunityFund) -> Self {
         Self {}
     }
 }
 
-impl From<pb::manage_neuron::LeaveCommunityFund> for pb_api::manage_neuron::LeaveCommunityFund {
+impl From<pb::manage_neuron::LeaveCommunityFund> for api::manage_neuron::LeaveCommunityFund {
     fn from(_: pb::manage_neuron::LeaveCommunityFund) -> Self {
         Self {}
     }
 }
-impl From<pb_api::manage_neuron::LeaveCommunityFund> for pb::manage_neuron::LeaveCommunityFund {
-    fn from(_: pb_api::manage_neuron::LeaveCommunityFund) -> Self {
+impl From<api::manage_neuron::LeaveCommunityFund> for pb::manage_neuron::LeaveCommunityFund {
+    fn from(_: api::manage_neuron::LeaveCommunityFund) -> Self {
         Self {}
     }
 }
 
 impl From<pb::manage_neuron::ChangeAutoStakeMaturity>
-    for pb_api::manage_neuron::ChangeAutoStakeMaturity
+    for api::manage_neuron::ChangeAutoStakeMaturity
 {
     fn from(item: pb::manage_neuron::ChangeAutoStakeMaturity) -> Self {
         Self {
@@ -676,10 +678,10 @@ impl From<pb::manage_neuron::ChangeAutoStakeMaturity>
         }
     }
 }
-impl From<pb_api::manage_neuron::ChangeAutoStakeMaturity>
+impl From<api::manage_neuron::ChangeAutoStakeMaturity>
     for pb::manage_neuron::ChangeAutoStakeMaturity
 {
-    fn from(item: pb_api::manage_neuron::ChangeAutoStakeMaturity) -> Self {
+    fn from(item: api::manage_neuron::ChangeAutoStakeMaturity) -> Self {
         Self {
             requested_setting_for_auto_stake_maturity: item
                 .requested_setting_for_auto_stake_maturity,
@@ -687,110 +689,110 @@ impl From<pb_api::manage_neuron::ChangeAutoStakeMaturity>
     }
 }
 
-impl From<pb::manage_neuron::SetVisibility> for pb_api::manage_neuron::SetVisibility {
+impl From<pb::manage_neuron::SetVisibility> for api::manage_neuron::SetVisibility {
     fn from(item: pb::manage_neuron::SetVisibility) -> Self {
         Self {
             visibility: item.visibility,
         }
     }
 }
-impl From<pb_api::manage_neuron::SetVisibility> for pb::manage_neuron::SetVisibility {
-    fn from(item: pb_api::manage_neuron::SetVisibility) -> Self {
+impl From<api::manage_neuron::SetVisibility> for pb::manage_neuron::SetVisibility {
+    fn from(item: api::manage_neuron::SetVisibility) -> Self {
         Self {
             visibility: item.visibility,
         }
     }
 }
 
-impl From<pb::manage_neuron::Configure> for pb_api::manage_neuron::Configure {
+impl From<pb::manage_neuron::Configure> for api::manage_neuron::Configure {
     fn from(item: pb::manage_neuron::Configure) -> Self {
         Self {
             operation: item.operation.map(|x| x.into()),
         }
     }
 }
-impl From<pb_api::manage_neuron::Configure> for pb::manage_neuron::Configure {
-    fn from(item: pb_api::manage_neuron::Configure) -> Self {
+impl From<api::manage_neuron::Configure> for pb::manage_neuron::Configure {
+    fn from(item: api::manage_neuron::Configure) -> Self {
         Self {
             operation: item.operation.map(|x| x.into()),
         }
     }
 }
 
-impl From<pb::manage_neuron::configure::Operation> for pb_api::manage_neuron::configure::Operation {
+impl From<pb::manage_neuron::configure::Operation> for api::manage_neuron::configure::Operation {
     fn from(item: pb::manage_neuron::configure::Operation) -> Self {
         match item {
             pb::manage_neuron::configure::Operation::IncreaseDissolveDelay(v) => {
-                pb_api::manage_neuron::configure::Operation::IncreaseDissolveDelay(v.into())
+                api::manage_neuron::configure::Operation::IncreaseDissolveDelay(v.into())
             }
             pb::manage_neuron::configure::Operation::StartDissolving(v) => {
-                pb_api::manage_neuron::configure::Operation::StartDissolving(v.into())
+                api::manage_neuron::configure::Operation::StartDissolving(v.into())
             }
             pb::manage_neuron::configure::Operation::StopDissolving(v) => {
-                pb_api::manage_neuron::configure::Operation::StopDissolving(v.into())
+                api::manage_neuron::configure::Operation::StopDissolving(v.into())
             }
             pb::manage_neuron::configure::Operation::AddHotKey(v) => {
-                pb_api::manage_neuron::configure::Operation::AddHotKey(v.into())
+                api::manage_neuron::configure::Operation::AddHotKey(v.into())
             }
             pb::manage_neuron::configure::Operation::RemoveHotKey(v) => {
-                pb_api::manage_neuron::configure::Operation::RemoveHotKey(v.into())
+                api::manage_neuron::configure::Operation::RemoveHotKey(v.into())
             }
             pb::manage_neuron::configure::Operation::SetDissolveTimestamp(v) => {
-                pb_api::manage_neuron::configure::Operation::SetDissolveTimestamp(v.into())
+                api::manage_neuron::configure::Operation::SetDissolveTimestamp(v.into())
             }
             pb::manage_neuron::configure::Operation::JoinCommunityFund(v) => {
-                pb_api::manage_neuron::configure::Operation::JoinCommunityFund(v.into())
+                api::manage_neuron::configure::Operation::JoinCommunityFund(v.into())
             }
             pb::manage_neuron::configure::Operation::LeaveCommunityFund(v) => {
-                pb_api::manage_neuron::configure::Operation::LeaveCommunityFund(v.into())
+                api::manage_neuron::configure::Operation::LeaveCommunityFund(v.into())
             }
             pb::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v) => {
-                pb_api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v.into())
+                api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v.into())
             }
             pb::manage_neuron::configure::Operation::SetVisibility(v) => {
-                pb_api::manage_neuron::configure::Operation::SetVisibility(v.into())
+                api::manage_neuron::configure::Operation::SetVisibility(v.into())
             }
         }
     }
 }
-impl From<pb_api::manage_neuron::configure::Operation> for pb::manage_neuron::configure::Operation {
-    fn from(item: pb_api::manage_neuron::configure::Operation) -> Self {
+impl From<api::manage_neuron::configure::Operation> for pb::manage_neuron::configure::Operation {
+    fn from(item: api::manage_neuron::configure::Operation) -> Self {
         match item {
-            pb_api::manage_neuron::configure::Operation::IncreaseDissolveDelay(v) => {
+            api::manage_neuron::configure::Operation::IncreaseDissolveDelay(v) => {
                 pb::manage_neuron::configure::Operation::IncreaseDissolveDelay(v.into())
             }
-            pb_api::manage_neuron::configure::Operation::StartDissolving(v) => {
+            api::manage_neuron::configure::Operation::StartDissolving(v) => {
                 pb::manage_neuron::configure::Operation::StartDissolving(v.into())
             }
-            pb_api::manage_neuron::configure::Operation::StopDissolving(v) => {
+            api::manage_neuron::configure::Operation::StopDissolving(v) => {
                 pb::manage_neuron::configure::Operation::StopDissolving(v.into())
             }
-            pb_api::manage_neuron::configure::Operation::AddHotKey(v) => {
+            api::manage_neuron::configure::Operation::AddHotKey(v) => {
                 pb::manage_neuron::configure::Operation::AddHotKey(v.into())
             }
-            pb_api::manage_neuron::configure::Operation::RemoveHotKey(v) => {
+            api::manage_neuron::configure::Operation::RemoveHotKey(v) => {
                 pb::manage_neuron::configure::Operation::RemoveHotKey(v.into())
             }
-            pb_api::manage_neuron::configure::Operation::SetDissolveTimestamp(v) => {
+            api::manage_neuron::configure::Operation::SetDissolveTimestamp(v) => {
                 pb::manage_neuron::configure::Operation::SetDissolveTimestamp(v.into())
             }
-            pb_api::manage_neuron::configure::Operation::JoinCommunityFund(v) => {
+            api::manage_neuron::configure::Operation::JoinCommunityFund(v) => {
                 pb::manage_neuron::configure::Operation::JoinCommunityFund(v.into())
             }
-            pb_api::manage_neuron::configure::Operation::LeaveCommunityFund(v) => {
+            api::manage_neuron::configure::Operation::LeaveCommunityFund(v) => {
                 pb::manage_neuron::configure::Operation::LeaveCommunityFund(v.into())
             }
-            pb_api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v) => {
+            api::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v) => {
                 pb::manage_neuron::configure::Operation::ChangeAutoStakeMaturity(v.into())
             }
-            pb_api::manage_neuron::configure::Operation::SetVisibility(v) => {
+            api::manage_neuron::configure::Operation::SetVisibility(v) => {
                 pb::manage_neuron::configure::Operation::SetVisibility(v.into())
             }
         }
     }
 }
 
-impl From<pb::manage_neuron::Disburse> for pb_api::manage_neuron::Disburse {
+impl From<pb::manage_neuron::Disburse> for api::manage_neuron::Disburse {
     fn from(item: pb::manage_neuron::Disburse) -> Self {
         Self {
             amount: item.amount.map(|x| x.into()),
@@ -798,8 +800,8 @@ impl From<pb::manage_neuron::Disburse> for pb_api::manage_neuron::Disburse {
         }
     }
 }
-impl From<pb_api::manage_neuron::Disburse> for pb::manage_neuron::Disburse {
-    fn from(item: pb_api::manage_neuron::Disburse) -> Self {
+impl From<api::manage_neuron::Disburse> for pb::manage_neuron::Disburse {
+    fn from(item: api::manage_neuron::Disburse) -> Self {
         Self {
             amount: item.amount.map(|x| x.into()),
             to_account: item.to_account,
@@ -807,18 +809,18 @@ impl From<pb_api::manage_neuron::Disburse> for pb::manage_neuron::Disburse {
     }
 }
 
-impl From<pb::manage_neuron::disburse::Amount> for pb_api::manage_neuron::disburse::Amount {
+impl From<pb::manage_neuron::disburse::Amount> for api::manage_neuron::disburse::Amount {
     fn from(item: pb::manage_neuron::disburse::Amount) -> Self {
         Self { e8s: item.e8s }
     }
 }
-impl From<pb_api::manage_neuron::disburse::Amount> for pb::manage_neuron::disburse::Amount {
-    fn from(item: pb_api::manage_neuron::disburse::Amount) -> Self {
+impl From<api::manage_neuron::disburse::Amount> for pb::manage_neuron::disburse::Amount {
+    fn from(item: api::manage_neuron::disburse::Amount) -> Self {
         Self { e8s: item.e8s }
     }
 }
 
-impl From<pb::manage_neuron::Split> for pb_api::manage_neuron::Split {
+impl From<pb::manage_neuron::Split> for api::manage_neuron::Split {
     fn from(item: pb::manage_neuron::Split) -> Self {
         Self {
             amount_e8s: item.amount_e8s,
@@ -826,8 +828,8 @@ impl From<pb::manage_neuron::Split> for pb_api::manage_neuron::Split {
         }
     }
 }
-impl From<pb_api::manage_neuron::Split> for pb::manage_neuron::Split {
-    fn from(item: pb_api::manage_neuron::Split) -> Self {
+impl From<api::manage_neuron::Split> for pb::manage_neuron::Split {
+    fn from(item: api::manage_neuron::Split) -> Self {
         Self {
             amount_e8s: item.amount_e8s,
             memo: item.memo,
@@ -835,22 +837,22 @@ impl From<pb_api::manage_neuron::Split> for pb::manage_neuron::Split {
     }
 }
 
-impl From<pb::manage_neuron::Merge> for pb_api::manage_neuron::Merge {
+impl From<pb::manage_neuron::Merge> for api::manage_neuron::Merge {
     fn from(item: pb::manage_neuron::Merge) -> Self {
         Self {
             source_neuron_id: item.source_neuron_id,
         }
     }
 }
-impl From<pb_api::manage_neuron::Merge> for pb::manage_neuron::Merge {
-    fn from(item: pb_api::manage_neuron::Merge) -> Self {
+impl From<api::manage_neuron::Merge> for pb::manage_neuron::Merge {
+    fn from(item: api::manage_neuron::Merge) -> Self {
         Self {
             source_neuron_id: item.source_neuron_id,
         }
     }
 }
 
-impl From<pb::manage_neuron::Spawn> for pb_api::manage_neuron::Spawn {
+impl From<pb::manage_neuron::Spawn> for api::manage_neuron::Spawn {
     fn from(item: pb::manage_neuron::Spawn) -> Self {
         Self {
             new_controller: item.new_controller,
@@ -859,8 +861,8 @@ impl From<pb::manage_neuron::Spawn> for pb_api::manage_neuron::Spawn {
         }
     }
 }
-impl From<pb_api::manage_neuron::Spawn> for pb::manage_neuron::Spawn {
-    fn from(item: pb_api::manage_neuron::Spawn) -> Self {
+impl From<api::manage_neuron::Spawn> for pb::manage_neuron::Spawn {
+    fn from(item: api::manage_neuron::Spawn) -> Self {
         Self {
             new_controller: item.new_controller,
             nonce: item.nonce,
@@ -869,47 +871,47 @@ impl From<pb_api::manage_neuron::Spawn> for pb::manage_neuron::Spawn {
     }
 }
 
-impl From<pb::manage_neuron::MergeMaturity> for pb_api::manage_neuron::MergeMaturity {
+impl From<pb::manage_neuron::MergeMaturity> for api::manage_neuron::MergeMaturity {
     fn from(item: pb::manage_neuron::MergeMaturity) -> Self {
         Self {
             percentage_to_merge: item.percentage_to_merge,
         }
     }
 }
-impl From<pb_api::manage_neuron::MergeMaturity> for pb::manage_neuron::MergeMaturity {
-    fn from(item: pb_api::manage_neuron::MergeMaturity) -> Self {
+impl From<api::manage_neuron::MergeMaturity> for pb::manage_neuron::MergeMaturity {
+    fn from(item: api::manage_neuron::MergeMaturity) -> Self {
         Self {
             percentage_to_merge: item.percentage_to_merge,
         }
     }
 }
 
-impl From<pb::manage_neuron::StakeMaturity> for pb_api::manage_neuron::StakeMaturity {
+impl From<pb::manage_neuron::StakeMaturity> for api::manage_neuron::StakeMaturity {
     fn from(item: pb::manage_neuron::StakeMaturity) -> Self {
         Self {
             percentage_to_stake: item.percentage_to_stake,
         }
     }
 }
-impl From<pb_api::manage_neuron::StakeMaturity> for pb::manage_neuron::StakeMaturity {
-    fn from(item: pb_api::manage_neuron::StakeMaturity) -> Self {
+impl From<api::manage_neuron::StakeMaturity> for pb::manage_neuron::StakeMaturity {
+    fn from(item: api::manage_neuron::StakeMaturity) -> Self {
         Self {
             percentage_to_stake: item.percentage_to_stake,
         }
     }
 }
 
-impl From<pb::manage_neuron::RefreshVotingPower> for pb_api::manage_neuron::RefreshVotingPower {
+impl From<pb::manage_neuron::RefreshVotingPower> for api::manage_neuron::RefreshVotingPower {
     fn from(_item: pb::manage_neuron::RefreshVotingPower) -> Self {
         Self {}
     }
 }
-impl From<pb_api::manage_neuron::RefreshVotingPower> for pb::manage_neuron::RefreshVotingPower {
-    fn from(_item: pb_api::manage_neuron::RefreshVotingPower) -> Self {
+impl From<api::manage_neuron::RefreshVotingPower> for pb::manage_neuron::RefreshVotingPower {
+    fn from(_item: api::manage_neuron::RefreshVotingPower) -> Self {
         Self {}
     }
 }
-impl From<pb::manage_neuron::DisburseToNeuron> for pb_api::manage_neuron::DisburseToNeuron {
+impl From<pb::manage_neuron::DisburseToNeuron> for api::manage_neuron::DisburseToNeuron {
     fn from(item: pb::manage_neuron::DisburseToNeuron) -> Self {
         Self {
             new_controller: item.new_controller,
@@ -920,8 +922,8 @@ impl From<pb::manage_neuron::DisburseToNeuron> for pb_api::manage_neuron::Disbur
         }
     }
 }
-impl From<pb_api::manage_neuron::DisburseToNeuron> for pb::manage_neuron::DisburseToNeuron {
-    fn from(item: pb_api::manage_neuron::DisburseToNeuron) -> Self {
+impl From<api::manage_neuron::DisburseToNeuron> for pb::manage_neuron::DisburseToNeuron {
+    fn from(item: api::manage_neuron::DisburseToNeuron) -> Self {
         Self {
             new_controller: item.new_controller,
             amount_e8s: item.amount_e8s,
@@ -932,7 +934,7 @@ impl From<pb_api::manage_neuron::DisburseToNeuron> for pb::manage_neuron::Disbur
     }
 }
 
-impl From<pb::manage_neuron::Follow> for pb_api::manage_neuron::Follow {
+impl From<pb::manage_neuron::Follow> for api::manage_neuron::Follow {
     fn from(item: pb::manage_neuron::Follow) -> Self {
         Self {
             topic: item.topic,
@@ -940,8 +942,8 @@ impl From<pb::manage_neuron::Follow> for pb_api::manage_neuron::Follow {
         }
     }
 }
-impl From<pb_api::manage_neuron::Follow> for pb::manage_neuron::Follow {
-    fn from(item: pb_api::manage_neuron::Follow) -> Self {
+impl From<api::manage_neuron::Follow> for pb::manage_neuron::Follow {
+    fn from(item: api::manage_neuron::Follow) -> Self {
         Self {
             topic: item.topic,
             followees: item.followees,
@@ -949,7 +951,7 @@ impl From<pb_api::manage_neuron::Follow> for pb::manage_neuron::Follow {
     }
 }
 
-impl From<pb::manage_neuron::RegisterVote> for pb_api::manage_neuron::RegisterVote {
+impl From<pb::manage_neuron::RegisterVote> for api::manage_neuron::RegisterVote {
     fn from(item: pb::manage_neuron::RegisterVote) -> Self {
         Self {
             proposal: item.proposal,
@@ -957,8 +959,8 @@ impl From<pb::manage_neuron::RegisterVote> for pb_api::manage_neuron::RegisterVo
         }
     }
 }
-impl From<pb_api::manage_neuron::RegisterVote> for pb::manage_neuron::RegisterVote {
-    fn from(item: pb_api::manage_neuron::RegisterVote) -> Self {
+impl From<api::manage_neuron::RegisterVote> for pb::manage_neuron::RegisterVote {
+    fn from(item: api::manage_neuron::RegisterVote) -> Self {
         Self {
             proposal: item.proposal,
             vote: item.vote,
@@ -966,22 +968,22 @@ impl From<pb_api::manage_neuron::RegisterVote> for pb::manage_neuron::RegisterVo
     }
 }
 
-impl From<pb::manage_neuron::ClaimOrRefresh> for pb_api::manage_neuron::ClaimOrRefresh {
+impl From<pb::manage_neuron::ClaimOrRefresh> for api::manage_neuron::ClaimOrRefresh {
     fn from(item: pb::manage_neuron::ClaimOrRefresh) -> Self {
         Self {
             by: item.by.map(|x| x.into()),
         }
     }
 }
-impl From<pb_api::manage_neuron::ClaimOrRefresh> for pb::manage_neuron::ClaimOrRefresh {
-    fn from(item: pb_api::manage_neuron::ClaimOrRefresh) -> Self {
+impl From<api::manage_neuron::ClaimOrRefresh> for pb::manage_neuron::ClaimOrRefresh {
+    fn from(item: api::manage_neuron::ClaimOrRefresh) -> Self {
         Self {
             by: item.by.map(|x| x.into()),
         }
     }
 }
 
-impl From<pb::manage_neuron::DisburseMaturity> for pb_api::manage_neuron::DisburseMaturity {
+impl From<pb::manage_neuron::DisburseMaturity> for api::manage_neuron::DisburseMaturity {
     fn from(item: pb::manage_neuron::DisburseMaturity) -> Self {
         Self {
             percentage_to_disburse: item.percentage_to_disburse,
@@ -990,8 +992,8 @@ impl From<pb::manage_neuron::DisburseMaturity> for pb_api::manage_neuron::Disbur
         }
     }
 }
-impl From<pb_api::manage_neuron::DisburseMaturity> for pb::manage_neuron::DisburseMaturity {
-    fn from(item: pb_api::manage_neuron::DisburseMaturity) -> Self {
+impl From<api::manage_neuron::DisburseMaturity> for pb::manage_neuron::DisburseMaturity {
+    fn from(item: api::manage_neuron::DisburseMaturity) -> Self {
         Self {
             percentage_to_disburse: item.percentage_to_disburse,
             to_account: item.to_account.map(|x| x.into()),
@@ -1000,15 +1002,15 @@ impl From<pb_api::manage_neuron::DisburseMaturity> for pb::manage_neuron::Disbur
     }
 }
 
-impl From<pb::manage_neuron::SetFollowing> for pb_api::manage_neuron::SetFollowing {
+impl From<pb::manage_neuron::SetFollowing> for api::manage_neuron::SetFollowing {
     fn from(item: pb::manage_neuron::SetFollowing) -> Self {
         Self {
             topic_following: Some(item.topic_following.into_iter().map(|x| x.into()).collect()),
         }
     }
 }
-impl From<pb_api::manage_neuron::SetFollowing> for pb::manage_neuron::SetFollowing {
-    fn from(item: pb_api::manage_neuron::SetFollowing) -> Self {
+impl From<api::manage_neuron::SetFollowing> for pb::manage_neuron::SetFollowing {
+    fn from(item: api::manage_neuron::SetFollowing) -> Self {
         Self {
             topic_following: item
                 .topic_following
@@ -1021,7 +1023,7 @@ impl From<pb_api::manage_neuron::SetFollowing> for pb::manage_neuron::SetFollowi
 }
 
 impl From<pb::manage_neuron::set_following::FolloweesForTopic>
-    for pb_api::manage_neuron::set_following::FolloweesForTopic
+    for api::manage_neuron::set_following::FolloweesForTopic
 {
     fn from(item: pb::manage_neuron::set_following::FolloweesForTopic) -> Self {
         Self {
@@ -1030,10 +1032,10 @@ impl From<pb::manage_neuron::set_following::FolloweesForTopic>
         }
     }
 }
-impl From<pb_api::manage_neuron::set_following::FolloweesForTopic>
+impl From<api::manage_neuron::set_following::FolloweesForTopic>
     for pb::manage_neuron::set_following::FolloweesForTopic
 {
-    fn from(item: pb_api::manage_neuron::set_following::FolloweesForTopic) -> Self {
+    fn from(item: api::manage_neuron::set_following::FolloweesForTopic) -> Self {
         Self {
             followees: item.followees.unwrap_or_default(),
             topic: item.topic,
@@ -1042,7 +1044,7 @@ impl From<pb_api::manage_neuron::set_following::FolloweesForTopic>
 }
 
 impl From<pb::manage_neuron::claim_or_refresh::MemoAndController>
-    for pb_api::manage_neuron::claim_or_refresh::MemoAndController
+    for api::manage_neuron::claim_or_refresh::MemoAndController
 {
     fn from(item: pb::manage_neuron::claim_or_refresh::MemoAndController) -> Self {
         Self {
@@ -1051,10 +1053,10 @@ impl From<pb::manage_neuron::claim_or_refresh::MemoAndController>
         }
     }
 }
-impl From<pb_api::manage_neuron::claim_or_refresh::MemoAndController>
+impl From<api::manage_neuron::claim_or_refresh::MemoAndController>
     for pb::manage_neuron::claim_or_refresh::MemoAndController
 {
-    fn from(item: pb_api::manage_neuron::claim_or_refresh::MemoAndController) -> Self {
+    fn from(item: api::manage_neuron::claim_or_refresh::MemoAndController) -> Self {
         Self {
             memo: item.memo,
             controller: item.controller,
@@ -1062,56 +1064,56 @@ impl From<pb_api::manage_neuron::claim_or_refresh::MemoAndController>
     }
 }
 
-impl From<pb::manage_neuron::claim_or_refresh::By> for pb_api::manage_neuron::claim_or_refresh::By {
+impl From<pb::manage_neuron::claim_or_refresh::By> for api::manage_neuron::claim_or_refresh::By {
     fn from(item: pb::manage_neuron::claim_or_refresh::By) -> Self {
         match item {
             pb::manage_neuron::claim_or_refresh::By::Memo(v) => {
-                pb_api::manage_neuron::claim_or_refresh::By::Memo(v)
+                api::manage_neuron::claim_or_refresh::By::Memo(v)
             }
             pb::manage_neuron::claim_or_refresh::By::MemoAndController(v) => {
-                pb_api::manage_neuron::claim_or_refresh::By::MemoAndController(v.into())
+                api::manage_neuron::claim_or_refresh::By::MemoAndController(v.into())
             }
             pb::manage_neuron::claim_or_refresh::By::NeuronIdOrSubaccount(v) => {
-                pb_api::manage_neuron::claim_or_refresh::By::NeuronIdOrSubaccount(v.into())
+                api::manage_neuron::claim_or_refresh::By::NeuronIdOrSubaccount(v.into())
             }
         }
     }
 }
-impl From<pb_api::manage_neuron::claim_or_refresh::By> for pb::manage_neuron::claim_or_refresh::By {
-    fn from(item: pb_api::manage_neuron::claim_or_refresh::By) -> Self {
+impl From<api::manage_neuron::claim_or_refresh::By> for pb::manage_neuron::claim_or_refresh::By {
+    fn from(item: api::manage_neuron::claim_or_refresh::By) -> Self {
         match item {
-            pb_api::manage_neuron::claim_or_refresh::By::Memo(v) => {
+            api::manage_neuron::claim_or_refresh::By::Memo(v) => {
                 pb::manage_neuron::claim_or_refresh::By::Memo(v)
             }
-            pb_api::manage_neuron::claim_or_refresh::By::MemoAndController(v) => {
+            api::manage_neuron::claim_or_refresh::By::MemoAndController(v) => {
                 pb::manage_neuron::claim_or_refresh::By::MemoAndController(v.into())
             }
-            pb_api::manage_neuron::claim_or_refresh::By::NeuronIdOrSubaccount(v) => {
+            api::manage_neuron::claim_or_refresh::By::NeuronIdOrSubaccount(v) => {
                 pb::manage_neuron::claim_or_refresh::By::NeuronIdOrSubaccount(v.into())
             }
         }
     }
 }
 
-impl From<pb::manage_neuron::NeuronIdOrSubaccount> for pb_api::manage_neuron::NeuronIdOrSubaccount {
+impl From<pb::manage_neuron::NeuronIdOrSubaccount> for api::manage_neuron::NeuronIdOrSubaccount {
     fn from(item: pb::manage_neuron::NeuronIdOrSubaccount) -> Self {
         match item {
             pb::manage_neuron::NeuronIdOrSubaccount::Subaccount(v) => {
-                pb_api::manage_neuron::NeuronIdOrSubaccount::Subaccount(v)
+                api::manage_neuron::NeuronIdOrSubaccount::Subaccount(v)
             }
             pb::manage_neuron::NeuronIdOrSubaccount::NeuronId(v) => {
-                pb_api::manage_neuron::NeuronIdOrSubaccount::NeuronId(v)
+                api::manage_neuron::NeuronIdOrSubaccount::NeuronId(v)
             }
         }
     }
 }
-impl From<pb_api::manage_neuron::NeuronIdOrSubaccount> for pb::manage_neuron::NeuronIdOrSubaccount {
-    fn from(item: pb_api::manage_neuron::NeuronIdOrSubaccount) -> Self {
+impl From<api::manage_neuron::NeuronIdOrSubaccount> for pb::manage_neuron::NeuronIdOrSubaccount {
+    fn from(item: api::manage_neuron::NeuronIdOrSubaccount) -> Self {
         match item {
-            pb_api::manage_neuron::NeuronIdOrSubaccount::Subaccount(v) => {
+            api::manage_neuron::NeuronIdOrSubaccount::Subaccount(v) => {
                 pb::manage_neuron::NeuronIdOrSubaccount::Subaccount(v)
             }
-            pb_api::manage_neuron::NeuronIdOrSubaccount::NeuronId(v) => {
+            api::manage_neuron::NeuronIdOrSubaccount::NeuronId(v) => {
                 pb::manage_neuron::NeuronIdOrSubaccount::NeuronId(v)
             }
         }
@@ -1120,167 +1122,167 @@ impl From<pb_api::manage_neuron::NeuronIdOrSubaccount> for pb::manage_neuron::Ne
 
 // TODO: Remove this once the proposals exposed by Governance API no longer includes `Action` but
 // only the self-describing version.
-impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::ManageNeuronProposalCommand {
+impl From<pb::manage_neuron::Command> for api::manage_neuron::ManageNeuronProposalCommand {
     fn from(item: pb::manage_neuron::Command) -> Self {
         match item {
             pb::manage_neuron::Command::Configure(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::Configure(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::Configure(v.into())
             }
             pb::manage_neuron::Command::Disburse(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::Disburse(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::Disburse(v.into())
             }
             pb::manage_neuron::Command::Spawn(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::Spawn(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::Spawn(v.into())
             }
             pb::manage_neuron::Command::Follow(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::Follow(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::Follow(v.into())
             }
             pb::manage_neuron::Command::MakeProposal(v) => {
                 // Note: this case is actually impossible since we no longer allow creating
                 // proposals through another ManageNeuron proposal. However this case cannot be
                 // easily removed until the `manage_neuron` canister method no longer uses
                 // `pb::manage_neuron::Command`.
-                pb_api::manage_neuron::ManageNeuronProposalCommand::MakeProposal(Box::new(
+                api::manage_neuron::ManageNeuronProposalCommand::MakeProposal(Box::new(
                     convert_proposal(&v, ProposalDisplayOptions::for_get_proposal_info()),
                 ))
             }
             pb::manage_neuron::Command::RegisterVote(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::RegisterVote(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::RegisterVote(v.into())
             }
             pb::manage_neuron::Command::Split(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::Split(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::Split(v.into())
             }
             pb::manage_neuron::Command::DisburseToNeuron(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::DisburseToNeuron(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::DisburseToNeuron(v.into())
             }
             pb::manage_neuron::Command::ClaimOrRefresh(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::ClaimOrRefresh(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::ClaimOrRefresh(v.into())
             }
             pb::manage_neuron::Command::MergeMaturity(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::MergeMaturity(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::MergeMaturity(v.into())
             }
             pb::manage_neuron::Command::Merge(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::Merge(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::Merge(v.into())
             }
             pb::manage_neuron::Command::StakeMaturity(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::StakeMaturity(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::StakeMaturity(v.into())
             }
             pb::manage_neuron::Command::RefreshVotingPower(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::RefreshVotingPower(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::RefreshVotingPower(v.into())
             }
             pb::manage_neuron::Command::DisburseMaturity(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::DisburseMaturity(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::DisburseMaturity(v.into())
             }
             pb::manage_neuron::Command::SetFollowing(v) => {
-                pb_api::manage_neuron::ManageNeuronProposalCommand::SetFollowing(v.into())
+                api::manage_neuron::ManageNeuronProposalCommand::SetFollowing(v.into())
             }
         }
     }
 }
-impl From<pb_api::manage_neuron::ManageNeuronProposalCommand> for pb::manage_neuron::Command {
-    fn from(item: pb_api::manage_neuron::ManageNeuronProposalCommand) -> Self {
+impl From<api::manage_neuron::ManageNeuronProposalCommand> for pb::manage_neuron::Command {
+    fn from(item: api::manage_neuron::ManageNeuronProposalCommand) -> Self {
         match item {
-            pb_api::manage_neuron::ManageNeuronProposalCommand::Configure(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::Configure(v) => {
                 pb::manage_neuron::Command::Configure(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::Disburse(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::Disburse(v) => {
                 pb::manage_neuron::Command::Disburse(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::Spawn(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::Spawn(v) => {
                 pb::manage_neuron::Command::Spawn(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::Follow(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::Follow(v) => {
                 pb::manage_neuron::Command::Follow(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::MakeProposal(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::MakeProposal(v) => {
                 pb::manage_neuron::Command::MakeProposal(Box::new((*v).into()))
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::RegisterVote(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::RegisterVote(v) => {
                 pb::manage_neuron::Command::RegisterVote(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::Split(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::Split(v) => {
                 pb::manage_neuron::Command::Split(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::DisburseToNeuron(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::DisburseToNeuron(v) => {
                 pb::manage_neuron::Command::DisburseToNeuron(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::ClaimOrRefresh(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::ClaimOrRefresh(v) => {
                 pb::manage_neuron::Command::ClaimOrRefresh(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::MergeMaturity(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::MergeMaturity(v) => {
                 pb::manage_neuron::Command::MergeMaturity(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::Merge(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::Merge(v) => {
                 pb::manage_neuron::Command::Merge(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::StakeMaturity(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::RefreshVotingPower(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::RefreshVotingPower(v) => {
                 pb::manage_neuron::Command::RefreshVotingPower(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::DisburseMaturity(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::DisburseMaturity(v) => {
                 pb::manage_neuron::Command::DisburseMaturity(v.into())
             }
-            pb_api::manage_neuron::ManageNeuronProposalCommand::SetFollowing(v) => {
+            api::manage_neuron::ManageNeuronProposalCommand::SetFollowing(v) => {
                 pb::manage_neuron::Command::SetFollowing(v.into())
             }
         }
     }
 }
-impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
-    fn from(item: pb_api::ManageNeuronCommandRequest) -> Self {
+impl From<api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
+    fn from(item: api::ManageNeuronCommandRequest) -> Self {
         match item {
-            pb_api::ManageNeuronCommandRequest::Configure(v) => {
+            api::ManageNeuronCommandRequest::Configure(v) => {
                 pb::manage_neuron::Command::Configure(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::Disburse(v) => {
+            api::ManageNeuronCommandRequest::Disburse(v) => {
                 pb::manage_neuron::Command::Disburse(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::Spawn(v) => {
+            api::ManageNeuronCommandRequest::Spawn(v) => {
                 pb::manage_neuron::Command::Spawn(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::Follow(v) => {
+            api::ManageNeuronCommandRequest::Follow(v) => {
                 pb::manage_neuron::Command::Follow(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::MakeProposal(v) => {
+            api::ManageNeuronCommandRequest::MakeProposal(v) => {
                 pb::manage_neuron::Command::MakeProposal(Box::new((*v).into()))
             }
-            pb_api::ManageNeuronCommandRequest::RegisterVote(v) => {
+            api::ManageNeuronCommandRequest::RegisterVote(v) => {
                 pb::manage_neuron::Command::RegisterVote(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::Split(v) => {
+            api::ManageNeuronCommandRequest::Split(v) => {
                 pb::manage_neuron::Command::Split(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::DisburseToNeuron(v) => {
+            api::ManageNeuronCommandRequest::DisburseToNeuron(v) => {
                 pb::manage_neuron::Command::DisburseToNeuron(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::ClaimOrRefresh(v) => {
+            api::ManageNeuronCommandRequest::ClaimOrRefresh(v) => {
                 pb::manage_neuron::Command::ClaimOrRefresh(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::MergeMaturity(v) => {
+            api::ManageNeuronCommandRequest::MergeMaturity(v) => {
                 pb::manage_neuron::Command::MergeMaturity(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::Merge(v) => {
+            api::ManageNeuronCommandRequest::Merge(v) => {
                 pb::manage_neuron::Command::Merge(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::StakeMaturity(v) => {
+            api::ManageNeuronCommandRequest::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::RefreshVotingPower(v) => {
+            api::ManageNeuronCommandRequest::RefreshVotingPower(v) => {
                 pb::manage_neuron::Command::RefreshVotingPower(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::DisburseMaturity(v) => {
+            api::ManageNeuronCommandRequest::DisburseMaturity(v) => {
                 pb::manage_neuron::Command::DisburseMaturity(v.into())
             }
-            pb_api::ManageNeuronCommandRequest::SetFollowing(v) => {
+            api::ManageNeuronCommandRequest::SetFollowing(v) => {
                 pb::manage_neuron::Command::SetFollowing(v.into())
             }
         }
     }
 }
 
-impl From<pb::GovernanceError> for pb_api::GovernanceError {
+impl From<pb::GovernanceError> for api::GovernanceError {
     fn from(item: pb::GovernanceError) -> Self {
         Self {
             error_type: item.error_type,
@@ -1288,8 +1290,8 @@ impl From<pb::GovernanceError> for pb_api::GovernanceError {
         }
     }
 }
-impl From<pb_api::GovernanceError> for pb::GovernanceError {
-    fn from(item: pb_api::GovernanceError) -> Self {
+impl From<api::GovernanceError> for pb::GovernanceError {
+    fn from(item: api::GovernanceError) -> Self {
         Self {
             error_type: item.error_type,
             error_message: item.error_message,
@@ -1297,132 +1299,124 @@ impl From<pb_api::GovernanceError> for pb::GovernanceError {
     }
 }
 
-impl From<pb::governance_error::ErrorType> for pb_api::governance_error::ErrorType {
+impl From<pb::governance_error::ErrorType> for api::governance_error::ErrorType {
     fn from(item: pb::governance_error::ErrorType) -> Self {
         match item {
             pb::governance_error::ErrorType::Unspecified => {
-                pb_api::governance_error::ErrorType::Unspecified
+                api::governance_error::ErrorType::Unspecified
             }
-            pb::governance_error::ErrorType::Ok => pb_api::governance_error::ErrorType::Ok,
+            pb::governance_error::ErrorType::Ok => api::governance_error::ErrorType::Ok,
             pb::governance_error::ErrorType::Unavailable => {
-                pb_api::governance_error::ErrorType::Unavailable
+                api::governance_error::ErrorType::Unavailable
             }
             pb::governance_error::ErrorType::NotAuthorized => {
-                pb_api::governance_error::ErrorType::NotAuthorized
+                api::governance_error::ErrorType::NotAuthorized
             }
-            pb::governance_error::ErrorType::NotFound => {
-                pb_api::governance_error::ErrorType::NotFound
-            }
+            pb::governance_error::ErrorType::NotFound => api::governance_error::ErrorType::NotFound,
             pb::governance_error::ErrorType::InvalidCommand => {
-                pb_api::governance_error::ErrorType::InvalidCommand
+                api::governance_error::ErrorType::InvalidCommand
             }
             pb::governance_error::ErrorType::RequiresNotDissolving => {
-                pb_api::governance_error::ErrorType::RequiresNotDissolving
+                api::governance_error::ErrorType::RequiresNotDissolving
             }
             pb::governance_error::ErrorType::RequiresDissolving => {
-                pb_api::governance_error::ErrorType::RequiresDissolving
+                api::governance_error::ErrorType::RequiresDissolving
             }
             pb::governance_error::ErrorType::RequiresDissolved => {
-                pb_api::governance_error::ErrorType::RequiresDissolved
+                api::governance_error::ErrorType::RequiresDissolved
             }
-            pb::governance_error::ErrorType::HotKey => pb_api::governance_error::ErrorType::HotKey,
+            pb::governance_error::ErrorType::HotKey => api::governance_error::ErrorType::HotKey,
             pb::governance_error::ErrorType::ResourceExhausted => {
-                pb_api::governance_error::ErrorType::ResourceExhausted
+                api::governance_error::ErrorType::ResourceExhausted
             }
             pb::governance_error::ErrorType::PreconditionFailed => {
-                pb_api::governance_error::ErrorType::PreconditionFailed
+                api::governance_error::ErrorType::PreconditionFailed
             }
-            pb::governance_error::ErrorType::External => {
-                pb_api::governance_error::ErrorType::External
-            }
+            pb::governance_error::ErrorType::External => api::governance_error::ErrorType::External,
             pb::governance_error::ErrorType::LedgerUpdateOngoing => {
-                pb_api::governance_error::ErrorType::LedgerUpdateOngoing
+                api::governance_error::ErrorType::LedgerUpdateOngoing
             }
             pb::governance_error::ErrorType::InsufficientFunds => {
-                pb_api::governance_error::ErrorType::InsufficientFunds
+                api::governance_error::ErrorType::InsufficientFunds
             }
             pb::governance_error::ErrorType::InvalidPrincipal => {
-                pb_api::governance_error::ErrorType::InvalidPrincipal
+                api::governance_error::ErrorType::InvalidPrincipal
             }
             pb::governance_error::ErrorType::InvalidProposal => {
-                pb_api::governance_error::ErrorType::InvalidProposal
+                api::governance_error::ErrorType::InvalidProposal
             }
             pb::governance_error::ErrorType::AlreadyJoinedCommunityFund => {
-                pb_api::governance_error::ErrorType::AlreadyJoinedCommunityFund
+                api::governance_error::ErrorType::AlreadyJoinedCommunityFund
             }
             pb::governance_error::ErrorType::NotInTheCommunityFund => {
-                pb_api::governance_error::ErrorType::NotInTheCommunityFund
+                api::governance_error::ErrorType::NotInTheCommunityFund
             }
             pb::governance_error::ErrorType::NeuronAlreadyVoted => {
-                pb_api::governance_error::ErrorType::NeuronAlreadyVoted
+                api::governance_error::ErrorType::NeuronAlreadyVoted
             }
         }
     }
 }
-impl From<pb_api::governance_error::ErrorType> for pb::governance_error::ErrorType {
-    fn from(item: pb_api::governance_error::ErrorType) -> Self {
+impl From<api::governance_error::ErrorType> for pb::governance_error::ErrorType {
+    fn from(item: api::governance_error::ErrorType) -> Self {
         match item {
-            pb_api::governance_error::ErrorType::Unspecified => {
+            api::governance_error::ErrorType::Unspecified => {
                 pb::governance_error::ErrorType::Unspecified
             }
-            pb_api::governance_error::ErrorType::Ok => pb::governance_error::ErrorType::Ok,
-            pb_api::governance_error::ErrorType::Unavailable => {
+            api::governance_error::ErrorType::Ok => pb::governance_error::ErrorType::Ok,
+            api::governance_error::ErrorType::Unavailable => {
                 pb::governance_error::ErrorType::Unavailable
             }
-            pb_api::governance_error::ErrorType::NotAuthorized => {
+            api::governance_error::ErrorType::NotAuthorized => {
                 pb::governance_error::ErrorType::NotAuthorized
             }
-            pb_api::governance_error::ErrorType::NotFound => {
-                pb::governance_error::ErrorType::NotFound
-            }
-            pb_api::governance_error::ErrorType::InvalidCommand => {
+            api::governance_error::ErrorType::NotFound => pb::governance_error::ErrorType::NotFound,
+            api::governance_error::ErrorType::InvalidCommand => {
                 pb::governance_error::ErrorType::InvalidCommand
             }
-            pb_api::governance_error::ErrorType::RequiresNotDissolving => {
+            api::governance_error::ErrorType::RequiresNotDissolving => {
                 pb::governance_error::ErrorType::RequiresNotDissolving
             }
-            pb_api::governance_error::ErrorType::RequiresDissolving => {
+            api::governance_error::ErrorType::RequiresDissolving => {
                 pb::governance_error::ErrorType::RequiresDissolving
             }
-            pb_api::governance_error::ErrorType::RequiresDissolved => {
+            api::governance_error::ErrorType::RequiresDissolved => {
                 pb::governance_error::ErrorType::RequiresDissolved
             }
-            pb_api::governance_error::ErrorType::HotKey => pb::governance_error::ErrorType::HotKey,
-            pb_api::governance_error::ErrorType::ResourceExhausted => {
+            api::governance_error::ErrorType::HotKey => pb::governance_error::ErrorType::HotKey,
+            api::governance_error::ErrorType::ResourceExhausted => {
                 pb::governance_error::ErrorType::ResourceExhausted
             }
-            pb_api::governance_error::ErrorType::PreconditionFailed => {
+            api::governance_error::ErrorType::PreconditionFailed => {
                 pb::governance_error::ErrorType::PreconditionFailed
             }
-            pb_api::governance_error::ErrorType::External => {
-                pb::governance_error::ErrorType::External
-            }
-            pb_api::governance_error::ErrorType::LedgerUpdateOngoing => {
+            api::governance_error::ErrorType::External => pb::governance_error::ErrorType::External,
+            api::governance_error::ErrorType::LedgerUpdateOngoing => {
                 pb::governance_error::ErrorType::LedgerUpdateOngoing
             }
-            pb_api::governance_error::ErrorType::InsufficientFunds => {
+            api::governance_error::ErrorType::InsufficientFunds => {
                 pb::governance_error::ErrorType::InsufficientFunds
             }
-            pb_api::governance_error::ErrorType::InvalidPrincipal => {
+            api::governance_error::ErrorType::InvalidPrincipal => {
                 pb::governance_error::ErrorType::InvalidPrincipal
             }
-            pb_api::governance_error::ErrorType::InvalidProposal => {
+            api::governance_error::ErrorType::InvalidProposal => {
                 pb::governance_error::ErrorType::InvalidProposal
             }
-            pb_api::governance_error::ErrorType::AlreadyJoinedCommunityFund => {
+            api::governance_error::ErrorType::AlreadyJoinedCommunityFund => {
                 pb::governance_error::ErrorType::AlreadyJoinedCommunityFund
             }
-            pb_api::governance_error::ErrorType::NotInTheCommunityFund => {
+            api::governance_error::ErrorType::NotInTheCommunityFund => {
                 pb::governance_error::ErrorType::NotInTheCommunityFund
             }
-            pb_api::governance_error::ErrorType::NeuronAlreadyVoted => {
+            api::governance_error::ErrorType::NeuronAlreadyVoted => {
                 pb::governance_error::ErrorType::NeuronAlreadyVoted
             }
         }
     }
 }
 
-impl From<pb::Ballot> for pb_api::Ballot {
+impl From<pb::Ballot> for api::Ballot {
     fn from(item: pb::Ballot) -> Self {
         Self {
             vote: item.vote,
@@ -1430,8 +1424,8 @@ impl From<pb::Ballot> for pb_api::Ballot {
         }
     }
 }
-impl From<pb_api::Ballot> for pb::Ballot {
-    fn from(item: pb_api::Ballot) -> Self {
+impl From<api::Ballot> for pb::Ballot {
+    fn from(item: api::Ballot) -> Self {
         Self {
             vote: item.vote,
             voting_power: item.voting_power,
@@ -1439,7 +1433,7 @@ impl From<pb_api::Ballot> for pb::Ballot {
     }
 }
 
-impl From<pb::Tally> for pb_api::Tally {
+impl From<pb::Tally> for api::Tally {
     fn from(item: pb::Tally) -> Self {
         Self {
             timestamp_seconds: item.timestamp_seconds,
@@ -1449,8 +1443,8 @@ impl From<pb::Tally> for pb_api::Tally {
         }
     }
 }
-impl From<pb_api::Tally> for pb::Tally {
-    fn from(item: pb_api::Tally) -> Self {
+impl From<api::Tally> for pb::Tally {
+    fn from(item: api::Tally) -> Self {
         Self {
             timestamp_seconds: item.timestamp_seconds,
             yes: item.yes,
@@ -1460,8 +1454,8 @@ impl From<pb_api::Tally> for pb::Tally {
     }
 }
 
-impl From<pb_api::ProposalData> for pb::ProposalData {
-    fn from(item: pb_api::ProposalData) -> Self {
+impl From<api::ProposalData> for pb::ProposalData {
+    fn from(item: api::ProposalData) -> Self {
         Self {
             id: item.id,
             proposer: item.proposer,
@@ -1493,7 +1487,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
     }
 }
 
-impl From<pb::NeuronsFundData> for pb_api::NeuronsFundData {
+impl From<pb::NeuronsFundData> for api::NeuronsFundData {
     fn from(item: pb::NeuronsFundData) -> Self {
         Self {
             initial_neurons_fund_participation: item
@@ -1506,8 +1500,8 @@ impl From<pb::NeuronsFundData> for pb_api::NeuronsFundData {
         }
     }
 }
-impl From<pb_api::NeuronsFundData> for pb::NeuronsFundData {
-    fn from(item: pb_api::NeuronsFundData) -> Self {
+impl From<api::NeuronsFundData> for pb::NeuronsFundData {
+    fn from(item: api::NeuronsFundData) -> Self {
         Self {
             initial_neurons_fund_participation: item
                 .initial_neurons_fund_participation
@@ -1520,7 +1514,7 @@ impl From<pb_api::NeuronsFundData> for pb::NeuronsFundData {
     }
 }
 
-impl From<pb::NeuronsFundAuditInfo> for pb_api::NeuronsFundAuditInfo {
+impl From<pb::NeuronsFundAuditInfo> for api::NeuronsFundAuditInfo {
     fn from(item: pb::NeuronsFundAuditInfo) -> Self {
         Self {
             initial_neurons_fund_participation: item
@@ -1533,8 +1527,8 @@ impl From<pb::NeuronsFundAuditInfo> for pb_api::NeuronsFundAuditInfo {
         }
     }
 }
-impl From<pb_api::NeuronsFundAuditInfo> for pb::NeuronsFundAuditInfo {
-    fn from(item: pb_api::NeuronsFundAuditInfo) -> Self {
+impl From<api::NeuronsFundAuditInfo> for pb::NeuronsFundAuditInfo {
+    fn from(item: api::NeuronsFundAuditInfo) -> Self {
         Self {
             initial_neurons_fund_participation: item
                 .initial_neurons_fund_participation
@@ -1547,30 +1541,30 @@ impl From<pb_api::NeuronsFundAuditInfo> for pb::NeuronsFundAuditInfo {
     }
 }
 
-impl From<pb::GetNeuronsFundAuditInfoRequest> for pb_api::GetNeuronsFundAuditInfoRequest {
+impl From<pb::GetNeuronsFundAuditInfoRequest> for api::GetNeuronsFundAuditInfoRequest {
     fn from(item: pb::GetNeuronsFundAuditInfoRequest) -> Self {
         Self {
             nns_proposal_id: item.nns_proposal_id,
         }
     }
 }
-impl From<pb_api::GetNeuronsFundAuditInfoRequest> for pb::GetNeuronsFundAuditInfoRequest {
-    fn from(item: pb_api::GetNeuronsFundAuditInfoRequest) -> Self {
+impl From<api::GetNeuronsFundAuditInfoRequest> for pb::GetNeuronsFundAuditInfoRequest {
+    fn from(item: api::GetNeuronsFundAuditInfoRequest) -> Self {
         Self {
             nns_proposal_id: item.nns_proposal_id,
         }
     }
 }
 
-impl From<pb::GetNeuronsFundAuditInfoResponse> for pb_api::GetNeuronsFundAuditInfoResponse {
+impl From<pb::GetNeuronsFundAuditInfoResponse> for api::GetNeuronsFundAuditInfoResponse {
     fn from(item: pb::GetNeuronsFundAuditInfoResponse) -> Self {
         Self {
             result: item.result.map(|x| x.into()),
         }
     }
 }
-impl From<pb_api::GetNeuronsFundAuditInfoResponse> for pb::GetNeuronsFundAuditInfoResponse {
-    fn from(item: pb_api::GetNeuronsFundAuditInfoResponse) -> Self {
+impl From<api::GetNeuronsFundAuditInfoResponse> for pb::GetNeuronsFundAuditInfoResponse {
+    fn from(item: api::GetNeuronsFundAuditInfoResponse) -> Self {
         Self {
             result: item.result.map(|x| x.into()),
         }
@@ -1578,7 +1572,7 @@ impl From<pb_api::GetNeuronsFundAuditInfoResponse> for pb::GetNeuronsFundAuditIn
 }
 
 impl From<pb::get_neurons_fund_audit_info_response::Ok>
-    for pb_api::get_neurons_fund_audit_info_response::Ok
+    for api::get_neurons_fund_audit_info_response::Ok
 {
     fn from(item: pb::get_neurons_fund_audit_info_response::Ok) -> Self {
         Self {
@@ -1586,10 +1580,10 @@ impl From<pb::get_neurons_fund_audit_info_response::Ok>
         }
     }
 }
-impl From<pb_api::get_neurons_fund_audit_info_response::Ok>
+impl From<api::get_neurons_fund_audit_info_response::Ok>
     for pb::get_neurons_fund_audit_info_response::Ok
 {
-    fn from(item: pb_api::get_neurons_fund_audit_info_response::Ok) -> Self {
+    fn from(item: api::get_neurons_fund_audit_info_response::Ok) -> Self {
         Self {
             neurons_fund_audit_info: item.neurons_fund_audit_info.map(|x| x.into()),
         }
@@ -1597,35 +1591,35 @@ impl From<pb_api::get_neurons_fund_audit_info_response::Ok>
 }
 
 impl From<pb::get_neurons_fund_audit_info_response::Result>
-    for pb_api::get_neurons_fund_audit_info_response::Result
+    for api::get_neurons_fund_audit_info_response::Result
 {
     fn from(item: pb::get_neurons_fund_audit_info_response::Result) -> Self {
         match item {
             pb::get_neurons_fund_audit_info_response::Result::Err(v) => {
-                pb_api::get_neurons_fund_audit_info_response::Result::Err(v.into())
+                api::get_neurons_fund_audit_info_response::Result::Err(v.into())
             }
             pb::get_neurons_fund_audit_info_response::Result::Ok(v) => {
-                pb_api::get_neurons_fund_audit_info_response::Result::Ok(v.into())
+                api::get_neurons_fund_audit_info_response::Result::Ok(v.into())
             }
         }
     }
 }
-impl From<pb_api::get_neurons_fund_audit_info_response::Result>
+impl From<api::get_neurons_fund_audit_info_response::Result>
     for pb::get_neurons_fund_audit_info_response::Result
 {
-    fn from(item: pb_api::get_neurons_fund_audit_info_response::Result) -> Self {
+    fn from(item: api::get_neurons_fund_audit_info_response::Result) -> Self {
         match item {
-            pb_api::get_neurons_fund_audit_info_response::Result::Err(v) => {
+            api::get_neurons_fund_audit_info_response::Result::Err(v) => {
                 pb::get_neurons_fund_audit_info_response::Result::Err(v.into())
             }
-            pb_api::get_neurons_fund_audit_info_response::Result::Ok(v) => {
+            api::get_neurons_fund_audit_info_response::Result::Ok(v) => {
                 pb::get_neurons_fund_audit_info_response::Result::Ok(v.into())
             }
         }
     }
 }
 
-impl From<pb::NeuronsFundParticipation> for pb_api::NeuronsFundParticipation {
+impl From<pb::NeuronsFundParticipation> for api::NeuronsFundParticipation {
     fn from(item: pb::NeuronsFundParticipation) -> Self {
         Self {
             ideal_matched_participation_function: item
@@ -1644,8 +1638,8 @@ impl From<pb::NeuronsFundParticipation> for pb_api::NeuronsFundParticipation {
         }
     }
 }
-impl From<pb_api::NeuronsFundParticipation> for pb::NeuronsFundParticipation {
-    fn from(item: pb_api::NeuronsFundParticipation) -> Self {
+impl From<api::NeuronsFundParticipation> for pb::NeuronsFundParticipation {
+    fn from(item: api::NeuronsFundParticipation) -> Self {
         Self {
             ideal_matched_participation_function: item
                 .ideal_matched_participation_function
@@ -1664,22 +1658,22 @@ impl From<pb_api::NeuronsFundParticipation> for pb::NeuronsFundParticipation {
     }
 }
 
-impl From<pb::IdealMatchedParticipationFunction> for pb_api::IdealMatchedParticipationFunction {
+impl From<pb::IdealMatchedParticipationFunction> for api::IdealMatchedParticipationFunction {
     fn from(item: pb::IdealMatchedParticipationFunction) -> Self {
         Self {
             serialized_representation: item.serialized_representation,
         }
     }
 }
-impl From<pb_api::IdealMatchedParticipationFunction> for pb::IdealMatchedParticipationFunction {
-    fn from(item: pb_api::IdealMatchedParticipationFunction) -> Self {
+impl From<api::IdealMatchedParticipationFunction> for pb::IdealMatchedParticipationFunction {
+    fn from(item: api::IdealMatchedParticipationFunction) -> Self {
         Self {
             serialized_representation: item.serialized_representation,
         }
     }
 }
 
-impl From<pb::NeuronsFundSnapshot> for pb_api::NeuronsFundSnapshot {
+impl From<pb::NeuronsFundSnapshot> for api::NeuronsFundSnapshot {
     fn from(item: pb::NeuronsFundSnapshot) -> Self {
         Self {
             neurons_fund_neuron_portions: item
@@ -1690,8 +1684,8 @@ impl From<pb::NeuronsFundSnapshot> for pb_api::NeuronsFundSnapshot {
         }
     }
 }
-impl From<pb_api::NeuronsFundSnapshot> for pb::NeuronsFundSnapshot {
-    fn from(item: pb_api::NeuronsFundSnapshot) -> Self {
+impl From<api::NeuronsFundSnapshot> for pb::NeuronsFundSnapshot {
+    fn from(item: api::NeuronsFundSnapshot) -> Self {
         Self {
             neurons_fund_neuron_portions: item
                 .neurons_fund_neuron_portions
@@ -1703,7 +1697,7 @@ impl From<pb_api::NeuronsFundSnapshot> for pb::NeuronsFundSnapshot {
 }
 
 impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
-    for pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion
+    for api::neurons_fund_snapshot::NeuronsFundNeuronPortion
 {
     fn from(item: pb::neurons_fund_snapshot::NeuronsFundNeuronPortion) -> Self {
         Self {
@@ -1716,10 +1710,10 @@ impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
         }
     }
 }
-impl From<pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion>
+impl From<api::neurons_fund_snapshot::NeuronsFundNeuronPortion>
     for pb::neurons_fund_snapshot::NeuronsFundNeuronPortion
 {
-    fn from(item: pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion) -> Self {
+    fn from(item: api::neurons_fund_snapshot::NeuronsFundNeuronPortion) -> Self {
         #[allow(deprecated)]
         Self {
             nns_neuron_id: item.nns_neuron_id,
@@ -1732,7 +1726,7 @@ impl From<pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion>
     }
 }
 
-impl From<pb::SwapParticipationLimits> for pb_api::SwapParticipationLimits {
+impl From<pb::SwapParticipationLimits> for api::SwapParticipationLimits {
     fn from(item: pb::SwapParticipationLimits) -> Self {
         Self {
             min_direct_participation_icp_e8s: item.min_direct_participation_icp_e8s,
@@ -1742,8 +1736,8 @@ impl From<pb::SwapParticipationLimits> for pb_api::SwapParticipationLimits {
         }
     }
 }
-impl From<pb_api::SwapParticipationLimits> for pb::SwapParticipationLimits {
-    fn from(item: pb_api::SwapParticipationLimits) -> Self {
+impl From<api::SwapParticipationLimits> for pb::SwapParticipationLimits {
+    fn from(item: api::SwapParticipationLimits) -> Self {
         Self {
             min_direct_participation_icp_e8s: item.min_direct_participation_icp_e8s,
             max_direct_participation_icp_e8s: item.max_direct_participation_icp_e8s,
@@ -1753,22 +1747,22 @@ impl From<pb_api::SwapParticipationLimits> for pb::SwapParticipationLimits {
     }
 }
 
-impl From<pb::DerivedProposalInformation> for pb_api::DerivedProposalInformation {
+impl From<pb::DerivedProposalInformation> for api::DerivedProposalInformation {
     fn from(item: pb::DerivedProposalInformation) -> Self {
         Self {
             swap_background_information: item.swap_background_information.map(|x| x.into()),
         }
     }
 }
-impl From<pb_api::DerivedProposalInformation> for pb::DerivedProposalInformation {
-    fn from(item: pb_api::DerivedProposalInformation) -> Self {
+impl From<api::DerivedProposalInformation> for pb::DerivedProposalInformation {
+    fn from(item: api::DerivedProposalInformation) -> Self {
         Self {
             swap_background_information: item.swap_background_information.map(|x| x.into()),
         }
     }
 }
 
-impl From<pb::SwapBackgroundInformation> for pb_api::SwapBackgroundInformation {
+impl From<pb::SwapBackgroundInformation> for api::SwapBackgroundInformation {
     fn from(item: pb::SwapBackgroundInformation) -> Self {
         Self {
             fallback_controller_principal_ids: item.fallback_controller_principal_ids,
@@ -1790,8 +1784,8 @@ impl From<pb::SwapBackgroundInformation> for pb_api::SwapBackgroundInformation {
         }
     }
 }
-impl From<pb_api::SwapBackgroundInformation> for pb::SwapBackgroundInformation {
-    fn from(item: pb_api::SwapBackgroundInformation) -> Self {
+impl From<api::SwapBackgroundInformation> for pb::SwapBackgroundInformation {
+    fn from(item: api::SwapBackgroundInformation) -> Self {
         Self {
             fallback_controller_principal_ids: item.fallback_controller_principal_ids,
             root_canister_summary: item.root_canister_summary.map(|x| x.into()),
@@ -1814,7 +1808,7 @@ impl From<pb_api::SwapBackgroundInformation> for pb::SwapBackgroundInformation {
 }
 
 impl From<pb::swap_background_information::CanisterSummary>
-    for pb_api::swap_background_information::CanisterSummary
+    for api::swap_background_information::CanisterSummary
 {
     fn from(item: pb::swap_background_information::CanisterSummary) -> Self {
         Self {
@@ -1823,10 +1817,10 @@ impl From<pb::swap_background_information::CanisterSummary>
         }
     }
 }
-impl From<pb_api::swap_background_information::CanisterSummary>
+impl From<api::swap_background_information::CanisterSummary>
     for pb::swap_background_information::CanisterSummary
 {
-    fn from(item: pb_api::swap_background_information::CanisterSummary) -> Self {
+    fn from(item: api::swap_background_information::CanisterSummary) -> Self {
         Self {
             canister_id: item.canister_id,
             status: item.status.map(|x| x.into()),
@@ -1835,7 +1829,7 @@ impl From<pb_api::swap_background_information::CanisterSummary>
 }
 
 impl From<pb::swap_background_information::CanisterStatusResultV2>
-    for pb_api::swap_background_information::CanisterStatusResultV2
+    for api::swap_background_information::CanisterStatusResultV2
 {
     fn from(item: pb::swap_background_information::CanisterStatusResultV2) -> Self {
         Self {
@@ -1849,10 +1843,10 @@ impl From<pb::swap_background_information::CanisterStatusResultV2>
         }
     }
 }
-impl From<pb_api::swap_background_information::CanisterStatusResultV2>
+impl From<api::swap_background_information::CanisterStatusResultV2>
     for pb::swap_background_information::CanisterStatusResultV2
 {
-    fn from(item: pb_api::swap_background_information::CanisterStatusResultV2) -> Self {
+    fn from(item: api::swap_background_information::CanisterStatusResultV2) -> Self {
         Self {
             status: item.status,
             module_hash: item.module_hash,
@@ -1866,62 +1860,62 @@ impl From<pb_api::swap_background_information::CanisterStatusResultV2>
 }
 
 impl From<pb::swap_background_information::CanisterStatusType>
-    for pb_api::swap_background_information::CanisterStatusType
+    for api::swap_background_information::CanisterStatusType
 {
     fn from(item: pb::swap_background_information::CanisterStatusType) -> Self {
         match item {
             pb::swap_background_information::CanisterStatusType::Unspecified => {
-                pb_api::swap_background_information::CanisterStatusType::Unspecified
+                api::swap_background_information::CanisterStatusType::Unspecified
             }
             pb::swap_background_information::CanisterStatusType::Running => {
-                pb_api::swap_background_information::CanisterStatusType::Running
+                api::swap_background_information::CanisterStatusType::Running
             }
             pb::swap_background_information::CanisterStatusType::Stopping => {
-                pb_api::swap_background_information::CanisterStatusType::Stopping
+                api::swap_background_information::CanisterStatusType::Stopping
             }
             pb::swap_background_information::CanisterStatusType::Stopped => {
-                pb_api::swap_background_information::CanisterStatusType::Stopped
+                api::swap_background_information::CanisterStatusType::Stopped
             }
         }
     }
 }
-impl From<pb_api::swap_background_information::CanisterStatusType>
+impl From<api::swap_background_information::CanisterStatusType>
     for pb::swap_background_information::CanisterStatusType
 {
-    fn from(item: pb_api::swap_background_information::CanisterStatusType) -> Self {
+    fn from(item: api::swap_background_information::CanisterStatusType) -> Self {
         match item {
-            pb_api::swap_background_information::CanisterStatusType::Unspecified => {
+            api::swap_background_information::CanisterStatusType::Unspecified => {
                 pb::swap_background_information::CanisterStatusType::Unspecified
             }
-            pb_api::swap_background_information::CanisterStatusType::Running => {
+            api::swap_background_information::CanisterStatusType::Running => {
                 pb::swap_background_information::CanisterStatusType::Running
             }
-            pb_api::swap_background_information::CanisterStatusType::Stopping => {
+            api::swap_background_information::CanisterStatusType::Stopping => {
                 pb::swap_background_information::CanisterStatusType::Stopping
             }
-            pb_api::swap_background_information::CanisterStatusType::Stopped => {
+            api::swap_background_information::CanisterStatusType::Stopped => {
                 pb::swap_background_information::CanisterStatusType::Stopped
             }
         }
     }
 }
 
-impl From<pb::WaitForQuietState> for pb_api::WaitForQuietState {
+impl From<pb::WaitForQuietState> for api::WaitForQuietState {
     fn from(item: pb::WaitForQuietState) -> Self {
         Self {
             current_deadline_timestamp_seconds: item.current_deadline_timestamp_seconds,
         }
     }
 }
-impl From<pb_api::WaitForQuietState> for pb::WaitForQuietState {
-    fn from(item: pb_api::WaitForQuietState) -> Self {
+impl From<api::WaitForQuietState> for pb::WaitForQuietState {
+    fn from(item: api::WaitForQuietState) -> Self {
         Self {
             current_deadline_timestamp_seconds: item.current_deadline_timestamp_seconds,
         }
     }
 }
 
-impl From<pb::NetworkEconomics> for pb_api::NetworkEconomics {
+impl From<pb::NetworkEconomics> for api::NetworkEconomics {
     fn from(item: pb::NetworkEconomics) -> Self {
         Self {
             reject_cost_e8s: item.reject_cost_e8s,
@@ -1938,8 +1932,8 @@ impl From<pb::NetworkEconomics> for pb_api::NetworkEconomics {
     }
 }
 
-impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
-    fn from(item: pb_api::NetworkEconomics) -> Self {
+impl From<api::NetworkEconomics> for pb::NetworkEconomics {
+    fn from(item: api::NetworkEconomics) -> Self {
         Self {
             reject_cost_e8s: item.reject_cost_e8s,
             neuron_minimum_stake_e8s: item.neuron_minimum_stake_e8s,
@@ -1955,8 +1949,8 @@ impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
     }
 }
 
-impl From<pb_api::VotingPowerEconomics> for pb::VotingPowerEconomics {
-    fn from(item: pb_api::VotingPowerEconomics) -> Self {
+impl From<api::VotingPowerEconomics> for pb::VotingPowerEconomics {
+    fn from(item: api::VotingPowerEconomics) -> Self {
         Self {
             start_reducing_voting_power_after_seconds: item
                 .start_reducing_voting_power_after_seconds,
@@ -1967,7 +1961,7 @@ impl From<pb_api::VotingPowerEconomics> for pb::VotingPowerEconomics {
     }
 }
 
-impl From<pb::VotingPowerEconomics> for pb_api::VotingPowerEconomics {
+impl From<pb::VotingPowerEconomics> for api::VotingPowerEconomics {
     fn from(item: pb::VotingPowerEconomics) -> Self {
         Self {
             start_reducing_voting_power_after_seconds: item
@@ -1980,7 +1974,7 @@ impl From<pb::VotingPowerEconomics> for pb_api::VotingPowerEconomics {
 }
 
 impl From<pb::NeuronsFundMatchedFundingCurveCoefficients>
-    for pb_api::NeuronsFundMatchedFundingCurveCoefficients
+    for api::NeuronsFundMatchedFundingCurveCoefficients
 {
     fn from(item: pb::NeuronsFundMatchedFundingCurveCoefficients) -> Self {
         Self {
@@ -1990,10 +1984,10 @@ impl From<pb::NeuronsFundMatchedFundingCurveCoefficients>
         }
     }
 }
-impl From<pb_api::NeuronsFundMatchedFundingCurveCoefficients>
+impl From<api::NeuronsFundMatchedFundingCurveCoefficients>
     for pb::NeuronsFundMatchedFundingCurveCoefficients
 {
-    fn from(item: pb_api::NeuronsFundMatchedFundingCurveCoefficients) -> Self {
+    fn from(item: api::NeuronsFundMatchedFundingCurveCoefficients) -> Self {
         Self {
             contribution_threshold_xdr: item.contribution_threshold_xdr,
             one_third_participation_milestone_xdr: item.one_third_participation_milestone_xdr,
@@ -2002,7 +1996,7 @@ impl From<pb_api::NeuronsFundMatchedFundingCurveCoefficients>
     }
 }
 
-impl From<pb::NeuronsFundEconomics> for pb_api::NeuronsFundEconomics {
+impl From<pb::NeuronsFundEconomics> for api::NeuronsFundEconomics {
     fn from(item: pb::NeuronsFundEconomics) -> Self {
         Self {
             max_theoretical_neurons_fund_participation_amount_xdr: item
@@ -2015,8 +2009,8 @@ impl From<pb::NeuronsFundEconomics> for pb_api::NeuronsFundEconomics {
         }
     }
 }
-impl From<pb_api::NeuronsFundEconomics> for pb::NeuronsFundEconomics {
-    fn from(item: pb_api::NeuronsFundEconomics) -> Self {
+impl From<api::NeuronsFundEconomics> for pb::NeuronsFundEconomics {
+    fn from(item: api::NeuronsFundEconomics) -> Self {
         Self {
             max_theoretical_neurons_fund_participation_amount_xdr: item
                 .max_theoretical_neurons_fund_participation_amount_xdr,
@@ -2029,7 +2023,7 @@ impl From<pb_api::NeuronsFundEconomics> for pb::NeuronsFundEconomics {
     }
 }
 
-impl From<pb::RewardEvent> for pb_api::RewardEvent {
+impl From<pb::RewardEvent> for api::RewardEvent {
     fn from(item: pb::RewardEvent) -> Self {
         Self {
             day_after_genesis: item.day_after_genesis,
@@ -2042,8 +2036,8 @@ impl From<pb::RewardEvent> for pb_api::RewardEvent {
         }
     }
 }
-impl From<pb_api::RewardEvent> for pb::RewardEvent {
-    fn from(item: pb_api::RewardEvent) -> Self {
+impl From<api::RewardEvent> for pb::RewardEvent {
+    fn from(item: api::RewardEvent) -> Self {
         Self {
             day_after_genesis: item.day_after_genesis,
             actual_timestamp_seconds: item.actual_timestamp_seconds,
@@ -2056,7 +2050,7 @@ impl From<pb_api::RewardEvent> for pb::RewardEvent {
     }
 }
 
-impl From<pb::KnownNeuron> for pb_api::KnownNeuron {
+impl From<pb::KnownNeuron> for api::KnownNeuron {
     fn from(item: pb::KnownNeuron) -> Self {
         Self {
             id: item.id,
@@ -2064,8 +2058,8 @@ impl From<pb::KnownNeuron> for pb_api::KnownNeuron {
         }
     }
 }
-impl From<pb_api::KnownNeuron> for pb::KnownNeuron {
-    fn from(item: pb_api::KnownNeuron) -> Self {
+impl From<api::KnownNeuron> for pb::KnownNeuron {
+    fn from(item: api::KnownNeuron) -> Self {
         Self {
             id: item.id,
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
@@ -2073,80 +2067,72 @@ impl From<pb_api::KnownNeuron> for pb::KnownNeuron {
     }
 }
 
-impl From<pb::Topic> for pb_api::TopicToFollow {
+impl From<pb::Topic> for api::TopicToFollow {
     fn from(topic: pb::Topic) -> Self {
         match topic {
-            pb::Topic::Unspecified => pb_api::TopicToFollow::CatchAll,
-            pb::Topic::NeuronManagement => pb_api::TopicToFollow::NeuronManagement,
-            pb::Topic::ExchangeRate => pb_api::TopicToFollow::ExchangeRate,
-            pb::Topic::NetworkEconomics => pb_api::TopicToFollow::NetworkEconomics,
-            pb::Topic::Governance => pb_api::TopicToFollow::Governance,
-            pb::Topic::NodeAdmin => pb_api::TopicToFollow::NodeAdmin,
-            pb::Topic::ParticipantManagement => pb_api::TopicToFollow::ParticipantManagement,
-            pb::Topic::SubnetManagement => pb_api::TopicToFollow::SubnetManagement,
+            pb::Topic::Unspecified => api::TopicToFollow::CatchAll,
+            pb::Topic::NeuronManagement => api::TopicToFollow::NeuronManagement,
+            pb::Topic::ExchangeRate => api::TopicToFollow::ExchangeRate,
+            pb::Topic::NetworkEconomics => api::TopicToFollow::NetworkEconomics,
+            pb::Topic::Governance => api::TopicToFollow::Governance,
+            pb::Topic::NodeAdmin => api::TopicToFollow::NodeAdmin,
+            pb::Topic::ParticipantManagement => api::TopicToFollow::ParticipantManagement,
+            pb::Topic::SubnetManagement => api::TopicToFollow::SubnetManagement,
             pb::Topic::ApplicationCanisterManagement => {
-                pb_api::TopicToFollow::ApplicationCanisterManagement
+                api::TopicToFollow::ApplicationCanisterManagement
             }
-            pb::Topic::Kyc => pb_api::TopicToFollow::Kyc,
-            pb::Topic::NodeProviderRewards => pb_api::TopicToFollow::NodeProviderRewards,
-            pb::Topic::IcOsVersionDeployment => pb_api::TopicToFollow::IcOsVersionDeployment,
-            pb::Topic::IcOsVersionElection => pb_api::TopicToFollow::IcOsVersionElection,
-            pb::Topic::SnsAndCommunityFund => pb_api::TopicToFollow::SnsAndCommunityFund,
-            pb::Topic::ApiBoundaryNodeManagement => {
-                pb_api::TopicToFollow::ApiBoundaryNodeManagement
-            }
-            pb::Topic::SubnetRental => pb_api::TopicToFollow::SubnetRental,
-            pb::Topic::ProtocolCanisterManagement => {
-                pb_api::TopicToFollow::ProtocolCanisterManagement
-            }
+            pb::Topic::Kyc => api::TopicToFollow::Kyc,
+            pb::Topic::NodeProviderRewards => api::TopicToFollow::NodeProviderRewards,
+            pb::Topic::IcOsVersionDeployment => api::TopicToFollow::IcOsVersionDeployment,
+            pb::Topic::IcOsVersionElection => api::TopicToFollow::IcOsVersionElection,
+            pb::Topic::SnsAndCommunityFund => api::TopicToFollow::SnsAndCommunityFund,
+            pb::Topic::ApiBoundaryNodeManagement => api::TopicToFollow::ApiBoundaryNodeManagement,
+            pb::Topic::SubnetRental => api::TopicToFollow::SubnetRental,
+            pb::Topic::ProtocolCanisterManagement => api::TopicToFollow::ProtocolCanisterManagement,
             pb::Topic::ServiceNervousSystemManagement => {
-                pb_api::TopicToFollow::ServiceNervousSystemManagement
+                api::TopicToFollow::ServiceNervousSystemManagement
             }
         }
     }
 }
 
-impl From<pb_api::TopicToFollow> for pb::Topic {
-    fn from(topic: pb_api::TopicToFollow) -> Self {
+impl From<api::TopicToFollow> for pb::Topic {
+    fn from(topic: api::TopicToFollow) -> Self {
         match topic {
-            pb_api::TopicToFollow::CatchAll => pb::Topic::Unspecified,
-            pb_api::TopicToFollow::NeuronManagement => pb::Topic::NeuronManagement,
-            pb_api::TopicToFollow::ExchangeRate => pb::Topic::ExchangeRate,
-            pb_api::TopicToFollow::NetworkEconomics => pb::Topic::NetworkEconomics,
-            pb_api::TopicToFollow::Governance => pb::Topic::Governance,
-            pb_api::TopicToFollow::NodeAdmin => pb::Topic::NodeAdmin,
-            pb_api::TopicToFollow::ParticipantManagement => pb::Topic::ParticipantManagement,
-            pb_api::TopicToFollow::SubnetManagement => pb::Topic::SubnetManagement,
-            pb_api::TopicToFollow::Kyc => pb::Topic::Kyc,
-            pb_api::TopicToFollow::NodeProviderRewards => pb::Topic::NodeProviderRewards,
-            pb_api::TopicToFollow::IcOsVersionDeployment => pb::Topic::IcOsVersionDeployment,
-            pb_api::TopicToFollow::IcOsVersionElection => pb::Topic::IcOsVersionElection,
-            pb_api::TopicToFollow::SnsAndCommunityFund => pb::Topic::SnsAndCommunityFund,
-            pb_api::TopicToFollow::ApiBoundaryNodeManagement => {
-                pb::Topic::ApiBoundaryNodeManagement
-            }
-            pb_api::TopicToFollow::SubnetRental => pb::Topic::SubnetRental,
-            pb_api::TopicToFollow::ApplicationCanisterManagement => {
+            api::TopicToFollow::CatchAll => pb::Topic::Unspecified,
+            api::TopicToFollow::NeuronManagement => pb::Topic::NeuronManagement,
+            api::TopicToFollow::ExchangeRate => pb::Topic::ExchangeRate,
+            api::TopicToFollow::NetworkEconomics => pb::Topic::NetworkEconomics,
+            api::TopicToFollow::Governance => pb::Topic::Governance,
+            api::TopicToFollow::NodeAdmin => pb::Topic::NodeAdmin,
+            api::TopicToFollow::ParticipantManagement => pb::Topic::ParticipantManagement,
+            api::TopicToFollow::SubnetManagement => pb::Topic::SubnetManagement,
+            api::TopicToFollow::Kyc => pb::Topic::Kyc,
+            api::TopicToFollow::NodeProviderRewards => pb::Topic::NodeProviderRewards,
+            api::TopicToFollow::IcOsVersionDeployment => pb::Topic::IcOsVersionDeployment,
+            api::TopicToFollow::IcOsVersionElection => pb::Topic::IcOsVersionElection,
+            api::TopicToFollow::SnsAndCommunityFund => pb::Topic::SnsAndCommunityFund,
+            api::TopicToFollow::ApiBoundaryNodeManagement => pb::Topic::ApiBoundaryNodeManagement,
+            api::TopicToFollow::SubnetRental => pb::Topic::SubnetRental,
+            api::TopicToFollow::ApplicationCanisterManagement => {
                 pb::Topic::ApplicationCanisterManagement
             }
-            pb_api::TopicToFollow::ProtocolCanisterManagement => {
-                pb::Topic::ProtocolCanisterManagement
-            }
-            pb_api::TopicToFollow::ServiceNervousSystemManagement => {
+            api::TopicToFollow::ProtocolCanisterManagement => pb::Topic::ProtocolCanisterManagement,
+            api::TopicToFollow::ServiceNervousSystemManagement => {
                 pb::Topic::ServiceNervousSystemManagement
             }
         }
     }
 }
 
-impl From<pb::KnownNeuronData> for pb_api::KnownNeuronData {
+impl From<pb::KnownNeuronData> for api::KnownNeuronData {
     fn from(item: pb::KnownNeuronData) -> Self {
         let committed_topics = Some(
             item.committed_topics
                 .iter()
                 .map(|&topic_i32| {
                     let topic = pb::Topic::try_from(topic_i32).ok();
-                    topic.map(pb_api::TopicToFollow::from)
+                    topic.map(api::TopicToFollow::from)
                 })
                 .collect(),
         );
@@ -2160,8 +2146,8 @@ impl From<pb::KnownNeuronData> for pb_api::KnownNeuronData {
     }
 }
 
-impl From<pb_api::KnownNeuronData> for pb::KnownNeuronData {
-    fn from(item: pb_api::KnownNeuronData) -> Self {
+impl From<api::KnownNeuronData> for pb::KnownNeuronData {
+    fn from(item: api::KnownNeuronData) -> Self {
         let committed_topics = item
             .committed_topics
             .unwrap_or_default()
@@ -2178,7 +2164,7 @@ impl From<pb_api::KnownNeuronData> for pb::KnownNeuronData {
     }
 }
 
-impl From<pb::OpenSnsTokenSwap> for pb_api::OpenSnsTokenSwap {
+impl From<pb::OpenSnsTokenSwap> for api::OpenSnsTokenSwap {
     fn from(item: pb::OpenSnsTokenSwap) -> Self {
         Self {
             target_swap_canister_id: item.target_swap_canister_id,
@@ -2187,8 +2173,8 @@ impl From<pb::OpenSnsTokenSwap> for pb_api::OpenSnsTokenSwap {
         }
     }
 }
-impl From<pb_api::OpenSnsTokenSwap> for pb::OpenSnsTokenSwap {
-    fn from(item: pb_api::OpenSnsTokenSwap) -> Self {
+impl From<api::OpenSnsTokenSwap> for pb::OpenSnsTokenSwap {
+    fn from(item: api::OpenSnsTokenSwap) -> Self {
         Self {
             target_swap_canister_id: item.target_swap_canister_id,
             params: item.params,
@@ -2197,7 +2183,7 @@ impl From<pb_api::OpenSnsTokenSwap> for pb::OpenSnsTokenSwap {
     }
 }
 
-impl From<pb::CreateServiceNervousSystem> for pb_api::CreateServiceNervousSystem {
+impl From<pb::CreateServiceNervousSystem> for api::CreateServiceNervousSystem {
     fn from(item: pb::CreateServiceNervousSystem) -> Self {
         Self {
             name: item.name,
@@ -2213,8 +2199,8 @@ impl From<pb::CreateServiceNervousSystem> for pb_api::CreateServiceNervousSystem
         }
     }
 }
-impl From<pb_api::CreateServiceNervousSystem> for pb::CreateServiceNervousSystem {
-    fn from(item: pb_api::CreateServiceNervousSystem) -> Self {
+impl From<api::CreateServiceNervousSystem> for pb::CreateServiceNervousSystem {
+    fn from(item: api::CreateServiceNervousSystem) -> Self {
         Self {
             name: item.name,
             description: item.description,
@@ -2231,7 +2217,7 @@ impl From<pb_api::CreateServiceNervousSystem> for pb::CreateServiceNervousSystem
 }
 
 impl From<pb::create_service_nervous_system::InitialTokenDistribution>
-    for pb_api::create_service_nervous_system::InitialTokenDistribution
+    for api::create_service_nervous_system::InitialTokenDistribution
 {
     fn from(item: pb::create_service_nervous_system::InitialTokenDistribution) -> Self {
         Self {
@@ -2241,10 +2227,10 @@ impl From<pb::create_service_nervous_system::InitialTokenDistribution>
         }
     }
 }
-impl From<pb_api::create_service_nervous_system::InitialTokenDistribution>
+impl From<api::create_service_nervous_system::InitialTokenDistribution>
     for pb::create_service_nervous_system::InitialTokenDistribution
 {
-    fn from(item: pb_api::create_service_nervous_system::InitialTokenDistribution) -> Self {
+    fn from(item: api::create_service_nervous_system::InitialTokenDistribution) -> Self {
         Self {
             developer_distribution: item.developer_distribution.map(|x| x.into()),
             treasury_distribution: item.treasury_distribution.map(|x| x.into()),
@@ -2254,7 +2240,7 @@ impl From<pb_api::create_service_nervous_system::InitialTokenDistribution>
 }
 
 impl From<pb::create_service_nervous_system::initial_token_distribution::DeveloperDistribution>
-    for pb_api::create_service_nervous_system::initial_token_distribution::DeveloperDistribution
+    for api::create_service_nervous_system::initial_token_distribution::DeveloperDistribution
 {
     fn from(
         item: pb::create_service_nervous_system::initial_token_distribution::DeveloperDistribution,
@@ -2268,11 +2254,11 @@ impl From<pb::create_service_nervous_system::initial_token_distribution::Develop
         }
     }
 }
-impl From<pb_api::create_service_nervous_system::initial_token_distribution::DeveloperDistribution>
+impl From<api::create_service_nervous_system::initial_token_distribution::DeveloperDistribution>
     for pb::create_service_nervous_system::initial_token_distribution::DeveloperDistribution
 {
     fn from(
-        item: pb_api::create_service_nervous_system::initial_token_distribution::DeveloperDistribution,
+        item: api::create_service_nervous_system::initial_token_distribution::DeveloperDistribution,
     ) -> Self {
         Self {
             developer_neurons: item
@@ -2284,7 +2270,7 @@ impl From<pb_api::create_service_nervous_system::initial_token_distribution::Dev
     }
 }
 
-impl From<pb::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution> for pb_api::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution {
+impl From<pb::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution> for api::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution {
     fn from(item: pb::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution) -> Self {
         Self {
             controller: item.controller,
@@ -2295,8 +2281,8 @@ impl From<pb::create_service_nervous_system::initial_token_distribution::develop
         }
     }
 }
-impl From<pb_api::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution> for pb::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution {
-    fn from(item: pb_api::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution) -> Self {
+impl From<api::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution> for pb::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution {
+    fn from(item: api::create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution) -> Self {
         Self {
             controller: item.controller,
             dissolve_delay: item.dissolve_delay,
@@ -2308,7 +2294,7 @@ impl From<pb_api::create_service_nervous_system::initial_token_distribution::dev
 }
 
 impl From<pb::create_service_nervous_system::initial_token_distribution::TreasuryDistribution>
-    for pb_api::create_service_nervous_system::initial_token_distribution::TreasuryDistribution
+    for api::create_service_nervous_system::initial_token_distribution::TreasuryDistribution
 {
     fn from(
         item: pb::create_service_nervous_system::initial_token_distribution::TreasuryDistribution,
@@ -2316,18 +2302,18 @@ impl From<pb::create_service_nervous_system::initial_token_distribution::Treasur
         Self { total: item.total }
     }
 }
-impl From<pb_api::create_service_nervous_system::initial_token_distribution::TreasuryDistribution>
+impl From<api::create_service_nervous_system::initial_token_distribution::TreasuryDistribution>
     for pb::create_service_nervous_system::initial_token_distribution::TreasuryDistribution
 {
     fn from(
-        item: pb_api::create_service_nervous_system::initial_token_distribution::TreasuryDistribution,
+        item: api::create_service_nervous_system::initial_token_distribution::TreasuryDistribution,
     ) -> Self {
         Self { total: item.total }
     }
 }
 
 impl From<pb::create_service_nervous_system::initial_token_distribution::SwapDistribution>
-    for pb_api::create_service_nervous_system::initial_token_distribution::SwapDistribution
+    for api::create_service_nervous_system::initial_token_distribution::SwapDistribution
 {
     fn from(
         item: pb::create_service_nervous_system::initial_token_distribution::SwapDistribution,
@@ -2335,18 +2321,18 @@ impl From<pb::create_service_nervous_system::initial_token_distribution::SwapDis
         Self { total: item.total }
     }
 }
-impl From<pb_api::create_service_nervous_system::initial_token_distribution::SwapDistribution>
+impl From<api::create_service_nervous_system::initial_token_distribution::SwapDistribution>
     for pb::create_service_nervous_system::initial_token_distribution::SwapDistribution
 {
     fn from(
-        item: pb_api::create_service_nervous_system::initial_token_distribution::SwapDistribution,
+        item: api::create_service_nervous_system::initial_token_distribution::SwapDistribution,
     ) -> Self {
         Self { total: item.total }
     }
 }
 
 impl From<pb::create_service_nervous_system::SwapParameters>
-    for pb_api::create_service_nervous_system::SwapParameters
+    for api::create_service_nervous_system::SwapParameters
 {
     fn from(item: pb::create_service_nervous_system::SwapParameters) -> Self {
         Self {
@@ -2369,10 +2355,10 @@ impl From<pb::create_service_nervous_system::SwapParameters>
         }
     }
 }
-impl From<pb_api::create_service_nervous_system::SwapParameters>
+impl From<api::create_service_nervous_system::SwapParameters>
     for pb::create_service_nervous_system::SwapParameters
 {
-    fn from(item: pb_api::create_service_nervous_system::SwapParameters) -> Self {
+    fn from(item: api::create_service_nervous_system::SwapParameters) -> Self {
         Self {
             minimum_participants: item.minimum_participants,
             minimum_icp: item.minimum_icp,
@@ -2395,7 +2381,7 @@ impl From<pb_api::create_service_nervous_system::SwapParameters>
 }
 
 impl From<pb::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters>
-    for pb_api::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters
+    for api::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters
 {
     fn from(
         item: pb::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters,
@@ -2406,12 +2392,11 @@ impl From<pb::create_service_nervous_system::swap_parameters::NeuronBasketConstr
         }
     }
 }
-impl
-    From<pb_api::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters>
+impl From<api::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters>
     for pb::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters
 {
     fn from(
-        item: pb_api::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters,
+        item: api::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters,
     ) -> Self {
         Self {
             count: item.count,
@@ -2421,7 +2406,7 @@ impl
 }
 
 impl From<pb::create_service_nervous_system::LedgerParameters>
-    for pb_api::create_service_nervous_system::LedgerParameters
+    for api::create_service_nervous_system::LedgerParameters
 {
     fn from(item: pb::create_service_nervous_system::LedgerParameters) -> Self {
         Self {
@@ -2432,10 +2417,10 @@ impl From<pb::create_service_nervous_system::LedgerParameters>
         }
     }
 }
-impl From<pb_api::create_service_nervous_system::LedgerParameters>
+impl From<api::create_service_nervous_system::LedgerParameters>
     for pb::create_service_nervous_system::LedgerParameters
 {
-    fn from(item: pb_api::create_service_nervous_system::LedgerParameters) -> Self {
+    fn from(item: api::create_service_nervous_system::LedgerParameters) -> Self {
         Self {
             transaction_fee: item.transaction_fee,
             token_name: item.token_name,
@@ -2446,7 +2431,7 @@ impl From<pb_api::create_service_nervous_system::LedgerParameters>
 }
 
 impl From<pb::create_service_nervous_system::GovernanceParameters>
-    for pb_api::create_service_nervous_system::GovernanceParameters
+    for api::create_service_nervous_system::GovernanceParameters
 {
     fn from(item: pb::create_service_nervous_system::GovernanceParameters) -> Self {
         Self {
@@ -2461,13 +2446,14 @@ impl From<pb::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
-impl From<pb_api::create_service_nervous_system::GovernanceParameters>
+impl From<api::create_service_nervous_system::GovernanceParameters>
     for pb::create_service_nervous_system::GovernanceParameters
 {
-    fn from(item: pb_api::create_service_nervous_system::GovernanceParameters) -> Self {
+    fn from(item: api::create_service_nervous_system::GovernanceParameters) -> Self {
         Self {
             proposal_rejection_fee: item.proposal_rejection_fee,
             proposal_initial_voting_period: item.proposal_initial_voting_period,
@@ -2480,12 +2466,13 @@ impl From<pb_api::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
 
 impl From<pb::create_service_nervous_system::governance_parameters::VotingRewardParameters>
-    for pb_api::create_service_nervous_system::governance_parameters::VotingRewardParameters
+    for api::create_service_nervous_system::governance_parameters::VotingRewardParameters
 {
     fn from(
         item: pb::create_service_nervous_system::governance_parameters::VotingRewardParameters,
@@ -2497,11 +2484,11 @@ impl From<pb::create_service_nervous_system::governance_parameters::VotingReward
         }
     }
 }
-impl From<pb_api::create_service_nervous_system::governance_parameters::VotingRewardParameters>
+impl From<api::create_service_nervous_system::governance_parameters::VotingRewardParameters>
     for pb::create_service_nervous_system::governance_parameters::VotingRewardParameters
 {
     fn from(
-        item: pb_api::create_service_nervous_system::governance_parameters::VotingRewardParameters,
+        item: api::create_service_nervous_system::governance_parameters::VotingRewardParameters,
     ) -> Self {
         Self {
             initial_reward_rate: item.initial_reward_rate,
@@ -2510,8 +2497,32 @@ impl From<pb_api::create_service_nervous_system::governance_parameters::VotingRe
         }
     }
 }
+impl From<pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for api::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: Some(item.additional_critical_native_action_ids),
+        }
+    }
+}
+impl From<api::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: api::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: item
+                .additional_critical_native_action_ids
+                .unwrap_or_default(),
+        }
+    }
+}
 
-impl From<pb::InstallCode> for pb_api::InstallCode {
+impl From<pb::InstallCode> for api::InstallCode {
     fn from(item: pb::InstallCode) -> Self {
         Self {
             canister_id: item.canister_id,
@@ -2522,8 +2533,8 @@ impl From<pb::InstallCode> for pb_api::InstallCode {
         }
     }
 }
-impl From<pb_api::InstallCode> for pb::InstallCode {
-    fn from(item: pb_api::InstallCode) -> Self {
+impl From<api::InstallCode> for pb::InstallCode {
+    fn from(item: api::InstallCode) -> Self {
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
@@ -2537,8 +2548,8 @@ impl From<pb_api::InstallCode> for pb::InstallCode {
         }
     }
 }
-impl From<pb_api::InstallCodeRequest> for pb::InstallCode {
-    fn from(item: pb_api::InstallCodeRequest) -> Self {
+impl From<api::InstallCodeRequest> for pb::InstallCode {
+    fn from(item: api::InstallCodeRequest) -> Self {
         let wasm_module_hash = item
             .wasm_module
             .as_ref()
@@ -2569,44 +2580,44 @@ impl From<pb_api::InstallCodeRequest> for pb::InstallCode {
     }
 }
 
-impl From<pb::install_code::CanisterInstallMode> for pb_api::install_code::CanisterInstallMode {
+impl From<pb::install_code::CanisterInstallMode> for api::install_code::CanisterInstallMode {
     fn from(item: pb::install_code::CanisterInstallMode) -> Self {
         match item {
             pb::install_code::CanisterInstallMode::Unspecified => {
-                pb_api::install_code::CanisterInstallMode::Unspecified
+                api::install_code::CanisterInstallMode::Unspecified
             }
             pb::install_code::CanisterInstallMode::Install => {
-                pb_api::install_code::CanisterInstallMode::Install
+                api::install_code::CanisterInstallMode::Install
             }
             pb::install_code::CanisterInstallMode::Reinstall => {
-                pb_api::install_code::CanisterInstallMode::Reinstall
+                api::install_code::CanisterInstallMode::Reinstall
             }
             pb::install_code::CanisterInstallMode::Upgrade => {
-                pb_api::install_code::CanisterInstallMode::Upgrade
+                api::install_code::CanisterInstallMode::Upgrade
             }
         }
     }
 }
-impl From<pb_api::install_code::CanisterInstallMode> for pb::install_code::CanisterInstallMode {
-    fn from(item: pb_api::install_code::CanisterInstallMode) -> Self {
+impl From<api::install_code::CanisterInstallMode> for pb::install_code::CanisterInstallMode {
+    fn from(item: api::install_code::CanisterInstallMode) -> Self {
         match item {
-            pb_api::install_code::CanisterInstallMode::Unspecified => {
+            api::install_code::CanisterInstallMode::Unspecified => {
                 pb::install_code::CanisterInstallMode::Unspecified
             }
-            pb_api::install_code::CanisterInstallMode::Install => {
+            api::install_code::CanisterInstallMode::Install => {
                 pb::install_code::CanisterInstallMode::Install
             }
-            pb_api::install_code::CanisterInstallMode::Reinstall => {
+            api::install_code::CanisterInstallMode::Reinstall => {
                 pb::install_code::CanisterInstallMode::Reinstall
             }
-            pb_api::install_code::CanisterInstallMode::Upgrade => {
+            api::install_code::CanisterInstallMode::Upgrade => {
                 pb::install_code::CanisterInstallMode::Upgrade
             }
         }
     }
 }
 
-impl From<pb::StopOrStartCanister> for pb_api::StopOrStartCanister {
+impl From<pb::StopOrStartCanister> for api::StopOrStartCanister {
     fn from(item: pb::StopOrStartCanister) -> Self {
         Self {
             canister_id: item.canister_id,
@@ -2615,8 +2626,8 @@ impl From<pb::StopOrStartCanister> for pb_api::StopOrStartCanister {
     }
 }
 
-impl From<pb_api::StopOrStartCanister> for pb::StopOrStartCanister {
-    fn from(item: pb_api::StopOrStartCanister) -> Self {
+impl From<api::StopOrStartCanister> for pb::StopOrStartCanister {
+    fn from(item: api::StopOrStartCanister) -> Self {
         Self {
             canister_id: item.canister_id,
             action: item.action,
@@ -2625,42 +2636,42 @@ impl From<pb_api::StopOrStartCanister> for pb::StopOrStartCanister {
 }
 
 impl From<pb::stop_or_start_canister::CanisterAction>
-    for pb_api::stop_or_start_canister::CanisterAction
+    for api::stop_or_start_canister::CanisterAction
 {
     fn from(item: pb::stop_or_start_canister::CanisterAction) -> Self {
         match item {
             pb::stop_or_start_canister::CanisterAction::Unspecified => {
-                pb_api::stop_or_start_canister::CanisterAction::Unspecified
+                api::stop_or_start_canister::CanisterAction::Unspecified
             }
             pb::stop_or_start_canister::CanisterAction::Stop => {
-                pb_api::stop_or_start_canister::CanisterAction::Stop
+                api::stop_or_start_canister::CanisterAction::Stop
             }
             pb::stop_or_start_canister::CanisterAction::Start => {
-                pb_api::stop_or_start_canister::CanisterAction::Start
+                api::stop_or_start_canister::CanisterAction::Start
             }
         }
     }
 }
 
-impl From<pb_api::stop_or_start_canister::CanisterAction>
+impl From<api::stop_or_start_canister::CanisterAction>
     for pb::stop_or_start_canister::CanisterAction
 {
-    fn from(item: pb_api::stop_or_start_canister::CanisterAction) -> Self {
+    fn from(item: api::stop_or_start_canister::CanisterAction) -> Self {
         match item {
-            pb_api::stop_or_start_canister::CanisterAction::Unspecified => {
+            api::stop_or_start_canister::CanisterAction::Unspecified => {
                 pb::stop_or_start_canister::CanisterAction::Unspecified
             }
-            pb_api::stop_or_start_canister::CanisterAction::Stop => {
+            api::stop_or_start_canister::CanisterAction::Stop => {
                 pb::stop_or_start_canister::CanisterAction::Stop
             }
-            pb_api::stop_or_start_canister::CanisterAction::Start => {
+            api::stop_or_start_canister::CanisterAction::Start => {
                 pb::stop_or_start_canister::CanisterAction::Start
             }
         }
     }
 }
 
-impl From<pb::UpdateCanisterSettings> for pb_api::UpdateCanisterSettings {
+impl From<pb::UpdateCanisterSettings> for api::UpdateCanisterSettings {
     fn from(item: pb::UpdateCanisterSettings) -> Self {
         Self {
             canister_id: item.canister_id,
@@ -2669,8 +2680,8 @@ impl From<pb::UpdateCanisterSettings> for pb_api::UpdateCanisterSettings {
     }
 }
 
-impl From<pb_api::UpdateCanisterSettings> for pb::UpdateCanisterSettings {
-    fn from(item: pb_api::UpdateCanisterSettings) -> Self {
+impl From<api::UpdateCanisterSettings> for pb::UpdateCanisterSettings {
+    fn from(item: api::UpdateCanisterSettings) -> Self {
         Self {
             canister_id: item.canister_id,
             settings: item.settings.map(|x| x.into()),
@@ -2678,7 +2689,7 @@ impl From<pb_api::UpdateCanisterSettings> for pb::UpdateCanisterSettings {
     }
 }
 
-impl From<pb::FulfillSubnetRentalRequest> for pb_api::FulfillSubnetRentalRequest {
+impl From<pb::FulfillSubnetRentalRequest> for api::FulfillSubnetRentalRequest {
     fn from(item: pb::FulfillSubnetRentalRequest) -> Self {
         Self {
             user: item.user,
@@ -2688,8 +2699,8 @@ impl From<pb::FulfillSubnetRentalRequest> for pb_api::FulfillSubnetRentalRequest
     }
 }
 
-impl From<pb_api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest {
-    fn from(item: pb_api::FulfillSubnetRentalRequest) -> Self {
+impl From<api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest {
+    fn from(item: api::FulfillSubnetRentalRequest) -> Self {
         Self {
             user: item.user,
             node_ids: item.node_ids.unwrap_or_default(),
@@ -2698,96 +2709,113 @@ impl From<pb_api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest
     }
 }
 
-impl From<pb::BlessAlternativeGuestOsVersion> for pb_api::BlessAlternativeGuestOsVersion {
+impl From<pb::BlessAlternativeGuestOsVersion> for api::BlessAlternativeGuestOsVersion {
     fn from(item: pb::BlessAlternativeGuestOsVersion) -> Self {
         Self {
             chip_ids: Some(item.chip_ids),
             rootfs_hash: Some(item.rootfs_hash),
             base_guest_launch_measurements: item
                 .base_guest_launch_measurements
-                .map(convert_guest_launch_measurements_from_pb_to_pb_api),
+                .map(convert_guest_launch_measurements_from_pb_to_api),
         }
     }
 }
 
-impl From<pb_api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestOsVersion {
-    fn from(item: pb_api::BlessAlternativeGuestOsVersion) -> Self {
+impl From<api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestOsVersion {
+    fn from(item: api::BlessAlternativeGuestOsVersion) -> Self {
         Self {
             chip_ids: item.chip_ids.unwrap_or_default(),
             rootfs_hash: item.rootfs_hash.unwrap_or_default(),
             base_guest_launch_measurements: item
                 .base_guest_launch_measurements
-                .map(convert_guest_launch_measurements_from_pb_api_to_pb),
+                .map(convert_guest_launch_measurements_from_api_to_pb),
         }
     }
 }
 
-fn convert_guest_launch_measurements_from_pb_to_pb_api(
+fn convert_guest_launch_measurements_from_pb_to_api(
     item: PbGuestLaunchMeasurements,
-) -> pb_api::GuestLaunchMeasurements {
-    pb_api::GuestLaunchMeasurements {
+) -> api::GuestLaunchMeasurements {
+    api::GuestLaunchMeasurements {
         guest_launch_measurements: Some(
             item.guest_launch_measurements
                 .into_iter()
-                .map(convert_guest_launch_measurement_from_pb_to_pb_api)
+                .map(convert_guest_launch_measurement_from_pb_to_api)
                 .collect(),
         ),
     }
 }
 
-fn convert_guest_launch_measurements_from_pb_api_to_pb(
-    item: pb_api::GuestLaunchMeasurements,
+fn convert_guest_launch_measurements_from_api_to_pb(
+    item: api::GuestLaunchMeasurements,
 ) -> PbGuestLaunchMeasurements {
     PbGuestLaunchMeasurements {
         guest_launch_measurements: item
             .guest_launch_measurements
             .unwrap_or_default()
             .into_iter()
-            .map(convert_guest_launch_measurement_from_pb_api_to_pb)
+            .map(convert_guest_launch_measurement_from_api_to_pb)
             .collect(),
     }
 }
 
-fn convert_guest_launch_measurement_from_pb_to_pb_api(
+fn convert_guest_launch_measurement_from_pb_to_api(
     item: PbGuestLaunchMeasurement,
-) -> pb_api::GuestLaunchMeasurement {
-    pb_api::GuestLaunchMeasurement {
+) -> api::GuestLaunchMeasurement {
+    api::GuestLaunchMeasurement {
         measurement: Some(item.measurement),
         metadata: item
             .metadata
-            .map(convert_guest_launch_measurement_metadata_from_pb_to_pb_api),
+            .map(convert_guest_launch_measurement_metadata_from_pb_to_api),
     }
 }
 
-fn convert_guest_launch_measurement_from_pb_api_to_pb(
-    item: pb_api::GuestLaunchMeasurement,
+fn convert_guest_launch_measurement_from_api_to_pb(
+    item: api::GuestLaunchMeasurement,
 ) -> PbGuestLaunchMeasurement {
     PbGuestLaunchMeasurement {
         measurement: item.measurement.unwrap_or_default(),
         metadata: item
             .metadata
-            .map(convert_guest_launch_measurement_metadata_from_pb_api_to_pb),
+            .map(convert_guest_launch_measurement_metadata_from_api_to_pb),
     }
 }
 
-fn convert_guest_launch_measurement_metadata_from_pb_to_pb_api(
+fn convert_guest_launch_measurement_metadata_from_pb_to_api(
     item: PbGuestLaunchMeasurementMetadata,
-) -> pb_api::GuestLaunchMeasurementMetadata {
-    pb_api::GuestLaunchMeasurementMetadata {
+) -> api::GuestLaunchMeasurementMetadata {
+    api::GuestLaunchMeasurementMetadata {
         kernel_cmdline: item.kernel_cmdline,
     }
 }
 
-fn convert_guest_launch_measurement_metadata_from_pb_api_to_pb(
-    item: pb_api::GuestLaunchMeasurementMetadata,
+fn convert_guest_launch_measurement_metadata_from_api_to_pb(
+    item: api::GuestLaunchMeasurementMetadata,
 ) -> PbGuestLaunchMeasurementMetadata {
     PbGuestLaunchMeasurementMetadata {
         kernel_cmdline: item.kernel_cmdline,
     }
 }
 
+impl From<pb::LoadCanisterSnapshot> for api::LoadCanisterSnapshot {
+    fn from(item: pb::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: Some(item.snapshot_id),
+        }
+    }
+}
+impl From<api::LoadCanisterSnapshot> for pb::LoadCanisterSnapshot {
+    fn from(item: api::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: item.snapshot_id.unwrap_or_default(),
+        }
+    }
+}
+
 impl From<pb::update_canister_settings::CanisterSettings>
-    for pb_api::update_canister_settings::CanisterSettings
+    for api::update_canister_settings::CanisterSettings
 {
     fn from(item: pb::update_canister_settings::CanisterSettings) -> Self {
         Self {
@@ -2802,10 +2830,10 @@ impl From<pb::update_canister_settings::CanisterSettings>
     }
 }
 
-impl From<pb_api::update_canister_settings::CanisterSettings>
+impl From<api::update_canister_settings::CanisterSettings>
     for pb::update_canister_settings::CanisterSettings
 {
-    fn from(item: pb_api::update_canister_settings::CanisterSettings) -> Self {
+    fn from(item: api::update_canister_settings::CanisterSettings) -> Self {
         Self {
             controllers: item.controllers.map(|x| x.into()),
             compute_allocation: item.compute_allocation,
@@ -2819,7 +2847,7 @@ impl From<pb_api::update_canister_settings::CanisterSettings>
 }
 
 impl From<pb::update_canister_settings::Controllers>
-    for pb_api::update_canister_settings::Controllers
+    for api::update_canister_settings::Controllers
 {
     fn from(item: pb::update_canister_settings::Controllers) -> Self {
         Self {
@@ -2828,10 +2856,10 @@ impl From<pb::update_canister_settings::Controllers>
     }
 }
 
-impl From<pb_api::update_canister_settings::Controllers>
+impl From<api::update_canister_settings::Controllers>
     for pb::update_canister_settings::Controllers
 {
-    fn from(item: pb_api::update_canister_settings::Controllers) -> Self {
+    fn from(item: api::update_canister_settings::Controllers) -> Self {
         Self {
             controllers: item.controllers,
         }
@@ -2839,43 +2867,43 @@ impl From<pb_api::update_canister_settings::Controllers>
 }
 
 impl From<pb::update_canister_settings::LogVisibility>
-    for pb_api::update_canister_settings::LogVisibility
+    for api::update_canister_settings::LogVisibility
 {
     fn from(item: pb::update_canister_settings::LogVisibility) -> Self {
         match item {
             pb::update_canister_settings::LogVisibility::Unspecified => {
-                pb_api::update_canister_settings::LogVisibility::Unspecified
+                api::update_canister_settings::LogVisibility::Unspecified
             }
             pb::update_canister_settings::LogVisibility::Controllers => {
-                pb_api::update_canister_settings::LogVisibility::Controllers
+                api::update_canister_settings::LogVisibility::Controllers
             }
             pb::update_canister_settings::LogVisibility::Public => {
-                pb_api::update_canister_settings::LogVisibility::Public
+                api::update_canister_settings::LogVisibility::Public
             }
         }
     }
 }
 
-impl From<pb_api::update_canister_settings::LogVisibility>
+impl From<api::update_canister_settings::LogVisibility>
     for pb::update_canister_settings::LogVisibility
 {
-    fn from(item: pb_api::update_canister_settings::LogVisibility) -> Self {
+    fn from(item: api::update_canister_settings::LogVisibility) -> Self {
         match item {
-            pb_api::update_canister_settings::LogVisibility::Unspecified => {
+            api::update_canister_settings::LogVisibility::Unspecified => {
                 pb::update_canister_settings::LogVisibility::Unspecified
             }
-            pb_api::update_canister_settings::LogVisibility::Controllers => {
+            api::update_canister_settings::LogVisibility::Controllers => {
                 pb::update_canister_settings::LogVisibility::Controllers
             }
-            pb_api::update_canister_settings::LogVisibility::Public => {
+            api::update_canister_settings::LogVisibility::Public => {
                 pb::update_canister_settings::LogVisibility::Public
             }
         }
     }
 }
 
-impl From<pb_api::governance::NeuronInFlightCommand> for pb::governance::NeuronInFlightCommand {
-    fn from(item: pb_api::governance::NeuronInFlightCommand) -> Self {
+impl From<api::governance::NeuronInFlightCommand> for pb::governance::NeuronInFlightCommand {
+    fn from(item: api::governance::NeuronInFlightCommand) -> Self {
         Self {
             timestamp: item.timestamp,
             command: item.command.map(|x| x.into()),
@@ -2884,57 +2912,57 @@ impl From<pb_api::governance::NeuronInFlightCommand> for pb::governance::NeuronI
 }
 
 impl From<pb::governance::neuron_in_flight_command::SyncCommand>
-    for pb_api::governance::neuron_in_flight_command::SyncCommand
+    for api::governance::neuron_in_flight_command::SyncCommand
 {
     fn from(_: pb::governance::neuron_in_flight_command::SyncCommand) -> Self {
         Self {}
     }
 }
-impl From<pb_api::governance::neuron_in_flight_command::SyncCommand>
+impl From<api::governance::neuron_in_flight_command::SyncCommand>
     for pb::governance::neuron_in_flight_command::SyncCommand
 {
-    fn from(_: pb_api::governance::neuron_in_flight_command::SyncCommand) -> Self {
+    fn from(_: api::governance::neuron_in_flight_command::SyncCommand) -> Self {
         Self {}
     }
 }
 
-impl From<pb_api::governance::neuron_in_flight_command::Command>
+impl From<api::governance::neuron_in_flight_command::Command>
     for pb::governance::neuron_in_flight_command::Command
 {
-    fn from(item: pb_api::governance::neuron_in_flight_command::Command) -> Self {
+    fn from(item: api::governance::neuron_in_flight_command::Command) -> Self {
         match item {
-            pb_api::governance::neuron_in_flight_command::Command::Disburse(v) => {
+            api::governance::neuron_in_flight_command::Command::Disburse(v) => {
                 pb::governance::neuron_in_flight_command::Command::Disburse(v.into())
             }
-            pb_api::governance::neuron_in_flight_command::Command::Split(v) => {
+            api::governance::neuron_in_flight_command::Command::Split(v) => {
                 pb::governance::neuron_in_flight_command::Command::Split(v.into())
             }
-            pb_api::governance::neuron_in_flight_command::Command::DisburseToNeuron(v) => {
+            api::governance::neuron_in_flight_command::Command::DisburseToNeuron(v) => {
                 pb::governance::neuron_in_flight_command::Command::DisburseToNeuron(v.into())
             }
-            pb_api::governance::neuron_in_flight_command::Command::MergeMaturity(v) => {
+            api::governance::neuron_in_flight_command::Command::MergeMaturity(v) => {
                 pb::governance::neuron_in_flight_command::Command::MergeMaturity(v.into())
             }
-            pb_api::governance::neuron_in_flight_command::Command::ClaimOrRefreshNeuron(v) => {
+            api::governance::neuron_in_flight_command::Command::ClaimOrRefreshNeuron(v) => {
                 pb::governance::neuron_in_flight_command::Command::ClaimOrRefreshNeuron(v.into())
             }
-            pb_api::governance::neuron_in_flight_command::Command::Configure(v) => {
+            api::governance::neuron_in_flight_command::Command::Configure(v) => {
                 pb::governance::neuron_in_flight_command::Command::Configure(v.into())
             }
-            pb_api::governance::neuron_in_flight_command::Command::Merge(v) => {
+            api::governance::neuron_in_flight_command::Command::Merge(v) => {
                 pb::governance::neuron_in_flight_command::Command::Merge(v.into())
             }
-            pb_api::governance::neuron_in_flight_command::Command::Spawn(v) => {
+            api::governance::neuron_in_flight_command::Command::Spawn(v) => {
                 pb::governance::neuron_in_flight_command::Command::Spawn(v)
             }
-            pb_api::governance::neuron_in_flight_command::Command::SyncCommand(v) => {
+            api::governance::neuron_in_flight_command::Command::SyncCommand(v) => {
                 pb::governance::neuron_in_flight_command::Command::SyncCommand(v.into())
             }
         }
     }
 }
 
-impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::GovernanceCachedMetrics {
+impl From<pb::governance::GovernanceCachedMetrics> for api::governance::GovernanceCachedMetrics {
     fn from(item: pb::governance::GovernanceCachedMetrics) -> Self {
         Self {
             timestamp_seconds: item.timestamp_seconds,
@@ -2998,8 +3026,8 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
         }
     }
 }
-impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::GovernanceCachedMetrics {
-    fn from(item: pb_api::governance::GovernanceCachedMetrics) -> Self {
+impl From<api::governance::GovernanceCachedMetrics> for pb::governance::GovernanceCachedMetrics {
+    fn from(item: api::governance::GovernanceCachedMetrics) -> Self {
         Self {
             timestamp_seconds: item.timestamp_seconds,
             total_supply_icp: item.total_supply_icp,
@@ -3064,7 +3092,7 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
 }
 
 impl From<pb::governance::governance_cached_metrics::NeuronSubsetMetrics>
-    for pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics
+    for api::governance::governance_cached_metrics::NeuronSubsetMetrics
 {
     fn from(item: pb::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
@@ -3090,10 +3118,10 @@ impl From<pb::governance::governance_cached_metrics::NeuronSubsetMetrics>
         }
     }
 }
-impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
+impl From<api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     for pb::governance::governance_cached_metrics::NeuronSubsetMetrics
 {
-    fn from(item: pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
+    fn from(item: api::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
             count: item.count,
 
@@ -3129,7 +3157,7 @@ impl TryFrom<ic_node_rewards_canister_api::DateUtc> for pb::DateUtc {
         Ok(Self { year, month, day })
     }
 }
-impl From<pb::DateUtc> for pb_api::DateUtc {
+impl From<pb::DateUtc> for api::DateUtc {
     fn from(item: pb::DateUtc) -> Self {
         Self {
             year: item.year,
@@ -3138,8 +3166,8 @@ impl From<pb::DateUtc> for pb_api::DateUtc {
         }
     }
 }
-impl From<pb_api::DateUtc> for pb::DateUtc {
-    fn from(item: pb_api::DateUtc) -> Self {
+impl From<api::DateUtc> for pb::DateUtc {
+    fn from(item: api::DateUtc) -> Self {
         Self {
             year: item.year,
             month: item.month,
@@ -3147,7 +3175,7 @@ impl From<pb_api::DateUtc> for pb::DateUtc {
         }
     }
 }
-impl From<pb::XdrConversionRate> for pb_api::XdrConversionRate {
+impl From<pb::XdrConversionRate> for api::XdrConversionRate {
     fn from(item: pb::XdrConversionRate) -> Self {
         Self {
             timestamp_seconds: item.timestamp_seconds,
@@ -3155,8 +3183,8 @@ impl From<pb::XdrConversionRate> for pb_api::XdrConversionRate {
         }
     }
 }
-impl From<pb_api::XdrConversionRate> for pb::XdrConversionRate {
-    fn from(item: pb_api::XdrConversionRate) -> Self {
+impl From<api::XdrConversionRate> for pb::XdrConversionRate {
+    fn from(item: api::XdrConversionRate) -> Self {
         Self {
             timestamp_seconds: item.timestamp_seconds,
             xdr_permyriad_per_icp: item.xdr_permyriad_per_icp,
@@ -3164,36 +3192,36 @@ impl From<pb_api::XdrConversionRate> for pb::XdrConversionRate {
     }
 }
 
-impl From<pb::ListKnownNeuronsResponse> for pb_api::ListKnownNeuronsResponse {
+impl From<pb::ListKnownNeuronsResponse> for api::ListKnownNeuronsResponse {
     fn from(item: pb::ListKnownNeuronsResponse) -> Self {
         Self {
             known_neurons: item.known_neurons.into_iter().map(|x| x.into()).collect(),
         }
     }
 }
-impl From<pb_api::ListKnownNeuronsResponse> for pb::ListKnownNeuronsResponse {
-    fn from(item: pb_api::ListKnownNeuronsResponse) -> Self {
+impl From<api::ListKnownNeuronsResponse> for pb::ListKnownNeuronsResponse {
+    fn from(item: api::ListKnownNeuronsResponse) -> Self {
         Self {
             known_neurons: item.known_neurons.into_iter().map(|x| x.into()).collect(),
         }
     }
 }
 
-impl From<pb::ListNodeProvidersResponse> for pb_api::ListNodeProvidersResponse {
+impl From<pb::ListNodeProvidersResponse> for api::ListNodeProvidersResponse {
     fn from(item: pb::ListNodeProvidersResponse) -> Self {
         Self {
             node_providers: item.node_providers.into_iter().map(|x| x.into()).collect(),
         }
     }
 }
-impl From<pb_api::ListNodeProvidersResponse> for pb::ListNodeProvidersResponse {
-    fn from(item: pb_api::ListNodeProvidersResponse) -> Self {
+impl From<api::ListNodeProvidersResponse> for pb::ListNodeProvidersResponse {
+    fn from(item: api::ListNodeProvidersResponse) -> Self {
         Self {
             node_providers: item.node_providers.into_iter().map(|x| x.into()).collect(),
         }
     }
 }
-impl From<pb::MonthlyNodeProviderRewards> for pb_api::MonthlyNodeProviderRewards {
+impl From<pb::MonthlyNodeProviderRewards> for api::MonthlyNodeProviderRewards {
     fn from(item: pb::MonthlyNodeProviderRewards) -> Self {
         Self {
             timestamp: item.timestamp,
@@ -3209,8 +3237,8 @@ impl From<pb::MonthlyNodeProviderRewards> for pb_api::MonthlyNodeProviderRewards
         }
     }
 }
-impl From<pb_api::MonthlyNodeProviderRewards> for pb::MonthlyNodeProviderRewards {
-    fn from(item: pb_api::MonthlyNodeProviderRewards) -> Self {
+impl From<api::MonthlyNodeProviderRewards> for pb::MonthlyNodeProviderRewards {
+    fn from(item: api::MonthlyNodeProviderRewards) -> Self {
         Self {
             timestamp: item.timestamp,
             start_date: item.start_date.map(|x| x.into()),
@@ -3226,7 +3254,7 @@ impl From<pb_api::MonthlyNodeProviderRewards> for pb::MonthlyNodeProviderRewards
     }
 }
 
-impl From<pb::SettleCommunityFundParticipation> for pb_api::SettleCommunityFundParticipation {
+impl From<pb::SettleCommunityFundParticipation> for api::SettleCommunityFundParticipation {
     fn from(item: pb::SettleCommunityFundParticipation) -> Self {
         Self {
             open_sns_token_swap_proposal_id: item.open_sns_token_swap_proposal_id,
@@ -3234,8 +3262,8 @@ impl From<pb::SettleCommunityFundParticipation> for pb_api::SettleCommunityFundP
         }
     }
 }
-impl From<pb_api::SettleCommunityFundParticipation> for pb::SettleCommunityFundParticipation {
-    fn from(item: pb_api::SettleCommunityFundParticipation) -> Self {
+impl From<api::SettleCommunityFundParticipation> for pb::SettleCommunityFundParticipation {
+    fn from(item: api::SettleCommunityFundParticipation) -> Self {
         Self {
             open_sns_token_swap_proposal_id: item.open_sns_token_swap_proposal_id,
             result: item.result.map(|x| x.into()),
@@ -3244,7 +3272,7 @@ impl From<pb_api::SettleCommunityFundParticipation> for pb::SettleCommunityFundP
 }
 
 impl From<pb::settle_community_fund_participation::Committed>
-    for pb_api::settle_community_fund_participation::Committed
+    for api::settle_community_fund_participation::Committed
 {
     fn from(item: pb::settle_community_fund_participation::Committed) -> Self {
         Self {
@@ -3254,10 +3282,10 @@ impl From<pb::settle_community_fund_participation::Committed>
         }
     }
 }
-impl From<pb_api::settle_community_fund_participation::Committed>
+impl From<api::settle_community_fund_participation::Committed>
     for pb::settle_community_fund_participation::Committed
 {
-    fn from(item: pb_api::settle_community_fund_participation::Committed) -> Self {
+    fn from(item: api::settle_community_fund_participation::Committed) -> Self {
         Self {
             sns_governance_canister_id: item.sns_governance_canister_id,
             total_direct_contribution_icp_e8s: item.total_direct_contribution_icp_e8s,
@@ -3267,43 +3295,43 @@ impl From<pb_api::settle_community_fund_participation::Committed>
 }
 
 impl From<pb::settle_community_fund_participation::Aborted>
-    for pb_api::settle_community_fund_participation::Aborted
+    for api::settle_community_fund_participation::Aborted
 {
     fn from(_: pb::settle_community_fund_participation::Aborted) -> Self {
         Self {}
     }
 }
-impl From<pb_api::settle_community_fund_participation::Aborted>
+impl From<api::settle_community_fund_participation::Aborted>
     for pb::settle_community_fund_participation::Aborted
 {
-    fn from(_: pb_api::settle_community_fund_participation::Aborted) -> Self {
+    fn from(_: api::settle_community_fund_participation::Aborted) -> Self {
         Self {}
     }
 }
 
 impl From<pb::settle_community_fund_participation::Result>
-    for pb_api::settle_community_fund_participation::Result
+    for api::settle_community_fund_participation::Result
 {
     fn from(item: pb::settle_community_fund_participation::Result) -> Self {
         match item {
             pb::settle_community_fund_participation::Result::Committed(v) => {
-                pb_api::settle_community_fund_participation::Result::Committed(v.into())
+                api::settle_community_fund_participation::Result::Committed(v.into())
             }
             pb::settle_community_fund_participation::Result::Aborted(v) => {
-                pb_api::settle_community_fund_participation::Result::Aborted(v.into())
+                api::settle_community_fund_participation::Result::Aborted(v.into())
             }
         }
     }
 }
-impl From<pb_api::settle_community_fund_participation::Result>
+impl From<api::settle_community_fund_participation::Result>
     for pb::settle_community_fund_participation::Result
 {
-    fn from(item: pb_api::settle_community_fund_participation::Result) -> Self {
+    fn from(item: api::settle_community_fund_participation::Result) -> Self {
         match item {
-            pb_api::settle_community_fund_participation::Result::Committed(v) => {
+            api::settle_community_fund_participation::Result::Committed(v) => {
                 pb::settle_community_fund_participation::Result::Committed(v.into())
             }
-            pb_api::settle_community_fund_participation::Result::Aborted(v) => {
+            api::settle_community_fund_participation::Result::Aborted(v) => {
                 pb::settle_community_fund_participation::Result::Aborted(v.into())
             }
         }
@@ -3311,7 +3339,7 @@ impl From<pb_api::settle_community_fund_participation::Result>
 }
 
 impl From<pb::SettleNeuronsFundParticipationRequest>
-    for pb_api::SettleNeuronsFundParticipationRequest
+    for api::SettleNeuronsFundParticipationRequest
 {
     fn from(item: pb::SettleNeuronsFundParticipationRequest) -> Self {
         Self {
@@ -3320,10 +3348,10 @@ impl From<pb::SettleNeuronsFundParticipationRequest>
         }
     }
 }
-impl From<pb_api::SettleNeuronsFundParticipationRequest>
+impl From<api::SettleNeuronsFundParticipationRequest>
     for pb::SettleNeuronsFundParticipationRequest
 {
-    fn from(item: pb_api::SettleNeuronsFundParticipationRequest) -> Self {
+    fn from(item: api::SettleNeuronsFundParticipationRequest) -> Self {
         Self {
             nns_proposal_id: item.nns_proposal_id,
             result: item.result.map(|x| x.into()),
@@ -3332,7 +3360,7 @@ impl From<pb_api::SettleNeuronsFundParticipationRequest>
 }
 
 impl From<pb::settle_neurons_fund_participation_request::Committed>
-    for pb_api::settle_neurons_fund_participation_request::Committed
+    for api::settle_neurons_fund_participation_request::Committed
 {
     fn from(item: pb::settle_neurons_fund_participation_request::Committed) -> Self {
         Self {
@@ -3342,10 +3370,10 @@ impl From<pb::settle_neurons_fund_participation_request::Committed>
         }
     }
 }
-impl From<pb_api::settle_neurons_fund_participation_request::Committed>
+impl From<api::settle_neurons_fund_participation_request::Committed>
     for pb::settle_neurons_fund_participation_request::Committed
 {
-    fn from(item: pb_api::settle_neurons_fund_participation_request::Committed) -> Self {
+    fn from(item: api::settle_neurons_fund_participation_request::Committed) -> Self {
         Self {
             sns_governance_canister_id: item.sns_governance_canister_id,
             total_direct_participation_icp_e8s: item.total_direct_participation_icp_e8s,
@@ -3355,43 +3383,43 @@ impl From<pb_api::settle_neurons_fund_participation_request::Committed>
 }
 
 impl From<pb::settle_neurons_fund_participation_request::Aborted>
-    for pb_api::settle_neurons_fund_participation_request::Aborted
+    for api::settle_neurons_fund_participation_request::Aborted
 {
     fn from(_: pb::settle_neurons_fund_participation_request::Aborted) -> Self {
         Self {}
     }
 }
-impl From<pb_api::settle_neurons_fund_participation_request::Aborted>
+impl From<api::settle_neurons_fund_participation_request::Aborted>
     for pb::settle_neurons_fund_participation_request::Aborted
 {
-    fn from(_: pb_api::settle_neurons_fund_participation_request::Aborted) -> Self {
+    fn from(_: api::settle_neurons_fund_participation_request::Aborted) -> Self {
         Self {}
     }
 }
 
 impl From<pb::settle_neurons_fund_participation_request::Result>
-    for pb_api::settle_neurons_fund_participation_request::Result
+    for api::settle_neurons_fund_participation_request::Result
 {
     fn from(item: pb::settle_neurons_fund_participation_request::Result) -> Self {
         match item {
             pb::settle_neurons_fund_participation_request::Result::Committed(v) => {
-                pb_api::settle_neurons_fund_participation_request::Result::Committed(v.into())
+                api::settle_neurons_fund_participation_request::Result::Committed(v.into())
             }
             pb::settle_neurons_fund_participation_request::Result::Aborted(v) => {
-                pb_api::settle_neurons_fund_participation_request::Result::Aborted(v.into())
+                api::settle_neurons_fund_participation_request::Result::Aborted(v.into())
             }
         }
     }
 }
-impl From<pb_api::settle_neurons_fund_participation_request::Result>
+impl From<api::settle_neurons_fund_participation_request::Result>
     for pb::settle_neurons_fund_participation_request::Result
 {
-    fn from(item: pb_api::settle_neurons_fund_participation_request::Result) -> Self {
+    fn from(item: api::settle_neurons_fund_participation_request::Result) -> Self {
         match item {
-            pb_api::settle_neurons_fund_participation_request::Result::Committed(v) => {
+            api::settle_neurons_fund_participation_request::Result::Committed(v) => {
                 pb::settle_neurons_fund_participation_request::Result::Committed(v.into())
             }
-            pb_api::settle_neurons_fund_participation_request::Result::Aborted(v) => {
+            api::settle_neurons_fund_participation_request::Result::Aborted(v) => {
                 pb::settle_neurons_fund_participation_request::Result::Aborted(v.into())
             }
         }
@@ -3399,7 +3427,7 @@ impl From<pb_api::settle_neurons_fund_participation_request::Result>
 }
 
 impl From<pb::SettleNeuronsFundParticipationResponse>
-    for pb_api::SettleNeuronsFundParticipationResponse
+    for api::SettleNeuronsFundParticipationResponse
 {
     fn from(item: pb::SettleNeuronsFundParticipationResponse) -> Self {
         Self {
@@ -3407,10 +3435,10 @@ impl From<pb::SettleNeuronsFundParticipationResponse>
         }
     }
 }
-impl From<pb_api::SettleNeuronsFundParticipationResponse>
+impl From<api::SettleNeuronsFundParticipationResponse>
     for pb::SettleNeuronsFundParticipationResponse
 {
-    fn from(item: pb_api::SettleNeuronsFundParticipationResponse) -> Self {
+    fn from(item: api::SettleNeuronsFundParticipationResponse) -> Self {
         Self {
             result: item.result.map(|x| x.into()),
         }
@@ -3418,7 +3446,7 @@ impl From<pb_api::SettleNeuronsFundParticipationResponse>
 }
 
 impl From<pb::settle_neurons_fund_participation_response::NeuronsFundNeuron>
-    for pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron
+    for api::settle_neurons_fund_participation_response::NeuronsFundNeuron
 {
     fn from(item: pb::settle_neurons_fund_participation_response::NeuronsFundNeuron) -> Self {
         #[allow(deprecated)]
@@ -3431,10 +3459,10 @@ impl From<pb::settle_neurons_fund_participation_response::NeuronsFundNeuron>
         }
     }
 }
-impl From<pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron>
+impl From<api::settle_neurons_fund_participation_response::NeuronsFundNeuron>
     for pb::settle_neurons_fund_participation_response::NeuronsFundNeuron
 {
-    fn from(item: pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron) -> Self {
+    fn from(item: api::settle_neurons_fund_participation_response::NeuronsFundNeuron) -> Self {
         #[allow(deprecated)]
         Self {
             nns_neuron_id: item.nns_neuron_id,
@@ -3447,7 +3475,7 @@ impl From<pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron>
 }
 
 impl From<pb::settle_neurons_fund_participation_response::Ok>
-    for pb_api::settle_neurons_fund_participation_response::Ok
+    for api::settle_neurons_fund_participation_response::Ok
 {
     fn from(item: pb::settle_neurons_fund_participation_response::Ok) -> Self {
         Self {
@@ -3459,10 +3487,10 @@ impl From<pb::settle_neurons_fund_participation_response::Ok>
         }
     }
 }
-impl From<pb_api::settle_neurons_fund_participation_response::Ok>
+impl From<api::settle_neurons_fund_participation_response::Ok>
     for pb::settle_neurons_fund_participation_response::Ok
 {
-    fn from(item: pb_api::settle_neurons_fund_participation_response::Ok) -> Self {
+    fn from(item: api::settle_neurons_fund_participation_response::Ok) -> Self {
         Self {
             neurons_fund_neuron_portions: item
                 .neurons_fund_neuron_portions
@@ -3474,241 +3502,35 @@ impl From<pb_api::settle_neurons_fund_participation_response::Ok>
 }
 
 impl From<pb::settle_neurons_fund_participation_response::Result>
-    for pb_api::settle_neurons_fund_participation_response::Result
+    for api::settle_neurons_fund_participation_response::Result
 {
     fn from(item: pb::settle_neurons_fund_participation_response::Result) -> Self {
         match item {
             pb::settle_neurons_fund_participation_response::Result::Err(v) => {
-                pb_api::settle_neurons_fund_participation_response::Result::Err(v.into())
+                api::settle_neurons_fund_participation_response::Result::Err(v.into())
             }
             pb::settle_neurons_fund_participation_response::Result::Ok(v) => {
-                pb_api::settle_neurons_fund_participation_response::Result::Ok(v.into())
+                api::settle_neurons_fund_participation_response::Result::Ok(v.into())
             }
         }
     }
 }
-impl From<pb_api::settle_neurons_fund_participation_response::Result>
+impl From<api::settle_neurons_fund_participation_response::Result>
     for pb::settle_neurons_fund_participation_response::Result
 {
-    fn from(item: pb_api::settle_neurons_fund_participation_response::Result) -> Self {
+    fn from(item: api::settle_neurons_fund_participation_response::Result) -> Self {
         match item {
-            pb_api::settle_neurons_fund_participation_response::Result::Err(v) => {
+            api::settle_neurons_fund_participation_response::Result::Err(v) => {
                 pb::settle_neurons_fund_participation_response::Result::Err(v.into())
             }
-            pb_api::settle_neurons_fund_participation_response::Result::Ok(v) => {
+            api::settle_neurons_fund_participation_response::Result::Ok(v) => {
                 pb::settle_neurons_fund_participation_response::Result::Ok(v.into())
             }
         }
     }
 }
 
-impl From<pb::AuditEvent> for pb_api::AuditEvent {
-    fn from(item: pb::AuditEvent) -> Self {
-        Self {
-            timestamp_seconds: item.timestamp_seconds,
-            payload: item.payload.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::AuditEvent> for pb::AuditEvent {
-    fn from(item: pb_api::AuditEvent) -> Self {
-        Self {
-            timestamp_seconds: item.timestamp_seconds,
-            payload: item.payload.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::audit_event::ResetAging> for pb_api::audit_event::ResetAging {
-    fn from(item: pb::audit_event::ResetAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::audit_event::ResetAging> for pb::audit_event::ResetAging {
-    fn from(item: pb_api::audit_event::ResetAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::audit_event::reset_aging::NeuronDissolveState>
-    for pb_api::audit_event::reset_aging::NeuronDissolveState
-{
-    fn from(item: pb::audit_event::reset_aging::NeuronDissolveState) -> Self {
-        match item {
-            pb::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => {
-                pb_api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                    v,
-                )
-            }
-            pb::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
-                pb_api::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-impl From<pb_api::audit_event::reset_aging::NeuronDissolveState>
-    for pb::audit_event::reset_aging::NeuronDissolveState
-{
-    fn from(item: pb_api::audit_event::reset_aging::NeuronDissolveState) -> Self {
-        match item {
-            pb_api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => pb::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v),
-            pb_api::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v) => pb::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-        }
-    }
-}
-
-impl From<pb::audit_event::RestoreAging> for pb_api::audit_event::RestoreAging {
-    fn from(item: pb::audit_event::RestoreAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-impl From<pb_api::audit_event::RestoreAging> for pb::audit_event::RestoreAging {
-    fn from(item: pb_api::audit_event::RestoreAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::audit_event::restore_aging::NeuronDissolveState>
-    for pb_api::audit_event::restore_aging::NeuronDissolveState
-{
-    fn from(item: pb::audit_event::restore_aging::NeuronDissolveState) -> Self {
-        match item {
-            pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => pb_api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v),
-            pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => pb_api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-        }
-    }
-}
-impl From<pb_api::audit_event::restore_aging::NeuronDissolveState>
-    for pb::audit_event::restore_aging::NeuronDissolveState
-{
-    fn from(item: pb_api::audit_event::restore_aging::NeuronDissolveState) -> Self {
-        match item {
-            pb_api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v),
-            pb_api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-        }
-    }
-}
-
-impl From<pb::audit_event::NormalizeDissolveStateAndAge>
-    for pb_api::audit_event::NormalizeDissolveStateAndAge
-{
-    fn from(item: pb::audit_event::NormalizeDissolveStateAndAge) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            neuron_legacy_case: item.neuron_legacy_case,
-            previous_when_dissolved_timestamp_seconds: item
-                .previous_when_dissolved_timestamp_seconds,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-        }
-    }
-}
-impl From<pb_api::audit_event::NormalizeDissolveStateAndAge>
-    for pb::audit_event::NormalizeDissolveStateAndAge
-{
-    fn from(item: pb_api::audit_event::NormalizeDissolveStateAndAge) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            neuron_legacy_case: item.neuron_legacy_case,
-            previous_when_dissolved_timestamp_seconds: item
-                .previous_when_dissolved_timestamp_seconds,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-        }
-    }
-}
-
-impl From<pb::audit_event::NeuronLegacyCase> for pb_api::audit_event::NeuronLegacyCase {
-    fn from(item: pb::audit_event::NeuronLegacyCase) -> Self {
-        match item {
-            pb::audit_event::NeuronLegacyCase::Unspecified => {
-                pb_api::audit_event::NeuronLegacyCase::Unspecified
-            }
-            pb::audit_event::NeuronLegacyCase::DissolvingOrDissolved => {
-                pb_api::audit_event::NeuronLegacyCase::DissolvingOrDissolved
-            }
-            pb::audit_event::NeuronLegacyCase::Dissolved => {
-                pb_api::audit_event::NeuronLegacyCase::Dissolved
-            }
-            pb::audit_event::NeuronLegacyCase::NoneDissolveState => {
-                pb_api::audit_event::NeuronLegacyCase::NoneDissolveState
-            }
-        }
-    }
-}
-impl From<pb_api::audit_event::NeuronLegacyCase> for pb::audit_event::NeuronLegacyCase {
-    fn from(item: pb_api::audit_event::NeuronLegacyCase) -> Self {
-        match item {
-            pb_api::audit_event::NeuronLegacyCase::Unspecified => {
-                pb::audit_event::NeuronLegacyCase::Unspecified
-            }
-            pb_api::audit_event::NeuronLegacyCase::DissolvingOrDissolved => {
-                pb::audit_event::NeuronLegacyCase::DissolvingOrDissolved
-            }
-            pb_api::audit_event::NeuronLegacyCase::Dissolved => {
-                pb::audit_event::NeuronLegacyCase::Dissolved
-            }
-            pb_api::audit_event::NeuronLegacyCase::NoneDissolveState => {
-                pb::audit_event::NeuronLegacyCase::NoneDissolveState
-            }
-        }
-    }
-}
-
-impl From<pb::audit_event::Payload> for pb_api::audit_event::Payload {
-    fn from(item: pb::audit_event::Payload) -> Self {
-        match item {
-            pb::audit_event::Payload::ResetAging(v) => {
-                pb_api::audit_event::Payload::ResetAging(v.into())
-            }
-            pb::audit_event::Payload::RestoreAging(v) => {
-                pb_api::audit_event::Payload::RestoreAging(v.into())
-            }
-            pb::audit_event::Payload::NormalizeDissolveStateAndAge(v) => {
-                pb_api::audit_event::Payload::NormalizeDissolveStateAndAge(v.into())
-            }
-        }
-    }
-}
-impl From<pb_api::audit_event::Payload> for pb::audit_event::Payload {
-    fn from(item: pb_api::audit_event::Payload) -> Self {
-        match item {
-            pb_api::audit_event::Payload::ResetAging(v) => {
-                pb::audit_event::Payload::ResetAging(v.into())
-            }
-            pb_api::audit_event::Payload::RestoreAging(v) => {
-                pb::audit_event::Payload::RestoreAging(v.into())
-            }
-            pb_api::audit_event::Payload::NormalizeDissolveStateAndAge(v) => {
-                pb::audit_event::Payload::NormalizeDissolveStateAndAge(v.into())
-            }
-        }
-    }
-}
-
-impl From<pb::RestoreAgingSummary> for pb_api::RestoreAgingSummary {
+impl From<pb::RestoreAgingSummary> for api::RestoreAgingSummary {
     fn from(item: pb::RestoreAgingSummary) -> Self {
         Self {
             timestamp_seconds: item.timestamp_seconds,
@@ -3716,8 +3538,8 @@ impl From<pb::RestoreAgingSummary> for pb_api::RestoreAgingSummary {
         }
     }
 }
-impl From<pb_api::RestoreAgingSummary> for pb::RestoreAgingSummary {
-    fn from(item: pb_api::RestoreAgingSummary) -> Self {
+impl From<api::RestoreAgingSummary> for pb::RestoreAgingSummary {
+    fn from(item: api::RestoreAgingSummary) -> Self {
         Self {
             timestamp_seconds: item.timestamp_seconds,
             groups: item.groups.into_iter().map(|x| x.into()).collect(),
@@ -3726,7 +3548,7 @@ impl From<pb_api::RestoreAgingSummary> for pb::RestoreAgingSummary {
 }
 
 impl From<pb::restore_aging_summary::RestoreAgingNeuronGroup>
-    for pb_api::restore_aging_summary::RestoreAgingNeuronGroup
+    for api::restore_aging_summary::RestoreAgingNeuronGroup
 {
     fn from(item: pb::restore_aging_summary::RestoreAgingNeuronGroup) -> Self {
         Self {
@@ -3737,10 +3559,10 @@ impl From<pb::restore_aging_summary::RestoreAgingNeuronGroup>
         }
     }
 }
-impl From<pb_api::restore_aging_summary::RestoreAgingNeuronGroup>
+impl From<api::restore_aging_summary::RestoreAgingNeuronGroup>
     for pb::restore_aging_summary::RestoreAgingNeuronGroup
 {
-    fn from(item: pb_api::restore_aging_summary::RestoreAgingNeuronGroup) -> Self {
+    fn from(item: api::restore_aging_summary::RestoreAgingNeuronGroup) -> Self {
         Self {
             group_type: item.group_type,
             count: item.count,
@@ -3751,59 +3573,59 @@ impl From<pb_api::restore_aging_summary::RestoreAgingNeuronGroup>
 }
 
 impl From<pb::restore_aging_summary::NeuronGroupType>
-    for pb_api::restore_aging_summary::NeuronGroupType
+    for api::restore_aging_summary::NeuronGroupType
 {
     fn from(item: pb::restore_aging_summary::NeuronGroupType) -> Self {
         match item {
             pb::restore_aging_summary::NeuronGroupType::Unspecified => {
-                pb_api::restore_aging_summary::NeuronGroupType::Unspecified
+                api::restore_aging_summary::NeuronGroupType::Unspecified
             }
             pb::restore_aging_summary::NeuronGroupType::NotPreAging => {
-                pb_api::restore_aging_summary::NeuronGroupType::NotPreAging
+                api::restore_aging_summary::NeuronGroupType::NotPreAging
             }
             pb::restore_aging_summary::NeuronGroupType::DissolvingOrDissolved => {
-                pb_api::restore_aging_summary::NeuronGroupType::DissolvingOrDissolved
+                api::restore_aging_summary::NeuronGroupType::DissolvingOrDissolved
             }
             pb::restore_aging_summary::NeuronGroupType::StakeChanged => {
-                pb_api::restore_aging_summary::NeuronGroupType::StakeChanged
+                api::restore_aging_summary::NeuronGroupType::StakeChanged
             }
             pb::restore_aging_summary::NeuronGroupType::StakeSameAgingChanged => {
-                pb_api::restore_aging_summary::NeuronGroupType::StakeSameAgingChanged
+                api::restore_aging_summary::NeuronGroupType::StakeSameAgingChanged
             }
             pb::restore_aging_summary::NeuronGroupType::StakeSameAgingSame => {
-                pb_api::restore_aging_summary::NeuronGroupType::StakeSameAgingSame
+                api::restore_aging_summary::NeuronGroupType::StakeSameAgingSame
             }
         }
     }
 }
-impl From<pb_api::restore_aging_summary::NeuronGroupType>
+impl From<api::restore_aging_summary::NeuronGroupType>
     for pb::restore_aging_summary::NeuronGroupType
 {
-    fn from(item: pb_api::restore_aging_summary::NeuronGroupType) -> Self {
+    fn from(item: api::restore_aging_summary::NeuronGroupType) -> Self {
         match item {
-            pb_api::restore_aging_summary::NeuronGroupType::Unspecified => {
+            api::restore_aging_summary::NeuronGroupType::Unspecified => {
                 pb::restore_aging_summary::NeuronGroupType::Unspecified
             }
-            pb_api::restore_aging_summary::NeuronGroupType::NotPreAging => {
+            api::restore_aging_summary::NeuronGroupType::NotPreAging => {
                 pb::restore_aging_summary::NeuronGroupType::NotPreAging
             }
-            pb_api::restore_aging_summary::NeuronGroupType::DissolvingOrDissolved => {
+            api::restore_aging_summary::NeuronGroupType::DissolvingOrDissolved => {
                 pb::restore_aging_summary::NeuronGroupType::DissolvingOrDissolved
             }
-            pb_api::restore_aging_summary::NeuronGroupType::StakeChanged => {
+            api::restore_aging_summary::NeuronGroupType::StakeChanged => {
                 pb::restore_aging_summary::NeuronGroupType::StakeChanged
             }
-            pb_api::restore_aging_summary::NeuronGroupType::StakeSameAgingChanged => {
+            api::restore_aging_summary::NeuronGroupType::StakeSameAgingChanged => {
                 pb::restore_aging_summary::NeuronGroupType::StakeSameAgingChanged
             }
-            pb_api::restore_aging_summary::NeuronGroupType::StakeSameAgingSame => {
+            api::restore_aging_summary::NeuronGroupType::StakeSameAgingSame => {
                 pb::restore_aging_summary::NeuronGroupType::StakeSameAgingSame
             }
         }
     }
 }
 
-impl From<pb::Account> for pb_api::Account {
+impl From<pb::Account> for api::Account {
     fn from(item: pb::Account) -> Self {
         Self {
             owner: item.owner,
@@ -3811,8 +3633,8 @@ impl From<pb::Account> for pb_api::Account {
         }
     }
 }
-impl From<pb_api::Account> for pb::Account {
-    fn from(item: pb_api::Account) -> Self {
+impl From<api::Account> for pb::Account {
+    fn from(item: api::Account) -> Self {
         Self {
             owner: item.owner,
             subaccount: item.subaccount.map(|x| pb::Subaccount { subaccount: x }),
@@ -3820,330 +3642,302 @@ impl From<pb_api::Account> for pb::Account {
     }
 }
 
-impl From<pb::NeuronState> for pb_api::NeuronState {
+impl From<pb::NeuronState> for api::NeuronState {
     fn from(item: pb::NeuronState) -> Self {
         match item {
-            pb::NeuronState::Unspecified => pb_api::NeuronState::Unspecified,
-            pb::NeuronState::NotDissolving => pb_api::NeuronState::NotDissolving,
-            pb::NeuronState::Dissolving => pb_api::NeuronState::Dissolving,
-            pb::NeuronState::Dissolved => pb_api::NeuronState::Dissolved,
-            pb::NeuronState::Spawning => pb_api::NeuronState::Spawning,
+            pb::NeuronState::Unspecified => api::NeuronState::Unspecified,
+            pb::NeuronState::NotDissolving => api::NeuronState::NotDissolving,
+            pb::NeuronState::Dissolving => api::NeuronState::Dissolving,
+            pb::NeuronState::Dissolved => api::NeuronState::Dissolved,
+            pb::NeuronState::Spawning => api::NeuronState::Spawning,
         }
     }
 }
-impl From<pb_api::NeuronState> for pb::NeuronState {
-    fn from(item: pb_api::NeuronState) -> Self {
+impl From<api::NeuronState> for pb::NeuronState {
+    fn from(item: api::NeuronState) -> Self {
         match item {
-            pb_api::NeuronState::Unspecified => pb::NeuronState::Unspecified,
-            pb_api::NeuronState::NotDissolving => pb::NeuronState::NotDissolving,
-            pb_api::NeuronState::Dissolving => pb::NeuronState::Dissolving,
-            pb_api::NeuronState::Dissolved => pb::NeuronState::Dissolved,
-            pb_api::NeuronState::Spawning => pb::NeuronState::Spawning,
+            api::NeuronState::Unspecified => pb::NeuronState::Unspecified,
+            api::NeuronState::NotDissolving => pb::NeuronState::NotDissolving,
+            api::NeuronState::Dissolving => pb::NeuronState::Dissolving,
+            api::NeuronState::Dissolved => pb::NeuronState::Dissolved,
+            api::NeuronState::Spawning => pb::NeuronState::Spawning,
         }
     }
 }
 
-impl From<pb::NeuronType> for pb_api::NeuronType {
+impl From<pb::NeuronType> for api::NeuronType {
     fn from(item: pb::NeuronType) -> Self {
         match item {
-            pb::NeuronType::Unspecified => pb_api::NeuronType::Unspecified,
-            pb::NeuronType::Seed => pb_api::NeuronType::Seed,
-            pb::NeuronType::Ect => pb_api::NeuronType::Ect,
+            pb::NeuronType::Unspecified => api::NeuronType::Unspecified,
+            pb::NeuronType::Seed => api::NeuronType::Seed,
+            pb::NeuronType::Ect => api::NeuronType::Ect,
         }
     }
 }
-impl From<pb_api::NeuronType> for pb::NeuronType {
-    fn from(item: pb_api::NeuronType) -> Self {
+impl From<api::NeuronType> for pb::NeuronType {
+    fn from(item: api::NeuronType) -> Self {
         match item {
-            pb_api::NeuronType::Unspecified => pb::NeuronType::Unspecified,
-            pb_api::NeuronType::Seed => pb::NeuronType::Seed,
-            pb_api::NeuronType::Ect => pb::NeuronType::Ect,
+            api::NeuronType::Unspecified => pb::NeuronType::Unspecified,
+            api::NeuronType::Seed => pb::NeuronType::Seed,
+            api::NeuronType::Ect => pb::NeuronType::Ect,
         }
     }
 }
 
-impl From<pb::Vote> for pb_api::Vote {
+impl From<pb::Vote> for api::Vote {
     fn from(item: pb::Vote) -> Self {
         match item {
-            pb::Vote::Unspecified => pb_api::Vote::Unspecified,
-            pb::Vote::Yes => pb_api::Vote::Yes,
-            pb::Vote::No => pb_api::Vote::No,
+            pb::Vote::Unspecified => api::Vote::Unspecified,
+            pb::Vote::Yes => api::Vote::Yes,
+            pb::Vote::No => api::Vote::No,
         }
     }
 }
-impl From<pb_api::Vote> for pb::Vote {
-    fn from(item: pb_api::Vote) -> Self {
+impl From<api::Vote> for pb::Vote {
+    fn from(item: api::Vote) -> Self {
         match item {
-            pb_api::Vote::Unspecified => pb::Vote::Unspecified,
-            pb_api::Vote::Yes => pb::Vote::Yes,
-            pb_api::Vote::No => pb::Vote::No,
+            api::Vote::Unspecified => pb::Vote::Unspecified,
+            api::Vote::Yes => pb::Vote::Yes,
+            api::Vote::No => pb::Vote::No,
         }
     }
 }
 
-impl From<pb::NnsFunction> for pb_api::NnsFunction {
+impl From<pb::NnsFunction> for api::NnsFunction {
     fn from(item: pb::NnsFunction) -> Self {
         match item {
-            pb::NnsFunction::Unspecified => pb_api::NnsFunction::Unspecified,
-            pb::NnsFunction::CreateSubnet => pb_api::NnsFunction::CreateSubnet,
-            pb::NnsFunction::AddNodeToSubnet => pb_api::NnsFunction::AddNodeToSubnet,
-            pb::NnsFunction::NnsCanisterInstall => pb_api::NnsFunction::NnsCanisterInstall,
-            pb::NnsFunction::NnsCanisterUpgrade => pb_api::NnsFunction::NnsCanisterUpgrade,
-            pb::NnsFunction::BlessReplicaVersion => pb_api::NnsFunction::BlessReplicaVersion,
-            pb::NnsFunction::RecoverSubnet => pb_api::NnsFunction::RecoverSubnet,
-            pb::NnsFunction::UpdateConfigOfSubnet => pb_api::NnsFunction::UpdateConfigOfSubnet,
-            pb::NnsFunction::AssignNoid => pb_api::NnsFunction::AssignNoid,
-            pb::NnsFunction::NnsRootUpgrade => pb_api::NnsFunction::NnsRootUpgrade,
-            pb::NnsFunction::IcpXdrConversionRate => pb_api::NnsFunction::IcpXdrConversionRate,
+            pb::NnsFunction::Unspecified => api::NnsFunction::Unspecified,
+            pb::NnsFunction::CreateSubnet => api::NnsFunction::CreateSubnet,
+            pb::NnsFunction::AddNodeToSubnet => api::NnsFunction::AddNodeToSubnet,
+            pb::NnsFunction::NnsCanisterInstall => api::NnsFunction::NnsCanisterInstall,
+            pb::NnsFunction::NnsCanisterUpgrade => api::NnsFunction::NnsCanisterUpgrade,
+            pb::NnsFunction::BlessReplicaVersion => api::NnsFunction::BlessReplicaVersion,
+            pb::NnsFunction::RecoverSubnet => api::NnsFunction::RecoverSubnet,
+            pb::NnsFunction::UpdateConfigOfSubnet => api::NnsFunction::UpdateConfigOfSubnet,
+            pb::NnsFunction::AssignNoid => api::NnsFunction::AssignNoid,
+            pb::NnsFunction::NnsRootUpgrade => api::NnsFunction::NnsRootUpgrade,
+            pb::NnsFunction::IcpXdrConversionRate => api::NnsFunction::IcpXdrConversionRate,
             pb::NnsFunction::DeployGuestosToAllSubnetNodes => {
-                pb_api::NnsFunction::DeployGuestosToAllSubnetNodes
+                api::NnsFunction::DeployGuestosToAllSubnetNodes
             }
             pb::NnsFunction::ClearProvisionalWhitelist => {
-                pb_api::NnsFunction::ClearProvisionalWhitelist
+                api::NnsFunction::ClearProvisionalWhitelist
             }
-            pb::NnsFunction::RemoveNodesFromSubnet => pb_api::NnsFunction::RemoveNodesFromSubnet,
-            pb::NnsFunction::SetAuthorizedSubnetworks => {
-                pb_api::NnsFunction::SetAuthorizedSubnetworks
-            }
-            pb::NnsFunction::SetFirewallConfig => pb_api::NnsFunction::SetFirewallConfig,
-            pb::NnsFunction::UpdateNodeOperatorConfig => {
-                pb_api::NnsFunction::UpdateNodeOperatorConfig
-            }
-            pb::NnsFunction::StopOrStartNnsCanister => pb_api::NnsFunction::StopOrStartNnsCanister,
-            pb::NnsFunction::RemoveNodes => pb_api::NnsFunction::RemoveNodes,
-            pb::NnsFunction::UninstallCode => pb_api::NnsFunction::UninstallCode,
-            pb::NnsFunction::UpdateNodeRewardsTable => pb_api::NnsFunction::UpdateNodeRewardsTable,
-            pb::NnsFunction::AddOrRemoveDataCenters => pb_api::NnsFunction::AddOrRemoveDataCenters,
+            pb::NnsFunction::RemoveNodesFromSubnet => api::NnsFunction::RemoveNodesFromSubnet,
+            pb::NnsFunction::SetAuthorizedSubnetworks => api::NnsFunction::SetAuthorizedSubnetworks,
+            pb::NnsFunction::SetFirewallConfig => api::NnsFunction::SetFirewallConfig,
+            pb::NnsFunction::UpdateNodeOperatorConfig => api::NnsFunction::UpdateNodeOperatorConfig,
+            pb::NnsFunction::StopOrStartNnsCanister => api::NnsFunction::StopOrStartNnsCanister,
+            pb::NnsFunction::RemoveNodes => api::NnsFunction::RemoveNodes,
+            pb::NnsFunction::UninstallCode => api::NnsFunction::UninstallCode,
+            pb::NnsFunction::UpdateNodeRewardsTable => api::NnsFunction::UpdateNodeRewardsTable,
+            pb::NnsFunction::AddOrRemoveDataCenters => api::NnsFunction::AddOrRemoveDataCenters,
             pb::NnsFunction::UpdateUnassignedNodesConfig => {
-                pb_api::NnsFunction::UpdateUnassignedNodesConfig
+                api::NnsFunction::UpdateUnassignedNodesConfig
             }
-            pb::NnsFunction::RemoveNodeOperators => pb_api::NnsFunction::RemoveNodeOperators,
-            pb::NnsFunction::RerouteCanisterRanges => pb_api::NnsFunction::RerouteCanisterRanges,
-            pb::NnsFunction::AddFirewallRules => pb_api::NnsFunction::AddFirewallRules,
-            pb::NnsFunction::RemoveFirewallRules => pb_api::NnsFunction::RemoveFirewallRules,
-            pb::NnsFunction::UpdateFirewallRules => pb_api::NnsFunction::UpdateFirewallRules,
-            pb::NnsFunction::PrepareCanisterMigration => {
-                pb_api::NnsFunction::PrepareCanisterMigration
-            }
+            pb::NnsFunction::RemoveNodeOperators => api::NnsFunction::RemoveNodeOperators,
+            pb::NnsFunction::RerouteCanisterRanges => api::NnsFunction::RerouteCanisterRanges,
+            pb::NnsFunction::AddFirewallRules => api::NnsFunction::AddFirewallRules,
+            pb::NnsFunction::RemoveFirewallRules => api::NnsFunction::RemoveFirewallRules,
+            pb::NnsFunction::UpdateFirewallRules => api::NnsFunction::UpdateFirewallRules,
+            pb::NnsFunction::PrepareCanisterMigration => api::NnsFunction::PrepareCanisterMigration,
             pb::NnsFunction::CompleteCanisterMigration => {
-                pb_api::NnsFunction::CompleteCanisterMigration
+                api::NnsFunction::CompleteCanisterMigration
             }
-            pb::NnsFunction::AddSnsWasm => pb_api::NnsFunction::AddSnsWasm,
-            pb::NnsFunction::ChangeSubnetMembership => pb_api::NnsFunction::ChangeSubnetMembership,
-            pb::NnsFunction::UpdateSubnetType => pb_api::NnsFunction::UpdateSubnetType,
+            pb::NnsFunction::AddSnsWasm => api::NnsFunction::AddSnsWasm,
+            pb::NnsFunction::ChangeSubnetMembership => api::NnsFunction::ChangeSubnetMembership,
+            pb::NnsFunction::UpdateSubnetType => api::NnsFunction::UpdateSubnetType,
             pb::NnsFunction::ChangeSubnetTypeAssignment => {
-                pb_api::NnsFunction::ChangeSubnetTypeAssignment
+                api::NnsFunction::ChangeSubnetTypeAssignment
             }
             pb::NnsFunction::UpdateSnsWasmSnsSubnetIds => {
-                pb_api::NnsFunction::UpdateSnsWasmSnsSubnetIds
+                api::NnsFunction::UpdateSnsWasmSnsSubnetIds
             }
-            pb::NnsFunction::UpdateAllowedPrincipals => {
-                pb_api::NnsFunction::UpdateAllowedPrincipals
-            }
-            pb::NnsFunction::RetireReplicaVersion => pb_api::NnsFunction::RetireReplicaVersion,
+            pb::NnsFunction::UpdateAllowedPrincipals => api::NnsFunction::UpdateAllowedPrincipals,
+            pb::NnsFunction::RetireReplicaVersion => api::NnsFunction::RetireReplicaVersion,
             pb::NnsFunction::InsertSnsWasmUpgradePathEntries => {
-                pb_api::NnsFunction::InsertSnsWasmUpgradePathEntries
+                api::NnsFunction::InsertSnsWasmUpgradePathEntries
             }
             pb::NnsFunction::ReviseElectedGuestosVersions => {
-                pb_api::NnsFunction::ReviseElectedGuestosVersions
+                api::NnsFunction::ReviseElectedGuestosVersions
             }
-            pb::NnsFunction::BitcoinSetConfig => pb_api::NnsFunction::BitcoinSetConfig,
+            pb::NnsFunction::BitcoinSetConfig => api::NnsFunction::BitcoinSetConfig,
             pb::NnsFunction::UpdateElectedHostosVersions => {
-                pb_api::NnsFunction::UpdateElectedHostosVersions
+                api::NnsFunction::UpdateElectedHostosVersions
             }
-            pb::NnsFunction::UpdateNodesHostosVersion => {
-                pb_api::NnsFunction::UpdateNodesHostosVersion
-            }
+            pb::NnsFunction::UpdateNodesHostosVersion => api::NnsFunction::UpdateNodesHostosVersion,
             pb::NnsFunction::HardResetNnsRootToVersion => {
-                pb_api::NnsFunction::HardResetNnsRootToVersion
+                api::NnsFunction::HardResetNnsRootToVersion
             }
-            pb::NnsFunction::AddApiBoundaryNodes => pb_api::NnsFunction::AddApiBoundaryNodes,
-            pb::NnsFunction::RemoveApiBoundaryNodes => pb_api::NnsFunction::RemoveApiBoundaryNodes,
+            pb::NnsFunction::AddApiBoundaryNodes => api::NnsFunction::AddApiBoundaryNodes,
+            pb::NnsFunction::RemoveApiBoundaryNodes => api::NnsFunction::RemoveApiBoundaryNodes,
             pb::NnsFunction::UpdateApiBoundaryNodesVersion => {
-                pb_api::NnsFunction::UpdateApiBoundaryNodesVersion
+                api::NnsFunction::UpdateApiBoundaryNodesVersion
             }
             pb::NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
-                pb_api::NnsFunction::DeployGuestosToSomeApiBoundaryNodes
+                api::NnsFunction::DeployGuestosToSomeApiBoundaryNodes
             }
             pb::NnsFunction::DeployGuestosToAllUnassignedNodes => {
-                pb_api::NnsFunction::DeployGuestosToAllUnassignedNodes
+                api::NnsFunction::DeployGuestosToAllUnassignedNodes
             }
             pb::NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
-                pb_api::NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
+                api::NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
             }
             pb::NnsFunction::ReviseElectedHostosVersions => {
-                pb_api::NnsFunction::ReviseElectedHostosVersions
+                api::NnsFunction::ReviseElectedHostosVersions
             }
-            pb::NnsFunction::DeployHostosToSomeNodes => {
-                pb_api::NnsFunction::DeployHostosToSomeNodes
-            }
-            pb::NnsFunction::SubnetRentalRequest => pb_api::NnsFunction::SubnetRentalRequest,
-            pb::NnsFunction::PauseCanisterMigrations => {
-                pb_api::NnsFunction::PauseCanisterMigrations
-            }
+            pb::NnsFunction::DeployHostosToSomeNodes => api::NnsFunction::DeployHostosToSomeNodes,
+            pb::NnsFunction::SubnetRentalRequest => api::NnsFunction::SubnetRentalRequest,
+            pb::NnsFunction::PauseCanisterMigrations => api::NnsFunction::PauseCanisterMigrations,
             pb::NnsFunction::UnpauseCanisterMigrations => {
-                pb_api::NnsFunction::UnpauseCanisterMigrations
+                api::NnsFunction::UnpauseCanisterMigrations
             }
             pb::NnsFunction::SetSubnetOperationalLevel => {
-                pb_api::NnsFunction::SetSubnetOperationalLevel
+                api::NnsFunction::SetSubnetOperationalLevel
             }
         }
     }
 }
-impl From<pb_api::NnsFunction> for pb::NnsFunction {
-    fn from(item: pb_api::NnsFunction) -> Self {
+impl From<api::NnsFunction> for pb::NnsFunction {
+    fn from(item: api::NnsFunction) -> Self {
         match item {
-            pb_api::NnsFunction::Unspecified => pb::NnsFunction::Unspecified,
-            pb_api::NnsFunction::CreateSubnet => pb::NnsFunction::CreateSubnet,
-            pb_api::NnsFunction::AddNodeToSubnet => pb::NnsFunction::AddNodeToSubnet,
-            pb_api::NnsFunction::NnsCanisterInstall => pb::NnsFunction::NnsCanisterInstall,
-            pb_api::NnsFunction::NnsCanisterUpgrade => pb::NnsFunction::NnsCanisterUpgrade,
-            pb_api::NnsFunction::BlessReplicaVersion => pb::NnsFunction::BlessReplicaVersion,
-            pb_api::NnsFunction::RecoverSubnet => pb::NnsFunction::RecoverSubnet,
-            pb_api::NnsFunction::UpdateConfigOfSubnet => pb::NnsFunction::UpdateConfigOfSubnet,
-            pb_api::NnsFunction::AssignNoid => pb::NnsFunction::AssignNoid,
-            pb_api::NnsFunction::NnsRootUpgrade => pb::NnsFunction::NnsRootUpgrade,
-            pb_api::NnsFunction::IcpXdrConversionRate => pb::NnsFunction::IcpXdrConversionRate,
-            pb_api::NnsFunction::DeployGuestosToAllSubnetNodes => {
+            api::NnsFunction::Unspecified => pb::NnsFunction::Unspecified,
+            api::NnsFunction::CreateSubnet => pb::NnsFunction::CreateSubnet,
+            api::NnsFunction::AddNodeToSubnet => pb::NnsFunction::AddNodeToSubnet,
+            api::NnsFunction::NnsCanisterInstall => pb::NnsFunction::NnsCanisterInstall,
+            api::NnsFunction::NnsCanisterUpgrade => pb::NnsFunction::NnsCanisterUpgrade,
+            api::NnsFunction::BlessReplicaVersion => pb::NnsFunction::BlessReplicaVersion,
+            api::NnsFunction::RecoverSubnet => pb::NnsFunction::RecoverSubnet,
+            api::NnsFunction::UpdateConfigOfSubnet => pb::NnsFunction::UpdateConfigOfSubnet,
+            api::NnsFunction::AssignNoid => pb::NnsFunction::AssignNoid,
+            api::NnsFunction::NnsRootUpgrade => pb::NnsFunction::NnsRootUpgrade,
+            api::NnsFunction::IcpXdrConversionRate => pb::NnsFunction::IcpXdrConversionRate,
+            api::NnsFunction::DeployGuestosToAllSubnetNodes => {
                 pb::NnsFunction::DeployGuestosToAllSubnetNodes
             }
-            pb_api::NnsFunction::ClearProvisionalWhitelist => {
+            api::NnsFunction::ClearProvisionalWhitelist => {
                 pb::NnsFunction::ClearProvisionalWhitelist
             }
-            pb_api::NnsFunction::RemoveNodesFromSubnet => pb::NnsFunction::RemoveNodesFromSubnet,
-            pb_api::NnsFunction::SetAuthorizedSubnetworks => {
-                pb::NnsFunction::SetAuthorizedSubnetworks
-            }
-            pb_api::NnsFunction::SetFirewallConfig => pb::NnsFunction::SetFirewallConfig,
-            pb_api::NnsFunction::UpdateNodeOperatorConfig => {
-                pb::NnsFunction::UpdateNodeOperatorConfig
-            }
-            pb_api::NnsFunction::StopOrStartNnsCanister => pb::NnsFunction::StopOrStartNnsCanister,
-            pb_api::NnsFunction::RemoveNodes => pb::NnsFunction::RemoveNodes,
-            pb_api::NnsFunction::UninstallCode => pb::NnsFunction::UninstallCode,
-            pb_api::NnsFunction::UpdateNodeRewardsTable => pb::NnsFunction::UpdateNodeRewardsTable,
-            pb_api::NnsFunction::AddOrRemoveDataCenters => pb::NnsFunction::AddOrRemoveDataCenters,
-            pb_api::NnsFunction::UpdateUnassignedNodesConfig => {
+            api::NnsFunction::RemoveNodesFromSubnet => pb::NnsFunction::RemoveNodesFromSubnet,
+            api::NnsFunction::SetAuthorizedSubnetworks => pb::NnsFunction::SetAuthorizedSubnetworks,
+            api::NnsFunction::SetFirewallConfig => pb::NnsFunction::SetFirewallConfig,
+            api::NnsFunction::UpdateNodeOperatorConfig => pb::NnsFunction::UpdateNodeOperatorConfig,
+            api::NnsFunction::StopOrStartNnsCanister => pb::NnsFunction::StopOrStartNnsCanister,
+            api::NnsFunction::RemoveNodes => pb::NnsFunction::RemoveNodes,
+            api::NnsFunction::UninstallCode => pb::NnsFunction::UninstallCode,
+            api::NnsFunction::UpdateNodeRewardsTable => pb::NnsFunction::UpdateNodeRewardsTable,
+            api::NnsFunction::AddOrRemoveDataCenters => pb::NnsFunction::AddOrRemoveDataCenters,
+            api::NnsFunction::UpdateUnassignedNodesConfig => {
                 pb::NnsFunction::UpdateUnassignedNodesConfig
             }
-            pb_api::NnsFunction::RemoveNodeOperators => pb::NnsFunction::RemoveNodeOperators,
-            pb_api::NnsFunction::RerouteCanisterRanges => pb::NnsFunction::RerouteCanisterRanges,
-            pb_api::NnsFunction::AddFirewallRules => pb::NnsFunction::AddFirewallRules,
-            pb_api::NnsFunction::RemoveFirewallRules => pb::NnsFunction::RemoveFirewallRules,
-            pb_api::NnsFunction::UpdateFirewallRules => pb::NnsFunction::UpdateFirewallRules,
-            pb_api::NnsFunction::PrepareCanisterMigration => {
-                pb::NnsFunction::PrepareCanisterMigration
-            }
-            pb_api::NnsFunction::CompleteCanisterMigration => {
+            api::NnsFunction::RemoveNodeOperators => pb::NnsFunction::RemoveNodeOperators,
+            api::NnsFunction::RerouteCanisterRanges => pb::NnsFunction::RerouteCanisterRanges,
+            api::NnsFunction::AddFirewallRules => pb::NnsFunction::AddFirewallRules,
+            api::NnsFunction::RemoveFirewallRules => pb::NnsFunction::RemoveFirewallRules,
+            api::NnsFunction::UpdateFirewallRules => pb::NnsFunction::UpdateFirewallRules,
+            api::NnsFunction::PrepareCanisterMigration => pb::NnsFunction::PrepareCanisterMigration,
+            api::NnsFunction::CompleteCanisterMigration => {
                 pb::NnsFunction::CompleteCanisterMigration
             }
-            pb_api::NnsFunction::AddSnsWasm => pb::NnsFunction::AddSnsWasm,
-            pb_api::NnsFunction::ChangeSubnetMembership => pb::NnsFunction::ChangeSubnetMembership,
-            pb_api::NnsFunction::UpdateSubnetType => pb::NnsFunction::UpdateSubnetType,
-            pb_api::NnsFunction::ChangeSubnetTypeAssignment => {
+            api::NnsFunction::AddSnsWasm => pb::NnsFunction::AddSnsWasm,
+            api::NnsFunction::ChangeSubnetMembership => pb::NnsFunction::ChangeSubnetMembership,
+            api::NnsFunction::UpdateSubnetType => pb::NnsFunction::UpdateSubnetType,
+            api::NnsFunction::ChangeSubnetTypeAssignment => {
                 pb::NnsFunction::ChangeSubnetTypeAssignment
             }
-            pb_api::NnsFunction::UpdateSnsWasmSnsSubnetIds => {
+            api::NnsFunction::UpdateSnsWasmSnsSubnetIds => {
                 pb::NnsFunction::UpdateSnsWasmSnsSubnetIds
             }
-            pb_api::NnsFunction::UpdateAllowedPrincipals => {
-                pb::NnsFunction::UpdateAllowedPrincipals
-            }
-            pb_api::NnsFunction::RetireReplicaVersion => pb::NnsFunction::RetireReplicaVersion,
-            pb_api::NnsFunction::InsertSnsWasmUpgradePathEntries => {
+            api::NnsFunction::UpdateAllowedPrincipals => pb::NnsFunction::UpdateAllowedPrincipals,
+            api::NnsFunction::RetireReplicaVersion => pb::NnsFunction::RetireReplicaVersion,
+            api::NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 pb::NnsFunction::InsertSnsWasmUpgradePathEntries
             }
-            pb_api::NnsFunction::ReviseElectedGuestosVersions => {
+            api::NnsFunction::ReviseElectedGuestosVersions => {
                 pb::NnsFunction::ReviseElectedGuestosVersions
             }
-            pb_api::NnsFunction::BitcoinSetConfig => pb::NnsFunction::BitcoinSetConfig,
-            pb_api::NnsFunction::UpdateElectedHostosVersions => {
+            api::NnsFunction::BitcoinSetConfig => pb::NnsFunction::BitcoinSetConfig,
+            api::NnsFunction::UpdateElectedHostosVersions => {
                 pb::NnsFunction::UpdateElectedHostosVersions
             }
-            pb_api::NnsFunction::UpdateNodesHostosVersion => {
-                pb::NnsFunction::UpdateNodesHostosVersion
-            }
-            pb_api::NnsFunction::HardResetNnsRootToVersion => {
+            api::NnsFunction::UpdateNodesHostosVersion => pb::NnsFunction::UpdateNodesHostosVersion,
+            api::NnsFunction::HardResetNnsRootToVersion => {
                 pb::NnsFunction::HardResetNnsRootToVersion
             }
-            pb_api::NnsFunction::AddApiBoundaryNodes => pb::NnsFunction::AddApiBoundaryNodes,
-            pb_api::NnsFunction::RemoveApiBoundaryNodes => pb::NnsFunction::RemoveApiBoundaryNodes,
-            pb_api::NnsFunction::UpdateApiBoundaryNodesVersion => {
+            api::NnsFunction::AddApiBoundaryNodes => pb::NnsFunction::AddApiBoundaryNodes,
+            api::NnsFunction::RemoveApiBoundaryNodes => pb::NnsFunction::RemoveApiBoundaryNodes,
+            api::NnsFunction::UpdateApiBoundaryNodesVersion => {
                 pb::NnsFunction::UpdateApiBoundaryNodesVersion
             }
-            pb_api::NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
+            api::NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
                 pb::NnsFunction::DeployGuestosToSomeApiBoundaryNodes
             }
-            pb_api::NnsFunction::DeployGuestosToAllUnassignedNodes => {
+            api::NnsFunction::DeployGuestosToAllUnassignedNodes => {
                 pb::NnsFunction::DeployGuestosToAllUnassignedNodes
             }
-            pb_api::NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
+            api::NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
                 pb::NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
             }
-            pb_api::NnsFunction::ReviseElectedHostosVersions => {
+            api::NnsFunction::ReviseElectedHostosVersions => {
                 pb::NnsFunction::ReviseElectedHostosVersions
             }
-            pb_api::NnsFunction::DeployHostosToSomeNodes => {
-                pb::NnsFunction::DeployHostosToSomeNodes
-            }
-            pb_api::NnsFunction::SubnetRentalRequest => pb::NnsFunction::SubnetRentalRequest,
-            pb_api::NnsFunction::PauseCanisterMigrations => {
-                pb::NnsFunction::PauseCanisterMigrations
-            }
-            pb_api::NnsFunction::UnpauseCanisterMigrations => {
+            api::NnsFunction::DeployHostosToSomeNodes => pb::NnsFunction::DeployHostosToSomeNodes,
+            api::NnsFunction::SubnetRentalRequest => pb::NnsFunction::SubnetRentalRequest,
+            api::NnsFunction::PauseCanisterMigrations => pb::NnsFunction::PauseCanisterMigrations,
+            api::NnsFunction::UnpauseCanisterMigrations => {
                 pb::NnsFunction::UnpauseCanisterMigrations
             }
-            pb_api::NnsFunction::SetSubnetOperationalLevel => {
+            api::NnsFunction::SetSubnetOperationalLevel => {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
         }
     }
 }
 
-impl From<pb::ProposalStatus> for pb_api::ProposalStatus {
+impl From<pb::ProposalStatus> for api::ProposalStatus {
     fn from(item: pb::ProposalStatus) -> Self {
         match item {
-            pb::ProposalStatus::Unspecified => pb_api::ProposalStatus::Unspecified,
-            pb::ProposalStatus::Open => pb_api::ProposalStatus::Open,
-            pb::ProposalStatus::Rejected => pb_api::ProposalStatus::Rejected,
-            pb::ProposalStatus::Adopted => pb_api::ProposalStatus::Adopted,
-            pb::ProposalStatus::Executed => pb_api::ProposalStatus::Executed,
-            pb::ProposalStatus::Failed => pb_api::ProposalStatus::Failed,
+            pb::ProposalStatus::Unspecified => api::ProposalStatus::Unspecified,
+            pb::ProposalStatus::Open => api::ProposalStatus::Open,
+            pb::ProposalStatus::Rejected => api::ProposalStatus::Rejected,
+            pb::ProposalStatus::Adopted => api::ProposalStatus::Adopted,
+            pb::ProposalStatus::Executed => api::ProposalStatus::Executed,
+            pb::ProposalStatus::Failed => api::ProposalStatus::Failed,
         }
     }
 }
-impl From<pb_api::ProposalStatus> for pb::ProposalStatus {
-    fn from(item: pb_api::ProposalStatus) -> Self {
+impl From<api::ProposalStatus> for pb::ProposalStatus {
+    fn from(item: api::ProposalStatus) -> Self {
         match item {
-            pb_api::ProposalStatus::Unspecified => pb::ProposalStatus::Unspecified,
-            pb_api::ProposalStatus::Open => pb::ProposalStatus::Open,
-            pb_api::ProposalStatus::Rejected => pb::ProposalStatus::Rejected,
-            pb_api::ProposalStatus::Adopted => pb::ProposalStatus::Adopted,
-            pb_api::ProposalStatus::Executed => pb::ProposalStatus::Executed,
-            pb_api::ProposalStatus::Failed => pb::ProposalStatus::Failed,
+            api::ProposalStatus::Unspecified => pb::ProposalStatus::Unspecified,
+            api::ProposalStatus::Open => pb::ProposalStatus::Open,
+            api::ProposalStatus::Rejected => pb::ProposalStatus::Rejected,
+            api::ProposalStatus::Adopted => pb::ProposalStatus::Adopted,
+            api::ProposalStatus::Executed => pb::ProposalStatus::Executed,
+            api::ProposalStatus::Failed => pb::ProposalStatus::Failed,
         }
     }
 }
 
-impl From<pb::ProposalRewardStatus> for pb_api::ProposalRewardStatus {
+impl From<pb::ProposalRewardStatus> for api::ProposalRewardStatus {
     fn from(item: pb::ProposalRewardStatus) -> Self {
         match item {
-            pb::ProposalRewardStatus::Unspecified => pb_api::ProposalRewardStatus::Unspecified,
-            pb::ProposalRewardStatus::AcceptVotes => pb_api::ProposalRewardStatus::AcceptVotes,
-            pb::ProposalRewardStatus::ReadyToSettle => pb_api::ProposalRewardStatus::ReadyToSettle,
-            pb::ProposalRewardStatus::Settled => pb_api::ProposalRewardStatus::Settled,
-            pb::ProposalRewardStatus::Ineligible => pb_api::ProposalRewardStatus::Ineligible,
+            pb::ProposalRewardStatus::Unspecified => api::ProposalRewardStatus::Unspecified,
+            pb::ProposalRewardStatus::AcceptVotes => api::ProposalRewardStatus::AcceptVotes,
+            pb::ProposalRewardStatus::ReadyToSettle => api::ProposalRewardStatus::ReadyToSettle,
+            pb::ProposalRewardStatus::Settled => api::ProposalRewardStatus::Settled,
+            pb::ProposalRewardStatus::Ineligible => api::ProposalRewardStatus::Ineligible,
         }
     }
 }
-impl From<pb_api::ProposalRewardStatus> for pb::ProposalRewardStatus {
-    fn from(item: pb_api::ProposalRewardStatus) -> Self {
+impl From<api::ProposalRewardStatus> for pb::ProposalRewardStatus {
+    fn from(item: api::ProposalRewardStatus) -> Self {
         match item {
-            pb_api::ProposalRewardStatus::Unspecified => pb::ProposalRewardStatus::Unspecified,
-            pb_api::ProposalRewardStatus::AcceptVotes => pb::ProposalRewardStatus::AcceptVotes,
-            pb_api::ProposalRewardStatus::ReadyToSettle => pb::ProposalRewardStatus::ReadyToSettle,
-            pb_api::ProposalRewardStatus::Settled => pb::ProposalRewardStatus::Settled,
-            pb_api::ProposalRewardStatus::Ineligible => pb::ProposalRewardStatus::Ineligible,
+            api::ProposalRewardStatus::Unspecified => pb::ProposalRewardStatus::Unspecified,
+            api::ProposalRewardStatus::AcceptVotes => pb::ProposalRewardStatus::AcceptVotes,
+            api::ProposalRewardStatus::ReadyToSettle => pb::ProposalRewardStatus::ReadyToSettle,
+            api::ProposalRewardStatus::Settled => pb::ProposalRewardStatus::Settled,
+            api::ProposalRewardStatus::Ineligible => pb::ProposalRewardStatus::Ineligible,
         }
     }
 }
@@ -4156,7 +3950,7 @@ impl From<ic_nns_governance_api::test_api::TimeWarp> for crate::TimeWarp {
     }
 }
 
-impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
+impl From<pb::MaturityDisbursement> for api::MaturityDisbursement {
     fn from(item: pb::MaturityDisbursement) -> Self {
         Self {
             amount_e8s: Some(item.amount_e8s),
@@ -4177,71 +3971,20 @@ impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
     }
 }
 
-impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
-    fn from(item: pb::SelfDescribingValue) -> Self {
-        let Some(value) = item.value else {
-            return Self::Map(HashMap::new());
-        };
-        match value {
-            pb::self_describing_value::Value::Blob(v) => Self::Blob(v),
-            pb::self_describing_value::Value::Text(v) => Self::Text(v),
-            pb::self_describing_value::Value::Nat(v) => {
-                let nat = Nat::decode(&mut v.as_slice()).unwrap();
-                Self::Nat(nat)
-            }
-            pb::self_describing_value::Value::Int(v) => {
-                let int = Int::decode(&mut v.as_slice()).unwrap();
-                Self::Int(int)
-            }
-            pb::self_describing_value::Value::Array(v) => {
-                Self::Array(v.values.into_iter().map(Self::from).collect())
-            }
-            pb::self_describing_value::Value::Map(v) => Self::Map(
-                v.values
-                    .into_iter()
-                    .map(|(k, v)| (k, Self::from(v)))
-                    .collect(),
-            ),
+impl From<pb::TakeCanisterSnapshot> for api::TakeCanisterSnapshot {
+    fn from(item: pb::TakeCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            replace_snapshot: item.replace_snapshot,
         }
     }
 }
 
-impl From<pb_api::SelfDescribingValue> for pb::SelfDescribingValue {
-    fn from(item: pb_api::SelfDescribingValue) -> Self {
-        let value = match item {
-            pb_api::SelfDescribingValue::Blob(v) => pb::self_describing_value::Value::Blob(v),
-            pb_api::SelfDescribingValue::Text(v) => pb::self_describing_value::Value::Text(v),
-            pb_api::SelfDescribingValue::Nat(v) => {
-                let mut bytes = Vec::new();
-                v.encode(&mut bytes).unwrap();
-                pb::self_describing_value::Value::Nat(bytes)
-            }
-            pb_api::SelfDescribingValue::Int(v) => {
-                let mut bytes = Vec::new();
-                v.encode(&mut bytes).unwrap();
-                pb::self_describing_value::Value::Int(bytes)
-            }
-            pb_api::SelfDescribingValue::Array(v) => {
-                pb::self_describing_value::Value::Array(pb::SelfDescribingValueArray {
-                    values: v.into_iter().map(Self::from).collect(),
-                })
-            }
-            pb_api::SelfDescribingValue::Map(v) => {
-                pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
-                    values: v.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
-                })
-            }
-        };
-        Self { value: Some(value) }
-    }
-}
-
-impl From<pb::SelfDescribingProposalAction> for pb_api::SelfDescribingProposalAction {
-    fn from(item: pb::SelfDescribingProposalAction) -> Self {
+impl From<api::TakeCanisterSnapshot> for pb::TakeCanisterSnapshot {
+    fn from(item: api::TakeCanisterSnapshot) -> Self {
         Self {
-            type_name: Some(item.type_name),
-            type_description: Some(item.type_description),
-            value: item.value.map(pb_api::SelfDescribingValue::from),
+            canister_id: item.canister_id,
+            replace_snapshot: item.replace_snapshot,
         }
     }
 }

@@ -2,6 +2,7 @@ use crate::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use crate::visitor::{Control, Visitor};
 use ic_canonical_state_tree_hash::lazy_tree::LazyTree;
 use ic_replicated_state::ReplicatedState;
+use ic_types::Height;
 
 /// Traverses lazy tree using specified visitor.
 fn traverse_lazy_tree<V: Visitor>(t: &LazyTree<'_>, v: &mut V) -> Result<(), V::Output> {
@@ -31,8 +32,8 @@ fn traverse_lazy_tree<V: Visitor>(t: &LazyTree<'_>, v: &mut V) -> Result<(), V::
 /// By supplying different visitors, one can use `traverse` to serialize the
 /// `state` for transmitting it over the network to another replica, compute a
 /// hash tree for certification or extract a specific value.
-pub fn traverse<V: Visitor>(state: &ReplicatedState, mut v: V) -> V::Output {
-    let t = replicated_state_as_lazy_tree(state);
+pub fn traverse<V: Visitor>(state: &ReplicatedState, height: Height, mut v: V) -> V::Output {
+    let t = replicated_state_as_lazy_tree(state, height);
     match traverse_lazy_tree(&t, &mut v) {
         Err(output) => output,
         _ => v.finish(),
@@ -43,7 +44,9 @@ pub fn traverse<V: Visitor>(state: &ReplicatedState, mut v: V) -> V::Output {
 mod tests {
     use super::*;
     use crate::{
-        encoding::{CborProxyEncoder, encode_stream_header, types::SystemMetadata},
+        encoding::{
+            CborProxyEncoder, encode_stream_header, types::SystemMetadata as SystemMetadataV23,
+        },
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
     use ic_base_types::{NumBytes, NumSeconds};
@@ -61,24 +64,24 @@ mod tests {
             ExecutionState, ExportedFunctions, NumWasmPages,
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         },
-        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
+        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology, testing::NetworkTopologyTesting},
         page_map::PageMap,
-        testing::ReplicatedStateTesting,
+        testing::{ReplicatedStateTesting, StreamTesting},
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{
         canister_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_types::{
-        CanisterId, Cycles,
+        CanisterId, CryptoHashOfPartialState, Cycles, Height,
         batch::CanisterCyclesCostSchedule,
+        crypto::CryptoHash,
         xnet::{StreamFlags, StreamHeader},
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::{BTreeSet, VecDeque};
     use std::convert::TryFrom;
-    use std::sync::Arc;
     use std::time::Duration;
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -93,8 +96,8 @@ mod tests {
         E::VisitBlob(buf)
     }
 
-    fn encode_metadata(metadata: SystemMetadata) -> Vec<u8> {
-        SystemMetadata::proxy_encode(metadata).unwrap()
+    fn encode_metadata(metadata: SystemMetadataV23) -> Vec<u8> {
+        SystemMetadataV23::proxy_encode(metadata).unwrap()
     }
 
     /// Helper function for most tests where the /cansiter_ranges subtree should be missing before V21, and empty afterwards.
@@ -108,9 +111,44 @@ mod tests {
         ])
     }
 
+    fn expected_metadata(
+        height: u64,
+        prev_state_hash: Option<CryptoHashOfPartialState>,
+        certification_version: CertificationVersion,
+    ) -> Option<Vec<crate::test_visitors::TraceEntry>> {
+        if certification_version >= V24 {
+            let height = vec![edge("height"), leb_num(height)];
+            let prev_state_hash = if let Some(hash) = prev_state_hash {
+                vec![edge("prev_state_hash"), E::VisitBlob(hash.get().0)]
+            } else {
+                vec![]
+            };
+            Some(
+                [
+                    vec![edge("metadata"), E::StartSubtree],
+                    height,
+                    prev_state_hash,
+                    vec![E::EndSubtree],
+                ]
+                .concat(),
+            )
+        } else {
+            Some(vec![
+                edge("metadata"),
+                E::VisitBlob(encode_metadata(SystemMetadataV23 {
+                    deprecated_id_counter: None,
+                    prev_state_hash: prev_state_hash.as_ref().map(|hash| hash.clone().get().0),
+                })),
+            ])
+        }
+    }
+
     #[test]
-    fn test_traverse_empty_state() {
+    fn test_traverse_metadata() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let prev_state_hash = Some(CryptoHashOfPartialState::from(CryptoHash(vec![42; 32])));
+        state.metadata.prev_state_hash = prev_state_hash.clone();
+        let height = 42;
 
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -129,12 +167,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, prev_state_hash.clone(), certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -155,7 +189,57 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(&state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
+                "unexpected traversal for certification_version: {certification_version:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_traverse_empty_state() {
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let height = 42;
+
+        for certification_version in all_supported_versions() {
+            state.metadata.certification_version = certification_version;
+            let visitor = TracingVisitor::new(NoopVisitor);
+
+            let expected_traversal = vec![
+                Some(vec![E::StartSubtree]), // global
+                Some(vec![
+                    edge("api_boundary_nodes"),
+                    E::StartSubtree,
+                    E::EndSubtree, // api_boundary_nodes
+                ]),
+                Some(vec![
+                    edge("canister"),
+                    E::StartSubtree,
+                    E::EndSubtree, // canisters
+                ]),
+                expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, None, certification_version),
+                Some(vec![
+                    edge("request_status"),
+                    E::StartSubtree,
+                    E::EndSubtree, // request_status
+                    edge("streams"),
+                    E::StartSubtree,
+                    E::EndSubtree, // streams
+                    edge("subnet"),
+                    E::StartSubtree,
+                    E::EndSubtree, // subnets
+                    edge("time"),
+                    leb_num(0),
+                    E::EndSubtree, // global
+                ]),
+            ]
+            .into_iter()
+            .flat_map(Option::unwrap_or_default)
+            .collect::<Vec<_>>();
+
+            assert_eq!(
+                expected_traversal,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -178,6 +262,8 @@ mod tests {
         );
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);
+
+        let height = 0;
 
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -205,12 +291,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -231,7 +313,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(&state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -277,6 +359,8 @@ mod tests {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);
 
+        let height = 0;
+
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
             let visitor = TracingVisitor::new(NoopVisitor);
@@ -320,12 +404,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -346,7 +426,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(&state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -381,6 +461,8 @@ mod tests {
             streams.insert(other_subnet_id, stream);
         });
 
+        let height = 0;
+
         // Test all certification versions.
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -399,12 +481,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -446,7 +524,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(&state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -619,7 +697,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(&state, visitor).0,
+                traverse(&state, Height::new(0), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -629,6 +707,8 @@ mod tests {
     fn test_traverse_time() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.metadata.batch_time += Duration::new(1, 123456789);
+
+        let height = 0;
 
         // Test all supported certification versions.
         for certification_version in all_supported_versions() {
@@ -648,12 +728,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -674,7 +750,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(&state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -691,7 +767,7 @@ mod tests {
     fn test_traverse_subnet() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.subnets = btreemap! {
+        state.metadata.network_topology.set_subnets(btreemap! {
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
                 nodes: BTreeSet::new(),
@@ -708,8 +784,8 @@ mod tests {
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
             }
-        };
-        state.metadata.network_topology.routing_table = Arc::new(
+        });
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 id_range(0, 10) => subnet_test_id(0),
                 id_range(11, 20) => subnet_test_id(1),
@@ -720,6 +796,8 @@ mod tests {
         state.metadata.node_public_keys = btreemap! {
             node_test_id(2) => vec![9, 10, 11, 12],
         };
+
+        let height = 0;
 
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -754,11 +832,8 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    Some(vec![edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
-                        prev_state_hash: None,
-                    })),
+                    expected_metadata(height, None, certification_version),
+                    Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -847,7 +922,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(&state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -857,7 +932,7 @@ mod tests {
     fn test_traverse_large_or_empty_routing_table() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.subnets = btreemap! {
+        state.metadata.network_topology.set_subnets(btreemap! {
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
                 nodes: BTreeSet::new(),
@@ -874,8 +949,8 @@ mod tests {
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
             }
-        };
-        state.metadata.network_topology.routing_table = Arc::new(
+        });
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 id_range(0, 10) => subnet_test_id(0),
                 id_range(21, 30) => subnet_test_id(0),
@@ -887,6 +962,8 @@ mod tests {
             })
             .unwrap(),
         );
+
+        let height = 0;
 
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -965,11 +1042,8 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    Some(vec![edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
-                        prev_state_hash: None,
-                    })),
+                    expected_metadata(height, None, certification_version),
+                    Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -1074,7 +1148,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(&state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -1097,6 +1171,8 @@ mod tests {
                 pubkey: None,
             },
         };
+
+        let height = 0;
 
         // Test all supported certification versions.
         for certification_version in all_supported_versions() {
@@ -1140,12 +1216,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -1166,7 +1238,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(&state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }

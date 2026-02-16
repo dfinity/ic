@@ -3,7 +3,7 @@
 
 use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
-use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
@@ -34,7 +34,7 @@ use wirm::{
         },
         types::{Body, Value},
     },
-    wasmparser::{ExternalKind, Operator, TypeRef, ValType},
+    wasmparser::{ExternalKind, Operator, RefType, TypeRef, ValType},
 };
 
 use crate::WASM_PAGE_SIZE;
@@ -1156,6 +1156,18 @@ fn validate_export_section(
     Ok(())
 }
 
+fn validate_table_section(module: &Module) -> Result<(), WasmValidationError> {
+    for table in module.tables.iter() {
+        if table.ty.element_type != RefType::FUNCREF {
+            return Err(WasmValidationError::InvalidTableSection(format!(
+                "Table element type must be funcref, got {:?}",
+                table.ty.element_type
+            )));
+        }
+    }
+    Ok(())
+}
+
 // Checks that offset-expressions in active data segments consist of only one constant
 // expression. Required because of OP. See also:
 // instrumentation.rs
@@ -1610,7 +1622,7 @@ fn validate_code_section(
 }
 
 /// Returns a Wasmtime config that is used for Wasm validation.
-pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtime::Config {
+pub fn wasmtime_validation_config(_embedders_config: &EmbeddersConfig) -> wasmtime::Config {
     let mut config = wasmtime::Config::default();
 
     // Keep this in the alphabetical order to simplify comparison with new
@@ -1625,7 +1637,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     config.generate_address_map(false);
     // The signal handler uses Posix signals, not Mach ports on MacOS.
     config.macos_use_mach_ports(false);
-    config.wasm_backtrace(embedders_config.feature_flags.canister_backtrace == FlagStatus::Enabled);
+    config.wasm_backtrace(false);
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
     config.wasm_bulk_memory(true);
     config.wasm_function_references(false);
@@ -1730,6 +1742,7 @@ pub(super) fn validate_wasm_binary<'a>(
         config.max_number_exported_functions,
         config.max_sum_exported_function_name_lengths,
     )?;
+    validate_table_section(&module)?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;

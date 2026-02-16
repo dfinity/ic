@@ -13,7 +13,6 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/for_verification_only",
-    "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/interfaces",
     "//rs/interfaces/registry",
@@ -44,7 +43,6 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:mockall",
     "@crate_index//:prost",
-    "@crate_index//:rand",
     "@crate_index//:rayon",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -55,7 +53,6 @@ DEPENDENCIES = [
     "@crate_index//:time",
     "@crate_index//:tokio",
     "@crate_index//:tower",
-    "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [

@@ -1,4 +1,5 @@
 mod update_balance {
+    use crate::lifecycle::init::DEFAULT_CHECK_FEE;
     use crate::management::{CallError, CallSource, get_utxos, sign_with_ecdsa};
     use crate::metrics::{Histogram, NumUtxoPages};
     use crate::metrics::{LatencyHistogram, MetricsResult};
@@ -6,7 +7,8 @@ mod update_balance {
     use crate::state::{SuspendedReason, audit, eventlog::EventType, mutate_state, read_state};
     use crate::test_fixtures::{
         BTC_CHECKER_CANISTER_ID, DAY, MINTER_CANISTER_ID, NOW, ecdsa_public_key, get_uxos_response,
-        ignored_utxo, init_args, init_state, ledger_account, mock::MockCanisterRuntime,
+        ignored_utxo, init_args, init_state, ledger_account,
+        mock::{MockCanisterRuntime, mock_increasing_time},
         quarantined_utxo, utxo,
     };
     use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
@@ -17,7 +19,6 @@ mod update_balance {
     use crate::{CanisterRuntime, GetUtxosResponse, Timestamp};
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
-    use ic_management_canister_types_private::BoundedVec;
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
@@ -131,68 +132,115 @@ mod update_balance {
 
     #[tokio::test]
     async fn should_mint_reevaluated_ignored_utxo() {
-        init_state_with_ecdsa_public_key();
-        let account = ledger_account();
-        let mut runtime = MockCanisterRuntime::new();
-        use_ckbtc_event_logger(&mut runtime);
-        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+        struct TestCase {
+            utxo_value: u64,
+            initial_check_fee: u64,
+            initial_deposit_btc_min_amount: u64,
+            updated_check_fee: u64,
+            updated_deposit_btc_min_amount: u64,
+            minted_amount: u64,
+        }
 
-        let ignored_utxo = ignored_utxo();
-        mutate_state(|s| {
-            audit::ignore_utxo(
-                s,
+        for TestCase {
+            utxo_value,
+            initial_check_fee,
+            initial_deposit_btc_min_amount,
+            updated_check_fee,
+            updated_deposit_btc_min_amount,
+            minted_amount,
+        } in [
+            TestCase {
+                utxo_value: DEFAULT_CHECK_FEE,
+                initial_check_fee: DEFAULT_CHECK_FEE,
+                initial_deposit_btc_min_amount: 0,
+                updated_check_fee: DEFAULT_CHECK_FEE - 1,
+                updated_deposit_btc_min_amount: 0,
+                minted_amount: 1,
+            },
+            TestCase {
+                utxo_value: 1,
+                initial_check_fee: 0,
+                initial_deposit_btc_min_amount: 2,
+                updated_check_fee: 0,
+                updated_deposit_btc_min_amount: 1,
+                minted_amount: 1,
+            },
+        ] {
+            init_state_with_ecdsa_public_key();
+            let account = ledger_account();
+            let mut runtime = MockCanisterRuntime::new();
+
+            use_ckbtc_event_logger(&mut runtime);
+            mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+
+            let ignored_utxo = Utxo {
+                value: utxo_value,
+                ..ignored_utxo()
+            };
+            mutate_state(|s| {
+                s.deposit_btc_min_amount = initial_deposit_btc_min_amount;
+                s.check_fee = initial_check_fee;
+                audit::ignore_utxo(
+                    s,
+                    ignored_utxo.clone(),
+                    account,
+                    NOW.checked_sub(DAY).unwrap(),
+                    &runtime,
+                )
+            });
+            mutate_state(|s| {
+                s.deposit_btc_min_amount = updated_deposit_btc_min_amount;
+                s.check_fee = updated_check_fee;
+            });
+            let events_before: Vec<_> = events().map(|event| event.payload).collect();
+
+            mock_derive_user_address(&mut runtime, account);
+            mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
+            println!("Checking transaction for UTXO {ignored_utxo:?} for {account}");
+            expect_check_transaction_returning(
+                &mut runtime,
                 ignored_utxo.clone(),
-                account,
-                NOW.checked_sub(DAY).unwrap(),
+                CheckTransactionResponse::Passed,
+            );
+            runtime
+                .expect_mint_ckbtc()
+                .times(1)
+                .withf(move |amount, account_, _memo| {
+                    amount == &minted_amount && account_ == &account
+                })
+                .return_const(Ok(1));
+            mock_schedule_now_process_logic(&mut runtime);
+
+            let result = update_balance(
+                UpdateBalanceArgs {
+                    owner: Some(account.owner),
+                    subaccount: account.subaccount,
+                },
                 &runtime,
             )
-        });
-        mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
-        let events_before: Vec<_> = events().map(|event| event.payload).collect();
+            .await;
 
-        mock_derive_user_address(&mut runtime, account);
-        mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
-        expect_check_transaction_returning(
-            &mut runtime,
-            ignored_utxo.clone(),
-            CheckTransactionResponse::Passed,
-        );
-        runtime
-            .expect_mint_ckbtc()
-            .times(1)
-            .withf(move |amount, account_, _memo| amount == &1 && account_ == &account)
-            .return_const(Ok(1));
-        mock_schedule_now_process_logic(&mut runtime);
-
-        let result = update_balance(
-            UpdateBalanceArgs {
-                owner: Some(account.owner),
-                subaccount: account.subaccount,
-            },
-            &runtime,
-        )
-        .await;
-
-        assert_eq!(suspended_utxo(&ignored_utxo), None);
-        assert_eq!(
-            result,
-            Ok(vec![UtxoStatus::Minted {
-                block_index: 1,
-                minted_amount: 1,
-                utxo: ignored_utxo.clone(),
-            }])
-        );
-        assert_has_new_events(
-            &events_before,
-            &[
-                checked_utxo_event(ignored_utxo.clone(), account),
-                EventType::ReceivedUtxos {
-                    mint_txid: Some(1),
-                    to_account: account,
-                    utxos: vec![ignored_utxo],
-                },
-            ],
-        );
+            assert_eq!(suspended_utxo(&ignored_utxo), None);
+            assert_eq!(
+                result,
+                Ok(vec![UtxoStatus::Minted {
+                    block_index: 1,
+                    minted_amount,
+                    utxo: ignored_utxo.clone(),
+                }])
+            );
+            assert_has_new_events(
+                &events_before,
+                &[
+                    checked_utxo_event(ignored_utxo.clone(), account),
+                    EventType::ReceivedUtxos {
+                        mint_txid: Some(1),
+                        to_account: account,
+                        utxos: vec![ignored_utxo],
+                    },
+                ],
+            );
+        }
     }
 
     #[tokio::test]
@@ -640,7 +688,7 @@ mod update_balance {
             result: MetricsResult,
         ) -> Result<Vec<u8>, CallError> {
             let key_name = "test_key".to_string();
-            let derivation_path = BoundedVec::new(vec![]);
+            let derivation_path = vec![];
             let message_hash = [0u8; 32];
 
             let mut runtime = MockCanisterRuntime::new();
@@ -879,19 +927,6 @@ mod update_balance {
 
     fn mock_schedule_now_process_logic(runtime: &mut MockCanisterRuntime) {
         runtime.expect_global_timer_set().return_const(());
-    }
-
-    fn mock_increasing_time(
-        runtime: &mut MockCanisterRuntime,
-        start: Timestamp,
-        interval: Duration,
-    ) {
-        let mut current_time = start;
-        runtime.expect_time().returning(move || {
-            let previous_time = current_time;
-            current_time = current_time.saturating_add(interval);
-            previous_time.as_nanos_since_unix_epoch()
-        });
     }
 
     fn mock_constant_time(

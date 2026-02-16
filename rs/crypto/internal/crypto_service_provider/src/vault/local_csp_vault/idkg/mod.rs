@@ -647,8 +647,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             //    new key added, between the time that retain on the crypto component was called,
             //    and the time that we actually call retain here. In this case, a newly-created key
             //    may be deleted. This is currently not an issue given how the crypto component is
-            //    called from consensus, but an approach similar to the one proposed for NI-DKG in
-            //    CRP-1094 (adding the registry version to the keys) could be applied here also.
+            //    called from consensus, but an approach similar to the one proposed for NI-DKG
+            //    (adding the registry version to the keys) could be applied here also.
             self.canister_sks_write_lock()
                 .retain(
                     filter,
@@ -765,13 +765,7 @@ fn generate_idkg_key_material_from_seed(
 ) -> Result<(MEGaPublicKey, CspSecretKey, KeyId), CspCreateMEGaKeyError> {
     let (public_key, private_key) = gen_keypair(EccCurveType::K256, seed);
 
-    let key_id =
-        KeyId::try_from(&public_key).map_err(|e| CspCreateMEGaKeyError::InternalError {
-            internal_error: format!(
-                "Failed to create key ID from MEGa public key {:?}: {e}",
-                &public_key
-            ),
-        })?;
+    let key_id = KeyId::from(&public_key);
     let csp_secret_key = CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
         public_key: MEGaPublicKeyK256Bytes::try_from(&public_key)
             .map_err(CspCreateMEGaKeyError::SerializationError)?,
@@ -799,9 +793,7 @@ fn idkg_public_key_proto_to_key_id(
                     internal_error: format!("Error deserializing IDKG public key: {err:?}"),
                 })?;
 
-            KeyId::try_from(&mega_public_key).map_err(|error| IDkgRetainKeysError::InternalError {
-                internal_error: format!("Invalid key ID {error:?}"),
-            })
+            Ok(KeyId::from(&mega_public_key))
         })
         .collect()
 }

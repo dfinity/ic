@@ -46,7 +46,6 @@ use std::io::{self};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Seed for random generator
 const RND_SEED: u64 = 42;
@@ -150,7 +149,10 @@ pub fn test(env: TestEnv, config: Config) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
     info!(&log, "Installation of counter canisters has succeeded.");
     info!(
         &log,

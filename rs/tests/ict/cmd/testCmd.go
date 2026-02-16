@@ -67,7 +67,7 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		if cfg.keepAlive {
 			keepAlive := fmt.Sprintf("--test_timeout=%s", strconv.Itoa(DEFAULT_TEST_KEEPALIVE_MINS*60))
 			command = append(command, keepAlive)
-			command = append(command, "--test_arg=--debug-keepalive")
+			command = append(command, "--test_arg=--keepalive")
 		}
 		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations --test_timeout=20 ..."
 		// Note: arguments provided by the user might override the ones above, i.e. test_timeout, cache_test_results, etc.

@@ -33,17 +33,17 @@ use crate::{
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
             ArchivedMonthlyNodeProviderRewards, Ballot, BlessAlternativeGuestOsVersion,
-            CreateServiceNervousSystem, Followees, FulfillSubnetRentalRequest,
-            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
-            ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards, Motion,
-            NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+            CreateServiceNervousSystem, Followees, GetNeuronsFundAuditInfoRequest,
+            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
+            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
+            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
+            NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
-            SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
-            UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
+            SettleNeuronsFundParticipationResponse, StopOrStartCanister, TakeCanisterSnapshot,
+            Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
             WaitForQuietState, archived_monthly_node_provider_rewards,
             create_service_nervous_system::LedgerParameters,
             get_neurons_fund_audit_info_response,
@@ -73,6 +73,7 @@ use crate::{
         ValidProposalAction,
         call_canister::CallCanister,
         execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
+        fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest,
         sum_weighted_voting_power,
     },
     storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
@@ -511,6 +512,8 @@ impl Action {
             Action::BlessAlternativeGuestOsVersion(_) => {
                 "ACTION_BLESS_ALTERNATIVE_GUEST_OS_VERSION"
             }
+            Action::TakeCanisterSnapshot(_) => "ACTION_TAKE_CANISTER_SNAPSHOT",
+            Action::LoadCanisterSnapshot(_) => "ACTION_LOAD_CANISTER_SNAPSHOT",
         }
     }
 }
@@ -4173,6 +4176,14 @@ impl Governance {
                 pid,
                 bless_alternative_guest_os_version,
             ),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                self.perform_take_canister_snapshot(pid, take_canister_snapshot)
+                    .await;
+            }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                self.perform_load_canister_snapshot(pid, load_canister_snapshot)
+                    .await;
+            }
         }
     }
 
@@ -4236,10 +4247,21 @@ impl Governance {
     async fn perform_fulfill_subnet_rental_request(
         &mut self,
         proposal_id: u64,
-        fulfill_subnet_rental_request: FulfillSubnetRentalRequest,
+        fulfill_subnet_rental_request: ValidFulfillSubnetRentalRequest,
     ) {
         let result = fulfill_subnet_rental_request
             .execute(ProposalId { id: proposal_id }, &self.env)
+            .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_load_canister_snapshot(
+        &mut self,
+        proposal_id: u64,
+        load_canister_snapshot: pb::v1::LoadCanisterSnapshot,
+    ) {
+        let result = self
+            .perform_call_canister(proposal_id, load_canister_snapshot)
             .await;
         self.set_proposal_execution_status(proposal_id, result);
     }
@@ -4250,6 +4272,17 @@ impl Governance {
         bless_alternative_guest_os_version: BlessAlternativeGuestOsVersion,
     ) {
         let result = bless_alternative_guest_os_version.execute();
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_take_canister_snapshot(
+        &mut self,
+        proposal_id: u64,
+        take_canister_snapshot: TakeCanisterSnapshot,
+    ) {
+        let result = self
+            .perform_call_canister(proposal_id, take_canister_snapshot)
+            .await;
         self.set_proposal_execution_status(proposal_id, result);
     }
 
@@ -4754,7 +4787,8 @@ impl Governance {
             }
             ValidProposalAction::ApproveGenesisKyc(_)
             | ValidProposalAction::RewardNodeProvider(_)
-            | ValidProposalAction::RewardNodeProviders(_) => Ok(()),
+            | ValidProposalAction::RewardNodeProviders(_)
+            | ValidProposalAction::FulfillSubnetRentalRequest(_) => Ok(()),
             ValidProposalAction::RegisterKnownNeuron(register_known_neuron) => {
                 register_known_neuron.validate(&self.neuron_store)
             }
@@ -4763,15 +4797,18 @@ impl Governance {
             ValidProposalAction::UpdateCanisterSettings(update_settings) => {
                 update_settings.validate()
             }
-            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
-                fulfill_subnet_rental_request.validate()
-            }
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
                 deregister_known_neuron.validate(&self.neuron_store)
             }
             ValidProposalAction::BlessAlternativeGuestOsVersion(
                 bless_alternative_guest_os_version,
             ) => bless_alternative_guest_os_version.validate(),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                take_canister_snapshot.validate()
+            }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                load_canister_snapshot.validate()
+            }
         }
     }
 
@@ -5000,14 +5037,16 @@ impl Governance {
             ));
         }
 
-        let self_describing_action =
-            if is_self_describing_proposal_actions_enabled() && cfg!(target_arch = "wasm32") {
-                // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-                // implemented.
-                action.to_self_describing(self.env.clone()).await.ok()
-            } else {
-                None
-            };
+        let self_describing_action = if is_self_describing_proposal_actions_enabled()
+            && cfg!(target_arch = "wasm32")
+            && !cfg!(feature = "canbench-rs")
+        {
+            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
+            // implemented.
+            action.to_self_describing(self.env.clone()).await.ok()
+        } else {
+            None
+        };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the

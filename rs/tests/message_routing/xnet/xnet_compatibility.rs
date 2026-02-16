@@ -31,13 +31,11 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, get_guestos_img_version,
-    get_guestos_launch_measurements, get_guestos_update_img_sha256, get_guestos_update_img_url,
-    get_guestos_update_img_version,
+    get_guestos_update_img_sha256, get_guestos_update_img_url, get_guestos_update_img_version,
+    get_guestos_update_launch_measurements,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{MetricsFetcher, block_on, runtime_from_url};
@@ -53,10 +51,8 @@ const DKG_INTERVAL: u64 = 9;
 const NODES_PER_SUBNET: usize = 1;
 
 fn main() -> Result<()> {
-    let config = Config::default();
-    let test = config.clone().test();
     SystemTestGroup::new()
-        .with_setup(config.build())
+        .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(PER_TASK_TIMEOUT) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(OVERALL_TIMEOUT) // the entire group may take up to `overall_timeout`.
@@ -64,42 +60,14 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct Config {
-    with_prometheus: bool,
-}
-
-impl Config {
-    pub fn with_prometheus(self) -> Self {
-        Self {
-            with_prometheus: true,
-        }
-    }
-
-    /// Builds the IC instance.
-    pub fn build(self) -> impl PotSetupFn {
-        move |env: TestEnv| setup(env, self)
-    }
-
-    /// Returns a test function based on this configuration.
-    pub fn test(self) -> impl SysTestFn {
-        move |env: TestEnv| test(env)
-    }
-}
-
 // Generic setup
-fn setup(env: TestEnv, config: Config) {
+fn setup(env: TestEnv) {
     fn subnet(subnet_type: SubnetType, custom_dkg: Option<u64>) -> Subnet {
         let mut subnet = Subnet::new(subnet_type).add_nodes(NODES_PER_SUBNET);
         if let Some(dkg_interval) = custom_dkg {
             subnet = subnet.with_dkg_interval_length(ic_types::Height::from(dkg_interval));
         }
         subnet
-    }
-    if config.with_prometheus {
-        PrometheusVm::default()
-            .start(&env)
-            .expect("failed to start prometheus VM");
     }
     let ic = InternetComputer::new();
     ic.add_subnet(subnet(SubnetType::System, None))
@@ -113,9 +81,6 @@ fn setup(env: TestEnv, config: Config) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
     install_nns_and_check_progress(env.topology_snapshot());
-    if config.with_prometheus {
-        env.sync_with_prometheus();
-    }
 }
 
 pub fn test(env: TestEnv) {
@@ -179,7 +144,7 @@ pub async fn test_async(env: TestEnv) {
 
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     bless_replica_version(
         &nns_node,
         &branch_version,

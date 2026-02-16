@@ -1,0 +1,11 @@
+[package]
+name = "linux_kernel_command_line"
+description = "Utilities to manipulate a kernel command line reliably."
+license = "Apache-2.0"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+regex = { workspace = true }

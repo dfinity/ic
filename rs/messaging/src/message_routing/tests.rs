@@ -25,6 +25,7 @@ use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDa
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::Stream;
+use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
@@ -668,7 +669,6 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         subnet_size: 0,
         node_ids: BTreeSet::new(),
         registry_version: RegistryVersion::default(),
-        canister_cycles_cost_schedule: ic_types::batch::CanisterCyclesCostSchedule::Normal,
     }));
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),
@@ -734,7 +734,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                             curve: EcdsaCurve::Secp256k1,
                             name: "ecdsa key 1".to_string(),
                         }),
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                         max_queue_size: 891,
                     },
                     KeyConfig {
@@ -742,7 +742,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                             curve: EcdsaCurve::Secp256k1,
                             name: "ecdsa key 2".to_string(),
                         }),
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                         max_queue_size: 891,
                     },
                 ],
@@ -891,12 +891,12 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 0);
 
         // Check network topology.
-        assert_eq!(network_topology.subnets.len(), 2);
+        assert_eq!(network_topology.subnets().len(), 2);
         for (subnet_id, subnet_record, transcript) in [
             (own_subnet_id, &own_subnet_record, &own_transcript),
             (other_subnet_id, &other_subnet_record, &other_transcript),
         ] {
-            let subnet_topology = network_topology.subnets.get(&subnet_id).unwrap();
+            let subnet_topology = network_topology.subnets().get(&subnet_id).unwrap();
             assert_eq!(
                 ic_crypto_utils_threshold_sig_der::public_key_to_der(
                     &ThresholdSigPublicKey::try_from(transcript)
@@ -935,7 +935,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 .map(|(key, val)| (key.clone(), Valid(val.clone())))
                 .collect::<BTreeMap<_, _>>()
         );
-        assert_eq!(routing_table, *network_topology.routing_table);
+        assert_eq!(&routing_table, network_topology.routing_table().as_ref());
         assert_eq!(canister_migrations, *network_topology.canister_migrations);
 
         // Check registry execution settings.
@@ -1017,7 +1017,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // defined above). Additionally check the `registry_execution_settings` are also passed
         // correctly (they are stored in the internal `Arc` of the fake state machine itself).
         let latest_state = state_manager.get_latest_state().take();
-        assert_ne!(network_topology, latest_state.metadata.network_topology);
+        assert_ne!(&network_topology, &latest_state.metadata.network_topology);
         assert_ne!(
             own_subnet_features,
             latest_state.metadata.own_subnet_features
@@ -1042,7 +1042,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             replica_version: ReplicaVersion::default(),
         });
         let latest_state = state_manager.get_latest_state().take();
-        assert_eq!(network_topology, latest_state.metadata.network_topology);
+        assert_eq!(&network_topology, &latest_state.metadata.network_topology);
         assert_eq!(
             own_subnet_features,
             latest_state.metadata.own_subnet_features
@@ -1703,7 +1703,7 @@ fn process_batch_updates_subnet_metrics() {
                             name: "ecdsa key 1".to_string(),
                         }),
                         max_queue_size: 891,
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                     },
                     KeyConfig {
                         key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
@@ -1711,7 +1711,7 @@ fn process_batch_updates_subnet_metrics() {
                             name: "ecdsa key 2".to_string(),
                         }),
                         max_queue_size: 891,
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                     },
                 ],
                 ..Default::default()
@@ -1833,8 +1833,7 @@ fn process_batch_updates_subnet_metrics() {
 
         let latest_state = state_manager.get_latest_state().take();
         let canister_state = latest_state
-            .canister_states
-            .values()
+            .canisters_iter()
             .map(|canister| canister.memory_usage())
             .sum();
         assert_eq!(

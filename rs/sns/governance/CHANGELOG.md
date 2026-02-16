@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-02-11: Proposal 140317
+
+http://dashboard.internetcomputer.org/proposal/140317
+
+## Added
+
+- Introduced `additional_critical_native_action_ids` into `NervousSystemParameters` so that an SNS
+  can set additional proposal actions as critical.
+
+
 # 2025-11-28: Proposal 139578
 
 http://dashboard.internetcomputer.org/proposal/139578

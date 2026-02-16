@@ -432,7 +432,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -542,7 +542,32 @@ pub mod proposal {
         /// (NNS-approved) new software.
         #[prost(message, tag = "31")]
         BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
+        /// Take a canister snapshot.
+        #[prost(message, tag = "32")]
+        TakeCanisterSnapshot(super::TakeCanisterSnapshot),
+        /// Load a canister snapshot.
+        #[prost(message, tag = "33")]
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
+}
+/// Take a canister snapshot.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TakeCanisterSnapshot {
+    /// The canister being snapshotted.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// If set, the existing snapshot with this content will be replaced.
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub replace_snapshot: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Empty message to use in oneof fields that represent empty
 /// enums.
@@ -1919,7 +1944,9 @@ pub struct WaitForQuietState {
 /// NetworkEconomics to 0.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    ic_nns_governance_derive_self_describing::SelfDescribing, Clone, PartialEq, ::prost::Message,
+)]
 pub struct NetworkEconomics {
     /// The number of E8s (10E-8 of an ICP token) that a rejected
     /// proposal will cost.
@@ -1979,6 +2006,7 @@ pub struct NetworkEconomics {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     Copy,
     PartialEq,
@@ -2024,6 +2052,7 @@ pub struct VotingPowerEconomics {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2061,6 +2090,7 @@ pub struct NeuronsFundMatchedFundingCurveCoefficients {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2233,6 +2263,7 @@ pub struct OpenSnsTokenSwap {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2268,6 +2299,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2289,6 +2321,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             PartialEq,
             ::prost::Message,
@@ -2305,6 +2338,7 @@ pub mod create_service_nervous_system {
                 candid::Deserialize,
                 serde::Serialize,
                 comparable::Comparable,
+                ic_nns_governance_derive_self_describing::SelfDescribing,
                 Clone,
                 PartialEq,
                 ::prost::Message,
@@ -2329,6 +2363,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2343,6 +2378,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2358,6 +2394,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2413,6 +2450,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2431,6 +2469,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2452,8 +2491,8 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
-        Copy,
         PartialEq,
         ::prost::Message,
     )]
@@ -2487,6 +2526,11 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "10")]
         pub voting_reward_parameters:
             ::core::option::Option<governance_parameters::VotingRewardParameters>,
+        /// Custom proposal criticality configuration. Allows specifying additional native function IDs
+        /// that should be considered critical, requiring a higher level of consensus.
+        #[prost(message, optional, tag = "11")]
+        pub custom_proposal_criticality:
+            ::core::option::Option<governance_parameters::CustomProposalCriticality>,
     }
     /// Nested message and enum types in `GovernanceParameters`.
     pub mod governance_parameters {
@@ -2495,6 +2539,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2510,6 +2555,20 @@ pub mod create_service_nervous_system {
             #[prost(message, optional, tag = "3")]
             pub reward_rate_transition_duration:
                 ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct CustomProposalCriticality {
+            #[prost(uint64, repeated, tag = "1")]
+            pub additional_critical_native_action_ids: ::prost::alloc::vec::Vec<u64>,
         }
     }
 }
@@ -2795,6 +2854,7 @@ pub struct FulfillSubnetRentalRequest {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2808,6 +2868,24 @@ pub struct BlessAlternativeGuestOsVersion {
     pub base_guest_launch_measurements: ::core::option::Option<
         ::ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements,
     >,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct LoadCanisterSnapshot {
+    /// The ID of the canister to load the snapshot into.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The ID of the snapshot to load.
+    #[prost(bytes = "vec", tag = "2")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
@@ -4133,7 +4211,10 @@ pub struct FinalizeDisburseMaturity {
     ::prost::Message,
 )]
 pub struct SelfDescribingValue {
-    #[prost(oneof = "self_describing_value::Value", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(
+        oneof = "self_describing_value::Value",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8"
+    )]
     pub value: ::core::option::Option<self_describing_value::Value>,
 }
 /// Nested message and enum types in `SelfDescribingValue`.
@@ -4161,6 +4242,10 @@ pub mod self_describing_value {
         Array(super::SelfDescribingValueArray),
         #[prost(message, tag = "6")]
         Map(super::SelfDescribingValueMap),
+        #[prost(message, tag = "7")]
+        Null(super::Empty),
+        #[prost(bool, tag = "8")]
+        Bool(bool),
     }
 }
 #[derive(

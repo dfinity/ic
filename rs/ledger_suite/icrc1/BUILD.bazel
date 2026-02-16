@@ -75,6 +75,7 @@ rust_test(
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//rs/ledger_suite/icrc1/tokens_u256",
         "//rs/ledger_suite/icrc1/tokens_u64",
+        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
         "//rs/types/base_types",
         "@crate_index//:hex",
     ] + DEV_DEPENDENCIES,

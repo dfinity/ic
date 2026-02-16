@@ -31,7 +31,7 @@ def image_deps(mode, _malicious = False):
         "bootfs": {},
         "rootfs": {
             "//rs/ic_os/release:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
-            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+            "//rs/ic_os/release:config_tool": "/opt/ic/bin/config_tool:0755",
         },
 
         # Set various configuration values
@@ -67,8 +67,8 @@ def image_deps(mode, _malicious = False):
 
     # Update dev rootfs
     if "dev" in mode:
-        deps["rootfs"].pop("//rs/ic_os/release:config", None)
-        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+        deps["rootfs"].pop("//rs/ic_os/release:config_tool", None)
+        deps["rootfs"].update({"//rs/ic_os/release:config_tool_dev": "/opt/ic/bin/config_tool:0755"})
 
     return deps
 
@@ -187,8 +187,7 @@ def _custom_partitions(mode):
         ":partition-data.tzst",
     ]
 
-def create_test_img(name, source, compat = False, **kwargs):
-    # TODO: Remove compat with NODE-1791
+def create_test_img(name, source, **kwargs):
     native.genrule(
         name = name,
         srcs = [source],
@@ -197,9 +196,9 @@ def create_test_img(name, source, compat = False, **kwargs):
             tmpdir="$$(mktemp -d)"
             trap "rm -rf $$tmpdir" EXIT
             tar -xf $< -C $$tmpdir
-            $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path $$tmpdir/disk.img{compat_flag}
+            $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path $$tmpdir/disk.img
             tar --zstd -Scf $@ -C $$tmpdir disk.img
-        """.format(compat_flag = " --compat" if compat else ""),
+        """,
         target_compatible_with = ["@platforms//os:linux"],
         tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
         **kwargs
