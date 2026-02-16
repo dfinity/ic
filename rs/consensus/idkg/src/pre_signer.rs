@@ -665,7 +665,7 @@ impl IDkgPreSignerImpl {
                         idkg_pool.stats(),
                     )
                 })
-                .map(|transcript| IDkgChangeAction::AddTranscript(transcript))
+                .map(IDkgChangeAction::AddTranscript)
                 .collect()
         })
     }
