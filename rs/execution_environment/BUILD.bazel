@@ -307,6 +307,9 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//rs/config",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/types/base_types",
         "//rs/types/types",
@@ -347,6 +350,7 @@ rust_ic_bench(
         # Keep sorted.
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
+        "//rs/test_utilities/metrics",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:criterion",

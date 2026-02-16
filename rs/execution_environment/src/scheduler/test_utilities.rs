@@ -182,6 +182,14 @@ impl SchedulerTest {
         &self.scheduler
     }
 
+    pub fn was_fully_executed(&self, canister_id: CanisterId) -> bool {
+        self.state()
+            .metadata
+            .subnet_schedule
+            .fully_executed_canisters
+            .contains(&canister_id)
+    }
+
     pub fn xnet_canister_id(&self) -> CanisterId {
         self.xnet_canister_id
     }

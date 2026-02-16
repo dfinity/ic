@@ -2,8 +2,12 @@ use criterion::Criterion;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_execution_environment::RoundSchedule;
-use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
-use ic_types::Cycles;
+use ic_execution_environment::scheduler::scheduler_metrics::SchedulerMetrics;
+use ic_logger::new_replica_logger_from_config;
+use ic_metrics::MetricsRegistry;
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::{CanisterState, ReplicatedState, SchedulerState, SystemState};
+use ic_types::{Cycles, NumBytes, PrincipalId, SubnetId};
 use ic_types_test_utils::ids::{canister_test_id, user_test_id};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -32,29 +36,30 @@ fn main() {
             ordered_new_execution_canister_ids.push(canister_id);
         }
     }
+    let mut state = ReplicatedState::new(
+        SubnetId::new(PrincipalId::new_subnet_test_id(0)),
+        SubnetType::Application,
+    );
+    state.put_canister_states(canisters);
 
     let scheduler_cores = 4;
-    let long_execution_cores = 1;
-    let round_schedule = RoundSchedule::new(
+    let heap_delta_rate_limit = NumBytes::from(1_000_000);
+    let rate_limiting_of_heap_delta = FlagStatus::Enabled;
+    let mut round_schedule = RoundSchedule::new(
         scheduler_cores,
-        long_execution_cores,
-        0,
-        ordered_new_execution_canister_ids,
-        ordered_long_execution_canister_ids,
+        heap_delta_rate_limit,
+        rate_limiting_of_heap_delta,
     );
+    let metrics_registry = MetricsRegistry::new();
+    let metrics = SchedulerMetrics::new(&metrics_registry);
+    let (log, _async_guard) = new_replica_logger_from_config(&Default::default());
 
     let mut criterion = Criterion::default();
     let mut group = criterion.benchmark_group("RoundSchedule");
 
-    let heap_delta_rate_limit = 1_000_000.into();
-    let rate_limiting_of_heap_delta = FlagStatus::Enabled;
     group.bench_function("filter_canisters", |bench| {
         bench.iter(|| {
-            let _ = round_schedule.filter_canisters(
-                &canisters,
-                heap_delta_rate_limit,
-                rate_limiting_of_heap_delta,
-            );
+            round_schedule.start_iteration(&mut state, &metrics, &log);
         });
     });
 }
