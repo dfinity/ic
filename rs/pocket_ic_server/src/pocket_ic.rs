@@ -170,7 +170,11 @@ use tower::{service_fn, util::ServiceExt};
 #[template(path = "dashboard.html", escape = "html")]
 struct Dashboard<'a> {
     height: Height,
-    canisters: &'a Vec<(&'a ic_replicated_state::CanisterState, SubnetId)>,
+    canisters: &'a Vec<(
+        &'a ic_replicated_state::CanisterState,
+        &'a ic_replicated_state::CanisterPriority,
+        SubnetId,
+    )>,
 }
 
 const MAINNET_NNS_SUBNET_ID: &str =
@@ -2824,7 +2828,7 @@ impl PocketIc {
                     let subnet_id = metadata.own_subnet_id;
                     let ranges: Vec<_> = metadata
                         .network_topology
-                        .routing_table
+                        .routing_table()
                         .ranges(subnet_id)
                         .iter()
                         .cloned()
@@ -4298,7 +4302,13 @@ impl Operation for DashboardRequest {
                 state
                     .get_ref()
                     .canisters_iter()
-                    .map(|c| (c, *subnet_id))
+                    .map(|canister| {
+                        (
+                            canister,
+                            state.get_ref().canister_priority(&canister.canister_id()),
+                            *subnet_id,
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .concat();

@@ -1447,10 +1447,19 @@ impl SystemState {
         }
     }
 
+    /// Returns `true` if there are any ingress messages in the queue that satisfy
+    /// the filter, `false` otherwise.
+    pub fn any_ingress_messages<F>(&self, filter: F) -> bool
+    where
+        F: FnMut(&Ingress) -> bool,
+    {
+        self.queues.any_ingress_messages(filter)
+    }
+
     /// See `IngressQueue::filter_messages()` for documentation.
     pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
-        F: FnMut(&Arc<Ingress>) -> bool,
+        F: FnMut(&Ingress) -> bool,
     {
         self.queues.filter_ingress_messages(filter)
     }
@@ -1579,6 +1588,13 @@ impl SystemState {
                 self.queues.guaranteed_response_memory_usage() as i64;
             *subnet_available_guaranteed_response_memory -= guaranteed_response_memory_usage;
         }
+    }
+
+    /// Returns `true` if calling `garbage_collect_canister_queues()` would actually
+    /// mutate the canister queues.
+    #[allow(dead_code)]
+    pub(crate) fn can_garbage_collect_canister_queues(&self) -> bool {
+        self.queues.can_garbage_collect()
     }
 
     /// Garbage collects empty input and output queue pairs.

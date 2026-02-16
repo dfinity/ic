@@ -11,8 +11,9 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
+use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::CanisterLog;
+use ic_types::{CanisterLog, NumBytes};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -26,20 +27,21 @@ use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
-    #[validate_eq(Ignore)]
+    feature_flag: FlagStatus,
+
+    #[validate_eq(CompareWithValidateEq)]
     maybe_page_map: Option<PageMap>,
+
+    /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
+    #[validate_eq(Ignore)]
+    header_cache: OnceLock<Option<Header>>,
 
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
     /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
     /// The collected sizes are used to expose per-round memory usage metrics
     /// and the record is cleared at the end of the round.
-    #[validate_eq(Ignore)]
     delta_log_sizes: VecDeque<usize>,
-
-    /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
-    #[validate_eq(Ignore)]
-    header_cache: OnceLock<Option<Header>>,
 }
 
 impl LogMemoryStore {
@@ -48,20 +50,31 @@ impl LogMemoryStore {
     /// The store technically exists but has 0 capacity and is considered "uninitialized".
     /// Any attempts to append logs will be silently ignored until the store is
     /// explicitly resized to a non-zero capacity.
-    pub fn new() -> Self {
-        Self::new_inner(None)
+    pub fn new(feature_flag: FlagStatus) -> Self {
+        Self::new_inner(feature_flag, None)
     }
 
     /// Creates a new store from a checkpoint.
-    pub fn from_checkpoint(page_map: PageMap) -> Self {
-        Self::new_inner(Some(page_map))
+    pub fn from_checkpoint(
+        feature_flag: FlagStatus,
+        log_memory_limit: NumBytes,
+        page_map: PageMap,
+    ) -> Self {
+        Self::new_inner(
+            feature_flag,
+            // PageMap is a lazy pointer that doesn't verify file existence on creation.
+            // To avoid redundant disk I/O during restoration, we only initialize page_map
+            // if the log memory limit is non-zero.
+            (log_memory_limit > NumBytes::new(0)).then_some(page_map),
+        )
     }
 
-    fn new_inner(maybe_page_map: Option<PageMap>) -> Self {
+    fn new_inner(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
         Self {
+            feature_flag,
             maybe_page_map,
-            delta_log_sizes: VecDeque::new(),
             header_cache: OnceLock::new(),
+            delta_log_sizes: VecDeque::new(),
         }
     }
 
@@ -145,7 +158,7 @@ impl LogMemoryStore {
     }
 
     fn resize_impl(&mut self, limit: usize, create_page_map: impl FnOnce() -> PageMap) {
-        if limit == 0 {
+        if self.feature_flag == FlagStatus::Disabled || limit == 0 {
             self.deallocate();
             return;
         }
@@ -199,6 +212,10 @@ impl LogMemoryStore {
 
     /// Appends a delta log to the ring buffer if it exists.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
+        if self.feature_flag == FlagStatus::Disabled {
+            self.deallocate();
+            return;
+        }
         if delta_log.is_empty() {
             return; // Don't append if delta is empty.
         }
@@ -221,21 +238,21 @@ impl LogMemoryStore {
         self.delta_log_sizes.push_back(size);
     }
 
-    /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
-    pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
-        self.delta_log_sizes.drain(..).collect()
+    /// Returns delta_log sizes.
+    pub fn delta_log_sizes(&self) -> Vec<usize> {
+        self.delta_log_sizes.iter().cloned().collect()
     }
-}
 
-impl Default for LogMemoryStore {
-    fn default() -> Self {
-        Self::new()
+    /// Clears the delta_log sizes.
+    pub fn clear_delta_log_sizes(&mut self) {
+        self.delta_log_sizes.clear();
     }
 }
 
 impl Clone for LogMemoryStore {
     fn clone(&self) -> Self {
         Self {
+            feature_flag: self.feature_flag,
             // PageMap is a persistent data structure, so clone is cheap and creates
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),
@@ -252,7 +269,9 @@ impl Clone for LogMemoryStore {
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
         // header_cache is a transient cache and should not be compared.
-        self.maybe_page_map == other.maybe_page_map && self.delta_log_sizes == other.delta_log_sizes
+        self.feature_flag == other.feature_flag
+            && self.maybe_page_map == other.maybe_page_map
+            && self.delta_log_sizes == other.delta_log_sizes
     }
 }
 

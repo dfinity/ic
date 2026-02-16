@@ -23,10 +23,6 @@ pub struct BootstrapOptions {
     /// IC_PREP_OUT_PATH/ic_registry_local_store
     pub ic_registry_local_store: Option<PathBuf>,
 
-    /// NNS public key override file.
-    #[cfg(feature = "dev")]
-    pub nns_public_key_override: Option<PathBuf>,
-
     /// Should point to a directory with files containing the authorized ssh
     /// keys for specific user accounts on the machine. The name of the
     /// key designates the name of the account (so, if there is a file
@@ -35,9 +31,6 @@ pub struct BootstrapOptions {
     /// admin
     #[cfg(feature = "dev")]
     pub accounts_ssh_authorized_keys: Option<PathBuf>,
-
-    /// Should point to a file containing a Node Provider private key PEM.
-    pub node_operator_private_key: Option<PathBuf>,
 }
 
 impl BootstrapOptions {
@@ -80,20 +73,11 @@ impl BootstrapOptions {
         Ok(())
     }
 
-    /// Build a bootstrap directory with this configuration.
-    /// Returns a TempDir containing all bootstrap files.
+    /// Populates given bootstrap directory with this configuration
     fn populate_bootstrap_dir(&self, bootstrap_dir: &Path) -> Result<()> {
-        if let Some(guestos_config) = &self.guestos_config {
-            serialize_and_write_config(&bootstrap_dir.join("config.json"), guestos_config)
+        if let Some(guestos_config) = self.guestos_config.clone() {
+            serialize_and_write_config(&bootstrap_dir.join("config.json"), &guestos_config)
                 .context("Failed to write guestos config to config.json")?;
-        }
-
-        if let Some(node_operator_private_key) = &self.node_operator_private_key {
-            fs::copy(
-                node_operator_private_key,
-                bootstrap_dir.join("node_operator_private_key.pem"),
-            )
-            .context("Failed to copy node operator private key")?;
         }
 
         if let Some(ic_crypto) = &self.ic_crypto {
@@ -118,14 +102,6 @@ impl BootstrapOptions {
 
         #[cfg(feature = "dev")]
         {
-            if let Some(nns_public_key_override) = &self.nns_public_key_override {
-                fs::copy(
-                    nns_public_key_override,
-                    bootstrap_dir.join("nns_public_key_override.pem"),
-                )
-                .context("Failed to copy NNS public key override")?;
-            }
-
             if let Some(accounts_ssh_authorized_keys) = &self.accounts_ssh_authorized_keys {
                 let target_dir = bootstrap_dir.join("accounts_ssh_authorized_keys");
                 Self::copy_dir_recursively(accounts_ssh_authorized_keys, &target_dir)
@@ -206,10 +182,9 @@ mod tests {
         let test_files_dir = tmp_dir.path().join("test_files");
         fs::create_dir(&test_files_dir)?;
 
-        let guestos_config = GuestOSConfig::default();
-
-        let nns_key_override_path = test_files_dir.join("nns_public_key_override.pem");
-        fs::write(&nns_key_override_path, "test_nns_key")?;
+        let mut guestos_config = GuestOSConfig::default();
+        guestos_config.icos_settings.node_operator_private_key =
+            Some("node_operator_private_key_foo".to_string());
 
         let node_key_path = test_files_dir.join("node.pem");
         fs::write(&node_key_path, "test_node_key")?;
@@ -233,8 +208,6 @@ mod tests {
         // Create full configuration
         let bootstrap_options = BootstrapOptions {
             guestos_config: Some(guestos_config.clone()),
-            nns_public_key_override: Some(nns_key_override_path),
-            node_operator_private_key: Some(node_key_path),
             #[cfg(feature = "dev")]
             accounts_ssh_authorized_keys: Some(ssh_keys_dir),
             ic_crypto: Some(crypto_dir),
@@ -242,22 +215,14 @@ mod tests {
             ic_registry_local_store: Some(registry_dir),
         };
 
-        // Populate bootstrap directory
         bootstrap_options.populate_bootstrap_dir(&bootstrap_dir)?;
 
+        let guestos_config_json: GuestOSConfig =
+            serde_json::from_slice(&fs::read(bootstrap_dir.join("config.json"))?)?;
+
         // Verify all copied files and directories
-        assert_eq!(
-            fs::read_to_string(bootstrap_dir.join("config.json"))?,
-            serde_json::to_string_pretty(&guestos_config)?
-        );
-        assert_eq!(
-            fs::read_to_string(bootstrap_dir.join("nns_public_key_override.pem"))?,
-            "test_nns_key"
-        );
-        assert_eq!(
-            fs::read_to_string(bootstrap_dir.join("node_operator_private_key.pem"))?,
-            "test_node_key"
-        );
+        assert_eq!(guestos_config, guestos_config_json);
+
         assert_eq!(
             fs::read_to_string(bootstrap_dir.join("accounts_ssh_authorized_keys/key1"))?,
             "ssh_key1"
@@ -274,6 +239,49 @@ mod tests {
             fs::read_to_string(bootstrap_dir.join("ic_registry_local_store/test"))?,
             "registry_data"
         );
+
+        // Check that the image can be created
+        let out_file = tmp_dir.path().join("bootstrap.img");
+        bootstrap_options.build_bootstrap_config_image(&out_file)?;
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "dev")]
+    fn test_build_bootstrap_dir_node_operator_in_config() -> Result<()> {
+        let tmp_dir = tempfile::tempdir()?;
+        let bootstrap_dir = tmp_dir.path().join("bootstrap");
+        fs::create_dir(&bootstrap_dir)?;
+
+        // Create test files and directories
+        let test_files_dir = tmp_dir.path().join("test_files");
+        fs::create_dir(&test_files_dir)?;
+
+        let mut guestos_config = GuestOSConfig::default();
+        guestos_config.icos_settings.node_operator_private_key =
+            Some("node_operator_private_key_from_config".to_string());
+
+        let node_key_path = test_files_dir.join("node.pem");
+        fs::write(&node_key_path, "test_node_key")?;
+
+        let bootstrap_options = BootstrapOptions {
+            guestos_config: Some(guestos_config.clone()),
+            #[cfg(feature = "dev")]
+            accounts_ssh_authorized_keys: None,
+            ic_crypto: None,
+            ic_state: None,
+            ic_registry_local_store: None,
+        };
+
+        bootstrap_options.populate_bootstrap_dir(&bootstrap_dir)?;
+
+        let guestos_config_json: GuestOSConfig =
+            serde_json::from_slice(&fs::read(bootstrap_dir.join("config.json"))?)?;
+
+        // Make sure that the key from the config gets into the resulitng JSON,
+        // and not the key from the file.
+        assert_eq!(guestos_config, guestos_config_json);
 
         // Check that the image can be created
         let out_file = tmp_dir.path().join("bootstrap.img");
