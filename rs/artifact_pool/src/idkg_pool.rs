@@ -490,19 +490,19 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
         for action in change_set {
             match action {
                 IDkgChangeAction::AddToValidated(message) => {
-                    if !matches!(message, IDkgMessage::Transcript(_)) {
-                        // Completed transcripts are not gossiped
-                        transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
-                            artifact: message.clone(),
-                            is_latency_sensitive: true,
-                        }));
-                    }
+                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                        artifact: message.clone(),
+                        is_latency_sensitive: true,
+                    }));
                     validated_ops.insert(message);
                 }
                 IDkgChangeAction::MoveToValidated(message) => {
                     // IDKG messages aren't relayed
                     unvalidated_ops.remove(IDkgArtifactId::from(&message));
                     validated_ops.insert(message);
+                }
+                IDkgChangeAction::AddTranscriptToUnvalidated(transcript) => {
+                    unvalidated_ops.insert(IDkgMessage::Transcript(transcript));
                 }
                 IDkgChangeAction::RemoveValidated(msg_id) => {
                     if !matches!(msg_id, IDkgArtifactId::Transcript(_, _)) {

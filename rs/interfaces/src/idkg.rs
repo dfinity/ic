@@ -13,6 +13,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 pub enum IDkgChangeAction {
     AddToValidated(IDkgMessage),
     MoveToValidated(IDkgMessage),
+    AddTranscriptToUnvalidated(IDkgTranscript),
     RemoveValidated(IDkgMessageId),
     RemoveUnvalidated(IDkgMessageId),
     HandleInvalid(IDkgMessageId, String),

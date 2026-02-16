@@ -656,9 +656,9 @@ impl IDkgPreSignerImpl {
             });
         let ret = ret.chain(action);
 
-        // Completed transcripts.
+        // Completed transcripts in the unvalidated pool.
         let action = idkg_pool
-            .validated()
+            .unvalidated()
             .transcripts()
             .filter(|(_, transcript)| {
                 self.should_purge(
@@ -668,7 +668,7 @@ impl IDkgPreSignerImpl {
                     &target_subnet_xnet_transcripts,
                 )
             })
-            .map(|(id, _)| IDkgChangeAction::RemoveValidated(id));
+            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id));
         let ret = ret.chain(action);
 
         ret.collect()
@@ -3065,6 +3065,69 @@ mod tests {
                 let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+            })
+        })
+    }
+
+    // Tests purging of completed transcripts from unvalidated pool
+    #[test]
+    fn test_ecdsa_purge_unvalidated_transcripts() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
+                let (mut idkg_pool, pre_signer) =
+                    create_pre_signer_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(20)),
+                    create_transcript_id_with_height(3, Height::from(200)),
+                );
+
+                // Transcript 1: height <= current_height, in_progress (not purged)
+                let transcript_1 = create_transcript(&key_id, id_1, &[NODE_2, NODE_4]);
+                let msg_id_1 = IDkgMessage::Transcript(transcript_1.clone()).message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Transcript(transcript_1),
+                    peer_id: NODE_2,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                // Transcript 2: height <= current_height, !in_progress (purged); add via change action
+                let transcript_2 = create_transcript(&key_id, id_2, &[NODE_2, NODE_4]);
+                let msg_id_2 = IDkgMessage::Transcript(transcript_2.clone()).message_id();
+                idkg_pool.apply(vec![IDkgChangeAction::AddTranscriptToUnvalidated(
+                    transcript_2,
+                )]);
+
+                // Transcript 3: height > current_height (not purged)
+                let transcript_3 = create_transcript(&key_id, id_3, &[NODE_2, NODE_4]);
+                let msg_id_3 = IDkgMessage::Transcript(transcript_3.clone()).message_id();
+                idkg_pool.insert(UnvalidatedArtifact {
+                    message: IDkgMessage::Transcript(transcript_3),
+                    peer_id: NODE_2,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                // Before purge: unvalidated pool contains all three transcripts; validated is empty
+                assert!(idkg_pool.unvalidated().contains(&msg_id_1));
+                assert!(idkg_pool.unvalidated().contains(&msg_id_2));
+                assert!(idkg_pool.unvalidated().contains(&msg_id_3));
+                assert_eq!(idkg_pool.validated().transcripts().count(), 0);
+
+                let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
+                let block_reader =
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+
+                idkg_pool.apply(change_set);
+
+                // After purge: transcript_2 removed, transcript_1 and transcript_3 remain; validated still empty
+                assert!(idkg_pool.unvalidated().contains(&msg_id_1));
+                assert!(!idkg_pool.unvalidated().contains(&msg_id_2));
+                assert!(idkg_pool.unvalidated().contains(&msg_id_3));
+                assert_eq!(idkg_pool.validated().transcripts().count(), 0);
             })
         })
     }

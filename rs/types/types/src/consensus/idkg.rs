@@ -915,7 +915,7 @@ impl From<IDkgMessage> for pb::IDkgMessage {
             IDkgMessage::VetKdKeyShare(x) => Msg::VetkdKeyShare(x.into()),
             IDkgMessage::Complaint(x) => Msg::Complaint(x.into()),
             IDkgMessage::Opening(x) => Msg::Opening(x.into()),
-            IDkgMessage::Transcript(x) => Msg::Transcript(x.into()),
+            IDkgMessage::Transcript(ref x) => Msg::Transcript(x.into()),
         };
         Self { msg: Some(msg) }
     }
