@@ -503,7 +503,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                 }
                 IDkgChangeAction::AddTranscript(transcript) => {
                     self.transcripts
-                        .insert(transcript.transcript_id.clone(), transcript);
+                        .insert(transcript.transcript_id, transcript);
                 }
                 IDkgChangeAction::RemoveTranscript(transcript_id) => {
                     self.transcripts.remove(&transcript_id);

@@ -668,7 +668,7 @@ impl IDkgPreSignerImpl {
                     &target_subnet_xnet_transcripts,
                 )
             })
-            .map(|transcript| IDkgChangeAction::RemoveTranscript(transcript.transcript_id.clone()));
+            .map(|transcript| IDkgChangeAction::RemoveTranscript(transcript.transcript_id));
         let ret = ret.chain(action);
 
         ret.collect()
