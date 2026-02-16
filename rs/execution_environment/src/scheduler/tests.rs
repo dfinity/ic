@@ -5640,10 +5640,10 @@ fn test_is_next_method_added_to_task_queue() {
         None,
         None,
     );
-    let may_schedule_heartbeat = false;
-    let may_schedule_global_timer = false;
+    let has_heartbeat = false;
+    let has_active_timer = false;
 
-    let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
+    let mut heartbeat_and_timer_canisters = BTreeSet::new();
     assert!(
         !test
             .canister_state(canister)
@@ -5657,18 +5657,18 @@ fn test_is_next_method_added_to_task_queue() {
         // input, hence no method will be chosen.
         assert!(!is_next_method_chosen(
             test.canister_state_mut(canister),
-            &mut heartbeat_and_timer_canister_ids,
-            may_schedule_heartbeat,
-            may_schedule_global_timer,
+            has_heartbeat,
+            has_active_timer,
+            &mut heartbeat_and_timer_canisters,
         ));
-        assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+        assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
     }
 
     // Make canister able to schedule both heartbeat and global timer.
-    let may_schedule_heartbeat = true;
-    let may_schedule_global_timer = true;
+    let has_heartbeat = true;
+    let has_active_timer = true;
 
     // Set input.
     test.canister_state_mut(canister)
@@ -5699,9 +5699,9 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
@@ -5713,7 +5713,7 @@ fn test_is_next_method_added_to_task_queue() {
             .is_empty()
     );
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
 
     while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::Heartbeat
@@ -5726,12 +5726,12 @@ fn test_is_next_method_added_to_task_queue() {
     // and GlobalTimer are added at the front of the queue.
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
     assert_eq!(
         test.canister_state(canister)
             .system_state
@@ -5758,9 +5758,9 @@ fn test_is_next_method_added_to_task_queue() {
         .task_queue
         .pop_front();
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
 
-    heartbeat_and_timer_canister_ids = BTreeSet::new();
+    heartbeat_and_timer_canisters = BTreeSet::new();
 
     while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::GlobalTimer
@@ -5772,12 +5772,12 @@ fn test_is_next_method_added_to_task_queue() {
     // and Heartbeat are added at the front of the queue.
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
     assert_eq!(
         test.canister_state(canister)
             .system_state
@@ -5804,7 +5804,7 @@ fn test_is_next_method_added_to_task_queue() {
         .task_queue
         .pop_front();
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
 }
 
 pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {

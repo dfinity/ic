@@ -152,17 +152,20 @@ impl CanisterState {
 
     /// Returns what the canister is going to execute next.
     pub fn next_execution(&self) -> NextExecution {
-        let next_task = self.system_state.task_queue.front();
-        match (next_task, self.has_input()) {
-            (None, false) => NextExecution::None,
-            (None, true) => NextExecution::StartNew,
-            (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::GlobalTimer), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::OnLowWasmMemory), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::AbortedExecution { .. }), _)
-            | (Some(ExecutionTask::PausedExecution { .. }), _) => NextExecution::ContinueLong,
-            (Some(ExecutionTask::AbortedInstallCode { .. }), _)
-            | (Some(ExecutionTask::PausedInstallCode(..)), _) => NextExecution::ContinueInstallCode,
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory) => NextExecution::StartNew,
+
+            Some(ExecutionTask::AbortedExecution { .. })
+            | Some(ExecutionTask::PausedExecution { .. }) => NextExecution::ContinueLong,
+
+            Some(ExecutionTask::AbortedInstallCode { .. })
+            | Some(ExecutionTask::PausedInstallCode(..)) => NextExecution::ContinueInstallCode,
+
+            None if self.has_input() => NextExecution::StartNew,
+
+            None => NextExecution::None,
         }
     }
 
