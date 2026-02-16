@@ -16,7 +16,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, id::ni_dkg_target_id},
     },
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
-    node_id_into_protobuf, node_id_try_from_option,
+    node_id_into_protobuf, node_id_try_from_protobuf,
 };
 use phantom_newtype::Id;
 use std::{

@@ -20,16 +20,18 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
     canister_state::system_state::{CyclesUseCase, PausedExecutionId},
-    metadata_state::subnet_call_context_manager::EcdsaMatchedPreSignature,
+    metadata_state::{
+        subnet_call_context_manager::EcdsaMatchedPreSignature, testing::NetworkTopologyTesting,
+    },
+    testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
-    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
+    HistogramStats, fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_vec_buckets,
+    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, labels, metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -914,15 +916,18 @@ fn test_message_limit_from_message_overhead() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // All messages are zero instruction messages so use  this metric to get their count.
-    let number_of_messages = test.scheduler().metrics.zero_instruction_messages.get();
-    assert_eq!(number_of_messages, expected_number_of_messages);
+    // All messages are zero instruction messages.
+    assert_eq!(
+        zero_instruction_messages(test.metrics_registry()),
+        expected_number_of_messages
+    );
+
     assert_eq!(
         test.state()
             .metadata
             .subnet_metrics
             .update_transactions_total,
-        expected_number_of_messages
+        0
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
 }
@@ -1060,12 +1065,18 @@ fn validate_consumed_instructions_metric() {
 
     let metrics = &test.scheduler().metrics;
 
+    // 1 round, 2 inner iterations, 2 messages. Each 100 instructions.
+    assert_eq!(metrics.round.instructions.get_sample_count(), 1);
+    assert_floats_are_equal(metrics.round.instructions.get_sample_sum(), 100_f64);
     assert_eq!(
-        metrics.instructions_consumed_per_round.get_sample_count(),
+        metrics
+            .round_inner_iteration
+            .instructions
+            .get_sample_count(),
         2
     );
     assert_floats_are_equal(
-        metrics.instructions_consumed_per_round.get_sample_sum(),
+        metrics.round_inner_iteration.instructions.get_sample_sum(),
         100_f64,
     );
     assert_eq!(
@@ -2268,7 +2279,10 @@ fn heartbeat_is_not_scheduled_if_the_canister_is_stopped() {
     test.send_ingress(canister, ingress(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.instructions_consumed_per_message.get_sample_count(),
+        1
+    );
 }
 
 #[test]
@@ -2288,7 +2302,10 @@ fn global_timer_is_not_scheduled_if_the_canister_is_stopped() {
     test.send_ingress(canister, ingress(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.instructions_consumed_per_message.get_sample_count(),
+        1
+    );
 }
 
 #[test]
@@ -2604,19 +2621,18 @@ fn scheduler_executes_postponed_raw_rand_requests() {
     );
 
     assert_eq!(
-        fetch_histogram_stats(
-            test.metrics_registry(),
-            "execution_round_postponed_raw_rand_queue_messages",
-        ),
-        Some(HistogramStats { sum: 1.0, count: 1 })
+        fetch_histogram_vec_stats(test.metrics_registry(), "execution_round_phase_messages")
+            .get(&labels(&[("phase", "raw_rand")])),
+        Some(&HistogramStats { sum: 1.0, count: 1 })
     );
 
     assert_eq!(
-        fetch_histogram_stats(
+        fetch_histogram_vec_stats(
             test.metrics_registry(),
-            "execution_round_postponed_raw_rand_queue_instructions",
-        ),
-        Some(HistogramStats { sum: 0.0, count: 1 })
+            "execution_round_phase_instructions",
+        )
+        .get(&labels(&[("phase", "raw_rand")])),
+        Some(&HistogramStats { count: 1, sum: 0.0 })
     );
 }
 
@@ -2713,15 +2729,14 @@ fn can_record_metrics_single_scheduler_thread() {
         metrics.instructions_consumed_per_message.get_sample_count(),
         3
     );
+    assert_eq!(metrics.round.instructions.get_sample_count(), 1);
     assert_eq!(
-        metrics.instructions_consumed_per_round.get_sample_count(),
-        1
-    );
-    assert_eq!(
-        metrics.instructions_consumed_per_round.get_sample_sum() as i64,
+        metrics.round.instructions.get_sample_sum() as i64,
         5 + 4 + 4
     );
-    assert_eq!(metrics.canister_messages_where_cycles_were_charged.get(), 3);
+
+    // No messages consumed zero instructions.
+    assert_eq!(zero_instruction_messages(test.metrics_registry()), 0);
 }
 
 #[test]
@@ -2805,10 +2820,14 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.round_finalization_charge.get_sample_count(), 1);
     // Compute allocation violation is not observed for newly created canisters.
     assert_eq!(metrics.canister_compute_allocation_violation.get(), 0);
+
+    // `2 * scheduler_cores` messages were executed.
     assert_eq!(
-        metrics.canister_messages_where_cycles_were_charged.get(),
+        metrics.instructions_consumed_per_message.get_sample_count(),
         scheduler_cores as u64 * 2
     );
+    // All of them consumed some instructions.
+    assert_eq!(zero_instruction_messages(test.metrics_registry()), 0);
 
     assert_eq!(
         test.state()
@@ -2879,16 +2898,10 @@ fn prepay_failures_counted() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let metrics = &test.scheduler().metrics;
-    // We should have one entry for the canister with cycles which ran.
-    assert_eq!(
-        metrics
-            .round_inner_iteration_thread_message
-            .duration
-            .get_sample_count(),
-        1
-    );
-    // We should have one count for the canister which couldn't prepay.
-    assert_eq!(metrics.zero_instruction_messages.get(), 1);
+    // We should have one entry for the canister with cycles that ran.
+    assert_eq!(metrics.msg_execution_duration.get_sample_count(), 1);
+    // We should have one count for the canister that couldn't prepay.
+    assert_eq!(zero_instruction_messages(test.metrics_registry()), 1);
 }
 
 #[test]
@@ -3378,39 +3391,13 @@ fn execution_round_metrics_are_recorded() {
     );
     assert_eq!(
         10,
-        metrics
-            .round_inner_iteration_thread_message
-            .duration
-            .get_sample_count()
-    );
-    assert_eq!(
-        10,
-        metrics
-            .round_inner_iteration_thread_message
-            .instructions
-            .get_sample_count(),
+        metrics.instructions_consumed_per_message.get_sample_count(),
     );
     assert_eq!(
         100,
-        metrics
-            .round_inner_iteration_thread_message
-            .instructions
-            .get_sample_sum() as u64,
+        metrics.instructions_consumed_per_message.get_sample_sum() as u64,
     );
-    assert_eq!(
-        10,
-        metrics
-            .round_inner_iteration_thread_message
-            .messages
-            .get_sample_count(),
-    );
-    assert_eq!(
-        10,
-        metrics
-            .round_inner_iteration_thread_message
-            .messages
-            .get_sample_sum() as u64,
-    );
+    assert_eq!(10, metrics.msg_execution_duration.get_sample_count());
 }
 
 #[test]
@@ -3451,32 +3438,13 @@ fn heartbeat_metrics_are_recorded() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(
         2,
-        metrics
-            .round_inner_iteration_thread_message
-            .instructions
-            .get_sample_count(),
+        metrics.instructions_consumed_per_message.get_sample_count(),
     );
     assert_eq!(
         200,
-        metrics
-            .round_inner_iteration_thread_message
-            .instructions
-            .get_sample_sum() as u64,
+        metrics.instructions_consumed_per_message.get_sample_sum() as u64,
     );
-    assert_eq!(
-        2,
-        metrics
-            .round_inner_iteration_thread_message
-            .messages
-            .get_sample_count(),
-    );
-    assert_eq!(
-        2,
-        metrics
-            .round_inner_iteration_thread_message
-            .messages
-            .get_sample_sum() as u64,
-    );
+    assert_eq!(2, metrics.msg_execution_duration.get_sample_count());
 }
 
 #[test]
@@ -3587,8 +3555,10 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(1)));
     state.put_canister_state(get_running_canister(canister_test_id(2)));
 
-    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    routing_table
+    state
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .insert(
             CanisterIdRange {
                 start: canister_test_id(0),
@@ -3660,8 +3630,10 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(2)));
     state.put_canister_state(get_running_canister(canister_test_id(100)));
 
-    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    routing_table
+    state
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .insert(
             CanisterIdRange {
                 start: canister_test_id(0),
@@ -5674,10 +5646,10 @@ fn test_is_next_method_added_to_task_queue() {
         None,
         None,
     );
-    let may_schedule_heartbeat = false;
-    let may_schedule_global_timer = false;
+    let has_heartbeat = false;
+    let has_active_timer = false;
 
-    let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
+    let mut heartbeat_and_timer_canisters = BTreeSet::new();
     assert!(
         !test
             .canister_state(canister)
@@ -5691,18 +5663,18 @@ fn test_is_next_method_added_to_task_queue() {
         // input, hence no method will be chosen.
         assert!(!is_next_method_chosen(
             test.canister_state_mut(canister),
-            &mut heartbeat_and_timer_canister_ids,
-            may_schedule_heartbeat,
-            may_schedule_global_timer,
+            has_heartbeat,
+            has_active_timer,
+            &mut heartbeat_and_timer_canisters,
         ));
-        assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+        assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
     }
 
     // Make canister able to schedule both heartbeat and global timer.
-    let may_schedule_heartbeat = true;
-    let may_schedule_global_timer = true;
+    let has_heartbeat = true;
+    let has_active_timer = true;
 
     // Set input.
     test.canister_state_mut(canister)
@@ -5733,9 +5705,9 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
@@ -5747,7 +5719,7 @@ fn test_is_next_method_added_to_task_queue() {
             .is_empty()
     );
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
 
     while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::Heartbeat
@@ -5760,12 +5732,12 @@ fn test_is_next_method_added_to_task_queue() {
     // and GlobalTimer are added at the front of the queue.
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
     assert_eq!(
         test.canister_state(canister)
             .system_state
@@ -5792,9 +5764,9 @@ fn test_is_next_method_added_to_task_queue() {
         .task_queue
         .pop_front();
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
 
-    heartbeat_and_timer_canister_ids = BTreeSet::new();
+    heartbeat_and_timer_canisters = BTreeSet::new();
 
     while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::GlobalTimer
@@ -5806,12 +5778,12 @@ fn test_is_next_method_added_to_task_queue() {
     // and Heartbeat are added at the front of the queue.
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
     assert_eq!(
         test.canister_state(canister)
             .system_state
@@ -5838,7 +5810,7 @@ fn test_is_next_method_added_to_task_queue() {
         .task_queue
         .pop_front();
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
 }
 
 pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {
@@ -6286,7 +6258,10 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
     assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id, own_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -6302,7 +6277,10 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates the canister to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -6725,4 +6703,15 @@ fn charge_idle_canisters_for_full_execution_round() {
         // The accumulated priority invariant should be respected.
         assert_eq!(total_accumulated_priority - total_priority_credit, 0);
     }
+}
+
+fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
+    let instructions_consumed_per_message = fetch_histogram_vec_buckets(
+        metrics_registry,
+        "scheduler_instructions_consumed_per_message",
+    )
+    .remove(&BTreeMap::new())
+    .unwrap();
+
+    *instructions_consumed_per_message.get("0").unwrap()
 }
