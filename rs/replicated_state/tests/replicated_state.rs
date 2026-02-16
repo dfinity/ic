@@ -11,24 +11,23 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_snapshots::CanisterSnapshot;
-use ic_replicated_state::canister_state::execution_state::{
-    CustomSection, CustomSectionType, WasmMetadata,
-};
-use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
-    SubnetCallContext,
-};
-use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
-use ic_replicated_state::replicated_state::{
-    MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
-};
-use ic_replicated_state::testing::{
-    CanisterQueuesTesting, FakeDropMessageMetrics, SystemStateTesting,
-};
 use ic_replicated_state::{
     CanisterState, ExecutionTask, IngressHistoryState, InputSource, ReplicatedState,
     SchedulerState, StateError, SystemState,
+    canister_snapshots::CanisterSnapshot,
+    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
+    metadata_state::{
+        subnet_call_context_manager::{
+            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
+            SubnetCallContext,
+        },
+        testing::NetworkTopologyTesting,
+    },
+    replicated_state::{
+        MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
+        testing::ReplicatedStateTesting,
+    },
+    testing::{CanisterQueuesTesting, FakeDropMessageMetrics, SystemStateTesting},
 };
 use ic_test_utilities_state::{ExecutionStateBuilder, arb_replicated_state_with_output_queues};
 use ic_test_utilities_types::ids::{SUBNET_1, canister_test_id, message_test_id, user_test_id};
@@ -1268,7 +1267,11 @@ fn online_split() {
         CanisterIdRange {start: CanisterId::from_u64(CANISTER_2_U64 + 1), end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
     })
     .unwrap();
-    fixture.state.metadata.network_topology.routing_table = Arc::new(routing_table.clone());
+    fixture
+        .state
+        .metadata
+        .network_topology
+        .set_routing_table(routing_table.clone());
 
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.

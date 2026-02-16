@@ -710,7 +710,7 @@ impl ReplicatedState {
     }
 
     pub fn routing_table(&self) -> Arc<RoutingTable> {
-        Arc::clone(&self.metadata.network_topology.routing_table)
+        Arc::clone(self.metadata.network_topology.routing_table())
     }
 
     /// Returns the cost schedule of this subnet.
@@ -718,7 +718,7 @@ impl ReplicatedState {
         let subnet_id = self.metadata.own_subnet_id;
         self.metadata
             .network_topology
-            .subnets
+            .subnets()
             .get(&subnet_id)
             .map(|x| x.cost_schedule)
             .unwrap_or_default()
@@ -728,7 +728,7 @@ impl ReplicatedState {
     pub fn get_cost_schedule(&self, subnet_id: SubnetId) -> Option<CanisterCyclesCostSchedule> {
         self.metadata
             .network_topology
-            .subnets
+            .subnets()
             .get(&subnet_id)
             .map(|x| x.cost_schedule)
     }
@@ -1593,7 +1593,7 @@ impl ReplicatedState {
 
         // All of the canisters in `canister_states` must be hosted by either
         // `new_subnet_id` or `other_subnet_id`.
-        let routing_table = metadata.network_topology.routing_table.clone();
+        let routing_table = metadata.network_topology.routing_table().clone();
         let lookup_subnet = |canister_id: &CanisterId| {
             routing_table
                 .lookup_entry(*canister_id)
