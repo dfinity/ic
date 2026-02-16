@@ -1478,17 +1478,12 @@ impl ExecutionTest {
                     message_instructions_used.get(),
                     capped_slice_instructions_used
                 );
-                self.update_execution_stats(
-                    canister_id,
-                    NumInstructions::from(capped_slice_instructions_used),
-                    cost_schedule,
-                );
+                self.update_execution_stats(canister_id, message_instructions_used, cost_schedule);
             } else {
-                *self
-                    .paused_subnet_message_instructions
-                    .entry(canister_id)
-                    .or_insert(NumInstructions::from(0)) =
-                    NumInstructions::from(slice_instructions_used.get() as u64);
+                self.paused_subnet_message_instructions.insert(
+                    canister_id,
+                    NumInstructions::from(slice_instructions_used.get() as u64),
+                );
             }
         }
         true
@@ -1631,7 +1626,7 @@ impl ExecutionTest {
                     assert_eq!(message_instructions_used, capped_instructions_used);
                     self.update_execution_stats(
                         canister_id,
-                        capped_instructions_used,
+                        message_instructions_used,
                         cost_schedule,
                     );
                 } else {
