@@ -11,7 +11,9 @@ use ic_interfaces::execution_environment::TransformExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
-use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};
+use ic_types::canister_http::{
+    CanisterHttpPaymentMetadata, CanisterHttpRequest, CanisterHttpResponse,
+};
 use std::convert::TryFrom;
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri};
@@ -24,7 +26,12 @@ pub fn setup_canister_http_client(
     transform_handler: TransformExecutionService,
     max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
-) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
+) -> Box<
+    dyn NonBlockingChannel<
+            CanisterHttpRequest,
+            Response = (CanisterHttpResponse, CanisterHttpPaymentMetadata),
+        > + Send,
+> {
     match adapter_config.https_outcalls_uds_path {
         None => {
             error!(

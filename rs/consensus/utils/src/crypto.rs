@@ -1,7 +1,7 @@
 use ic_interfaces::{crypto::*, validation::ValidationResult};
 use ic_types::{
     NodeId, RegistryVersion,
-    canister_http::CanisterHttpResponseMetadata,
+    canister_http::{CanisterHttpPaymentMetadata, CanisterHttpResponseMetadata},
     consensus::{
         BlockMetadata, CatchUpContent, FinalizationContent, NotarizationContent,
         RandomBeaconContent, RandomTapeContent, dkg,
@@ -434,8 +434,8 @@ pub trait ConsensusCrypto:
         BasicSignature<CanisterHttpResponseMetadata>,
         RegistryVersion,
     > + SignVerify<
-        CanisterHttpResponseMetadata,
-        BasicSignature<CanisterHttpResponseMetadata>,
+        CanisterHttpPaymentMetadata,
+        BasicSignature<CanisterHttpPaymentMetadata>,
         RegistryVersion,
     > + Aggregate<
         NotarizationContent,
