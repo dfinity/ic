@@ -293,57 +293,34 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         dfinity_owned_node.get_ip_addr()
     );
 
-    break_nodes(faulty_nodes, &logger);
+    // We could break all faulty nodes now. But if all nodes are broken, then the later call to
+    // fetch nodes' metrics to determine the download pool will fail, since no nodes will answer.
+    // To avoid that, we break at most `subnet_size - 1` nodes first, effectively breaking the
+    // subnet, then fetch the metrics and determine the download pool, and finally break the
+    // remaining nodes.
+    let (nodes_to_break_first, nodes_to_break_after) = faulty_nodes
+        .split_at_checked(subnet_size - 1)
+        .unwrap_or((faulty_nodes, &[]));
+    break_nodes(nodes_to_break_first, &logger);
 
-    let recovery_dir = tempdir().unwrap().path().to_path_buf();
-    match maybe_healthy_node {
-        None => {
-            // Special case if all nodes are broken: the subnet is broken even in read mode, see the
-            // `false` parameter below.
-            assert_subnet_is_broken(
-                &dfinity_owned_node.get_public_url(), // This URL is not expected to be responsive
-                app_can_id,
-                msg,
-                /*can_read=*/ false,
-                &logger,
-            );
-
-            // Moreover, the registry canister will not be able to respond to
-            // `get_certified_changes_since` calls to initialize the local store of `ic-recovery`.
-            // Thus, we need to manually download the local store of one of the nodes to pre-populate
-            // the local store of `ic-recovery`.
-            let local_store_path_src = PathBuf::from(IC_DATA_PATH)
-                .join(IC_REGISTRY_LOCAL_STORE)
-                .join("");
-            let local_store_path_dest = recovery_dir
-                .join("working_dir")
-                .join("data")
-                .join(IC_REGISTRY_LOCAL_STORE);
-
-            std::fs::create_dir_all(&local_store_path_dest).unwrap();
-            let ssh_helper = RecoverySshHelper::new(
-                logger.clone(),
-                RecoverySshUser::Admin,
-                dfinity_owned_node.get_ip_addr(),
-                false,
-                Some(ssh_admin_priv_key_path.clone()),
-            );
-            ssh_helper
-                .rsync(
-                    ssh_helper.remote_path(&local_store_path_src),
-                    &local_store_path_dest,
-                )
-                .expect("Failed to manually initialize the local store of ic-recovery by downloading it from a node");
-        }
-        Some(healthy_node) => {
-            assert_subnet_is_broken(
-                &healthy_node.get_public_url(),
-                app_can_id,
-                msg,
-                /*can_read=*/ true,
-                &logger,
-            );
-        }
+    if let Some(healthy_node) = maybe_healthy_node {
+        assert_subnet_is_broken(
+            &healthy_node.get_public_url(),
+            app_can_id,
+            msg,
+            /*can_read=*/ true,
+            &logger,
+        );
+    } else {
+        // Special case if all nodes are broken: the subnet is broken even in read mode, see the
+        // `false` parameter below.
+        assert_subnet_is_broken(
+            &dfinity_owned_node.get_public_url(), // This URL is not expected to be responsive
+            app_can_id,
+            msg,
+            /*can_read=*/ false,
+            &logger,
+        );
     }
 
     // Download pool from the node with the highest certification share height
@@ -356,6 +333,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         download_pool_node.get_ip_addr(),
         highest_cert_share,
     );
+
+    break_nodes(nodes_to_break_after, &logger);
 
     // Mirror production setup by removing admin SSH access from all nodes except the DFINITY-owned node
     info!(
@@ -384,6 +363,35 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &admin_auth,
     );
 
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    if maybe_healthy_node.is_none() {
+        // If all nodes are broken, the registry canister will not be able to respond to
+        // `get_certified_changes_since` calls to initialize the local store of `ic-recovery`.
+        // Thus, we need to manually download the local store of one of the nodes to pre-populate
+        // the local store of `ic-recovery`.
+        let local_store_path_src = PathBuf::from(IC_DATA_PATH)
+            .join(IC_REGISTRY_LOCAL_STORE)
+            .join("");
+        let local_store_path_dest = recovery_dir
+            .join("working_dir")
+            .join("data")
+            .join(IC_REGISTRY_LOCAL_STORE);
+
+        std::fs::create_dir_all(&local_store_path_dest).unwrap();
+        let ssh_helper = RecoverySshHelper::new(
+            logger.clone(),
+            RecoverySshUser::Admin,
+            dfinity_owned_node.get_ip_addr(),
+            false,
+            Some(ssh_admin_priv_key_path.clone()),
+        );
+        ssh_helper
+            .rsync(
+                ssh_helper.remote_path(&local_store_path_src),
+                &local_store_path_dest,
+            )
+            .expect("Failed to manually initialize the local store of ic-recovery by downloading it from a node");
+    }
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         // If `maybe_healthy_node` is `None`, it means all nodes are broken, and the local store was
