@@ -125,10 +125,10 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_post_call))
                 .add_test(systest!(test_head_call))
                 .add_test(systest!(test_put_call))
-                // TODO(CON-1636): Uncomment this test when PUT is supported in replicated mode.
+                // TODO(CON-1636): Uncomment this test when PUT is supported in non-replicated mode.
                 // .add_test(systest!(test_put_without_non_replicated_rejected))
                 .add_test(systest!(test_delete_call))
-                // TODO(CON-1636): Uncomment this test when DELETE is supported in replicated mode.
+                // TODO(CON-1636): Uncomment this test when DELETE is supported in non-replicated mode.
                 // .add_test(systest!(test_delete_without_non_replicated_rejected))
                 .add_test(systest!(test_max_possible_request_size))
                 .add_test(systest!(test_max_possible_request_size_exceeded))
