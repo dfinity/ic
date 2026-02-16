@@ -656,6 +656,21 @@ impl IDkgPreSignerImpl {
             });
         let ret = ret.chain(action);
 
+        // Completed transcripts in the pool.
+        let action = idkg_pool
+            .transcripts()
+            .values()
+            .filter(|transcript| {
+                self.should_purge(
+                    &transcript.transcript_id,
+                    current_height,
+                    &in_progress,
+                    &target_subnet_xnet_transcripts,
+                )
+            })
+            .map(|transcript| IDkgChangeAction::RemoveTranscript(transcript.transcript_id.clone()));
+        let ret = ret.chain(action);
+
         ret.collect()
     }
 
@@ -3124,6 +3139,55 @@ mod tests {
                         .get(&validated_id_3)
                         .is_some_and(|signers| *signers == BTreeSet::from([NODE_3]))
                 );
+            })
+        })
+    }
+
+    // Tests purging of completed transcripts the pool
+    #[test]
+    fn test_ecdsa_purge_unvalidated_transcripts() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
+                let (mut idkg_pool, pre_signer) =
+                    create_pre_signer_dependencies(pool_config, logger);
+                let (id_1, id_2, id_3) = (
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(20)),
+                    create_transcript_id_with_height(3, Height::from(200)),
+                );
+
+                // Transcript 1: height <= current_height, in_progress (not purged)
+                let transcript_1 = create_transcript(&key_id, id_1, &[NODE_2, NODE_4]);
+                idkg_pool.apply(vec![IDkgChangeAction::AddTranscript(transcript_1)]);
+
+                // Transcript 2: height <= current_height, !in_progress (purged); add via change action
+                let transcript_2 = create_transcript(&key_id, id_2, &[NODE_2, NODE_4]);
+                idkg_pool.apply(vec![IDkgChangeAction::AddTranscript(transcript_2)]);
+
+                // Transcript 3: height > current_height (not purged)
+                let transcript_3 = create_transcript(&key_id, id_3, &[NODE_2, NODE_4]);
+                idkg_pool.apply(vec![IDkgChangeAction::AddTranscript(transcript_3)]);
+
+                // Before purge: three transcripts in the pool
+                assert_eq!(idkg_pool.transcripts().len(), 3);
+                assert!(idkg_pool.transcripts().contains_key(&id_1));
+                assert!(idkg_pool.transcripts().contains_key(&id_2));
+                assert!(idkg_pool.transcripts().contains_key(&id_3));
+
+                let t = create_transcript_param(&key_id, id_1, &[NODE_2], &[NODE_4]);
+                let block_reader =
+                    TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+                let change_set = pre_signer.purge_artifacts(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert_matches!(&change_set[0], &IDkgChangeAction::RemoveTranscript(id) if id == id_2);
+
+                idkg_pool.apply(change_set);
+
+                // After purge: transcript_2 removed, transcript_1 and transcript_3 remain; validated still empty
+                assert_eq!(idkg_pool.transcripts().len(), 2);
+                assert!(idkg_pool.transcripts().contains_key(&id_1));
+                assert!(idkg_pool.transcripts().contains_key(&id_3));
             })
         })
     }
