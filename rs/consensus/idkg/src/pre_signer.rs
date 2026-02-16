@@ -574,8 +574,8 @@ impl IDkgPreSignerImpl {
         })
     }
 
-    /// Starts the transcript generation sequence by issuing the
-    /// dealing for the transcript. The requests for new transcripts
+    /// Builds the completed transcripts by collecting dealings and support
+    /// shares for the transcript. The requests for new transcripts
     /// come from the latest finalized block.
     fn build_transcripts(
         &self,
