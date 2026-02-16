@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
@@ -11,6 +11,13 @@ rust_binary(
     crate_name = "quick_upgrade_toy_bin",
     deps = [
         # Keep sorted.
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:futures",
@@ -19,19 +26,12 @@ rust_binary(
         "@crate_index//:regex",
         "@crate_index//:slog",
         "@crate_index//:tokio",
-        "//rs/registry/subnet_features",
-        "//rs/registry/subnet_type",
-        "//rs/tests/consensus/tecdsa/utils",
-        "//rs/tests/consensus/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/management_canister_types",
-        "//rs/types/types",
     ],
 )
 
 system_test_nns(
-    enable_mainnet_nns_variant = False,
     name = "run_quick_upgrade_toy",
+    enable_mainnet_nns_variant = False,
     env = MAINNET_ENV,
     guestos = True,
     guestos_update = "malicious",
