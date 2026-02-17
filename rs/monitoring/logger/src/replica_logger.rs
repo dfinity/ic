@@ -19,44 +19,6 @@ pub type ReplicaLogger = ContextLogger<LogEntry, LogEntryLogger>;
 /// so that we don't get a pair of ellipses (`...`) if the `UserError` description is of the maximum length
 const MAX_LOG_MESSAGE_LEN_BYTES: usize = 16 * 1024;
 
-/// A logger that doesn't log. Used in tests.
-pub fn no_op_logger() -> ReplicaLogger {
-    LogEntryLogger::new(
-        slog::Logger::root(slog::Discard, slog::o!()),
-        ic_config::logger::Level::Critical,
-    )
-    .into()
-}
-
-/// A logger that logs to stdout/stderr if the environment variable `RUST_LOG`
-/// or the input parameter specify a log level (in this order of precedence)
-/// and otherwise is a no-op.
-/// If the environment variable `LOG_TO_STDERR` is set, then the logger logs
-/// to stderr. Otherwise, it logs to stdout.
-/// Used in tests.
-pub fn test_logger(log_level: Option<Level>) -> ReplicaLogger {
-    if let Some(log_level) = std::env::var("RUST_LOG")
-        .ok()
-        .and_then(|level| Level::from_str(&level).ok())
-        .or(log_level)
-    {
-        let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
-            Box::new(stderr())
-        } else {
-            Box::new(slog_term::TestStdoutWriter)
-        };
-        let decorator = slog_term::PlainSyncDecorator::new(writer);
-        let drain = slog_term::FullFormat::new(decorator)
-            .build()
-            .filter_level(log_level)
-            .fuse();
-        let logger = slog::Logger::root(drain, slog::o!());
-        logger.into()
-    } else {
-        no_op_logger()
-    }
-}
-
 impl From<LogEntryLogger> for ReplicaLogger {
     fn from(logger: LogEntryLogger) -> Self {
         ReplicaLogger::new(logger)
@@ -185,6 +147,44 @@ pub fn get_crate(module_path: &'static str) -> String {
 pub fn get_module(module_path: &'static str) -> String {
     let path: Vec<&str> = module_path.split("::").collect();
     (*path.last().unwrap_or(&"")).to_string()
+}
+
+/// A logger that doesn't log. Used in tests.
+pub fn no_op_logger() -> ReplicaLogger {
+    LogEntryLogger::new(
+        slog::Logger::root(slog::Discard, slog::o!()),
+        ic_config::logger::Level::Critical,
+    )
+    .into()
+}
+
+/// A logger that logs to stdout/stderr if the environment variable `RUST_LOG`
+/// or the input parameter specify a log level (in this order of precedence)
+/// and otherwise is a no-op.
+/// If the environment variable `LOG_TO_STDERR` is set, then the logger logs
+/// to stderr. Otherwise, it logs to stdout.
+/// Used in tests.
+pub fn test_logger(log_level: Option<Level>) -> ReplicaLogger {
+    if let Some(log_level) = std::env::var("RUST_LOG")
+        .ok()
+        .and_then(|level| Level::from_str(&level).ok())
+        .or(log_level)
+    {
+        let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
+            Box::new(stderr())
+        } else {
+            Box::new(slog_term::TestStdoutWriter)
+        };
+        let decorator = slog_term::PlainSyncDecorator::new(writer);
+        let drain = slog_term::FullFormat::new(decorator)
+            .build()
+            .filter_level(log_level)
+            .fuse();
+        let logger = slog::Logger::root(drain, slog::o!());
+        logger.into()
+    } else {
+        no_op_logger()
+    }
 }
 
 #[cfg(test)]
