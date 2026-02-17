@@ -752,7 +752,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::{
         RandomStateKind,
-        tests::{access_ingress_pool, set_up_registry, setup, setup_with_params},
+        tests::{set_up_registry, setup, setup_with_params},
     };
     use assert_matches::assert_matches;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
@@ -792,7 +792,6 @@ pub(crate) mod tests {
         state_manager::{StateManagerError, StateManagerResult},
         time::{UNIX_EPOCH, expiry_time_from_now},
     };
-    use rand::RngCore;
     use rstest::rstest;
     use std::sync::RwLock;
     use std::{collections::HashSet, convert::TryInto, time::Duration};
@@ -914,20 +913,11 @@ pub(crate) mod tests {
                     .expiry_time(time)
                     .build();
 
-                let ingress_messages = [m1.clone(), m2, m3];
-                for m in ingress_messages.iter() {
-                    let message_id = IngressMessageId::from(m);
-                    access_ingress_pool(&ingress_pool, |ingress_pool| {
-                        ingress_pool.insert(UnvalidatedArtifact {
-                            message: m.clone(),
-                            peer_id: node_test_id(0),
-                            timestamp: time_source.get_relative_time(),
-                        });
-                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
-                        // check that message is indeed in the pool
-                        assert!(ingress_pool.get(&message_id).is_some());
-                    });
-                }
+                insert_unvalidated_ingress_with_timestamp(
+                    vec![m1.clone(), m2, m3],
+                    &ingress_pool,
+                    time_source.get_relative_time(),
+                );
 
                 ingress_manager.hashes_in_blocks_enabled_in_tests = false;
 
@@ -1099,15 +1089,12 @@ pub(crate) mod tests {
                     .canister_id(canister_test_id(0))
                     .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
-                let message_id = IngressMessageId::from(&ingress_msg1);
-                access_ingress_pool(&ingress_pool, |ingress_pool| {
-                    ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_msg1.clone(),
-                        peer_id: node_test_id(0),
-                        timestamp: time_source.get_relative_time(),
-                    });
-                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
-                });
+
+                insert_unvalidated_ingress_with_timestamp(
+                    vec![ingress_msg1],
+                    &ingress_pool,
+                    time_source.get_relative_time(),
+                );
 
                 // get ingress message in payload
                 let first_ingress_payload = ingress_manager.get_ingress_payload(
@@ -1149,15 +1136,11 @@ pub(crate) mod tests {
                     .canister_id(canister_test_id(0))
                     .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
-                let message_id = IngressMessageId::from(&ingress_msg1);
-                access_ingress_pool(&ingress_pool, |ingress_pool| {
-                    ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_msg1.clone(),
-                        peer_id: node_test_id(0),
-                        timestamp: time_source.get_relative_time(),
-                    });
-                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
-                });
+                insert_unvalidated_ingress_with_timestamp(
+                    vec![ingress_msg1],
+                    &ingress_pool,
+                    time_source.get_relative_time(),
+                );
 
                 // get ingress message in payload
                 let first_ingress_payload = ingress_manager.get_ingress_payload(
@@ -1217,23 +1200,11 @@ pub(crate) mod tests {
                     .build();
 
                 // add them to the pool
-                access_ingress_pool(&ingress_pool, |ingress_pool| {
-                    let message_id = IngressMessageId::from(&ingress_msg1);
-                    ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_msg1.clone(),
-                        peer_id: node_test_id(0),
-                        timestamp: time_source.get_relative_time(),
-                    });
-                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
-
-                    let message_id = IngressMessageId::from(&ingress_msg2);
-                    ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_msg2.clone(),
-                        peer_id: node_test_id(0),
-                        timestamp: time_source.get_relative_time(),
-                    });
-                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
-                });
+                insert_unvalidated_ingress_with_timestamp(
+                    vec![ingress_msg1, ingress_msg2],
+                    &ingress_pool,
+                    time_source.get_relative_time(),
+                );
 
                 let validation_context = ValidationContext {
                     time: UNIX_EPOCH,
@@ -1306,23 +1277,11 @@ pub(crate) mod tests {
                     .build();
 
                 // add them to the pool
-                access_ingress_pool(&ingress_pool, |ingress_pool| {
-                    let message_id = IngressMessageId::from(&ingress_msg1);
-                    ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_msg1.clone(),
-                        peer_id: node_test_id(0),
-                        timestamp: time_source.get_relative_time(),
-                    });
-                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
-
-                    let message_id = IngressMessageId::from(&ingress_msg2);
-                    ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_msg2.clone(),
-                        peer_id: node_test_id(0),
-                        timestamp: time_source.get_relative_time(),
-                    });
-                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
-                });
+                insert_unvalidated_ingress_with_timestamp(
+                    vec![ingress_msg1, ingress_msg2],
+                    &ingress_pool,
+                    time_source.get_relative_time(),
+                );
 
                 let validation_context = ValidationContext {
                     time: UNIX_EPOCH,
@@ -1482,22 +1441,12 @@ pub(crate) mod tests {
                     .nonce(3)
                     .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
                     .build();
-                let message_id2 = IngressMessageId::from(&ingress_msg2);
 
-                access_ingress_pool(&ingress_pool, |ingress_pool| {
-                    ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_msg1.clone(),
-                        peer_id: node_test_id(0),
-                        timestamp: time_source.get_relative_time(),
-                    });
-                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id1)]);
-                    ingress_pool.insert(UnvalidatedArtifact {
-                        message: ingress_msg2.clone(),
-                        peer_id: node_test_id(0),
-                        timestamp: time_source.get_relative_time(),
-                    });
-                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id2)]);
-                });
+                insert_unvalidated_ingress_with_timestamp(
+                    vec![ingress_msg1.clone(), ingress_msg2.clone()],
+                    &ingress_pool,
+                    time_source.get_relative_time(),
+                );
 
                 let validation_context = ValidationContext {
                     time: UNIX_EPOCH,
@@ -1672,21 +1621,11 @@ pub(crate) mod tests {
                     certified_height: Height::from(0),
                 };
 
-                let ingress_messages = [m1.clone(), m2.clone(), m3, m4];
-
-                for m in ingress_messages.iter() {
-                    let message_id = IngressMessageId::from(m);
-                    access_ingress_pool(&ingress_pool, |ingress_pool| {
-                        ingress_pool.insert(UnvalidatedArtifact {
-                            message: m.clone(),
-                            peer_id: node_test_id(0),
-                            timestamp: time_source.get_relative_time(),
-                        });
-                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
-                        // check that message is indeed in the pool
-                        assert!(ingress_pool.get(&message_id).is_some());
-                    });
-                }
+                insert_unvalidated_ingress_with_timestamp(
+                    vec![m1.clone(), m2.clone(), m3, m4],
+                    &ingress_pool,
+                    time_source.get_relative_time(),
+                );
 
                 let payload = ingress_manager.get_ingress_payload(
                     &HashSet::new(),
@@ -2257,22 +2196,21 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn insert_unvalidated_ingress_with_timestamp(
-        msgs: Vec<SignedIngress>,
+        messages: Vec<SignedIngress>,
         pool: &Arc<RwLock<IngressPoolImpl>>,
         timestamp: Time,
     ) {
-        for m in msgs.iter() {
-            let message_id = IngressMessageId::from(m);
-            access_ingress_pool(pool, |ingress_pool| {
-                ingress_pool.insert(UnvalidatedArtifact {
-                    message: m.clone(),
-                    peer_id: node_test_id(0),
-                    timestamp,
-                });
-                ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
-                // check that message is indeed in the pool
-                assert!(ingress_pool.get(&message_id).is_some());
+        let mut ingress_pool = pool.write().unwrap();
+        for message in messages {
+            let message_id = IngressMessageId::from(&message);
+            ingress_pool.insert(UnvalidatedArtifact {
+                message,
+                peer_id: node_test_id(0),
+                timestamp,
             });
+            ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
+            // check that message is indeed in the pool
+            assert!(ingress_pool.get(&message_id).is_some());
         }
     }
 
@@ -2284,7 +2222,7 @@ pub(crate) mod tests {
         expiry: Time,
     ) -> (Vec<SignedIngress>, CanisterState) {
         let msgs: Vec<_> = (0..msg_count)
-            .map(|_| generate_ingress_with_params(cid, bytes, expiry))
+            .map(|nonce| generate_ingress_with_params(cid, bytes, nonce as u64, expiry))
             .collect();
 
         (
@@ -2299,12 +2237,13 @@ pub(crate) mod tests {
     pub(crate) fn generate_ingress_with_params(
         cid: CanisterId,
         bytes: usize,
+        nonce: u64,
         expiry: Time,
     ) -> SignedIngress {
         SignedIngressBuilder::new()
             .canister_id(cid)
             .expiry_time(expiry)
-            .nonce(rand::thread_rng().next_u64())
+            .nonce(nonce)
             .method_payload(vec![0xff; bytes])
             .build()
     }
@@ -2522,9 +2461,12 @@ pub(crate) mod tests {
             messages_count_limit as u64,
             ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
+        let number_of_messages_to_generate = memory_bytes_limit
+            .unwrap_or(ic_limits::MAX_INGRESS_BYTES_PER_BLOCK as usize)
+            .div_ceil(ingress_message_payload_size.max(1));
         let (ingress, canister) = generate_ingress_messages_with_params(
             canister_test_id(1),
-            messages_count_limit + 1,
+            std::cmp::min(number_of_messages_to_generate, messages_count_limit) + 1,
             ingress_message_payload_size,
             UNIX_EPOCH + Duration::from_secs(40),
         );

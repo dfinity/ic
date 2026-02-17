@@ -143,7 +143,8 @@ const MB: usize = 1024 * 1024;
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 128,
+        cases: 1024,
+        timeout: 10_000, // 10 seconds
         ..ProptestConfig::default()
     })]
     #[test]
@@ -154,12 +155,13 @@ proptest! {
         messages_count_limit in 1..= 1000_usize,
     ){
         prop_assume!(
-            ingress_message_payload_size <=std::cmp::min(memory_bytes_limit, wire_bytes_limit)
+            ingress_message_payload_size <= std::cmp::min(memory_bytes_limit, wire_bytes_limit)
         );
 
         let ingress_size = generate_ingress_with_params(
             canister_test_id(0),
             ingress_message_payload_size,
+            /*nonce=*/ 0,
             UNIX_EPOCH + Duration::from_secs(30),
         )
         .count_bytes();
