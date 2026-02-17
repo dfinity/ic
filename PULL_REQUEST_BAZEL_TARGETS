@@ -102,3 +102,5 @@ rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_tes
 rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns
 
 rs/ledger_suite/icp/index/* //rs/ledger_suite/icp/index:retrieve_blocks_from_ledger_interval_test
+
+rs/rosetta-api/icrc1/* //rs/rosetta-api/icrc1:ic-icrc-rosetta-unit-tests
