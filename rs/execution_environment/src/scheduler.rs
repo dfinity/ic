@@ -938,6 +938,9 @@ impl SchedulerImpl {
                 canister.system_state.clear_canister_history();
                 // Burn the remaining balance of the canister.
                 canister.system_state.burn_remaining_balance_for_uninstall();
+                canister
+                    .canister_snapshots
+                    .delete_snapshots(canister.canister_id());
 
                 info!(
                     self.log,
@@ -946,12 +949,6 @@ impl SchedulerImpl {
                 );
                 self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
-        }
-
-        // Delete any snapshots associated with the canister
-        // that ran out of cycles.
-        for canister_id in uninstalled_canisters {
-            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1502,6 +1499,8 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
                 let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
+                let mut total_canister_snapshots_memory_usage = NumBytes::new(0);
+                let mut total_num_canister_snapshots = 0;
                 for canister in state.canisters_iter_mut() {
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                     self.metrics
@@ -1553,6 +1552,10 @@ impl Scheduler for SchedulerImpl {
                         .allocated_bytes(canister.memory_usage());
                     total_canister_balance += canister.system_state.balance();
                     total_canister_reserved_balance += canister.system_state.reserved_balance();
+
+                    total_canister_snapshots_memory_usage +=
+                        canister.canister_snapshots.memory_taken();
+                    total_num_canister_snapshots += canister.canister_snapshots.count();
 
                     // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
                     // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
@@ -1632,10 +1635,10 @@ impl Scheduler for SchedulerImpl {
 
                 self.metrics
                     .canister_snapshots_memory_usage
-                    .set(final_state.canister_snapshots.memory_taken().get() as i64);
+                    .set(total_canister_snapshots_memory_usage.get() as i64);
                 self.metrics
                     .num_canister_snapshots
-                    .set(final_state.canister_snapshots.count() as i64);
+                    .set(total_num_canister_snapshots as i64);
             }
             round_schedule.finish_round(&mut final_state, fully_executed_canister_ids);
             self.finish_round(&mut final_state, current_round_type);

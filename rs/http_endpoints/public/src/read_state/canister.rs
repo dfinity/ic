@@ -428,10 +428,7 @@ mod test {
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        CanisterQueues, RefundPool, ReplicatedState, SystemMetadata,
-        canister_snapshots::CanisterSnapshots,
-    };
+    use ic_replicated_state::{CanisterQueues, RefundPool, ReplicatedState, SystemMetadata};
     use ic_test_utilities_state::insert_dummy_canister;
     use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, canister_test_id, user_test_id};
     use ic_types::{batch::RawQueryStats, time::UNIX_EPOCH};
@@ -559,7 +556,6 @@ mod test {
             CanisterQueues::default(),
             RefundPool::default(),
             RawQueryStats::default(),
-            CanisterSnapshots::default(),
         )
     }
 

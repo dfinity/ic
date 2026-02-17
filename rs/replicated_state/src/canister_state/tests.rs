@@ -5,6 +5,7 @@ use super::*;
 use crate::CallContext;
 use crate::CallOrigin;
 use crate::Memory;
+use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
@@ -91,9 +92,15 @@ impl CanisterStateFixture {
             Cycles::new(1 << 36),
             NumSeconds::from(100_000),
         );
+        let canister_snapshots = CanisterSnapshots::default();
 
         CanisterStateFixture {
-            canister_state: CanisterState::new(system_state, None, scheduler_state),
+            canister_state: CanisterState::new(
+                system_state,
+                None,
+                scheduler_state,
+                canister_snapshots,
+            ),
         }
     }
 

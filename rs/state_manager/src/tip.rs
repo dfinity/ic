@@ -18,7 +18,7 @@ use ic_protobuf::state::{
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_snapshots::CanisterSnapshot;
+use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshot;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
 use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
 use ic_replicated_state::page_map::{
@@ -105,7 +105,7 @@ pub(crate) enum TipRequest {
             >,
         >,
     },
-    /// Filter canisters and snapshots in tip. Remove ones not present in the sets.
+    /// Filter canisters in tip. Remove ones not present in the sets.
     ///
     /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
@@ -209,6 +209,7 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     )
                                 });
+                            println!("filtering tip snapshots: {:?}", snapshot_ids);
                             tip_handler
                                 .filter_tip_snapshots(height, &snapshot_ids)
                                 .unwrap_or_else(|err| {
@@ -478,6 +479,7 @@ pub(crate) fn spawn_tip_thread(
                             );
                             tip_state.latest_checkpoint_state.verified = true;
 
+                            println!("I'm also hre");
                             if let Err(err) =
                                 validate_and_finalize_checkpoint_and_remove_unverified_marker(
                                     &checkpoint_layout,
@@ -608,8 +610,12 @@ fn switch_to_checkpoint(
         }
     }
 
-    for (tip_id, tip_snapshot) in tip.canister_snapshots.iter_mut() {
-        let new_snapshot = Arc::make_mut(tip_snapshot);
+    for (tip_id, tip_snapshot) in tip
+        .canisters_iter_mut()
+        .flat_map(|canister| canister.canister_snapshots.iter_mut())
+    {
+        println!("writing snapshot {}", tip_id);
+        let new_snapshot: &mut CanisterSnapshot = Arc::make_mut(tip_snapshot);
         let snapshot_layout = layout.snapshot(tip_id).unwrap();
 
         new_snapshot
@@ -1116,7 +1122,10 @@ fn serialize_protos_to_checkpoint_readwrite(
 
     let results = parallel_map(
         thread_pool,
-        state.canister_snapshots.iter(),
+        state
+            .canister_states()
+            .values()
+            .flat_map(|canister| canister.canister_snapshots.iter()),
         |canister_snapshot| {
             serialize_snapshot_protos_to_checkpoint_readwrite(
                 canister_snapshot.0,
@@ -1147,7 +1156,10 @@ fn serialize_wasm_binaries_and_pagemaps(
     .try_for_each(identity)?;
     parallel_map(
         thread_pool,
-        state.canister_snapshots.iter(),
+        state
+            .canister_states()
+            .values()
+            .flat_map(|canister| canister.canister_snapshots.iter()),
         |(snapshot_id, snapshot)| {
             serialize_snapshot_wasm_binary_and_pagemaps(
                 snapshot_id,

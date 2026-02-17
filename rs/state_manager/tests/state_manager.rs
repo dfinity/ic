@@ -23,7 +23,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
-    canister_snapshots::CanisterSnapshot,
+    canister_state::canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::{ApiBoundaryNodeEntry, testing::NetworkTopologyTesting},
     page_map::{PageIndex, Shard, StorageLayout},
@@ -263,6 +263,21 @@ fn read_and_assert_eq(env: &StateMachine, canister_id: CanisterId, expected: i32
         ),
         expected
     );
+}
+
+fn take_canister_snapshot(
+    state: &mut ReplicatedState,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    snapshot: CanisterSnapshot,
+) {
+    let mut canister = state.take_canister_state(&canister_id).unwrap();
+    canister.take_snapshot(snapshot_id, Arc::new(snapshot));
+    state.put_canister_state(canister);
+    state
+        .metadata
+        .unflushed_checkpoint_ops
+        .take_snapshot(canister_id, snapshot_id);
 }
 
 #[test]
@@ -7244,10 +7259,21 @@ fn lsmt_shard_size_is_stable() {
 }
 
 /// Mock version of CanisterManager::load_canister_snapshot that only does the bits relevant to the state manager
-fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mut ReplicatedState) {
-    let snapshot = state.canister_snapshots.get(snapshot_id).unwrap().clone();
-    let mut canister = state.take_canister_state(&canister_id).unwrap();
+fn restore_snapshot(
+    snapshot_id: SnapshotId,
+    snapshot_canister_id: CanisterId,
+    canister_id: CanisterId,
+    state: &mut ReplicatedState,
+) {
+    let snapshot = state
+        .canister_state(&snapshot_canister_id)
+        .unwrap()
+        .canister_snapshots
+        .get(snapshot_id)
+        .unwrap()
+        .clone();
 
+    let mut canister = state.take_canister_state(&canister_id).unwrap();
     canister.system_state.wasm_chunk_store = snapshot.chunk_store().clone();
     canister.execution_state = Some(ExecutionState::new(
         Default::default(),
@@ -7281,7 +7307,7 @@ fn can_create_and_delete_canister_snapshot() {
         .unwrap();
         let snapshot_id = SnapshotId::from((canister_test_id(100), 0));
 
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        take_canister_snapshot(&mut state, canister_test_id(100), snapshot_id, new_snapshot);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7323,7 +7349,8 @@ fn can_create_and_delete_canister_snapshot() {
 
         let (_height, mut state) = state_manager.take_tip();
 
-        state.canister_snapshots.remove(snapshot_id);
+        let canister = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        canister.canister_snapshots.remove(snapshot_id);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7358,7 +7385,7 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
         )
         .unwrap();
         let snapshot_id = SnapshotId::from((canister_id, 0));
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        take_canister_snapshot(&mut state, canister_id, snapshot_id, new_snapshot);
 
         let canister_wasm_binary = &state
             .canister_state(&canister_id)
@@ -7370,6 +7397,8 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .binary;
 
         let snapshot_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .get(snapshot_id)
             .unwrap()
@@ -7402,6 +7431,8 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
             .binary;
 
         let snapshot_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .get(snapshot_id)
             .unwrap()
@@ -7471,7 +7502,7 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
         )
         .unwrap();
         let snapshot_id = SnapshotId::from((canister_id, 0));
-        state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        take_canister_snapshot(&mut state, canister_id, snapshot_id, new_snapshot);
 
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7501,6 +7532,8 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
             .binary;
 
         let snapshot_wasm_binary = &state
+            .canister_state(&canister_id)
+            .unwrap()
             .canister_snapshots
             .get(snapshot_id)
             .unwrap()
@@ -7559,7 +7592,7 @@ fn can_create_and_restore_snapshot() {
             )
             .unwrap();
             let snapshot_id = SnapshotId::from((canister_id, 0));
-            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+            take_canister_snapshot(&mut state, canister_id, snapshot_id, new_snapshot);
             state_manager.commit_and_certify(state, certification_scope.clone(), None);
 
             // Modify the canister.
@@ -7583,7 +7616,7 @@ fn can_create_and_restore_snapshot() {
 
             // Restore the canister.
             let (_height, mut state) = state_manager.take_tip();
-            restore_snapshot(snapshot_id, canister_id, &mut state);
+            restore_snapshot(snapshot_id, canister_id, canister_id, &mut state);
 
             // Verify the correct canister state across a couple of checkpoints.
             let verify_state = |state: &ReplicatedState| {
@@ -8003,14 +8036,14 @@ fn can_split_with_inflight_restore_snapshot() {
             )
             .unwrap();
             let snapshot_id = SnapshotId::from((CANISTER_1, 0));
-            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+            take_canister_snapshot(&mut state, CANISTER_1, snapshot_id, new_snapshot);
 
             // Commit (and optionally checkpoint) the state.
             state_manager.commit_and_certify(state, certification_scope, None);
             let (_height, mut state) = state_manager.take_tip();
 
             // Restore the snapshot of `CANISTER_1` to `CANISTER_2`.
-            restore_snapshot(snapshot_id, CANISTER_2, &mut state);
+            restore_snapshot(snapshot_id, CANISTER_1, CANISTER_2, &mut state);
             // Sanity check.
             let canister_state = state.canister_state(&CANISTER_2).unwrap();
             let execution_state = canister_state.execution_state.as_ref().unwrap();
@@ -8054,8 +8087,6 @@ fn can_split_with_inflight_restore_snapshot() {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
                 expected.remove_canister(&CANISTER_1);
-                // And the snapshot of `CANISTER_1` should be deleted.
-                expected.canister_snapshots = Default::default();
             } else {
                 unreachable!("Unexpected subnet ID: {:?}", subnet_id);
             }
@@ -8156,7 +8187,7 @@ fn can_rename_canister() {
             )
             .unwrap();
             let snapshot_id = SnapshotId::from((new_canister_id, 0));
-            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+            take_canister_snapshot(&mut state, new_canister_id, snapshot_id, new_snapshot);
 
             // Trigger a flush either at the checkpoint or by committing exactly
             // `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before the checkpoint.

@@ -11,7 +11,7 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
-    checkpoint::{PageMapType, flush_canister_snapshots_and_page_maps},
+    checkpoint::{PageMapType, flush_page_maps},
     manifest::compute_bundled_manifest,
     state_sync::{
         chunkable::cache::StateSyncCache,
@@ -1036,7 +1036,7 @@ fn initialize_tip(
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
-            pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
+            pagemaptypes: PageMapType::list_all(&snapshot.state),
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
@@ -1649,7 +1649,7 @@ impl StateManagerImpl {
     fn observe_num_loaded_pagemaps(&self, state: &ReplicatedState) {
         let mut loaded = 0;
         let mut not_loaded = 0;
-        for entry in PageMapType::list_all_including_snapshots(state) {
+        for entry in PageMapType::list_all(state) {
             if let Some(page_map) = entry.get(state) {
                 if page_map.is_loaded() {
                     loaded += 1;
@@ -1683,17 +1683,23 @@ impl StateManagerImpl {
             })
             .count();
 
-        let num_loaded_snapshot_wasm = state
-            .canister_snapshots
-            .iter()
-            .filter(|(_, snapshot)| {
-                snapshot
-                    .execution_snapshot()
-                    .wasm_binary
-                    .module_loading_status()
-                    == ModuleLoadingStatus::FileLoaded
+        let num_loaded_snapshot_wasm: usize = state
+            .canister_states()
+            .values()
+            .map(|canister| {
+                canister
+                    .canister_snapshots
+                    .iter()
+                    .filter(|(_, snapshot)| {
+                        snapshot
+                            .execution_snapshot()
+                            .wasm_binary
+                            .module_loading_status()
+                            == ModuleLoadingStatus::FileLoaded
+                    })
+                    .count()
             })
-            .count();
+            .sum();
 
         self.metrics
             .checkpoint_metrics
@@ -2556,7 +2562,7 @@ impl StateManagerImpl {
                 .start_timer();
             let tip_requests = vec![TipRequest::ResetTipAndMerge {
                 checkpoint_layout: cp_layout.clone(),
-                pagemaptypes: PageMapType::list_all_including_snapshots(&state),
+                pagemaptypes: PageMapType::list_all(&state),
             }];
 
             CreateCheckpointResult {
@@ -3243,7 +3249,7 @@ impl StateManager for StateManagerImpl {
                     .saturating_sub(height.get())
                     == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
             {
-                flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
+                flush_page_maps(&mut state, height, &self.tip_channel);
             }
         }
 
