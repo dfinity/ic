@@ -558,7 +558,10 @@ impl NodeRegistration {
         if let Some(config) = rustls_config {
             let reqwest_client = reqwest::ClientBuilder::default()
                 .use_preconfigured_tls(config)
-                .build()?;
+                .build()
+                .map_err(|e| {
+                    format!("Failed to create reqwest client with custom TLS config: {e}")
+                })?;
 
             builder = builder.with_http_client(reqwest_client)
         }

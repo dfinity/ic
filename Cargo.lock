@@ -18829,6 +18829,7 @@ dependencies = [
  "exec",
  "get_if_addrs",
  "guest_upgrade_server",
+ "hex",
  "http-body-util",
  "hyper 1.8.1",
  "hyper-rustls",
