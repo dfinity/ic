@@ -376,6 +376,7 @@ pub fn verify_chunking(
 
         let lhs = {
             let mut lhs = Vec::with_capacity(e.len());
+            // TODO(CRP-2550) this loop can run in parallel
             for (i, e_i) in e.iter().enumerate() {
                 let e_ijk_polynomials: Vec<_> = e_i
                     .iter()
@@ -412,6 +413,7 @@ pub fn verify_chunking(
         // | k <- [1..l]] * product [cc_k ^ x^k | k <- [1..l]] * Y   = product
         // [y_i^z_ri | i <- [1..n]] * y0^z_beta * g_1 ^ sum [z_sk * x^k | k <- [1..l]]
 
+        // TODO(CRP-2550) this loop can run in parallel
         let cij_to_eijks: Vec<G1Projective> = (0..NUM_ZK_REPETITIONS)
             .map(|k| {
                 let c_ij_s: Vec<_> = instance
