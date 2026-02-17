@@ -5919,11 +5919,9 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
 
     let expected_height = Height::from(test.last_round().get());
 
+    // Deprecated field should be none
+    assert_eq!(sign_with_ecdsa_context.matched_pre_signature, None);
     // Check that quadruple was matched
-    assert_eq!(
-        sign_with_ecdsa_context.matched_pre_signature,
-        Some((pre_sig_id, expected_height))
-    );
     assert_eq!(
         sign_with_ecdsa_context
             .ecdsa_args()
@@ -5954,11 +5952,9 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
         .sign_with_ecdsa_contexts();
     let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
+    // Deprecated field should be none
+    assert_eq!(sign_with_ecdsa_context.matched_pre_signature, None);
     // Check that quadruple is still matched
-    assert_eq!(
-        sign_with_ecdsa_context.matched_pre_signature,
-        Some((pre_sig_id, expected_height))
-    );
     assert_eq!(
         sign_with_ecdsa_context
             .ecdsa_args()
@@ -6086,10 +6082,8 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     let expected_height = Height::from(test.last_round().get() - 1);
     let context1 = sign_with_ecdsa_contexts.get(&CallbackId::from(1)).unwrap();
     assert!(context1.nonce.is_some());
-    assert_eq!(
-        context1.matched_pre_signature,
-        Some((*pre_sigs1.keys().next().unwrap(), expected_height))
-    );
+    // Deprecated field should be none
+    assert_eq!(context1.matched_pre_signature, None);
     assert_eq!(
         context1.ecdsa_args().pre_signature.clone().unwrap(),
         EcdsaMatchedPreSignature {
@@ -6102,10 +6096,8 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
 
     let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
     assert!(context2.nonce.is_some());
-    assert_eq!(
-        context2.matched_pre_signature,
-        Some((*pre_sigs0.keys().next().unwrap(), expected_height))
-    );
+    // Deprecated field should be none
+    assert_eq!(context2.matched_pre_signature, None);
     assert_eq!(
         context2.ecdsa_args().pre_signature.clone().unwrap(),
         EcdsaMatchedPreSignature {
