@@ -306,7 +306,7 @@ mod tests {
         );
         BlockProposal::fake(
             block,
-            pool.get_block_maker_by_rank(parent.height.increment(), Rank(0)),
+            pool.get_block_maker_by_rank(parent.height.increment(), Some(Rank(0))),
         )
     }
 
