@@ -5,9 +5,10 @@ use ic_types::{Cycles, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
 
-const MIB: u64 = 1024 * 1024;
-const GIB: u64 = MIB * 1024;
-const TIB: u64 = GIB * 1024;
+const KIB: u64 = 1024;
+const MIB: u64 = 1024 * KIB;
+const GIB: u64 = 1024 * MIB;
+const TIB: u64 = 1024 * GIB;
 
 // TODO(DSM-105): remove after the feature is enabled by default.
 pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = false;
@@ -17,12 +18,12 @@ pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENA
     FlagStatus::Disabled
 };
 pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-    4 * 1024 // 4 KiB
+    4 * KIB
 } else {
     0
 };
 pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-    4 * 1024 + 4 * 1024 + TEST_DEFAULT_LOG_MEMORY_LIMIT // header, index table, data region
+    4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT // header, index table, data region
 } else {
     0
 };
