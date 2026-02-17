@@ -342,6 +342,11 @@ impl Step for DownloadIcDataStep {
                     None,
                 )?;
             }
+        } else {
+            info!(
+                self.logger,
+                "No data includes were specified, skipping download under {IC_DATA_PATH}",
+            );
         }
 
         if self.include_config {
@@ -456,6 +461,11 @@ impl Step for ReplayStep {
             Recovery::remove_all_but_highest_checkpoints(&checkpoint_path, &self.logger)?
         } else {
             // If there is no checkpoint, we assume the replay starts from genesis
+            info!(
+                self.logger,
+                "No checkpoint found, assuming replay starts from genesis.",
+            );
+
             Height::from(0)
         };
 
