@@ -11,9 +11,7 @@ use ic_management_canister_types_private::{
 };
 use ic_system_test_driver::util::{MESSAGE_CANISTER_WASM, MessageCanister};
 use ic_types::PrincipalId;
-use ic_utils::interfaces::{
-    ManagementCanister, management_canister::CanisterStatusType as CanisterStatus,
-};
+use ic_utils::interfaces::{ManagementCanister, management_canister::CanisterStatus};
 use slog::{Logger, info};
 use std::{str::FromStr, time::Duration};
 
