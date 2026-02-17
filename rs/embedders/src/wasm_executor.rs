@@ -671,13 +671,12 @@ pub fn process(
     //unwrap should not fail, because we have passed Some(system_api) to the instance above
     let system_api = instance.store_data_mut().system_api_mut().unwrap();
     let system_api_call_counters = system_api.call_counters();
-    let slice_instruction_limit = system_api.slice_instruction_limit();
     // Capping at the limit to preserve the existing behaviour. It should be
     // possible to remove capping after ensuring that all callers can handle
     // instructions executed being larger than the limit.
     let mut slice_instructions_executed = system_api
         .slice_instructions_executed(instruction_counter)
-        .min(slice_instruction_limit);
+        .min(first_slice_instruction_limit);
     // Capping at the limit to avoid an underflow when computing the remaining
     // instructions below.
     let message_instructions_executed = system_api
