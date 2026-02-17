@@ -1,10 +1,8 @@
 //! Library crate for verifying the validity of a node's TLS certificate.
 
 use core::fmt;
-use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
-use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes as BasicSigEd25519SignatureBytes;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use ic_types::crypto::CryptoResult;
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use ic_types::{NodeId, Time};
 use serde::Deserialize;
 use serde::Serialize;
@@ -206,14 +204,13 @@ fn single_cn_as_str<'a>(name: &'a X509Name<'_>) -> Result<&'a str, String> {
 
 fn ed25519_pubkey_from_x509_cert(
     x509_cert: &X509Certificate,
-) -> Result<BasicSigEd25519PublicKeyBytes, TlsCertValidationError> {
-    BasicSigEd25519PublicKeyBytes::try_from(
-        x509_cert
+) -> Result<ic_ed25519::PublicKey, TlsCertValidationError> {
+    ic_ed25519::PublicKey::deserialize_raw(
+        &x509_cert
             .tbs_certificate
             .subject_pki
             .subject_public_key
-            .data
-            .to_vec(),
+            .data,
     )
     .map_err(|e| {
         invalid_tls_certificate_error(format!("conversion to Ed25519 public key failed: {e}"))
@@ -221,9 +218,9 @@ fn ed25519_pubkey_from_x509_cert(
 }
 
 fn verify_ed25519_public_key(
-    public_key: &BasicSigEd25519PublicKeyBytes,
+    public_key: &ic_ed25519::PublicKey,
 ) -> Result<(), TlsCertValidationError> {
-    if !ic_crypto_internal_basic_sig_ed25519::verify_public_key(public_key) {
+    if !public_key.is_torsion_free() {
         return Err(invalid_tls_certificate_error(
             "public key verification failed",
         ));
@@ -245,11 +242,19 @@ fn verify_ed25519_public_key(
 /// specification on how to verify the signature.
 fn verify_ed25519_signature(
     x509_cert: &X509Certificate,
-    public_key: &BasicSigEd25519PublicKeyBytes,
+    public_key: &ic_ed25519::PublicKey,
 ) -> CryptoResult<()> {
-    let sig = BasicSigEd25519SignatureBytes::try_from(x509_cert.signature_value.data.to_vec())?;
+    let sig = x509_cert.signature_value.data.as_ref();
     let msg = x509_cert.tbs_certificate.as_ref();
-    ic_crypto_internal_basic_sig_ed25519::verify(&sig, msg, public_key)
+
+    public_key
+        .verify_signature(msg, sig)
+        .map_err(|e| CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::Ed25519,
+            public_key_bytes: public_key.serialize_raw().to_vec(),
+            sig_bytes: sig.to_vec(),
+            internal_error: e.to_string(),
+        })
 }
 
 fn invalid_tls_certificate_error<S: Into<String>>(internal_error: S) -> TlsCertValidationError {

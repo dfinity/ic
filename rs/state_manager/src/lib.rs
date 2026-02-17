@@ -36,7 +36,7 @@ use ic_interfaces_certified_stream_store::{
 };
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateReader, TransientStateHashError::*,
+    StateHashError, StateHashMetadata, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, warn};
 use ic_metrics::{
@@ -1674,7 +1674,7 @@ impl StateManagerImpl {
     /// values in provided state.
     fn observe_num_loaded_wasm_files(&self, state: &ReplicatedState) {
         let num_loaded_canister_wasm = state
-            .canister_states
+            .canister_states()
             .iter()
             .filter_map(|(_, canister)| canister.execution_state.as_ref())
             .filter(|execution_state| {
@@ -2766,6 +2766,8 @@ impl StateManager for StateManagerImpl {
             .as_ref()
             .expect("Missing CheckpointLayout")
             .clone();
+
+        states.tip_height = target_snapshot.height;
         std::mem::drop(states);
 
         let mut new_tip = initialize_tip(
@@ -2966,7 +2968,7 @@ impl StateManager for StateManagerImpl {
         }
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         let _timer = self
             .metrics
             .api_call_duration
@@ -2978,11 +2980,9 @@ impl StateManager for StateManagerImpl {
             .certifications_metadata
             .iter()
             .filter(|(_, metadata)| metadata.certification.is_none())
-            .map(|(height, metadata)| {
-                (
-                    *height,
-                    CryptoHashOfPartialState::from(metadata.certified_state_hash.clone()),
-                )
+            .map(|(height, metadata)| StateHashMetadata {
+                height: *height,
+                hash: CryptoHashOfPartialState::from(metadata.certified_state_hash.clone()),
             })
             .collect()
     }
@@ -3215,7 +3215,6 @@ impl StateManager for StateManagerImpl {
     fn commit_and_certify(
         &self,
         mut state: Self::State,
-        height: Height,
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
@@ -3224,6 +3223,11 @@ impl StateManager for StateManagerImpl {
             .api_call_duration
             .with_label_values(&["commit_and_certify"])
             .start_timer();
+
+        let height = {
+            let states = self.states.read();
+            states.tip_height.increment()
+        };
 
         self.populate_extra_metadata(&mut state, height);
 

@@ -99,9 +99,10 @@ fn defects_to_governance_error(defects: Vec<String>) -> GovernanceError {
 
 impl LocallyDescribableProposalAction for LoadCanisterSnapshot {
     const TYPE_NAME: &'static str = "Load Canister Snapshot";
-    const TYPE_DESCRIPTION: &'static str = "A proposal to load a previously taken snapshot of \
-        an NNS-controlled canister's state. The canister's state will be restored to the state \
-        captured in the snapshot.";
+    const TYPE_DESCRIPTION: &'static str = "Load a snapshot created by a Take Canister Snapshot \
+        proposal into a canister controlled by the NNS. Loading a snapshot replaces the \
+        canister's current stable memory, heap memory, data, and Wasm module with what was saved \
+        in the snapshot, rolling the canister back to that earlier state.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         SelfDescribingValue::from(self.clone())

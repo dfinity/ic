@@ -34,9 +34,9 @@ pub trait LocallyDescribableProposalAction {
 impl LocallyDescribableProposalAction for Motion {
     const TYPE_NAME: &'static str = "Motion";
 
-    const TYPE_DESCRIPTION: &'static str = "A motion is a text that can be adopted or rejected. \
-    No code is executed when a motion is adopted. An adopted motion should guide the future \
-    strategy of the Internet Computer ecosystem.";
+    const TYPE_DESCRIPTION: &'static str = "Propose a text that can be adopted or rejected. \
+        No code is executed when a motion is adopted. An adopted motion should guide the future \
+        strategy of the Internet Computer ecosystem.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
@@ -48,13 +48,15 @@ impl LocallyDescribableProposalAction for Motion {
 impl LocallyDescribableProposalAction for ApproveGenesisKyc {
     const TYPE_NAME: &'static str = "Approve Genesis KYC";
 
-    const TYPE_DESCRIPTION: &'static str = "When new neurons are created at Genesis, they have \
-    GenesisKYC=false. This restricts what actions they can perform. Specifically, they cannot spawn \
-    new neurons, and once their dissolve delays are zero, they cannot be disbursed and their balances \
-    unlocked to new accounts. This proposal sets GenesisKYC=true for batches of principals. \
-    (Special note: The Genesis event disburses all ICP in the form of neurons, whose principals \
-    must be KYCed. Consequently, all neurons created after Genesis have GenesisKYC=true set \
-    automatically since they must have been derived from balances that have already been KYCed.)";
+    const TYPE_DESCRIPTION: &'static str = "Set GenesisKYC=true for batches of principals.\n\n\
+        When new neurons are created at Genesis, they have GenesisKYC=false. This restricts what \
+        actions they can perform. Specifically, they cannot spawn new neurons, and once their \
+        dissolve delays are zero, they cannot be disbursed and their balances unlocked to new \
+        accounts.\n\n\
+        (Special note: The Genesis event disburses all ICP in the form of neurons, \
+        whose principals must be KYCed. Consequently, all neurons created after Genesis have \
+        GenesisKYC=true set automatically since they must have been derived from balances that \
+        have already been KYCed.)";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
@@ -65,9 +67,9 @@ impl LocallyDescribableProposalAction for ApproveGenesisKyc {
 
 impl LocallyDescribableProposalAction for NetworkEconomics {
     const TYPE_NAME: &'static str = "Manage Network Economics";
-    const TYPE_DESCRIPTION: &'static str = "Updates the network economics parameters that control various costs, rewards, and \
-        thresholds in the Network Nervous System, including proposal costs, neuron staking \
-        requirements, transaction fees, and voting power economics.";
+    const TYPE_DESCRIPTION: &'static str = "Update the network economics parameters that control \
+        various costs, rewards, and thresholds in the Network Nervous System, including proposal \
+        costs, neuron staking requirements, transaction fees, and voting power economics.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         SelfDescribingValue::from(self.clone())

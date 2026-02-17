@@ -35,9 +35,8 @@ pub(crate) fn check_hostos_version_invariants(
         // Node's version to one that has already been added to the registry.
         let r = get_hostos_version_record(snapshot, version);
 
-        // Check whether release package URL (iso image) and corresponding hash
-        // are well-formed. As file-based URLs are only used in
-        // test-deployments, we disallow file:/// URLs.
+        // Check whether release package URLs (update image) and corresponding hash are well-formed.
+        // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
         assert_valid_urls_and_hash(
             &r.release_package_urls,
             &r.release_package_sha256_hex,

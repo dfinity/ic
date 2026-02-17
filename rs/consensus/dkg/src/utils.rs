@@ -7,7 +7,7 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     consensus::{
         Block,
-        dkg::{DkgPayloadCreationError, DkgSummary, Message},
+        dkg::{DkgPayloadCreationError, DkgSummary},
     },
     crypto::{
         AlgorithmId,
@@ -86,15 +86,18 @@ pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
 ) -> HashSet<(NiDkgId, NodeId)> {
-    let (dkg_dealings, _) = extract_from_dkg_dealing_messages(pool_reader, block, false, |_| ());
-    dkg_dealings
-        .into_iter()
-        .flat_map(|(dkg_id, dealings)| {
-            dealings
-                .into_keys()
-                .map(move |node_id| (dkg_id.clone(), node_id))
-        })
-        .collect()
+    let mut dealers = HashSet::new();
+    for block in pool_reader
+        .chain_iterator(block.clone())
+        .take_while(|block| !block.payload.is_summary())
+    {
+        let payload = &block.payload.as_ref().as_data().dkg;
+        for message in payload.messages.iter() {
+            let unique = dealers.insert((message.content.dkg_id.clone(), message.signature.signer));
+            assert!(unique, "Dealings from the same dealers discovered.");
+        }
+    }
+    dealers
 }
 
 /// Starts with the given block and creates a nested mapping from the DKG Id to
@@ -109,18 +112,7 @@ pub(super) fn get_dkg_dealings(
     BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>>,
     BTreeSet<NiDkgId>,
 ) {
-    extract_from_dkg_dealing_messages(pool_reader, block, true, |message| {
-        message.content.dealing.clone()
-    })
-}
-
-fn extract_from_dkg_dealing_messages<T>(
-    pool_reader: &PoolReader<'_>,
-    block: &Block,
-    exclude_used: bool,
-    extractor: impl Fn(&Message) -> T,
-) -> (BTreeMap<NiDkgId, BTreeMap<NodeId, T>>, BTreeSet<NiDkgId>) {
-    let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, T>> = BTreeMap::new();
+    let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> = BTreeMap::new();
     let mut excluded: BTreeSet<NiDkgId> = BTreeSet::new();
 
     for block in pool_reader
@@ -129,13 +121,11 @@ fn extract_from_dkg_dealing_messages<T>(
     {
         let payload = &block.payload.as_ref().as_data().dkg;
 
-        if exclude_used {
-            for (dkg_id, _, _) in payload.transcripts_for_remote_subnets.iter() {
-                // Add the finished DKG to excluded list
-                excluded.insert(dkg_id.clone());
-                // Remove already selected dealings
-                dealings.remove(dkg_id);
-            }
+        for (dkg_id, _, _) in payload.transcripts_for_remote_subnets.iter() {
+            // Add the finished DKG to excluded list
+            excluded.insert(dkg_id.clone());
+            // Remove already selected dealings
+            dealings.remove(dkg_id);
         }
 
         for message in payload.messages.iter() {
@@ -146,7 +136,7 @@ fn extract_from_dkg_dealing_messages<T>(
             let old_dealing = dealings
                 .entry(message.content.dkg_id.clone())
                 .or_default()
-                .insert(message.signature.signer, extractor(message));
+                .insert(message.signature.signer, message.content.dealing.clone());
 
             assert!(
                 old_dealing.is_none(),
@@ -196,7 +186,7 @@ pub(crate) fn tags_iter(
 
 #[cfg(test)]
 mod tests {
-    use super::get_dkg_dealings;
+    use super::{get_dealers_from_chain, get_dkg_dealings};
     use crate::test_utils::create_dealing;
     use crate::utils::vetkd_key_ids_for_subnet;
     use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
@@ -208,12 +198,17 @@ mod tests {
         MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
+    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
+    use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         Height, RegistryVersion,
         batch::BatchPayload,
-        consensus::{Block, BlockPayload, DataPayload, Payload, Rank, dkg::DkgDataPayload, idkg},
+        consensus::{
+            Block, BlockPayload, BlockProposal, DataPayload, Payload, Rank, dkg::DkgDataPayload,
+            idkg,
+        },
         crypto::{
             crypto_hash,
             threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet},
@@ -290,11 +285,36 @@ mod tests {
         }
     }
 
+    fn make_data_block(
+        pool: &TestConsensusPool,
+        parent: &Block,
+        dkg_payload: DkgDataPayload,
+    ) -> BlockProposal {
+        let block = Block::new(
+            crypto_hash(parent),
+            Payload::new(
+                crypto_hash,
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload::default(),
+                    dkg: dkg_payload,
+                    idkg: idkg::Payload::default(),
+                }),
+            ),
+            parent.height.increment(),
+            Rank(0),
+            parent.context.clone(),
+        );
+        BlockProposal::fake(
+            block,
+            pool.get_block_maker_by_rank(parent.height.increment(), Some(Rank(0))),
+        )
+    }
+
     #[test]
     fn test_get_dkg_dealings_included_and_excluded_by_transcript() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_id = subnet_test_id(1);
-            let nodes: Vec<_> = (0..3).map(node_test_id).collect();
+            let nodes: Vec<_> = (0..4).map(node_test_id).collect();
             let dkg_interval_len = 10;
             let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
                 pool_config,
@@ -316,55 +336,90 @@ mod tests {
             // DKG id with no transcript -> its dealings should be included.
             let dkg_id_without_transcript = dkg_id(subnet_id, NiDkgTag::LowThreshold);
 
-            // Dealings for the transcript DKG id (excluded) and for another DKG id (included).
-            let msg_excluded_1 = create_dealing(0, dkg_id_with_transcript.clone());
-            let msg_excluded_2 = create_dealing(1, dkg_id_with_transcript.clone());
-            let msg_included_1 = create_dealing(0, dkg_id_without_transcript.clone());
-            let msg_included_2 = create_dealing(1, dkg_id_without_transcript.clone());
+            // Dealings per dealer (0..4) for each DKG id.
+            let dealings_excluded: Vec<_> = (0..4)
+                .map(|i| create_dealing(i, dkg_id_with_transcript.clone()))
+                .collect();
+            let dealings_included: Vec<_> = (0..4)
+                .map(|i| create_dealing(i, dkg_id_without_transcript.clone()))
+                .collect();
 
-            let dkg_payload = DkgDataPayload {
-                start_height: tip.payload.as_ref().as_data().dkg.start_height,
-                messages: vec![
-                    msg_excluded_1.clone(),
-                    msg_excluded_2.clone(),
-                    msg_included_1.clone(),
-                    msg_included_2.clone(),
-                ],
-                transcripts_for_remote_subnets: vec![(
-                    dkg_id_with_transcript.clone(),
-                    CallbackId::from(0),
-                    Ok(dummy_transcript_for_tests()),
-                )],
-            };
+            let start_height = tip.payload.as_ref().as_data().dkg.start_height;
 
-            let child_block = Block::new(
-                crypto_hash(&tip),
-                Payload::new(crypto_hash, {
-                    BlockPayload::Data(DataPayload {
-                        batch: BatchPayload::default(),
-                        dkg: dkg_payload,
-                        idkg: idkg::Payload::default(),
-                    })
-                }),
-                tip.height.increment(),
-                Rank(0),
-                tip.context.clone(),
+            // Parent block: dealer 2 for both DKG ids.
+            let parent_proposal = make_data_block(
+                &pool,
+                &tip,
+                DkgDataPayload {
+                    start_height,
+                    messages: vec![dealings_excluded[2].clone(), dealings_included[2].clone()],
+                    transcripts_for_remote_subnets: vec![],
+                },
             );
+            pool.advance_round_with_block(&parent_proposal);
+            let parent_block = parent_proposal.content.as_ref().clone();
+
+            // Middle block: transcript for dkg_id_with_transcript, dealers 0, 1 for both DKG ids.
+            let middle_proposal = make_data_block(
+                &pool,
+                &parent_block,
+                DkgDataPayload {
+                    start_height,
+                    messages: vec![
+                        dealings_excluded[0].clone(),
+                        dealings_excluded[1].clone(),
+                        dealings_included[0].clone(),
+                        dealings_included[1].clone(),
+                    ],
+                    transcripts_for_remote_subnets: vec![(
+                        dkg_id_with_transcript.clone(),
+                        CallbackId::from(0),
+                        Ok(dummy_transcript_for_tests()),
+                    )],
+                },
+            );
+            pool.advance_round_with_block(&middle_proposal);
+            let middle_block = middle_proposal.content.as_ref().clone();
+
+            let pool_reader = PoolReader::new(&pool);
+
+            // Child block (used for get_dkg_dealings): dealer 3 for both DKG ids.
+            let child_proposal = make_data_block(
+                &pool,
+                &middle_block,
+                DkgDataPayload {
+                    start_height,
+                    messages: vec![dealings_excluded[3].clone(), dealings_included[3].clone()],
+                    transcripts_for_remote_subnets: vec![],
+                },
+            );
+            let child_block = child_proposal.content.as_ref().clone();
 
             let (dealings, excluded) = get_dkg_dealings(&pool_reader, &child_block);
 
-            // Excluded: only the DKG id that has a transcript.
+            // Excluded: only the DKG id that has a transcript (in the middle block).
             assert_eq!(excluded.len(), 1);
             assert!(excluded.contains(&dkg_id_with_transcript));
 
-            // Dealings for the transcript DKG id must not appear in the result.
+            // Dealings for the transcript DKG id must not appear in the result (neither from
+            // child, middle nor parent).
+            assert_eq!(dealings.len(), 1);
             assert!(!dealings.contains_key(&dkg_id_with_transcript));
 
-            // Dealings for the other DKG id must be included with both dealers.
+            // Dealings for the other DKG id must be included from all three blocks
+            // (dealers 0, 1 from middle; dealer 2 from parent; dealer 3 from child).
             let included = dealings.get(&dkg_id_without_transcript).unwrap();
-            assert_eq!(included.len(), 2);
-            assert!(included.contains_key(&node_test_id(0)));
-            assert!(included.contains_key(&node_test_id(1)));
+            assert_eq!(included.len(), 4);
+
+            // get_dealers_from_chain returns all dealers from the chain (no transcript exclusion).
+            let dealers = get_dealers_from_chain(&pool_reader, &child_block);
+            assert_eq!(dealers.len(), 8);
+
+            for i in 0..4 {
+                assert!(included.contains_key(&node_test_id(i)));
+                assert!(dealers.contains(&(dkg_id_with_transcript.clone(), node_test_id(i))));
+                assert!(dealers.contains(&(dkg_id_without_transcript.clone(), node_test_id(i))));
+            }
         });
     }
 

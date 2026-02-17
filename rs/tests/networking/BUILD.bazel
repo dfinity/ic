@@ -62,6 +62,16 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "canister_http_flexible_test",
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/rust_canisters/canister_test",
+    ],
+)
+
+system_test_nns(
     name = "canister_http_stress_test",
     enable_metrics = True,
     tags = ["manual"],  # not meant to be run on CI
@@ -300,6 +310,7 @@ system_test_nns(
     flaky = False,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",

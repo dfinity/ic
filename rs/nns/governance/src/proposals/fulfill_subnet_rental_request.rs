@@ -102,11 +102,10 @@ impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
 
 impl LocallyDescribableProposalAction for ValidFulfillSubnetRentalRequest {
     const TYPE_NAME: &'static str = "Subnet Rental Agreement";
-
-    const TYPE_DESCRIPTION: &'static str = "A proposal to create a rented subnet with a subnet rental \
-    agreement, based on a previously executed Subnet Rental Request proposal. The resulting subnet \
-    allows only the user of the rental agreement to create canisters, and canisters are not charged \
-    cycles for computation and storage.";
+    const TYPE_DESCRIPTION: &'static str = "Create a rented subnet with a subnet rental \
+        agreement, based on a previously executed Subnet Rental Request proposal. The resulting \
+        subnet allows only the user of the rental agreement to create canisters, and canisters \
+        are not charged cycles for computation and storage.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         SelfDescribingValue::from(self.clone())
@@ -223,8 +222,9 @@ impl ValidFulfillSubnetRentalRequest {
             1
         });
         let create_subnet_payload = Encode!(&CreateSubnetPayload {
-            // This is the main thing that distinguishes this subnet from "normal" subnets.
+            // These are the main things that distinguish this subnet from "normal" subnets.
             canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Free),
+            subnet_admins: Some(vec![self.user]),
 
             // Copy values from self.
             node_ids: self

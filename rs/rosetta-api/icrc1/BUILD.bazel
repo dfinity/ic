@@ -85,7 +85,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.2.8"
+ROSETTA_VERSION = "1.2.9"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -112,6 +112,7 @@ rust_test(
     aliases = ALIASES,
     crate = ":ic-icrc-rosetta",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["long_test"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

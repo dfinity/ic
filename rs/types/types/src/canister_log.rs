@@ -8,10 +8,9 @@ use std::collections::VecDeque;
 #[allow(non_upper_case_globals)]
 const KiB: usize = 1024;
 
-/// The minimum size of an aggregate canister log buffer.
-pub const MIN_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 /// The maximum size of an aggregate canister log buffer.
 pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+
 /// The default size of an aggregate canister log buffer.
 pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
@@ -27,13 +26,8 @@ const DELTA_LOG_SIZES_CAP: usize = 10_000;
 pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
 
 // Compile-time assertions to ensure the constants are within valid ranges.
-const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
-
-const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_DELTA_LOG_MEMORY_LIMIT);
 const _: () = assert!(MAX_DELTA_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
-
-const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_AGGREGATE_LOG_MEMORY_LIMIT);
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
@@ -271,9 +265,19 @@ impl CanisterLog {
         self.delta_log_sizes.push_back(size);
     }
 
-    /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
-    pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
-        self.delta_log_sizes.drain(..).collect()
+    /// Returns delta_log sizes.
+    pub fn delta_log_sizes(&self) -> Vec<usize> {
+        self.delta_log_sizes.iter().cloned().collect()
+    }
+
+    /// Clears the delta_log sizes.
+    pub fn clear_delta_log_sizes(&mut self) {
+        self.delta_log_sizes.clear();
+    }
+
+    /// Returns true if the canister log has delta log sizes.
+    pub fn has_delta_log_sizes(&self) -> bool {
+        !self.delta_log_sizes.is_empty()
     }
 }
 
@@ -496,8 +500,11 @@ mod tests {
                 (9, 303, b"delta #6"),
             ]))
         );
-        assert_eq!(main.take_delta_log_sizes(), vec![size_b, size_c]);
-        assert_eq!(main.take_delta_log_sizes(), Vec::<usize>::new()); // Second call returns empty.
+        assert!(main.has_delta_log_sizes());
+        assert_eq!(main.delta_log_sizes(), vec![size_b, size_c]);
+        main.clear_delta_log_sizes();
+        assert!(!main.has_delta_log_sizes());
+        assert_eq!(main.delta_log_sizes(), Vec::<usize>::new()); // Call after clear_delta_log_sizes.
         assert_eq!(main.bytes_used(), size_a + size_b + size_c);
     }
 }

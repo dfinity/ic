@@ -150,9 +150,32 @@ jobs:
             message += 'New container image: `${{ needs.ic-build-image.outputs.imageid }}`\n'
             message += 'New container tag: `${{ needs.build-image-prep.outputs.image_tag }}`'
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            // Find existing comment from this workflow
+            const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: message
-            })
+              issue_number: context.issue.number
+            });
+
+            const botComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('New container image:')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: message
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: message
+              });
+            }

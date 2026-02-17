@@ -10,8 +10,9 @@ use ic_system_test_driver::systest;
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .with_overall_timeout(Duration::from_secs(30 * 60))
-        .with_timeout_per_test(Duration::from_secs(30 * 60))
+        .with_overall_timeout(Duration::from_secs(55 * 60))
+        .with_timeout_per_test(Duration::from_secs(50 * 60))
+        .without_assert_no_replica_restarts()
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())

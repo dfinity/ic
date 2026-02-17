@@ -145,7 +145,7 @@ use crate::{
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
     retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
-    util::{block_on, create_agent},
+    util::{MetricsFetcher, block_on, create_agent},
 };
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
@@ -933,6 +933,56 @@ impl IcNodeSnapshot {
             .contains(&self.node_id)
     }
 
+    pub fn await_api_bn_healthy(&self) -> Result<()> {
+        block_on(self.await_api_bn_healthy_async())
+    }
+
+    pub async fn await_api_bn_healthy_async(&self) -> Result<()> {
+        let domain = self
+            .get_domain()
+            .ok_or_else(|| anyhow!("API BN has no domain configured"))?;
+        let api_bn_addr = SocketAddr::new(self.get_ip_addr(), 443);
+        let log = self.env.logger();
+
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .danger_accept_invalid_certs(true)
+            .resolve(&domain, api_bn_addr)
+            .build()
+            .map_err(|e| anyhow!("Failed to build HTTP client: {e}"))?;
+
+        retry_with_msg_async!(
+            format!("await_api_bn_healthy for {domain}"),
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let url = format!("https://{domain}/health");
+                info!(log, "Checking API BN health endpoint {url}");
+
+                let response = client.get(&url).send().await;
+
+                match response {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            info!(log, "API BN with domain {domain} is healthy");
+                            Ok(())
+                        } else {
+                            bail!(
+                                "API BN with domain {domain} returned non-success status: {}",
+                                resp.status()
+                            )
+                        }
+                    }
+                    Err(e) => {
+                        bail!("API BN with domain {domain} not reachable: {e}")
+                    }
+                }
+            }
+        )
+        .await
+    }
+
     pub fn effective_canister_id(&self) -> PrincipalId {
         match self.subnet_id() {
             Some(subnet_id) => {
@@ -1126,6 +1176,65 @@ impl IcNodeSnapshot {
         self.block_on_bash_script(&script).context(format!(
             "Failed to insert egress {action} rule on node {node_id} for target {target}"
         ))
+    }
+
+    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>) {
+        block_on(async {
+            let replica_metrics_fetcher =
+                MetricsFetcher::new(std::iter::once(self.clone()), metrics_to_check);
+            let replica_metrics_result = replica_metrics_fetcher.fetch::<u64>().await;
+            let replica_metrics = match replica_metrics_result {
+                Ok(replica_metrics) => replica_metrics,
+                Err(e) => {
+                    info!(
+                        self.env.logger(),
+                        "Could not fetch replica metrics for node {}: {e:?}", self.node_id
+                    );
+                    return;
+                }
+            };
+            assert!(
+                !replica_metrics.is_empty(),
+                "No error counters were found in replica metrics for node {}",
+                self.node_id
+            );
+            for (name, value) in replica_metrics {
+                assert_eq!(
+                    value[0], 0,
+                    "The metric `{name}` on node {} has non-zero value. \
+                    If the metric is allowed to be non-zero in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
+                    self.node_id,
+                );
+            }
+        });
+    }
+
+    pub fn assert_no_replica_restarts(&self) {
+        block_on(async {
+            let orchestrator_metric_name = "orchestrator_replica_process_start_attempts_total";
+            let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
+                std::iter::once(self.clone()),
+                vec![orchestrator_metric_name.to_string()],
+                9091,
+            );
+            let orchestrator_metrics_result = orchestrator_metrics_fetcher.fetch::<u64>().await;
+            let orchestrator_metrics = match orchestrator_metrics_result {
+                Ok(orchestrator_metrics) => orchestrator_metrics,
+                Err(e) => {
+                    info!(
+                        self.env.logger(),
+                        "Could not fetch orchestrator metrics for node {}: {e:?}", self.node_id
+                    );
+                    return;
+                }
+            };
+            assert_eq!(
+                orchestrator_metrics[orchestrator_metric_name][0], 1,
+                "The replica process on node {} was restarted during test. Create `SystemTestGroup` using `without_assert_no_replica_restarts` if replica restarts are expected in your test",
+                self.node_id
+            );
+        });
     }
 }
 

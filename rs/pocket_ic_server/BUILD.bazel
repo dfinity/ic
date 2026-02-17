@@ -100,6 +100,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:wat",
+    "@crate_index//:wsl",
 ]
 
 TEST_DEPENDENCIES = [
@@ -183,6 +184,9 @@ HEAD_NNS_CANISTER_DATA = [
 ]
 
 HEAD_NNS_CANISTER_ENV = {
+    # Head build uses current canister interfaces (e.g. unified ICP Index init/upgrade args).
+    # TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
+    "POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS": "0",
     "REGISTRY_CANISTER_WASM_PATH": "$(location //rs/registry/canister:registry-canister)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location //rs/nns/cmc:cycles-minting-canister)",
     "ICP_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
@@ -219,6 +223,9 @@ MAINNET_NNS_CANISTER_DATA = [
 ]
 
 MAINNET_NNS_CANISTER_ENV = {
+    # Mainnet embeds older canister WASMs; use legacy ICP Index init args until mainnet is updated (see DEFI-2617).
+    # TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
+    "POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS": "1",
     "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:registry.wasm.gz)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:cycles-minting.wasm.gz)",
     "ICP_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:ledger.wasm.gz)",
@@ -276,26 +283,16 @@ MAINNET_NNS_CANISTER_ENV = {
     ]
 ]
 
-# The latest registry version to bump the hard-coded registry version can be determined using:
-# `bazel run //rs/registry/admin:ic-admin -- get-registry-version`
-genrule(
-    name = "mainnet_routing_table",
-    testonly = True,
-    srcs = [],
-    outs = ["mainnet_routing_table.json"],
-    cmd = "$(location //rs/registry/admin:ic-admin) get-routing-table --json --registry-version 55267 > $@",
-    tags = ["requires-network"],
-    tools = ["//rs/registry/admin:ic-admin"],
-)
-
 [
     rust_binary(
         name = "pocket-ic-server" + name_suffix,
         testonly = True,
         srcs = ["src/main.rs"],
-        compile_data = [":mainnet_routing_table"],
+        compile_data = ["//:mainnet-routing-table.json"],
         proc_macro_deps = MACRO_DEPENDENCIES,
-        rustc_env = {"MAINNET_ROUTING_TABLE": "$(location :mainnet_routing_table)"},
+        rustc_env = {
+            "MAINNET_ROUTING_TABLE": "$(location //:mainnet-routing-table.json)",
+        },
         # TODO: restrict the visibility
         visibility = ["//visibility:public"],
         deps = LIB_DEPENDENCIES + [

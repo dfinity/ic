@@ -834,6 +834,23 @@ impl PublicKey {
         Ok(Self { key })
     }
 
+    /// Deserialize a public key stored in DER SubjectPublicKeyInfo format
+    ///
+    /// The public key must be in uncompressed format. The originally provided
+    /// input is compared with the re-encoded DER to prevent using non-canonical
+    /// encodings that might be accepted otherwise
+    pub fn deserialize_canonical_der(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
+        let pk = Self::deserialize_der(bytes)?;
+
+        if pk.serialize_der() != bytes {
+            return Err(KeyDecodingError::InvalidKeyEncoding(
+                "Non-canonical encoding".to_string(),
+            ));
+        }
+
+        Ok(pk)
+    }
+
     /// Deserialize a public key stored in PEM SubjectPublicKeyInfo format
     pub fn deserialize_pem(pem: &str) -> Result<Self, KeyDecodingError> {
         let der =

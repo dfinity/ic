@@ -1,11 +1,12 @@
 use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_state_manager::{
-    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager, StateReader,
+    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateHashMetadata,
+    StateManager, StateReader,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
-    consensus::certification::Certification, state_manager::StateManagerResult,
+    CryptoHashOfState, Height, batch::BatchSummary, consensus::certification::Certification,
+    state_manager::StateManagerResult,
 };
 use mockall::*;
 use std::sync::Arc;
@@ -49,7 +50,7 @@ mock! {
 
         fn fetch_state(&self, height: Height, root_hash: CryptoHashOfState, cup_interval_length: Height);
 
-        fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)>;
+        fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
 
         fn deliver_state_certification(&self, certification: Certification);
 
@@ -62,7 +63,6 @@ mock! {
         fn commit_and_certify(
             &self,
             state: ReplicatedState,
-            height: Height,
             scope: CertificationScope,
             batch_summary: Option<BatchSummary>,
         );
