@@ -100,3 +100,55 @@ pub fn make_logger() -> Logger {
 pub fn write_public_key_to_file(der_bytes: &[u8], path: &Path) -> RecoveryResult<()> {
     write_bytes(path, public_key_der_to_pem(der_bytes))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_node_id_and_pub_key_from_str() {
+        let valid_node_id_str = "igjkj-job4m-om7ug-cmzok-admxb-ag2xv-xqlgk-2bxsr-ro2mx-r5i7q-hqe";
+        let invalid_node_id_str = "igjkj-job4m";
+
+        let valid_pub_key_str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org";
+
+        let valid_input = format!("{}:{}", valid_node_id_str, valid_pub_key_str);
+        assert_eq!(
+            node_id_and_pub_key_from_str(&valid_input).unwrap(),
+            (
+                node_id_from_str(valid_node_id_str).unwrap(),
+                valid_pub_key_str.to_string()
+            )
+        );
+
+        let valid_input = format!("{}::{}", valid_node_id_str, valid_pub_key_str);
+        assert_eq!(
+            node_id_and_pub_key_from_str(&valid_input).unwrap(),
+            (
+                node_id_from_str(valid_node_id_str).unwrap(),
+                format!(":{}", valid_pub_key_str)
+            )
+        );
+
+        let valid_input = format!("{}:{}:", valid_node_id_str, valid_pub_key_str);
+        assert_eq!(
+            node_id_and_pub_key_from_str(&valid_input).unwrap(),
+            (
+                node_id_from_str(valid_node_id_str).unwrap(),
+                format!("{}:", valid_pub_key_str)
+            )
+        );
+
+        let invalid_input = format!("");
+        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+
+        let invalid_input = format!("{}:{}", invalid_node_id_str, valid_pub_key_str);
+        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+
+        let invalid_input = format!("{}", valid_node_id_str);
+        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+
+        let invalid_input = format!("{}", valid_pub_key_str);
+        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+    }
+}
