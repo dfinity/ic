@@ -479,81 +479,77 @@ jobs:
   build-ic:
     needs: [config]
     name: Build IC
-    runs-on: *dind-large-setup
-    container: *container-setup
+    runs-on: namespace-profile-ubuntu-24-04
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
     timeout-minutes: 90
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - *checkout
-      - name: "Node Name"
-        run: |
-          echo "::notice::Node Name: ${NODE_NAME}"
       - name: Run Build IC
-        uses: ./.github/actions/bazel
-        with:
-          execlogs-artifact-name: execlogs-build-ic
-          run: |
-            set -euo pipefail
+        shell: bash
+        run: |
+          set -euo pipefail
 
-            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
-            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
-            BASE_SHA='${{ github.event.pull_request.base.sha }}'
-            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+          RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
+          DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
+          BASE_SHA='${{ github.event.pull_request.base.sha }}'
+          HEAD_SHA='${{ github.event.pull_request.head.sha }}'
 
-            cd "$CI_PROJECT_DIR"
+          cd "$CI_PROJECT_DIR"
 
-            # run full release build on "protected" branches
-            if [[ "$RELEASE_BUILD" == 'true' ]]; then
-                ci/container/build-ic.sh -i -c -b
-                exit 0
-            fi
+          # run full release build on "protected" branches
+          if [[ "$RELEASE_BUILD" == 'true' ]]; then
+              ci/container/build-ic.sh -i -c -b
+              exit 0
+          fi
 
-            # run full non-release build if not asked to diff
-            if ! [ "$DIFF_ONLY" == 'true' ]; then
-                ci/container/build-ic.sh -i -c -b --no-release
-                exit 0
-            fi
+          # run full non-release build if not asked to diff
+          if ! [ "$DIFF_ONLY" == 'true' ]; then
+              ci/container/build-ic.sh -i -c -b --no-release
+              exit 0
+          fi
 
-            # otherwise, infer targets to build
-            target_pattern_file=$(mktemp)
-            trap "rm $target_pattern_file" INT TERM EXIT
-            targets_args=()
-            commit_range_arg=""
-            if [[ "$DIFF_ONLY" == 'true' ]]; then
-              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
-            fi
-            ci/scripts/targets.py build "${targets_args[@]}" >"$target_pattern_file"
-            num_targets=$(wc <"$target_pattern_file" -l)
-            echo "Considering $num_targets targets ..."
-            # the target list can get quite big, so we wrap it in details/summary
-            {
-              echo '<details><summary>Considered '"$num_targets"' targets</summary>';
-              echo
-              echo '```'
-              cat "$target_pattern_file"
-              echo '```'
-              echo
-              echo '</details>';
-            } >>"$GITHUB_STEP_SUMMARY"
+          # otherwise, infer targets to build
+          target_pattern_file=$(mktemp)
+          trap "rm $target_pattern_file" INT TERM EXIT
+          targets_args=()
+          commit_range_arg=""
+          if [[ "$DIFF_ONLY" == 'true' ]]; then
+            targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
+          fi
+          ci/scripts/targets.py build "${targets_args[@]}" >"$target_pattern_file"
+          num_targets=$(wc <"$target_pattern_file" -l)
+          echo "Considering $num_targets targets ..."
+          # the target list can get quite big, so we wrap it in details/summary
+          {
+            echo '<details><summary>Considered '"$num_targets"' targets</summary>';
+            echo
+            echo '```'
+            cat "$target_pattern_file"
+            echo '```'
+            echo
+            echo '</details>';
+          } >>"$GITHUB_STEP_SUMMARY"
 
-            ARGS=()
+          ARGS=()
 
-            if grep -q '^//ic-os' <"$target_pattern_file"; then
-                ARGS+=(-i)
-            fi
-            if grep -q '^//publish/canisters' <"$target_pattern_file"; then
-                ARGS+=(-c)
-            fi
-            if grep -q '^//publish/binaries' <"$target_pattern_file"; then
-                ARGS+=(-b)
-            fi
+          if grep -q '^//ic-os' <"$target_pattern_file"; then
+              ARGS+=(-i)
+          fi
+          if grep -q '^//publish/canisters' <"$target_pattern_file"; then
+              ARGS+=(-c)
+          fi
+          if grep -q '^//publish/binaries' <"$target_pattern_file"; then
+              ARGS+=(-b)
+          fi
 
-            if [[ ${#ARGS[@]} -eq 0 ]]; then
-                echo "No changes that require building IC-OS, binaries or canisters."
-                exit 0
-            fi
+          if [[ ${#ARGS[@]} -eq 0 ]]; then
+              echo "No changes that require building IC-OS, binaries or canisters."
+              exit 0
+          fi
 
-            ci/container/build-ic.sh "${ARGS[@]}" --no-release
+          ci/container/build-ic.sh "${ARGS[@]}" --no-release
 
   build-determinism:
     name: Build Determinism
