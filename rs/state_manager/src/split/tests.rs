@@ -352,6 +352,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     );
 
     let mut state = ReplicatedState::new(SUBNET_A, SubnetType::Application);
+    let cost_schedule = state.get_own_cost_schedule();
     state.put_canister_state(new_canister_state_with_execution(
         CANISTER_1,
         CANISTER_0.get(),
@@ -409,6 +410,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
                 .build()
                 .into(),
             &mut (10 << 30),
+            cost_schedule,
         )
         .unwrap();
 

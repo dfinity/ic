@@ -186,7 +186,6 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -276,7 +275,6 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
 
@@ -379,7 +377,6 @@ fn dts_update_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
 
@@ -476,7 +473,6 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
 
@@ -747,9 +743,11 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
 
         // Change the cycles balance of the clean canister.
         let balance = test.canister_state(a_id).system_state.balance();
-        test.canister_state_mut(a_id)
-            .system_state
-            .add_cycles(balance + Cycles::new(1), CyclesUseCase::NonConsumed);
+        test.canister_state_mut(a_id).system_state.add_cycles(
+            balance + Cycles::new(1),
+            CyclesUseCase::NonConsumed,
+            CanisterCyclesCostSchedule::default(),
+        );
 
         test.execute_slice(a_id);
 

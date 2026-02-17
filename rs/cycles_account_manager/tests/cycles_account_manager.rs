@@ -31,22 +31,6 @@ use std::{convert::TryFrom, time::Duration};
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
-fn xnet_call_total_fee_free() {
-    let cost_schedule = CanisterCyclesCostSchedule::Free;
-    let cam = CyclesAccountManagerBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .build();
-    assert_eq!(
-        Cycles::new(0),
-        cam.xnet_call_total_fee(
-            NumBytes::new(9999),
-            WasmExecutionMode::Wasm32,
-            cost_schedule
-        )
-    );
-}
-
-#[test]
 fn test_can_charge_application_subnets() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     with_test_replica_logger(|log| {
@@ -83,21 +67,18 @@ fn test_can_charge_application_subnets() {
                     );
 
                     let memory = memory_allocation.allocated_bytes(canister.memory_usage());
-                    let expected_fee = cycles_account_manager.compute_allocation_cost(
-                        compute_allocation,
-                        duration,
-                        subnet_size,
-                        cost_schedule,
-                    ) + cycles_account_manager.memory_cost(
-                        memory,
-                        duration,
-                        subnet_size,
+                    let expected_fee =
+                        cycles_account_manager.compute_allocation_cost(
+                            compute_allocation,
+                            duration,
+                            subnet_size,
+                        ) + cycles_account_manager.memory_cost(memory, duration, subnet_size);
+                    let initial_cycles = expected_fee;
+                    canister.system_state.add_cycles(
+                        initial_cycles,
+                        CyclesUseCase::NonConsumed,
                         cost_schedule,
                     );
-                    let initial_cycles = expected_fee;
-                    canister
-                        .system_state
-                        .add_cycles(initial_cycles, CyclesUseCase::NonConsumed);
                     assert_eq!(canister.system_state.balance(), initial_cycles);
                     cycles_account_manager
                         .charge_canister_for_resource_allocation_and_usage(
@@ -373,42 +354,30 @@ fn verify_no_cycles_charged_for_message_execution_on_free_schedule() {
 
 #[test]
 fn ingress_induction_cost_valid_subnet_message() {
-    for cost_schedule in [
-        CanisterCyclesCostSchedule::Normal,
-        CanisterCyclesCostSchedule::Free,
-    ] {
-        let msg: SignedIngress = SignedIngressBuilder::new()
-            .sender(user_test_id(0))
-            .canister_id(IC_00)
-            .method_name("start_canister")
-            .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
-            .build();
-        let signed_ingress_content = &msg.content();
-        let effective_canister_id = extract_effective_canister_id(signed_ingress_content).unwrap();
-        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let num_bytes = msg.binary().len();
+    let msg: SignedIngress = SignedIngressBuilder::new()
+        .sender(user_test_id(0))
+        .canister_id(IC_00)
+        .method_name("start_canister")
+        .method_payload(CanisterIdRecord::from(canister_test_id(0)).encode())
+        .build();
+    let signed_ingress_content = &msg.content();
+    let effective_canister_id = extract_effective_canister_id(signed_ingress_content).unwrap();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let num_bytes = msg.binary().len();
 
-        let cost = cycles_account_manager
-            .ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-            + cycles_account_manager
-                .ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                * num_bytes;
-        if let CanisterCyclesCostSchedule::Free = cost_schedule {
-            assert_eq!(cost, Cycles::new(0));
+    let cost = cycles_account_manager.ingress_message_received_fee(SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager.ingress_byte_received_fee(SMALL_APP_SUBNET_MAX_SIZE) * num_bytes;
+    assert_eq!(
+        cycles_account_manager.ingress_induction_cost(
+            &msg,
+            effective_canister_id,
+            SMALL_APP_SUBNET_MAX_SIZE,
+        ),
+        IngressInductionCost::Fee {
+            payer: canister_test_id(0),
+            cost
         }
-        assert_eq!(
-            cycles_account_manager.ingress_induction_cost(
-                &msg,
-                effective_canister_id,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                cost_schedule,
-            ),
-            IngressInductionCost::Fee {
-                payer: canister_test_id(0),
-                cost
-            }
-        );
-    }
+    );
 }
 
 #[test]
@@ -525,12 +494,7 @@ fn charge_canister_for_memory_usage() {
         let memory_usage = MEMORY_ALLOCATION + message_memory_usage.total();
         let cycles_burned = INITIAL_BALANCE - canister.system_state.balance();
         assert_eq!(
-            cycles_account_manager.memory_cost(
-                memory_usage,
-                HOUR,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                cost_schedule
-            ),
+            cycles_account_manager.memory_cost(memory_usage, HOUR, SMALL_APP_SUBNET_MAX_SIZE),
             cycles_burned
         )
     })
@@ -584,18 +548,8 @@ fn do_not_charge_canister_for_memory_usage_free_schedule() {
             )
             .unwrap();
 
-        let memory_usage = MEMORY_ALLOCATION + message_memory_usage.total();
         let cycles_burned = INITIAL_BALANCE - canister.system_state.balance();
         assert_eq!(cycles_burned, Cycles::new(0));
-        assert_eq!(
-            cycles_account_manager.memory_cost(
-                memory_usage,
-                HOUR,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                cost_schedule
-            ),
-            cycles_burned
-        )
     })
 }
 
@@ -642,14 +596,6 @@ fn do_not_charge_canister_for_compute_allocation_free_schedule() {
             )
             .unwrap();
 
-        let expected_fee = cycles_account_manager.compute_allocation_cost(
-            compute_allocation,
-            HOUR,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            cost_schedule,
-        );
-        assert_eq!(expected_fee, Cycles::zero());
-
         let cycles_burned = canister.system_state.balance();
         assert_eq!(cycles_burned, Cycles::new(0));
     })
@@ -658,6 +604,7 @@ fn do_not_charge_canister_for_compute_allocation_free_schedule() {
 #[test]
 fn cycles_withdraw_no_threshold() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
 
     // Create an account with u128::MAX
     let mut cycles_balance_expected = Cycles::from(u128::MAX);
@@ -676,6 +623,7 @@ fn cycles_withdraw_no_threshold() {
                 Cycles::zero(),
                 threshold,
                 false,
+                cost_schedule,
             )
             .is_ok()
     );
@@ -692,7 +640,8 @@ fn cycles_withdraw_no_threshold() {
                 &mut balance,
                 amount,
                 threshold,
-                false
+                false,
+                cost_schedule,
             )
             .is_ok()
     );
@@ -706,7 +655,8 @@ fn cycles_withdraw_no_threshold() {
                 &mut balance,
                 amount,
                 threshold,
-                false
+                false,
+                cost_schedule,
             )
             .is_ok()
     );
@@ -721,7 +671,8 @@ fn cycles_withdraw_no_threshold() {
                 &mut balance,
                 amount,
                 threshold,
-                false
+                false,
+                cost_schedule,
             )
             .is_ok()
     );
@@ -735,7 +686,8 @@ fn cycles_withdraw_no_threshold() {
                 &mut balance,
                 amount,
                 threshold,
-                false
+                false,
+                cost_schedule,
             )
             .is_err()
     );
@@ -1177,7 +1129,11 @@ fn consume_cycles_for_memory_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.add_cycles(
+        Cycles::new(4_000_000),
+        CyclesUseCase::NonConsumed,
+        cost_schedule,
+    );
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1201,7 +1157,11 @@ fn consume_cycles_for_compute_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.add_cycles(
+        Cycles::new(4_000_000),
+        CyclesUseCase::NonConsumed,
+        cost_schedule,
+    );
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1225,7 +1185,11 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.add_cycles(
+        Cycles::new(4_000_000),
+        CyclesUseCase::NonConsumed,
+        cost_schedule,
+    );
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,
@@ -1249,7 +1213,11 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(Cycles::zero())
         .build();
-    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.add_cycles(
+        Cycles::new(4_000_000),
+        CyclesUseCase::NonConsumed,
+        cost_schedule,
+    );
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
     cam.consume_with_threshold(
         &mut system_state,

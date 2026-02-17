@@ -27,7 +27,7 @@ use ic_test_utilities_metrics::{
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_types::NumBytes;
-use ic_types::batch::ConsensusResponse;
+use ic_types::batch::{CanisterCyclesCostSchedule, ConsensusResponse};
 use ic_types::messages::{
     CallbackId, Payload, RejectContext, StopCanisterCallId, StopCanisterContext,
 };
@@ -1070,15 +1070,6 @@ fn http_outcalls_free() {
         .canister_http_request_contexts;
     assert_eq!(canister_http_request_contexts.len(), 1);
 
-    let http_request_context = canister_http_request_contexts
-        .get(&CallbackId::from(0))
-        .unwrap();
-
-    let fee = test.http_request_fee(
-        http_request_context.variable_parts_size(),
-        Some(NumBytes::from(response_size_limit)),
-    );
-    assert_eq!(fee, Cycles::new(0));
     let cycles_after = test.canister_state(caller_canister).system_state.balance();
     assert_eq!(cycles_before, cycles_after);
 }
@@ -1099,7 +1090,11 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
     let removed_cycles = Cycles::from(1000u128);
     test.canister_state_mut(canister_id)
         .system_state
-        .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
+        .remove_cycles(
+            removed_cycles,
+            CyclesUseCase::Instructions,
+            CanisterCyclesCostSchedule::Normal,
+        );
 
     test.scheduler().state_metrics.observe(
         test.scheduler().own_subnet_id,
@@ -1133,7 +1128,11 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
     let removed_cycles = Cycles::from(1000u128);
     test.canister_state_mut(canister_id)
         .system_state
-        .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
+        .remove_cycles(
+            removed_cycles,
+            CyclesUseCase::Instructions,
+            CanisterCyclesCostSchedule::Normal,
+        );
 
     test.inject_call_to_ic00(
         Method::DeleteCanister,

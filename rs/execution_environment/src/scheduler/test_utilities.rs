@@ -248,7 +248,6 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
-            self.state.as_ref().unwrap().get_own_cost_schedule(),
             WasmExecutionMode::Wasm32,
         )
     }
@@ -683,17 +682,15 @@ impl SchedulerTest {
     }
 
     pub fn ecdsa_signature_fee(&self) -> Cycles {
-        self.scheduler.cycles_account_manager.ecdsa_signature_fee(
-            self.registry_settings.subnet_size,
-            self.state().get_own_cost_schedule(),
-        )
+        self.scheduler
+            .cycles_account_manager
+            .ecdsa_signature_fee(self.registry_settings.subnet_size)
     }
 
     pub fn schnorr_signature_fee(&self) -> Cycles {
-        self.scheduler.cycles_account_manager.schnorr_signature_fee(
-            self.registry_settings.subnet_size,
-            self.state().get_own_cost_schedule(),
-        )
+        self.scheduler
+            .cycles_account_manager
+            .schnorr_signature_fee(self.registry_settings.subnet_size)
     }
 
     pub fn http_request_fee(
@@ -705,17 +702,13 @@ impl SchedulerTest {
             request_size,
             response_size_limit,
             self.subnet_size(),
-            self.state.as_ref().unwrap().get_own_cost_schedule(),
         )
     }
 
     pub fn memory_cost(&self, bytes: NumBytes, duration: Duration) -> Cycles {
-        self.scheduler.cycles_account_manager.memory_cost(
-            bytes,
-            duration,
-            self.subnet_size(),
-            self.state.as_ref().unwrap().get_own_cost_schedule(),
-        )
+        self.scheduler
+            .cycles_account_manager
+            .memory_cost(bytes, duration, self.subnet_size())
     }
 
     pub(crate) fn deliver_pre_signatures(
@@ -1446,12 +1439,11 @@ impl TestWasmExecutorCore {
             .cycles_account_manager
             .prepayment_for_response_execution(
                 self.subnet_size,
-                system_state.cost_schedule(),
                 WasmExecutionMode::from_is_wasm64(system_state.is_wasm64_execution),
             );
         let prepayment_for_response_transmission = self
             .cycles_account_manager
-            .prepayment_for_response_transmission(self.subnet_size, system_state.cost_schedule());
+            .prepayment_for_response_transmission(self.subnet_size);
         let deadline = NO_DEADLINE;
         let callback = system_state
             .register_callback(Callback {

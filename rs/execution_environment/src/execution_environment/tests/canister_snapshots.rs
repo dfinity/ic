@@ -31,7 +31,6 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
     CanisterId, NumInstructions, SnapshotId,
-    batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
@@ -1742,11 +1741,9 @@ fn take_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Take a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().management_canister_cost(
-        instructions,
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(instructions, test.subnet_size());
 
     // Take a snapshot for the canister.
     let args: TakeCanisterSnapshotArgs =
@@ -1819,11 +1816,9 @@ fn load_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Load a snapshot of the canister will decrease the balance.
-    let expected_charge = test.cycles_account_manager().management_canister_cost(
-        instructions,
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(instructions, test.subnet_size());
 
     // Load an existing snapshot will decrease the balance.
     let args: LoadCanisterSnapshotArgs =

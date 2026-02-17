@@ -42,39 +42,15 @@ fn test_scale_cost() {
     let cam = create_cycles_account_manager(reference_subnet_size);
 
     let cost = Cycles::new(13_000);
-    assert_eq!(
-        cam.scale_cost(cost, 0, CanisterCyclesCostSchedule::Normal),
-        Cycles::new(0)
-    );
-    assert_eq!(
-        cam.scale_cost(cost, 1, CanisterCyclesCostSchedule::Normal),
-        Cycles::new(1_000)
-    );
-    assert_eq!(
-        cam.scale_cost(cost, 6, CanisterCyclesCostSchedule::Normal),
-        Cycles::new(6_000)
-    );
-    assert_eq!(
-        cam.scale_cost(cost, 13, CanisterCyclesCostSchedule::Normal),
-        Cycles::new(13_000)
-    );
-    assert_eq!(
-        cam.scale_cost(cost, 26, CanisterCyclesCostSchedule::Normal),
-        Cycles::new(26_000)
-    );
-
-    assert_eq!(
-        cam.scale_cost(cost, 26, CanisterCyclesCostSchedule::Free),
-        Cycles::new(0)
-    );
+    assert_eq!(cam.scale_cost(cost, 0), Cycles::new(0));
+    assert_eq!(cam.scale_cost(cost, 1), Cycles::new(1_000));
+    assert_eq!(cam.scale_cost(cost, 6), Cycles::new(6_000));
+    assert_eq!(cam.scale_cost(cost, 13), Cycles::new(13_000));
+    assert_eq!(cam.scale_cost(cost, 26), Cycles::new(26_000));
 
     // Check overflow case.
     assert_eq!(
-        cam.scale_cost(
-            Cycles::new(u128::MAX),
-            1_000_000,
-            CanisterCyclesCostSchedule::Normal
-        ),
+        cam.scale_cost(Cycles::new(u128::MAX), 1_000_000),
         Cycles::new(u128::MAX) / reference_subnet_size
     );
 }
@@ -106,23 +82,14 @@ fn http_requests_fee_scale() {
 
     // Check the fee for a 13-node subnet.
     assert_eq!(
-        cycles_account_manager.http_request_fee(
-            request_size,
-            None,
-            reference_subnet_size as usize,
-            CanisterCyclesCostSchedule::Normal,
-        ),
+        cycles_account_manager
+            .http_request_fee(request_size, None, reference_subnet_size as usize,),
         Cycles::from(1_603_786_800u64) * reference_subnet_size
     );
 
     // Check the fee for a 34-node subnet.
     assert_eq!(
-        cycles_account_manager.http_request_fee(
-            request_size,
-            None,
-            subnet_size as usize,
-            CanisterCyclesCostSchedule::Normal,
-        ),
+        cycles_account_manager.http_request_fee(request_size, None, subnet_size as usize,),
         Cycles::from(1_605_046_800u64) * subnet_size
     );
 }

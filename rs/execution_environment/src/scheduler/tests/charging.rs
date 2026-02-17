@@ -10,6 +10,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use ic_types_cycles::CyclesUseCase;
@@ -212,7 +213,11 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
-        .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
+        .add_cycles(
+            expected_charge,
+            CyclesUseCase::NonConsumed,
+            CanisterCyclesCostSchedule::Normal,
+        );
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs =
@@ -330,7 +335,11 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
-        .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
+        .add_cycles(
+            expected_charge,
+            CyclesUseCase::NonConsumed,
+            CanisterCyclesCostSchedule::Normal,
+        );
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs =

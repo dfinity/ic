@@ -97,7 +97,6 @@ fn dts_resume_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE,
                 ),
         );
@@ -147,7 +146,6 @@ fn dts_abort_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE
                 ),
         );
@@ -171,7 +169,6 @@ fn dts_abort_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE
                 ),
         );
@@ -428,7 +425,6 @@ fn execute_install_code_message_dts_helper(
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(1_000_000),
                     test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE
                 ),
         );
@@ -2319,7 +2315,6 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
@@ -2396,13 +2391,11 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     let fixed_execution_overhead = test.cycles_account_manager().execution_cost(
         NumInstructions::from(0),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     ) - fixed_execution_overhead
         + charge_for_regular_install;

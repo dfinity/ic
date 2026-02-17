@@ -3148,22 +3148,18 @@ fn ic0_call_cycles_add_deducts_cycles() {
     assert_eq!(IngressState::Processing, ingress_state);
     assert_eq!(1, test.xnet_messages().len());
     let mgr = test.cycles_account_manager();
-    let messaging_fee = mgr
-        .xnet_call_performed_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+    let messaging_fee = mgr.xnet_call_performed_fee(test.subnet_size())
         + mgr.xnet_call_bytes_transmitted_fee(
             test.xnet_messages()[0].payload_size_bytes(),
             test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
         )
         + mgr.xnet_call_bytes_transmitted_fee(
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
         )
         + mgr.execution_cost(
             MAX_NUM_INSTRUCTIONS,
             test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(canister_id),
         );
     let transferred_cycles = Cycles::new(10_000_000_000);
@@ -6417,7 +6413,6 @@ fn dts_abort_works_in_update_call() {
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
                 test.canister_wasm_execution_mode(canister_id)
             ),
     );
@@ -6451,7 +6446,6 @@ fn dts_abort_works_in_update_call() {
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
                 test.canister_wasm_execution_mode(canister_id)
             ),
     );
@@ -8894,7 +8888,6 @@ fn invoke_cost_call() {
     let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
         (method_name.len() as u64 + argument.len() as u64).into(),
         WasmExecutionMode::Wasm32,
-        CanisterCyclesCostSchedule::Normal,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
@@ -8916,7 +8909,7 @@ fn invoke_cost_create_canister() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .canister_creation_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
+        .canister_creation_fee(subnet_size);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
@@ -8941,7 +8934,6 @@ fn invoke_cost_http_request() {
         request_size.into(),
         Some(max_res_bytes.into()),
         subnet_size,
-        CanisterCyclesCostSchedule::Normal,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
@@ -8990,7 +8982,6 @@ fn invoke_cost_http_request_v2() {
         transform_instructions.into(),
         transformed_response_bytes.into(),
         subnet_size,
-        CanisterCyclesCostSchedule::Normal,
     );
     let bytes = get_reply(res);
     let actual_cost = Cycles::from(&bytes);
@@ -9058,7 +9049,7 @@ fn invoke_cost_sign_with_ecdsa() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .ecdsa_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
+        .ecdsa_signature_fee(subnet_size);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
@@ -9138,7 +9129,7 @@ fn invoke_cost_sign_with_schnorr() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .schnorr_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
+        .schnorr_signature_fee(subnet_size);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
@@ -9216,9 +9207,7 @@ fn invoke_cost_vetkd_derive_key() {
         .reply()
         .build();
     let res = test.ingress(canister_id, "update", payload);
-    let expected_cost = test
-        .cycles_account_manager()
-        .vetkd_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
+    let expected_cost = test.cycles_account_manager().vetkd_fee(subnet_size);
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
