@@ -3186,17 +3186,17 @@ mod tests {
                     .collect();
                 idkg_pool.apply(change_set);
 
+                // cannot aggregate empty shares
+                let result =
+                    pre_signer.crypto_aggregate_dealing_support(&params, &[], idkg_pool.stats());
+                assert_matches!(result, None);
+
                 // there are no support shares, no transcript should be completed
                 let change_set = pre_signer.build_transcripts(&idkg_pool, &block_reader);
                 assert!(
                     change_set.is_empty(),
                     "expected empty change set, got {change_set:?}"
                 );
-
-                // cannot aggregate empty shares
-                let result =
-                    pre_signer.crypto_aggregate_dealing_support(&params, &[], idkg_pool.stats());
-                assert_matches!(result, None);
 
                 // add support
                 let change_set = supports
