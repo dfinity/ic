@@ -7,5 +7,5 @@ where
     use serde::Deserialize;
 
     let s: Option<serde_bytes::ByteBuf> = Option::deserialize(deserializer)?;
-    Ok(s.map(|b| b.to_vec()))
+    Ok(s.map(|b| b.into_vec()))
 }

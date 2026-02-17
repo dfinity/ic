@@ -39,7 +39,7 @@ use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterMetadataRequest, CanisterStatusType, ClearChunkStoreArgs,
     CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00,
+    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, HttpMethod, IC_00,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
@@ -1031,32 +1031,42 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                             },
                             Ok(args) => {
-                                match CanisterHttpRequestContext::generate_from_args(
-                                    state.time(),
-                                    request.as_ref(),
-                                    args,
-                                    &registry_settings.node_ids,
-                                    registry_settings.subnet_size,
-                                    rng,
-                                ) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err.into()),
+                                if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE) {
+                                    ExecuteSubnetMessageResult::Finished {
+                                        response: Err(UserError::new(
+                                            ErrorCode::CanisterRejectedMessage,
+                                            "PUT and DELETE are not supported yet".to_string(),
+                                        )),
                                         refund: msg.take_cycles(),
-                                    },
-                                    Ok(canister_http_request_context) => match self
-                                        .try_add_http_context_to_replicated_state(
-                                            canister_http_request_context,
-                                            &mut state,
-                                            request.as_ref(),
-                                            registry_settings,
-                                            since,
-                                        ) {
+                                    }
+                                } else {
+                                    match CanisterHttpRequestContext::generate_from_args(
+                                        state.time(),
+                                        request.as_ref(),
+                                        args,
+                                        &registry_settings.node_ids,
+                                        registry_settings.subnet_size,
+                                        rng,
+                                    ) {
                                         Err(err) => ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
+                                            response: Err(err.into()),
                                             refund: msg.take_cycles(),
                                         },
-                                        Ok(()) => ExecuteSubnetMessageResult::Processing,
-                                    },
+                                        Ok(canister_http_request_context) => match self
+                                            .try_add_http_context_to_replicated_state(
+                                                canister_http_request_context,
+                                                &mut state,
+                                                request.as_ref(),
+                                                registry_settings,
+                                                since,
+                                            ) {
+                                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                                response: Err(err),
+                                                refund: msg.take_cycles(),
+                                            },
+                                            Ok(()) => ExecuteSubnetMessageResult::Processing,
+                                        },
+                                    }
                                 }
                             }
                         }
@@ -1926,6 +1936,13 @@ impl ExecutionEnvironment {
             state.metadata.subnet_call_context_manager.push_context(
                 SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
             );
+            if let Some(canister_stats) = state.canister_state_mut(&request.sender) {
+                canister_stats
+                    .system_state
+                    .canister_metrics_mut()
+                    .load_metrics_mut()
+                    .observe_http_outcall();
+            }
             self.metrics.observe_message_with_label(
                 &request.method_name,
                 since.elapsed().as_secs_f64(),
@@ -3441,10 +3458,10 @@ impl ExecutionEnvironment {
             }
         }
 
-        let topology = &state.metadata.network_topology;
         // If the request isn't from the NNS, then we need to charge for it.
-        let source_subnet = topology.route(request.sender.get());
-        if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
+        let source_subnet = state.metadata.network_topology.route(request.sender.get());
+        let nns_subnet_id = state.metadata.network_topology.nns_subnet_id;
+        if source_subnet != Some(nns_subnet_id) {
             let cost_schedule = state.get_own_cost_schedule();
             let signature_fee = self.calculate_signature_fee(&args, subnet_size, cost_schedule);
             if request.payment < signature_fee {
@@ -3477,7 +3494,9 @@ impl ExecutionEnvironment {
         let threshold_key = args.key_id();
 
         // Check if the key is enabled.
-        if !topology
+        if !state
+            .metadata
+            .network_topology
             .chain_key_enabled_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
         {
@@ -4453,7 +4472,7 @@ fn execute_canister_input(
     input: CanisterMessageOrTask,
     prepaid_execution_cycles: Option<Cycles>,
     exec_env: &ExecutionEnvironment,
-    canister: CanisterState,
+    mut canister: CanisterState,
     instruction_limits: InstructionLimits,
     max_instructions_per_query_message: NumInstructions,
     network_topology: Arc<NetworkTopology>,
@@ -4463,6 +4482,36 @@ fn execute_canister_input(
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
     let info = input.to_string();
+    let load_metrics = &mut canister
+        .system_state
+        .canister_metrics_mut()
+        .load_metrics_mut();
+    match &input {
+        CanisterMessageOrTask::Message(CanisterMessage::Ingress(_)) => {
+            load_metrics.observe_ingress_message();
+        }
+        CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
+            if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) {
+                load_metrics.observe_local_subnet_message();
+            } else {
+                load_metrics.observe_remote_subnet_message();
+            }
+        }
+        CanisterMessageOrTask::Message(CanisterMessage::Response {
+            response,
+            callback: _,
+        }) => {
+            if network_topology.route(response.respondent.get()) == Some(exec_env.own_subnet_id) {
+                load_metrics.observe_local_subnet_message();
+            } else {
+                load_metrics.observe_remote_subnet_message();
+            }
+        }
+        CanisterMessageOrTask::Task(CanisterTask::GlobalTimer | CanisterTask::Heartbeat) => {
+            load_metrics.observe_heartbeat_or_global_timer();
+        }
+        CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
+    }
     let result = exec_env.execute_canister_input(
         canister,
         instruction_limits,

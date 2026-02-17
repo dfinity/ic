@@ -82,7 +82,7 @@ pub mod delegations;
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
-pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
+pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(40);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 
@@ -684,6 +684,31 @@ impl<'a> MessageCanister<'a> {
         Self::new_with_params(agent, effective_canister_id, None, Some(cycles.into()))
             .await
             .unwrap()
+    }
+
+    pub async fn new_with_cycles_with_retries<C: Into<u128>>(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        cycles: C,
+        log: &slog::Logger,
+    ) -> MessageCanister<'a> {
+        let c = cycles.into();
+        retry_with_msg_async!(
+            format!(
+                "install MessageCanister {}",
+                effective_canister_id.to_string()
+            ),
+            log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                Self::new_with_params(agent, effective_canister_id, None, Some(c))
+                    .await
+                    .map_err(|e| anyhow!(e))
+            }
+        )
+        .await
+        .expect("Could not create message canister with cycles.")
     }
 
     pub fn canister_id(&self) -> Principal {
