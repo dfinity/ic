@@ -68,12 +68,18 @@ impl LogMemoryStore {
         }
     }
 
+    /// Provides access to the underlying `PageMap`.
     pub fn maybe_page_map(&self) -> Option<&PageMap> {
         self.maybe_page_map.as_ref()
     }
 
+    /// Provides mutable access to the underlying `PageMap`.
+    ///
+    /// ### IMPORTANT(!) Safety & Invariants
+    /// Use this **exclusively** for stripping page map deltas. Do not modify the
+    /// map's contents directly, as doing so invalidates the `header_cache` and
+    /// forces an unnecessary reload of the page map in subsequent rounds.
     pub fn maybe_page_map_mut(&mut self) -> Option<&mut PageMap> {
-        self.header_cache = OnceLock::new();
         self.maybe_page_map.as_mut()
     }
 
