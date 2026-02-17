@@ -9522,6 +9522,7 @@ dependencies = [
  "ic-embedders",
  "ic-error-types 0.2.0",
  "ic-heap-bytes",
+ "ic-https-outcalls-pricing",
  "ic-interfaces",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",

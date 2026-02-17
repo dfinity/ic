@@ -17,6 +17,7 @@ pub use self::http::{
     HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
     SignedDelegation,
 };
+use crate::batch::ConsensusResponse;
 use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
@@ -345,6 +346,7 @@ pub enum SubnetMessage {
     Request(Arc<Request>),
     Response(Arc<Response>),
     Ingress(Arc<Ingress>),
+    ConsensusResponse(Arc<ConsensusResponse>),
 }
 
 impl SubnetMessage {
@@ -354,6 +356,7 @@ impl SubnetMessage {
             SubnetMessage::Ingress(ingress) => ingress.effective_canister_id,
             SubnetMessage::Request(request) => request.extract_effective_canister_id(),
             SubnetMessage::Response { .. } => None,
+            SubnetMessage::ConsensusResponse { .. } => None,
         }
     }
 }

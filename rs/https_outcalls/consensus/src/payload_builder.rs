@@ -824,7 +824,7 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
                 stats.single_signature_responses += 1;
             }
             stats.responses += 1;
-            ConsensusResponse::new(
+            let mut consensus_response = ConsensusResponse::new(
                 response.content.id,
                 match response.content.content {
                     CanisterHttpResponseContent::Success(data) => Payload::Data(data),
@@ -832,7 +832,11 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
                         Payload::Reject(RejectContext::from(&canister_http_reject))
                     }
                 },
-            )
+            );
+            for payment_share in &response.payment_proof.payment_shares {
+                consensus_response.refund_shares.push((payment_share.signature.signer, payment_share.content.receipt.refund));
+            }
+            consensus_response
         });
 
         let timeouts = messages.timeouts.iter().map(|callback| {

@@ -1340,20 +1340,7 @@ impl Scheduler for SchedulerImpl {
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
                 let (new_state, _) = self.execute_subnet_message(
-                    // Wrap the callback ID and payload into a Response, to make it easier for
-                    // `execute_subnet_message()` to deal with. All other fields will be ignored by
-                    // `execute_subnet_message()`.
-                    SubnetMessage::Response(
-                        Response {
-                            originator: CanisterId::ic_00(),
-                            respondent: CanisterId::ic_00(),
-                            originator_reply_callback: response.callback,
-                            refund: Cycles::zero(),
-                            response_payload: response.payload,
-                            deadline: NO_DEADLINE,
-                        }
-                        .into(),
-                    ),
+                    SubnetMessage::ConsensusResponse(Arc::new(response)),
                     state,
                     &mut csprng,
                     current_round,
@@ -2189,6 +2176,7 @@ fn can_execute_subnet_msg(
         SubnetMessage::Ingress(ingress) => Ic00Method::from_str(ingress.method_name.as_str()).ok(),
         SubnetMessage::Request(request) => Ic00Method::from_str(request.method_name.as_str()).ok(),
         SubnetMessage::Response { .. } => None,
+        SubnetMessage::ConsensusResponse { .. } => None,
     };
     let Some(method) = maybe_method else {
         // If there is no method name, we can execute the subnet message.
@@ -2238,7 +2226,7 @@ fn get_instructions_limits_for_subnet_message(
     // for install code in which case the default limits are overriden.
     let default_limits = InstructionLimits::new(NumInstructions::from(0), NumInstructions::from(0));
     let method_name = match &msg {
-        SubnetMessage::Response { .. } => {
+        SubnetMessage::Response { .. } | SubnetMessage::ConsensusResponse { .. } => {
             return default_limits;
         }
         SubnetMessage::Ingress(ingress) => &ingress.method_name,
