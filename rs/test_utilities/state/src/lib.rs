@@ -11,6 +11,7 @@ use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
     Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
+        UnflushedCheckpointOps,
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         system_state::{CyclesUseCase, TaskQueue},
         testing::new_canister_output_queues_for_test,
@@ -387,6 +388,7 @@ impl CanisterStateBuilder {
             system_state,
             execution_state,
             scheduler_state: SchedulerState::default(),
+            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
         }
     }
 }
@@ -628,6 +630,7 @@ pub fn canister_from_exec_state(
             .build(),
         execution_state: Some(execution_state),
         scheduler_state: Default::default(),
+        unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
     }
 }
 
@@ -656,6 +659,7 @@ pub fn get_running_canister_with_args(
         ),
         execution_state: None,
         scheduler_state: Default::default(),
+        unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
     }
 }
 
@@ -680,6 +684,7 @@ pub fn get_stopping_canister_with_controller(
         ),
         execution_state: None,
         scheduler_state: Default::default(),
+        unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
     }
 }
 
@@ -704,6 +709,7 @@ pub fn get_stopped_canister_with_controller(
         ),
         execution_state: None,
         scheduler_state: Default::default(),
+        unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
     }
 }
 

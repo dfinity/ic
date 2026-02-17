@@ -5,6 +5,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
+use ic_replicated_state::canister_state::UnflushedCheckpointOps;
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, WasmBinary, WasmExecutionMode,
 };
@@ -394,7 +395,10 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
 
     // Take all snapshot operations that happened since the last flush and clear the list stored in `tip_state`.
     // This way each operation is executed exactly once, independent of how many times `flush_page_maps` is called.
-    let unflushed_checkpoint_ops = tip_state.metadata.unflushed_checkpoint_ops.take();
+    let unflushed_checkpoint_ops = tip_state
+        .canisters_iter_mut()
+        .flat_map(|canister| canister.unflushed_checkpoint_ops.take())
+        .collect();
 
     tip_channel
         .send(TipRequest::FlushPageMapDelta {
@@ -725,8 +729,13 @@ fn validate_eq_checkpoint_internal(
         .load_system_metadata(SubnetSchedule::new(priorities))
         .map_err(|err| format!("Failed to load system metadata: {err}"))?
         .validate_eq(metadata)?;
-    if !metadata.unflushed_checkpoint_ops.is_empty() {
-        return Err("Metadata has unflushed changes after checkpoint".to_string());
+    for canister in canister_states.values() {
+        if !canister.unflushed_checkpoint_ops.is_empty() {
+            return Err(format!(
+                "Canister {} has unflushed changes after checkpoint",
+                canister.canister_id()
+            ));
+        }
     }
     checkpoint_loader
         .load_subnet_queues()
@@ -915,6 +924,7 @@ pub fn load_canister_state(
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
         },
+        unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
     };
     let priority = CanisterPriority {
         accumulated_priority: canister_state_bits.accumulated_priority,

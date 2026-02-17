@@ -1336,9 +1336,6 @@ impl ReplicatedState {
         snapshot_id: SnapshotId,
         snapshot: Arc<CanisterSnapshot>,
     ) -> SnapshotId {
-        self.metadata
-            .unflushed_checkpoint_ops
-            .take_snapshot(snapshot.canister_id(), snapshot_id);
         self.canister_snapshots.push(snapshot_id, snapshot)
     }
 

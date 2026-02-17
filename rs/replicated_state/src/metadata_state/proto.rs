@@ -465,7 +465,6 @@ impl
                 Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,
                 None => BlockmakerMetricsTimeSeries::default(),
             },
-            unflushed_checkpoint_ops: Default::default(),
         })
     }
 }

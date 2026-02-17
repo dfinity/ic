@@ -2042,6 +2042,9 @@ impl CanisterManager {
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
         state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        canister
+            .unflushed_checkpoint_ops
+            .take_snapshot(canister.canister_id(), snapshot_id);
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
@@ -2460,8 +2463,7 @@ impl CanisterManager {
         round_limits
             .subnet_available_memory
             .update_execution_memory_unchecked(available_execution_memory_change);
-        state
-            .metadata
+        new_canister
             .unflushed_checkpoint_ops
             .load_snapshot(canister_id, snapshot_id);
 
@@ -3155,8 +3157,7 @@ impl CanisterManager {
             .subnet_schedule
             .rename_canister(&old_id, new_id);
 
-        state
-            .metadata
+        canister
             .unflushed_checkpoint_ops
             .rename_canister(old_id, new_id);
 
