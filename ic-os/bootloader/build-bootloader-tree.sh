@@ -4,7 +4,7 @@
 # the /boot/grub and /boot/efi portions. From this, the grub and
 # efi partitions of the disk image can be built.
 
-set -exo pipefail
+set -euxo pipefail
 
 cleanup() {
     podman rm -f "${CONTAINER_NAME}"
