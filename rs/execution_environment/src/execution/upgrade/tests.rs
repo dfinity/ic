@@ -218,7 +218,6 @@ fn upgrade_fails_on_not_enough_cycles() {
     let balance_cycles = test.cycles_account_manager().execution_cost(
         (MAX_INSTRUCTIONS_PER_SLICE * 3).into(),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         WasmExecutionMode::Wasm32,
     );
 

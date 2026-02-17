@@ -269,7 +269,6 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
             &signed_ingress,
             effective_canister_id,
             subnet_size,
-            cost_schedule,
         );
 
         let ingress = Ingress::from((signed_ingress.take_content(), effective_canister_id));

@@ -109,7 +109,11 @@ impl Default for SystemStateModifications {
 impl SystemStateModifications {
     /// Checks that no cycles were created during the execution of this message
     /// (unless the canister is the cycles minting canister).
-    fn validate_cycle_change(&self, is_cmc_canister: bool) -> HypervisorResult<()> {
+    fn validate_cycle_change(
+        &self,
+        is_cmc_canister: bool,
+        is_free_cost_schedule: bool,
+    ) -> HypervisorResult<()> {
         let mut expected_change = CyclesBalanceChange::zero();
 
         if let Some((_, call_context_balance_taken)) = self.call_context_balance_taken {
@@ -130,7 +134,8 @@ impl SystemStateModifications {
         // If the canister is not the cycles minting canister, then the balance
         // change coming from the Wasm execution must match the expected balance
         // change that we just computed.
-        if is_cmc_canister || self.cycles_balance_change == expected_change {
+        if is_cmc_canister || is_free_cost_schedule || self.cycles_balance_change == expected_change
+        {
             Ok(())
         } else {
             Err(HypervisorError::WasmEngineError(
@@ -352,8 +357,14 @@ impl SystemStateModifications {
             .append_delta_log(&mut self.canister_log);
 
         // Verify total cycle change is not positive and update cycles balance.
-        self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
-        self.apply_balance_changes(system_state);
+        let cost_schedule = network_topology
+            .get_cost_schedule(&own_subnet_id)
+            .unwrap_or_default();
+        self.validate_cycle_change(
+            system_state.canister_id() == CYCLES_MINTING_CANISTER_ID,
+            cost_schedule == CanisterCyclesCostSchedule::Free,
+        )?;
+        self.apply_balance_changes(system_state, cost_schedule);
 
         if let Some(hook_condition_check_result) =
             self.on_low_wasm_memory_hook_condition_check_result
@@ -542,7 +553,11 @@ impl SystemStateModifications {
     }
 
     /// Applies the balance change to the given state.
-    pub fn apply_balance_changes(&self, state: &mut SystemState) {
+    pub fn apply_balance_changes(
+        &self,
+        state: &mut SystemState,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) {
         let initial_balance = state.balance();
 
         // `self.cycles_balance_change` consists of:
@@ -565,16 +580,16 @@ impl SystemStateModifications {
         // Apply the main cycles balance change without the consumed and reserved cycles.
         match adjusted_balance_change {
             CyclesBalanceChange::Added(added) => {
-                state.add_cycles(added, CyclesUseCase::NonConsumed)
+                state.add_cycles(added, CyclesUseCase::NonConsumed, cost_schedule)
             }
             CyclesBalanceChange::Removed(removed) => {
-                state.remove_cycles(removed, CyclesUseCase::NonConsumed)
+                state.remove_cycles(removed, CyclesUseCase::NonConsumed, cost_schedule)
             }
         }
 
         // Apply the consumed cycles with the use case metrics recording.
         for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
-            state.remove_cycles(*amount, *use_case);
+            state.remove_cycles(*amount, *use_case, cost_schedule);
         }
 
         // Apply the reserved cycles. This must succeed because the cycle
@@ -582,13 +597,18 @@ impl SystemStateModifications {
         // crash here to avoid making the cycle balance incorrect.
         state.reserve_cycles(self.reserved_cycles).unwrap();
 
-        // All changes applied above should be equivalent to simply applying
-        // `self.cycles_balance_change` to the initial balance.
-        let expected_balance = match self.cycles_balance_change {
-            CyclesBalanceChange::Added(added) => initial_balance + added,
-            CyclesBalanceChange::Removed(removed) => initial_balance - removed,
-        };
-        assert_eq!(state.balance(), expected_balance);
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => {}
+            CanisterCyclesCostSchedule::Normal => {
+                // All changes applied above should be equivalent to simply applying
+                // `self.cycles_balance_change` to the initial balance.
+                let expected_balance = match self.cycles_balance_change {
+                    CyclesBalanceChange::Added(added) => initial_balance + added,
+                    CyclesBalanceChange::Removed(removed) => initial_balance - removed,
+                };
+                assert_eq!(state.balance(), expected_balance)
+            }
+        }
     }
 
     fn add_consumed_cycles(&mut self, consumed_cycles: &[(CyclesUseCase, Cycles)]) {
@@ -1081,14 +1101,13 @@ impl SandboxSafeSystemState {
         self.cycles_account_manager
             .prepayment_for_response_execution(
                 self.subnet_size,
-                self.cost_schedule,
                 WasmExecutionMode::from_is_wasm64(self.is_wasm64_execution),
             )
     }
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_transmission(self.subnet_size, self.cost_schedule)
+            .prepayment_for_response_transmission(self.subnet_size)
     }
 
     pub(super) fn withdraw_cycles_for_transfer(
@@ -1507,6 +1526,7 @@ mod tests {
         );
 
         let initial_cycles_balance = system_state.balance();
+        let cost_schedule = CanisterCyclesCostSchedule::Normal;
 
         let removed = Cycles::new(500_000);
         let consumed = Cycles::new(100_000);
@@ -1515,7 +1535,7 @@ mod tests {
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1528,7 +1548,7 @@ mod tests {
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
 
         assert_eq!(initial_cycles_balance - removed, system_state.balance());
 
@@ -1541,7 +1561,7 @@ mod tests {
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
 
@@ -1554,7 +1574,7 @@ mod tests {
             BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
-        system_state_modifications.apply_balance_changes(&mut system_state);
+        system_state_modifications.apply_balance_changes(&mut system_state, cost_schedule);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
     }

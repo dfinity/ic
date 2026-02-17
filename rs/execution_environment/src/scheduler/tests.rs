@@ -1391,11 +1391,13 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);
-    test.state_mut()
+    let state = test.state_mut();
+    let cost_schedule = state.get_own_cost_schedule();
+    state
         .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
-        .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
+        .add_cycles(expected_charge, CyclesUseCase::NonConsumed, cost_schedule);
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs =
@@ -1505,11 +1507,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);
-    test.state_mut()
+    let state = test.state_mut();
+    let cost_schedule = state.get_own_cost_schedule();
+    state
         .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
-        .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
+        .add_cycles(expected_charge, CyclesUseCase::NonConsumed, cost_schedule);
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs =
@@ -4241,15 +4245,6 @@ fn http_outcalls_free() {
         .canister_http_request_contexts;
     assert_eq!(canister_http_request_contexts.len(), 1);
 
-    let http_request_context = canister_http_request_contexts
-        .get(&CallbackId::from(0))
-        .unwrap();
-
-    let fee = test.http_request_fee(
-        http_request_context.variable_parts_size(),
-        Some(NumBytes::from(response_size_limit)),
-    );
-    assert_eq!(fee, Cycles::new(0));
     let cycles_after = test.canister_state(caller_canister).system_state.balance();
     assert_eq!(cycles_before, cycles_after);
 }
@@ -4268,9 +4263,10 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
     );
 
     let removed_cycles = Cycles::from(1000u128);
+    let cost_schedule = test.state().get_own_cost_schedule();
     test.canister_state_mut(canister_id)
         .system_state
-        .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
+        .remove_cycles(removed_cycles, CyclesUseCase::Instructions, cost_schedule);
 
     observe_replicated_state_metrics(
         test.scheduler().own_subnet_id,
@@ -4304,9 +4300,10 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
     );
 
     let removed_cycles = Cycles::from(1000u128);
+    let cost_schedule = test.state().get_own_cost_schedule();
     test.canister_state_mut(canister_id)
         .system_state
-        .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
+        .remove_cycles(removed_cycles, CyclesUseCase::Instructions, cost_schedule);
 
     test.inject_call_to_ic00(
         Method::DeleteCanister,

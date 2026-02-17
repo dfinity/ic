@@ -425,7 +425,6 @@ impl ExecutionTest {
         self.cycles_account_manager.execution_cost(
             instructions,
             self.subnet_size(),
-            self.cost_schedule(),
             // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee and snapshot size
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -463,7 +462,6 @@ impl ExecutionTest {
             message_memory_usage,
             compute_allocation,
             self.subnet_size(),
-            self.cost_schedule(),
         )
     }
 
@@ -488,11 +486,10 @@ impl ExecutionTest {
 
     pub fn call_fee<S: ToString>(&self, method_name: S, payload: &[u8]) -> Cycles {
         self.cycles_account_manager
-            .xnet_call_performed_fee(self.subnet_size(), self.cost_schedule())
+            .xnet_call_performed_fee(self.subnet_size())
             + self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
                 NumBytes::from((payload.len() + method_name.to_string().len()) as u64),
                 self.subnet_size(),
-                self.cost_schedule(),
             )
     }
 
@@ -500,7 +497,6 @@ impl ExecutionTest {
         self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             self.subnet_size(),
-            self.cost_schedule(),
         )
     }
 
@@ -508,22 +504,18 @@ impl ExecutionTest {
         self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
             NumBytes::from(payload.len() as u64),
             self.subnet_size(),
-            self.cost_schedule(),
         )
     }
 
     pub fn reject_fee<S: ToString>(&self, reject_message: S) -> Cycles {
         let bytes = reject_message.to_string().len() + std::mem::size_of::<RejectCode>();
-        self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
-            NumBytes::from(bytes as u64),
-            self.subnet_size(),
-            self.cost_schedule(),
-        )
+        self.cycles_account_manager
+            .xnet_call_bytes_transmitted_fee(NumBytes::from(bytes as u64), self.subnet_size())
     }
 
     pub fn canister_creation_fee(&self) -> Cycles {
         self.cycles_account_manager
-            .canister_creation_fee(self.subnet_size(), self.cost_schedule())
+            .canister_creation_fee(self.subnet_size())
     }
 
     pub fn http_request_fee(
@@ -535,7 +527,6 @@ impl ExecutionTest {
             request_size,
             response_size_limit,
             self.subnet_size(),
-            self.cost_schedule(),
         )
     }
 
@@ -561,7 +552,6 @@ impl ExecutionTest {
         self.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
-            self.cost_schedule(),
             WasmExecutionMode::Wasm32, // For this test, we can assume a Wasm32 execution.
         )
     }
@@ -1244,11 +1234,7 @@ impl ExecutionTest {
         state.put_canister_state(result.canister);
         state.metadata.heap_delta_estimate += result.heap_delta;
         self.state = Some(state);
-        self.update_execution_stats(
-            canister_id,
-            result.instructions_used.unwrap(),
-            cost_schedule,
-        );
+        self.update_execution_stats(canister_id, result.instructions_used.unwrap());
     }
 
     /// Executes a query sent by the system in the given canister.
@@ -1376,7 +1362,7 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
         state.metadata.heap_delta_estimate += heap_delta;
-        self.update_execution_stats(canister_id, instructions_used, cost_schedule);
+        self.update_execution_stats(canister_id, instructions_used);
         state.put_canister_state(canister);
         self.state = Some(state);
         response
@@ -1442,7 +1428,6 @@ impl ExecutionTest {
     /// Return a progress flag indicating if the message was executed or not.
     pub fn execute_subnet_message(&mut self) -> bool {
         let mut state = self.state.take().unwrap();
-        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let message = match state.pop_subnet_input() {
             Some(message) => message,
@@ -1489,11 +1474,7 @@ impl ExecutionTest {
                         self.install_code_instruction_limits.message(),
                     );
                     assert_eq!(message_instructions_used, capped_slice_instructions_used);
-                    self.update_execution_stats(
-                        canister_id,
-                        message_instructions_used,
-                        cost_schedule,
-                    );
+                    self.update_execution_stats(canister_id, message_instructions_used);
                 }
                 ExecuteSubnetMessageResultType::Processing => {
                     // such subnet messages should not consume any instructions
@@ -1564,7 +1545,7 @@ impl ExecutionTest {
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 if let Some(instructions_used) = result.instructions_used {
-                    self.update_execution_stats(canister_id, instructions_used, cost_schedule);
+                    self.update_execution_stats(canister_id, instructions_used);
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
@@ -1651,11 +1632,7 @@ impl ExecutionTest {
                             self.install_code_instruction_limits.message(),
                         );
                         assert_eq!(message_instructions_used, capped_instructions_used);
-                        self.update_execution_stats(
-                            canister_id,
-                            message_instructions_used,
-                            cost_schedule,
-                        );
+                        self.update_execution_stats(canister_id, message_instructions_used);
                     }
                     ExecuteSubnetMessageResultType::Processing => {
                         unreachable!()
@@ -1692,7 +1669,7 @@ impl ExecutionTest {
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
                 if let Some(instructions_used) = result.instructions_used {
-                    self.update_execution_stats(canister_id, instructions_used, cost_schedule);
+                    self.update_execution_stats(canister_id, instructions_used);
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
@@ -1716,12 +1693,7 @@ impl ExecutionTest {
     }
 
     // Increments the executed instructions and the execution cost counters.
-    fn update_execution_stats(
-        &mut self,
-        canister_id: CanisterId,
-        executed: NumInstructions,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) {
+    fn update_execution_stats(&mut self, canister_id: CanisterId, executed: NumInstructions) {
         let mgr = &self.cycles_account_manager;
         *self
             .executed_instructions
@@ -1730,12 +1702,8 @@ impl ExecutionTest {
 
         let is_wasm64_execution = self.canister_wasm_execution_mode(canister_id);
 
-        let instruction_cost = mgr.execution_cost(
-            executed,
-            self.subnet_size(),
-            cost_schedule,
-            is_wasm64_execution,
-        );
+        let instruction_cost =
+            mgr.execution_cost(executed, self.subnet_size(), is_wasm64_execution);
         *self
             .execution_cost
             .entry(canister_id)
@@ -1746,6 +1714,7 @@ impl ExecutionTest {
     /// `self.xnet_messages`.
     pub fn induct_messages(&mut self) {
         let mut state = self.state.take().unwrap();
+        let cost_schedule = state.get_own_cost_schedule();
         let mut subnet_available_guaranteed_response_memory = self
             .subnet_available_memory
             .get_guaranteed_response_message_memory();
@@ -1759,6 +1728,7 @@ impl ExecutionTest {
                         &mut subnet_available_guaranteed_response_memory,
                         state.metadata.own_subnet_type,
                         InputQueueType::LocalSubnet,
+                        cost_schedule,
                     );
                     if result.is_err() {
                         self.lost_messages.push(message);
@@ -1975,14 +1945,14 @@ impl ExecutionTest {
 
     pub fn prepayment_for_response_execution(&self, mode: WasmExecutionMode) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size(), self.cost_schedule(), mode)
+            .prepayment_for_response_execution(self.subnet_size(), mode)
     }
 
     pub fn refund_for_response_transmission(&self, response: &ResponsePayload) -> Cycles {
         let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
         let prepayment_for_response_transmission = self
             .cycles_account_manager
-            .prepayment_for_response_transmission(self.subnet_size(), self.cost_schedule());
+            .prepayment_for_response_transmission(self.subnet_size());
         self.cycles_account_manager
             .refund_for_response_transmission(
                 &self.log,
@@ -1990,7 +1960,6 @@ impl ExecutionTest {
                 response,
                 prepayment_for_response_transmission,
                 self.subnet_size(),
-                self.cost_schedule(),
             )
     }
 

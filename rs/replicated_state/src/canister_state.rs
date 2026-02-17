@@ -19,6 +19,7 @@ use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response};
 use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{
@@ -130,12 +131,14 @@ impl CanisterState {
         subnet_available_guaranteed_response_memory: &mut i64,
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
+        cycles_cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.system_state.push_input(
             msg,
             subnet_available_guaranteed_response_memory,
             own_subnet_type,
             input_queue_type,
+            cycles_cost_schedule,
         )
     }
 

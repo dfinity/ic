@@ -720,16 +720,22 @@ impl CanisterManager {
 
         let fee = self
             .cycles_account_manager
-            .canister_creation_fee(subnet_size, state.get_own_cost_schedule());
-        if cycles < fee {
-            return (
-                Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
-                    sent: cycles,
-                    required: fee,
-                }),
-                cycles,
-            );
-        }
+            .canister_creation_fee(subnet_size);
+        let new_canister_cycles_balance = match state.get_own_cost_schedule() {
+            CanisterCyclesCostSchedule::Free => cycles,
+            CanisterCyclesCostSchedule::Normal => {
+                if cycles < fee {
+                    return (
+                        Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
+                            sent: cycles,
+                            required: fee,
+                        }),
+                        cycles,
+                    );
+                }
+                cycles - fee
+            }
+        };
 
         // Set the field to the default value if it is empty.
         settings
@@ -746,7 +752,7 @@ impl CanisterManager {
             round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
             &subnet_memory_saturation,
-            cycles - fee,
+            new_canister_cycles_balance,
             subnet_size,
             state.get_own_cost_schedule(),
         ) {
@@ -1102,6 +1108,18 @@ impl CanisterManager {
         let log_memory_limit = canister.log_memory_limit().get();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
+        let idle_cycles_burned_rate = match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal => {
+                self.cycles_account_manager.idle_cycles_burned_rate(
+                    memory_allocation,
+                    canister_memory_usage,
+                    canister_message_memory_usage,
+                    compute_allocation,
+                    subnet_size,
+                )
+            }
+        };
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -1130,16 +1148,7 @@ impl CanisterManager {
             reserved_cycles_limit.map(|x| x.get()),
             log_visibility,
             log_memory_limit,
-            self.cycles_account_manager
-                .idle_cycles_burned_rate(
-                    memory_allocation,
-                    canister_memory_usage,
-                    canister_message_memory_usage,
-                    compute_allocation,
-                    subnet_size,
-                    cost_schedule,
-                )
-                .get(),
+            idle_cycles_burned_rate.get(),
             canister.system_state.reserved_balance().get(),
             canister.system_state.total_query_stats.num_calls,
             canister.system_state.total_query_stats.num_instructions,
@@ -1431,7 +1440,11 @@ impl CanisterManager {
             Arc::clone(&self.fd_factory),
         );
 
-        system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
+        system_state.remove_cycles(
+            creation_fee,
+            CyclesUseCase::CanisterCreation,
+            state.get_own_cost_schedule(),
+        );
         let mut new_canister = CanisterState::new(system_state, None, SchedulerState::default());
 
         self.do_update_settings(&settings, &mut new_canister);
@@ -1504,6 +1517,7 @@ impl CanisterManager {
         cycles_amount: Option<u128>,
         canister: &mut CanisterState,
         provisional_whitelist: &ProvisionalWhitelist,
+        cycles_cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterManagerError> {
         if !provisional_whitelist.contains(&sender) {
             return Err(CanisterManagerError::SenderNotInWhitelist(sender));
@@ -1514,9 +1528,11 @@ impl CanisterManager {
             None => self.config.default_provisional_cycles_balance,
         };
 
-        canister
-            .system_state
-            .add_cycles(cycles_amount, CyclesUseCase::NonConsumed);
+        canister.system_state.add_cycles(
+            cycles_amount,
+            CyclesUseCase::NonConsumed,
+            cycles_cost_schedule,
+        );
 
         Ok(())
     }
@@ -2001,7 +2017,6 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
-            state.get_own_cost_schedule(),
             // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee and snapshot size
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -2416,7 +2431,6 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
-            state.get_own_cost_schedule(),
             // In this case, when the canister is actually created from the snapshot, we need to check
             // if the canister is in wasm64 mode to account for its instruction usage.
             wasm_execution_mode,
@@ -2780,7 +2794,6 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
-            state.get_own_cost_schedule(),
             // For the `create_snapshot_from_metadata` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee and snapshot size
             // and Wasm64 does not bring any additional overhead for this operation.

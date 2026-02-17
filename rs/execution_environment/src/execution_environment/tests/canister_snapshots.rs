@@ -32,7 +32,6 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
     CanisterId, Cycles, NumInstructions, SnapshotId,
-    batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
@@ -1706,7 +1705,6 @@ fn take_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
@@ -1770,7 +1768,6 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 

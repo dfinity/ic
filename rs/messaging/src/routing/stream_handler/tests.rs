@@ -1891,6 +1891,7 @@ fn check_stream_handler_generated_reject_signal_queue_full() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             let mut callback_id = 2;
+            let cost_schedule = state.get_own_cost_schedule();
             while state
                 .push_input(
                     RequestBuilder::new()
@@ -1900,6 +1901,7 @@ fn check_stream_handler_generated_reject_signal_queue_full() {
                         .build()
                         .into(),
                     &mut (i64::MAX / 2),
+                    cost_schedule,
                 )
                 .is_ok()
             {
@@ -1946,6 +1948,7 @@ fn duplicate_best_effort_response_is_dropped() {
         }],
         |stream_handler, mut state, metrics| {
             let response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone();
+            let cost_schedule = state.get_own_cost_schedule();
 
             let mut expected_state = state.clone();
             // The expected state has the response inducted...
@@ -1959,10 +1962,10 @@ fn duplicate_best_effort_response_is_dropped() {
             });
             expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
             // Cycles of the duplicate response are refunded.
-            expected_state.credit_refund(&ic_types::messages::Refund::anonymous(
-                *LOCAL_CANISTER,
-                response.cycles(),
-            ));
+            expected_state.credit_refund(
+                &ic_types::messages::Refund::anonymous(*LOCAL_CANISTER, response.cycles()),
+                cost_schedule,
+            );
 
             // Push the clone of the best effort response onto the loopback stream.
             state.modify_streams(|streams| streams.get_mut(&LOCAL_SUBNET).unwrap().push(response));
@@ -2041,11 +2044,12 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
                 .set_status(CanisterStatus::Stopped);
         },
         |expected_state, refund| {
+            let cost_schedule = expected_state.get_own_cost_schedule();
             // Cycles attached to the late response are refunded.
-            expected_state.credit_refund(&ic_types::messages::Refund::anonymous(
-                *LOCAL_CANISTER,
-                refund,
-            ));
+            expected_state.credit_refund(
+                &ic_types::messages::Refund::anonymous(*LOCAL_CANISTER, refund),
+                cost_schedule,
+            );
         },
     );
 }
@@ -2711,6 +2715,7 @@ fn induct_stream_slices_with_refunds() {
                 LOCAL_SUBNET,
                 REMOTE_SUBNET,
             );
+            let cost_schedule = state.get_own_cost_schedule();
 
             let mut expected_state = state.clone();
             // Expecting a stream with...
@@ -2731,7 +2736,7 @@ fn induct_stream_slices_with_refunds() {
 
             // Refund to `LOCAL_CANISTER` (@43) was applied.
             let refund43 = refund_in_slice(slices.get(&REMOTE_SUBNET), 43);
-            expected_state.credit_refund(refund43);
+            expected_state.credit_refund(refund43, cost_schedule);
 
             // Cycles in refund @44 are lost
             let refund44 = refund_in_slice(slices.get(&REMOTE_SUBNET), 44);
@@ -3622,19 +3627,28 @@ fn messages_in_slice(
 
 /// Pushes a message into the `state` using an infinite memory pool.
 fn push_input(state: &mut ReplicatedState, msg: StreamMessage) {
+    let cost_schedule = state.get_own_cost_schedule();
     match msg {
         StreamMessage::Request(request) => {
             state
-                .push_input(RequestOrResponse::Request(request), &mut (i64::MAX / 2))
+                .push_input(
+                    RequestOrResponse::Request(request),
+                    &mut (i64::MAX / 2),
+                    cost_schedule,
+                )
                 .unwrap();
         }
         StreamMessage::Response(response) => {
             state
-                .push_input(RequestOrResponse::Response(response), &mut (i64::MAX / 2))
+                .push_input(
+                    RequestOrResponse::Response(response),
+                    &mut (i64::MAX / 2),
+                    cost_schedule,
+                )
                 .unwrap();
         }
         StreamMessage::Refund(refund) => {
-            assert!(state.credit_refund(&refund));
+            assert!(state.credit_refund(&refund, cost_schedule));
         }
     }
 }

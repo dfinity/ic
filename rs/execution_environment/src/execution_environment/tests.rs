@@ -30,7 +30,6 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
     CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
-    batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpMethod, Transform},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -820,7 +819,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * seconds_per_day
             * test
                 .cycles_account_manager()
-                .gib_storage_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .gib_storage_per_second_fee(test.subnet_size())
                 .get())
             / one_gib
     );

@@ -4358,12 +4358,15 @@ impl StateMachine {
         let msg = self.ingress_message(sender, canister_id, method, payload);
         let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
         let subnet_size = self.nodes.len();
-        self.cycles_account_manager.ingress_induction_cost(
-            &msg,
-            effective_canister_id,
-            subnet_size,
-            self.cost_schedule,
-        )
+        match self.cost_schedule {
+            CanisterCyclesCostSchedule::Free => IngressInductionCost::Fee {
+                payer: effective_canister_id.unwrap_or(canister_id),
+                cost: Cycles::zero(),
+            },
+            CanisterCyclesCostSchedule::Normal => self
+                .cycles_account_manager
+                .ingress_induction_cost(&msg, effective_canister_id, subnet_size),
+        }
     }
 
     /// Sends an ingress message to the canister with the specified ID.
@@ -4789,12 +4792,15 @@ impl StateMachine {
     /// This function panics if the specified canister does not exist.
     pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
         let (_height, mut state) = self.state_manager.take_tip();
+        let cost_schedule = state.get_own_cost_schedule();
         let canister_state = state
             .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
-        canister_state
-            .system_state
-            .add_cycles(Cycles::from(amount), CyclesUseCase::NonConsumed);
+        canister_state.system_state.add_cycles(
+            Cycles::from(amount),
+            CyclesUseCase::NonConsumed,
+            cost_schedule,
+        );
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
@@ -4961,6 +4967,7 @@ impl StateMachine {
             .filter(|subnet_id| *subnet_id != self.get_subnet_id().get())
             .collect();
         let (_height, mut replicated_state) = self.state_manager.take_tip();
+        let cost_schedule = replicated_state.get_own_cost_schedule();
         let mut synthetic_responses = vec![];
         for canister_state in replicated_state.canisters_iter_mut() {
             let Some(call_context_manager) = canister_state.system_state.call_context_manager()
@@ -5012,6 +5019,7 @@ impl StateMachine {
                 .push_input(
                     RequestOrResponse::Response(Arc::new(response)),
                     &mut available_guaranteed_response_memory,
+                    cost_schedule,
                 )
                 .unwrap();
         }
