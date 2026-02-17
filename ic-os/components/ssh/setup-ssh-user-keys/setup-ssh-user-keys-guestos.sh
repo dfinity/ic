@@ -18,7 +18,7 @@ copy_ssh_keys() {
 
 # Create home directories
 echo "Creating user home directories"
-for ACCOUNT in backup readonly admin recovery; do
+for ACCOUNT in backup readonly admin; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     echo "Creating home directory for ${ACCOUNT}: ${HOMEDIR}"
     mkdir -p "${HOMEDIR}"
@@ -26,7 +26,7 @@ done
 
 # Setup SSH keys
 echo "Setting up SSH keys for accounts"
-for ACCOUNT in backup readonly admin recovery; do
+for ACCOUNT in backup readonly admin; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     GROUP=$(id -ng "${ACCOUNT}")
 
