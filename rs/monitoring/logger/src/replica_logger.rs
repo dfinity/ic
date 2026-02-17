@@ -29,7 +29,10 @@ pub fn no_op_logger() -> ReplicaLogger {
 }
 
 /// A logger that logs to stdout/stderr if the environment variable `RUST_LOG`
-/// or the input parameter specify a log level (in this order of precedence).
+/// or the input parameter specify a log level (in this order of precedence)
+/// and otherwise is a no-op.
+/// If the environment variable `LOG_TO_STDERR` is set, then the logger logs
+/// to stderr. Otherwise, it logs to stdout.
 /// Used in tests.
 pub fn test_logger(log_level: Option<Level>) -> ReplicaLogger {
     if let Some(log_level) = std::env::var("RUST_LOG")
