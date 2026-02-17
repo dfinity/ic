@@ -274,6 +274,11 @@ impl CanisterLog {
     pub fn clear_delta_log_sizes(&mut self) {
         self.delta_log_sizes.clear();
     }
+
+    /// Returns true if the canister log has delta log sizes.
+    pub fn has_delta_log_sizes(&self) -> bool {
+        !self.delta_log_sizes.is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -495,8 +500,10 @@ mod tests {
                 (9, 303, b"delta #6"),
             ]))
         );
+        assert!(main.has_delta_log_sizes());
         assert_eq!(main.delta_log_sizes(), vec![size_b, size_c]);
         main.clear_delta_log_sizes();
+        assert!(!main.has_delta_log_sizes());
         assert_eq!(main.delta_log_sizes(), Vec::<usize>::new()); // Call after clear_delta_log_sizes.
         assert_eq!(main.bytes_used(), size_a + size_b + size_c);
     }

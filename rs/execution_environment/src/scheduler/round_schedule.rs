@@ -1,22 +1,18 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-
+use super::{
+    SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN, SCHEDULER_CORES_INVARIANT_BROKEN,
+    SchedulerMetrics,
+};
+use crate::util::debug_assert_or_critical_error;
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{ReplicaLogger, error};
-use ic_replicated_state::{
-    CanisterPriority, CanisterState, ReplicatedState, canister_state::NextExecution,
-};
+use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::{CanisterPriority, CanisterState, ReplicatedState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
 use ic_utils::iter::left_outer_join;
-
-use crate::{
-    scheduler::{SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN, SCHEDULER_CORES_INVARIANT_BROKEN},
-    util::debug_assert_or_critical_error,
-};
-
 use more_asserts::debug_assert_gt;
-
-use super::SchedulerMetrics;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
 /// Round metrics required to prioritize a canister.
 #[derive(Clone, Debug)]
@@ -120,7 +116,7 @@ impl RoundSchedule {
     /// Marks idle canisters in front of the schedule as fully executed.
     pub fn charge_idle_canisters(
         &self,
-        canisters: &mut BTreeMap<CanisterId, CanisterState>,
+        canisters: &mut BTreeMap<CanisterId, Arc<CanisterState>>,
         fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
         is_first_iteration: bool,
     ) {
@@ -153,7 +149,7 @@ impl RoundSchedule {
     /// rate limited canisters.
     pub fn filter_canisters(
         &self,
-        canisters: &BTreeMap<CanisterId, CanisterState>,
+        canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         heap_delta_rate_limit: NumBytes,
         rate_limiting_of_heap_delta: FlagStatus,
     ) -> (Self, Vec<CanisterId>) {
@@ -249,10 +245,14 @@ impl RoundSchedule {
     /// * Core 1 (long execution core) takes: `CanisterId 1`, `CanisterId 3`
     /// * Core 2 takes: `CanisterId 4`,  `CanisterId 6`, `CanisterId 8`
     /// * Core 3 takes: `CanisterId 5`,  `CanisterId 7`, `CanisterId 2`
+    #[allow(clippy::type_complexity)]
     pub(super) fn partition_canisters_to_cores(
         &self,
-        mut canisters: BTreeMap<CanisterId, CanisterState>,
-    ) -> (Vec<Vec<CanisterState>>, BTreeMap<CanisterId, CanisterState>) {
+        mut canisters: BTreeMap<CanisterId, Arc<CanisterState>>,
+    ) -> (
+        Vec<Vec<Arc<CanisterState>>>,
+        BTreeMap<CanisterId, Arc<CanisterState>>,
+    ) {
         let mut canisters_partitioned_by_cores = vec![vec![]; self.scheduler_cores];
 
         let mut idx = 0;
@@ -448,6 +448,7 @@ impl RoundSchedule {
             accumulated_priority_deviation +=
                 accumulated_priority.get() as f64 * accumulated_priority.get() as f64;
             if canister.has_input() {
+                let canister = Arc::make_mut(canister);
                 canister
                     .system_state
                     .canister_metrics_mut()
