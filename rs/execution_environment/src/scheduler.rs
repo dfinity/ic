@@ -1446,7 +1446,6 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
                 let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
-                // FIXME: Consider iterating over `round_schedule` instead of `canister_states`.
                 for canister in state.canisters_iter_mut() {
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                     self.metrics

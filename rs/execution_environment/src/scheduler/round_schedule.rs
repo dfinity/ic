@@ -347,12 +347,12 @@ impl RoundSchedule {
                 });
         }
 
-        // println!("is_first_iteration: {}", is_first_iteration);
-        // println!("schedule: {:?}", self.schedule);
-        // println!(
-        //     "heartbeat_and_timer_canister_ids: {:?}",
-        //     self.heartbeat_and_timer_canister_ids
-        // );
+        println!("is_first_iteration: {}", is_first_iteration);
+        println!("schedule: {:?}", self.schedule);
+        println!(
+            "heartbeat_and_timer_canisters: {:?}",
+            self.heartbeat_and_timer_canisters
+        );
     }
 
     /// Partitions the executable Canisters to the available cores for execution.

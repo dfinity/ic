@@ -1678,13 +1678,7 @@ fn can_execute_messages_with_just_enough_instructions() {
     for canister_state in test.state().canisters_iter() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
-        // FIXME
-        // assert_eq!(
-        //     test.state()
-        //         .canister_priority(&canister_state.canister_id())
-        //         .last_full_execution_round,
-        //     ExecutionRound::from(1)
-        // );
+        assert!(test.was_fully_executed(canister_state.canister_id()));
         assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         assert_eq!(
@@ -1735,23 +1729,12 @@ fn execute_idle_and_canisters_with_messages() {
 
     // We won't update `last_full_execution_round` for the canister without any
     // input messages.
-    // FIXME
-    // assert_eq!(
-    //     test.state()
-    //         .canister_priority(&idle)
-    //         .last_full_execution_round,
-    //     test.last_round()
-    // );
+    assert!(!test.was_fully_executed(idle));
     let idle = test.canister_state(idle);
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
+    assert_eq!(idle.system_state.canister_metrics().executed(), 0);
 
-    // FIXME
-    // assert_eq!(
-    //     test.state()
-    //         .canister_priority(&active)
-    //         .last_full_execution_round,
-    //     ExecutionRound::from(1)
-    // );
+    assert!(test.was_fully_executed(active));
     let active = test.canister_state(active);
     assert_eq!(active.system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
@@ -1798,13 +1781,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
     for canister_state in test.state().canisters_iter() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
-        // FIXME
-        // assert_eq!(
-        //     test.state()
-        //         .canister_priority(&canister_state.canister_id())
-        //         .last_full_execution_round,
-        //     ExecutionRound::new(1)
-        // );
+        assert!(test.was_fully_executed(canister_state.canister_id()));
         assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         assert_eq!(
@@ -2772,8 +2749,13 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.canister_age.get_sample_sum() as i64, 0);
     assert_eq!(metrics.round_preparation_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
-    // FIXME
-    // assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
+    assert_eq!(
+        metrics
+            .round_inner_iteration_prep_step
+            .with_label_values(&["scheduling"])
+            .get_sample_count(),
+        1
+    );
     assert_ge!(metrics.round_inner_iteration_prep.get_sample_count(), 1);
     assert_ge!(metrics.round_inner_iteration_exe.get_sample_count(), 1);
     assert_ge!(metrics.round_inner_iteration_fin.get_sample_count(), 1);
@@ -5529,108 +5511,6 @@ fn dts_update_and_heartbeat() {
 }
 
 #[test]
-fn scheduler_resets_accumulated_priorities() {
-    /// Create `scheduler_cores * 2` canisters with 2 messages each and execute 2 rounds.
-    /// Return number of executed second ingress messages.
-    fn executed_messages_after_two_rounds(scheduler_cores: usize, reset_interval: u64) -> usize {
-        /// Count the number of executed ingress messages.
-        fn executed_messages(test: &SchedulerTest, ingress_ids: &[MessageId]) -> usize {
-            ingress_ids
-                .iter()
-                .filter_map(|ingress_id| match test.ingress_status(ingress_id) {
-                    IngressStatus::Known {
-                        // There is no response, so messages are in the failed state
-                        state: IngressState::Failed(_),
-                        ..
-                    } => Some(()),
-                    _ => None,
-                })
-                .count()
-        }
-
-        // There must twice more canisters than the scheduler cores
-        let num_canisters = scheduler_cores * 2;
-
-        let subnet_config = SubnetConfig::new(SubnetType::Application);
-        let mut test = SchedulerTestBuilder::new()
-            .with_scheduler_config(SchedulerConfig {
-                scheduler_cores,
-                // Increase the overhead to execute just one message per round per core
-                instruction_overhead_per_execution: subnet_config
-                    .scheduler_config
-                    .max_instructions_per_round,
-                // Reset accumulated priority every Nth round
-                accumulated_priority_reset_interval: reset_interval.into(),
-                ..subnet_config.scheduler_config
-            })
-            .build();
-
-        // Create canisters with 2 messages each
-        let mut canister_ids = Vec::with_capacity(num_canisters);
-        let mut first_ingress_ids = Vec::with_capacity(num_canisters);
-        let mut second_ingress_ids = Vec::with_capacity(num_canisters);
-        for _ in 0..num_canisters {
-            let canister_id = test.create_canister();
-            canister_ids.push(canister_id);
-            first_ingress_ids.push(test.send_ingress(canister_id, ingress(5)));
-            second_ingress_ids.push(test.send_ingress(canister_id, ingress(5)));
-        }
-
-        // Execute the first round. Only first `scheduler_cores` messages
-        // must be executed (marked as `E`):
-        // Canister ID:        0 1 2 3 (scheduler_cores * 2)
-        // 1st message states: E E . .
-        // 2nd message states: . . . .
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
-        // After the first round, only the first `scheduler_cores` messages will be executed
-        assert_eq!(
-            scheduler_cores,
-            executed_messages(&test, &first_ingress_ids)
-        );
-        assert_eq!(0, executed_messages(&test, &second_ingress_ids));
-
-        // Execute the second round
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
-        // Return number of executed second ingress messages
-        executed_messages(&test, &second_ingress_ids)
-    }
-
-    // Note: the DTS scheduler requires at least 2 scheduler cores
-    let scheduler_cores = 2;
-
-    // When there is no reset round, canisters with the same compute allocation
-    // get scheduled fairly, one by one:
-    //
-    // 1. After the first round, some two canisters will be executed.
-    // 2. After the second round, the other two canisters will be executed.
-    //
-    // After two rounds, all canisters will be executed once (marked as `E`):
-    //
-    //     Canister ID:        0 1 2 3 (scheduler_cores * 2)
-    //     1st message states: E E E E
-    //     2nd message states: . . . . <-- num_executed_second_messages == 0
-    let num_executed_second_messages = executed_messages_after_two_rounds(scheduler_cores, 100);
-    assert_eq!(0, num_executed_second_messages);
-
-    // When the accumulated priorities get reset every round, accumulated priority
-    // becomes irrelevant. Scheduler will be trying to execute every round
-    // the same two canisters:
-    //
-    // 1. After the first round, some two canister will be executed.
-    // 2. After the second round, the same two canisters will be executed.
-    //
-    // After two rounds, two canisters will be executed twice (marked as `E`):
-    //
-    //     Canister ID:        0 1 2 3 (scheduler_cores * 2)
-    //     1st message states: E E . .
-    //     2nd message states: E E . . <-- num_executed_second_messages == scheduler_cores
-
-    // FIXME: Consider dropping the AP reset interval altogether.
-    // let num_executed_second_messages = executed_messages_after_two_rounds(scheduler_cores, 1);
-    // assert_eq!(scheduler_cores, num_executed_second_messages);
-}
-
-#[test]
 fn test_is_next_method_added_to_task_queue() {
     let mut test = SchedulerTestBuilder::new().build();
 
@@ -6619,8 +6499,7 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
             // The second half of the canisters should finish their messages.
             prop_assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
             // The second half of the canisters should be executed in the last round.
-            // FIXME
-            // prop_assert_eq!(priority.last_full_execution_round, test.last_round());
+            prop_assert!(test.was_fully_executed(canister.canister_id()));
         }
     }
     let mut total_accumulated_priority = 0;
