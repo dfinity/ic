@@ -1,0 +1,28 @@
+# Default recipe to show available commands
+default:
+    @just --list
+
+# Test command - accepts 'icp' or 'icrc1' as argument
+test target:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    if [ "{{ target }}" = "icp" ]; then
+        echo "Running ICP tests..."
+        cd icp
+        bazel test :rosetta-api_test --test_output=streamed
+        bazel test :rosetta-api-cli-tests --test_output=streamed
+        bazel test :icp_rosetta_system_tests --test_output=streamed
+    elif [ "{{ target }}" = "icrc1" ]; then
+        echo "Running ICRC1 tests..."
+        cd icrc1
+        bazel test :ic-icrc-rosetta-unit-tests --test_output=streamed
+        bazel test :storage-operations-tests --test_output=streamed
+        bazel test :icrc_rosetta_integration --test_output=streamed
+        bazel test :icrc_rosetta_system --test_output=streamed
+        bazel test :icrc_multitoken_rosetta_system --test_output=streamed
+    else
+        echo "Error: Invalid target '{{ target }}'"
+        echo "Usage: just test [icp|icrc1]"
+        exit 1
+    fi
