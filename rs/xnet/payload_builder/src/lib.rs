@@ -987,7 +987,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
     use SubnetType::*;
     match state.metadata.own_subnet_type {
         // No limits for now on application subnets.
-        Application | VerifiedApplication => None,
+        Application | VerifiedApplication | CloudEngine => None,
 
         System => {
             // If this is not the NNS subnet and the remote subnet is a system subnet, don't enforce the limit.

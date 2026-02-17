@@ -942,6 +942,8 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
                     fetch_inducted_payload_size_stats(&metrics_registry)
                 );
             }
+
+            SubnetType::CloudEngine => todo!(),
         }
     });
 }

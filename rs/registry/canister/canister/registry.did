@@ -352,7 +352,7 @@ type SubnetFeatures = record {
   sev_enabled : opt bool;
 };
 
-type SubnetType = variant { application; verified_application; system };
+type SubnetType = variant { application; verified_application; system; cloud_engine };
 
 type UpdateApiBoundaryNodesVersionPayload = record {
   version : text;
