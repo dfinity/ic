@@ -6674,7 +6674,6 @@ fn charge_idle_canisters_for_full_execution_round() {
         }
     }
 
-    let multiplier = scheduler_cores * test.state().canister_states().len();
     for round in 0..num_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
@@ -6696,8 +6695,8 @@ fn charge_idle_canisters_for_full_execution_round() {
             // Assert there is no divergency in accumulated priorities.
             let priority =
                 canister_priority.accumulated_priority - canister_priority.priority_credit;
-            assert_le!(priority.get(), 100 * multiplier as i64);
-            assert_ge!(priority.get(), -100 * multiplier as i64);
+            assert_le!(priority.get(), 100 * MULTIPLIER as i64);
+            assert_ge!(priority.get(), -100 * MULTIPLIER as i64);
 
             total_accumulated_priority += canister_priority.accumulated_priority.get();
             total_priority_credit += canister_priority.priority_credit.get();
