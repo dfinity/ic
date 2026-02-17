@@ -1890,7 +1890,7 @@ fn execute_canisters_on_thread(
         canister
             .system_state
             .canister_metrics_mut()
-            .observe_executed();
+            .observe_executed(total_instructions_used);
         canisters.push(canister);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
