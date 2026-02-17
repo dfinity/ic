@@ -707,9 +707,9 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn mock_tls_config_called_times<Times: Into<mockall::TimesRange>>(
-        n: Times,
+        times: Times,
     ) -> MockTlsConfig {
-        mock_tls_config_impl(Some(n))
+        mock_tls_config_impl(Some(times))
     }
 
     fn mock_tls_config_impl<Times: Into<mockall::TimesRange>>(
