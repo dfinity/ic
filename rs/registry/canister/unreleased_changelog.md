@@ -10,6 +10,7 @@ on the process that this file is part of, see
 ## Added
 
 * Invariant about cycles cost schedule and subnet types allowing only application subnets to be put on "Free" schedule.
+* New subnet admins field in the SubnetRecord.
 
 ## Changed
 
