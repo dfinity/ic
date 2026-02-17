@@ -1250,26 +1250,6 @@ pub(crate) trait IDkgTranscriptBuilder: Send + Sync {
     fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing>;
 }
 
-impl<T: ?Sized + IDkgPool> IDkgTranscriptBuilder for T {
-    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
-        self.transcripts().get(&transcript_id).cloned()
-    }
-
-    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
-        let mut ret = Vec::new();
-        for (_, signed_dealing) in self
-            .validated()
-            .signed_dealings_by_transcript_id(&transcript_id)
-        {
-            let dealing = signed_dealing.idkg_dealing();
-            if dealing.transcript_id == transcript_id {
-                ret.push(signed_dealing);
-            }
-        }
-        ret
-    }
-}
-
 /// Specifies how to handle a received message
 #[derive(Eq, PartialEq)]
 enum Action<'a> {

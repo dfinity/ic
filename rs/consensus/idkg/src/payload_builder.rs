@@ -468,11 +468,15 @@ struct PoolTranscriptBuilder<'a> {
 
 impl<'a> IDkgTranscriptBuilder for PoolTranscriptBuilder<'a> {
     fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
-        self.idkg_pool.get_completed_transcript(transcript_id)
+        self.idkg_pool.transcripts().get(&transcript_id).cloned()
     }
 
     fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
-        self.idkg_pool.get_validated_dealings(transcript_id)
+        self.idkg_pool
+            .validated()
+            .signed_dealings_by_transcript_id(&transcript_id)
+            .map(|(_, signed_dealing)| signed_dealing)
+            .collect()
     }
 }
 
