@@ -582,8 +582,7 @@ pub async fn install_bitcoin_canister_with_network(
 /// TODO(DEFI-2672): once new version of ic-doge-interface is released, use type from this crate.
 #[derive(candid::CandidType)]
 enum DogecoinCanisterArg {
-    #[candid(rename = "init")]
-    Init(ic_doge_interface::InitConfig),
+    init(ic_doge_interface::InitConfig),
 }
 
 pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
@@ -619,7 +618,7 @@ pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> Ca
         lazily_evaluate_fee_percentiles: Some(Flag::Enabled),
     };
 
-    let args = DogecoinCanisterArg::Init(init_config);
+    let args = DogecoinCanisterArg::init(init_config);
     install_rust_canister_from_path(
         &mut dogecoin_canister,
         get_dependency_path_from_env("DOGE_WASM_PATH"),
