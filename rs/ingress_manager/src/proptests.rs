@@ -154,7 +154,7 @@ proptest! {
         messages_count_limit in 1..= 1000_usize,
     ){
         prop_assume!(
-            ingress_message_payload_size <=std::cmp::min(memory_bytes_limit, wire_bytes_limit)
+            ingress_message_payload_size <= std::cmp::min(memory_bytes_limit, wire_bytes_limit)
         );
 
         let ingress_size = generate_ingress_with_params(
