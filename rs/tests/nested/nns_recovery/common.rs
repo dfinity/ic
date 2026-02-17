@@ -44,8 +44,8 @@ use slog::{Logger, info};
 use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(16)),
-    memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
+    vcpus: Some(NrOfVCPUs::new(32)),
+    memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
     boot_image_minimal_size_gibibytes: None,
 };
 

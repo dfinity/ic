@@ -9,14 +9,15 @@ use ic_metrics::{
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
 use prometheus::{
-    Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+    Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+    IntGaugeVec,
 };
 
 use crate::{
     metrics::{
         ScopedMetrics, cycles_histogram, dts_pause_or_abort_histogram, duration_histogram,
-        instructions_histogram, memory_histogram, messages_histogram, slices_histogram,
-        unique_sorted_buckets,
+        instructions_buckets, instructions_histogram, memory_histogram, messages_buckets,
+        messages_histogram, slices_histogram, unique_sorted_buckets,
     },
     scheduler::threshold_signatures::THRESHOLD_SIGNATURE_SCHEME_MISMATCH,
     units::{KIB, MIB},
@@ -43,13 +44,12 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_compute_allocation: Histogram,
     pub(super) canister_ingress_queue_latencies: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
+    pub(super) msg_execution_duration: Histogram,
     pub(super) instructions_consumed_per_message: Histogram,
-    pub(super) instructions_consumed_per_round: Histogram,
     pub(super) executable_canisters_per_round: Histogram,
     pub(super) executed_canisters_per_round: Histogram,
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) ingress_history_length: IntGauge,
-    pub(super) msg_execution_duration: Histogram,
     pub(super) registered_canisters: IntGaugeVec,
     pub(super) available_canister_ids: IntGauge,
     /// Metric `consumed_cycles` is not monotonically increasing. Cycles
@@ -69,7 +69,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) queues_memory_reservations: IntGauge,
     pub(super) queues_oversized_requests_extra_bytes: IntGauge,
     pub(super) queues_best_effort_message_bytes: IntGauge,
-    pub(super) canister_messages_where_cycles_were_charged: IntCounter,
     pub(super) current_heap_delta: IntGauge,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
     pub(super) execute_round_called: IntCounter,
@@ -91,7 +90,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_inner_iteration_prep: Histogram,
     pub(super) round_inner_iteration_exe: Histogram,
     pub(super) round_inner_iteration_thread: ScopedMetrics,
-    pub(super) round_inner_iteration_thread_message: ScopedMetrics,
     pub(super) round_inner_iteration_fin: Histogram,
     pub(super) round_inner_iteration_fin_induct: Histogram,
     pub(super) round_finalization_duration: Histogram,
@@ -128,7 +126,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) stop_canister_calls_without_call_id: IntGauge,
     pub(super) canister_snapshots_memory_usage: IntGauge,
     pub(super) num_canister_snapshots: IntGauge,
-    pub(super) zero_instruction_messages: IntCounter,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -225,17 +222,15 @@ impl SchedulerMetrics {
                 "The Internet Computer's compute utilization as a percent per cpu core.",
                 linear_buckets(0.0, 0.05, 21),
             ),
-            instructions_consumed_per_message: metrics_registry.histogram(
-                "scheduler_instructions_consumed_per_message",
-                "Wasm instructions consumed per message.",
-                // 1, 2, 5, …, 1M, 2M, 5M
-                decimal_buckets(0, 6),
+            msg_execution_duration: duration_histogram(
+                "scheduler_message_execution_duration_seconds",
+                "Durations of single replicated message executions in seconds.",
+                metrics_registry,
             ),
-            instructions_consumed_per_round: metrics_registry.histogram(
-                "scheduler_instructions_consumed_per_round",
-                "Wasm instructions consumed per round.",
-                // 1, 2, 5, …, 1M, 2M, 5M
-                decimal_buckets(0, 6),
+            instructions_consumed_per_message: instructions_histogram(
+                "scheduler_instructions_consumed_per_message",
+                "Wasm instructions consumed per message. Also includes zero instruction message executions (i.e. too few cycles to execute).",
+                metrics_registry,
             ),
             executable_canisters_per_round: metrics_registry.histogram(
                 "scheduler_executable_canisters_per_round",
@@ -257,11 +252,6 @@ impl SchedulerMetrics {
             ingress_history_length: metrics_registry.int_gauge(
                 "replicated_state_ingress_history_length",
                 "Total number of entries kept in the ingress history.",
-            ),
-            msg_execution_duration: duration_histogram(
-                "scheduler_message_execution_duration_seconds",
-                "The duration of single message execution in seconds.",
-                metrics_registry,
             ),
             registered_canisters: metrics_registry.int_gauge_vec(
                 "replicated_state_registered_canisters",
@@ -340,10 +330,6 @@ impl SchedulerMetrics {
                 "execution_queues_best_effort_message_bytes",
                 "Total byte size of all best-effort messages in canister queues.",
             ),
-            canister_messages_where_cycles_were_charged: metrics_registry.int_counter(
-                "scheduler_canister_messages_where_cycles_were_charged",
-                "Total number of canister messages which resulted in cycles being charged.",
-            ),
             current_heap_delta: metrics_registry.int_gauge(
                 "current_heap_delta",
                 "Estimate of the current size of the heap delta since the last checkpoint",
@@ -397,158 +383,48 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
-            round_preparation_duration: duration_histogram(
-                "execution_round_preparation_duration_seconds",
-                "The duration of execution round preparation in seconds.",
-                metrics_registry,
-            ),
-            round_preparation_ingress: duration_histogram(
-                "execution_round_preparation_ingress_pruning_duration_seconds",
-                "The duration of purging ingress during execution round \
-                      preparation in seconds.",
-                metrics_registry,
-            ),
+            round_preparation_duration: round_phase_duration_histogram("preparation", metrics_registry),
+            // Expiration of messages in the ingress queue.
+            round_preparation_ingress: round_preparation_phase_duration_histogram("expire ingress", metrics_registry),
+            // Processing of messages in the consensus queue.
             round_consensus_queue: ScopedMetrics {
-                duration: duration_histogram(
-                    "execution_round_consensus_queue_duration_seconds",
-                    "The duration of consensus queue processing in \
-                          an execution round",
-                    metrics_registry,
-                ),
-                instructions: instructions_histogram(
-                    "execution_round_consensus_queue_instructions",
-                    "The number of instructions executed during consensus \
-                          queue processing in an execution round",
-                    metrics_registry,
-                ),
-                slices: slices_histogram(
-                    "execution_round_consensus_queue_slices",
-                    "The number of slices executed during consensus \
-                          queue processing in an execution round",
-                    metrics_registry,
-                ),
-                messages: messages_histogram(
-                    "execution_round_consensus_queue_messages",
-                    "The number of messages executed during consensus \
-                          queue processing in an execution round",
-                    metrics_registry,
-                ),
+                duration: round_phase_duration_histogram("consensus", metrics_registry),
+                instructions: round_phase_instructions_histogram("consensus", metrics_registry),
+                slices: round_phase_slices_histogram("consensus", metrics_registry),
+                messages: round_phase_messages_histogram("consensus", metrics_registry),
             },
+            // Processing of postponed `raw_rand` calls.
             round_postponed_raw_rand_queue: ScopedMetrics {
-                duration: duration_histogram(
-                    "execution_round_postponed_raw_rand_queue_duration_seconds",
-                    "The duration of postponed raw rand queue processing in \
-                          an execution round",
-                    metrics_registry,
-                ),
-                instructions: instructions_histogram(
-                    "execution_round_postponed_raw_rand_queue_instructions",
-                    "The number of instructions executed during postponed \
-                          raw rand queue processing in an execution round",
-                    metrics_registry,
-                ),
-                slices: slices_histogram(
-                    "execution_round_postponed_raw_rand_queue_slices",
-                    "The number of slices executed during postponed \
-                          raw rand queue processing in an execution round",
-                    metrics_registry,
-                ),
-                messages: messages_histogram(
-                    "execution_round_postponed_raw_rand_queue_messages",
-                    "The number of messages executed during postponed \
-                          raw rand queue processing in an execution round",
-                    metrics_registry,
-                ),
+                duration: round_phase_duration_histogram("raw_rand", metrics_registry),
+                instructions: round_phase_instructions_histogram("raw_rand", metrics_registry),
+                slices: round_phase_slices_histogram("raw_rand", metrics_registry),
+                messages: round_phase_messages_histogram("raw_rand", metrics_registry),
             },
+            // Subnet queue processing happens in `inner_round()`, so in terms of
+            // instrumentation it is an inner round phase.
             round_subnet_queue: ScopedMetrics {
-                duration: duration_histogram(
-                    "execution_round_subnet_queue_duration_seconds",
-                    "The duration of subnet queue processing in \
-                          an execution round",
-                    metrics_registry,
-                ),
-                instructions: instructions_histogram(
-                    "execution_round_subnet_queue_instructions",
-                    "The number of instructions executed during subnet \
-                          queue processing in an execution round",
-                    metrics_registry,
-                ),
-                slices: slices_histogram(
-                    "execution_round_subnet_queue_slices",
-                    "The number of slices executed during subnet \
-                          queue processing in an execution round",
-                    metrics_registry,
-                ),
-                messages: messages_histogram(
-                    "execution_round_subnet_queue_messages",
-                    "The number of messages executed during subnet \
-                          queue processing in an execution round",
-                    metrics_registry,
-                ),
+                duration: round_inner_phase_duration_histogram("subnet", metrics_registry),
+                instructions: round_inner_phase_instructions_histogram("subnet", metrics_registry),
+                slices: round_inner_phase_slices_histogram("subnet", metrics_registry),
+                messages: round_inner_phase_messages_histogram("subnet", metrics_registry),
             },
+            // Advancing in-progress long install code.
             round_advance_long_install_code: ScopedMetrics {
-                duration: duration_histogram(
-                    "execution_round_advance_long_install_code_duration_seconds",
-                    "The duration of advancing an in progress long install code in \
-                          an execution round",
-                    metrics_registry,
-                ),
-                instructions: instructions_histogram(
-                    "execution_round_advance_long_install_code_instructions",
-                    "The number of instructions executed during advancing \
-                        an in progress install code in an execution round",
-                    metrics_registry,
-                ),
-                slices: slices_histogram(
-                    "execution_round_advance_long_install_code_slices",
-                    "The number of slices executed executed during advancing \
-                        an in progress install code in an execution round",
-                    metrics_registry,
-                ),
-                messages: messages_histogram(
-                    "execution_round_advance_long_install_code_messages",
-                    "The number of messages executed during advancing \
-                        an in progress install code in an execution round",
-                    metrics_registry,
-                ),
+                duration: round_phase_duration_histogram("long install", metrics_registry),
+                instructions: round_phase_instructions_histogram("long install", metrics_registry),
+                slices: round_phase_slices_histogram("long install", metrics_registry),
+                messages: round_phase_messages_histogram("long install", metrics_registry),
             },
-            round_scheduling_duration: duration_histogram(
-                "execution_round_scheduling_duration_seconds",
-                "The duration of execution round scheduling in seconds.",
-                metrics_registry,
-            ),
-            round_update_signature_request_contexts_duration: duration_histogram(
-                "execution_round_update_signature_request_contexts_duration_seconds",
-                "The duration of updating signature request contexts in seconds.",
-                metrics_registry,
-            ),
+            round_scheduling_duration: round_phase_duration_histogram("scheduling", metrics_registry),
+            round_update_signature_request_contexts_duration: round_phase_duration_histogram("threshold sign", metrics_registry),
+            // `inner_round()` processing.
             round_inner: ScopedMetrics {
-                duration: duration_histogram(
-                    "execution_round_inner_duration_seconds",
-                    "The duration of an inner round",
-                    metrics_registry,
-                ),
-                instructions: instructions_histogram(
-                    "execution_round_inner_instructions",
-                    "The number of instructions executed in an inner round",
-                    metrics_registry,
-                ),
-                slices: slices_histogram(
-                    "execution_round_inner_slices",
-                    "The number of slices executed in an inner round",
-                    metrics_registry,
-                ),
-                messages: messages_histogram(
-                    "execution_round_inner_messages",
-                    "The number of messages executed in an inner round",
-                    metrics_registry,
-                ),
+                duration: round_phase_duration_histogram("inner", metrics_registry),
+                instructions: round_phase_instructions_histogram("inner", metrics_registry),
+                slices: round_phase_slices_histogram("inner", metrics_registry),
+                messages: round_phase_messages_histogram("inner", metrics_registry),
             },
-            round_inner_heartbeat_overhead_duration: duration_histogram(
-                "execution_round_inner_heartbeat_overhead_duration_seconds",
-                "The duration of iterating canisters to prepare/remove heartbeat and global timer tasks",
-                metrics_registry,
-            ),
+            round_inner_heartbeat_overhead_duration: round_inner_phase_duration_histogram("heartbeat overhead", metrics_registry),
             round_inner_iteration: ScopedMetrics {
                 duration: duration_histogram(
                     "execution_round_inner_iteration_duration_seconds",
@@ -571,16 +447,8 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
-            round_inner_iteration_prep: duration_histogram(
-                "execution_round_inner_preparation_duration_seconds",
-                "The duration of inner execution round preparation in seconds.",
-                metrics_registry,
-            ),
-            round_inner_iteration_exe: duration_histogram(
-                "execution_round_inner_execution_duration_seconds",
-                "The duration of inner execution round of all the threads in seconds.",
-                metrics_registry,
-            ),
+            round_inner_iteration_prep: round_inner_phase_duration_histogram("preparation", metrics_registry),
+            round_inner_iteration_exe: round_inner_phase_duration_histogram("execution", metrics_registry),
             round_inner_iteration_thread: ScopedMetrics {
                 duration: duration_histogram(
                     "execution_round_inner_iteration_thread_duration_seconds",
@@ -607,66 +475,18 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
-            round_inner_iteration_thread_message: ScopedMetrics {
-                duration: duration_histogram(
-                    "execution_round_inner_iteration_thread_message_duration_seconds",
-                    "The duration of executing a message in a thread \
-                          spawned by an iteration of an inner round",
-                    metrics_registry,
-                ),
-                instructions: instructions_histogram(
-                    "execution_round_inner_iteration_thread_message_instructions",
-                    "The number of instructions executed in a message \
-                          in a thread spawned by an iteration of an inner round",
-                    metrics_registry,
-                ),
-                slices: slices_histogram(
-                    "execution_round_inner_iteration_thread_message_slices",
-                    "The number of slices executed in a message in a \
-                          thread spawned by an iteration of an inner round",
-                    metrics_registry,
-                ),
-                messages: messages_histogram(
-                    "execution_round_inner_iteration_thread_message_messages",
-                    "The number of messages executed in a message in a \
-                          thread spawned by an iteration of an inner round",
-                    metrics_registry,
-                ),
-            },
-            round_inner_iteration_fin: duration_histogram(
-                "execution_round_inner_finalization_duration_seconds",
-                "The duration of inner execution round finalization in seconds.",
-                metrics_registry,
-            ),
+            round_inner_iteration_fin: round_inner_phase_duration_histogram("finalization", metrics_registry),
             round_inner_iteration_fin_induct: duration_histogram(
                 "execution_round_inner_finalization_message_induction_duration_seconds",
                 "The duration of message induction during inner execution \
                       round finalization in seconds.",
                 metrics_registry,
             ),
-            round_finalization_duration: duration_histogram(
-                "execution_round_finalization_duration_seconds",
-                "The duration of execution round finalization in seconds.",
-                metrics_registry,
-            ),
-            round_finalization_stop_canisters: duration_histogram(
-                "execution_round_finalization_stop_canisters_duration_seconds",
-                "The duration of stopping canisters during execution \
-                      round finalization in seconds.",
-                metrics_registry,
-            ),
-            round_finalization_ingress: duration_histogram(
-                "execution_round_finalization_ingress_history_prune_duration_seconds",
-                "The duration of pruning ingress during execution round \
-                      finalization in seconds.",
-                metrics_registry,
-            ),
-            round_finalization_charge: duration_histogram(
-                "execution_round_finalization_charge_resources_duration_seconds",
-                "The duration of charging for resources during execution \
-                      round finalization in seconds.",
-                metrics_registry,
-            ),
+            round_finalization_duration: round_phase_duration_histogram("finalization", metrics_registry),
+            round_finalization_stop_canisters: round_finalization_phase_duration_histogram("stop canisters", metrics_registry),
+            // Pruning of expired messages from the ingress history.
+            round_finalization_ingress: round_finalization_phase_duration_histogram("prune ingress", metrics_registry),
+            round_finalization_charge: round_finalization_phase_duration_histogram("charge canisters", metrics_registry),
             canister_heap_delta_debits: metrics_registry.histogram(
                 "scheduler_canister_heap_delta_debits",
                 "The heap delta debit of a canister at the end of the round, before \
@@ -757,12 +577,6 @@ impl SchedulerMetrics {
                 "scheduler_num_canister_snapshots",
                 "Total number of canister snapshots on this subnet.",
             ),
-            zero_instruction_messages: metrics_registry.int_counter(
-                "scheduler_zero_instruction_messages",
-                "Number of messages that were scheduled to be \
-                executed, but didn't end up using any cycles. Possibly \
-                because the canister couldn't prepay for the execution."
-            )
         }
     }
 
@@ -809,4 +623,169 @@ impl SchedulerMetrics {
     pub(super) fn observe_queues_best_effort_message_bytes(&self, size_bytes: usize) {
         self.queues_best_effort_message_bytes.set(size_bytes as i64);
     }
+}
+
+fn round_phase_duration_histogram(phase: &str, metrics_registry: &MetricsRegistry) -> Histogram {
+    phase_duration_histogram(
+        "execution_round_phase_duration_seconds",
+        "Durations of specific execute_round() phases, in seconds.",
+        phase,
+        metrics_registry,
+    )
+}
+
+fn round_phase_instructions_histogram(
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    phase_instructions_histogram(
+        "execution_round_phase_instructions",
+        "Number of instructions executed in specific execute_round() phases.",
+        phase,
+        metrics_registry,
+    )
+}
+
+fn round_phase_slices_histogram(phase: &str, metrics_registry: &MetricsRegistry) -> Histogram {
+    phase_messages_histogram(
+        "execution_round_phase_slices",
+        "Number of slices executed in specific execute_round() phases.",
+        phase,
+        metrics_registry,
+    )
+}
+
+fn round_phase_messages_histogram(phase: &str, metrics_registry: &MetricsRegistry) -> Histogram {
+    phase_messages_histogram(
+        "execution_round_phase_messages",
+        "Number of messages executed in specific execute_round() phases.",
+        phase,
+        metrics_registry,
+    )
+}
+
+fn round_preparation_phase_duration_histogram(
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    phase_duration_histogram(
+        "execution_round_preparation_phase_duration_seconds",
+        "Durations of specific round preparation phases, in seconds.",
+        phase,
+        metrics_registry,
+    )
+}
+
+fn round_inner_phase_duration_histogram(
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    phase_duration_histogram(
+        "execution_round_inner_phase_duration_seconds",
+        "Durations of specific inner_round() phases, in seconds.",
+        phase,
+        metrics_registry,
+    )
+}
+
+fn round_inner_phase_instructions_histogram(
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    phase_instructions_histogram(
+        "execution_round_inner_phase_instructions",
+        "Number of instructions executed in specific inner_round() phases.",
+        phase,
+        metrics_registry,
+    )
+}
+
+fn round_inner_phase_slices_histogram(
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    phase_messages_histogram(
+        "execution_round_inner_phase_slices",
+        "Number of slices executed in specific inner_round() phases.",
+        phase,
+        metrics_registry,
+    )
+}
+
+fn round_inner_phase_messages_histogram(
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    phase_messages_histogram(
+        "execution_round_inner_phase_messages",
+        "Number of messages executed in specific inner_round() phases.",
+        phase,
+        metrics_registry,
+    )
+}
+
+fn round_finalization_phase_duration_histogram(
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    phase_duration_histogram(
+        "execution_round_finalization_phase_duration_seconds",
+        "Durations of specific round finalization phases, in seconds.",
+        phase,
+        metrics_registry,
+    )
+}
+
+/// Returns a histogram with a `phase` const label and buckets appropriate for
+/// durations.
+fn phase_duration_histogram(
+    name: &str,
+    help: &str,
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    metrics_registry.register(
+        Histogram::with_opts(
+            HistogramOpts::new(name, help)
+                .const_label("phase", phase)
+                .buckets(decimal_buckets_with_zero(-4, 1)),
+        )
+        .unwrap(),
+    )
+}
+
+/// Returns a histogram with a `phase` const label and buckets appropriate for
+/// instructions.
+fn phase_instructions_histogram(
+    name: &str,
+    help: &str,
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    metrics_registry.register(
+        Histogram::with_opts(
+            HistogramOpts::new(name, help)
+                .const_label("phase", phase)
+                .buckets(instructions_buckets()),
+        )
+        .unwrap(),
+    )
+}
+
+/// Returns a histogram with a `phase` const label and buckets appropriate for
+/// messages or slices.
+fn phase_messages_histogram(
+    name: &str,
+    help: &str,
+    phase: &str,
+    metrics_registry: &MetricsRegistry,
+) -> Histogram {
+    metrics_registry.register(
+        Histogram::with_opts(
+            HistogramOpts::new(name, help)
+                .const_label("phase", phase)
+                .buckets(messages_buckets()),
+        )
+        .unwrap(),
+    )
 }

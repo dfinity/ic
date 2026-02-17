@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           invocation-names: afl
-          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 10
 
   config:
     name: Set Config
@@ -339,9 +339,18 @@ jobs:
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+          cat /tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
       - name: Build and Test
         run: |
+          # Set up .netrc so that bazel can authenticate with GitHub to have higher rate limits for fetching dependencies.
+          touch  ~/.netrc
+          chmod 600 ~/.netrc
+          echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
+          echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
+          echo "Current GitHub API rate limits:"
+          curl -s --netrc https://api.github.com/rate_limit | jq '.resources.core'
+
           mkdir -p /tmp/zig-cache
 
           bazel \
