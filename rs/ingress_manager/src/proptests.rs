@@ -143,7 +143,7 @@ const MB: usize = 1024 * 1024;
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 64,
+        cases: 1024,
         timeout: 10_000, // 10 seconds
         ..ProptestConfig::default()
     })]
@@ -161,6 +161,7 @@ proptest! {
         let ingress_size = generate_ingress_with_params(
             canister_test_id(0),
             ingress_message_payload_size,
+            /*nonce=*/ 0,
             UNIX_EPOCH + Duration::from_secs(30),
         )
         .count_bytes();

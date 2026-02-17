@@ -792,7 +792,6 @@ pub(crate) mod tests {
         state_manager::{StateManagerError, StateManagerResult},
         time::{UNIX_EPOCH, expiry_time_from_now},
     };
-    use rand::RngCore;
     use rstest::rstest;
     use std::sync::RwLock;
     use std::{collections::HashSet, convert::TryInto, time::Duration};
@@ -2223,7 +2222,7 @@ pub(crate) mod tests {
         expiry: Time,
     ) -> (Vec<SignedIngress>, CanisterState) {
         let msgs: Vec<_> = (0..msg_count)
-            .map(|_| generate_ingress_with_params(cid, bytes, expiry))
+            .map(|nonce| generate_ingress_with_params(cid, bytes, nonce as u64, expiry))
             .collect();
 
         (
@@ -2238,12 +2237,13 @@ pub(crate) mod tests {
     pub(crate) fn generate_ingress_with_params(
         cid: CanisterId,
         bytes: usize,
+        nonce: u64,
         expiry: Time,
     ) -> SignedIngress {
         SignedIngressBuilder::new()
             .canister_id(cid)
             .expiry_time(expiry)
-            .nonce(rand::thread_rng().next_u64())
+            .nonce(nonce)
             .method_payload(vec![0xff; bytes])
             .build()
     }
@@ -2461,9 +2461,12 @@ pub(crate) mod tests {
             messages_count_limit as u64,
             ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
         );
+        let number_of_messages_to_generate = memory_bytes_limit
+            .unwrap_or(ic_limits::MAX_INGRESS_BYTES_PER_BLOCK as usize)
+            .div_ceil(ingress_message_payload_size.max(1));
         let (ingress, canister) = generate_ingress_messages_with_params(
             canister_test_id(1),
-            messages_count_limit + 1,
+            std::cmp::min(number_of_messages_to_generate, messages_count_limit) + 1,
             ingress_message_payload_size,
             UNIX_EPOCH + Duration::from_secs(40),
         );
