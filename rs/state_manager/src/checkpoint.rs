@@ -276,7 +276,7 @@ fn strip_page_map_deltas(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
     for canister in state.canisters_iter_mut() {
-        // FIXME: Check if canister has deltas before making a mutable reference.
+        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
         let canister = Arc::make_mut(canister);
         canister
             .system_state
@@ -364,7 +364,7 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
     };
 
     for canister in tip_state.canisters_iter_mut() {
-        // FIXME: Filter out canisters with no heap deltas before making a mutable reference.
+        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
         let canister = Arc::make_mut(canister);
         let id = canister.canister_id();
         add_to_pagemaps_and_strip(
