@@ -1530,22 +1530,13 @@ impl Scheduler for SchedulerImpl {
                         };
 
                     let log = &mut canister.system_state.canister_log;
-                    let (log_memory_usage, delta_log_sizes) =
-                        (log.bytes_used(), log.delta_log_sizes());
-                    // IMPORTANT: clear_delta_log_sizes() must be called to make sure
-                    // that the delta log sizes are always empty at the end of the round.
-                    log.clear_delta_log_sizes();
+                    let log_memory_usage = log.bytes_used();
                     self.metrics
                         .canister_log_memory_usage_v2
                         .observe(log_memory_usage as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
                         .observe(log_memory_usage as f64);
-                    for size in delta_log_sizes {
-                        self.metrics
-                            .canister_log_delta_memory_usage
-                            .observe(size as f64);
-                    }
 
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_allocated_bytes += canister

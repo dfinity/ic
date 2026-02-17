@@ -18,9 +18,10 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
+use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
 use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
     CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
     methods::FuncRef,
@@ -46,6 +47,7 @@ pub struct HypervisorMetrics {
     max_complexity: Histogram,
     compilation_cache_size: IntGaugeVec,
     code_section_size: Histogram,
+    canister_log_delta_memory_usage: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -81,6 +83,13 @@ impl HypervisorMetrics {
                     the current limit).",
                 linear_buckets(1024.0 * 1024.0, 1024.0 * 1204.0, 11), // 1MiB, 2MiB, ..., 11 MiB. Current limit is 11 MiB.
             ),
+
+            canister_log_delta_memory_usage: metrics_registry.histogram(
+                "canister_log_delta_memory_usage_bytes",
+                "Canisters log delta (per single execution) memory usage distribution in bytes.",
+                // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
+                binary_buckets_with_zero(10, 23),
+            ),
         }
     }
 
@@ -108,6 +117,12 @@ impl HypervisorMetrics {
         self.compilation_cache_size
             .with_label_values(&["disk"])
             .set(cache_disk_size as i64);
+    }
+}
+
+impl CanisterLogMetrics for HypervisorMetrics {
+    fn observe_delta_log_size(&self, size: usize) {
+        self.canister_log_delta_memory_usage.observe(size as f64);
     }
 }
 
@@ -327,6 +342,7 @@ impl Hypervisor {
             time,
             network_topology,
             self.own_subnet_id,
+            &self.metrics,
             &self.log,
             state_changes_error,
             call_tree_metrics,
@@ -452,5 +468,9 @@ impl Hypervisor {
         let canister_module = CanisterModule::new(bytes);
         self.compilation_cache
             .insert_ok(&canister_module, compiled_module);
+    }
+
+    pub(crate) fn metrics(&self) -> &HypervisorMetrics {
+        &self.metrics
     }
 }

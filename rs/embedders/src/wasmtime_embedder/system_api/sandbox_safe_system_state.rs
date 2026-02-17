@@ -28,6 +28,7 @@ use ic_replicated_state::{
     canister_state::DEFAULT_QUEUE_CAPACITY, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
     CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
@@ -325,13 +326,14 @@ impl SystemStateModifications {
 
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
-    pub fn apply_changes(
+    pub fn apply_changes<Metrics: CanisterLogMetrics>(
         mut self,
         time: Time,
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
         is_composite_query: bool,
+        metrics: &Metrics,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Verify total cycle change is not positive and update cycles balance.
@@ -519,7 +521,7 @@ impl SystemStateModifications {
         // Append delta log to the total canister log.
         system_state
             .canister_log
-            .append_delta_log(&mut self.canister_log);
+            .append_delta_log(&mut self.canister_log, metrics);
 
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {
