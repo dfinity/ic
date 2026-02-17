@@ -9,7 +9,7 @@ use crate::invariants::common::{
 
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
-use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType};
 use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_node_record_key, make_subnet_record_key};
 use prost::Message;
 
@@ -20,6 +20,7 @@ use prost::Message;
 ///    * Each subnet contains at least one node
 ///    * There is at least one system subnet
 ///    * Each subnet in the registry occurs in the subnet list and vice versa
+///    * Only application subnets can be rented and therefore have a "free" cycles cost schedule
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -91,7 +92,21 @@ pub(crate) fn check_subnet_invariants(
         if subnet_record.subnet_type == i32::from(SubnetType::System) {
             system_subnet_count += 1;
         }
+
+        // Only application subnets can be rented and have a "free" cycles cost schedule.
+        if subnet_record.subnet_type != i32::from(SubnetType::Application)
+            && subnet_record.canister_cycles_cost_schedule
+                == i32::from(CanisterCyclesCostSchedule::Free)
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Subnet {subnet_id:} is not an application subnet but has a free cycles cost schedule"
+                ),
+                source: None,
+            });
+        }
     }
+
     // There is at least one system subnet. Note that we disable this invariant for benchmarks, as
     // the code to set up "invariants compliant" registry mostly depends on "test-only" code, and
     // it's very difficult to conform canbench benchmarks to test-only code. It's also risky to move
@@ -129,3 +144,6 @@ pub(crate) fn get_subnet_records_map(
     }
     subnets
 }
+
+#[cfg(test)]
+mod tests;
