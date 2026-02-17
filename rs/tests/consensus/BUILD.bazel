@@ -323,7 +323,7 @@ system_test(
     ],
 )
 
-consensus_performance = system_test_nns(
+consensus_performance_template = system_test_nns(
     name = "consensus_performance",
     additional_colocate_tags = [
         "system_test_benchmark",
@@ -366,18 +366,92 @@ consensus_performance = system_test_nns(
 
 system_test_nns(
     name = "consensus_performance_4MB",
-    test_driver_target = consensus_performance.test_driver_target,
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 64,
+        "memory_kibibytes": 512142680,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
+    crate_features = select({
+        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
+        "//conditions:default": [],
+    }),
+    enable_head_nns_variant = False,
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
+    tags = [
+        "colocate",
+        "manual",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
+        "IC_VERSION_FILE": "//bazel:version.txt",
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
+    },
     env = {
         "MAX_INGRESS_BYTES_PER_BLOCK": "4194304",
     },
+    test_driver_target = consensus_performance_template.test_driver_target,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test_nns(
     name = "consensus_performance_8MB",
-    test_driver_target = consensus_performance.test_driver_target,
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 64,
+        "memory_kibibytes": 512142680,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
+    crate_features = select({
+        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
+        "//conditions:default": [],
+    }),
+    enable_head_nns_variant = False,
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
+    tags = [
+        "colocate",
+        "manual",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
+        "IC_VERSION_FILE": "//bazel:version.txt",
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
+    },
     env = {
         "MAX_INGRESS_BYTES_PER_BLOCK": "8388608",
     },
+    test_driver_target = consensus_performance_template.test_driver_target,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test_nns(
