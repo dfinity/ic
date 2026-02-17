@@ -139,16 +139,16 @@ mod tests {
             )
         );
 
-        let invalid_input = format!("");
-        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
-
         let invalid_input = format!("{}:{}", invalid_node_id_str, valid_pub_key_str);
         assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
 
-        let invalid_input = format!("{}", valid_node_id_str);
+        let invalid_input = String::new();
         assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
 
-        let invalid_input = format!("{}", valid_pub_key_str);
+        let invalid_input = valid_node_id_str.to_string();
+        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+
+        let invalid_input = valid_pub_key_str.to_string();
         assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
     }
 }
