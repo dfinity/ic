@@ -121,6 +121,7 @@ mod tests {
             )
         );
 
+        // Works also with additional colons (same logic as in `ic-admin`)
         let valid_input = format!("{}::{}", valid_node_id_str, valid_pub_key_str);
         assert_eq!(
             node_id_and_pub_key_from_str(&valid_input).unwrap(),
@@ -130,6 +131,7 @@ mod tests {
             )
         );
 
+        // Works also with additional colons (same logic as in `ic-admin`)
         let valid_input = format!("{}:{}:", valid_node_id_str, valid_pub_key_str);
         assert_eq!(
             node_id_and_pub_key_from_str(&valid_input).unwrap(),
