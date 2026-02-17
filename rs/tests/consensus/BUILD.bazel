@@ -381,20 +381,20 @@ system_test_nns(
     }),
     enable_head_nns_variant = False,
     enable_metrics = True,
+    env = {
+        "MAX_INGRESS_BYTES_PER_BLOCK": "4194304",
+    },
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
         "manual",
     ],
+    test_driver_target = consensus_performance_template.test_driver_target,
     test_timeout = "eternal",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "IC_VERSION_FILE": "//bazel:version.txt",
         "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
     },
-    env = {
-        "MAX_INGRESS_BYTES_PER_BLOCK": "4194304",
-    },
-    test_driver_target = consensus_performance_template.test_driver_target,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -426,20 +426,20 @@ system_test_nns(
     }),
     enable_head_nns_variant = False,
     enable_metrics = True,
+    env = {
+        "MAX_INGRESS_BYTES_PER_BLOCK": "8388608",
+    },
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
         "manual",
     ],
+    test_driver_target = consensus_performance_template.test_driver_target,
     test_timeout = "eternal",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "IC_VERSION_FILE": "//bazel:version.txt",
         "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
     },
-    env = {
-        "MAX_INGRESS_BYTES_PER_BLOCK": "8388608",
-    },
-    test_driver_target = consensus_performance_template.test_driver_target,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
