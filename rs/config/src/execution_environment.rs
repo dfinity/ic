@@ -9,7 +9,7 @@ const MIB: u64 = 1024 * 1024;
 const GIB: u64 = MIB * 1024;
 const TIB: u64 = GIB * 1024;
 
-// TODO: remove after the feature is enabled by default.
+// TODO(DSM-105): remove after the feature is enabled by default.
 pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = false;
 pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENABLED {
     FlagStatus::Enabled

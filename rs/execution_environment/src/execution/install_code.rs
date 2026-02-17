@@ -604,7 +604,7 @@ impl InstallCodeHelper {
 
     /// Takes the canister log.
     pub(crate) fn take_canister_log(&mut self) -> (CanisterLog, LogMemoryStore) {
-        // TODO(DSM-11): Remove duplication when the migration is fully done.
+        // TODO(DSM-105): Remove duplication when the migration is fully done.
         (
             self.canister.system_state.canister_log.take(),
             self.canister.system_state.log_memory_store.clone(),
