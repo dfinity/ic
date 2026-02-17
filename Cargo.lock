@@ -14847,6 +14847,7 @@ dependencies = [
  "maplit",
  "num-traits",
  "prometheus",
+ "slog",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
