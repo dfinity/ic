@@ -627,9 +627,8 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
-        log_memory_limit: NumBytes,
         canister_log: CanisterLog,
-        log_memory_store_data: PageMap,
+        log_memory_store_data: Option<PageMap>,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
@@ -665,7 +664,6 @@ impl SystemState {
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 LOG_MEMORY_STORE_FEATURE,
-                log_memory_limit,
                 log_memory_store_data,
             ),
             wasm_memory_limit,

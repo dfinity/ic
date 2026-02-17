@@ -13,7 +13,7 @@ use crate::canister_state::system_state::log_memory_store::{
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::{CanisterLog, NumBytes};
+use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -55,18 +55,8 @@ impl LogMemoryStore {
     }
 
     /// Creates a new store from a checkpoint.
-    pub fn from_checkpoint(
-        feature_flag: FlagStatus,
-        log_memory_limit: NumBytes,
-        page_map: PageMap,
-    ) -> Self {
-        Self::new_inner(
-            feature_flag,
-            // PageMap is a lazy pointer that doesn't verify file existence on creation.
-            // To avoid redundant disk I/O during restoration, we only initialize page_map
-            // if the log memory limit is non-zero.
-            (log_memory_limit > NumBytes::new(0)).then_some(page_map),
-        )
+    pub fn from_checkpoint(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
+        Self::new_inner(feature_flag, maybe_page_map)
     }
 
     fn new_inner(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
