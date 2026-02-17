@@ -126,6 +126,7 @@ impl SetupConfigBuilder {
 
     fn with_nns_nodes(mut self, nns_nodes: usize) -> Self {
         assert!(nns_nodes > 0, "Subnets must have at least one node");
+
         self.config.nns_nodes = nns_nodes;
         self
     }
