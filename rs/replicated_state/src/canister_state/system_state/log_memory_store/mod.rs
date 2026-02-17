@@ -87,6 +87,11 @@ impl LogMemoryStore {
         self.maybe_page_map.as_mut()
     }
 
+    /// Returns true if the underlying page map is allocated.
+    pub fn is_allocated(&self) -> bool {
+        self.maybe_page_map.is_some()
+    }
+
     /// Clears the canister log records without deallocating the ring buffer.
     pub fn clear(&mut self) {
         if let Some(mut ring_buffer) = self.load_ring_buffer() {

@@ -197,7 +197,9 @@ impl PageMapType {
         let mut result = vec![];
         for (id, canister) in state.canister_states() {
             result.push(Self::WasmChunkStore(id.to_owned()));
-            result.push(Self::LogMemoryStore(id.to_owned()));
+            if canister.system_state.log_memory_store.is_allocated() {
+                result.push(Self::LogMemoryStore(id.to_owned()));
+            }
             if canister.execution_state.is_some() {
                 result.push(Self::WasmMemory(id.to_owned()));
                 result.push(Self::StableMemory(id.to_owned()));
