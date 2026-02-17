@@ -265,9 +265,19 @@ impl CanisterLog {
         self.delta_log_sizes.push_back(size);
     }
 
-    /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
-    pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
-        self.delta_log_sizes.drain(..).collect()
+    /// Returns delta_log sizes.
+    pub fn delta_log_sizes(&self) -> Vec<usize> {
+        self.delta_log_sizes.iter().cloned().collect()
+    }
+
+    /// Clears the delta_log sizes.
+    pub fn clear_delta_log_sizes(&mut self) {
+        self.delta_log_sizes.clear();
+    }
+
+    /// Returns true if the canister log has delta log sizes.
+    pub fn has_delta_log_sizes(&self) -> bool {
+        !self.delta_log_sizes.is_empty()
     }
 }
 
@@ -490,8 +500,11 @@ mod tests {
                 (9, 303, b"delta #6"),
             ]))
         );
-        assert_eq!(main.take_delta_log_sizes(), vec![size_b, size_c]);
-        assert_eq!(main.take_delta_log_sizes(), Vec::<usize>::new()); // Second call returns empty.
+        assert!(main.has_delta_log_sizes());
+        assert_eq!(main.delta_log_sizes(), vec![size_b, size_c]);
+        main.clear_delta_log_sizes();
+        assert!(!main.has_delta_log_sizes());
+        assert_eq!(main.delta_log_sizes(), Vec::<usize>::new()); // Call after clear_delta_log_sizes.
         assert_eq!(main.bytes_used(), size_a + size_b + size_c);
     }
 }

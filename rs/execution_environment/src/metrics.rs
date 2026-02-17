@@ -431,7 +431,7 @@ pub fn duration_histogram<S: Into<String>>(
 }
 
 /// Returns buckets appropriate for instructions.
-fn instructions_buckets() -> Vec<f64> {
+pub fn instructions_buckets() -> Vec<f64> {
     let mut buckets: Vec<NumInstructions> = decimal_buckets_with_zero(4, 11)
         .into_iter()
         .map(|x| NumInstructions::from(x as u64))
@@ -528,16 +528,19 @@ pub fn memory_histogram<S: Into<String>>(
     metrics_registry.histogram(name, help, memory_buckets())
 }
 
+/// Returns buckets appropriate for messages and slices.
+pub fn messages_buckets() -> Vec<f64> {
+    decimal_buckets_with_zero(0, 3)
+}
+
 /// Returns a histogram with buckets appropriate for messages.
 pub fn messages_histogram<S: Into<String>>(
     name: S,
     help: S,
     metrics_registry: &MetricsRegistry,
 ) -> Histogram {
-    let mut buckets = decimal_buckets_with_zero(1, 4);
-    buckets.push(100_000.0);
-    // Buckets are [0, 10, 20, 50, ..., 10K, 20K, 50K].
-    metrics_registry.histogram(name, help, buckets)
+    // Buckets are [0, 1, 2, 5, ..., 1K, 2K, 5K].
+    metrics_registry.histogram(name, help, messages_buckets())
 }
 
 /// Returns a histogram with buckets appropriate for slices.

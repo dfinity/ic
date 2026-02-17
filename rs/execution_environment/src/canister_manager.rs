@@ -1,5 +1,5 @@
 use crate::as_round_instructions;
-use crate::execution::install_code::{OriginalContext, validate_controller};
+use crate::execution::{common::validate_controller, install_code::OriginalContext};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
     CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
@@ -943,7 +943,7 @@ impl CanisterManager {
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
         let time = state.time();
-        let canister = match state.canister_state_mut(&canister_id) {
+        let canister = match state.canister_state(&canister_id) {
             Some(canister) => canister,
             None => return Err(CanisterManagerError::CanisterNotFound(canister_id)),
         };
@@ -955,6 +955,7 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
 
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         let rejects = uninstall_canister(
             &self.log,
             canister,
@@ -1003,7 +1004,7 @@ impl CanisterManager {
         mut stop_context: StopCanisterContext,
         state: &mut ReplicatedState,
     ) -> StopCanisterResult {
-        let canister = match state.canister_state_mut(&canister_id) {
+        let canister = match state.canister_state(&canister_id) {
             None => {
                 return StopCanisterResult::Failure {
                     error: CanisterManagerError::CanisterNotFound(canister_id),
@@ -1020,6 +1021,7 @@ impl CanisterManager {
             };
         }
 
+        let canister = state.canister_state_mut(&canister_id).unwrap();
         let result = match canister.system_state.begin_stopping(stop_context) {
             Some(mut stop_context) => StopCanisterResult::AlreadyStopped {
                 cycles_to_return: stop_context.take_cycles(),
@@ -1223,8 +1225,8 @@ impl CanisterManager {
         // - its state is permanently deleted, and
         // - its cycles are discarded.
 
-        // Take out the canister from `ReplicatedState`.
-        let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
+        // Remove the canister from `ReplicatedState`.
+        let canister_to_delete = state.remove_canister(&canister_id_to_delete).unwrap();
         let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
 
         // Delete canister snapshots that are stored separately in `ReplicatedState`.
@@ -1313,6 +1315,10 @@ impl CanisterManager {
             .reserved_cycles_limit
             .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
 
+        settings
+            .wasm_memory_limit
+            .get_or_insert(self.config.default_wasm_memory_limit);
+
         // Validate settings before `create_canister_helper` applies them
         // No creation fee applied.
         //
@@ -1364,7 +1370,7 @@ impl CanisterManager {
             });
         }
 
-        if state.canister_states.contains_key(&new_canister_id) {
+        if state.canister_states().contains_key(&new_canister_id) {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
 
@@ -3144,6 +3150,12 @@ impl CanisterManager {
             execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
             execution_state.wasm_binary.clear_compilation_cache();
         }
+
+        // Carry over the scheduling priority.
+        state
+            .metadata
+            .subnet_schedule
+            .rename_canister(&old_id, new_id);
 
         state
             .metadata

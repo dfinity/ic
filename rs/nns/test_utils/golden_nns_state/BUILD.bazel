@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/types/base_types",
     "//rs/types/types",
+    "@crate_index//:serde_json",
     "@crate_index//:tempfile",
 ]
 
@@ -37,7 +38,11 @@ rust_library(
     name = "golden_nns_state",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
+    compile_data = ["//:mainnet-routing-table.json"],
     crate_name = "ic_nns_test_utils_golden_nns_state",
+    rustc_env = {
+        "MAINNET_ROUTING_TABLE": "$(location //:mainnet-routing-table.json)",
+    },
     version = "0.0.1",
     deps = DEPENDENCIES,
 )

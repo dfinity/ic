@@ -58,7 +58,9 @@ use ic_replicated_state::{
         CyclesUseCase,
         wasm_chunk_store::{self, ChunkValidationResult},
     },
-    metadata_state::subnet_call_context_manager::InstallCodeCallId,
+    metadata_state::{
+        subnet_call_context_manager::InstallCodeCallId, testing::NetworkTopologyTesting,
+    },
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
@@ -340,18 +342,18 @@ fn canister_manager_config(
 fn initial_state(subnet_id: SubnetId, use_specified_ids_routing_table: bool) -> ReplicatedState {
     let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
 
-    state.metadata.network_topology.routing_table = if use_specified_ids_routing_table {
-        let routing_table =
-            get_routing_table_with_specified_ids_allocation_range(subnet_id).unwrap();
-        Arc::new(routing_table)
+    let routing_table = if use_specified_ids_routing_table {
+        get_routing_table_with_specified_ids_allocation_range(subnet_id).unwrap()
     } else {
-        Arc::new(
-            RoutingTable::try_from(btreemap! {
-                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => subnet_id,
-            })
-            .unwrap(),
-        )
+        RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => subnet_id,
+        })
+        .unwrap()
     };
+    state
+        .metadata
+        .network_topology
+        .set_routing_table(routing_table);
 
     state.metadata.network_topology.nns_subnet_id = subnet_id;
     state.metadata.init_allocation_ranges_if_empty().unwrap();
@@ -406,6 +408,7 @@ fn install_code(
     execution_parameters.compute_allocation = old_canister.compute_allocation();
     execution_parameters.memory_allocation = old_canister.memory_allocation();
 
+    let old_canister = Arc::unwrap_or_clone(old_canister);
     let dts_result = canister_manager.install_code_dts(
         context,
         CanisterCall::Ingress(Arc::new(ingress)),
@@ -426,14 +429,21 @@ fn install_code(
     // Canister manager tests do not trigger DTS executions.
     let (result, instructions_used, canister) = match dts_result {
         DtsInstallCodeResult::Finished {
-            mut canister,
+            canister,
             call_id: _,
             message: _,
             instructions_used,
             result,
         } => {
+            // `update_on_low_wasm_memory_hook_condition()` requires an `Arc<CanisterState>`
+            // so we need to jump through this hoop to make it work.
+            let mut canister = Arc::new(canister);
             canister.update_on_low_wasm_memory_hook_condition();
-            (result, instructions_used, Some(canister))
+            (
+                result,
+                instructions_used,
+                Some(Arc::unwrap_or_clone(canister)),
+            )
         }
         DtsInstallCodeResult::Paused {
             canister: _,
@@ -1556,7 +1566,7 @@ fn get_canister_status_of_stopped_canister() {
         let canister = get_stopped_canister(canister_id);
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state(&canister_id).unwrap();
         let status_res = canister_manager
             .get_canister_status(
                 sender,
@@ -1591,7 +1601,7 @@ fn get_canister_status_of_stopping_canister() {
         let canister = get_stopping_canister(canister_id);
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state(&canister_id).unwrap();
         let status = canister_manager
             .get_canister_status(
                 sender,
@@ -6908,7 +6918,7 @@ fn can_create_canister() {
     let canister_id2 = test.create_canister(*INITIAL_CYCLES);
     assert_eq!(canister_id2, expected_generated_id2);
 
-    assert_eq!(test.state().canister_states.len(), 2);
+    assert_eq!(test.state().canister_states().len(), 2);
 }
 
 #[test]
@@ -6944,7 +6954,7 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
             );
         }
     }
-    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(test.state().canister_states().len(), 1);
 }
 
 #[test]
@@ -6973,7 +6983,7 @@ fn can_create_canister_with_extra_cycles() {
         .build();
     let result = test.ingress(canister_id, "update", payload);
     let _ = get_reply(result);
-    assert_eq!(test.state().canister_states.len(), 2);
+    assert_eq!(test.state().canister_states().len(), 2);
 }
 
 #[test]
