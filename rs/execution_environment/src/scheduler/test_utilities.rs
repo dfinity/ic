@@ -562,25 +562,29 @@ impl SchedulerTest {
         }
     }
 
-    pub fn drain_subnet_messages(&mut self) -> ReplicatedState {
-        let state = self.state.take().unwrap();
+    fn round_limits(&self, state: &ReplicatedState) -> RoundLimits {
         let compute_allocation_used = state.total_compute_allocation();
-        let mut csprng = Csprng::from_randomness_and_purpose(
-            &Randomness::from([0; 32]),
-            &ExecutionThread(self.scheduler.config.scheduler_cores as u32),
-        );
-        let mut round_limits = RoundLimits {
+        RoundLimits {
             instructions: as_round_instructions(
                 self.scheduler.config.max_instructions_per_round / 16,
             ),
             subnet_available_memory: self
                 .scheduler
                 .exec_env
-                .scaled_subnet_available_memory(&state),
-            subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(&state),
+                .scaled_subnet_available_memory(state),
+            subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(state),
             compute_allocation_used,
             subnet_memory_reservation: self.scheduler.exec_env.scaled_subnet_memory_reservation(),
-        };
+        }
+    }
+
+    pub fn drain_subnet_messages(&mut self) -> ReplicatedState {
+        let state = self.state.take().unwrap();
+        let mut csprng = Csprng::from_seed_and_purpose(
+            &Randomness::from([0; 32]),
+            &ExecutionThread(self.scheduler.config.scheduler_cores as u32),
+        );
+        let mut round_limits = self.round_limits(&state);
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
         self.scheduler.drain_subnet_queues(
             state,
@@ -595,12 +599,15 @@ impl SchedulerTest {
     }
 
     pub fn charge_for_resource_allocations(&mut self) {
-        let subnet_size = self.subnet_size();
+        let mut state = self.state.take().unwrap();
+        let mut round_limits = self.round_limits(&state);
         self.scheduler
             .charge_canisters_for_resource_allocation_and_usage(
-                self.state.as_mut().unwrap(),
-                subnet_size,
-            )
+                &mut state,
+                &mut round_limits,
+                &self.registry_settings,
+            );
+        self.state = Some(state);
     }
 
     pub fn induct_messages_on_same_subnet(&mut self) {

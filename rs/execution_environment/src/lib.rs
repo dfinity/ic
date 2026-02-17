@@ -368,7 +368,6 @@ fn setup_execution_helper(
         logger.clone(),
         canister_manager_config,
         Arc::clone(&cycles_account_manager),
-        Arc::clone(&ingress_history_writer) as Arc<_>,
         Arc::clone(&fd_factory),
         config.environment_variables,
     ));
