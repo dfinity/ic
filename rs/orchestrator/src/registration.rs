@@ -556,19 +556,11 @@ impl NodeRegistration {
 
         let mut builder = Agent::builder();
         if let Some(config) = rustls_config {
-            if let Ok(reqwest_client) = reqwest::ClientBuilder::default()
+            let reqwest_client = reqwest::ClientBuilder::default()
                 .use_preconfigured_tls(config)
-                .build()
-            {
-                builder = builder.with_http_client(reqwest_client)
-            } else {
-                // If we fail to create a reqwest client with TLS config, we log a warning but
-                // try to continue with a default agent builder (without TLS config)
-                warn!(
-                    self.log,
-                    "Failed to create reqwest client with rustls config, proceeding without custom TLS configuration."
-                );
-            }
+                .build()?;
+
+            builder = builder.with_http_client(reqwest_client)
         }
 
         let agent = builder
