@@ -963,7 +963,7 @@ impl IDkgPreSignerImpl {
     }
 
     /// Helper to combine the multi sig shares for a dealing
-    fn crypto_aggregate_dealing_support(
+    pub(crate) fn crypto_aggregate_dealing_support(
         &self,
         transcript_params: &IDkgTranscriptParams,
         support_shares: &[IDkgDealingSupport],
@@ -1364,7 +1364,9 @@ mod tests {
     use super::*;
     use crate::test_utils::*;
     use assert_matches::assert_matches;
-    use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, setup_masked_random_params,
+    };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_test_utilities_consensus::{IDkgStatsNoOp, idkg::*};
@@ -1373,10 +1375,11 @@ mod tests {
     use ic_types::{
         Height, RegistryVersion,
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject},
-        crypto::{BasicSig, BasicSigOf, CryptoHash},
+        crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash},
         time::UNIX_EPOCH,
     };
     use ic_types_test_utils::ids::node_test_id;
+    use std::collections::HashSet;
 
     impl IDkgPreSignerImpl {
         fn validated_dealing_supports(
@@ -3131,138 +3134,119 @@ mod tests {
         })
     }
 
-    // // Tests transcript builder failures and success
-    // #[test]
-    // fn test_transcript_builder_all_algorithms() {
-    //     for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-    //         println!("Running test for key ID {key_id}");
-    //         test_transcript_builder(key_id);
-    //     }
-    // }
+    // Tests transcript builder failures and success
+    #[test]
+    fn test_build_transcripts_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_build_transcripts(key_id);
+        }
+    }
 
-    // fn test_transcript_builder(key_id: IDkgMasterPublicKeyId) {
-    //     let mut rng = reproducible_rng();
-    //     let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-    //     let (dealers, receivers) = env.choose_dealers_and_receivers(
-    //         &IDkgParticipants::AllNodesAsDealersAndReceivers,
-    //         &mut rng,
-    //     );
-    //     let params = setup_masked_random_params(
-    //         &env,
-    //         AlgorithmId::from(key_id.inner()),
-    //         &dealers,
-    //         &receivers,
-    //         &mut rng,
-    //     );
-    //     let tid = params.transcript_id();
-    //     let (dealings, supports) = get_dealings_and_support(&env, &params);
-    //     let block_reader =
-    //         TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
-    //     let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
-    //     let crypto = first_crypto(&env);
+    fn test_build_transcripts(key_id: IDkgMasterPublicKeyId) {
+        let mut rng = reproducible_rng();
+        let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
+        let params = setup_masked_random_params(
+            &env,
+            AlgorithmId::from(key_id.inner()),
+            &dealers,
+            &receivers,
+            &mut rng,
+        );
+        let tid = params.transcript_id();
+        let (dealings, supports) = get_dealings_and_support(&env, &params);
+        let block_reader =
+            TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
+        let crypto = first_crypto(&env);
 
-    //     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-    //         with_test_replica_logger(|logger| {
-    //             let (mut idkg_pool, _) =
-    //                 create_pre_signer_dependencies(pool_config, logger.clone());
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, pre_signer) = create_pre_signer_dependencies_with_crypto(
+                    pool_config,
+                    logger.clone(),
+                    Some(crypto.clone()),
+                );
 
-    //             {
-    //                 let b = IDkgTranscriptBuilderImpl::new(
-    //                     &block_reader,
-    //                     crypto.deref(),
-    //                     &idkg_pool,
-    //                     &metrics,
-    //                     logger.clone(),
-    //                 );
+                // tid is requested, but there are no dealings for it, the transcript cannot
+                // be completed
+                let change_set = pre_signer.build_transcripts(&idkg_pool, &block_reader);
+                assert!(
+                    change_set.is_empty(),
+                    "expected empty change set, got {change_set:?}"
+                );
 
-    //                 // tid is requested, but there are no dealings for it, the transcript cannot
-    //                 // be completed
-    //                 let result = b.get_completed_transcript(tid);
-    //                 assert_matches!(result, None);
-    //             }
+                // add dealings
+                let change_set = dealings
+                    .values()
+                    .map(|d| IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(d.clone())))
+                    .collect();
+                idkg_pool.apply(change_set);
 
-    //             // add dealings
-    //             let change_set = dealings
-    //                 .values()
-    //                 .map(|d| IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(d.clone())))
-    //                 .collect();
-    //             idkg_pool.apply(change_set);
+                // there are no support shares, no transcript should be completed
+                let change_set = pre_signer.build_transcripts(&idkg_pool, &block_reader);
+                assert!(
+                    change_set.is_empty(),
+                    "expected empty change set, got {change_set:?}"
+                );
 
-    //             {
-    //                 let b = IDkgTranscriptBuilderImpl::new(
-    //                     &block_reader,
-    //                     crypto.deref(),
-    //                     &idkg_pool,
-    //                     &metrics,
-    //                     logger.clone(),
-    //                 );
+                // cannot aggregate empty shares
+                let result =
+                    pre_signer.crypto_aggregate_dealing_support(&params, &[], idkg_pool.stats());
+                assert_matches!(result, None);
 
-    //                 // cannot aggregate empty shares
-    //                 let result = b.crypto_aggregate_dealing_support(&params, &[]);
-    //                 assert_matches!(result, None);
+                // add support
+                let change_set = supports
+                    .iter()
+                    .map(|s| {
+                        IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(s.clone()))
+                    })
+                    .collect();
+                idkg_pool.apply(change_set);
 
-    //                 // there are no support shares, no transcript should be completed
-    //                 let result = b.get_completed_transcript(tid);
-    //                 assert_matches!(result, None);
-    //             }
+                // the transcript should be completed now, returned as AddTranscript in the change set
+                let change_set = pre_signer.build_transcripts(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                let completed_transcript = match &change_set[0] {
+                    IDkgChangeAction::AddTranscript(t) => t.clone(),
+                    _ => panic!("expected AddTranscript, got {:?}", change_set[0]),
+                };
+                assert_eq!(completed_transcript.transcript_id, tid);
 
-    //             // add support
-    //             let change_set = supports
-    //                 .iter()
-    //                 .map(|s| {
-    //                     IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(s.clone()))
-    //                 })
-    //                 .collect();
-    //             idkg_pool.apply(change_set);
+                // created transcript should equal the one produced by the test environment with the same dealings
+                let batch_signed_dealings = env
+                    .nodes
+                    .support_dealings_from_all_receivers(dealings.clone(), &params);
+                let expected_transcript = env
+                    .nodes
+                    .random_node(&mut rng)
+                    .create_transcript(&params, &batch_signed_dealings)
+                    .expect("create transcript");
+                assert_eq!(completed_transcript, expected_transcript);
 
-    //             let b = IDkgTranscriptBuilderImpl::new(
-    //                 &block_reader,
-    //                 crypto.deref(),
-    //                 &idkg_pool,
-    //                 &metrics,
-    //                 logger.clone(),
-    //             );
-    //             // the transcript should be completed now
-    //             let result = b.get_completed_transcript(tid);
-    //             assert_matches!(result, Some(t) if t.transcript_id == tid);
+                // validated dealings in the pool should equal the ones we inserted
+                let dealings1 = dealings.values().cloned().collect::<HashSet<_>>();
+                let dealings2 = idkg_pool
+                    .validated()
+                    .signed_dealings_by_transcript_id(&tid)
+                    .map(|(_, d)| d)
+                    .collect::<HashSet<_>>();
+                assert_eq!(dealings1, dealings2);
 
-    //             // returned dealings should be equal to the ones we inserted
-    //             let dealings1 = dealings.values().cloned().collect::<HashSet<_>>();
-    //             let dealings2 = b
-    //                 .get_validated_dealings(tid)
-    //                 .into_iter()
-    //                 .collect::<HashSet<_>>();
-    //             assert_eq!(dealings1, dealings2);
-
-    //             {
-    //                 let block_reader =
-    //                     TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
-    //                 let b = IDkgTranscriptBuilderImpl::new(
-    //                     &block_reader,
-    //                     crypto.deref(),
-    //                     &idkg_pool,
-    //                     &metrics,
-    //                     logger.clone(),
-    //                 );
-    //                 // the transcript is no longer requested, it should not be returned
-    //                 let result = b.get_completed_transcript(tid);
-    //                 assert_matches!(result, None);
-    //             }
-
-    //             let crypto = crypto_without_keys();
-    //             let b = IDkgTranscriptBuilderImpl::new(
-    //                 &block_reader,
-    //                 crypto.as_ref(),
-    //                 &idkg_pool,
-    //                 &metrics,
-    //                 logger,
-    //             );
-    //             // transcript completion should fail on crypto failures
-    //             let result = b.get_completed_transcript(tid);
-    //             assert_matches!(result, None);
-    //         })
-    //     });
-    // }
+                // the transcript is no longer requested, build_transcripts should not return it
+                let block_reader_empty =
+                    TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
+                let change_set = pre_signer.build_transcripts(&idkg_pool, &block_reader_empty);
+                assert!(
+                    change_set.is_empty(),
+                    "expected empty change set, got {change_set:?}"
+                );
+            })
+        });
+    }
 
     fn first_crypto(env: &CanisterThresholdSigTestEnvironment) -> Arc<dyn ConsensusCrypto> {
         env.nodes.iter().next().unwrap().crypto()
