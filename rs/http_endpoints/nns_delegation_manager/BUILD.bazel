@@ -3,9 +3,7 @@ load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = [
     "//rs/http_endpoints:__subpackages__",
-    "//rs/https_outcalls:__subpackages__",
     "//rs/pocket_ic_server:__subpackages__",
-    "//rs/replica:__subpackages__",
 ])
 
 rust_library(

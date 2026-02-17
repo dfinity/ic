@@ -3,7 +3,6 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = [
-    "//rs/http_endpoints:__subpackages__",
     "//rs/pocket_ic_server:__subpackages__",
     "//rs/replica:__subpackages__",
     "//rs/state_machine_tests:__subpackages__",

@@ -19,7 +19,6 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, info};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
-use ic_nns_delegation_manager::start_nns_delegation_manager;
 use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -279,19 +278,6 @@ pub fn construct_ic_stack(
 
     let cancellation_token = CancellationToken::new();
 
-    // TODO(CON-1492): consider joining on the returned join handle
-    let (_, nns_delegation_watcher) = start_nns_delegation_manager(
-        metrics_registry,
-        config.http_handler.clone(),
-        log.clone(),
-        rt_handle_http.clone(),
-        subnet_id,
-        root_subnet_id,
-        registry.clone(),
-        Arc::clone(&crypto) as Arc<_>,
-        cancellation_token.child_token(),
-    );
-
     // ---------- HTTPS OUTCALLS PAYLOAD BUILDER DEPS FOLLOW ----------
     let canister_http_adapter_client = setup_canister_http_client(
         rt_handle_main.clone(),
@@ -358,7 +344,6 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behavior.malicious_flags,
-        nns_delegation_watcher,
         Arc::new(Pprof),
         tracing_handle,
         max_certified_height_rx,

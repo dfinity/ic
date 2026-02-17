@@ -30,7 +30,7 @@ pub use call::{
 use common::CONTENT_TYPE_CBOR;
 pub use common::{cors_layer, make_plaintext_response};
 use ic_http_endpoints_async_utils::start_tcp_listener;
-use ic_nns_delegation_manager::NNSDelegationReader;
+use ic_nns_delegation_manager::{NNSDelegationReader, start_nns_delegation_manager};
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 pub use read_state::subnet::SubnetReadStateServiceBuilder;
@@ -269,13 +269,25 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    nns_delegation_reader: NNSDelegationReader,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
     cancellation_token: CancellationToken,
 ) {
+    // TODO(CON-1492): consider joining on the returned join handle
+    let (_, nns_delegation_reader) = start_nns_delegation_manager(
+        metrics_registry,
+        config.clone(),
+        log.clone(),
+        rt_handle.clone(),
+        subnet_id,
+        nns_subnet_id,
+        registry_client.clone(),
+        tls_config.clone(),
+        cancellation_token.child_token(),
+    );
+
     info!(log, "Starting HTTP server...");
     let tcp_listener = start_tcp_listener(config.listen_addr, &rt_handle);
     let _enter = rt_handle.enter();

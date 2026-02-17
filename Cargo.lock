@@ -13233,7 +13233,6 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-messaging",
  "ic-metrics",
- "ic-nns-delegation-manager",
  "ic-pprof",
  "ic-protobuf",
  "ic-registry-client",

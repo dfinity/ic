@@ -16,7 +16,6 @@ DEPENDENCIES = [
     "//rs/execution_environment",
     "//rs/http_endpoints/async_utils",
     "//rs/http_endpoints/metrics",
-    "//rs/http_endpoints/nns_delegation_manager",
     "//rs/http_endpoints/public",
     "//rs/http_endpoints/xnet",
     "//rs/https_outcalls/client",
