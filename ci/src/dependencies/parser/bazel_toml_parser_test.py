@@ -9,6 +9,7 @@ from bazel_toml_parser import parse_bazel_toml_to_gh_manifest
     "filename",
     [
         pytest.param(os.path.join("test_data", "minimal-example.toml.lock")),
+        pytest.param(os.path.join("test_data", "real-world-example.toml.lock")),
     ],
 )
 def test_happy_cases(filename):
