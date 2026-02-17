@@ -662,7 +662,7 @@ impl IDkgPreSignerImpl {
             .keys()
             .filter(|transcript_id| {
                 self.should_purge(
-                    &transcript_id,
+                    transcript_id,
                     current_height,
                     &in_progress,
                     &target_subnet_xnet_transcripts,
