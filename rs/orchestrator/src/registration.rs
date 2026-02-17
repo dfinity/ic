@@ -1140,6 +1140,9 @@ mod tests {
 
         use super::*;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
+        use ic_crypto_test_utils_keys::public_keys::{
+            valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+        };
         use ic_interfaces::crypto::{
             BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
             IDkgDealingEncryptionKeyRotationError, KeyManager, KeyRotationOutcome,
@@ -1454,32 +1457,6 @@ mod tests {
                     subnet_id,
                 }
             }
-        }
-
-        fn valid_node_signing_public_key() -> PublicKey {
-            PublicKey {
-                version: 0,
-                algorithm: AlgorithmId::Ed25519 as i32,
-                key_value: [0; 32].to_vec(),
-                proof_data: None,
-                timestamp: None,
-            }
-        }
-
-        fn valid_idkg_dealing_encryption_public_key() -> PublicKey {
-            PublicKey {
-                version: 0,
-                algorithm: AlgorithmId::MegaSecp256k1 as i32,
-                key_value: hex_decode(
-                    "03e1e1f76e9d834221a26c4a080b65e60d3b6f9c1d6e5b880abf916a364893da2e",
-                ),
-                proof_data: None,
-                timestamp: None,
-            }
-        }
-
-        fn hex_decode<T: AsRef<[u8]>>(data: T) -> Vec<u8> {
-            hex::decode(data).expect("failed to decode hex")
         }
 
         #[tokio::test]
