@@ -396,8 +396,8 @@ impl IDkgPoolImpl {
                 "The number of invalidated IDKG artifacts",
             ),
             active_transcripts: metrics_registry.int_gauge(
-                "idkg_active_transcripts_in_pool",
-                "The number of active IDKG transcripts in the IDKG pool",
+                "idkg_transcripts_in_pool",
+                "The number of IDKG transcripts in the IDKG pool",
             ),
             validated,
             unvalidated: Box::new(InMemoryIDkgPoolSection::new(
