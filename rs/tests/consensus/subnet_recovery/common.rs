@@ -97,6 +97,124 @@ const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
 
+struct SetupConfig {
+    nns_nodes: usize,
+    source_nodes: usize,
+    app_nodes: usize,
+    unassigned_nodes: usize,
+    nns_dkg_interval: u64,
+    app_dkg_interval: u64,
+}
+
+struct SetupConfigBuilder {
+    config: SetupConfig,
+}
+
+impl SetupConfigBuilder {
+    fn new() -> Self {
+        Self {
+            config: SetupConfig {
+                nns_nodes: NNS_NODES,
+                source_nodes: APP_NODES,
+                app_nodes: APP_NODES,
+                unassigned_nodes: 0,
+                nns_dkg_interval: DKG_INTERVAL,
+                app_dkg_interval: DKG_INTERVAL,
+            },
+        }
+    }
+
+    fn with_nns_nodes(mut self, nns_nodes: usize) -> Self {
+        assert!(nns_nodes > 0, "Subnets must have at least one node");
+        self.config.nns_nodes = nns_nodes;
+        self
+    }
+
+    // Because of the inter-dependency with `with_chain_keys`, this method needs to be called before
+    // it.
+    fn with_app_nodes(mut self, app_nodes: usize) -> Self {
+        assert!(app_nodes > 0, "Subnets must have at least one node");
+        assert!(
+            self.config.app_nodes > 0,
+            "`with_app_nodes` should be called before `with_chain_keys`"
+        );
+
+        self.config.source_nodes = app_nodes;
+        self.config.app_nodes = app_nodes;
+        self
+    }
+
+    // Because of the inter-dependency with `with_app_nodes`, this method needs to be called after
+    // it.
+    fn with_chain_keys(mut self) -> Self {
+        self.config.unassigned_nodes += self.config.app_nodes;
+        self.config.app_nodes = 0;
+        self
+    }
+
+    fn add_unassigned_nodes(mut self, unassigned_nodes: usize) -> Self {
+        self.config.unassigned_nodes += unassigned_nodes;
+        self
+    }
+
+    fn with_nns_dkg_interval(mut self, dkg_interval: u64) -> Self {
+        self.config.nns_dkg_interval = dkg_interval;
+        self
+    }
+
+    fn with_app_dkg_interval(mut self, dkg_interval: u64) -> Self {
+        self.config.app_dkg_interval = dkg_interval;
+        self
+    }
+
+    fn build(self) -> SetupConfig {
+        self.config
+    }
+}
+
+pub fn setup_large_chain_keys(env: TestEnv) {
+    let config = SetupConfigBuilder::new()
+        .with_nns_nodes(NNS_NODES_LARGE)
+        .with_app_nodes(APP_NODES_LARGE)
+        .with_chain_keys()
+        .with_nns_dkg_interval(DKG_INTERVAL_LARGE)
+        .with_app_dkg_interval(DKG_INTERVAL_LARGE)
+        .build();
+    setup(env, config);
+}
+
+pub fn setup_same_nodes_huge_dkg_interval(env: TestEnv) {
+    let config = SetupConfigBuilder::new()
+        .with_app_dkg_interval(DKG_INTERVAL_HUGE)
+        .build();
+    setup(env, config);
+}
+
+pub fn setup_same_nodes_chain_keys(env: TestEnv) {
+    let config = SetupConfigBuilder::new().with_chain_keys().build();
+    setup(env, config);
+}
+
+pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
+    let config = SetupConfigBuilder::new()
+        .with_chain_keys()
+        .add_unassigned_nodes(UNASSIGNED_NODES)
+        .build();
+    setup(env, config);
+}
+
+pub fn setup_same_nodes(env: TestEnv) {
+    let config = SetupConfigBuilder::new().build();
+    setup(env, config);
+}
+
+pub fn setup_failover_nodes(env: TestEnv) {
+    let config = SetupConfigBuilder::new()
+        .add_unassigned_nodes(UNASSIGNED_NODES)
+        .build();
+    setup(env, config);
+}
+
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
 fn setup(env: TestEnv, cfg: SetupConfig) {
@@ -142,99 +260,6 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
     ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
     install_nns_and_check_progress(env.topology_snapshot());
-}
-
-struct SetupConfig {
-    nns_nodes: usize,
-    source_nodes: usize,
-    app_nodes: usize,
-    unassigned_nodes: usize,
-    nns_dkg_interval: u64,
-    app_dkg_interval: u64,
-}
-
-pub fn setup_large_chain_keys(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES_LARGE,
-            source_nodes: APP_NODES_LARGE,
-            app_nodes: 0,
-            unassigned_nodes: APP_NODES_LARGE,
-            nns_dkg_interval: DKG_INTERVAL_LARGE,
-            app_dkg_interval: DKG_INTERVAL_LARGE,
-        },
-    );
-}
-
-pub fn setup_same_nodes_huge_dkg_interval(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES,
-            source_nodes: APP_NODES,
-            app_nodes: APP_NODES,
-            unassigned_nodes: 0,
-            nns_dkg_interval: DKG_INTERVAL,
-            app_dkg_interval: DKG_INTERVAL_HUGE,
-        },
-    );
-}
-
-pub fn setup_same_nodes_chain_keys(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES,
-            source_nodes: APP_NODES,
-            app_nodes: 0,
-            unassigned_nodes: APP_NODES,
-            nns_dkg_interval: DKG_INTERVAL,
-            app_dkg_interval: DKG_INTERVAL,
-        },
-    );
-}
-
-pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES,
-            source_nodes: APP_NODES,
-            app_nodes: 0,
-            unassigned_nodes: APP_NODES + UNASSIGNED_NODES,
-            nns_dkg_interval: DKG_INTERVAL,
-            app_dkg_interval: DKG_INTERVAL,
-        },
-    );
-}
-
-pub fn setup_same_nodes(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES,
-            source_nodes: APP_NODES,
-            app_nodes: APP_NODES,
-            unassigned_nodes: 0,
-            nns_dkg_interval: DKG_INTERVAL,
-            app_dkg_interval: DKG_INTERVAL,
-        },
-    );
-}
-
-pub fn setup_failover_nodes(env: TestEnv) {
-    setup(
-        env,
-        SetupConfig {
-            nns_nodes: NNS_NODES,
-            source_nodes: APP_NODES,
-            app_nodes: APP_NODES,
-            unassigned_nodes: UNASSIGNED_NODES,
-            nns_dkg_interval: DKG_INTERVAL,
-            app_dkg_interval: DKG_INTERVAL,
-        },
-    );
 }
 
 struct TestConfig {
