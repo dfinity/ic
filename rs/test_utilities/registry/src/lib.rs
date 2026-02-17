@@ -234,6 +234,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_backup_access: vec![],
         chain_key_config: None,
         canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+        recalled_replica_version_ids: vec![],
     }
 }
 
@@ -344,6 +345,14 @@ impl SubnetRecordBuilder {
 
     pub fn with_dkg_dealings_per_block(mut self, dkg_dealings_per_block: u64) -> Self {
         self.record.dkg_dealings_per_block = dkg_dealings_per_block;
+        self
+    }
+
+    pub fn with_recalled_replica_version_ids(
+        mut self,
+        recalled_replica_version_ids: &[String],
+    ) -> Self {
+        self.record.recalled_replica_version_ids = recalled_replica_version_ids.to_vec();
         self
     }
 
