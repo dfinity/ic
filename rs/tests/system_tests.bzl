@@ -2,7 +2,6 @@
 Rules for system-tests.
 """
 
-load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
@@ -405,11 +404,11 @@ def oci_tar(name, image, repo_tags = []):
 
     basename = name.removesuffix(".tar")
 
-    name_image = basename + "_image"
+    tarball = basename + "_tarball"
 
     # First load the image
     oci_load(
-        name = name_image,
+        name = tarball,
         image = image,
         repo_tags = repo_tags,
         target_compatible_with = [
@@ -418,22 +417,10 @@ def oci_tar(name, image, repo_tags = []):
     )
 
     # create the tarball
-    name_tarballdir = basename + "_tarballdir"
     native.filegroup(
-        name = name_tarballdir,
-        srcs = [":" + name_image],
+        name = name,
+        srcs = [":" + tarball],
         output_group = "tarball",
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-        tags = ["manual"],
-    )
-
-    # Copy the tarball out so we can reference the file by 'name'
-    copy_file(
-        name = basename + "_tar",
-        src = ":" + name_tarballdir,
-        out = name,
         target_compatible_with = [
             "@platforms//os:linux",
         ],
