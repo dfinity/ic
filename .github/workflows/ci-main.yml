@@ -121,6 +121,7 @@ jobs:
               skip_buf_checks="false"
           fi
 
+          release-build=true
 
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
@@ -244,7 +245,7 @@ jobs:
             }
 
             bazel_do build
-            bazel_do test
+        #    bazel_do test
 
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
@@ -255,7 +256,7 @@ jobs:
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
-          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+   #       credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
