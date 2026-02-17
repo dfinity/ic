@@ -405,7 +405,7 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
     // This way each operation is executed exactly once, independent of how many times `flush_page_maps` is called.
     let unflushed_checkpoint_ops = tip_state
         .canisters_iter_mut()
-        .flat_map(|canister| canister.unflushed_checkpoint_ops.take())
+        .flat_map(|canister| Arc::make_mut(canister).unflushed_checkpoint_ops.take())
         .collect();
 
     tip_channel

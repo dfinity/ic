@@ -271,12 +271,13 @@ fn take_canister_snapshot(
     snapshot: CanisterSnapshot,
 ) {
     let canister_id = snapshot_id.get_canister_id();
-    let mut canister = state.take_canister_state(&canister_id).unwrap();
+    let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
+    let canister = Arc::make_mut(&mut canister_arc);
     state.take_snapshot(snapshot_id, Arc::new(snapshot));
     canister
         .unflushed_checkpoint_ops
         .take_snapshot(canister_id, snapshot_id);
-    state.put_canister_state(canister);
+    state.put_canister_state(canister_arc);
 }
 
 #[test]
@@ -8086,7 +8087,7 @@ fn can_split_with_inflight_restore_snapshot() {
 
             // Checkpointing should have additionally flushed / dropped all checkpoint ops.
             for canister in expected.canisters_iter_mut() {
-                canister.unflushed_checkpoint_ops = Default::default();
+                Arc::make_mut(canister).unflushed_checkpoint_ops = Default::default();
             }
             // The "previous state hash" has changed. Update it.
             expected.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
