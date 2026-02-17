@@ -800,7 +800,12 @@ pub fn new_canister_state(
         initial_cycles,
         freeze_threshold,
     );
-    CanisterState::new(system_state, None, scheduler_state)
+    CanisterState::new(
+        system_state,
+        None,
+        scheduler_state,
+        UnflushedCheckpointOps::default(),
+    )
 }
 
 pub fn new_canister_state_with_execution(
@@ -819,7 +824,12 @@ pub fn new_canister_state_with_execution(
     let execution_state = ExecutionStateBuilder::default()
         .with_wasm_binary(empty_wasm())
         .build();
-    CanisterState::new(system_state, Some(execution_state), scheduler_state)
+    CanisterState::new(
+        system_state,
+        Some(execution_state),
+        scheduler_state,
+        UnflushedCheckpointOps::default(),
+    )
 }
 
 /// Helper function to register a callback.

@@ -642,7 +642,9 @@ mod test {
     use ic_base_types::{CanisterId, NumSeconds};
     use ic_error_types::UserError;
     use ic_logger::{LoggerImpl, ReplicaLogger};
-    use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
+    use ic_replicated_state::{
+        CanisterState, SchedulerState, SystemState, canister_state::UnflushedCheckpointOps,
+    };
     use ic_types::messages::{CallbackId, NO_DEADLINE};
     use ic_types::{Cycles, Time};
 
@@ -664,7 +666,12 @@ mod test {
                 ic_error_types::ErrorCode::CanisterCalledTrap,
                 "",
             )),
-            &CanisterState::new(system_state, None, scheduler_state),
+            &CanisterState::new(
+                system_state,
+                None,
+                scheduler_state,
+                UnflushedCheckpointOps::default(),
+            ),
             Time::from_nanos_since_unix_epoch(100),
             ic_replicated_state::CallOrigin::CanisterUpdate(
                 CanisterId::from(123u64),

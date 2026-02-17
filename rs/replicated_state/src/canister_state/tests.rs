@@ -5,6 +5,7 @@ use super::*;
 use crate::CallContext;
 use crate::CallOrigin;
 use crate::Memory;
+use crate::canister_state::UnflushedCheckpointOps;
 use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
@@ -93,7 +94,12 @@ impl CanisterStateFixture {
         );
 
         CanisterStateFixture {
-            canister_state: CanisterState::new(system_state, None, scheduler_state),
+            canister_state: CanisterState::new(
+                system_state,
+                None,
+                scheduler_state,
+                UnflushedCheckpointOps::default(),
+            ),
         }
     }
 

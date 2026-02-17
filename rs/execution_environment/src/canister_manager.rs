@@ -43,7 +43,7 @@ use ic_replicated_state::{
     CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
     canister_snapshots::CanisterSnapshot,
     canister_state::{
-        NextExecution,
+        NextExecution, UnflushedCheckpointOps,
         execution_state::Memory,
         execution_state::WasmExecutionMode,
         system_state::{
@@ -1425,7 +1425,12 @@ impl CanisterManager {
         );
 
         system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
-        let mut new_canister = CanisterState::new(system_state, None, SchedulerState::default());
+        let mut new_canister = CanisterState::new(
+            system_state,
+            None,
+            SchedulerState::default(),
+            UnflushedCheckpointOps::default(),
+        );
 
         self.do_update_settings(&settings, &mut new_canister);
         let new_usage = new_canister.memory_usage();
@@ -2378,8 +2383,12 @@ impl CanisterManager {
                 exec_state.wasm_execution_mode
             });
 
-        let mut new_canister =
-            CanisterState::new(system_state, new_execution_state, scheduler_state);
+        let mut new_canister = CanisterState::new(
+            system_state,
+            new_execution_state,
+            scheduler_state,
+            canister.unflushed_checkpoint_ops.clone(),
+        );
         let new_memory_usage = new_canister.memory_usage();
 
         // If the snapshot was uploaded, make sure the snapshot's memory hook status matches the actual status.

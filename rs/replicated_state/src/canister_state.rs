@@ -83,12 +83,13 @@ impl CanisterState {
         system_state: SystemState,
         execution_state: Option<ExecutionState>,
         scheduler_state: SchedulerState,
+        unflushed_checkpoint_ops: UnflushedCheckpointOps,
     ) -> Self {
         Self {
             system_state,
             execution_state,
             scheduler_state,
-            unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
+            unflushed_checkpoint_ops,
         }
     }
 

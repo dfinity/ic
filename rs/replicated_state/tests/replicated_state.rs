@@ -15,6 +15,7 @@ use ic_replicated_state::{
     CanisterState, ExecutionTask, IngressHistoryState, InputSource, ReplicatedState,
     SchedulerState, StateError, SystemState,
     canister_snapshots::CanisterSnapshot,
+    canister_state::UnflushedCheckpointOps,
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::{
         subnet_call_context_manager::{
@@ -147,6 +148,7 @@ impl ReplicatedStateFixture {
                 system_state,
                 Some(execution_state),
                 scheduler_state,
+                UnflushedCheckpointOps::default(),
             ));
         }
         ReplicatedStateFixture { state }
