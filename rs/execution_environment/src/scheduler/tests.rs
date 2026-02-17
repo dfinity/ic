@@ -6695,8 +6695,8 @@ fn charge_idle_canisters_for_full_execution_round() {
             // Assert there is no divergency in accumulated priorities.
             let priority =
                 canister_priority.accumulated_priority - canister_priority.priority_credit;
-            assert_le!(priority.get(), 100 * MULTIPLIER as i64);
-            assert_ge!(priority.get(), -100 * MULTIPLIER as i64);
+            assert_le!(priority.get(), 100 * MULTIPLIER);
+            assert_ge!(priority.get(), -100 * MULTIPLIER);
 
             total_accumulated_priority += canister_priority.accumulated_priority.get();
             total_priority_credit += canister_priority.priority_credit.get();
