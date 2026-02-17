@@ -1936,6 +1936,13 @@ impl ExecutionEnvironment {
             state.metadata.subnet_call_context_manager.push_context(
                 SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
             );
+            if let Some(canister_stats) = state.canister_state_mut(&request.sender) {
+                canister_stats
+                    .system_state
+                    .canister_metrics_mut()
+                    .load_metrics_mut()
+                    .observe_http_outcall();
+            }
             self.metrics.observe_message_with_label(
                 &request.method_name,
                 since.elapsed().as_secs_f64(),
@@ -4465,7 +4472,7 @@ fn execute_canister_input(
     input: CanisterMessageOrTask,
     prepaid_execution_cycles: Option<Cycles>,
     exec_env: &ExecutionEnvironment,
-    canister: CanisterState,
+    mut canister: CanisterState,
     instruction_limits: InstructionLimits,
     max_instructions_per_query_message: NumInstructions,
     network_topology: Arc<NetworkTopology>,
@@ -4475,6 +4482,36 @@ fn execute_canister_input(
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
     let info = input.to_string();
+    let load_metrics = &mut canister
+        .system_state
+        .canister_metrics_mut()
+        .load_metrics_mut();
+    match &input {
+        CanisterMessageOrTask::Message(CanisterMessage::Ingress(_)) => {
+            load_metrics.observe_ingress_message();
+        }
+        CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
+            if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) {
+                load_metrics.observe_local_subnet_message();
+            } else {
+                load_metrics.observe_remote_subnet_message();
+            }
+        }
+        CanisterMessageOrTask::Message(CanisterMessage::Response {
+            response,
+            callback: _,
+        }) => {
+            if network_topology.route(response.respondent.get()) == Some(exec_env.own_subnet_id) {
+                load_metrics.observe_local_subnet_message();
+            } else {
+                load_metrics.observe_remote_subnet_message();
+            }
+        }
+        CanisterMessageOrTask::Task(CanisterTask::GlobalTimer | CanisterTask::Heartbeat) => {
+            load_metrics.observe_heartbeat_or_global_timer();
+        }
+        CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
+    }
     let result = exec_env.execute_canister_input(
         canister,
         instruction_limits,
