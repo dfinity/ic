@@ -294,12 +294,15 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     );
 
     // We could break all faulty nodes now. But if all nodes are broken, then the later call to
-    // fetch nodes' metrics to determine the download pool will fail, since no nodes will answer.
+    // fetch nodes' metrics to determine which node to download the consensus pool from will fail,
+    // since no nodes will answer.
     // To avoid that, we break at most `subnet_size - 1` nodes first, effectively breaking the
     // subnet, then fetch the metrics and determine the download pool, and finally break the
     // remaining nodes.
     let (nodes_to_break_first, nodes_to_break_after) = faulty_nodes
         .split_at_checked(subnet_size - 1)
+        // `split_at_checked` returns `None` if `subnet_size - 1 > faulty_nodes.len()`. In that
+        // case, we can break all faulty nodes at once.
         .unwrap_or((faulty_nodes, &[]));
     break_nodes(nodes_to_break_first, &logger);
 
