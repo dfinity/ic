@@ -194,7 +194,10 @@ impl NodeRegistration {
                 let trimmed_error = if error_message.chars().count() > CONSOLE_ERR_MAX {
                     format!(
                         "{} (see replica logs for full error)",
-                        error_message.chars().take(CONSOLE_ERR_MAX).collect::<String>(),
+                        error_message
+                            .chars()
+                            .take(CONSOLE_ERR_MAX)
+                            .collect::<String>(),
                     )
                 } else {
                     error_message
