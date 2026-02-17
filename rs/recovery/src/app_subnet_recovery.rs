@@ -268,7 +268,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
 
                 if self.params.write_node_id_and_pub_key.is_none() {
-                    // Prit node heights to help choose an up-to-date node for write access and
+                    // Print node heights to help choose an up-to-date node for write access and
                     // avoid long state upload times later.
                     print_height_info(
                         &self.logger,
