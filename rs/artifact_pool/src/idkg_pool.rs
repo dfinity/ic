@@ -32,8 +32,9 @@ use ic_types::{
             VetKdKeyShare,
         },
     },
-    crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
-    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
+    crypto::canister_threshold_sig::idkg::{
+        IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId, SignedIDkgDealing,
+    },
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
@@ -358,6 +359,7 @@ impl MutableIDkgPoolSection for InMemoryIDkgPoolSection {
 pub struct IDkgPoolImpl {
     validated: Box<dyn MutableIDkgPoolSection>,
     unvalidated: Box<dyn MutableIDkgPoolSection>,
+    transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     stats: Box<dyn IDkgStats>,
     invalidated_artifacts: IntCounter,
     log: ReplicaLogger,
@@ -398,6 +400,7 @@ impl IDkgPoolImpl {
                 POOL_IDKG,
                 POOL_TYPE_UNVALIDATED,
             )),
+            transcripts: BTreeMap::new(),
             stats,
             log,
         }
@@ -448,6 +451,10 @@ impl IDkgPool for IDkgPoolImpl {
         self.unvalidated.as_pool_section()
     }
 
+    fn transcripts(&self) -> &BTreeMap<IDkgTranscriptId, IDkgTranscript> {
+        &self.transcripts
+    }
+
     fn stats(&self) -> &dyn IDkgStats {
         self.stats.as_ref()
     }
@@ -493,6 +500,13 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                 }
                 IDkgChangeAction::RemoveUnvalidated(msg_id) => {
                     unvalidated_ops.remove(msg_id);
+                }
+                IDkgChangeAction::AddTranscript(transcript) => {
+                    self.transcripts
+                        .insert(transcript.transcript_id, transcript);
+                }
+                IDkgChangeAction::RemoveTranscript(transcript_id) => {
+                    self.transcripts.remove(&transcript_id);
                 }
                 IDkgChangeAction::HandleInvalid(msg_id, msg) => {
                     self.invalidated_artifacts.inc();
