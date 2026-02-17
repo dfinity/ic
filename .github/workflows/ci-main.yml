@@ -149,12 +149,12 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
-    environment:
-      # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
-      # It also requires the CLOUD_CREDENTIALS_CONTENT secret which is only available in the `upload-artifacts` environment.
-      # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
-      # when `release-build == 'true'` but not otherwise.
-      name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
+    # environment:
+    #   # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
+    #   # It also requires the CLOUD_CREDENTIALS_CONTENT secret which is only available in the `upload-artifacts` environment.
+    #   # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
+    #   # when `release-build == 'true'` but not otherwise.
+    #   name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 150
