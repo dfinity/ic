@@ -45,7 +45,6 @@ rust_library(
     version = "0.9.0",
     visibility = [
         "//rs/crypto:__subpackages__",
-        "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = DEPENDENCIES,
 )

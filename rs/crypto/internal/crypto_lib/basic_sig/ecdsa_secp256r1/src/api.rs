@@ -11,22 +11,13 @@ use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 /// # Returns
 /// The decoded public key
 pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes> {
-    let pkey = ic_secp256r1::PublicKey::deserialize_der(pk_der).map_err(|e| {
+    let pkey = ic_secp256r1::PublicKey::deserialize_canonical_der(pk_der).map_err(|e| {
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::EcdsaP256,
             key_bytes: Some(pk_der.to_vec()),
             internal_error: format!("{e:?}"),
         }
     })?;
-
-    // Check pk_der is in canonical form (uncompressed).
-    if pkey.serialize_der() != pk_der {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::EcdsaP256,
-            key_bytes: Some(pk_der.to_vec()),
-            internal_error: "non-canonical encoding".to_string(),
-        });
-    }
 
     let pk_bytes = pkey.serialize_sec1(false);
     Ok(types::PublicKeyBytes::from(pk_bytes))

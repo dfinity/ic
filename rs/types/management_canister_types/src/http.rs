@@ -85,7 +85,7 @@ pub type BoundedHttpHeaders = BoundedVec<
 ///   url : text;
 ///   max_response_bytes : opt nat64;
 ///   headers : vec http_header;
-///   method : variant { get; head; post };
+///   method : variant { get; head; post; put; delete };
 ///   body : opt blob;
 ///   transform : opt record {
 ///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
@@ -118,6 +118,52 @@ impl CanisterHttpRequestArgs {
             .as_ref()
             .map(|transform_context| PrincipalId::from(transform_context.function.0.principal))
     }
+}
+
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   url : text;
+///   headers : vec http_header;
+///   method : variant { get; head; post };
+///   body : opt blob;
+///   transform : opt record {
+///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
+///     context : blob;
+///   };
+///  replication: opt record {
+///     min_responses: nat32;
+///     max_responses: nat32;
+///     total_requests: nat32;
+///   };
+/// }
+/// ```s
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+pub struct FlexibleCanisterHttpRequestArgs {
+    pub url: String,
+    pub headers: BoundedHttpHeaders,
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub body: Option<Vec<u8>>,
+    pub method: HttpMethod,
+    pub transform: Option<TransformContext>,
+    pub replication: Option<ReplicationCounts>,
+}
+
+impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
+
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///     min_responses: nat32;
+///     max_responses: nat32;
+///     total_requests: nat32;
+///   };
+/// ```
+#[derive(CandidType, Deserialize, Debug, Clone, Default, PartialEq)]
+pub struct ReplicationCounts {
+    pub total_requests: u32,
+    pub min_responses: u32,
+    pub max_responses: u32,
 }
 
 #[test]
@@ -321,6 +367,10 @@ pub enum HttpMethod {
     POST,
     #[serde(rename = "head")]
     HEAD,
+    #[serde(rename = "put")]
+    PUT,
+    #[serde(rename = "delete")]
+    DELETE,
 }
 
 /// Represents the response for a canister http request.

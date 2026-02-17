@@ -271,8 +271,6 @@ pub enum FinalizedStatus {
 pub enum InFlightStatus {
     /// Awaiting signatures for transaction inputs.
     Signing,
-    /// Awaiting the Bitcoin canister to accept the transaction.
-    Sending { txid: Txid },
 }
 
 /// The status of a retrieve_btc request.
@@ -869,7 +867,6 @@ impl CkBtcMinterState {
         if let Some(status) = self.requests_in_flight.get(&block_index).cloned() {
             return match status {
                 InFlightStatus::Signing => RetrieveBtcStatus::Signing,
-                InFlightStatus::Sending { txid } => RetrieveBtcStatus::Sending { txid },
             };
         }
 

@@ -2,7 +2,10 @@
 use crate::driver::{
     farm::{Farm, HostFeature},
     task_scheduler::TaskScheduler,
-    test_env_api::{FarmBaseUrl, HasFarmUrl, HasGroupSetup},
+    test_env_api::{
+        FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
+        IcNodeSnapshot,
+    },
     {
         action_graph::ActionGraph,
         context::{GroupContext, ProcessContext},
@@ -49,6 +52,8 @@ pub const MAX_RUNTIME_THREADS: usize = 16;
 const REPORT_TASK_NAME: &str = "report";
 const SETUP_TASK_NAME: &str = "setup";
 const TEARDOWN_TASK_NAME: &str = "teardown";
+const ASSERT_NO_METRICS_ERRORS_TASK_NAME: &str = "assert_no_metrics_errors";
+const ASSERT_NO_REPLICA_RESTARTS_TASK_NAME: &str = "assert_no_replica_restarts";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 
 #[derive(Debug, Parser)]
@@ -419,10 +424,12 @@ impl SystemTestSubGroup {
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
     teardown: Option<Box<dyn PotSetupFn>>,
+    assert_no_replica_restarts: bool,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
     with_farm: bool,
+    metrics_to_check: Vec<String>,
 }
 
 impl Default for SystemTestGroup {
@@ -457,10 +464,19 @@ impl SystemTestGroup {
         Self {
             setup: Default::default(),
             teardown: Default::default(),
+            assert_no_replica_restarts: true,
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
+            metrics_to_check: vec![
+                String::from("critical_errors"),
+                String::from("consensus_invalidated_artifacts"),
+                String::from("dkg_invalidated_artifacts"),
+                String::from("idkg_invalidated_artifacts"),
+                String::from("certification_invalidated_artifacts"),
+                String::from("canister_http_invalidated_artifacts"),
+            ],
         }
     }
 
@@ -485,6 +501,25 @@ impl SystemTestGroup {
 
     pub fn with_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
         self.teardown = Some(Box::new(teardown));
+        self
+    }
+
+    /// If the provided metric will have a non-zero value for any of the nodes, the test will
+    /// fail.
+    pub fn add_metrics_to_check(mut self, metric_name: impl ToString) -> Self {
+        self.metrics_to_check.push(metric_name.to_string());
+        self
+    }
+
+    pub fn remove_metrics_to_check(mut self, metric_name: impl ToString) -> Self {
+        let metric_name_to_remove = metric_name.to_string();
+        self.metrics_to_check
+            .retain(|metric_name| *metric_name != metric_name_to_remove);
+        self
+    }
+
+    pub fn without_assert_no_replica_restarts(mut self) -> Self {
+        self.assert_no_replica_restarts = false;
         self
     }
 
@@ -680,29 +715,97 @@ impl SystemTestGroup {
             false,
         );
 
-        let teardown_plan = self.teardown.map(|teardown_fn| {
-            let logger = logger.clone();
-            let group_ctx = group_ctx.clone();
-            let teardown_task = subproc(
-                TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
-                move || {
-                    debug!(logger, ">>> teardown_fn");
-                    let env = ensure_setup_env(group_ctx);
-                    teardown_fn(env);
-                },
-                &mut compose_ctx,
-                false,
-            );
-            timed(
-                vec![Plan::Leaf {
-                    task: Box::from(teardown_task),
-                }],
-                EvalOrder::Sequential,
-                compose_ctx.timeout_per_test,
-                None,
-                &mut compose_ctx,
-            )
-        });
+        let assert_no_metric_errors_fn: Option<(String, Box<dyn PotSetupFn>)> = if !self
+            .metrics_to_check
+            .is_empty()
+        {
+            let teardown_fn = move |env: TestEnv| {
+                let topology = match env.safe_topology_snapshot() {
+                    Ok(topology) => topology,
+                    Err(e) => {
+                        info!(
+                            env.logger(),
+                            "Could not get topology ({e:?}) => skipping checks of critical errors."
+                        );
+                        return;
+                    }
+                };
+                let nodes: Vec<IcNodeSnapshot> = topology
+                    .subnets()
+                    .flat_map(|subnet| subnet.nodes())
+                    .collect();
+                for node in nodes {
+                    node.assert_no_metrics_errors(self.metrics_to_check.clone());
+                }
+            };
+            Some((
+                ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
+                Box::new(teardown_fn),
+            ))
+        } else {
+            None
+        };
+
+        let assert_no_replica_restarts_fn: Option<(String, Box<dyn PotSetupFn>)> = if self
+            .assert_no_replica_restarts
+        {
+            let teardown_fn = |env: TestEnv| {
+                let topology = match env.safe_topology_snapshot() {
+                    Ok(topology) => topology,
+                    Err(e) => {
+                        info!(
+                            env.logger(),
+                            "Could not get topology ({e:?}) => skipping checks that the replica process did not restart."
+                        );
+                        return;
+                    }
+                };
+                let nodes: Vec<IcNodeSnapshot> = topology
+                    .subnets()
+                    .flat_map(|subnet| subnet.nodes())
+                    .collect();
+                for node in nodes {
+                    node.assert_no_replica_restarts();
+                }
+            };
+            Some((
+                ASSERT_NO_REPLICA_RESTARTS_TASK_NAME.to_string(),
+                Box::new(teardown_fn),
+            ))
+        } else {
+            None
+        };
+
+        let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
+            .teardown
+            .into_iter()
+            .map(|teardown| (TEARDOWN_TASK_NAME.to_string(), teardown))
+            .chain(assert_no_metric_errors_fn)
+            .chain(assert_no_replica_restarts_fn)
+            .map(|(teardown_name, teardown_fn)| {
+                let logger = logger.clone();
+                let group_ctx = group_ctx.clone();
+                let teardown_task = subproc(
+                    TaskId::Test(teardown_name.clone()),
+                    move || {
+                        debug!(logger, ">>> {teardown_name}_fn");
+                        let env = ensure_setup_env(group_ctx);
+                        teardown_fn(env);
+                    },
+                    &mut compose_ctx,
+                    false,
+                );
+                timed(
+                    vec![Plan::Leaf {
+                        task: Box::from(teardown_task),
+                    }],
+                    EvalOrder::Sequential,
+                    compose_ctx.timeout_per_test,
+                    None,
+                    &mut compose_ctx,
+                )
+            })
+            .collect();
 
         let setup_plan: Plan<Box<dyn Task>> = Plan::Leaf {
             task: Box::from(setup_task),
@@ -1034,6 +1137,7 @@ impl SystemTestGroup {
         let farm_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
-        farm.delete_group(&group_name);
+        farm.delete_group(&group_name)
+            .expect("failed to delete the farm group");
     }
 }

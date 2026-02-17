@@ -28,16 +28,14 @@ rust_binary(
 system_test(
     name = "basic_health_test",
     enable_metrics = True,
-    flaky = True,  # flakiness rate of 1.22% over the month from 2025-02-11 till 2025-03-11
-    tags = [
-        "long_test",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
     ],
 )

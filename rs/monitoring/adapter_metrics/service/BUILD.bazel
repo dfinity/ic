@@ -20,12 +20,12 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     build_script_env = {
-        "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+        "PROTOC": "$(execpath @protobuf//:protoc)",
         "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
     },
     data = [
         "proto/adapter_metrics/v1/proto.proto",
-        "@com_google_protobuf//:protoc",
+        "@protobuf//:protoc",
         "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
     deps = [

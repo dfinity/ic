@@ -120,7 +120,7 @@ impl TestSubnet {
     pub fn canisters(&self) -> Vec<CanisterId> {
         self.env
             .get_latest_state()
-            .canister_states
+            .canister_states()
             .keys()
             .cloned()
             .collect()
@@ -131,7 +131,7 @@ impl TestSubnet {
         *self
             .env
             .get_latest_state()
-            .canister_states
+            .canister_states()
             .keys()
             .next()
             .unwrap()
@@ -141,8 +141,7 @@ impl TestSubnet {
     pub fn canister_status(&self, id: &CanisterId) -> Option<CanisterStatusType> {
         self.env
             .get_latest_state()
-            .canister_states
-            .get(id)
+            .canister_state(id)
             .map(|state| state.status())
     }
 
@@ -155,8 +154,7 @@ impl TestSubnet {
         Some(
             self.env
                 .get_latest_state()
-                .canister_states
-                .get(&from_canister)?
+                .canister_state(&from_canister)?
                 .system_state
                 .queues()
                 .output_queue_iter_for_testing(&to_canister)?
