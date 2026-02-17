@@ -360,7 +360,7 @@ mod tests {
             delivered_pre_signatures,
             vec![],
             pre_signature_stashes,
-            &mut Csprng::from_seed_and_purpose(
+            &mut Csprng::from_randomness_and_purpose(
                 &Randomness::new([1; 32]),
                 &ic_crypto_prng::RandomnessPurpose::ExecutionThread(1),
             ),

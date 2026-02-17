@@ -53,7 +53,7 @@ fn should_correctly_serialize_and_deserialize_initial_dealings() {
     let rng = &mut reproducible_rng();
     let initial_dealings = initial_dealings(rng);
     let proto = InitialIDkgDealingsProto::from(&initial_dealings);
-    let parsing_result = InitialIDkgDealings::try_from(&proto);
+    let parsing_result = InitialIDkgDealings::try_from(proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(initial_dealings, parsed);

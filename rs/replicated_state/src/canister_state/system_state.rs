@@ -115,6 +115,71 @@ enum ConsumingCycles {
     No,
 }
 
+/// Keeps track of the types of messages executed by the canister.
+/// This will be useful for load balancing purposes (e.g. subnet splitting) to determine which
+/// canisters contribute to heavy subnet load.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct LoadMetrics {
+    ingress_messages_executed: u64,
+    remote_subnet_messages_executed: u64,
+    local_subnet_messages_executed: u64,
+    http_outcalls_executed: u64,
+    heartbeats_and_global_timers_executed: u64,
+}
+
+impl LoadMetrics {
+    pub fn new(
+        ingress_messages_executed: u64,
+        remote_subnet_messages_executed: u64,
+        local_subnet_messages_executed: u64,
+        http_outcalls_executed: u64,
+        heartbeats_and_global_timers_executed: u64,
+    ) -> Self {
+        Self {
+            ingress_messages_executed,
+            remote_subnet_messages_executed,
+            local_subnet_messages_executed,
+            http_outcalls_executed,
+            heartbeats_and_global_timers_executed,
+        }
+    }
+
+    pub fn ingress_messages_executed(&self) -> u64 {
+        self.ingress_messages_executed
+    }
+    pub fn observe_ingress_message(&mut self) {
+        self.ingress_messages_executed += 1;
+    }
+
+    pub fn remote_subnet_messages_executed(&self) -> u64 {
+        self.remote_subnet_messages_executed
+    }
+    pub fn observe_remote_subnet_message(&mut self) {
+        self.remote_subnet_messages_executed += 1;
+    }
+
+    pub fn local_subnet_messages_executed(&self) -> u64 {
+        self.local_subnet_messages_executed
+    }
+    pub fn observe_local_subnet_message(&mut self) {
+        self.local_subnet_messages_executed += 1;
+    }
+
+    pub fn http_outcalls_executed(&self) -> u64 {
+        self.http_outcalls_executed
+    }
+    pub fn observe_http_outcall(&mut self) {
+        self.http_outcalls_executed += 1;
+    }
+
+    pub fn heartbeats_and_global_timers_executed(&self) -> u64 {
+        self.heartbeats_and_global_timers_executed
+    }
+    pub fn observe_heartbeat_or_global_timer(&mut self) {
+        self.heartbeats_and_global_timers_executed += 1;
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
 ///
@@ -125,6 +190,8 @@ pub struct CanisterMetrics {
     scheduled_as_first: u64,
     executed: u64,
     interrupted_during_execution: u64,
+    instructions_executed: NumInstructions,
+    load_metrics: LoadMetrics,
     consumed_cycles: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
@@ -137,6 +204,8 @@ impl CanisterMetrics {
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+        instructions_executed: NumInstructions,
+        load_metrics: LoadMetrics,
     ) -> Self {
         Self {
             rounds_scheduled,
@@ -145,6 +214,8 @@ impl CanisterMetrics {
             interrupted_during_execution,
             consumed_cycles,
             consumed_cycles_by_use_cases,
+            instructions_executed,
+            load_metrics,
         }
     }
 
@@ -158,6 +229,10 @@ impl CanisterMetrics {
 
     pub fn executed(&self) -> u64 {
         self.executed
+    }
+
+    pub fn instructions_executed(&self) -> NumInstructions {
+        self.instructions_executed
     }
 
     pub fn interrupted_during_execution(&self) -> u64 {
@@ -180,12 +255,21 @@ impl CanisterMetrics {
         self.scheduled_as_first += 1;
     }
 
-    pub fn observe_executed(&mut self) {
+    pub fn observe_executed(&mut self, total_instructions_used: NumInstructions) {
         self.executed += 1;
+        self.instructions_executed += total_instructions_used;
     }
 
     pub fn observe_interrupted_during_execution(&mut self) {
         self.interrupted_during_execution += 1;
+    }
+
+    pub fn load_metrics(&self) -> &LoadMetrics {
+        &self.load_metrics
+    }
+
+    pub fn load_metrics_mut(&mut self) -> &mut LoadMetrics {
+        &mut self.load_metrics
     }
 }
 
