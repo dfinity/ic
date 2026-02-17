@@ -89,7 +89,7 @@ const DKG_INTERVAL_LARGE: u64 = 4 * NNS_NODES_LARGE as u64 + 14;
 
 /// A very large DKG interval to test recovery when the subnet stalls during its first DKG
 /// interval.
-const DKG_INTERVAL_HUGE: u64 = 1000;
+const DKG_INTERVAL_HUGE: u64 = 999;
 
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
