@@ -15,8 +15,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-/// A fixed multiplier for accumulated priority, larger than the maximum number
-/// of canisters, so we can meaningfully divide 1% of free capacity among them.
+/// A fixed multiplier for accumulated priority, one order of magnitude larger
+/// than the maximum number of canisters, so we can meaningfully divide 1% of
+/// free capacity among them.
 const MULTIPLIER: i64 = 1_000_000;
 
 /// 100% in accumulated priority.
@@ -95,13 +96,13 @@ impl PartialOrd for CanisterRoundState {
 
 /// Represents three ordered active Canister ID groups to schedule.
 #[derive(Debug, Default)]
-pub(super) struct SchedulingOrder<P, N, R> {
+struct SchedulingOrder<P, N, R> {
     /// Prioritized long executions.
-    pub prioritized_long_canisters: P,
+    prioritized_long_canisters: P,
     /// New executions.
-    pub new_canisters: N,
+    new_canisters: N,
     /// To be executed when the Canisters from previous two groups are idle.
-    pub opportunistic_long_canisters: R,
+    opportunistic_long_canisters: R,
 }
 
 /// Represents the current round schedule. It is updated on every inner loop
@@ -160,13 +161,15 @@ impl RoundSchedule {
         }
     }
 
-    /// Returns the number of cores dedicated for long executions.
+    /// Computes the number of long execution cores by dividing
+    /// `long_execution_compute_allocation` by `100%` and rounding up (as one
+    /// scheduler core is reserved to guarantee long executions progress).
     fn long_execution_cores(&self) -> usize {
         if self.schedule.is_empty() {
             return 0;
         }
-        let compute_capacity_percent = Self::compute_capacity(self.scheduler_cores);
-        let free_compute = compute_capacity_percent - self.total_compute_allocation;
+        let compute_capacity = Self::compute_capacity(self.scheduler_cores);
+        let free_compute = compute_capacity - self.total_compute_allocation;
         let long_executions_compute = self.long_executions_compute_allocation
             + (free_compute * self.long_executions_count as i64 / self.schedule.len() as i64);
         std::cmp::min(
@@ -176,7 +179,7 @@ impl RoundSchedule {
         )
     }
 
-    pub(super) fn scheduling_order(
+    fn scheduling_order(
         &self,
     ) -> SchedulingOrder<
         impl Iterator<Item = &CanisterRoundState>,
@@ -221,6 +224,7 @@ impl RoundSchedule {
 
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
+        // Collect all active canisters and their next executions.
         // TODO(DSM-102): Consider using `left_outer_join()` here.
         self.schedule = canister_states
             .iter_mut()
@@ -288,6 +292,37 @@ impl RoundSchedule {
         self.schedule.sort();
 
         let long_execution_cores = self.long_execution_cores();
+        let compute_capacity = Self::compute_capacity(self.scheduler_cores);
+        debug_assert_or_critical_error!(
+            self.total_compute_allocation < compute_capacity,
+            metrics.scheduler_compute_allocation_invariant_broken,
+            logger,
+            "{}: Total compute allocation {}% must be less than compute capacity {}%",
+            SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN,
+            self.total_compute_allocation,
+            compute_capacity
+        );
+        // If there are long executions, the `long_execution_cores` must be non-zero.
+        debug_assert_or_critical_error!(
+            self.long_executions_count == 0 || long_execution_cores > 0,
+            metrics.scheduler_cores_invariant_broken,
+            logger,
+            "{}: Number of long execution cores {} must be more than 0",
+            SCHEDULER_CORES_INVARIANT_BROKEN,
+            long_execution_cores,
+        );
+        // As one scheduler core is reserved, the `long_execution_cores` is always
+        // less than `scheduler_cores`
+        debug_assert_or_critical_error!(
+            long_execution_cores < self.scheduler_cores,
+            metrics.scheduler_cores_invariant_broken,
+            logger,
+            "{}: Number of long execution cores {} must be less than scheduler cores {}",
+            SCHEDULER_CORES_INVARIANT_BROKEN,
+            long_execution_cores,
+            self.scheduler_cores
+        );
+
         if is_first_iteration {
             // First iteration: mark the first canisters on each core as fully executed.
             self.schedule
@@ -318,37 +353,6 @@ impl RoundSchedule {
         //     "heartbeat_and_timer_canister_ids: {:?}",
         //     self.heartbeat_and_timer_canister_ids
         // );
-
-        let compute_capacity_percent = Self::compute_capacity(self.scheduler_cores);
-        debug_assert_or_critical_error!(
-            self.total_compute_allocation < compute_capacity_percent,
-            metrics.scheduler_compute_allocation_invariant_broken,
-            logger,
-            "{}: Total compute allocation {}% must be less than compute capacity {}%",
-            SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN,
-            self.total_compute_allocation,
-            compute_capacity_percent
-        );
-        // If there are long executions, the `long_execution_cores` must be non-zero.
-        debug_assert_or_critical_error!(
-            self.long_executions_count == 0 || long_execution_cores > 0,
-            metrics.scheduler_cores_invariant_broken,
-            logger,
-            "{}: Number of long execution cores {} must be more than 0",
-            SCHEDULER_CORES_INVARIANT_BROKEN,
-            long_execution_cores,
-        );
-        // As one scheduler core is reserved, the `long_execution_cores` is always
-        // less than `scheduler_cores`
-        debug_assert_or_critical_error!(
-            long_execution_cores < self.scheduler_cores,
-            metrics.scheduler_cores_invariant_broken,
-            logger,
-            "{}: Number of long execution cores {} must be less than scheduler cores {}",
-            SCHEDULER_CORES_INVARIANT_BROKEN,
-            long_execution_cores,
-            self.scheduler_cores
-        );
     }
 
     /// Partitions the executable Canisters to the available cores for execution.
@@ -583,6 +587,7 @@ impl RoundSchedule {
     }
 
     /// Returns scheduler compute capacity in percent.
+    ///
     /// For the DTS scheduler, it's `(number of cores - 1) * 100%`
     pub(crate) fn compute_capacity_percent(scheduler_cores: usize) -> usize {
         // Note: the DTS scheduler requires at least 2 scheduler cores
@@ -590,6 +595,8 @@ impl RoundSchedule {
     }
 
     /// Returns scheduler compute capacity in accumulated priority.
+    ///
+    /// For the DTS scheduler, it's `(number of cores - 1) * 100%`
     fn compute_capacity(scheduler_cores: usize) -> AccumulatedPriority {
         ONE_HUNDRED_PERCENT * (scheduler_cores as i64 - 1)
     }
