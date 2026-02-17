@@ -755,16 +755,16 @@ impl IDkgPreSignerImpl {
         // Completed transcripts in the pool.
         let action = idkg_pool
             .transcripts()
-            .values()
-            .filter(|transcript| {
+            .keys()
+            .filter(|transcript_id| {
                 self.should_purge(
-                    &transcript.transcript_id,
+                    transcript_id,
                     current_height,
                     &in_progress,
                     &target_subnet_xnet_transcripts,
                 )
             })
-            .map(|transcript| IDkgChangeAction::RemoveTranscript(transcript.transcript_id));
+            .map(|transcript_id| IDkgChangeAction::RemoveTranscript(*transcript_id));
         let ret = ret.chain(action);
 
         ret.collect()
@@ -785,7 +785,6 @@ impl IDkgPreSignerImpl {
         match IDkgProtocol::create_dealing(&*self.crypto, transcript_params) {
             Ok(idkg_dealing) => {
                 self.metrics.pre_sign_metrics_inc("dealing_created");
-                self.metrics.pre_sign_metrics_inc("dealing_sent");
                 vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
                     idkg_dealing,
                 ))]

@@ -392,6 +392,7 @@ impl SchedulerImpl {
                     // is pending.
                 }
                 NextExecution::None | NextExecution::StartNew => {
+                    let canister = Arc::make_mut(canister);
                     maybe_add_heartbeat_or_global_timer_tasks(
                         canister,
                         has_heartbeat,
@@ -509,7 +510,7 @@ impl SchedulerImpl {
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
                     if let Some(canister) = partition.first_mut() {
-                        canister
+                        Arc::make_mut(canister)
                             .system_state
                             .canister_metrics_mut()
                             .observe_scheduled_as_first();
@@ -680,7 +681,7 @@ impl SchedulerImpl {
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn execute_canisters_in_inner_round(
         &self,
-        canisters_by_thread: Vec<Vec<CanisterState>>,
+        canisters_by_thread: Vec<Vec<Arc<CanisterState>>>,
         round_id: ExecutionRound,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -690,7 +691,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
     ) -> (
-        Vec<CanisterState>,
+        Vec<Arc<CanisterState>>,
         BTreeSet<CanisterId>,
         Vec<CanisterId>,
         Vec<(MessageId, IngressStatus)>,
@@ -818,15 +819,14 @@ impl SchedulerImpl {
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
     ) {
         let current_time = state.time();
-        let not_expired_yet = |ingress: &Ingress| ingress.expiry_time >= current_time;
-        let mut expired_ingress_messages =
-            state.filter_subnet_queues_ingress_messages(not_expired_yet);
+        let not_expired = |ingress: &Ingress| ingress.expiry_time >= current_time;
+        let mut expired_ingress_messages = state.subnet_queues_retain_ingress_messages(not_expired);
         for canister in state.canisters_iter_mut() {
-            expired_ingress_messages.extend(
-                canister
-                    .system_state
-                    .filter_ingress_messages(not_expired_yet),
-            );
+            if !canister.system_state.all_ingress_messages(not_expired) {
+                let canister = Arc::make_mut(canister);
+                expired_ingress_messages
+                    .extend(canister.system_state.retain_ingress_messages(not_expired));
+            }
         }
         for ingress in expired_ingress_messages.iter() {
             self.metrics.expired_ingress_messages_count.inc();
@@ -910,6 +910,7 @@ impl SchedulerImpl {
                 continue;
             }
 
+            let canister = Arc::make_mut(canister);
             self.observe_canister_metrics(canister);
             let duration_since_last_charge =
                 canister.duration_since_last_allocation_charge(state_time);
@@ -996,13 +997,16 @@ impl SchedulerImpl {
             // Remove the source canister from the map so that we can
             // `get_mut()` on the map further below for the destination canister.
             // Borrow rules do not allow us to hold multiple mutable references.
-            let mut source_canister = match state.take_canister_state(&source_canister_id) {
+            let mut source_canister_arc = match state.take_canister_state(&source_canister_id) {
                 None => fatal!(
                     self.log,
                     "Should be guaranteed that the canister exists in the map."
                 ),
                 Some(canister) => canister,
             };
+            // TODO(DSM-102): Consider checking whether the canister has output messages for
+            // local canisters before calling `make_mut()`.
+            let source_canister = Arc::make_mut(&mut source_canister_arc);
 
             let messages_before_induction = source_canister
                 .system_state
@@ -1053,7 +1057,7 @@ impl SchedulerImpl {
                 .output_queues_message_count();
             inducted_messages_to_others +=
                 messages_before_induction.saturating_sub(messages_after_induction);
-            state.put_canister_state(source_canister);
+            state.put_canister_state(source_canister_arc);
         }
         self.metrics
             .inducted_messages
@@ -1125,7 +1129,7 @@ impl SchedulerImpl {
             .iter()
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
-                let canister = state.canister_state_mut(&rs.canister_id).unwrap();
+                let canister = state.canister_state_mut_arc(&rs.canister_id).unwrap();
                 self.exec_env.abort_canister(canister, &self.log);
             });
     }
@@ -1507,44 +1511,53 @@ impl Scheduler for SchedulerImpl {
                     self.metrics
                         .canister_heap_delta_debits
                         .observe(heap_delta_debit as f64);
-                    canister.scheduler_state.heap_delta_debit =
-                        match self.rate_limiting_of_heap_delta {
-                            FlagStatus::Enabled => NumBytes::from(
-                                heap_delta_debit
-                                    .saturating_sub(self.config.heap_delta_rate_limit.get()),
-                            ),
-                            FlagStatus::Disabled => NumBytes::from(0),
-                        };
+                    if heap_delta_debit > 0 {
+                        let canister = Arc::make_mut(canister);
+                        canister.scheduler_state.heap_delta_debit =
+                            match self.rate_limiting_of_heap_delta {
+                                FlagStatus::Enabled => NumBytes::from(
+                                    heap_delta_debit
+                                        .saturating_sub(self.config.heap_delta_rate_limit.get()),
+                                ),
+                                FlagStatus::Disabled => NumBytes::from(0),
+                            };
+                    }
 
                     let install_code_debit = canister.scheduler_state.install_code_debit.get();
                     self.metrics
                         .canister_install_code_debits
                         .observe(install_code_debit as f64);
-                    canister.scheduler_state.install_code_debit =
-                        match self.rate_limiting_of_instructions {
-                            FlagStatus::Enabled => NumInstructions::from(
-                                install_code_debit
-                                    .saturating_sub(self.config.install_code_rate_limit.get()),
-                            ),
-                            FlagStatus::Disabled => NumInstructions::from(0),
-                        };
+                    if install_code_debit > 0 {
+                        let canister = Arc::make_mut(canister);
+                        canister.scheduler_state.install_code_debit =
+                            match self.rate_limiting_of_instructions {
+                                FlagStatus::Enabled => NumInstructions::from(
+                                    install_code_debit
+                                        .saturating_sub(self.config.install_code_rate_limit.get()),
+                                ),
+                                FlagStatus::Disabled => NumInstructions::from(0),
+                            };
+                    }
 
-                    let log = &mut canister.system_state.canister_log;
-                    let (log_memory_usage, delta_log_sizes) =
-                        (log.bytes_used(), log.delta_log_sizes());
-                    // IMPORTANT: clear_delta_log_sizes() must be called to make sure
-                    // that the delta log sizes are always empty at the end of the round.
-                    log.clear_delta_log_sizes();
+                    let log_memory_usage = canister.system_state.canister_log.bytes_used();
                     self.metrics
                         .canister_log_memory_usage_v2
                         .observe(log_memory_usage as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
                         .observe(log_memory_usage as f64);
-                    for size in delta_log_sizes {
-                        self.metrics
-                            .canister_log_delta_memory_usage
-                            .observe(size as f64);
+
+                    if canister.system_state.canister_log.has_delta_log_sizes() {
+                        let canister = Arc::make_mut(canister);
+                        let delta_log_sizes = canister.system_state.canister_log.delta_log_sizes();
+                        // IMPORTANT: clear_delta_log_sizes() must be called to make sure
+                        // that the delta log sizes are always empty at the end of the round.
+                        canister.system_state.canister_log.clear_delta_log_sizes();
+                        for size in delta_log_sizes {
+                            self.metrics
+                                .canister_log_delta_memory_usage
+                                .observe(size as f64);
+                        }
                     }
 
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
@@ -1710,7 +1723,7 @@ fn observe_instructions_consumed_per_message(
 /// This struct holds the result of a single execution thread.
 #[derive(Default)]
 struct ExecutionThreadResult {
-    canisters: Vec<CanisterState>,
+    canisters: Vec<Arc<CanisterState>>,
     executed_canister_ids: BTreeSet<CanisterId>,
     fully_executed_canister_ids: BTreeSet<CanisterId>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
@@ -1728,7 +1741,7 @@ struct ExecutionThreadResult {
 /// or all canisters are processed.
 #[allow(clippy::too_many_arguments)]
 fn execute_canisters_on_thread(
-    canisters_to_execute: Vec<CanisterState>,
+    canisters_to_execute: Vec<Arc<CanisterState>>,
     exec_env: &ExecutionEnvironment,
     config: &SchedulerConfig,
     round_id: ExecutionRound,
@@ -1761,13 +1774,13 @@ fn execute_canisters_on_thread(
         config.max_instructions_per_slice,
     );
 
-    for (rank, mut canister) in canisters_to_execute.into_iter().enumerate() {
+    for (rank, mut canister_arc) in canisters_to_execute.into_iter().enumerate() {
         // If no more instructions are left or if heap delta is already too
         // large, then skip execution of the canister and keep its old state.
         if round_limits.instructions_reached()
             || total_heap_delta >= config.max_heap_delta_per_iteration
         {
-            canisters.push(canister);
+            canisters.push(canister_arc);
             continue;
         }
 
@@ -1776,6 +1789,7 @@ fn execute_canisters_on_thread(
         // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
         // - or the canister finishes a long execution
+        let mut canister = Arc::make_mut(&mut canister_arc);
         let mut total_instructions_used = NumInstructions::new(0);
         loop {
             match canister.next_execution() {
@@ -1804,7 +1818,7 @@ fn execute_canisters_on_thread(
                 description,
             } = execute_canister(
                 exec_env,
-                canister,
+                canister_arc,
                 instruction_limits.clone(),
                 config.max_instructions_per_query_message,
                 Arc::clone(&network_topology),
@@ -1848,7 +1862,8 @@ fn execute_canisters_on_thread(
             }
             measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
             total_messages_executed += messages;
-            canister = new_canister;
+            canister_arc = new_canister;
+            canister = Arc::make_mut(&mut canister_arc);
             round_limits.instructions -=
                 as_round_instructions(config.instruction_overhead_per_execution);
             total_heap_delta += heap_delta;
@@ -1882,7 +1897,7 @@ fn execute_canisters_on_thread(
             es.last_executed_round = round_id;
         }
         RoundSchedule::finish_canister_execution(
-            &canister,
+            canister,
             &mut fully_executed_canister_ids,
             is_first_iteration,
             rank,
@@ -1890,8 +1905,8 @@ fn execute_canisters_on_thread(
         canister
             .system_state
             .canister_metrics_mut()
-            .observe_executed();
-        canisters.push(canister);
+            .observe_executed(total_instructions_used);
+        canisters.push(canister_arc);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
             round_limits.instructions -=
@@ -2155,7 +2170,7 @@ fn join_consumed_cycles_by_use_case(
 fn can_execute_subnet_msg(
     msg: &SubnetMessage,
     ongoing_long_install_code: bool,
-    canister_states: &BTreeMap<CanisterId, CanisterState>,
+    canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
     round_limits: &mut RoundLimits,
 ) -> bool {
     let Some(effective_canister_id) = msg.effective_canister_id() else {

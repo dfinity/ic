@@ -1188,7 +1188,7 @@ fn split() {
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_1, expected.canister_states());
     expected.put_canister_state(canister_state);
@@ -1234,7 +1234,7 @@ fn split() {
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_2]);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_2, expected.canister_states());
     expected.put_canister_state(canister_state);
@@ -1362,7 +1362,7 @@ fn online_split() {
     expected.remove_canister(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_1, expected.canister_states());
     expected.put_canister_state(canister_state);
@@ -1392,11 +1392,11 @@ fn online_split() {
     expected.remove_canister(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_2, expected.canister_states());
     // The in-progress `install_code` task should have been silently dropped.
-    canister_state.system_state.task_queue = Default::default();
+    Arc::make_mut(&mut canister_state).system_state.task_queue = Default::default();
     expected.put_canister_state(canister_state);
     // The snapshot of `CANISTER_1` should have been deleted.
     expected.canister_snapshots.remove(canister_1_snapshot_id);
