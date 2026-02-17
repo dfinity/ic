@@ -7246,7 +7246,8 @@ fn lsmt_shard_size_is_stable() {
 /// Mock version of CanisterManager::load_canister_snapshot that only does the bits relevant to the state manager
 fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mut ReplicatedState) {
     let snapshot = state.canister_snapshots.get(snapshot_id).unwrap().clone();
-    let mut canister = state.take_canister_state(&canister_id).unwrap();
+    let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
+    let canister = Arc::make_mut(&mut canister_arc);
 
     canister.system_state.wasm_chunk_store = snapshot.chunk_store().clone();
     canister.execution_state = Some(ExecutionState::new(
@@ -7263,7 +7264,7 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
         .metadata
         .unflushed_checkpoint_ops
         .load_snapshot(canister_id, snapshot_id);
-    state.put_canister_state(canister);
+    state.put_canister_state(canister_arc);
 }
 
 #[test]
@@ -8101,7 +8102,8 @@ fn can_split_with_inflight_restore_snapshot() {
 /// Simplified version of canister migration that only does the parts relevant to the state manager.
 fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: CanisterId) {
     // Take canister out.
-    let mut canister = state.take_canister_state(&old_id).unwrap();
+    let mut canister_arc = state.take_canister_state(&old_id).unwrap();
+    let canister = Arc::make_mut(&mut canister_arc);
 
     // Migrate the canister priority.
     state
@@ -8116,7 +8118,7 @@ fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: Can
         .rename_canister(old_id, new_id);
 
     // Put canister with the new id
-    state.put_canister_state(canister);
+    state.put_canister_state(canister_arc);
 }
 
 #[test]
