@@ -580,9 +580,9 @@ pub async fn install_bitcoin_canister_with_network(
 
 /// Dogecoin canister init arg (release/2026-02-06+).
 /// TODO(DEFI-2672): once new version of ic-doge-interface is released, use type from this crate.
-#[derive(candid::CandidType, serde::Serialize)]
+#[derive(candid::CandidType)]
 enum DogecoinCanisterArg {
-    #[serde(rename = "init")]
+    #[candid(rename = "init")]
     Init(ic_doge_interface::InitConfig),
 }
 
