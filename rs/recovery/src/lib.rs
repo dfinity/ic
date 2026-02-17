@@ -603,7 +603,9 @@ impl Recovery {
             .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
             .collect::<RecoveryResult<Vec<_>>>()?;
 
-        Ok(checkpoints.into_iter().max_by_key(|(_name, height)| height))
+        Ok(checkpoints
+            .into_iter()
+            .max_by_key(|(_name, height)| *height))
     }
 
     /// Get the name and the height of the latest checkpoint currently on disk
