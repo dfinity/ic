@@ -553,9 +553,22 @@ impl CanisterState {
     }
 
     /// Updates status of `OnLowWasmMemory` hook.
-    pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
-        self.system_state
-            .update_on_low_wasm_memory_hook_status(self.wasm_memory_usage());
+    pub fn update_on_low_wasm_memory_hook_condition(self: &mut Arc<Self>) {
+        let wasm_memory_usage = self.wasm_memory_usage();
+        let hook_condition = self
+            .system_state
+            .is_low_wasm_memory_hook_condition_satisfied(wasm_memory_usage);
+        // Only `make_mut` if the hook condition has changed.
+        if !self
+            .system_state
+            .task_queue
+            .peek_hook_status()
+            .is_consistent_with(hook_condition)
+        {
+            Arc::make_mut(self)
+                .system_state
+                .update_on_low_wasm_memory_hook_status(wasm_memory_usage);
+        }
     }
 
     /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.

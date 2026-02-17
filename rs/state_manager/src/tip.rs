@@ -570,7 +570,7 @@ fn tip_to_checkpoint_and_switch<'a>(
 /// Switches `tip` to the most recent checkpoint file provided by `layout`.
 ///
 /// Preconditions:
-/// 1) `tip` and `layout` mut have exactly the same set of canisters.
+/// 1) `tip` and `layout` must have the exact same set of canisters.
 /// 2) The page deltas must be empty in `tip`
 /// 3) The memory sizes must match.
 fn switch_to_checkpoint(
@@ -579,6 +579,7 @@ fn switch_to_checkpoint(
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
     for tip_canister in tip.canisters_iter_mut() {
+        let tip_canister = Arc::make_mut(tip_canister);
         let canister_layout = layout.canister(&tip_canister.canister_id()).unwrap();
         tip_canister
             .system_state
@@ -670,6 +671,7 @@ fn switch_to_checkpoint(
     }
 
     for tip_canister in tip.canisters_iter_mut() {
+        let tip_canister = Arc::make_mut(tip_canister);
         let tip_id = tip_canister.canister_id();
         if let Some(tip_state) = &mut tip_canister.execution_state {
             let canister_layout = layout.canister(&tip_id).unwrap();
