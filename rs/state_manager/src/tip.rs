@@ -574,7 +574,6 @@ fn switch_to_checkpoint(
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
     for tip_canister in tip.canisters_iter_mut() {
-        // FIXME: Is this necessary for all canisters?
         let tip_canister = Arc::make_mut(tip_canister);
         let canister_layout = layout.canister(&tip_canister.canister_id()).unwrap();
         tip_canister
@@ -667,7 +666,6 @@ fn switch_to_checkpoint(
     }
 
     for tip_canister in tip.canisters_iter_mut() {
-        // FIXME: Is this necessary for all canisters?
         let tip_canister = Arc::make_mut(tip_canister);
         let tip_id = tip_canister.canister_id();
         if let Some(tip_state) = &mut tip_canister.execution_state {
@@ -1287,6 +1285,11 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });
 
+    let load_metrics_bits = canister_state
+        .system_state
+        .canister_metrics()
+        .load_metrics();
+
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
@@ -1362,6 +1365,16 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .environment_variables
                 .clone()
                 .into(),
+            instructions_executed: canister_state
+                .system_state
+                .canister_metrics()
+                .instructions_executed(),
+            ingress_messages_executed: load_metrics_bits.ingress_messages_executed(),
+            remote_subnet_messages_executed: load_metrics_bits.remote_subnet_messages_executed(),
+            local_subnet_messages_executed: load_metrics_bits.local_subnet_messages_executed(),
+            http_outcalls_executed: load_metrics_bits.http_outcalls_executed(),
+            heartbeats_and_global_timers_executed: load_metrics_bits
+                .heartbeats_and_global_timers_executed(),
         }
         .into(),
     )?;

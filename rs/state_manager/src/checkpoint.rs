@@ -5,15 +5,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
-use ic_replicated_state::canister_state::execution_state::{
-    SandboxMemory, WasmBinary, WasmExecutionMode,
-};
+use ic_replicated_state::canister_state::system_state::LoadMetrics;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
-use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, PageMap, storage::validate};
+use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
-    CanisterMetrics, CanisterPriority, CanisterState, CheckpointLoadingMetrics, ExecutionState,
-    Memory, ReplicatedState, SchedulerState, SubnetSchedule, SystemState,
+    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
+    canister_state::execution_state::{SandboxMemory, WasmBinary, WasmExecutionMode},
+    page_map::PageMap,
 };
+use ic_replicated_state::{CanisterPriority, CheckpointLoadingMetrics, Memory, SubnetSchedule};
 use ic_state_layout::{
     AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
     PageMapLayout, ReadOnly, SnapshotLayout, error::LayoutError, try_mmap_wasm_file,
@@ -276,7 +276,7 @@ fn strip_page_map_deltas(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
     for canister in state.canisters_iter_mut() {
-        // FIXME: Check if canister has deltas before making a mutable reference.
+        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
         let canister = Arc::make_mut(canister);
         canister
             .system_state
@@ -364,7 +364,7 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
     };
 
     for canister in tip_state.canisters_iter_mut() {
-        // FIXME: Filter out canisters with no heap deltas before making a mutable reference.
+        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
         let canister = Arc::make_mut(canister);
         let id = canister.canister_id();
         add_to_pagemaps_and_strip(
@@ -872,6 +872,14 @@ pub fn load_canister_state(
         canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles,
         canister_state_bits.consumed_cycles_by_use_cases,
+        canister_state_bits.instructions_executed,
+        LoadMetrics::new(
+            canister_state_bits.ingress_messages_executed,
+            canister_state_bits.remote_subnet_messages_executed,
+            canister_state_bits.local_subnet_messages_executed,
+            canister_state_bits.http_outcalls_executed,
+            canister_state_bits.heartbeats_and_global_timers_executed,
+        ),
     );
 
     let starting_time = Instant::now();
