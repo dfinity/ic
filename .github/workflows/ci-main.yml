@@ -25,7 +25,7 @@ jobs:
     name: Bazel Run Fuzzers
     runs-on: &dind-large-setup
       labels: dind-large
-      group: dm1
+      group: dm2
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
       options: >-
