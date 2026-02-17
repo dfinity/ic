@@ -142,13 +142,12 @@ impl From<&CertificationMessageHash> for pb::CertificationMessageHash {
     }
 }
 
-impl TryFrom<&pb::CertificationMessageHash> for CertificationMessageHash {
+impl TryFrom<pb::CertificationMessageHash> for CertificationMessageHash {
     type Error = ProxyDecodeError;
-    fn try_from(value: &pb::CertificationMessageHash) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::CertificationMessageHash) -> Result<Self, Self::Error> {
         use pb::certification_message_hash::Kind;
         let kind = value
             .kind
-            .clone()
             .ok_or_else(|| ProxyDecodeError::MissingField("CertificationMessageHash::kind"))?;
 
         Ok(match kind {

@@ -176,37 +176,34 @@ impl From<&QuadrupleInCreation> for pb::QuadrupleInCreation {
     }
 }
 
-impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
+impl TryFrom<pb::QuadrupleInCreation> for QuadrupleInCreation {
     type Error = ProxyDecodeError;
-    fn try_from(quadruple: &pb::QuadrupleInCreation) -> Result<Self, Self::Error> {
+    fn try_from(quadruple: pb::QuadrupleInCreation) -> Result<Self, Self::Error> {
         let lambda_config: RandomTranscriptParams = try_from_option_field(
-            quadruple.lambda_config.as_ref(),
+            quadruple.lambda_config,
             "QuadrupleInCreation::lambda_config",
         )?;
 
         let lambda_masked: Option<MaskedTranscript> = quadruple
             .lambda_masked
-            .as_ref()
             .map(|transcript| transcript.try_into())
             .transpose()?;
 
         let kappa_unmasked_config: RandomUnmaskedTranscriptParams = try_from_option_field(
-            quadruple.kappa_unmasked_config.as_ref(),
+            quadruple.kappa_unmasked_config,
             "QuadrupleInCreation::kappa_unmasked_config",
         )?;
 
         let kappa_unmasked: Option<UnmaskedTranscript> = quadruple
             .kappa_unmasked
-            .as_ref()
             .map(|transcript| transcript.try_into())
             .transpose()?;
 
         let (key_times_lambda_config, key_times_lambda) =
-            if let Some(config_proto) = &quadruple.key_times_lambda_config {
+            if let Some(config_proto) = quadruple.key_times_lambda_config {
                 let config: UnmaskedTimesMaskedParams = config_proto.try_into()?;
                 let transcript: Option<MaskedTranscript> = quadruple
                     .key_times_lambda
-                    .as_ref()
                     .map(|transcript| transcript.try_into())
                     .transpose()?;
                 (Some(config), transcript)
@@ -215,11 +212,10 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
             };
 
         let (kappa_times_lambda_config, kappa_times_lambda) =
-            if let Some(config_proto) = &quadruple.kappa_times_lambda_config {
+            if let Some(config_proto) = quadruple.kappa_times_lambda_config {
                 let config: UnmaskedTimesMaskedParams = config_proto.try_into()?;
                 let transcript: Option<MaskedTranscript> = quadruple
                     .kappa_times_lambda
-                    .as_ref()
                     .map(|transcript| transcript.try_into())
                     .transpose()?;
                 (Some(config), transcript)
@@ -227,10 +223,8 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
                 (None, None)
             };
 
-        let key_id = try_from_option_field(
-            quadruple.key_id.clone(),
-            "QuadrupleInCreation::quadruple::key_id",
-        )?;
+        let key_id =
+            try_from_option_field(quadruple.key_id, "QuadrupleInCreation::quadruple::key_id")?;
 
         Ok(Self {
             key_id,
@@ -347,36 +341,36 @@ impl From<&PreSignatureQuadrupleRef> for pb::PreSignatureQuadrupleRef {
     }
 }
 
-impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
+impl TryFrom<pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
     type Error = ProxyDecodeError;
-    fn try_from(quadruple: &pb::PreSignatureQuadrupleRef) -> Result<Self, Self::Error> {
+    fn try_from(quadruple: pb::PreSignatureQuadrupleRef) -> Result<Self, Self::Error> {
         let kappa_unmasked_ref: UnmaskedTranscript = try_from_option_field(
-            quadruple.kappa_unmasked_ref.as_ref(),
+            quadruple.kappa_unmasked_ref,
             "PreSignatureQuadrupleRef::quadruple::kappa_unmasked_ref",
         )?;
 
         let lambda_masked_ref: MaskedTranscript = try_from_option_field(
-            quadruple.lambda_masked_ref.as_ref(),
+            quadruple.lambda_masked_ref,
             "PreSignatureQuadrupleRef::quadruple::lamdba_masked_ref",
         )?;
 
         let kappa_times_lambda_ref: MaskedTranscript = try_from_option_field(
-            quadruple.kappa_times_lambda_ref.as_ref(),
+            quadruple.kappa_times_lambda_ref,
             "PreSignatureQuadrupleRef::quadruple::kappa_times_lamdba_ref",
         )?;
 
         let key_times_lambda_ref: MaskedTranscript = try_from_option_field(
-            quadruple.key_times_lambda_ref.as_ref(),
+            quadruple.key_times_lambda_ref,
             "PreSignatureQuadrupleRef::quadruple::key_times_lamdba_ref",
         )?;
 
         let key_unmasked_ref: UnmaskedTranscript = try_from_option_field(
-            quadruple.key_unmasked_ref.as_ref(),
+            quadruple.key_unmasked_ref,
             "PreSignatureQuadrupleRef::quadruple::key_unmasked_ref",
         )?;
 
         let key_id = try_from_option_field(
-            quadruple.key_id.clone(),
+            quadruple.key_id,
             "PreSignatureQuadrupleRef::quadruple::key_id",
         )?;
 

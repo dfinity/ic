@@ -8,10 +8,13 @@ use ic_management_canister_types_private::{
     InstallCodeArgs, InstallCodeArgsV2, Method, Payload, UploadChunkArgs, UploadChunkReply,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_replicated_state::canister_state::NextExecution;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
-use ic_replicated_state::{ExecutionTask, ReplicatedState};
+use ic_replicated_state::{
+    ExecutionTask, ReplicatedState,
+    canister_state::{
+        NextExecution, execution_state::WasmExecutionMode, system_state::wasm_chunk_store,
+    },
+    metadata_state::testing::NetworkTopologyTesting,
+};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
 };
@@ -27,7 +30,6 @@ use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use more_asserts::assert_le;
 use std::mem::size_of;
-use std::sync::Arc;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
@@ -1179,9 +1181,15 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, own_subnet_id);
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, own_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1196,7 +1204,10 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates canister 1 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1262,7 +1273,10 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     );
 
     // Simulate a subnet split that migrates canister 2 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1393,8 +1407,7 @@ fn consistent_install_code_calls_after_split() {
 fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls: usize) {
     // Collect the call IDs and calls of all aborted install code calls.
     let canister_install_code_contexts: Vec<_> = state
-        .canister_states
-        .values()
+        .canisters_iter()
         .filter_map(|canister| {
             if let Some(ExecutionTask::AbortedInstallCode {
                 message, call_id, ..

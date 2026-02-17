@@ -9,7 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-* Enabling direct node swapping feature on all subnets for all node operators.
+* Invariant about cycles cost schedule and subnet types allowing only application subnets to be put on "Free" schedule.
 
 ## Changed
 
@@ -18,7 +18,5 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
-
-* When performing `RemoveNodes`, generate 1 update mutation per node operator key. Before this change, a single node operator record would be changed multiple times in a single version if the remove nodes proposal removed multiple nodes from the same node operator, which caused confusion. This bug resulted in incorrect tracking of node operator allowance depending on how they are fetched from the registry (given the different implementations in the registry utility functions).
 
 ## Security

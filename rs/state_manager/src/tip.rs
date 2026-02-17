@@ -18,17 +18,15 @@ use ic_protobuf::state::{
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_snapshots::CanisterSnapshot;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
-use ic_replicated_state::{
-    CanisterState, NumWasmPages, PageMap, ReplicatedState,
-    page_map::{PAGE_SIZE, StorageLayout},
+use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
+use ic_replicated_state::page_map::{
+    MAX_NUMBER_OF_FILES, MergeCandidate, PAGE_SIZE, PageAllocatorFileDescriptor, StorageLayout,
+    StorageMetrics, StorageResult,
 };
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshot,
-    page_map::{MAX_NUMBER_OF_FILES, MergeCandidate, StorageMetrics, StorageResult},
-};
-use ic_replicated_state::{
-    metadata_state::UnflushedCheckpointOp, page_map::PageAllocatorFileDescriptor,
+    CanisterPriority, CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
     CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ExecutionStateBits, PageMapLayout,
@@ -575,8 +573,8 @@ fn switch_to_checkpoint(
     layout: &CheckpointLayout<ReadOnly>,
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
-    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
-        let canister_layout = layout.canister(tip_id).unwrap();
+    for tip_canister in tip.canisters_iter_mut() {
+        let canister_layout = layout.canister(&tip_canister.canister_id()).unwrap();
         tip_canister
             .system_state
             .wasm_chunk_store
@@ -666,9 +664,10 @@ fn switch_to_checkpoint(
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
-    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+    for tip_canister in tip.canisters_iter_mut() {
+        let tip_id = tip_canister.canister_id();
         if let Some(tip_state) = &mut tip_canister.execution_state {
-            let canister_layout = layout.canister(tip_id).unwrap();
+            let canister_layout = layout.canister(&tip_id).unwrap();
 
             // We can reuse the cache because the Wasm binary has the same
             // contents, only the storage of that binary changed.
@@ -1104,7 +1103,11 @@ fn serialize_protos_to_checkpoint_readwrite(
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_protos_to_checkpoint_readwrite(canister_state, checkpoint_readwrite)
+        serialize_canister_protos_to_checkpoint_readwrite(
+            canister_state,
+            state.canister_priority(&canister_state.canister_id()),
+            checkpoint_readwrite,
+        )
     });
 
     for result in results.into_iter() {
@@ -1257,6 +1260,7 @@ fn serialize_snapshot_wasm_binary_and_pagemaps(
 
 fn serialize_canister_protos_to_checkpoint_readwrite(
     canister_state: &CanisterState,
+    canister_priority: &CanisterPriority,
     checkpoint_readwrite: &CheckpointLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
     let canister_id = canister_state.canister_id();
@@ -1279,14 +1283,19 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });
 
+    let load_metrics_bits = canister_state
+        .system_state
+        .canister_metrics()
+        .load_metrics();
+
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
-            last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
+            last_full_execution_round: canister_priority.last_full_execution_round,
             compute_allocation: canister_state.compute_allocation(),
-            priority_credit: canister_state.scheduler_state.priority_credit,
-            long_execution_mode: canister_state.scheduler_state.long_execution_mode,
-            accumulated_priority: canister_state.scheduler_state.accumulated_priority,
+            priority_credit: canister_priority.priority_credit,
+            long_execution_mode: canister_priority.long_execution_mode,
+            accumulated_priority: canister_priority.accumulated_priority,
             memory_allocation: canister_state.system_state.memory_allocation,
             wasm_memory_threshold: canister_state.system_state.wasm_memory_threshold,
             freeze_threshold: canister_state.system_state.freeze_threshold,
@@ -1354,6 +1363,16 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .environment_variables
                 .clone()
                 .into(),
+            instructions_executed: canister_state
+                .system_state
+                .canister_metrics()
+                .instructions_executed(),
+            ingress_messages_executed: load_metrics_bits.ingress_messages_executed(),
+            remote_subnet_messages_executed: load_metrics_bits.remote_subnet_messages_executed(),
+            local_subnet_messages_executed: load_metrics_bits.local_subnet_messages_executed(),
+            http_outcalls_executed: load_metrics_bits.http_outcalls_executed(),
+            heartbeats_and_global_timers_executed: load_metrics_bits
+                .heartbeats_and_global_timers_executed(),
         }
         .into(),
     )?;

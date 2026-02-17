@@ -1674,7 +1674,7 @@ impl StateManagerImpl {
     /// values in provided state.
     fn observe_num_loaded_wasm_files(&self, state: &ReplicatedState) {
         let num_loaded_canister_wasm = state
-            .canister_states
+            .canister_states()
             .iter()
             .filter_map(|(_, canister)| canister.execution_state.as_ref())
             .filter(|execution_state| {
@@ -2766,6 +2766,8 @@ impl StateManager for StateManagerImpl {
             .as_ref()
             .expect("Missing CheckpointLayout")
             .clone();
+
+        states.tip_height = target_snapshot.height;
         std::mem::drop(states);
 
         let mut new_tip = initialize_tip(
@@ -3213,7 +3215,6 @@ impl StateManager for StateManagerImpl {
     fn commit_and_certify(
         &self,
         mut state: Self::State,
-        height: Height,
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
@@ -3222,6 +3223,11 @@ impl StateManager for StateManagerImpl {
             .api_call_duration
             .with_label_values(&["commit_and_certify"])
             .start_timer();
+
+        let height = {
+            let states = self.states.read();
+            states.tip_height.increment()
+        };
 
         self.populate_extra_metadata(&mut state, height);
 
