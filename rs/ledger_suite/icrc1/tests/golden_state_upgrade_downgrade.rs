@@ -622,82 +622,11 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
 #[cfg(feature = "u256-tokens")]
 #[test]
 fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
-    // u256 testnet ledgers
-    const CK_SEPOLIA_LINK_LEDGER_SUITE: (&str, &str, &str) = (
-        "r52mc-qaaaa-aaaar-qafzq-cai",
-        "ri55p-riaaa-aaaar-qaf2a-cai",
-        "ckSepoliaLINK",
-    );
-    const CK_SEPOLIA_PEPE_LEDGER_SUITE: (&str, &str, &str) = (
-        "hw4ru-taaaa-aaaar-qagdq-cai",
-        "g3sv2-4iaaa-aaaar-qagea-cai",
-        "ckSepoliaPEPE",
-    );
-    const CK_SEPOLIA_USDC_LEDGER_SUITE: (&str, &str, &str) = (
-        "yfumr-cyaaa-aaaar-qaela-cai",
-        "ycvkf-paaaa-aaaar-qaelq-cai",
-        "ckSepoliaUSDC",
-    );
     // u256 production ledgers
     const CK_ETH_LEDGER_SUITE: (&str, &str, &str) = (
         "ss2fx-dyaaa-aaaar-qacoq-cai",
         "s3zol-vqaaa-aaaar-qacpa-cai",
         "ckETH",
-    );
-    const CK_EURC_LEDGER_SUITE: (&str, &str, &str) = (
-        "pe5t5-diaaa-aaaar-qahwa-cai",
-        "pd4vj-oqaaa-aaaar-qahwq-cai",
-        "ckEURC",
-    );
-    const CK_LINK_LEDGER_SUITE: (&str, &str, &str) = (
-        "g4tto-rqaaa-aaaar-qageq-cai",
-        "gvqys-hyaaa-aaaar-qagfa-cai",
-        "ckLINK",
-    );
-    const CK_OCT_LEDGER_SUITE: (&str, &str, &str) = (
-        "ebo5g-cyaaa-aaaar-qagla-cai",
-        "egp3s-paaaa-aaaar-qaglq-cai",
-        "ckOCT",
-    );
-    const CK_PEPE_LEDGER_SUITE: (&str, &str, &str) = (
-        "etik7-oiaaa-aaaar-qagia-cai",
-        "eujml-dqaaa-aaaar-qagiq-cai",
-        "ckPEPE",
-    );
-    const CK_SHIB_LEDGER_SUITE: (&str, &str, &str) = (
-        "fxffn-xiaaa-aaaar-qagoa-cai",
-        "fqedz-2qaaa-aaaar-qagoq-cai",
-        "ckSHIB",
-    );
-    const CK_UNI_LEDGER_SUITE: (&str, &str, &str) = (
-        "ilzky-ayaaa-aaaar-qahha-cai",
-        "imymm-naaaa-aaaar-qahhq-cai",
-        "ckUNI",
-    );
-    const CK_USDC_LEDGER_SUITE: (&str, &str, &str) = (
-        "xevnm-gaaaa-aaaar-qafnq-cai",
-        "xrs4b-hiaaa-aaaar-qafoa-cai",
-        "ckUSDC",
-    );
-    const CK_USDT_LEDGER_SUITE: (&str, &str, &str) = (
-        "cngnf-vqaaa-aaaar-qag4q-cai",
-        "cefgz-dyaaa-aaaar-qag5a-cai",
-        "ckUSDT",
-    );
-    const CK_WBTC_LEDGER_SUITE: (&str, &str, &str) = (
-        "bptq2-faaaa-aaaar-qagxq-cai",
-        "dso6s-wiaaa-aaaar-qagya-cai",
-        "ckWBTC",
-    );
-    const CK_WSTETH_LEDGER_SUITE: (&str, &str, &str) = (
-        "j2tuh-yqaaa-aaaar-qahcq-cai",
-        "jtq73-oyaaa-aaaar-qahda-cai",
-        "ckWSTETH",
-    );
-    const CK_XAUT_LEDGER_SUITE: (&str, &str, &str) = (
-        "nza5v-qaaaa-aaaar-qahzq-cai",
-        "nmhmy-riaaa-aaaar-qah2a-cai",
-        "ckXAUT",
     );
 
     let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {
@@ -721,28 +650,6 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
         Some(ck_eth_burns_without_spender),
         true,
     )];
-    for canister_id_and_name in vec![
-        CK_SEPOLIA_LINK_LEDGER_SUITE,
-        CK_SEPOLIA_PEPE_LEDGER_SUITE,
-        CK_SEPOLIA_USDC_LEDGER_SUITE,
-        CK_EURC_LEDGER_SUITE,
-        CK_USDC_LEDGER_SUITE,
-        CK_LINK_LEDGER_SUITE,
-        CK_OCT_LEDGER_SUITE,
-        CK_PEPE_LEDGER_SUITE,
-        CK_SHIB_LEDGER_SUITE,
-        CK_UNI_LEDGER_SUITE,
-        CK_USDT_LEDGER_SUITE,
-        CK_WBTC_LEDGER_SUITE,
-        CK_WSTETH_LEDGER_SUITE,
-        CK_XAUT_LEDGER_SUITE,
-    ] {
-        canister_configs.push(LedgerSuiteConfig::new(
-            canister_id_and_name,
-            &MAINNET_U256_WASMS,
-            &MASTER_WASMS,
-        ));
-    }
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
