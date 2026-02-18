@@ -31,10 +31,7 @@ use ic_types::{
     },
     messages::CallbackId,
 };
-use rayon::{
-    ThreadPool,
-    iter::{IntoParallelIterator, ParallelIterator},
-};
+use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Deref,
@@ -668,7 +665,7 @@ pub(crate) fn create_data_payload_helper_2(
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     signature_builder: &dyn ThresholdSignatureBuilder,
-    thread_pool: &ThreadPool,
+    _thread_pool: &ThreadPool,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<(), IDkgPayloadError> {
@@ -699,21 +696,13 @@ pub(crate) fn create_data_payload_helper_2(
         idkg_payload_metrics,
     );
 
-    let inputs = idkg_payload
-        .iter_pre_sig_transcript_configs_in_creation()
-        .collect::<Vec<_>>();
-    let transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript> = thread_pool.install(|| {
-        inputs
-            .into_par_iter()
-            .filter_map(|params_ref| {
-                transcript_builder.get_completed_transcript(params_ref.transcript_id)
-            })
-            .map(|t| (t.transcript_id, t))
-            .collect()
-    });
-
     let new_transcripts = [
-        pre_signatures::update_pre_signatures_in_creation(idkg_payload, transcripts, height, log)?,
+        pre_signatures::update_pre_signatures_in_creation(
+            idkg_payload,
+            transcript_builder,
+            height,
+            log,
+        )?,
         key_transcript::update_next_key_transcripts(
             receivers,
             next_interval_registry_version,
@@ -1242,7 +1231,7 @@ mod tests {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
             let mut expected_transcripts = BTreeSet::new();
-            let mut transcripts = BTreeMap::new();
+            let transcript_builder = TestIDkgTranscriptBuilder::new();
             let mut add_expected_transcripts = |trancript_refs: Vec<idkg::TranscriptRef>| {
                 for transcript_ref in trancript_refs {
                     expected_transcripts.insert(transcript_ref.transcript_id);
@@ -1352,14 +1341,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcripts.insert(config_ref.transcript_id, transcript.clone());
+            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                transcripts,
+                &transcript_builder,
                 parent_block_height,
                 &no_op_logger(),
             )
@@ -1501,7 +1490,7 @@ mod tests {
             let mut rng = reproducible_rng();
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let mut transcripts = BTreeMap::new();
+            let transcript_builder = TestIDkgTranscriptBuilder::new();
             // Create a summary block with transcripts
             let summary_height = Height::new(5);
             let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
@@ -1611,14 +1600,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcripts.insert(config_ref.transcript_id, transcript.clone());
+            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                transcripts,
+                &transcript_builder,
                 parent_block_height,
                 &no_op_logger(),
             )
