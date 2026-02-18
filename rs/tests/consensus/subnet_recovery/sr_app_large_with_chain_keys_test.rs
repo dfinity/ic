@@ -14,6 +14,9 @@ fn main() -> Result<()> {
         .with_timeout_per_test(Duration::from_secs(50 * 60))
         .without_assert_no_replica_restarts()
         .add_test(systest!(test))
+        // TODO(CON-1644): remove if/when we better handle duplicate artifacts which could occur
+        // when a replica restarts.
+        .remove_metrics_to_check("idkg_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }

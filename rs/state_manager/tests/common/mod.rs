@@ -392,7 +392,7 @@ pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
     let wasm = alternate_wasm();
 
     state
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .execution_state
         .as_mut()

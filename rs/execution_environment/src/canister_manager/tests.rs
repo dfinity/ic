@@ -1319,7 +1319,7 @@ fn start_a_stopped_canister_succeeds() {
         );
 
         // Start the canister.
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         canister_manager.start_canister(sender, canister).unwrap();
 
         // Canister should now be running.
@@ -1339,7 +1339,7 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
 
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         assert_eq!(
             canister_manager.start_canister(sender, canister),
             Ok(Vec::new())
@@ -1362,7 +1362,7 @@ fn start_a_stopping_canister_with_stop_contexts() {
 
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         assert_eq!(
             canister_manager.start_canister(sender, canister),
             Ok(vec![stop_context])
@@ -2193,7 +2193,7 @@ fn add_cycles_sender_in_whitelist() {
     let initial_cycles = canister.system_state.balance();
     state.put_canister_state(canister);
 
-    let canister = state.canister_state_mut(&canister_id).unwrap();
+    let canister = state.canister_state_make_mut(&canister_id).unwrap();
     canister_manager
         .add_cycles(
             sender,
@@ -2222,7 +2222,7 @@ fn add_cycles_sender_not_in_whitelist() {
 
         // By default, the `CanisterManager`'s whitelist is set to `None`.
         // A call to `add_cycles` should fail.
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         assert_eq!(
             canister_manager.add_cycles(
                 sender,
@@ -2922,7 +2922,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .certified_data
         .clone_from(&certified_data);
     state
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
         .certified_data = certified_data;
@@ -2988,7 +2988,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
 
     // Insert data to the chunk store to verify it is cleared on uninstall.
     let store = &mut state
-        .canister_state_mut(&canister_test_id(0))
+        .canister_state_make_mut(&canister_test_id(0))
         .unwrap()
         .system_state
         .wasm_chunk_store;
