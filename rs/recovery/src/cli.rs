@@ -4,7 +4,7 @@ use crate::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
     args_merger::merge,
     error::GracefulExpect,
-    get_node_heights_from_metrics,
+    get_available_nodes_heights_from_metrics,
     nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs},
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     recovery_iterator::RecoveryIterator,
@@ -187,34 +187,12 @@ fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) {
 
 pub fn print_height_info(logger: &Logger, registry_helper: &RegistryHelper, subnet_id: SubnetId) {
     info!(logger, "Collecting node heights from metrics...");
+    info!(logger, "Select a node with highest finalization height:");
 
-    let node_ids = match registry_helper.get_node_ids_on_subnet(subnet_id) {
-        Ok((_registry_version, Some(node_ids))) => node_ids,
-        Ok((_registry_version, None)) => {
-            warn!(
-                logger,
-                "Subnet record for subnet {subnet_id} does not contain node ids.",
-            );
-            return;
-        }
-        Err(err) => {
-            warn!(logger, "Failed to query registry for node ids: {:?}", err);
-            return;
-        }
+    match get_available_nodes_heights_from_metrics(logger, registry_helper, subnet_id) {
+        Ok(heights) => info!(logger, "{:#?}", heights),
+        Err(err) => warn!(logger, "Failed to query height info: {:?}", err),
     };
-    let heights = match get_node_heights_from_metrics(logger, registry_helper, subnet_id) {
-        Ok(heights) => heights,
-        Err(err) => {
-            warn!(logger, "Failed to query height info: {:?}", err);
-            return;
-        }
-    };
-
-    info!(
-        logger,
-        "{:#?}",
-        node_ids.iter().zip(heights.iter()).collect::<Vec<_>>()
-    );
 }
 
 /// Print the title of a step

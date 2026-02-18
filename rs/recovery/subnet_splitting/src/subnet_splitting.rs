@@ -20,7 +20,7 @@ use ic_recovery::{
     CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
-    get_node_heights_from_metrics,
+    get_available_nodes_heights_from_metrics,
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
@@ -273,12 +273,12 @@ impl SubnetSplitting {
         }
 
         if check_height
-            && get_node_heights_from_metrics(
+            && get_available_nodes_heights_from_metrics(
                 &recovery.logger,
                 &recovery.registry_helper,
                 subnet_id,
             )?
-            .iter()
+            .into_values()
             .any(|metrics| metrics.finalization_height > Height::new(0))
         {
             return validation_error(String::from("Subnet has a non-zero height"));

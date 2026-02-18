@@ -1159,33 +1159,39 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
     Some(node_heights)
 }
 
-/// Grabs metrics from all nodes and greps for the certification and finalization heights.
-pub fn get_node_heights_from_metrics(
+/// Grabs metrics from all available nodes and greps for the certification and finalization heights.
+pub fn get_available_nodes_heights_from_metrics(
     logger: &Logger,
     registry_helper: &RegistryHelper,
     subnet_id: SubnetId,
-) -> RecoveryResult<Vec<NodeMetrics>> {
-    let ips = get_member_ips(registry_helper, subnet_id)?;
-    let metrics: Vec<NodeMetrics> =
-        block_on(join_all(ips.iter().map(|ip| get_node_metrics(logger, ip))))
-            .into_iter()
-            .flatten()
-            .collect();
-    if ips.len() > metrics.len() {
+) -> RecoveryResult<BTreeMap<NodeId, NodeMetrics>> {
+    let nodes_id_to_ip = get_member_node_ids_and_ips(registry_helper, subnet_id)?;
+    let num_nodes = nodes_id_to_ip.len();
+
+    let (ids, ips): (Vec<_>, Vec<_>) = nodes_id_to_ip.into_iter().unzip();
+    let metrics = block_on(join_all(ips.iter().map(|ip| get_node_metrics(logger, ip))));
+
+    let nodes_id_to_metrics: BTreeMap<_, _> = ids
+        .into_iter()
+        .zip(metrics)
+        .filter_map(|(id, metric)| metric.map(|m| (id, m)))
+        .collect();
+
+    if num_nodes > nodes_id_to_metrics.len() {
         warn!(
             logger,
             "Failed to get metrics from {} nodes!",
-            ips.len() - metrics.len()
+            num_nodes - nodes_id_to_metrics.len()
         );
     }
-    Ok(metrics)
+    Ok(nodes_id_to_metrics)
 }
 
-/// Lookup IP addresses of all members of the given subnet
-pub fn get_member_ips(
+/// Lookup node IDs and corresponding IP addresses of all members of the given subnet
+fn get_member_node_ids_and_ips(
     registry_helper: &RegistryHelper,
     subnet_id: SubnetId,
-) -> RecoveryResult<Vec<IpAddr>> {
+) -> RecoveryResult<BTreeMap<NodeId, IpAddr>> {
     let (registry_version, node_ids) = registry_helper.get_node_ids_on_subnet(subnet_id)?;
 
     let Some(node_ids) = node_ids else {
@@ -1196,20 +1202,41 @@ pub fn get_member_ips(
 
     node_ids
         .into_iter()
-        .filter_map(|node_id| {
-            registry_helper
-                .registry_client()
-                .get_node_record(node_id, registry_version)
-                .unwrap_or_default()
-        })
-        .filter_map(|node_record| {
-            node_record.http.map(|http| {
-                http.ip_addr.parse().map_err(|err| {
-                    RecoveryError::UnexpectedError(format!(
-                        "couldn't parse ip address from the registry: {err:?}"
-                    ))
-                })
-            })
+        .map(|node_id| {
+            let node_record = match registry_helper.registry_client().get_node_record(node_id, registry_version) {
+                Ok(Some(record)) => record,
+                Ok(None) => {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "node record not found for node id {node_id} in registry version {registry_version}"
+                    )));
+                }
+                Err(e) => {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "failed to get node record for node id {node_id} in registry version {registry_version}: {e}"
+                    )));
+                }
+            };
+
+            let http = match node_record.http {
+                Some(http) => http,
+                None => {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "no http endpoint found in the node record for node id {node_id} in registry version {registry_version}"
+                    )));
+                }
+            };
+
+            let node_ip = match http.ip_addr.parse() {
+                Ok(ip) => ip,
+                Err(e) => {
+                    return Err(RecoveryError::UnexpectedError(format!(
+                        "failed to parse IP address {} for node id {node_id} in registry version {registry_version}: {e}",
+                        http.ip_addr
+                    )));
+                }
+            };
+
+            Ok((node_id, node_ip))
         })
         .collect()
 }

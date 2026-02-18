@@ -6,7 +6,7 @@ use crate::{
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
-    get_member_ips, get_node_heights_from_metrics,
+    get_available_nodes_heights_from_metrics, get_member_node_ids_and_ips,
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
@@ -91,7 +91,9 @@ impl Step for DownloadCertificationsStep {
         let output_dir = self.work_dir.join("certifications");
         create_dir(&output_dir)?;
 
-        let ips = get_member_ips(&self.registry_helper, self.subnet_id)?;
+        let ips = get_member_node_ids_and_ips(&self.registry_helper, self.subnet_id)?
+            .into_values()
+            .collect::<Vec<_>>();
 
         let n = ips.len();
         let f = (n.max(1) - 1) / 3;
@@ -502,8 +504,13 @@ impl Step for ValidateReplayStep {
         let latest_height =
             replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
 
-        let heights =
-            get_node_heights_from_metrics(&self.logger, &self.registry_helper, self.subnet_id)?;
+        let heights = get_available_nodes_heights_from_metrics(
+            &self.logger,
+            &self.registry_helper,
+            self.subnet_id,
+        )?
+        .into_values()
+        .collect::<Vec<_>>();
         let cert_height = &heights
             .iter()
             .max_by_key(|v| v.certification_height)
