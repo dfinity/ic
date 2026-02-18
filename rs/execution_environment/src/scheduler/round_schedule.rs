@@ -24,6 +24,7 @@ pub(super) const MULTIPLIER: i64 = 1_000_000;
 const ZERO: AccumulatedPriority = AccumulatedPriority::new(0);
 
 /// 1% in accumulated priority.
+#[allow(clippy::identity_op)]
 const ONE_PERCENT: AccumulatedPriority = AccumulatedPriority::new(1 * MULTIPLIER);
 
 /// 100% in accumulated priority.
