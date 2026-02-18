@@ -7589,6 +7589,7 @@ version = "0.9.0"
 dependencies = [
  "askama",
  "assert_matches",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "ethers-core",

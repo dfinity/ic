@@ -69,3 +69,38 @@ where
 {
     EVENTS.with(|events| f(Box::new(events.borrow().iter())))
 }
+
+#[cfg(feature = "canbench-rs")]
+mod benches {
+    use super::*;
+    use canbench_rs::bench;
+
+    #[bench(raw)]
+    fn bench_post_upgrade() -> canbench_rs::BenchResult {
+        // Re-initialize thread locals from stable memory loaded by canbench.
+        // This is necessary because thread locals are lazily initialized and may
+        // have been initialized before canbench loaded the stable memory file.
+        MEMORY_MANAGER
+            .with(|x| *x.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
+        EVENTS.with(|x| {
+            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
+                StableLog::init(
+                    m.borrow().get(LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(LOG_DATA_MEMORY_ID),
+                )
+                .expect("failed to initialize stable log")
+            })
+        });
+
+        let event_count = total_event_count();
+        assert!(event_count > 0, "expected events in stable memory");
+
+        canbench_rs::bench_fn(|| {
+            use crate::state::STATE;
+            use crate::state::audit::replay_events;
+            STATE.with(|cell| {
+                *cell.borrow_mut() = Some(replay_events());
+            });
+        })
+    }
+}
