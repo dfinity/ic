@@ -2,7 +2,7 @@ use crate::GuestVMType;
 use anyhow::{Context, Result};
 use prometheus::{Encoder, IntGaugeVec, Opts, Registry, TextEncoder};
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 /// Metrics for the guest VM runner service
@@ -41,23 +41,19 @@ impl GuestVmMetrics {
 
     /// Writes all metrics to the metrics file
     pub fn write_to_file(&self) -> Result<()> {
-        let metric_families = self.registry.gather();
-        let encoder = TextEncoder::new();
+        let mut file =
+            BufWriter::new(File::create(&self.metrics_file_path).with_context(|| {
+                format!(
+                    "Failed to create metrics file: {}",
+                    self.metrics_file_path.display()
+                )
+            })?);
 
-        let mut buffer = Vec::new();
-        encoder
-            .encode(&metric_families, &mut buffer)
+        TextEncoder::new()
+            .encode(&self.registry.gather(), &mut file)
             .context("Failed to encode metrics")?;
 
-        let mut file = File::create(&self.metrics_file_path).with_context(|| {
-            format!(
-                "Failed to create metrics file: {}",
-                self.metrics_file_path.display()
-            )
-        })?;
-
-        file.write_all(&buffer)
-            .context("Failed to write metrics to file")?;
+        file.flush().context("Failed to flush metrics file")?;
 
         Ok(())
     }

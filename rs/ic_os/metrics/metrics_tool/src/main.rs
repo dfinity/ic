@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use prometheus::{Encoder, GaugeVec, IntGaugeVec, Opts, Registry, TextEncoder};
+use prometheus::{Encoder, IntGaugeVec, Opts, Registry, TextEncoder};
 
 use std::fs::File;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 const INTERRUPT_FILTER: &str = "TLB shootdowns";
@@ -64,17 +64,17 @@ pub fn main() -> Result<()> {
     gauge.with_label_values::<&str>(&[]).set(tlb_shootdowns);
 
     // Write metrics to file
-    let metric_families = registry.gather();
-    let encoder = TextEncoder::new();
-    let mut file = File::create(&opts.metrics_filename).with_context(|| {
+    let mut file = BufWriter::new(File::create(&opts.metrics_filename).with_context(|| {
         format!(
             "Failed to create metrics file: {}",
             opts.metrics_filename.display()
         )
-    })?;
-    encoder
-        .encode(&metric_families, &mut file)
+    })?);
+    TextEncoder::new()
+        .encode(&registry.gather(), &mut file)
         .context("Failed to encode metrics")?;
+
+    file.flush().context("Failed to flush metrics file")?;
 
     Ok(())
 }
