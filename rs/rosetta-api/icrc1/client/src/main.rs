@@ -107,10 +107,10 @@ async fn main() -> anyhow::Result<()> {
     let args: Args = Args::parse();
     let rosetta_client = RosettaClient::from_str_url(&args.rosetta_url)?;
 
-    let pem_contents = match std::fs::read(args.sender_pem_file.clone()) {
-        Ok(contents) => contents,
+    let file = match std::fs::File::open(args.sender_pem_file.clone()) {
+        Ok(file) => file,
         Err(e) => {
-            anyhow::bail!("Failed to read file {:?}: {:?}", args.sender_pem_file, e);
+            anyhow::bail!("Failed to open file {:?}: {:?}", args.sender_pem_file, e);
         }
     };
 
@@ -120,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to get network list: {:?}", e))?
         .network_identifiers[0];
 
-    let sender_keypair = Arc::new(BasicIdentity::from_pem(pem_contents)?);
+    let sender_keypair = Arc::new(BasicIdentity::from_pem(file)?);
 
     match args.operation_type {
         OperationType::Approve {

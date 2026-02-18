@@ -21,7 +21,6 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
-        "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-utils",
         "@crate_index//:regex",
         "@crate_index//:slog",

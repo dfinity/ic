@@ -279,12 +279,11 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     let dd = g1.batch_mul(&delta);
 
     let yy = {
-        let y0_and_pk = [y0.clone()]
-            .iter()
-            .chain(&instance.public_keys)
-            .cloned()
-            .collect::<Vec<_>>();
-        G1Projective::muln_affine_vartime(&y0_and_pk, &delta).to_affine()
+        let y0_and_pk: Vec<_> = [&y0]
+            .into_iter()
+            .chain(instance.public_keys.iter())
+            .collect();
+        G1Projective::muln_affine_vartime_ref(&y0_and_pk, &delta).to_affine()
     };
 
     let second_move = SecondMoveChunking::from(&z_s, &dd, &yy);
@@ -416,12 +415,7 @@ pub fn verify_chunking(
         // TODO(CRP-2550) this loop can run in parallel
         let cij_to_eijks: Vec<G1Projective> = (0..NUM_ZK_REPETITIONS)
             .map(|k| {
-                let c_ij_s: Vec<_> = instance
-                    .ciphertext_chunks
-                    .iter()
-                    .flatten()
-                    .cloned()
-                    .collect();
+                let c_ij_s: Vec<_> = instance.ciphertext_chunks.iter().flatten().collect();
                 let e_ijk_s: Vec<_> = e
                     .iter()
                     .flatten()
@@ -431,7 +425,7 @@ pub fn verify_chunking(
                     return Err(ZkProofChunkingError::InvalidProof);
                 }
 
-                Ok(G1Projective::muln_affine_vartime(&c_ij_s, &e_ijk_s) + &nizk.cc[k])
+                Ok(G1Projective::muln_affine_vartime_ref(&c_ij_s, &e_ijk_s) + &nizk.cc[k])
             })
             .collect::<Result<Vec<_>, _>>()?;
 
