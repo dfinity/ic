@@ -1541,23 +1541,24 @@ impl Scheduler for SchedulerImpl {
                             };
                     }
 
-                    let (log_memory_usage, delta_log_sizes) = {
+                    let new_log = &canister.system_state.log_memory_store;
+                    let old_log = &canister.system_state.canister_log;
+                    let (log_memory_usage, delta_log_sizes) = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                        (new_log.memory_usage(), new_log.delta_log_sizes())
+                    } else {
+                        (old_log.bytes_used(), old_log.delta_log_sizes())
+                    };
+                    if new_log.has_delta_log_sizes() || old_log.has_delta_log_sizes() {
+                        // Only clone state if delta log sizes are not empty.
                         let canister = Arc::make_mut(canister);
                         let new_log = &mut canister.system_state.log_memory_store;
                         let old_log = &mut canister.system_state.canister_log;
-                        let (log_memory_usage, delta_log_sizes) =
-                            if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                                (new_log.memory_usage(), new_log.delta_log_sizes())
-                            } else {
-                                (old_log.bytes_used(), old_log.delta_log_sizes())
-                            };
                         // IMPORTANT: Ensure `clear_delta_log_sizes()` is called
                         // so the delta log sizes are empty at the end of the round.
                         // This guarantees states remain consistent before and after a checkpoint.
                         new_log.clear_delta_log_sizes();
                         old_log.clear_delta_log_sizes();
-                        (log_memory_usage, delta_log_sizes)
-                    };
+                    }
                     self.metrics
                         .canister_log_memory_usage_v2
                         .observe(log_memory_usage as f64);

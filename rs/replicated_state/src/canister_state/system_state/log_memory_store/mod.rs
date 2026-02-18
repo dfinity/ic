@@ -239,6 +239,11 @@ impl LogMemoryStore {
         self.delta_log_sizes.push_back(size);
     }
 
+    /// Returns true if the delta log sizes are not empty.
+    pub fn has_delta_log_sizes(&self) -> bool {
+        !self.delta_log_sizes.is_empty()
+    }
+
     /// Returns delta_log sizes.
     pub fn delta_log_sizes(&self) -> Vec<usize> {
         self.delta_log_sizes.iter().cloned().collect()
