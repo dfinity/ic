@@ -296,14 +296,14 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     // We could break all faulty nodes now. But if all nodes are broken, then the later call to
     // fetch nodes' metrics to determine which node to download the consensus pool from will fail,
     // since no nodes will answer.
-    // To avoid that, we break at most `subnet_size - 1` nodes first, effectively breaking the
-    // subnet, then fetch the metrics and determine the download pool, and finally break the
-    // remaining nodes.
-    let (nodes_to_break_first, nodes_to_break_after) = faulty_nodes
-        .split_at_checked(subnet_size - 1)
-        // `split_at_checked` returns `None` if `subnet_size - 1 > faulty_nodes.len()`. In that
-        // case, we can break all faulty nodes at once.
-        .unwrap_or((faulty_nodes, &[]));
+    // To avoid that, in case all nodes are faulty, we break only `subnet_size - 1` nodes first,
+    // effectively breaking the subnet, then fetch the metrics and determine the download pool, and
+    // finally break the remaining node. Otherwise, we can break all faulty nodes at once.
+    let (nodes_to_break_first, nodes_to_break_after) = if faulty_nodes.len() == subnet_size {
+        faulty_nodes.split_at(subnet_size - 1)
+    } else {
+        (faulty_nodes, &[] as &[_])
+    };
     break_nodes(nodes_to_break_first, &logger);
 
     if let Some(healthy_node) = maybe_healthy_node {
@@ -368,7 +368,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     let recovery_dir = tempdir().unwrap().path().to_path_buf();
     let mut skipped_steps = vec![StepType::Cleanup]; // Skip Cleanup to keep the output directory
-    if maybe_healthy_node.is_none() {
+    if faulty_nodes.len() == subnet_size {
         // If all nodes are broken, the registry canister will not be able to respond to
         // `get_certified_changes_since` calls to initialize the local store of `ic-recovery`.
         // Thus, we need to manually download the local store of one of the nodes to pre-populate
