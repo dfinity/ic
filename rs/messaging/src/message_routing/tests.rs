@@ -629,20 +629,18 @@ impl StateMachine for FakeStateMachine {
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.node_public_keys = node_public_keys;
         state.metadata.api_boundary_nodes = api_boundary_nodes;
-        let mut canister_states = BTreeMap::new();
-        canister_states.insert(
-            canister_test_id(1),
+        state.put_canister_state(
             CanisterStateBuilder::new()
+                .with_canister_id(canister_test_id(1))
                 .with_wasm(vec![2; 1024 * 1024]) // 1MiB wasm
                 .build(),
         );
-        canister_states.insert(
-            canister_test_id(2),
+        state.put_canister_state(
             CanisterStateBuilder::new()
+                .with_canister_id(canister_test_id(2))
                 .with_wasm(vec![5; 10 * 1024]) // 10 KiB wasm
                 .build(),
         );
-        state.put_canister_states(canister_states);
         *self.0.lock().unwrap() = registry_settings.clone();
         state
     }
@@ -891,12 +889,12 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 0);
 
         // Check network topology.
-        assert_eq!(network_topology.subnets.len(), 2);
+        assert_eq!(network_topology.subnets().len(), 2);
         for (subnet_id, subnet_record, transcript) in [
             (own_subnet_id, &own_subnet_record, &own_transcript),
             (other_subnet_id, &other_subnet_record, &other_transcript),
         ] {
-            let subnet_topology = network_topology.subnets.get(&subnet_id).unwrap();
+            let subnet_topology = network_topology.subnets().get(&subnet_id).unwrap();
             assert_eq!(
                 ic_crypto_utils_threshold_sig_der::public_key_to_der(
                     &ThresholdSigPublicKey::try_from(transcript)
@@ -935,7 +933,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 .map(|(key, val)| (key.clone(), Valid(val.clone())))
                 .collect::<BTreeMap<_, _>>()
         );
-        assert_eq!(routing_table, *network_topology.routing_table);
+        assert_eq!(&routing_table, network_topology.routing_table().as_ref());
         assert_eq!(canister_migrations, *network_topology.canister_migrations);
 
         // Check registry execution settings.
@@ -1004,12 +1002,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // state corresponds to the registry records written above.
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(
-            state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         // Check `network_topology` and `subnet_features` are mapped into the new state correctly
         // by calling `BatchProcessorImpl::process_batch()` which will pass the `network_topology` and
@@ -1017,7 +1010,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // defined above). Additionally check the `registry_execution_settings` are also passed
         // correctly (they are stored in the internal `Arc` of the fake state machine itself).
         let latest_state = state_manager.get_latest_state().take();
-        assert_ne!(network_topology, latest_state.metadata.network_topology);
+        assert_ne!(&network_topology, &latest_state.metadata.network_topology);
         assert_ne!(
             own_subnet_features,
             latest_state.metadata.own_subnet_features
@@ -1042,7 +1035,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             replica_version: ReplicaVersion::default(),
         });
         let latest_state = state_manager.get_latest_state().take();
-        assert_eq!(network_topology, latest_state.metadata.network_topology);
+        assert_eq!(&network_topology, &latest_state.metadata.network_topology);
         assert_eq!(
             own_subnet_features,
             latest_state.metadata.own_subnet_features
@@ -1808,12 +1801,7 @@ fn process_batch_updates_subnet_metrics() {
             make_batch_processor(fixture.registry.clone(), log);
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(
-            state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
@@ -1883,7 +1871,7 @@ fn process_batch_resets_split_marker() {
         state.metadata.own_subnet_id = own_subnet_id;
         state.metadata.subnet_split_from = Some(other_subnet_id);
         height.inc_assign();
-        state_manager.commit_and_certify(state, height, CertificationScope::Metadata, None);
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         batch_processor.process_batch(Batch {
             batch_number: height.increment(),
@@ -1967,7 +1955,7 @@ fn test_demux_delivers_certified_stream_slices() {
 
             // Commit state with modified streams.
             height.inc_assign();
-            src_state_manager.commit_and_certify(state, height, CertificationScope::Metadata, None);
+            src_state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
             // Encode slice.
             src_state_manager

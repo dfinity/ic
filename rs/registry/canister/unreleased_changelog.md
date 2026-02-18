@@ -10,6 +10,8 @@ on the process that this file is part of, see
 ## Added
 
 * Add type4 node reward type for Cloud Engine nodes.
+* Invariant about cycles cost schedule and subnet types allowing only application subnets to be put on "Free" schedule.
+* New subnet admins field in the SubnetRecord.
 
 ## Changed
 

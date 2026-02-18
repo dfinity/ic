@@ -20,10 +20,12 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
     canister_state::system_state::{CyclesUseCase, PausedExecutionId},
-    metadata_state::subnet_call_context_manager::EcdsaMatchedPreSignature,
+    metadata_state::{
+        subnet_call_context_manager::EcdsaMatchedPreSignature, testing::NetworkTopologyTesting,
+    },
+    testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
@@ -2777,7 +2779,9 @@ fn can_record_metrics_for_a_round() {
     }
 
     for canister in test.state_mut().canisters_iter_mut() {
-        canister.system_state.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
+        Arc::make_mut(canister)
+            .system_state
+            .time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
     }
     test.state_mut().metadata.batch_time = UNIX_EPOCH
         + Duration::from_secs(1)
@@ -3553,8 +3557,10 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(1)));
     state.put_canister_state(get_running_canister(canister_test_id(2)));
 
-    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    routing_table
+    state
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .insert(
             CanisterIdRange {
                 start: canister_test_id(0),
@@ -3626,8 +3632,10 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(2)));
     state.put_canister_state(get_running_canister(canister_test_id(100)));
 
-    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    routing_table
+    state
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .insert(
             CanisterIdRange {
                 start: canister_test_id(0),
@@ -5640,10 +5648,10 @@ fn test_is_next_method_added_to_task_queue() {
         None,
         None,
     );
-    let may_schedule_heartbeat = false;
-    let may_schedule_global_timer = false;
+    let has_heartbeat = false;
+    let has_active_timer = false;
 
-    let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
+    let mut heartbeat_and_timer_canisters = BTreeSet::new();
     assert!(
         !test
             .canister_state(canister)
@@ -5657,18 +5665,18 @@ fn test_is_next_method_added_to_task_queue() {
         // input, hence no method will be chosen.
         assert!(!is_next_method_chosen(
             test.canister_state_mut(canister),
-            &mut heartbeat_and_timer_canister_ids,
-            may_schedule_heartbeat,
-            may_schedule_global_timer,
+            has_heartbeat,
+            has_active_timer,
+            &mut heartbeat_and_timer_canisters,
         ));
-        assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+        assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
     }
 
     // Make canister able to schedule both heartbeat and global timer.
-    let may_schedule_heartbeat = true;
-    let may_schedule_global_timer = true;
+    let has_heartbeat = true;
+    let has_active_timer = true;
 
     // Set input.
     test.canister_state_mut(canister)
@@ -5699,9 +5707,9 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
@@ -5713,7 +5721,7 @@ fn test_is_next_method_added_to_task_queue() {
             .is_empty()
     );
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
 
     while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::Heartbeat
@@ -5726,12 +5734,12 @@ fn test_is_next_method_added_to_task_queue() {
     // and GlobalTimer are added at the front of the queue.
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
     assert_eq!(
         test.canister_state(canister)
             .system_state
@@ -5758,9 +5766,9 @@ fn test_is_next_method_added_to_task_queue() {
         .task_queue
         .pop_front();
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
 
-    heartbeat_and_timer_canister_ids = BTreeSet::new();
+    heartbeat_and_timer_canisters = BTreeSet::new();
 
     while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::GlobalTimer
@@ -5772,12 +5780,12 @@ fn test_is_next_method_added_to_task_queue() {
     // and Heartbeat are added at the front of the queue.
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
     assert_eq!(
         test.canister_state(canister)
             .system_state
@@ -5804,7 +5812,7 @@ fn test_is_next_method_added_to_task_queue() {
         .task_queue
         .pop_front();
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
 }
 
 pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {
@@ -6252,7 +6260,10 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
     assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id, own_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -6268,7 +6279,10 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates the canister to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 

@@ -26,9 +26,9 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
+      image: ghcr.io/dfinity/ic-build@sha256:95705ebaed40462eef167d1c4c10f84aff9949f4d33d0f26dd28e0d9cc7fe1c6
       options: >-
-         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
     steps:
       - &checkout
@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           invocation-names: afl
-          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 10
 
   config:
     name: Set Config
@@ -349,7 +349,7 @@ jobs:
           echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
           echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
           echo "Current GitHub API rate limits:"
-          curl -s --netrc https://api.github.com/rate_limit | jq
+          curl -s --netrc https://api.github.com/rate_limit | jq '.resources.core'
 
           mkdir -p /tmp/zig-cache
 
