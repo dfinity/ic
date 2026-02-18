@@ -1684,7 +1684,8 @@ fn iter_with_exclude_queue_yields_correct_elements(
     prop_assert_eq!(remaining_output, ignored_requests.len());
 
     for raw in ignored_requests {
-        let queues = if let Some(canister) = replicated_state.canister_state_make_mut(&raw.sender()) {
+        let queues = if let Some(canister) = replicated_state.canister_state_make_mut(&raw.sender())
+        {
             canister.system_state.queues_mut()
         } else {
             replicated_state.subnet_queues_mut()
