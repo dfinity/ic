@@ -1135,7 +1135,7 @@ impl SchedulerImpl {
 
         observe_replicated_state_metrics(
             self.own_subnet_id,
-            &state,
+            state,
             current_round,
             self.exec_env.subnet_memory_capacity(),
             &self.state_metrics,
