@@ -408,7 +408,7 @@ crate.spec(
 crate.spec(
     features = ["global"],
     package = "dlmalloc",
-    version = "0.2.12",
+    version = "0.2.10",
 )
 crate.spec(
     package = "dfx-core",

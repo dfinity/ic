@@ -55,4 +55,4 @@ icrc3_disabled = []
 get_blocks_disabled = []
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-dlmalloc = { version = "0.2.12", features = ["global"] }
+dlmalloc = { version = "0.2.10", features = ["global"] }
