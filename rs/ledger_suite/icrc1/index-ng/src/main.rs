@@ -1,4 +1,12 @@
 #![allow(deprecated)]
+
+#[cfg(target_arch = "wasm32")]
+use dlmalloc::GlobalDlmalloc;
+
+#[cfg(target_arch = "wasm32")]
+#[global_allocator]
+static A: GlobalDlmalloc = GlobalDlmalloc;
+
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{SpanName, SpanStats, measure_span};
@@ -59,6 +67,9 @@ const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
 
+/// Prefix for diagnostic eprintln logs to pinpoint dlmalloc/panic location in tests.
+const DIAG_PREFIX: &str = "[index-ng]";
+
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
 
@@ -114,6 +125,12 @@ thread_local! {
 
     /// The ID of the block sync timer.
     static TIMER_ID: RefCell<TimerId> = RefCell::new(TimerId::default());
+
+    /// Counter for rate-limiting status() diagnostic logs.
+    static STATUS_QUERY_COUNT: RefCell<u64> = RefCell::new(0);
+
+    /// Counts how many times the build_index timer callback was invoked (for diagnostics).
+    static BUILD_INDEX_TIMER_INVOCATION: RefCell<u64> = RefCell::new(0);
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -450,13 +467,27 @@ where
     I: CandidType + Debug,
     O: CandidType + Debug + for<'a> Deserialize<'a>,
 {
+    ic_cdk::eprintln!("{} measured_call: entry method={}", DIAG_PREFIX, method);
     let req = measure_span(&PROFILING_DATA, encode_span_name, || Encode!(i))
         .map_err(|err| format!("failed to candid encode the input {i:?}: {err}"))?;
     let res = ic_cdk::api::call::call_raw(id, method, &req, 0)
         .await
         .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
-    measure_span(&PROFILING_DATA, decode_span_name, || Decode!(&res, O))
-        .map_err(|err| format!("failed to candid decode the output: {err}"))
+    ic_cdk::eprintln!(
+        "{} measured_call: before Decode method={} response_len={}",
+        DIAG_PREFIX,
+        method,
+        res.len()
+    );
+    let out = measure_span(&PROFILING_DATA, decode_span_name, || Decode!(&res, O))
+        .map_err(|err| format!("failed to candid decode the output: {err}"));
+    ic_cdk::eprintln!(
+        "{} measured_call: after Decode method={} ok={}",
+        DIAG_PREFIX,
+        method,
+        out.is_ok()
+    );
+    out
 }
 
 async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, SyncError> {
@@ -584,20 +615,58 @@ async fn find_get_blocks_method() -> GetBlocksMethod {
 }
 
 pub async fn build_index() -> Option<()> {
+    ic_cdk::eprintln!("{} build_index: start", DIAG_PREFIX);
     if with_state(|state| state.is_build_index_running) {
+        ic_cdk::eprintln!("{} build_index: skipped (already running)", DIAG_PREFIX);
         return None;
     }
     mutate_state(|state| {
         state.is_build_index_running = true;
     });
+    ic_cdk::eprintln!("{} build_index: set is_build_index_running=true", DIAG_PREFIX);
     let _reset_is_build_index_running_flag_guard = guard((), |_| {
         mutate_state(|state| {
             state.is_build_index_running = false;
         });
     });
-    let num_indexed = match find_get_blocks_method().await {
-        GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await,
-        GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await,
+    ic_cdk::eprintln!("{} build_index: calling find_get_blocks_method", DIAG_PREFIX);
+    let get_blocks_method = find_get_blocks_method().await;
+    ic_cdk::eprintln!(
+        "{} build_index: fetch path={:?}",
+        DIAG_PREFIX,
+        get_blocks_method
+    );
+    let num_indexed = match get_blocks_method {
+        GetBlocksMethod::GetBlocks => {
+            ic_cdk::eprintln!("{} build_index: before fetch_blocks_via_get_blocks", DIAG_PREFIX);
+            let r = fetch_blocks_via_get_blocks().await;
+            match &r {
+                Ok(n) => ic_cdk::eprintln!(
+                    "{} build_index: after fetch_blocks_via_get_blocks ok num_indexed={}",
+                    DIAG_PREFIX, n
+                ),
+                Err(e) => ic_cdk::eprintln!(
+                    "{} build_index: after fetch_blocks_via_get_blocks err msg={}",
+                    DIAG_PREFIX, e.message
+                ),
+            }
+            r
+        }
+        GetBlocksMethod::ICRC3GetBlocks => {
+            ic_cdk::eprintln!("{} build_index: before fetch_blocks_via_icrc3", DIAG_PREFIX);
+            let r = fetch_blocks_via_icrc3().await;
+            match &r {
+                Ok(n) => ic_cdk::eprintln!(
+                    "{} build_index: after fetch_blocks_via_icrc3 ok num_indexed={}",
+                    DIAG_PREFIX, n
+                ),
+                Err(e) => ic_cdk::eprintln!(
+                    "{} build_index: after fetch_blocks_via_icrc3 err msg={}",
+                    DIAG_PREFIX, e.message
+                ),
+            }
+            r
+        }
     };
     match num_indexed {
         Ok(num_indexed) => {
@@ -622,6 +691,7 @@ pub async fn build_index() -> Option<()> {
         }
     };
 
+    ic_cdk::eprintln!("{} build_index: returning (guard will clear flag)", DIAG_PREFIX);
     Some(())
 }
 
@@ -654,7 +724,21 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
     // The current number of blocks is also the id of the next
     // block to query from the Ledger.
     let previous_num_blocks = with_blocks(|blocks| blocks.len());
+    ic_cdk::eprintln!(
+        "{} fetch_blocks_via_icrc3: start previous_num_blocks={}",
+        DIAG_PREFIX, previous_num_blocks
+    );
+    ic_cdk::eprintln!(
+        "{} fetch_blocks_via_icrc3: about to call icrc3_get_blocks_from_ledger start={}",
+        DIAG_PREFIX, previous_num_blocks
+    );
     let res = icrc3_get_blocks_from_ledger(previous_num_blocks).await?;
+    let local_len = res.blocks.len();
+    let archived_count = res.archived_blocks.len();
+    ic_cdk::eprintln!(
+        "{} fetch_blocks_via_icrc3: got ledger response local_blocks={} archived_ranges={}",
+        DIAG_PREFIX, local_len, archived_count
+    );
 
     // The Ledger should return archives in order but there is
     // no guarantee of this. In order to avoid issues we sort
@@ -689,7 +773,15 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
                 args: vec![arg.clone()],
                 callback: callback.clone(),
             };
+            ic_cdk::eprintln!(
+                "{} fetch_blocks_via_icrc3: before icrc3_get_blocks_from_archive start={} length={}",
+                DIAG_PREFIX, arg.start, arg.length
+            );
             let res = icrc3_get_blocks_from_archive(&archived).await?;
+            ic_cdk::eprintln!(
+                "{} fetch_blocks_via_icrc3: after icrc3_get_blocks_from_archive got {} blocks",
+                DIAG_PREFIX, res.blocks.len()
+            );
 
             // sanity check: the index does not support nested archives
             if !res.archived_blocks.is_empty() {
@@ -709,11 +801,29 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
             arg.start += res.blocks.len();
             arg.length -= res.blocks.len();
 
+            let n = res.blocks.len();
+            ic_cdk::eprintln!(
+                "{} fetch_blocks_via_icrc3: before append_icrc3_blocks (archive) n={}",
+                DIAG_PREFIX, n
+            );
             append_icrc3_blocks(res.blocks)?;
+            ic_cdk::eprintln!(
+                "{} fetch_blocks_via_icrc3: after append_icrc3_blocks (archive) n={}",
+                DIAG_PREFIX, n
+            );
         }
     }
 
+    let local_blocks_len = res.blocks.len();
+    ic_cdk::eprintln!(
+        "{} fetch_blocks_via_icrc3: before append_icrc3_blocks (local) n={}",
+        DIAG_PREFIX, local_blocks_len
+    );
     append_icrc3_blocks(res.blocks)?;
+    ic_cdk::eprintln!(
+        "{} fetch_blocks_via_icrc3: after append_icrc3_blocks (local) n={}",
+        DIAG_PREFIX, local_blocks_len
+    );
     let num_blocks = with_blocks(|blocks| blocks.len());
     match num_blocks.checked_sub(previous_num_blocks) {
         None => panic!(
@@ -726,12 +836,21 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
 
 fn set_build_index_timer(after: Duration) {
     let timer_id = ic_cdk_timers::set_timer_interval(after, async || {
+        let inv = BUILD_INDEX_TIMER_INVOCATION.with(|c| {
+            let mut c = c.borrow_mut();
+            *c = c.saturating_add(1);
+            *c
+        });
+        ic_cdk::eprintln!("{} timer: build_index invocation #{}", DIAG_PREFIX, inv);
         let _ = build_index().await;
     });
     TIMER_ID.with(|tid| *tid.borrow_mut() = timer_id);
 }
 
 fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), SyncError> {
+    if block_index % 100 == 0 || block_index < 3 {
+        ic_cdk::eprintln!("{} append_block: block_index={}", DIAG_PREFIX, block_index);
+    }
     measure_span(&PROFILING_DATA, "append_blocks", move || {
         let original_block = block.clone();
 
@@ -805,16 +924,30 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), SyncError> {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
+    let n = new_blocks.len();
+    ic_cdk::eprintln!(
+        "{} append_blocks: start block_index={} n_blocks={}",
+        DIAG_PREFIX, block_index, n
+    );
     for block in new_blocks {
         append_block(block_index, block)?;
         block_index += 1;
     }
+    ic_cdk::eprintln!(
+        "{} append_blocks: done block_index={} (appended {})",
+        DIAG_PREFIX, block_index, n
+    );
     Ok(())
 }
 
 fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), SyncError> {
-    let mut blocks = vec![];
+    let n = new_blocks.len();
     let start_id = with_blocks(|blocks| blocks.len());
+    ic_cdk::eprintln!(
+        "{} append_icrc3_blocks: start start_id={} n_blocks={}",
+        DIAG_PREFIX, start_id, n
+    );
+    let mut blocks = vec![];
     for BlockWithId { id, block } in new_blocks {
         // sanity check
         let expected_id = start_id + blocks.len() as u64;
@@ -832,7 +965,12 @@ fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), SyncError> {
         // can represent any `ICRC3Value`.
         blocks.push(Value::from(block));
     }
+    ic_cdk::eprintln!(
+        "{} append_icrc3_blocks: calling append_blocks with {} blocks",
+        DIAG_PREFIX, blocks.len()
+    );
     append_blocks(blocks)?;
+    ic_cdk::eprintln!("{} append_icrc3_blocks: done", DIAG_PREFIX);
     Ok(())
 }
 
@@ -1086,8 +1224,19 @@ fn get_blocks(req: GetBlocksRequest) -> ic_icrc1_index_ng::GetBlocksResponse {
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
-
+    ic_cdk::eprintln!(
+        "{} get_blocks: start chain_length={} start={} length={}",
+        DIAG_PREFIX, chain_length, start, length
+    );
+    ic_cdk::eprintln!(
+        "{} get_blocks: about to decode_block_range start={} length={}",
+        DIAG_PREFIX, start, length
+    );
     let blocks = decode_block_range(start, length, decode_icrc1_block);
+    ic_cdk::eprintln!(
+        "{} get_blocks: done start={} blocks_returned={}",
+        DIAG_PREFIX, start, blocks.len()
+    );
     ic_icrc1_index_ng::GetBlocksResponse {
         chain_length,
         blocks,
@@ -1096,12 +1245,28 @@ fn get_blocks(req: GetBlocksRequest) -> ic_icrc1_index_ng::GetBlocksResponse {
 
 fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>) -> R) -> Vec<R> {
     let length = length.min(with_state(|opts| opts.max_blocks_per_response));
-    with_blocks(|blocks| {
+    const PROGRESS_LOG_EVERY: u64 = 500;
+    let blocks = with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
+        let num_to_decode = (limit - start) as usize;
+        ic_cdk::eprintln!(
+            "{} decode_block_range: start={} length={} limit={} num_to_decode={}",
+            DIAG_PREFIX, start, length, limit, num_to_decode
+        );
         (start..limit)
-            .map(|i| decoder(start + i, blocks.get(i).unwrap()))
+            .enumerate()
+            .map(|(j, i)| {
+                if j > 0 && (j as u64) % PROGRESS_LOG_EVERY == 0 {
+                    ic_cdk::eprintln!(
+                        "{} decode_block_range: progress block_index={}/{}",
+                        DIAG_PREFIX, i, limit
+                    );
+                }
+                decoder(i, blocks.get(i).unwrap())
+            })
             .collect()
-    })
+    });
+    blocks
 }
 
 #[query]
@@ -1195,7 +1360,18 @@ fn icrc1_balance_of(account: Account) -> Nat {
 
 #[query]
 fn status() -> Status {
-    let num_blocks_synced = with_blocks(|blocks| blocks.len().into());
+    let (num_blocks_synced, n) = with_blocks(|blocks| (blocks.len().into(), blocks.len() as u64));
+    let count = STATUS_QUERY_COUNT.with(|c| {
+        let mut c = c.borrow_mut();
+        *c = c.saturating_add(1);
+        *c
+    });
+    if count % 50 == 1 || n > 900_000 {
+        ic_cdk::eprintln!(
+            "{} status: query #{} num_blocks_synced={}",
+            DIAG_PREFIX, count, n
+        );
+    }
     Status { num_blocks_synced }
 }
 

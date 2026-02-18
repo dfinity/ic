@@ -3665,6 +3665,7 @@ dependencies = [
  "derive-new",
  "devicemapper",
  "dfx-core",
+ "dlmalloc",
  "dyn-clone",
  "ed25519-dalek",
  "educe",
@@ -4054,6 +4055,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.110",
+]
+
+[[package]]
+name = "dlmalloc"
+version = "0.2.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6738d2e996274e499bc7b0d693c858b7720b9cd2543a0643a3087e6cb0a4fa16"
+dependencies = [
+ "cfg-if 1.0.0",
+ "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

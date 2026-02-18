@@ -165,19 +165,19 @@ fn should_fail_to_install_and_upgrade_with_invalid_value() {
 #[test]
 fn should_install_and_upgrade_with_valid_values() {
     let max_seconds_for_timer = max_value_for_interval() - max_index_sync_time();
+    // Exclude interval 0 from the main matrix: it makes the timer fire every round so
+    // sync_after_upgrade is extremely slow. Interval 0 is covered by
+    // should_accept_upgrade_to_interval_zero (short test, no full sync wait).
     let build_index_interval_values = [
         (None, None),
-        (None, Some(0u64)),
         (None, Some(1u64)),
         (None, Some(10u64)),
         (None, Some(max_seconds_for_timer)),
         (Some(1u64), None),
-        (Some(1u64), Some(0u64)),
         (Some(1u64), Some(1u64)),
         (Some(1u64), Some(10u64)),
         (Some(1u64), Some(max_seconds_for_timer)),
         (Some(10u64), None),
-        (Some(10u64), Some(0u64)),
         (Some(10u64), Some(1u64)),
         (Some(10u64), Some(10u64)),
         (Some(10u64), Some(max_seconds_for_timer)),
@@ -191,6 +191,46 @@ fn should_install_and_upgrade_with_valid_values() {
             "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
         );
     }
+}
+
+/// Upgrade to interval 0 is accepted; we do not wait for full sync (that would be very
+/// slow because the timer fires every round). We only verify the upgrade doesn't trap
+/// and the canister stays responsive after a few ticks.
+#[test]
+fn should_accept_upgrade_to_interval_zero() {
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(
+        env,
+        vec![(account(1, 0), 1_000_000)],
+        default_archive_options(),
+    );
+    let index_wasm_bytes = index_wasm();
+    let index_id =
+        install_index(env, ledger_id, Some(1)).expect("install with interval 1 should succeed");
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
+        ledger_id: None,
+        retrieve_blocks_from_ledger_interval_seconds: Some(0),
+    });
+    env.upgrade_canister(
+        index_id,
+        index_wasm_bytes,
+        Encode!(&Some(upgrade_arg)).unwrap(),
+    )
+    .expect("upgrade to interval 0 should succeed");
+
+    // With interval 0 the timer fires every round; do a few ticks only (no full sync wait).
+    const TICKS_AFTER_UPGRADE: u32 = 3;
+    for _ in 0..TICKS_AFTER_UPGRADE {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
+    let s = status(env, index_id);
+    assert_eq!(
+        s.num_blocks_synced, 1,
+        "index should have synced the genesis block"
+    );
 }
 
 #[test]

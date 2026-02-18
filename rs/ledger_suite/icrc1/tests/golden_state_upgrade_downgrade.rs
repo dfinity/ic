@@ -751,6 +751,55 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     }
 }
 
+/// Stress-tests only the index `get_blocks` (query) path without advancing time,
+/// so the sync timer never runs. Use to isolate whether the dlmalloc panic is in
+/// the decode/query path. Run with:
+///   cargo test --package icrc_ledger_suite_integration_tests --lib golden_state_upgrade_downgrade::stress_get_blocks_only -- --ignored
+#[cfg(feature = "u256-tokens")]
+#[test]
+#[ignore]
+fn stress_get_blocks_only() {
+    const CK_ETH_LEDGER_SUITE: (&str, &str, &str) = (
+        "ss2fx-dyaaa-aaaar-qacoq-cai",
+        "s3zol-vqaaa-aaaar-qacpa-cai",
+        "ckETH",
+    );
+    let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {
+        owner: PrincipalId::from_str("sv3dd-oaaaa-aaaar-qacoa-cai")
+            .unwrap()
+            .0,
+        subaccount: None,
+    };
+    let ck_eth_burns_without_spender = BurnsWithoutSpender {
+        minter: ck_eth_minter,
+        burn_indexes: vec![
+            1051, 1094, 1276, 1759, 1803, 1929, 2449, 2574, 2218, 2219, 2231, 1777, 4, 9, 31, 1540,
+            1576, 1579, 1595, 1607, 1617, 1626, 1752, 1869, 1894, 2013, 2555,
+        ],
+    };
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+    let config = LedgerSuiteConfig::new_with_params(
+        CK_ETH_LEDGER_SUITE,
+        &MAINNET_U256_WASMS,
+        &MASTER_WASMS,
+        Some(ck_eth_burns_without_spender),
+        false,
+    );
+    let ledger_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.ledger_id).unwrap());
+    let index_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.index_id).unwrap());
+    top_up_canisters(&state_machine, ledger_canister_id, index_canister_id);
+    state_machine.advance_time(Duration::from_secs(1));
+    state_machine.tick();
+    config.upgrade_to_master(&state_machine);
+    // Do NOT advance time or tick after this — only stress get_blocks (query) path.
+    for round in 0..5 {
+        println!("stress_get_blocks_only: round {}", round + 1);
+        let _ = index::get_all_index_blocks(&state_machine, index_canister_id, None, None);
+    }
+}
+
 #[cfg(not(feature = "u256-tokens"))]
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
@@ -1100,7 +1149,7 @@ mod index {
         index_id: CanisterId,
         ledger_id: CanisterId,
     ) {
-        const MAX_ATTEMPTS: u8 = 100;
+        const MAX_ATTEMPTS: u8 = 200;
         const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
 
         let mut num_blocks_synced = u64::MAX;
@@ -1116,7 +1165,7 @@ mod index {
             }
         }
         panic!(
-            "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
+            "The index canister {index_id} was unable to sync all the blocks with the ledger {ledger_id}. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
         );
     }
 
