@@ -22,3 +22,4 @@ serde_bytes = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+pocket-ic = { path = "../../../packages/pocket-ic" }

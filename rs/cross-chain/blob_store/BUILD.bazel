@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -46,5 +47,22 @@ rust_test(
         # Keep sorted.
         ":lib",
         "@crate_index//:candid_parser",
+    ],
+)
+
+rust_ic_test(
+    name = "integration_tests",
+    srcs = ["tests/tests.rs"],
+    data = [
+        ":canister",
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "BLOB_STORE_CANISTER_WASM_PATH": "$(rootpath :canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    deps = [
+        "//packages/pocket-ic",
+        "@crate_index//:candid",
     ],
 )

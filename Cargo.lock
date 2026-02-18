@@ -1509,6 +1509,7 @@ dependencies = [
  "candid",
  "candid_parser",
  "ic-cdk",
+ "pocket-ic",
  "serde",
  "serde_bytes",
 ]
