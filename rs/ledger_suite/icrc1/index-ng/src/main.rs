@@ -67,6 +67,77 @@ const DIAG_PREFIX: &str = "[index-ng]";
 #[cfg(feature = "debug_dlmalloc")]
 const DEBUG_MAX_BLOCK_BYTES: usize = 2 * 1024 * 1024;
 
+// ---- Panic hook and context for pinpointing build_index panics (debug_dlmalloc) ----
+#[cfg(feature = "debug_dlmalloc")]
+mod panic_hook {
+    use super::DIAG_PREFIX;
+
+    const LEN: usize = 96;
+    static mut PANIC_CONTEXT: [u8; LEN] = [0; LEN];
+    static mut LAST_BLOCK_INDEX: u64 = 0;
+
+    /// Updates the context string (truncated to LEN-1, null-terminated). No allocation.
+    pub fn set_panic_context(s: &str) {
+        unsafe {
+            let bytes = s.as_bytes();
+            let n = bytes.len().min(LEN.saturating_sub(1));
+            let ptr = core::ptr::addr_of_mut!(PANIC_CONTEXT);
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr.cast::<u8>(), n);
+            *ptr.cast::<u8>().add(n) = 0;
+        }
+    }
+
+    /// Updates the last block index we were appending (for append_block).
+    pub fn set_panic_context_block_index(i: u64) {
+        unsafe {
+            LAST_BLOCK_INDEX = i;
+        }
+    }
+
+    /// Copies context into a local buffer and calls f with the &str (avoids static_mut_refs).
+    fn with_context_str<F, R>(f: F) -> R
+    where
+        F: FnOnce(&str) -> R,
+    {
+        const EMPTY: &str = "?";
+        unsafe {
+            let src = core::ptr::addr_of!(PANIC_CONTEXT).cast::<u8>();
+            let mut copy = [0u8; LEN];
+            core::ptr::copy_nonoverlapping(src, copy.as_mut_ptr(), LEN);
+            let pos = copy.iter().position(|&b| b == 0).unwrap_or(LEN);
+            let s = core::str::from_utf8(&copy[..pos]).unwrap_or(EMPTY);
+            f(s)
+        }
+    }
+
+    /// Installs a panic hook that logs current context and panic info before the trap.
+    pub fn set_panic_hook() {
+        std::panic::set_hook(Box::new(|info| {
+            with_context_str(|ctx| {
+                ic_cdk::eprintln!("{} [panic hook] context: {}", DIAG_PREFIX, ctx);
+            });
+            let last_block = unsafe { core::ptr::read(core::ptr::addr_of!(LAST_BLOCK_INDEX)) };
+            ic_cdk::eprintln!("{} [panic hook] last_block_index: {}", DIAG_PREFIX, last_block);
+            let payload: &str = info
+                .payload()
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("(no message)");
+            ic_cdk::eprintln!("{} [panic hook] payload: {}", DIAG_PREFIX, payload);
+            if let Some(loc) = info.location() {
+                ic_cdk::eprintln!(
+                    "{} [panic hook] at {}:{}:{}",
+                    DIAG_PREFIX,
+                    loc.file(),
+                    loc.line(),
+                    loc.column()
+                );
+            }
+        }));
+    }
+}
+
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
 
@@ -128,6 +199,31 @@ thread_local! {
 
     /// Counts how many times the build_index timer callback was invoked (for diagnostics).
     static BUILD_INDEX_TIMER_INVOCATION: RefCell<u64> = RefCell::new(0);
+}
+
+#[cfg(feature = "debug_dlmalloc")]
+thread_local! {
+    /// In-memory "current operation" for build_index; not persisted. Detects previous run that didn't clean up (e.g. trap/instruction limit).
+    static BUILD_INDEX_OP_CONTEXT: RefCell<Option<String>> = RefCell::new(None);
+}
+
+/// Guard that clears the build_index operation context in Drop (debug_dlmalloc).
+#[cfg(feature = "debug_dlmalloc")]
+struct BuildIndexOpGuard;
+
+#[cfg(feature = "debug_dlmalloc")]
+impl BuildIndexOpGuard {
+    fn new(context: &'static str) -> Self {
+        BUILD_INDEX_OP_CONTEXT.with(|c| *c.borrow_mut() = Some(context.to_string()));
+        Self
+    }
+}
+
+#[cfg(feature = "debug_dlmalloc")]
+impl Drop for BuildIndexOpGuard {
+    fn drop(&mut self) {
+        BUILD_INDEX_OP_CONTEXT.with(|c| *c.borrow_mut() = None);
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -410,6 +506,9 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
         let _maybe_first_key_value = account_data.first_key_value();
     });
 
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_hook();
+
     // set the first build_index to be called after init
     set_build_index_timer(with_state(|state| {
         state.retrieve_blocks_from_ledger_interval()
@@ -612,6 +711,8 @@ async fn find_get_blocks_method() -> GetBlocksMethod {
 }
 
 pub async fn build_index() -> Option<()> {
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("build_index: start");
     ic_cdk::eprintln!("{} build_index: start", DIAG_PREFIX);
     if with_state(|state| state.is_build_index_running) {
         ic_cdk::eprintln!("{} build_index: skipped (already running)", DIAG_PREFIX);
@@ -620,12 +721,18 @@ pub async fn build_index() -> Option<()> {
     mutate_state(|state| {
         state.is_build_index_running = true;
     });
+    #[cfg(feature = "debug_dlmalloc")]
+    let _build_index_op_guard = BuildIndexOpGuard::new("build_index");
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("build_index: is_build_index_running=true");
     ic_cdk::eprintln!("{} build_index: set is_build_index_running=true", DIAG_PREFIX);
     let _reset_is_build_index_running_flag_guard = guard((), |_| {
         mutate_state(|state| {
             state.is_build_index_running = false;
         });
     });
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("build_index: before find_get_blocks_method");
     ic_cdk::eprintln!("{} build_index: calling find_get_blocks_method", DIAG_PREFIX);
     let get_blocks_method = find_get_blocks_method().await;
     ic_cdk::eprintln!(
@@ -635,6 +742,8 @@ pub async fn build_index() -> Option<()> {
     );
     let num_indexed = match get_blocks_method {
         GetBlocksMethod::GetBlocks => {
+            #[cfg(feature = "debug_dlmalloc")]
+            panic_hook::set_panic_context("build_index: before fetch_blocks_via_get_blocks");
             ic_cdk::eprintln!("{} build_index: before fetch_blocks_via_get_blocks", DIAG_PREFIX);
             let r = fetch_blocks_via_get_blocks().await;
             match &r {
@@ -650,6 +759,8 @@ pub async fn build_index() -> Option<()> {
             r
         }
         GetBlocksMethod::ICRC3GetBlocks => {
+            #[cfg(feature = "debug_dlmalloc")]
+            panic_hook::set_panic_context("build_index: before fetch_blocks_via_icrc3");
             ic_cdk::eprintln!("{} build_index: before fetch_blocks_via_icrc3", DIAG_PREFIX);
             let r = fetch_blocks_via_icrc3().await;
             match &r {
@@ -688,13 +799,19 @@ pub async fn build_index() -> Option<()> {
         }
     };
 
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("build_index: return");
     ic_cdk::eprintln!("{} build_index: returning (guard will clear flag)", DIAG_PREFIX);
     Some(())
 }
 
 async fn fetch_blocks_via_get_blocks() -> Result<u64, SyncError> {
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("fetch_blocks_via_get_blocks: start");
     let mut num_indexed = 0;
     let next_id = with_blocks(|blocks| blocks.len());
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("fetch_blocks_via_get_blocks: before get_blocks_from_ledger");
     let res = get_blocks_from_ledger(next_id).await?;
     for archived in res.archived_blocks {
         let mut remaining = archived.length.clone();
@@ -705,19 +822,27 @@ async fn fetch_blocks_via_get_blocks() -> Result<u64, SyncError> {
                 length: remaining.clone(),
                 callback: archived.callback.clone(),
             };
+            #[cfg(feature = "debug_dlmalloc")]
+            panic_hook::set_panic_context("fetch_blocks_via_get_blocks: before get_blocks_from_archive");
             let res = get_blocks_from_archive(&archived).await?;
             next_archived_txid += res.blocks.len();
             num_indexed += res.blocks.len();
             remaining -= res.blocks.len();
+            #[cfg(feature = "debug_dlmalloc")]
+            panic_hook::set_panic_context("fetch_blocks_via_get_blocks: before append_blocks (archived)");
             append_blocks(res.blocks)?;
         }
     }
     num_indexed += res.blocks.len();
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("fetch_blocks_via_get_blocks: before append_blocks (local)");
     append_blocks(res.blocks)?;
     Ok(num_indexed as u64)
 }
 
 async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("fetch_blocks_via_icrc3: start");
     // The current number of blocks is also the id of the next
     // block to query from the Ledger.
     let previous_num_blocks = with_blocks(|blocks| blocks.len());
@@ -729,7 +854,11 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
         "{} fetch_blocks_via_icrc3: about to call icrc3_get_blocks_from_ledger start={}",
         DIAG_PREFIX, previous_num_blocks
     );
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("fetch_blocks_via_icrc3: before icrc3_get_blocks_from_ledger");
     let res = icrc3_get_blocks_from_ledger(previous_num_blocks).await?;
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("fetch_blocks_via_icrc3: after icrc3_get_blocks_from_ledger");
     let local_len = res.blocks.len();
     let archived_count = res.archived_blocks.len();
     ic_cdk::eprintln!(
@@ -770,6 +899,8 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
                 args: vec![arg.clone()],
                 callback: callback.clone(),
             };
+            #[cfg(feature = "debug_dlmalloc")]
+            panic_hook::set_panic_context("fetch_blocks_via_icrc3: before icrc3_get_blocks_from_archive");
             ic_cdk::eprintln!(
                 "{} fetch_blocks_via_icrc3: before icrc3_get_blocks_from_archive start={} length={}",
                 DIAG_PREFIX, arg.start, arg.length
@@ -799,6 +930,8 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
             arg.length -= res.blocks.len();
 
             let n = res.blocks.len();
+            #[cfg(feature = "debug_dlmalloc")]
+            panic_hook::set_panic_context("fetch_blocks_via_icrc3: before append_icrc3_blocks (archive)");
             ic_cdk::eprintln!(
                 "{} fetch_blocks_via_icrc3: before append_icrc3_blocks (archive) n={}",
                 DIAG_PREFIX, n
@@ -812,6 +945,8 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
     }
 
     let local_blocks_len = res.blocks.len();
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("fetch_blocks_via_icrc3: before append_icrc3_blocks (local)");
     ic_cdk::eprintln!(
         "{} fetch_blocks_via_icrc3: before append_icrc3_blocks (local) n={}",
         DIAG_PREFIX, local_blocks_len
@@ -833,6 +968,18 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
 
 fn set_build_index_timer(after: Duration) {
     let timer_id = ic_cdk_timers::set_timer_interval(after, async || {
+        #[cfg(feature = "debug_dlmalloc")]
+        {
+            BUILD_INDEX_OP_CONTEXT.with(|c| {
+                let mut r = c.borrow_mut();
+                if let Some(stale) = r.take() {
+                    ic_cdk::eprintln!(
+                        "{} [stale] previous build_index run did not clean up; last operation: {}",
+                        DIAG_PREFIX, stale
+                    );
+                }
+            });
+        }
         let inv = BUILD_INDEX_TIMER_INVOCATION.with(|c| {
             let mut c = c.borrow_mut();
             *c = c.saturating_add(1);
@@ -845,6 +992,11 @@ fn set_build_index_timer(after: Duration) {
 }
 
 fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), SyncError> {
+    #[cfg(feature = "debug_dlmalloc")]
+    {
+        panic_hook::set_panic_context("append_block");
+        panic_hook::set_panic_context_block_index(block_index);
+    }
     if block_index % 100 == 0 || block_index < 3 {
         ic_cdk::eprintln!("{} append_block: block_index={}", DIAG_PREFIX, block_index);
     }
@@ -936,6 +1088,8 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), Sy
 }
 
 fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), SyncError> {
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("append_blocks: start");
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
@@ -948,6 +1102,8 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), SyncError> {
         append_block(block_index, block)?;
         block_index += 1;
     }
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("append_blocks: done");
     ic_cdk::eprintln!(
         "{} append_blocks: done block_index={} (appended {})",
         DIAG_PREFIX, block_index, n
@@ -956,6 +1112,8 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), SyncError> {
 }
 
 fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), SyncError> {
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("append_icrc3_blocks: start");
     let n = new_blocks.len();
     let start_id = with_blocks(|blocks| blocks.len());
     ic_cdk::eprintln!(
@@ -985,6 +1143,8 @@ fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), SyncError> {
         DIAG_PREFIX, blocks.len()
     );
     append_blocks(blocks)?;
+    #[cfg(feature = "debug_dlmalloc")]
+    panic_hook::set_panic_context("append_icrc3_blocks: done");
     ic_cdk::eprintln!("{} append_icrc3_blocks: done", DIAG_PREFIX);
     Ok(())
 }
