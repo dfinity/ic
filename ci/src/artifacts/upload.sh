@@ -57,11 +57,12 @@ upload() {
     # Upload to Cloudflare's R2 (S3)
     # using profile 'cf' to look up the right creds in ~/.aws/credentials
     log "uploading to Cloudflare"
-    env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
-    AWS_PROFILE=cf rclone -v \
+  #  env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+    rclone -v \
         "${rclone_common_flags[@]}" \
         --s3-provider=Cloudflare \
         --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \
+        --s3-profile cf
         copy \
         --files-from <(echo "$(basename "$artifact_localpath")") \
         --no-traverse \
