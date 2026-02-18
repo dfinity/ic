@@ -914,6 +914,11 @@ fn subnets_as_tree<'a>(
                         subnet_id == own_subnet_id,
                         "metrics",
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
+                    )
+                    .with_tree_if(
+                        certification_version >= CertificationVersion::V25,
+                        "type",
+                        string(subnet_topology.subnet_type.as_ref()),
                     ),
             )
         },

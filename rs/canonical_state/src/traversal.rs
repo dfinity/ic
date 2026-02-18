@@ -863,7 +863,15 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![1, 2, 3, 4]),
+                    E::VisitBlob(vec![1, 2, 3, 4])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EnterEdge(subnet_test_id(1).get().into_vec()),
                     E::StartSubtree,
@@ -908,13 +916,21 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![5, 6, 7, 8]),
+                    E::VisitBlob(vec![5, 6, 7, 8])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EndSubtree, // subnets
                     edge("time"),
                     leb_num(0),
                     E::EndSubtree, // global
-                ])
+                ]),
             ]
             .into_iter()
             .flat_map(Option::unwrap_or_default)
@@ -1099,7 +1115,15 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![1, 2, 3, 4]),
+                    E::VisitBlob(vec![1, 2, 3, 4])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EnterEdge(subnet_test_id(1).get().into_vec()),
                     E::StartSubtree,
@@ -1134,13 +1158,21 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![5, 6, 7, 8]),
+                    E::VisitBlob(vec![5, 6, 7, 8])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EndSubtree, // subnets
                     edge("time"),
                     leb_num(0),
                     E::EndSubtree, // global
-                ])
+                ]),
             ]
             .into_iter()
             .flat_map(Option::unwrap_or_default)
