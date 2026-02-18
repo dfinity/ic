@@ -589,7 +589,7 @@ impl IDkgPreSignerImpl {
 
         let created = idkg_pool.transcripts();
 
-        let mut inputs = block_reader
+        let inputs = block_reader
             .requested_transcripts()
             .filter(|transcript_params_ref| {
                 !created.contains_key(&transcript_params_ref.transcript_id)
@@ -599,43 +599,43 @@ impl IDkgPreSignerImpl {
             .map(|params_ref| (params_ref.transcript_id, TranscriptState::new(params_ref)))
             .collect::<BTreeMap<_, _>>();
 
-        // Walk the dealings to get the dealings belonging to the transcripts
-        for (id, signed_dealing) in idkg_pool.validated().signed_dealings() {
-            let transcript_id = signed_dealing.idkg_dealing().transcript_id;
-            inputs.entry(transcript_id).and_modify(|transcript_state| {
-                if let Some(dealing_hash) = id.dealing_hash() {
-                    transcript_state.init_dealing_state(dealing_hash, signed_dealing);
-                } else {
-                    self.metrics
-                        .pre_sign_errors_inc("build_transcript_id_dealing_hash");
-                    warn!(
-                        self.log,
-                        "build_transcript(): Failed to get dealing hash: {:?}", id
-                    );
-                }
-            });
-        }
-
-        // Walk the support shares and assign to the corresponding dealing
-        for (_, support) in idkg_pool.validated().dealing_support() {
-            let transcript_id = support.transcript_id;
-            inputs.entry(transcript_id).and_modify(|transcript_state| {
-                if let Err(err) = transcript_state.add_dealing_support(support) {
-                    warn!(
-                        self.log,
-                        "Failed to add support: transcript_id = {:?}, error = {:?}",
-                        transcript_id,
-                        err
-                    );
-                    self.metrics.pre_sign_errors_inc("add_dealing_support");
-                }
-            });
-        }
-
         self.thread_pool.install(|| {
             inputs
                 .into_par_iter()
-                .filter_map(|(_, transcript_state)| {
+                .filter_map(|(transcript_id, mut transcript_state)| {
+                    // Collect the dealings and assign to the corresponding transcript
+                    for (id, signed_dealing) in idkg_pool
+                        .validated()
+                        .signed_dealings_by_transcript_id(&transcript_id)
+                    {
+                        if let Some(dealing_hash) = id.dealing_hash() {
+                            transcript_state.init_dealing_state(dealing_hash, signed_dealing);
+                        } else {
+                            self.metrics
+                                .pre_sign_errors_inc("build_transcript_id_dealing_hash");
+                            warn!(
+                                self.log,
+                                "build_transcript(): Failed to get dealing hash: {:?}", id
+                            );
+                        }
+                    }
+
+                    // Collect the support shares and assign to the corresponding dealing
+                    for (_, support) in idkg_pool
+                        .validated()
+                        .dealing_support_by_transcript_id(&transcript_id)
+                    {
+                        if let Err(err) = transcript_state.add_dealing_support(support) {
+                            warn!(
+                                self.log,
+                                "Failed to add support: transcript_id = {:?}, error = {:?}",
+                                transcript_id,
+                                err
+                            );
+                            self.metrics.pre_sign_errors_inc("add_dealing_support");
+                        }
+                    }
+
                     // Look up the transcript params
                     let transcript_params = self.resolve_ref(
                         transcript_state.params_ref,
