@@ -136,6 +136,7 @@ rust_test(
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1",
+            "IC_LOG_CANISTER_EXECUTION": "1",
             "CKBTC_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_archive.wasm.gz)",
             "CKBTC_IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_index.wasm.gz)",
             "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_ledger.wasm.gz)",

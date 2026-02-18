@@ -1302,6 +1302,17 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
                             data.len()
                         );
                     }
+                    // Finer-grained logging in the 12k-14k window where the panic was observed.
+                    const FINE_WINDOW: Range<u64> = 10_000..20_000;
+                    const FINE_LOG_EVERY: u64 = 50;
+                    if FINE_WINDOW.contains(&i) && (i - FINE_WINDOW.start) % FINE_LOG_EVERY == 0 {
+                        ic_cdk::eprintln!(
+                            "{} decode_block_range: fine block_index={} bytes_len={}",
+                            DIAG_PREFIX,
+                            i,
+                            data.len()
+                        );
+                    }
                 }
                 decoder(i, data)
             })
