@@ -6,11 +6,6 @@ fn init() {}
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {}
 
-#[ic_cdk::query]
-fn greet(key: String) -> String {
-    format!("Hello, {}!", key)
-}
-
 #[ic_cdk::update]
 fn record(request: RecordRequest) -> Result<String, RecordError> {
     blob_store_lib::record(ic_cdk::api::msg_caller(), &request.hash, request.data)

@@ -3,16 +3,6 @@ use pocket_ic::PocketIc;
 use serde::Deserialize;
 
 #[test]
-fn test_greet() {
-    let setup = Setup::default();
-    let blob_store = setup.blob_store();
-
-    let greeting = blob_store.greet("World");
-
-    assert_eq!(greeting, "Hello, World!");
-}
-
-#[test]
 fn test_record_success() {
     let setup = Setup::default();
     let blob_store = setup.blob_store();
@@ -144,19 +134,6 @@ pub struct BlobStoreCanister<'a> {
 }
 
 impl<'a> BlobStoreCanister<'a> {
-    pub fn greet(&self, name: &str) -> String {
-        let result = self
-            .env
-            .query_call(
-                self.canister_id,
-                Principal::anonymous(),
-                "greet",
-                Encode!(&name).unwrap(),
-            )
-            .expect("query call failed");
-        Decode!(&result, String).unwrap()
-    }
-
     pub fn record(
         &self,
         sender: Principal,

@@ -7,6 +7,5 @@ type RecordError = variant {
 type RecordRequest = record { data : blob; hash : text };
 type Result = variant { Ok : text; Err : RecordError };
 service : () -> {
-    greet : (text) -> (text) query;
     "record" : (RecordRequest) -> (Result);
 }
