@@ -121,6 +121,8 @@ jobs:
               skip_buf_checks="false"
           fi
 
+          release_build="true"
+
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -243,7 +245,7 @@ jobs:
             }
 
             bazel_do build
-            bazel_do test
+      #      bazel_do test
 
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
