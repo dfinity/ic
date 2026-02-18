@@ -469,7 +469,7 @@ fn main() {
 }
 
 #[test]
-fn test_cketh_minter_dump_stable_mem_mainnet() {
+fn test_minter_dump_stable_mem_mainnet() {
     fn path_to_file(file_name: &str) -> String {
         let mut path = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         path.push("test_resources");
