@@ -57,18 +57,18 @@ upload() {
     # Upload to Cloudflare's R2 (S3)
     # using profile 'cf' to look up the right creds in ~/.aws/credentials
     # log "uploading to Cloudflare"
-    # AWS_PROFILE=cf rclone -v \
-    #     "${rclone_common_flags[@]}" \
-    #     --s3-provider=Cloudflare \
-    #     --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \
-    #     --s3-env-auth \
-    #     copy \
-    #     --files-from <(echo "$(basename "$artifact_localpath")") \
-    #     --no-traverse \
-    #     --immutable \
-    #     "$(dirname "$artifact_localpath")" \
-    #     ":s3:dfinity-download-public/$bucket_dirname"
-    # log "done uploading to Cloudflare"
+    AWS_PROFILE=cf rclone -v \
+        "${rclone_common_flags[@]}" \
+        --s3-provider=Cloudflare \
+        --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \
+        --s3-env-auth \
+        copy \
+        --files-from <(echo "$(basename "$artifact_localpath")") \
+        --no-traverse \
+        --immutable \
+        "$(dirname "$artifact_localpath")" \
+        ":s3:dfinity-download-public/$bucket_dirname"
+    log "done uploading to Cloudflare"
 }
 
 # For each artifact in the bundle, extract the relative path to the bundle root and
