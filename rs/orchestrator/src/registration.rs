@@ -1170,8 +1170,7 @@ mod tests {
             PrincipalId,
             consensus::CatchUpContentProtobufBytes,
             crypto::{
-                AlgorithmId, BasicSig, BasicSigOf, CombinedThresholdSigOf, CryptoResult,
-                CurrentNodePublicKeys,
+                BasicSig, BasicSigOf, CombinedThresholdSigOf, CryptoResult, CurrentNodePublicKeys,
             },
             registry::RegistryClientError,
         };
