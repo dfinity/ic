@@ -1508,10 +1508,13 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "hex",
  "ic-cdk",
+ "ic-stable-structures 0.6.8",
  "pocket-ic",
  "serde",
  "serde_bytes",
+ "sha2 0.10.9",
 ]
 
 [[package]]

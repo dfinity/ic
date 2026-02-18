@@ -1,5 +1,6 @@
-use candid::{Decode, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use pocket_ic::PocketIc;
+use serde::Deserialize;
 
 #[test]
 fn test_greet() {
@@ -9,6 +10,91 @@ fn test_greet() {
     let greeting = blob_store.greet("World");
 
     assert_eq!(greeting, "Hello, World!");
+}
+
+#[test]
+fn test_record_success() {
+    let setup = Setup::default();
+    let blob_store = setup.blob_store();
+
+    let data = b"hello".to_vec();
+    let hash = sha256_hex(&data);
+
+    let result = blob_store.record(Setup::CONTROLLER, &hash, data);
+
+    assert_eq!(result, Ok(hash));
+}
+
+#[test]
+fn test_record_not_authorized() {
+    let setup = Setup::default();
+    let blob_store = setup.blob_store();
+
+    let data = b"hello".to_vec();
+    let hash = sha256_hex(&data);
+
+    let result = blob_store.record(Principal::anonymous(), &hash, data);
+
+    assert_eq!(result, Err(RecordError::NotAuthorized));
+}
+
+#[test]
+fn test_record_already_exists() {
+    let setup = Setup::default();
+    let blob_store = setup.blob_store();
+
+    let data = b"hello".to_vec();
+    let hash = sha256_hex(&data);
+    blob_store
+        .record(Setup::CONTROLLER, &hash, data.clone())
+        .expect("first record should succeed");
+
+    let result = blob_store.record(Setup::CONTROLLER, &hash, data);
+
+    assert_eq!(result, Err(RecordError::AlreadyExists));
+}
+
+#[test]
+fn test_record_hash_mismatch() {
+    let setup = Setup::default();
+    let blob_store = setup.blob_store();
+
+    let data = b"hello".to_vec();
+    let wrong_hash = sha256_hex(b"wrong");
+
+    let result = blob_store.record(Setup::CONTROLLER, &wrong_hash, data);
+
+    assert!(matches!(result, Err(RecordError::HashMismatch { .. })));
+}
+
+#[test]
+fn test_record_invalid_hash() {
+    let setup = Setup::default();
+    let blob_store = setup.blob_store();
+
+    let result = blob_store.record(Setup::CONTROLLER, "not-a-hex-hash", b"hello".to_vec());
+
+    assert!(matches!(result, Err(RecordError::InvalidHash(_))));
+}
+
+fn sha256_hex(data: &[u8]) -> String {
+    use sha2::Digest;
+    let hash: [u8; 32] = sha2::Sha256::digest(data).into();
+    hex::encode(hash)
+}
+
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct RecordRequest {
+    pub hash: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub enum RecordError {
+    NotAuthorized,
+    InvalidHash(String),
+    HashMismatch { expected: String, actual: String },
+    AlreadyExists,
 }
 
 pub struct Setup {
@@ -69,5 +155,27 @@ impl<'a> BlobStoreCanister<'a> {
             )
             .expect("query call failed");
         Decode!(&result, String).unwrap()
+    }
+
+    pub fn record(
+        &self,
+        sender: Principal,
+        hash: &str,
+        data: Vec<u8>,
+    ) -> Result<String, RecordError> {
+        let request = RecordRequest {
+            hash: hash.to_string(),
+            data,
+        };
+        let result = self
+            .env
+            .update_call(
+                self.canister_id,
+                sender,
+                "record",
+                Encode!(&request).unwrap(),
+            )
+            .expect("update call failed");
+        Decode!(&result, Result<String, RecordError>).unwrap()
     }
 }

@@ -7,9 +7,12 @@ package(default_visibility = ["//visibility:public"])
 DEPS = [
     # Keep sorted.
     "@crate_index//:candid",
+    "@crate_index//:hex",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:sha2",
 ]
 
 rust_library(
@@ -20,6 +23,7 @@ rust_library(
             "src/main.rs",
         ],
     ),
+    crate_name = "blob_store_lib",
     deps = DEPS,
 )
 
@@ -62,7 +66,12 @@ rust_ic_test(
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
     deps = [
+        # Keep sorted.
         "//packages/pocket-ic",
         "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:sha2",
     ],
 )
