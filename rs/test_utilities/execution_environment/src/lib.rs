@@ -337,7 +337,9 @@ impl ExecutionTest {
     }
 
     pub fn canister_state_mut(&mut self, canister_id: CanisterId) -> &mut CanisterState {
-        self.state_mut().canister_state_mut(&canister_id).unwrap()
+        self.state_mut()
+            .canister_state_make_mut(&canister_id)
+            .unwrap()
     }
 
     pub fn execution_state(&self, canister_id: CanisterId) -> &ExecutionState {
@@ -1157,7 +1159,7 @@ impl ExecutionTest {
             .method_payload(method_payload)
             .build();
         state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap()
             .push_ingress(ingress.clone());
         self.ingress_history_writer.set_status(

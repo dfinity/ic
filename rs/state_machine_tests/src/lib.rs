@@ -4741,7 +4741,7 @@ impl StateMachine {
     pub fn set_stable_memory(&self, canister_id: CanisterId, data: &[u8]) {
         let (_height, mut replicated_state) = self.state_manager.take_tip();
         let canister_state = replicated_state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
         let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
@@ -4777,7 +4777,7 @@ impl StateMachine {
     ) {
         let (_h, mut state) = self.state_manager.take_tip();
         state
-            .canister_state_mut(canister_id)
+            .canister_state_make_mut(canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .system_state
             .total_query_stats = total_query_stats;
@@ -4809,7 +4809,7 @@ impl StateMachine {
     pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
         let (_height, mut state) = self.state_manager.take_tip();
         let canister_state = state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
         canister_state
             .system_state

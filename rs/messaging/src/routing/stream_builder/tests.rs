@@ -1187,7 +1187,7 @@ fn build_streams_with_oversized_payloads() {
         let mut expected_state = consume_output_queues(&provided_state);
 
         // Expecting a reject response for the remote request.
-        let local_canister = expected_state.canister_state_mut(&local_canister).unwrap();
+        let local_canister = expected_state.canister_state_make_mut(&local_canister).unwrap();
         push_input(local_canister, remote_request_reject.into());
 
         // Expecting a loopback stream consisting of:
