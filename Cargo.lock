@@ -5470,11 +5470,11 @@ dependencies = [
  "goldenfile",
  "gpt",
  "grub",
- "ic-metrics-tool",
  "ic_device",
  "macaddr",
  "memchr",
  "nix 0.24.3",
+ "prometheus",
  "regex",
  "sev_host",
  "strum 0.26.3",
@@ -11145,6 +11145,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "prometheus",
 ]
 
 [[package]]
