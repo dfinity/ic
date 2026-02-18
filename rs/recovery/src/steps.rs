@@ -67,15 +67,15 @@ impl Step for AdminStep {
     }
 }
 
-pub struct DownloadCertificationsStep {
-    pub logger: Logger,
-    pub subnet_id: SubnetId,
-    pub registry_helper: RegistryHelper,
-    pub work_dir: PathBuf,
-    pub require_confirmation: bool,
-    pub auto_retry: bool,
-    pub key_file: Option<PathBuf>,
-    pub ssh_user: SshUser,
+pub(crate) struct DownloadCertificationsStep {
+    pub(crate) logger: Logger,
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) work_dir: PathBuf,
+    pub(crate) require_confirmation: bool,
+    pub(crate) auto_retry: bool,
+    pub(crate) key_file: Option<PathBuf>,
+    pub(crate) ssh_user: SshUser,
 }
 
 impl Step for DownloadCertificationsStep {
@@ -141,9 +141,9 @@ impl Step for DownloadCertificationsStep {
     }
 }
 
-pub struct MergeCertificationPoolsStep {
-    pub logger: Logger,
-    pub work_dir: PathBuf,
+pub(crate) struct MergeCertificationPoolsStep {
+    pub(crate) logger: Logger,
+    pub(crate) work_dir: PathBuf,
 }
 
 impl Step for MergeCertificationPoolsStep {
@@ -278,14 +278,14 @@ impl Step for MergeCertificationPoolsStep {
     }
 }
 
-pub struct DownloadIcDataStep {
-    pub logger: Logger,
-    pub ssh_helper: SshHelper,
-    pub backup_dir: PathBuf,
-    pub working_dir: PathBuf,
-    pub keep_downloaded_data: bool,
-    pub data_includes: Vec<PathBuf>,
-    pub include_config: bool,
+pub(crate) struct DownloadIcDataStep {
+    pub(crate) logger: Logger,
+    pub(crate) ssh_helper: SshHelper,
+    pub(crate) backup_dir: PathBuf,
+    pub(crate) working_dir: PathBuf,
+    pub(crate) keep_downloaded_data: bool,
+    pub(crate) data_includes: Vec<PathBuf>,
+    pub(crate) include_config: bool,
 }
 
 impl Step for DownloadIcDataStep {
@@ -361,10 +361,10 @@ impl Step for DownloadIcDataStep {
     }
 }
 
-pub struct CopyLocalIcStateStep {
-    pub logger: Logger,
-    pub working_dir: PathBuf,
-    pub require_confirmation: bool,
+pub(crate) struct CopyLocalIcStateStep {
+    pub(crate) logger: Logger,
+    pub(crate) working_dir: PathBuf,
+    pub(crate) require_confirmation: bool,
 }
 
 impl Step for CopyLocalIcStateStep {
@@ -417,16 +417,16 @@ pub struct ReplaySubCmd {
     pub descr: String,
 }
 
-pub struct ReplayStep {
-    pub logger: Logger,
-    pub subnet_id: SubnetId,
-    pub work_dir: PathBuf,
-    pub config: PathBuf,
-    pub subcmd: Option<ReplaySubCmd>,
-    pub canister_caller_id: Option<CanisterId>,
-    pub replay_until_height: Option<u64>,
-    pub result: PathBuf,
-    pub skip_prompts: bool,
+pub(crate) struct ReplayStep {
+    pub(crate) logger: Logger,
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) work_dir: PathBuf,
+    pub(crate) config: PathBuf,
+    pub(crate) subcmd: Option<ReplaySubCmd>,
+    pub(crate) canister_caller_id: Option<CanisterId>,
+    pub(crate) replay_until_height: Option<u64>,
+    pub(crate) result: PathBuf,
+    pub(crate) skip_prompts: bool,
 }
 
 impl Step for ReplayStep {
@@ -485,12 +485,12 @@ impl Step for ReplayStep {
     }
 }
 
-pub struct ValidateReplayStep {
-    pub logger: Logger,
-    pub subnet_id: SubnetId,
-    pub registry_helper: RegistryHelper,
-    pub work_dir: PathBuf,
-    pub extra_batches: u64,
+pub(crate) struct ValidateReplayStep {
+    pub(crate) logger: Logger,
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) registry_helper: RegistryHelper,
+    pub(crate) work_dir: PathBuf,
+    pub(crate) extra_batches: u64,
 }
 
 impl Step for ValidateReplayStep {
@@ -720,10 +720,10 @@ impl Step for UploadStateAndRestartStep {
     }
 }
 
-pub struct WaitForCUPStep {
-    pub logger: Logger,
-    pub node_ip: IpAddr,
-    pub work_dir: PathBuf,
+pub(crate) struct WaitForCUPStep {
+    pub(crate) logger: Logger,
+    pub(crate) node_ip: IpAddr,
+    pub(crate) work_dir: PathBuf,
 }
 
 impl Step for WaitForCUPStep {
@@ -748,8 +748,8 @@ impl Step for WaitForCUPStep {
     }
 }
 
-pub struct CleanupStep {
-    pub recovery_dir: PathBuf,
+pub(crate) struct CleanupStep {
+    pub(crate) recovery_dir: PathBuf,
 }
 
 impl Step for CleanupStep {
@@ -762,11 +762,11 @@ impl Step for CleanupStep {
     }
 }
 
-pub struct StopReplicaStep {
-    pub logger: Logger,
-    pub node_ip: IpAddr,
-    pub require_confirmation: bool,
-    pub key_file: Option<PathBuf>,
+pub(crate) struct StopReplicaStep {
+    pub(crate) logger: Logger,
+    pub(crate) node_ip: IpAddr,
+    pub(crate) require_confirmation: bool,
+    pub(crate) key_file: Option<PathBuf>,
 }
 
 impl Step for StopReplicaStep {
@@ -787,10 +787,10 @@ impl Step for StopReplicaStep {
     }
 }
 
-pub struct UpdateLocalStoreStep {
-    pub subnet_id: SubnetId,
-    pub work_dir: PathBuf,
-    pub skip_prompts: bool,
+pub(crate) struct UpdateLocalStoreStep {
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) work_dir: PathBuf,
+    pub(crate) skip_prompts: bool,
 }
 
 impl Step for UpdateLocalStoreStep {
@@ -817,14 +817,14 @@ impl Step for UpdateLocalStoreStep {
     }
 }
 
-pub struct GetRecoveryCUPStep {
-    pub subnet_id: SubnetId,
-    pub config: PathBuf,
-    pub state_hash: String,
-    pub recovery_height: Height,
-    pub result: PathBuf,
-    pub work_dir: PathBuf,
-    pub skip_prompts: bool,
+pub(crate) struct GetRecoveryCUPStep {
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) config: PathBuf,
+    pub(crate) state_hash: String,
+    pub(crate) recovery_height: Height,
+    pub(crate) result: PathBuf,
+    pub(crate) work_dir: PathBuf,
+    pub(crate) skip_prompts: bool,
 }
 
 impl Step for GetRecoveryCUPStep {
@@ -858,9 +858,9 @@ impl Step for GetRecoveryCUPStep {
     }
 }
 
-pub struct CreateRegistryTarStep {
-    pub logger: Logger,
-    pub store_tar_cmd: Command,
+pub(crate) struct CreateRegistryTarStep {
+    pub(crate) logger: Logger,
+    pub(crate) store_tar_cmd: Command,
 }
 
 impl Step for CreateRegistryTarStep {
@@ -878,16 +878,16 @@ impl Step for CreateRegistryTarStep {
     }
 }
 
-pub struct UploadCUPAndTarStep {
-    pub logger: Logger,
-    pub node_ip: IpAddr,
-    pub require_confirmation: bool,
-    pub key_file: Option<PathBuf>,
-    pub work_dir: PathBuf,
+pub(crate) struct UploadCUPAndTarStep {
+    pub(crate) logger: Logger,
+    pub(crate) node_ip: IpAddr,
+    pub(crate) require_confirmation: bool,
+    pub(crate) key_file: Option<PathBuf>,
+    pub(crate) work_dir: PathBuf,
 }
 
 impl UploadCUPAndTarStep {
-    pub fn get_restart_commands(&self) -> String {
+    fn get_restart_commands(&self) -> String {
         format!(
             r#"
 cd {};
@@ -910,7 +910,7 @@ sudo systemctl status ic-replica;
         )
     }
 
-    pub fn get_upload_dir_name() -> PathBuf {
+    fn get_upload_dir_name() -> PathBuf {
         PathBuf::from("/tmp").join("subnet_recovery")
     }
 }
@@ -965,9 +965,9 @@ impl Step for UploadCUPAndTarStep {
 }
 
 pub struct CreateNNSRecoveryTarStep {
-    pub logger: Logger,
-    pub work_dir: PathBuf,
-    pub output_dir: PathBuf,
+    pub(crate) logger: Logger,
+    pub(crate) work_dir: PathBuf,
+    pub(crate) output_dir: PathBuf,
 }
 
 impl CreateNNSRecoveryTarStep {
@@ -1048,14 +1048,14 @@ impl Step for CreateNNSRecoveryTarStep {
     }
 }
 
-pub struct DownloadRegistryStoreStep {
-    pub logger: Logger,
-    pub node_ip: IpAddr,
-    pub original_nns_id: SubnetId,
-    pub work_dir: PathBuf,
-    pub require_confirmation: bool,
-    pub ssh_user: SshUser,
-    pub key_file: Option<PathBuf>,
+pub(crate) struct DownloadRegistryStoreStep {
+    pub(crate) logger: Logger,
+    pub(crate) node_ip: IpAddr,
+    pub(crate) original_nns_id: SubnetId,
+    pub(crate) work_dir: PathBuf,
+    pub(crate) require_confirmation: bool,
+    pub(crate) ssh_user: SshUser,
+    pub(crate) key_file: Option<PathBuf>,
 }
 
 impl Step for DownloadRegistryStoreStep {
@@ -1112,17 +1112,17 @@ impl Step for DownloadRegistryStoreStep {
     }
 }
 
-pub struct UploadAndHostTarStep {
-    pub logger: Logger,
-    pub aux_user: SshUser,
-    pub aux_ip: IpAddr,
-    pub tar: PathBuf,
-    pub require_confirmation: bool,
-    pub key_file: Option<PathBuf>,
+pub(crate) struct UploadAndHostTarStep {
+    pub(crate) logger: Logger,
+    pub(crate) aux_user: SshUser,
+    pub(crate) aux_ip: IpAddr,
+    pub(crate) tar: PathBuf,
+    pub(crate) require_confirmation: bool,
+    pub(crate) key_file: Option<PathBuf>,
 }
 
 impl UploadAndHostTarStep {
-    pub fn get_upload_dir_name() -> PathBuf {
+    fn get_upload_dir_name() -> PathBuf {
         PathBuf::from("/tmp").join("recovery_registry")
     }
 }
