@@ -121,7 +121,7 @@ rust_test(
         crate_root = "tests/golden_state_upgrade_downgrade.rs",
         data = [
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
-            "//rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
+            "//rs/ledger_suite/icrc1/index-ng:" + index_ng_canister_wasm,
             "//rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm.gz",
             "@mainnet_canisters//:ck_btc_archive.wasm.gz",
             "@mainnet_canisters//:ck_btc_index.wasm.gz",
@@ -147,7 +147,7 @@ rust_test(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:sns_ledger.wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_2_WASM_PATH": "$(rootpath @mainnet_canisters//:sns_ledger_v2.wasm.gz)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
-            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
+            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:" + index_ng_canister_wasm + ")",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm.gz)",
         },
         tags = [
@@ -178,16 +178,18 @@ rust_test(
             "@crate_index//:num-traits",
         ],
     )
-    for (name_suffix, features, extra_deps) in [
+    for (name_suffix, features, extra_deps, index_ng_canister_wasm) in [
         (
             "",
             [],
             ["//rs/ledger_suite/icrc1/tokens_u64"],
+            "index_ng_canister.wasm.gz",
         ),
         (
             "_u256",
             ["u256-tokens"],
             ["//rs/ledger_suite/icrc1/tokens_u256"],
+            "index_ng_canister_u256_debug_dlmalloc.wasm.gz",
         ),
     ]
 ]

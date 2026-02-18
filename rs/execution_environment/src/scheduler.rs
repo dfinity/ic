@@ -1806,6 +1806,14 @@ fn execute_canisters_on_thread(
                     .observe_interrupted_during_execution();
                 break;
             }
+            if std::env::var("IC_LOG_CANISTER_EXECUTION").is_ok() {
+                info!(
+                    logger,
+                    "exec canister {} round {}",
+                    canister.canister_id(),
+                    round_id
+                );
+            }
             let timer = metrics.msg_execution_duration.start_timer();
 
             let instructions_before = round_limits.instructions;

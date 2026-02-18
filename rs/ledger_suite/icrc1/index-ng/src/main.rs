@@ -63,6 +63,10 @@ const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_se
 /// Prefix for diagnostic eprintln logs to pinpoint dlmalloc/panic location in tests.
 const DIAG_PREFIX: &str = "[index-ng]";
 
+/// Max encoded block size for debug_dlmalloc asserts (catch wrong size / overrun).
+#[cfg(feature = "debug_dlmalloc")]
+const DEBUG_MAX_BLOCK_BYTES: usize = 2 * 1024 * 1024;
+
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
 
@@ -887,6 +891,24 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), Sy
         }
 
         // append the encoded block to the block log
+        #[cfg(feature = "debug_dlmalloc")]
+        {
+            assert!(
+                block.0.len() <= DEBUG_MAX_BLOCK_BYTES,
+                "append block_index {} encoded len {} > {}",
+                block_index,
+                block.0.len(),
+                DEBUG_MAX_BLOCK_BYTES
+            );
+            if block_index % 100 == 0 || block_index < 3 {
+                ic_cdk::eprintln!(
+                    "{} append_block: block_index={} encoded_len={}",
+                    DIAG_PREFIX,
+                    block_index,
+                    block.0.len()
+                );
+            }
+        }
         with_blocks(|blocks| {
             blocks
                 .append(&block.0)
@@ -1207,6 +1229,13 @@ fn account_block_ids_key(account: Account, block_index: BlockIndex64) -> Account
 }
 
 fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> GenericBlock {
+    #[cfg(feature = "debug_dlmalloc")]
+    assert!(
+        bytes.len() <= DEBUG_MAX_BLOCK_BYTES,
+        "decode_icrc1_block bytes.len() {} > {}",
+        bytes.len(),
+        DEBUG_MAX_BLOCK_BYTES
+    );
     let encoded_block = EncodedBlock::from(bytes);
     encoded_block_to_generic_block(&encoded_block)
 }
@@ -1255,7 +1284,26 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
                         DIAG_PREFIX, i, limit
                     );
                 }
-                decoder(i, blocks.get(i).unwrap())
+                let data = blocks.get(i).unwrap();
+                #[cfg(feature = "debug_dlmalloc")]
+                {
+                    assert!(
+                        data.len() <= DEBUG_MAX_BLOCK_BYTES,
+                        "block {} len {} > {}",
+                        i,
+                        data.len(),
+                        DEBUG_MAX_BLOCK_BYTES
+                    );
+                    if j == 0 || (j as u64) % PROGRESS_LOG_EVERY == 0 {
+                        ic_cdk::eprintln!(
+                            "{} decode_block_range: block_index={} bytes_len={}",
+                            DIAG_PREFIX,
+                            i,
+                            data.len()
+                        );
+                    }
+                }
+                decoder(i, data)
             })
             .collect()
     });

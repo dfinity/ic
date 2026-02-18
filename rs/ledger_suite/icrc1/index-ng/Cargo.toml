@@ -53,3 +53,5 @@ default = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]
 icrc3_disabled = []
 get_blocks_disabled = []
+# Extra asserts and logging to hunt heap corruption when running with full golden state.
+debug_dlmalloc = []

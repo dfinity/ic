@@ -71,6 +71,11 @@ rust_library(
             ["u256-tokens"],
             ["//rs/ledger_suite/icrc1/tokens_u256"],
         ),
+        (
+            "_u256_debug_dlmalloc",
+            ["u256-tokens", "debug_dlmalloc"],
+            ["//rs/ledger_suite/icrc1/tokens_u256"],
+        ),
     ]
 ]
 
