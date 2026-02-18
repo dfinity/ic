@@ -290,6 +290,7 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
         "type3" => NodeRewardType::Type3,
         "type3.1" => NodeRewardType::Type3dot1,
         "type1.1" => NodeRewardType::Type1dot1,
+        "type4" => NodeRewardType::Type4,
         _ => return Err(format!("Invalid node type: {type_string}")),
     })
 }
