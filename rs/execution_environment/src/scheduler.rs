@@ -1591,7 +1591,10 @@ impl Scheduler for SchedulerImpl {
     fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
         self.finish_round(
             state,
-            // FIXME
+            // TODO(DSM-106) This is a workaround to avoid having to temporarily change the
+            // `Scheduler` trait. The round number is only used to decide whether to log
+            // warnings about long open call contexts. When `ReplicatedState`
+            // instrumentation moves to MessageRouting, this argument will be dropped.
             ExecutionRound::from(0),
             ExecutionRoundType::CheckpointRound,
             &self.log,

@@ -3245,7 +3245,7 @@ fn replicated_state_metrics_nothing_exported() {
         subnet_test_id(1),
         &state,
         0.into(),
-        0.into(),
+        default_subnet_memory_capacity(),
         &state_metrics,
         &no_op_logger(),
     );
@@ -3515,7 +3515,7 @@ fn replicated_state_metrics_running_canister() {
         subnet_test_id(1),
         &state,
         0.into(),
-        0.into(),
+        default_subnet_memory_capacity(),
         &state_metrics,
         &no_op_logger(),
     );
@@ -3546,7 +3546,7 @@ fn replicated_state_metrics_different_canister_statuses() {
         subnet_test_id(1),
         &state,
         0.into(),
-        0.into(),
+        default_subnet_memory_capacity(),
         &state_metrics,
         &no_op_logger(),
     );
@@ -3588,7 +3588,7 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
         subnet_test_id(1),
         &state,
         0.into(),
-        0.into(),
+        default_subnet_memory_capacity(),
         &state_metrics,
         &no_op_logger(),
     );
@@ -3627,7 +3627,7 @@ fn replicated_state_metrics_stop_contexts_with_missing_call_ids() {
         subnet_test_id(1),
         &state,
         0.into(),
-        0.into(),
+        default_subnet_memory_capacity(),
         &state_metrics,
         &no_op_logger(),
     );
@@ -3662,7 +3662,7 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
         subnet_test_id(1),
         &state,
         0.into(),
-        0.into(),
+        default_subnet_memory_capacity(),
         &state_metrics,
         &no_op_logger(),
     );
@@ -3844,7 +3844,7 @@ fn threshold_signature_agreements_metric_is_updated() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // At the beginning of the next round, the in flight contexts should have been observed
+    // At the end of the round, the in flight contexts should have been observed.
     let in_flight_contexts_metric = fetch_histogram_vec_stats(
         test.metrics_registry(),
         "execution_in_flight_signature_request_contexts",
@@ -6725,4 +6725,8 @@ fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
     .unwrap();
 
     *instructions_consumed_per_message.get("0").unwrap()
+}
+
+fn default_subnet_memory_capacity() -> NumBytes {
+    ic_config::execution_environment::Config::default().subnet_memory_capacity
 }
