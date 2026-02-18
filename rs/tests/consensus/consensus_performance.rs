@@ -109,6 +109,11 @@ fn setup(env: TestEnv) {
         ));
     }
 
+    let max_ingress_bytes: u64 = std::env::var("MAX_INGRESS_BYTES_PER_BLOCK")
+        .expect("`MAX_INGRESS_BYTES_PER_BLOCK` env variable must be set")
+        .parse()
+        .unwrap();
+
     ic_builder
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
@@ -128,6 +133,7 @@ fn setup(env: TestEnv) {
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_max_ingress_bytes_per_block(max_ingress_bytes)
                 .add_nodes(NODES_COUNT),
         )
         .setup_and_start(&env)
@@ -179,25 +185,31 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
             LATENCY,
             BANDWIDTH_MBITS * 1_000_000,
             NODES_COUNT,
+            Some(
+                std::env::var("MAX_INGRESS_BYTES_PER_BLOCK")
+                    .expect("If we are here then we know the variable has been set")
+                    .parse()
+                    .expect("If we are here then we know the content is parsable"),
+            ),
             &logger,
         ));
     }
 }
 
-fn test_few_small_messages(env: TestEnv) {
+fn test_single_tiny_message(env: TestEnv) {
     test(env, 1, 1.0)
 }
 
-fn test_small_messages(env: TestEnv) {
-    test(env, 4_000, 500.0)
+fn test_single_large_message(env: TestEnv) {
+    test(env, 1_999_500, 1.0)
 }
 
-fn test_few_large_messages(env: TestEnv) {
-    test(env, 1_999_000, 1.0)
+fn test_small_messages(env: TestEnv) {
+    test(env, 9_500, 1_000.0)
 }
 
 fn test_large_messages(env: TestEnv) {
-    test(env, 950_000, 4.0)
+    test(env, 1_999_500, 5.0)
 }
 
 fn teardown(env: TestEnv) {
@@ -224,9 +236,9 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        .add_test(systest!(test_few_small_messages))
+        .add_test(systest!(test_single_tiny_message))
         .add_test(systest!(test_small_messages))
-        .add_test(systest!(test_few_large_messages))
+        .add_test(systest!(test_single_large_message))
         .add_test(systest!(test_large_messages))
         .with_teardown(teardown)
         .execute_from_args()?;
