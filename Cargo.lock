@@ -12388,7 +12388,11 @@ name = "ic-nns-test-utils-prepare-golden-state"
 version = "0.0.1"
 dependencies = [
  "clap 4.5.27",
+ "hex",
+ "ic-base-types",
+ "tar",
  "tempfile",
+ "zstd",
 ]
 
 [[package]]

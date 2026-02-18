@@ -22,3 +22,18 @@ rust_binary(
     version = "0.0.1",
     deps = [":prepare_golden_state"] + DEPENDENCIES,
 )
+
+SLIM_FIDUCIARY_STATE_DEPS = [
+    "//rs/types/base_types",
+    "@crate_index//:hex",
+    "@crate_index//:tar",
+    "@crate_index//:tempfile",
+    "@crate_index//:zstd",
+]
+
+rust_binary(
+    name = "slim_fiduciary_state",
+    srcs = ["src/slim_fiduciary_state.rs"],
+    version = "0.0.1",
+    deps = SLIM_FIDUCIARY_STATE_DEPS,
+)

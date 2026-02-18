@@ -5,8 +5,16 @@ edition.workspace = true
 
 [dependencies]
 clap = { workspace = true }
+hex = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+tar = { workspace = true }
 tempfile = { workspace = true }
+zstd = { workspace = true }
 
 [[bin]]
 name = "watch-and-prepare"
 path = "src/watch_and_prepare.rs"
+
+[[bin]]
+name = "slim_fiduciary_state"
+path = "src/slim_fiduciary_state.rs"
