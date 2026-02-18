@@ -15872,6 +15872,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-tree-hash",
  "ic-ed25519 0.6.0",
  "ic-fstrim-tool",
  "ic-registry-subnet-type",

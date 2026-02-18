@@ -5,6 +5,7 @@ use candid::Encode;
 use ic_agent::Identity;
 use ic_agent::export::Principal;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -17,8 +18,9 @@ use ic_system_test_driver::util::{
     sign_update,
 };
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedDelegation,
+    Blob, Certificate, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent,
+    HttpReadState, HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery,
+    MessageId, SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
@@ -1499,7 +1501,7 @@ async fn send_request<C: serde::ser::Serialize>(
 
 /// When a v3/v4 sync update call returns 202 (the replica's internal timeout
 /// was exceeded before the ingress message was processed), fall back to polling
-/// read_state until a certificate is available.
+/// read_state until a terminal request status is available.
 async fn await_ingress_via_read_state(
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
@@ -1532,12 +1534,68 @@ async fn await_ingress_via_read_state(
         )
         .await;
 
-        if response.status() == 200 {
-            return response;
+        let status = response.status();
+
+        // 4xx (except 429 Too Many Requests) or 5xx: no point in continuing to poll
+        if (status.is_client_error() && status != 429) || status.is_server_error() {
+            panic!(
+                "read_state request failed with HTTP {}: {:?}",
+                status, response.body
+            );
+        }
+
+        if status == 200 {
+            // A 200 means the read_state HTTP request succeeded, but we must
+            // inspect the certificate to determine the actual request status.
+            match request_status_from_read_state_response(&response, &request_id) {
+                Some(s) if s == "replied" || s == "rejected" || s == "done" => {
+                    return response;
+                }
+                Some(s) => {
+                    assert!(
+                        s == "received" || s == "processing",
+                        "Unexpected request status: {s}"
+                    );
+                }
+                None => {
+                    // Status path absent or unknown in the certificate; keep polling
+                }
+            }
         }
     }
 
     panic!("Timed out waiting for ingress message to be processed via read_state polling");
+}
+
+/// Extract the request status string from a read_state response certificate.
+/// Returns `None` if the status path is absent or unknown in the certificate tree.
+fn request_status_from_read_state_response(
+    response: &ReplicaResponse,
+    request_id: &MessageId,
+) -> Option<String> {
+    let cbor = match &response.body {
+        ResponseBody::Cbor(cbor) => cbor,
+        other => panic!("Expected CBOR response body from read_state, got: {other:?}"),
+    };
+
+    let read_state_response: HttpReadStateResponse =
+        serde_cbor::value::from_value(cbor.clone()).expect("Failed to parse HttpReadStateResponse");
+
+    let certificate: Certificate =
+        serde_cbor::from_slice(read_state_response.certificate.0.as_ref())
+            .expect("Failed to parse certificate from read_state response");
+
+    let status_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"status"];
+
+    match certificate.tree.lookup(&status_path) {
+        LookupStatus::Found(MixedHashTree::Leaf(status_bytes)) => {
+            Some(String::from_utf8(status_bytes.clone()).expect("Invalid UTF-8 in request status"))
+        }
+        LookupStatus::Found(other) => {
+            panic!("Request status is not a leaf node: {other:?}");
+        }
+        LookupStatus::Absent | LookupStatus::Unknown => None,
+    }
 }
 
 async fn perform_query_call_with_delegations(
@@ -1737,9 +1795,10 @@ async fn perform_update_with_expiry(
         },
     };
 
+    let request_id = MessageId::from(content.representation_independent_hash());
     let signature = signer.sign_update(&content);
 
-    send_request(
+    let response = send_request(
         api_ver,
         test,
         "call",
@@ -1748,7 +1807,14 @@ async fn perform_update_with_expiry(
         None,
         signature,
     )
-    .await
+    .await;
+
+    // v3/v4 sync calls may return 202 under load; fall back to read_state polling
+    if api_ver >= 3 && response.status() == 202 {
+        return await_ingress_via_read_state(test, sender, request_id).await;
+    }
+
+    response
 }
 
 async fn perform_read_state_call_with_expiry(
