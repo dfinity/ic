@@ -427,7 +427,10 @@ fn query_compiled_once() {
         assert_eq!(1, query_handler.hypervisor.compile_count());
     }
 
-    let canister = test.state_mut().canister_state_mut(&canister_id).unwrap();
+    let canister = test
+        .state_mut()
+        .canister_state_make_mut(&canister_id)
+        .unwrap();
     // Drop the embedder cache and compilation cache to force
     // compilation during query handling.
     canister
