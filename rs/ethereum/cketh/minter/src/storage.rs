@@ -93,14 +93,10 @@ mod benches {
         });
 
         let event_count = total_event_count();
-        assert!(event_count > 0, "expected events in stable memory");
+        assert_eq!(event_count, 49_263, "expected events in stable memory");
 
         canbench_rs::bench_fn(|| {
-            use crate::state::STATE;
-            use crate::state::audit::replay_events;
-            STATE.with(|cell| {
-                *cell.borrow_mut() = Some(replay_events());
-            });
+            crate::lifecycle::upgrade::post_upgrade(None);
         })
     }
 }
