@@ -40,7 +40,7 @@ impl GuestVmMetrics {
     }
 
     /// Writes all metrics to the metrics file
-    pub fn write_to_file(&self) -> Result<()> {
+    fn write_to_file(&self) -> Result<()> {
         let mut file =
             BufWriter::new(File::create(&self.metrics_file_path).with_context(|| {
                 format!(
