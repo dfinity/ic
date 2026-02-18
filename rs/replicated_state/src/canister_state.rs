@@ -154,17 +154,20 @@ impl CanisterState {
 
     /// Returns what the canister is going to execute next.
     pub fn next_execution(&self) -> NextExecution {
-        let next_task = self.system_state.task_queue.front();
-        match (next_task, self.has_input()) {
-            (None, false) => NextExecution::None,
-            (None, true) => NextExecution::StartNew,
-            (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::GlobalTimer), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::OnLowWasmMemory), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::AbortedExecution { .. }), _)
-            | (Some(ExecutionTask::PausedExecution { .. }), _) => NextExecution::ContinueLong,
-            (Some(ExecutionTask::AbortedInstallCode { .. }), _)
-            | (Some(ExecutionTask::PausedInstallCode(..)), _) => NextExecution::ContinueInstallCode,
+        match self.system_state.task_queue.front() {
+            Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory) => NextExecution::StartNew,
+
+            Some(ExecutionTask::AbortedExecution { .. })
+            | Some(ExecutionTask::PausedExecution { .. }) => NextExecution::ContinueLong,
+
+            Some(ExecutionTask::AbortedInstallCode { .. })
+            | Some(ExecutionTask::PausedInstallCode(..)) => NextExecution::ContinueInstallCode,
+
+            None if self.has_input() => NextExecution::StartNew,
+
+            None => NextExecution::None,
         }
     }
 
@@ -563,9 +566,22 @@ impl CanisterState {
     }
 
     /// Updates status of `OnLowWasmMemory` hook.
-    pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
-        self.system_state
-            .update_on_low_wasm_memory_hook_status(self.wasm_memory_usage());
+    pub fn update_on_low_wasm_memory_hook_condition(self: &mut Arc<Self>) {
+        let wasm_memory_usage = self.wasm_memory_usage();
+        let hook_condition = self
+            .system_state
+            .is_low_wasm_memory_hook_condition_satisfied(wasm_memory_usage);
+        // Only `make_mut` if the hook condition has changed.
+        if !self
+            .system_state
+            .task_queue
+            .peek_hook_status()
+            .is_consistent_with(hook_condition)
+        {
+            Arc::make_mut(self)
+                .system_state
+                .update_on_low_wasm_memory_hook_status(wasm_memory_usage);
+        }
     }
 
     /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
