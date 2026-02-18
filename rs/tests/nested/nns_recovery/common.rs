@@ -299,11 +299,12 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     // To avoid that, in case all nodes are faulty, we break only `subnet_size - 1` nodes first,
     // effectively breaking the subnet, then fetch the metrics and determine the download pool, and
     // finally break the remaining node. Otherwise, we can break all faulty nodes at once.
-    let (nodes_to_break_first, nodes_to_break_after) = if faulty_nodes.len() == subnet_size {
-        faulty_nodes.split_at(subnet_size - 1)
-    } else {
-        (faulty_nodes, &[] as &[_])
-    };
+    let (nodes_to_break_first, nodes_to_break_after): (&[_], &[_]) =
+        if faulty_nodes.len() == subnet_size {
+            faulty_nodes.split_at(subnet_size - 1)
+        } else {
+            (faulty_nodes, &[])
+        };
     break_nodes(nodes_to_break_first, &logger);
 
     if let Some(healthy_node) = maybe_healthy_node {
