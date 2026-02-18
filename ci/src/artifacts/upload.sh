@@ -56,7 +56,7 @@ upload() {
 
     # Upload to Cloudflare's R2 (S3)
     # using profile 'cf' to look up the right creds in ~/.aws/credentials
-    # log "uploading to Cloudflare"
+    log "uploading to Cloudflare"
     AWS_PROFILE=cf rclone -v \
         "${rclone_common_flags[@]}" \
         --s3-provider=Cloudflare \
