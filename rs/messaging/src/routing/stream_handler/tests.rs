@@ -1858,7 +1858,7 @@ fn check_stream_handler_generated_reject_signal_canister_stopped() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_state_mut(&LOCAL_CANISTER)
+                .canister_state_make_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopped);
@@ -1873,7 +1873,7 @@ fn check_stream_handler_generated_reject_signal_canister_stopping() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_state_mut(&LOCAL_CANISTER)
+                .canister_state_make_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopping {
@@ -2035,7 +2035,7 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
         |state| {
             // Set `LOCAL_CANISTER` to stopped.
             state
-                .canister_state_mut(&LOCAL_CANISTER)
+                .canister_state_make_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopped);

@@ -1392,7 +1392,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);
     test.state_mut()
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
@@ -1506,7 +1506,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);
     test.state_mut()
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);

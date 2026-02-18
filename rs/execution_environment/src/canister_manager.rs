@@ -955,7 +955,7 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let rejects = uninstall_canister(
             &self.log,
             canister,
@@ -1021,7 +1021,7 @@ impl CanisterManager {
             };
         }
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let result = match canister.system_state.begin_stopping(stop_context) {
             Some(mut stop_context) => StopCanisterResult::AlreadyStopped {
                 cycles_to_return: stop_context.take_cycles(),
