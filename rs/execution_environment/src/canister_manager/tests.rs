@@ -974,7 +974,7 @@ fn stop_a_stopped_canister() {
             call_id: Some(StopCanisterCallId::new(0)),
         };
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state, &subnet_admins),
+            canister_manager.stop_canister(canister_id, stop_context, &mut state, subnet_admins),
             StopCanisterResult::AlreadyStopped {
                 cycles_to_return: Cycles::zero()
             }
@@ -1011,7 +1011,7 @@ fn stop_a_stopped_canister_from_another_canister() {
             deadline: NO_DEADLINE,
         };
         assert_eq!(
-            canister_manager.stop_canister(canister_id, stop_context, &mut state, &subnet_admins),
+            canister_manager.stop_canister(canister_id, stop_context, &mut state, subnet_admins),
             StopCanisterResult::AlreadyStopped {
                 cycles_to_return: Cycles::from(cycles)
             }
@@ -1327,7 +1327,7 @@ fn start_a_stopped_canister_succeeds() {
         // Start the canister.
         let canister = state.canister_state_mut(&canister_id).unwrap();
         canister_manager
-            .start_canister(sender, canister, &subnet_admins)
+            .start_canister(sender, canister, subnet_admins)
             .unwrap();
 
         // Canister should now be running.
@@ -1349,7 +1349,7 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         assert_eq!(
-            canister_manager.start_canister(sender, canister, &subnet_admins),
+            canister_manager.start_canister(sender, canister, subnet_admins),
             Ok(Vec::new())
         );
     });
@@ -1372,7 +1372,7 @@ fn start_a_stopping_canister_with_stop_contexts() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         assert_eq!(
-            canister_manager.start_canister(sender, canister, &subnet_admins),
+            canister_manager.start_canister(sender, canister, subnet_admins),
             Ok(vec![stop_context])
         );
     });
@@ -8000,8 +8000,15 @@ fn subnet_admin_can_perform_actions_on_canister() {
 
     let canister_id = test.universal_canister().unwrap();
 
-    // Switch user id so the request comes from the subnet admin.
+    // Switch user id so the request comes from the subnet admin
+    // who should not be a controller.
     test.set_user_id(subnet_admin);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(subnet_admin.get_ref())
+    );
 
     assert_eq!(
         test.canister_state(canister_id).status(),
@@ -8043,8 +8050,15 @@ fn subnet_admin_cannot_install_code() {
 
     let canister_id = test.universal_canister().unwrap();
 
-    // Switch user id so the request comes from the subnet admin.
+    // Switch user id so the request comes from the subnet admin
+    // who should not be a controller.
     test.set_user_id(subnet_admin);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(subnet_admin.get_ref())
+    );
 
     let err = test
         .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
