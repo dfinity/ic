@@ -4013,17 +4013,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dlmalloc"
-version = "0.2.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6738d2e996274e499bc7b0d693c858b7720b9cd2543a0643a3087e6cb0a4fa16"
-dependencies = [
- "cfg-if",
- "libc",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "dlv-list"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10358,7 +10347,6 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
- "dlmalloc",
  "ic-agent 0.40.1",
  "ic-base-types",
  "ic-canister-log 0.2.0",

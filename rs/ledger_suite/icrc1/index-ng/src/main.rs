@@ -1,12 +1,5 @@
 #![allow(deprecated)]
 
-#[cfg(target_arch = "wasm32")]
-use dlmalloc::GlobalDlmalloc;
-
-#[cfg(target_arch = "wasm32")]
-#[global_allocator]
-static A: GlobalDlmalloc = GlobalDlmalloc;
-
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{SpanName, SpanStats, measure_span};

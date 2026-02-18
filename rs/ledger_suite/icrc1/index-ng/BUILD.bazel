@@ -17,7 +17,6 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
-    "@crate_index//:dlmalloc",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
@@ -95,6 +94,7 @@ rust_test(
         name = "index_ng_test" + conf["test_suffix"],
         timeout = "long",
         srcs = [
+            "tests/minimal_dlmalloc_repro.rs",
             "tests/retrieve_blocks_from_ledger_interval.rs",
             "tests/tests.rs",
         ],
