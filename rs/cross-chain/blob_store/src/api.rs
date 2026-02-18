@@ -2,13 +2,13 @@
 use candid::{CandidType, Deserialize};
 
 #[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
-pub struct RecordRequest {
+pub struct InsertRequest {
     pub hash: String,
     pub data: Vec<u8>,
 }
 
 #[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
-pub enum RecordError {
+pub enum InsertError {
     NotAuthorized,
     InvalidHash(String),
     HashMismatch { expected: String, actual: String },

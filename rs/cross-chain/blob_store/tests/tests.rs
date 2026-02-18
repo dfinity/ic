@@ -1,90 +1,53 @@
-use candid::{CandidType, Decode, Encode, Principal};
+use blob_store_lib::api::{InsertError, InsertRequest};
+use candid::{Decode, Encode, Principal};
 use pocket_ic::PocketIc;
-use serde::Deserialize;
 
-#[test]
-fn test_record_success() {
-    let setup = Setup::default();
-    let blob_store = setup.blob_store();
+mod insert {
+    use crate::{Setup, sha256_hex};
+    use blob_store_lib::api::InsertError;
+    use candid::Principal;
 
-    let data = b"hello".to_vec();
-    let hash = sha256_hex(&data);
+    #[test]
+    fn should_insert_once() {
+        let setup = Setup::default();
+        let blob_store = setup.blob_store();
 
-    let result = blob_store.record(Setup::CONTROLLER, &hash, data);
+        let data = b"hello".to_vec();
+        let hash = sha256_hex(&data);
 
-    assert_eq!(result, Ok(hash));
-}
+        let result = blob_store.insert(Setup::CONTROLLER, &hash, data.clone());
+        assert_eq!(result, Ok(hash.clone()));
 
-#[test]
-fn test_record_not_authorized() {
-    let setup = Setup::default();
-    let blob_store = setup.blob_store();
+        let result = blob_store.insert(Setup::CONTROLLER, &hash, data);
+        assert_eq!(result, Err(InsertError::AlreadyExists));
+    }
 
-    let data = b"hello".to_vec();
-    let hash = sha256_hex(&data);
+    #[test]
+    fn should_not_insert() {
+        let setup = Setup::default();
+        let blob_store = setup.blob_store();
+        let data = b"hello".to_vec();
+        let hash = sha256_hex(&data);
 
-    let result = blob_store.record(Principal::anonymous(), &hash, data);
+        assert_eq!(
+            blob_store.insert(Principal::anonymous(), &hash, data.clone()),
+            Err(InsertError::NotAuthorized)
+        );
 
-    assert_eq!(result, Err(RecordError::NotAuthorized));
-}
+        let wrong_hash = sha256_hex(b"wrong");
+        assert_eq!(
+            blob_store.insert(Setup::CONTROLLER, &wrong_hash, data.clone()),
+            Err(InsertError::HashMismatch {
+                expected: wrong_hash,
+                actual: hash
+            })
+        );
 
-#[test]
-fn test_record_already_exists() {
-    let setup = Setup::default();
-    let blob_store = setup.blob_store();
-
-    let data = b"hello".to_vec();
-    let hash = sha256_hex(&data);
-    blob_store
-        .record(Setup::CONTROLLER, &hash, data.clone())
-        .expect("first record should succeed");
-
-    let result = blob_store.record(Setup::CONTROLLER, &hash, data);
-
-    assert_eq!(result, Err(RecordError::AlreadyExists));
-}
-
-#[test]
-fn test_record_hash_mismatch() {
-    let setup = Setup::default();
-    let blob_store = setup.blob_store();
-
-    let data = b"hello".to_vec();
-    let wrong_hash = sha256_hex(b"wrong");
-
-    let result = blob_store.record(Setup::CONTROLLER, &wrong_hash, data);
-
-    assert!(matches!(result, Err(RecordError::HashMismatch { .. })));
-}
-
-#[test]
-fn test_record_invalid_hash() {
-    let setup = Setup::default();
-    let blob_store = setup.blob_store();
-
-    let result = blob_store.record(Setup::CONTROLLER, "not-a-hex-hash", b"hello".to_vec());
-
-    assert!(matches!(result, Err(RecordError::InvalidHash(_))));
-}
-
-fn sha256_hex(data: &[u8]) -> String {
-    use sha2::Digest;
-    let hash: [u8; 32] = sha2::Sha256::digest(data).into();
-    hex::encode(hash)
-}
-
-#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
-pub struct RecordRequest {
-    pub hash: String,
-    pub data: Vec<u8>,
-}
-
-#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
-pub enum RecordError {
-    NotAuthorized,
-    InvalidHash(String),
-    HashMismatch { expected: String, actual: String },
-    AlreadyExists,
+        assert!(matches!(
+            blob_store.insert(Setup::CONTROLLER, "not-a-hex-hash", data),
+            Err(InsertError::InvalidHash(_))
+        ));
+    }
 }
 
 pub struct Setup {
@@ -134,13 +97,13 @@ pub struct BlobStoreCanister<'a> {
 }
 
 impl<'a> BlobStoreCanister<'a> {
-    pub fn record(
+    pub fn insert(
         &self,
         sender: Principal,
         hash: &str,
         data: Vec<u8>,
-    ) -> Result<String, RecordError> {
-        let request = RecordRequest {
+    ) -> Result<String, InsertError> {
+        let request = InsertRequest {
             hash: hash.to_string(),
             data,
         };
@@ -149,10 +112,16 @@ impl<'a> BlobStoreCanister<'a> {
             .update_call(
                 self.canister_id,
                 sender,
-                "record",
+                "insert",
                 Encode!(&request).unwrap(),
             )
             .expect("update call failed");
-        Decode!(&result, Result<String, RecordError>).unwrap()
+        Decode!(&result, Result<String, InsertError>).unwrap()
     }
+}
+
+fn sha256_hex(data: &[u8]) -> String {
+    use sha2::Digest;
+    let hash: [u8; 32] = sha2::Sha256::digest(data).into();
+    hex::encode(hash)
 }

@@ -1,11 +1,11 @@
-type RecordError = variant {
+type InsertError = variant {
     NotAuthorized;
     InvalidHash : text;
     AlreadyExists;
     HashMismatch : record { actual : text; expected : text };
 };
-type RecordRequest = record { data : blob; hash : text };
-type Result = variant { Ok : text; Err : RecordError };
+type InsertRequest = record { data : blob; hash : text };
+type Result = variant { Ok : text; Err : InsertError };
 service : () -> {
-    "record" : (RecordRequest) -> (Result);
+    insert : (InsertRequest) -> (Result);
 }

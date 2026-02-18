@@ -1,25 +1,73 @@
 pub mod api;
 pub mod storage;
+pub mod update;
 
-use crate::storage::{Blob, Hash, mutate_blob_store};
-use api::RecordError;
+use ic_stable_structures::Storable;
+use ic_stable_structures::storable::Bound;
+use std::borrow::Cow;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
-pub fn record(caller: candid::Principal, hash: &str, data: Vec<u8>) -> Result<Hash, RecordError> {
-    if !ic_cdk::api::is_controller(&caller) {
-        return Err(RecordError::NotAuthorized);
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Hash([u8; 32]);
+
+impl Hash {
+    pub fn sha256(data: &[u8]) -> Self {
+        use sha2::Digest;
+        Hash(sha2::Sha256::digest(data).into())
     }
-    let expected_hash: Hash = hash
-        .parse()
-        .map_err(|e: hex::FromHexError| RecordError::InvalidHash(e.to_string()))?;
-    let blob = Blob::from(data);
-    let actual_hash = blob.hash();
+}
 
-    if expected_hash != *actual_hash {
-        return Err(RecordError::HashMismatch {
-            expected: expected_hash.to_string(),
-            actual: actual_hash.to_string(),
-        });
+impl FromStr for Hash {
+    type Err = hex::FromHexError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use hex::FromHex;
+        <[u8; 32]>::from_hex(s).map(Hash)
+    }
+}
+
+impl Display for Hash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.0))
+    }
+}
+
+impl Storable for Hash {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.0)
     }
 
-    mutate_blob_store(|store| store.insert(blob).ok_or(RecordError::AlreadyExists))
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&bytes);
+        Hash(arr)
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 32,
+        is_fixed_size: true,
+    };
+}
+
+pub struct Blob {
+    data: Vec<u8>,
+    hash: Hash,
+}
+
+impl Blob {
+    pub fn new(data: Vec<u8>) -> Self {
+        let hash = Hash::sha256(&data);
+        Self { data, hash }
+    }
+
+    pub fn hash(&self) -> &Hash {
+        &self.hash
+    }
+}
+
+impl From<Vec<u8>> for Blob {
+    fn from(data: Vec<u8>) -> Self {
+        Self::new(data)
+    }
 }

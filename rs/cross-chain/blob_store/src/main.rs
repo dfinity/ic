@@ -1,4 +1,4 @@
-use blob_store_lib::api::{RecordError, RecordRequest};
+use blob_store_lib::api::{InsertError, InsertRequest};
 
 #[ic_cdk::init]
 fn init() {}
@@ -7,8 +7,8 @@ fn init() {}
 fn post_upgrade() {}
 
 #[ic_cdk::update]
-fn record(request: RecordRequest) -> Result<String, RecordError> {
-    blob_store_lib::record(ic_cdk::api::msg_caller(), &request.hash, request.data)
+fn insert(request: InsertRequest) -> Result<String, InsertError> {
+    blob_store_lib::update::insert(ic_cdk::api::msg_caller(), &request.hash, request.data)
         .map(|hash| hash.to_string())
 }
 
