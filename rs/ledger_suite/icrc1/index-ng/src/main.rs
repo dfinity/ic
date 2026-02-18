@@ -1275,7 +1275,7 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
             "{} decode_block_range: start={} length={} limit={} num_to_decode={}",
             DIAG_PREFIX, start, length, limit, num_to_decode
         );
-        (start..limit)
+        let decoded = (start..limit)
             .enumerate()
             .map(|(j, i)| {
                 if j > 0 && (j as u64) % PROGRESS_LOG_EVERY == 0 {
@@ -1302,9 +1302,11 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
                             data.len()
                         );
                     }
-                    // Finer-grained logging in the 12k-14k window where the panic was observed.
+                    // Finer-grained logging: 10k-20k (every 50) and 100k-200k (every 500) to pinpoint failing batch.
                     const FINE_WINDOW: Range<u64> = 10_000..20_000;
                     const FINE_LOG_EVERY: u64 = 50;
+                    const FINE_WINDOW_HI: Range<u64> = 100_000..200_000;
+                    const FINE_LOG_EVERY_HI: u64 = 500;
                     if FINE_WINDOW.contains(&i) && (i - FINE_WINDOW.start) % FINE_LOG_EVERY == 0 {
                         ic_cdk::eprintln!(
                             "{} decode_block_range: fine block_index={} bytes_len={}",
@@ -1313,11 +1315,37 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
                             data.len()
                         );
                     }
+                    if FINE_WINDOW_HI.contains(&i)
+                        && (i - FINE_WINDOW_HI.start) % FINE_LOG_EVERY_HI == 0
+                    {
+                        ic_cdk::eprintln!(
+                            "{} decode_block_range: fine_hi block_index={} bytes_len={}",
+                            DIAG_PREFIX,
+                            i,
+                            data.len()
+                        );
+                    }
                 }
                 decoder(i, data)
             })
-            .collect()
+            .collect::<Vec<R>>();
+        #[cfg(feature = "debug_dlmalloc")]
+        ic_cdk::eprintln!(
+            "{} decode_block_range: batch_completed start={} limit={} decoded={}",
+            DIAG_PREFIX,
+            start,
+            limit,
+            decoded.len()
+        );
+        decoded
     });
+    #[cfg(feature = "debug_dlmalloc")]
+    ic_cdk::eprintln!(
+        "{} decode_block_range: returning start={} blocks_len={}",
+        DIAG_PREFIX,
+        start,
+        blocks.len()
+    );
     blocks
 }
 
