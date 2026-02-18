@@ -16,7 +16,6 @@ pub struct GuestVmMetrics {
 }
 
 impl GuestVmMetrics {
-    /// Create a new GuestVmMetrics instance
     pub fn new(metrics_file_path: PathBuf) -> Result<Self> {
         let registry = Registry::new();
 
@@ -40,7 +39,7 @@ impl GuestVmMetrics {
         })
     }
 
-    /// Write all metrics to the metrics file
+    /// Writes all metrics to the metrics file
     pub fn write_to_file(&self) -> Result<()> {
         let metric_families = self.registry.gather();
         let encoder = TextEncoder::new();
@@ -63,7 +62,7 @@ impl GuestVmMetrics {
         Ok(())
     }
 
-    /// Set the service start metric
+    /// Sets the service start metric
     pub fn set_service_start(&self, vm_type: GuestVMType, success: bool) {
         self.service_start
             .with_label_values(&[vm_type.as_ref()])
