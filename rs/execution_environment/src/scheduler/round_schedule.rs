@@ -21,6 +21,11 @@ use std::sync::Arc;
 /// free capacity among them.
 pub(super) const MULTIPLIER: i64 = 1_000_000;
 
+const ZERO: AccumulatedPriority = AccumulatedPriority::new(0);
+
+/// 1% in accumulated priority.
+const ONE_PERCENT: AccumulatedPriority = AccumulatedPriority::new(1 * MULTIPLIER);
+
 /// 100% in accumulated priority.
 const ONE_HUNDRED_PERCENT: AccumulatedPriority = AccumulatedPriority::new(100 * MULTIPLIER);
 
@@ -371,10 +376,11 @@ impl RoundSchedule {
             state.canister_priority_mut(canister_id).priority_credit += ONE_HUNDRED_PERCENT;
         }
 
-        // Grant all canisters their compute allocation; charge free priority credit
-        // where possible; and calculate the subnet-wide free allocation (as the
-        // deviation from zero of all canisters' total AP).
-        let mut free_allocation = AccumulatedPriority::new(0);
+        // Grant all canisters their compute allocation; apply the priority credit
+        // where possible (no long execution); and calculate the subnet-wide free
+        // allocation (as the deviation from zero of all canisters' total accumulated
+        // priority, including priority credit).
+        let mut free_allocation = ZERO;
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         for canister in canister_states.values() {
             let canister_priority = subnet_schedule.get_mut(canister.canister_id());
@@ -391,15 +397,17 @@ impl RoundSchedule {
         }
 
         // Only ever apply positive free allocation. If the sum of all canisters'
-        // accumulated priorities is somehow positive (although this should never
-        // happen), then there's simply no free allocation to distribute.
+        // accumulated priorities (including priority credit) is somehow positive
+        // (although this should never happen), then there is simply no free allocation
+        // to distribute.
         if free_allocation.get() < 0 {
-            free_allocation = AccumulatedPriority::new(0);
+            free_allocation = ZERO;
         }
 
+        // Distribute the free allocation equally to all canisters.
         let mut remaining_canisters = number_of_canisters as i64;
-        // We called `SubnetSchedule::get_mut()` on all canisters just above, so this
-        // covers all canisters.
+        // We called `SubnetSchedule::get_mut()` for all canisters above (which inserts
+        // a default priority when not found), so this iteration covers all canisters.
         for (_, canister_priority) in subnet_schedule.iter_mut() {
             let canister_free_allocation = free_allocation / remaining_canisters;
             canister_priority.accumulated_priority += canister_free_allocation;
@@ -448,7 +456,7 @@ impl RoundSchedule {
         // It's guaranteed to be less than `compute_capacity`
         // by `validate_compute_allocation()`.
         // This corresponds to |a| in Scheduler Analysis.
-        let mut total_compute_allocation = AccumulatedPriority::default();
+        let mut total_compute_allocation = ZERO;
 
         // This corresponds to the vector p in the Scheduler Analysis document.
         let mut round_states = Vec::with_capacity(number_of_canisters);
@@ -461,16 +469,15 @@ impl RoundSchedule {
             .is_multiple_of(accumulated_priority_reset_interval.get());
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         if is_reset_round {
-            for (&canister_id, canister) in canister_states.iter() {
+            for &canister_id in canister_states.keys() {
                 let canister_priority = subnet_schedule.get_mut(canister_id);
-                // By default, each canister accumulated priority is set to its compute allocation.
-                canister_priority.accumulated_priority = from_ca(canister.compute_allocation());
+                canister_priority.accumulated_priority = Default::default();
                 canister_priority.priority_credit = Default::default();
             }
         }
 
         // Collect the priority of the canisters for this round.
-        let mut accumulated_priority_invariant = AccumulatedPriority::default();
+        let mut accumulated_priority_invariant = ZERO;
         let mut accumulated_priority_deviation = 0.0;
         for (_, canister, canister_priority) in
             left_outer_join(canister_states.iter_mut(), subnet_schedule.iter())
@@ -495,7 +502,7 @@ impl RoundSchedule {
         // Assert there is at least `1%` of free capacity to distribute across canisters.
         // It's guaranteed by `validate_compute_allocation()`
         debug_assert_or_critical_error!(
-            total_compute_allocation < compute_capacity,
+            total_compute_allocation + ONE_PERCENT <= compute_capacity,
             metrics.scheduler_compute_allocation_invariant_broken,
             logger,
             "{}: Total compute allocation {}% must be less than compute capacity {}%",
@@ -516,7 +523,7 @@ impl RoundSchedule {
 
         // Total compute allocation (including free allocation) of all canisters with
         // long executions.
-        let mut long_executions_compute_allocation = AccumulatedPriority::default();
+        let mut long_executions_compute_allocation = ZERO;
         let mut number_of_long_executions = 0;
         for rs in round_states.iter_mut() {
             // De-facto compute allocation includes bonus allocation
