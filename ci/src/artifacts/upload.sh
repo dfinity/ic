@@ -61,7 +61,6 @@ upload() {
         "${rclone_common_flags[@]}" \
         --s3-provider=Cloudflare \
         --s3-endpoint=https://64059940cc95339fc7e5888f431876ee.r2.cloudflarestorage.com \
-        --s3-env-auth \
         copy \
         --files-from <(echo "$(basename "$artifact_localpath")") \
         --no-traverse \
