@@ -2005,9 +2005,12 @@ dependencies = [
  "dfn_core",
  "futures",
  "ic-cdk",
+ "ic-config",
  "ic-management-canister-types-private",
  "ic-state-machine-tests",
+ "ic-sys",
  "ic-types",
+ "more-asserts",
  "wat",
 ]
 
