@@ -82,6 +82,15 @@ pub enum NonReplicatedQueryKind {
     Pure { caller: PrincipalId },
 }
 
+impl NonReplicatedQueryKind {
+    pub fn get_principal(&self) -> PrincipalId {
+        match &self {
+            NonReplicatedQueryKind::Stateful { call_origin } => call_origin.get_principal(),
+            NonReplicatedQueryKind::Pure { caller } => *caller,
+        }
+    }
+}
+
 // This struct holds public facing components that are created by Execution.
 pub struct ExecutionServices {
     pub ingress_filter: IngressFilterService,

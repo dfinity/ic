@@ -547,11 +547,12 @@ impl IngressManager {
                 Some(canister) => {
                     let cumulative_ingress_cost =
                         cycles_needed.entry(payer).or_insert_with(Cycles::zero);
-                    if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
+                    if let Err(err) = self.cycles_account_manager.can_withdraw_cycles_with_threshold(
                         &canister.system_state,
                         *cumulative_ingress_cost + ingress_cost,
                         canister.memory_usage(),
                         canister.message_memory_usage(),
+                        canister.system_state.reserved_balance(),
                         subnet_size,
                         state.get_own_cost_schedule(),
                         false, // error here is not returned back to the user => no need to reveal top up balance

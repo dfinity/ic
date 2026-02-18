@@ -494,7 +494,6 @@ impl CallOrTaskHelper {
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
-        let old_balance = self.canister.system_state.balance();
         let requested = canister_state_changes
             .system_state_modifications
             .removed_cycles();
@@ -508,24 +507,26 @@ impl CallOrTaskHelper {
             + canister_state_changes
                 .system_state_modifications
                 .reserved_cycles();
-        let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-            clean_canister.system_state.freeze_threshold,
-            clean_canister.system_state.memory_allocation,
-            new_memory_usage,
-            new_message_memory_usage,
-            clean_canister.compute_allocation(),
-            original.subnet_size,
-            round.cost_schedule,
-            new_reserved_balance,
-        );
         let reveal_top_up = self
             .canister
             .controllers()
             .contains(&original.call_origin.get_principal());
-        if old_balance < requested + freezing_threshold {
+        if let Err(_) = round
+            .cycles_account_manager
+            .can_withdraw_cycles_with_threshold(
+                &self.canister.system_state,
+                requested,
+                new_memory_usage,
+                new_message_memory_usage,
+                new_reserved_balance,
+                original.subnet_size,
+                round.cost_schedule,
+                reveal_top_up,
+            )
+        {
             let err = CanisterOutOfCyclesError {
                 canister_id: self.canister.canister_id(),
-                available: old_balance,
+                available: self.canister.system_state.balance(),
                 requested,
                 threshold: original.freezing_threshold,
                 reveal_top_up,
