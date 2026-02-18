@@ -15744,6 +15744,7 @@ dependencies = [
  "ic-canister-client",
  "ic-config",
  "ic-http-utils",
+ "ic-limits",
  "ic-management-canister-types-private",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
