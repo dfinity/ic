@@ -52,7 +52,7 @@ pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
-// f is the maximum number of faulty nodes that can be tolerated in the subnet
+/// f is the maximum number of faulty nodes that can be tolerated in the subnet
 pub const F: usize = (SUBNET_SIZE - 1) / 3;
 /// DKG interval of 9 is large enough for a subnet of that size and as small as possible to keep the
 /// test runtime low
