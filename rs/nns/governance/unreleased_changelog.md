@@ -17,4 +17,9 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* The Bitcoin and Dogecoin Watchdog canisters are now considered "protocol"
+  canisters; thus, proposals to upgrade these canisters now fall into the
+  "Protocol Canister Management" topic, instead of the "Application Canister
+  Management" topic.
+
 ## Security
