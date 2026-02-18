@@ -106,28 +106,22 @@ struct SetupConfig {
     app_dkg_interval: u64,
 }
 
-struct SetupConfigBuilder {
-    config: SetupConfig,
-}
-
-impl SetupConfigBuilder {
+impl SetupConfig {
     fn new() -> Self {
         Self {
-            config: SetupConfig {
-                nns_nodes: NNS_NODES,
-                source_nodes: APP_NODES,
-                app_nodes: APP_NODES,
-                unassigned_nodes: 0,
-                nns_dkg_interval: DKG_INTERVAL,
-                app_dkg_interval: DKG_INTERVAL,
-            },
+            nns_nodes: NNS_NODES,
+            source_nodes: APP_NODES,
+            app_nodes: APP_NODES,
+            unassigned_nodes: 0,
+            nns_dkg_interval: DKG_INTERVAL,
+            app_dkg_interval: DKG_INTERVAL,
         }
     }
 
     fn with_nns_nodes(mut self, nns_nodes: usize) -> Self {
         assert!(nns_nodes > 0, "Subnets must have at least one node");
 
-        self.config.nns_nodes = nns_nodes;
+        self.nns_nodes = nns_nodes;
         self
     }
 
@@ -136,83 +130,73 @@ impl SetupConfigBuilder {
     fn with_app_nodes(mut self, app_nodes: usize) -> Self {
         assert!(app_nodes > 0, "Subnets must have at least one node");
         assert!(
-            self.config.app_nodes > 0,
+            self.app_nodes > 0,
             "`with_app_nodes` should be called before `with_chain_keys`"
         );
 
-        self.config.source_nodes = app_nodes;
-        self.config.app_nodes = app_nodes;
+        self.source_nodes = app_nodes;
+        self.app_nodes = app_nodes;
         self
     }
 
     // Because of the inter-dependency with `with_app_nodes`, this method needs to be called after
     // it.
     fn with_chain_keys(mut self) -> Self {
-        self.config.unassigned_nodes += self.config.app_nodes;
-        self.config.app_nodes = 0;
+        self.unassigned_nodes += self.app_nodes;
+        self.app_nodes = 0;
         self
     }
 
     fn add_unassigned_nodes(mut self, unassigned_nodes: usize) -> Self {
-        self.config.unassigned_nodes += unassigned_nodes;
+        self.unassigned_nodes += unassigned_nodes;
         self
     }
 
     fn with_nns_dkg_interval(mut self, dkg_interval: u64) -> Self {
-        self.config.nns_dkg_interval = dkg_interval;
+        self.nns_dkg_interval = dkg_interval;
         self
     }
 
     fn with_app_dkg_interval(mut self, dkg_interval: u64) -> Self {
-        self.config.app_dkg_interval = dkg_interval;
+        self.app_dkg_interval = dkg_interval;
         self
-    }
-
-    fn build(self) -> SetupConfig {
-        self.config
     }
 }
 
 pub fn setup_large_chain_keys(env: TestEnv) {
-    let config = SetupConfigBuilder::new()
+    let config = SetupConfig::new()
         .with_nns_nodes(NNS_NODES_LARGE)
         .with_app_nodes(APP_NODES_LARGE)
         .with_chain_keys()
         .with_nns_dkg_interval(DKG_INTERVAL_LARGE)
-        .with_app_dkg_interval(DKG_INTERVAL_LARGE)
-        .build();
+        .with_app_dkg_interval(DKG_INTERVAL_LARGE);
     setup(env, config);
 }
 
 pub fn setup_same_nodes_huge_dkg_interval(env: TestEnv) {
-    let config = SetupConfigBuilder::new()
-        .with_app_dkg_interval(DKG_INTERVAL_HUGE)
-        .build();
+    let config = SetupConfig::new().with_app_dkg_interval(DKG_INTERVAL_HUGE);
     setup(env, config);
 }
 
 pub fn setup_same_nodes_chain_keys(env: TestEnv) {
-    let config = SetupConfigBuilder::new().with_chain_keys().build();
+    let config = SetupConfig::new().with_chain_keys();
     setup(env, config);
 }
 
 pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
-    let config = SetupConfigBuilder::new()
+    let config = SetupConfig::new()
         .with_chain_keys()
-        .add_unassigned_nodes(UNASSIGNED_NODES)
-        .build();
+        .add_unassigned_nodes(UNASSIGNED_NODES);
     setup(env, config);
 }
 
 pub fn setup_same_nodes(env: TestEnv) {
-    let config = SetupConfigBuilder::new().build();
+    let config = SetupConfig::new();
     setup(env, config);
 }
 
 pub fn setup_failover_nodes(env: TestEnv) {
-    let config = SetupConfigBuilder::new()
-        .add_unassigned_nodes(UNASSIGNED_NODES)
-        .build();
+    let config = SetupConfig::new().add_unassigned_nodes(UNASSIGNED_NODES);
     setup(env, config);
 }
 
