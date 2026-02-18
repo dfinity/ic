@@ -614,7 +614,7 @@ impl SchedulerImpl {
             // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canisters {
-                let canister = state.canister_state_mut(canister_id).unwrap();
+                let canister = state.canister_state_make_mut(canister_id).unwrap();
                 canister
                     .system_state
                     .task_queue
@@ -1031,7 +1031,7 @@ impl SchedulerImpl {
                 .system_state
                 .output_queues_for_each(|canister_id, msg| {
                     let own_subnet_type = state.metadata.own_subnet_type;
-                    match state.canister_state_mut(canister_id) {
+                    match state.canister_state_make_mut(canister_id) {
                         Some(dest_canister) => dest_canister
                             .push_input(
                                 (*msg).clone(),
