@@ -16,12 +16,16 @@
   <cpu mode='host-passthrough' migratable='off'>
     <cache mode='passthrough'/>
     <topology sockets='2' cores='{{nr_of_vcpus / 4}}' threads='2'/>
+    {%- if enable_sev %}
     <feature policy='require' name='topoext'/>
+    {%- endif %}
   </cpu>
+  {%- if enable_sev %}
   <commandline xmlns="http://libvirt.org/schemas/domain/qemu/1.0">
     <arg value='-cpu'/>
     <arg value='EPYC-v4,topoext=on,l3-cache=off'/>
   </commandline>
+  {%- endif %}
   {% endif -%}
 
   {%- if enable_sev -%}
