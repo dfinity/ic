@@ -540,7 +540,7 @@ mod cache_tests {
 
         // 5. Strip deltas: cache is preserved.
         s.maybe_page_map_mut();
-        assert!(!s.header_cache.get().is_none());
+        assert!(s.header_cache.get().is_some());
     }
 }
 
