@@ -241,7 +241,7 @@ impl ThresholdSignerImpl {
                         state_snapshot.get_height(),
                     ) {
                         Action::Process(sig_inputs) => {
-                            self.validate_signature_share(idkg_pool, id.clone(), share, sig_inputs)
+                            self.validate_signature_share(idkg_pool, id, share, sig_inputs)
                         }
                         Action::Drop => Some(IDkgChangeAction::RemoveUnvalidated(id)),
                         Action::Defer => None,

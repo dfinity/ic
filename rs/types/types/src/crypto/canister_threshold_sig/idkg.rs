@@ -615,19 +615,20 @@ impl InitialIDkgDealings {
         match params.unverified_dealings_collection_threshold() {
             Some(threshold) => {
                 let mut dealings_map = BTreeMap::new();
-                for dealing in &dealings {
-                    if params.dealer_index(dealing.dealer_id()).is_none() {
+                for dealing in dealings {
+                    let dealer_id = dealing.dealer_id();
+                    if params.dealer_index(dealer_id).is_none() {
                         return Err(InitialIDkgDealingsValidationError::DealerNotAllowed {
-                            node_id: dealing.dealer_id(),
+                            node_id: dealer_id,
                         });
                     }
                     if dealing.idkg_dealing().transcript_id != params.transcript_id {
                         return Err(InitialIDkgDealingsValidationError::MismatchingDealing);
                     }
-                    if dealings_map.insert(dealing.dealer_id(), dealing).is_some() {
+                    if dealings_map.insert(dealer_id, dealing).is_some() {
                         return Err(
                             InitialIDkgDealingsValidationError::MultipleDealingsFromSameDealer {
-                                node_id: dealing.dealer_id(),
+                                node_id: dealer_id,
                             },
                         );
                     }
@@ -635,7 +636,6 @@ impl InitialIDkgDealings {
                 let min_dealings: Vec<SignedIDkgDealing> = dealings_map
                     .into_values()
                     .take(threshold.get() as usize)
-                    .cloned()
                     .collect();
 
                 if min_dealings.len() < threshold.get() as usize {

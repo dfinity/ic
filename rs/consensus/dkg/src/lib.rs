@@ -179,7 +179,7 @@ impl DkgImpl {
         dkg_pool: &dyn DkgPool,
         configs: &BTreeMap<NiDkgId, NiDkgConfig>,
         dkg_start_height: Height,
-        messages: Vec<&Message>,
+        messages: &[&Message],
     ) -> Mutations {
         // Because dealing generation is not entirely deterministic, it is
         // actually possible to receive multiple dealings from an honest dealer.
@@ -334,7 +334,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
                     dkg_pool,
                     &dkg_summary.configs,
                     start_height,
-                    dealings.to_vec(),
+                    dealings,
                 )
             })
             .collect::<Vec<Mutations>>()
