@@ -231,6 +231,15 @@ impl WasmtimeEmbedder {
 
         config.wasm_multi_memory(true);
         config.wasm_memory64(true);
+
+        // Enable backtraces on trap so canister panics (e.g. dlmalloc assertion) include
+        // a call stack. Validation config disables these for size/speed; we override
+        // for execution only. generate_address_map lets Wasmtime map code addresses
+        // to wasm locations; without it backtraces have less detail.
+        config.wasm_backtrace(true);
+        config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
+        config.generate_address_map(true);
+
         config
     }
 
