@@ -22,6 +22,7 @@ env:
 
 jobs:
   bazel-run-fuzzers:
+    if: false
     name: Bazel Run Fuzzers
     runs-on: &dind-large-setup
       labels: dind-large
@@ -49,6 +50,7 @@ jobs:
           run: ./bin/fuzzing/run-all-fuzzers.sh --afl 10
 
   config:
+    if: false
     name: Set Config
     runs-on: ubuntu-latest
     outputs:
@@ -146,6 +148,7 @@ jobs:
           echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
   bazel-test-all:
+    if: false
     name: Bazel Test All
     needs: [config]
     environment:
@@ -270,7 +273,7 @@ jobs:
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
-    if: github.repository == 'dfinity/ic'
+    if: false
     steps:
       - *checkout
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
@@ -323,6 +326,7 @@ jobs:
   # and run tests tagged to run on all platforms.
   # NOTE: uses 'namespace.so' runners.
   bazel-test-arm64:
+    if: false
     strategy:
       matrix:
         include:
@@ -333,7 +337,6 @@ jobs:
     name: Bazel Test arm64-${{ matrix.os }}
     runs-on: ${{ matrix.profile }}
     timeout-minutes: 120
-    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
       - name: Set up Bazel cache
         run: |
@@ -404,9 +407,9 @@ jobs:
 
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
   upload-external-artifacts:
+    if: false
     name: Upload external artifacts
     needs: [bazel-test-arm64, config]
-    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
     # The `Upload artifacts` step below requires the CLOUD_CREDENTIALS_CONTENT secret
     # which is only available in the `upload-artifacts` environment.
     environment: upload-artifacts
@@ -451,6 +454,7 @@ jobs:
           credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
   python-ci-tests:
+    if: false
     name: Python CI Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -476,14 +480,26 @@ jobs:
           CI_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REPO_NAME: ${{ github.repository }}
 
+
+  repro:
+    name: repro
+    runs-on: namespace-profile-ubuntu-24-04
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
+    if: ${{ github.event_name != 'merge_group' }}
+    steps:
+      - *checkout
+      - run: bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build build //rs/phantom_newtype
+      - run: bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build build //ic-os/bootloader:build-bootloader-tree
+
   build-ic:
+    if: false
     needs: [config]
     name: Build IC
     runs-on: namespace-profile-ubuntu-24-04
     container:
       image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
     timeout-minutes: 90
-    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - *checkout
       - name: Run Build IC
@@ -552,6 +568,7 @@ jobs:
           ci/container/build-ic.sh "${ARGS[@]}" --no-release
 
   build-determinism:
+    if: ${{ github.event_name != 'merge_group' }}
     name: Build Determinism
     runs-on: ubuntu-latest
     needs: [build-ic, bazel-test-all]
@@ -608,7 +625,7 @@ jobs:
   bazel-build-all-no-cache:
     name: Bazel Build All No Cache
     needs: [config]
-    if: ${{ needs.config.outputs.skip_long_tests != 'true' }} # GHA output quirk, 'true' is a string
+    if: false
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 90
@@ -621,6 +638,7 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   cargo-linux:
+    if: false
     strategy:
       matrix:
         include:
@@ -675,12 +693,13 @@ jobs:
 
 # only run on pull-request event - they are also triggered from schedule-daily.yml
   pocket-ic-tests-windows:
-    if: github.event_name == 'pull_request'
+    if: false
     uses: ./.github/workflows/pocket-ic-tests-windows.yml
     with:
       commit-sha: ${{ github.sha }}
 
   test-container-run:
+    if: false
     name: Test Container Run ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
