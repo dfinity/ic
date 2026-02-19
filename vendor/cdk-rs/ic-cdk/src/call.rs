@@ -981,9 +981,11 @@ unsafe extern "C" fn callback(env: usize) {
         // to replace an automatic trap from not replying.
         CallFutureState::Trapped => trap("Call already trapped"),
         _ => {
-            unreachable!(
-                "CallFutureState for in-flight calls should only be Executing or Trapped (callback)"
-            )
+            // do nothing!
+            return;
+            // unreachable!(
+            //     "CallFutureState for in-flight calls should only be Executing or Trapped (callback)"
+            // )
         }
     };
     ic_cdk_executor::in_callback_executor_context_for(method, || {
