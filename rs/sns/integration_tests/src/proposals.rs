@@ -265,14 +265,6 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
             let user_3_subaccount = user_3_neuron_id.subaccount().unwrap();
 
             // Make a proposal.
-            let proposal_creation_time_seconds = match &runtime {
-                Runtime::StateMachine(state_machine) => state_machine
-                    .time()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs_f64(),
-                _ => unreachable!("expected StateMachine runtime"),
-            };
             let proposal_id = sns_canisters
                 .make_proposal(
                     &user_1,
@@ -338,8 +330,15 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 assert_eq!(ballot.vote, vote as i32);
 
                 // Inspect ballot ages.
-                let age_seconds =
-                    proposal_creation_time_seconds - ballot.cast_timestamp_seconds as f64;
+                let now_seconds = match &runtime {
+                    Runtime::StateMachine(state_machine) => state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs_f64(),
+                    _ => unreachable!("expected StateMachine runtime"),
+                };
+                let age_seconds = now_seconds - ballot.cast_timestamp_seconds as f64;
                 assert!(
                     0.0 < age_seconds,
                     "age_seconds = {age_seconds}. ballot = {ballot:?}"
