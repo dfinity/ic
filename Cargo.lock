@@ -4915,19 +4915,11 @@ dependencies = [
 
 [[package]]
 name = "fqdn"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0f5d7f7b3eed2f771fc7f6fcb651f9560d7b0c483d75876082acb4649d266b3"
-dependencies = [
- "punycode",
-]
-
-[[package]]
-name = "fqdn"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "886ac788f62d16d6b0f26b2fa762b34ef16ebfb4b624c2c15fbcadc9173c0f72"
 dependencies = [
+ "punycode",
  "serde",
 ]
 
@@ -6551,7 +6543,7 @@ dependencies = [
  "cloudflare",
  "derive-new",
  "flate2",
- "fqdn 0.5.2",
+ "fqdn",
  "futures",
  "futures-util",
  "governor 0.10.2",
@@ -6628,7 +6620,7 @@ dependencies = [
  "clap 4.5.27",
  "cloudflare",
  "derive-new",
- "fqdn 0.5.2",
+ "fqdn",
  "hickory-proto",
  "hickory-resolver",
  "http 1.3.1",
@@ -9131,13 +9123,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85917759f25f5207fb72786ae7cf016512d4ca6d8dba166b6ed49c207873476e"
 dependencies = [
  "anyhow",
- "axum 0.8.8",
+ "axum 0.8.4",
  "axum-extra",
  "axum-server",
  "base64 0.22.1",
  "candid",
  "chacha20poly1305",
- "clap 4.5.58",
+ "clap 4.5.27",
  "derive-new",
  "fqdn",
  "ic-bn-lib",
@@ -9148,7 +9140,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.27.2",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tower-http",
@@ -9164,11 +9156,11 @@ checksum = "720797c8546daf2e5138fd7640b0c46d84cd72369ae5499a22bb8e5a09a16b50"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum 0.8.8",
+ "axum 0.8.4",
  "candid",
  "chacha20poly1305",
  "chrono",
- "clap 4.5.58",
+ "clap 4.5.27",
  "derive-new",
  "fqdn",
  "hickory-resolver",
@@ -9181,7 +9173,7 @@ dependencies = [
  "prometheus",
  "serde",
  "strum 0.27.2",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tracing",
@@ -9198,7 +9190,7 @@ dependencies = [
  "derive-new",
  "serde",
  "strum 0.27.2",
- "thiserror 2.0.18",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -9571,7 +9563,7 @@ dependencies = [
  "cloudflare",
  "ctrlc",
  "derive-new",
- "fqdn 0.5.2",
+ "fqdn",
  "futures",
  "hickory-resolver",
  "hostname 0.4.0",
@@ -19536,7 +19528,7 @@ dependencies = [
  "ctrlc",
  "cycles-minting-canister",
  "flate2",
- "fqdn 0.5.2",
+ "fqdn",
  "futures",
  "hex",
  "http 1.3.1",
