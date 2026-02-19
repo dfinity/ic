@@ -605,19 +605,26 @@ fn method_name_edge_cases(env: TestEnv) {
                     .await
                     .unwrap_err();
 
-                let payload_too_large = |err: AgentError| {
-                    match err {
-                        AgentError::HttpError(payload) => {
-                            assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
-                        }
-                        _ => panic!("Unexpected error: {:?}", err),
-                    };
+                // When sending a very large request body, the server may either:
+                // 1. Read the full body and respond with HTTP 413 Payload Too Large, or
+                // 2. Close the connection while the client is still sending the body,
+                //    resulting in a ConnectionReset (errno 104) or BrokenPipe (errno 32).
+                // Both are valid server behaviors for rejecting oversized requests.
+                let payload_too_large = |err: AgentError| match err {
+                    AgentError::HttpError(payload) => {
+                        assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
+                    }
+                    AgentError::TransportError(_) => {}
+                    _ => panic!("Unexpected error: {:?}", err),
                 };
 
                 if is_api_bn {
                     // The API BN has more generous limits, so it still responds with HTTP 400 Bad Request.
+                    // A TransportError is also acceptable if the server closes the connection
+                    // while the client is still sending the oversized body.
                     assert!(
-                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
+                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16())
+                        || matches!(err, AgentError::TransportError(_)),
                         "api bn update for 'x' * 3**20: got error {}",
                         err
                     );
@@ -633,16 +640,22 @@ fn method_name_edge_cases(env: TestEnv) {
 
                 if is_api_bn {
                     // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
+                    // A TransportError is also acceptable if the server closes the connection
+                    // while the client is still sending the oversized body.
                     assert!(
-                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
-                        "api bn update for 'x' * 3**20: got error {}",
+                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16())
+                        || matches!(err, AgentError::TransportError(_)),
+                        "api bn query for 'x' * 3**20: got error {}",
                         err
                     );
                 } else {
                     // When bypassing the API BN, the replica responds with a reject.
+                    // A TransportError is also acceptable if the server closes the connection
+                    // while the client is still sending the oversized body.
                     assert!(
-                        matches!(err, AgentError::UncertifiedReject { .. }),
-                        "direct replica update for 'x' * 3**20: got error {}",
+                        matches!(err, AgentError::UncertifiedReject { .. })
+                        || matches!(err, AgentError::TransportError(_)),
+                        "direct replica query for 'x' * 3**20: got error {}",
                         err
                     );
                 }
