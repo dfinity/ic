@@ -43,7 +43,7 @@ use ic_replicated_state::{
     CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
     canister_snapshots::CanisterSnapshot,
     canister_state::{
-        NextExecution, UnflushedCheckpointOps,
+        NextExecution,
         execution_state::Memory,
         execution_state::WasmExecutionMode,
         system_state::{
@@ -51,6 +51,7 @@ use ic_replicated_state::{
             wasm_chunk_store::{self, WasmChunkStore},
         },
     },
+    metadata_state::UnflushedCheckpointOps,
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
 };

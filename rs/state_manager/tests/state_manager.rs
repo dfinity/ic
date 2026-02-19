@@ -271,13 +271,11 @@ fn take_canister_snapshot(
     snapshot: CanisterSnapshot,
 ) {
     let canister_id = snapshot_id.get_canister_id();
-    let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
-    let canister = Arc::make_mut(&mut canister_arc);
     state.take_snapshot(snapshot_id, Arc::new(snapshot));
-    canister
+    state
+        .metadata
         .unflushed_checkpoint_ops
         .take_snapshot(canister_id, snapshot_id);
-    state.put_canister_state(canister_arc);
 }
 
 #[test]
@@ -7337,7 +7335,8 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
         Default::default(),
     ));
 
-    canister
+    state
+        .metadata
         .unflushed_checkpoint_ops
         .load_snapshot(canister_id, snapshot_id);
     state.put_canister_state(canister_arc);
@@ -8148,9 +8147,7 @@ fn can_split_with_inflight_restore_snapshot() {
             state = state_manager.take_tip().1;
 
             // Checkpointing should have additionally flushed / dropped all checkpoint ops.
-            for canister in expected.canisters_iter_mut() {
-                Arc::make_mut(canister).unflushed_checkpoint_ops = Default::default();
-            }
+            expected.metadata.unflushed_checkpoint_ops = Default::default();
             // The "previous state hash" has changed. Update it.
             expected.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
 
@@ -8190,7 +8187,8 @@ fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: Can
         .rename_canister(&old_id, new_id);
 
     canister.system_state.set_canister_id(new_id);
-    canister
+    state
+        .metadata
         .unflushed_checkpoint_ops
         .rename_canister(old_id, new_id);
 
@@ -8262,12 +8260,7 @@ fn can_rename_canister() {
             assert_eq!(tip.canister_ids().unwrap(), vec![new_canister_id]);
             assert_eq!(tip.snapshot_ids().unwrap(), vec![snapshot_id]);
             let (_height, state) = state_manager.take_tip();
-            assert!(
-                state
-                    .canister_states()
-                    .values()
-                    .all(|canister| canister.unflushed_checkpoint_ops.is_empty())
-            );
+            assert!(state.system_metadata().unflushed_checkpoint_ops.is_empty());
         });
     }
     can_rename_canister_impl(CertificationScope::Metadata);

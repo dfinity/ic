@@ -643,7 +643,7 @@ mod test {
     use ic_error_types::UserError;
     use ic_logger::{LoggerImpl, ReplicaLogger};
     use ic_replicated_state::{
-        CanisterState, SchedulerState, SystemState, canister_state::UnflushedCheckpointOps,
+        CanisterState, SchedulerState, SystemState, metadata_state::UnflushedCheckpointOps,
     };
     use ic_types::messages::{CallbackId, NO_DEADLINE};
     use ic_types::{Cycles, Time};

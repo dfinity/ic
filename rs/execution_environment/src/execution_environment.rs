@@ -1973,6 +1973,16 @@ impl ExecutionEnvironment {
                             && let Some(canister_state) = state.canister_state_mut_arc(canister_id)
                         {
                             canister_state.update_on_low_wasm_memory_hook_condition();
+                            if !canister_state.unflushed_checkpoint_ops.is_empty() {
+                                let canister_unflushed_checkpoint_ops =
+                                    Arc::make_mut(canister_state)
+                                        .unflushed_checkpoint_ops
+                                        .take();
+                                state
+                                    .metadata
+                                    .unflushed_checkpoint_ops
+                                    .append(canister_unflushed_checkpoint_ops);
+                            }
                         }
                         Ok(res)
                     }

@@ -9,9 +9,9 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{
     ExecutionTask, SystemState, log_memory_store::LogMemoryStore,
 };
+use crate::metadata_state::UnflushedCheckpointOps;
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
-use ic_base_types::SnapshotId;
 use ic_config::embedders::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
@@ -76,7 +76,7 @@ pub struct CanisterState {
     pub scheduler_state: SchedulerState,
 
     /// Modifications to the canister state that have not been applied yet to the next checkpoint.
-    /// This field is transient and is emptied before writing the next checkpoint.
+    /// This field is transient and is emptied after every subnet message execution.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 }
 
@@ -650,60 +650,6 @@ pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
         return Err("Could not convert from wasm pages to number of bytes".to_string());
     }
     Ok(NumBytes::new(bytes as u64))
-}
-
-/// Modifications to the state that require explicit tracking in order to be correctly applied
-/// by the checkpointing logic.
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum UnflushedCheckpointOp {
-    /// A new snapshot was taken from a canister.
-    TakeSnapshot(CanisterId, SnapshotId),
-    /// A snapshot was loaded to a canister.
-    LoadSnapshot(CanisterId, SnapshotId),
-    /// A canister was renamed.
-    RenameCanister(CanisterId, CanisterId),
-}
-
-/// A collection of unflushed checkpoint operations in the order that they were applied to the state.
-/// Entries are added by the execution code and read by the checkpointing logic.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
-pub struct UnflushedCheckpointOps {
-    operations: Vec<UnflushedCheckpointOp>,
-}
-
-impl UnflushedCheckpointOps {
-    pub fn take(&mut self) -> Vec<UnflushedCheckpointOp> {
-        std::mem::take(&mut self.operations)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.operations.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.operations.len()
-    }
-
-    pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
-        self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
-            canister_id,
-            snapshot_id,
-        ));
-    }
-
-    pub fn load_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
-        self.operations.push(UnflushedCheckpointOp::LoadSnapshot(
-            canister_id,
-            snapshot_id,
-        ));
-    }
-
-    pub fn rename_canister(&mut self, old_canister_id: CanisterId, new_canister_id: CanisterId) {
-        self.operations.push(UnflushedCheckpointOp::RenameCanister(
-            old_canister_id,
-            new_canister_id,
-        ));
-    }
 }
 
 pub mod testing {

@@ -2,7 +2,7 @@ use super::input_schedule::testing::InputScheduleTesting;
 use super::message_pool::{MessageStats, REQUEST_LIFETIME};
 use super::testing::new_canister_output_queues_for_test;
 use super::*;
-use crate::canister_state::UnflushedCheckpointOps;
+use crate::metadata_state::UnflushedCheckpointOps;
 use crate::testing::FakeDropMessageMetrics;
 use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
 use assert_matches::assert_matches;

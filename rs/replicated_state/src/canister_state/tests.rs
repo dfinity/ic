@@ -5,7 +5,6 @@ use super::*;
 use crate::CallContext;
 use crate::CallOrigin;
 use crate::Memory;
-use crate::canister_state::UnflushedCheckpointOps;
 use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
@@ -14,6 +13,7 @@ use crate::canister_state::system_state::{
     CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
     MAX_CANISTER_HISTORY_CHANGES,
 };
+use crate::metadata_state::UnflushedCheckpointOps;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;

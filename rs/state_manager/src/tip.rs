@@ -19,8 +19,8 @@ use ic_protobuf::state::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::CanisterSnapshot;
-use ic_replicated_state::canister_state::UnflushedCheckpointOp;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
+use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
 use ic_replicated_state::page_map::{
     MAX_NUMBER_OF_FILES, MergeCandidate, PAGE_SIZE, PageAllocatorFileDescriptor, StorageLayout,
     StorageMetrics, StorageResult,
@@ -231,12 +231,7 @@ pub(crate) fn spawn_tip_thread(
                             debug_assert_eq!(tip_state.tip_folder_state.page_maps_height, height);
                             debug_assert!(tip_state.tip_folder_state.has_filtered_canisters);
                             // Snapshots and other unflushed changed should have been handled earlier in `flush_canister_snapshots_and_page_maps `.
-                            debug_assert!(
-                                state
-                                    .canister_states()
-                                    .values()
-                                    .all(|canister| canister.unflushed_checkpoint_ops.is_empty())
-                            );
+                            debug_assert!(state.metadata.unflushed_checkpoint_ops.is_empty());
                             tip_state.latest_checkpoint_state = tip_state.tip_folder_state;
                             tip_state.tip_folder_state = Default::default();
                             {

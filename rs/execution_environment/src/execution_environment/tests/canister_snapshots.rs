@@ -18,10 +18,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionState, SchedulerState,
     canister_state::{
-        UnflushedCheckpointOp, WASM_PAGE_SIZE_IN_BYTES,
+        WASM_PAGE_SIZE_IN_BYTES,
         execution_state::{WasmBinary, WasmExecutionMode},
         system_state::wasm_chunk_store::CHUNK_SIZE,
     },
+    metadata_state::UnflushedCheckpointOp,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_execution_environment::{
@@ -40,7 +41,6 @@ use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
 use std::borrow::Borrow;
-use std::sync::Arc;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
@@ -1523,13 +1523,7 @@ fn load_canister_snapshot_succeeds() {
             None,
         )
     );
-    let unflushed_changes = Arc::make_mut(
-        test.state_mut()
-            .canister_state_mut_arc(&canister_id)
-            .unwrap(),
-    )
-    .unflushed_checkpoint_ops
-    .take();
+    let unflushed_changes = test.state_mut().metadata.unflushed_checkpoint_ops.take();
     assert_eq!(unflushed_changes.len(), 2);
     let expected_unflushed_changes = vec![
         UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id),

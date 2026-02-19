@@ -8,7 +8,7 @@ use self::subnet_call_context_manager::SubnetCallContextManager;
 use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
 use crate::{CheckpointLoadingMetrics, canister_state::system_state::CyclesUseCase};
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -175,6 +175,10 @@ pub struct SystemMetadata {
     /// by aggregating them and storing a running total over multiple days by node id and
     /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
     pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
+
+    /// Modifications to the state that have not been applied yet to the next checkpoint.
+    /// This field is transient and is emptied before writing the next checkpoint.
+    pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 }
 
 /// Full description of the IC network toplogy.
@@ -418,6 +422,7 @@ impl SystemMetadata {
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
+            unflushed_checkpoint_ops: Default::default(),
         }
     }
 
@@ -707,6 +712,7 @@ impl SystemMetadata {
             ref expected_compiled_wasms,
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
+            unflushed_checkpoint_ops: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -773,6 +779,8 @@ impl SystemMetadata {
     ///    `commit_and_certify()` at the end of the round; and not used before.
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
+    ///  * `unflushed_checkpoint_ops` contains pending operations; It is
+    ///    therefore preserved untouched.
     pub fn online_split(
         self,
         subnet_id: SubnetId,
@@ -806,6 +814,7 @@ impl SystemMetadata {
             expected_compiled_wasms,
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
+            unflushed_checkpoint_ops,
         } = self;
 
         assert_eq!(None, split_from);
@@ -911,6 +920,7 @@ impl SystemMetadata {
             // TODO(DSM-51): Consider splitting off metrics for subnet B blockmakers and
             // retaining everything else on subnet A'.
             blockmaker_metrics_time_series,
+            unflushed_checkpoint_ops,
         })
     }
 
@@ -1823,6 +1833,65 @@ impl BlockmakerMetricsTimeSeries {
     }
 }
 
+/// Modifications to the state that require explicit tracking in order to be correctly applied
+/// by the checkpointing logic.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum UnflushedCheckpointOp {
+    /// A new snapshot was taken from a canister.
+    TakeSnapshot(CanisterId, SnapshotId),
+    /// A snapshot was loaded to a canister.
+    LoadSnapshot(CanisterId, SnapshotId),
+    /// A canister was renamed.
+    RenameCanister(CanisterId, CanisterId),
+}
+
+/// A collection of unflushed checkpoint operations in the order that they were applied to the state.
+/// Entries are added by the execution code and read by the checkpointing logic.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct UnflushedCheckpointOps {
+    operations: Vec<UnflushedCheckpointOp>,
+}
+
+impl UnflushedCheckpointOps {
+    pub fn take(&mut self) -> Vec<UnflushedCheckpointOp> {
+        std::mem::take(&mut self.operations)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.operations.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.operations.len()
+    }
+
+    pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
+        self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
+            canister_id,
+            snapshot_id,
+        ));
+    }
+
+    pub fn load_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
+        self.operations.push(UnflushedCheckpointOp::LoadSnapshot(
+            canister_id,
+            snapshot_id,
+        ));
+    }
+
+    pub fn rename_canister(&mut self, old_canister_id: CanisterId, new_canister_id: CanisterId) {
+        self.operations.push(UnflushedCheckpointOp::RenameCanister(
+            old_canister_id,
+            new_canister_id,
+        ));
+    }
+
+    pub fn append(&mut self, mut canister_unflushed_checkpoint_ops: Vec<UnflushedCheckpointOp>) {
+        self.operations
+            .append(&mut canister_unflushed_checkpoint_ops);
+    }
+}
+
 pub mod testing {
     use super::*;
 
@@ -1947,6 +2016,7 @@ pub mod testing {
             expected_compiled_wasms: Default::default(),
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
+            unflushed_checkpoint_ops: Default::default(),
         };
     }
 }

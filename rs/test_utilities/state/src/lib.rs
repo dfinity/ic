@@ -11,13 +11,12 @@ use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
     Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
-        UnflushedCheckpointOps,
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         system_state::{CyclesUseCase, TaskQueue},
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
-        Stream, SubnetMetrics,
+        Stream, SubnetMetrics, UnflushedCheckpointOps,
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
