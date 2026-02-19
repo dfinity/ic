@@ -14,7 +14,7 @@ use ic_sys::PAGE_SIZE;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
-use ic_types::{Cycles, NumInstructions, NumOsPages};
+use ic_types::{Cycles, NumBytes, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
 use std::time::Duration;
@@ -23,6 +23,9 @@ use ic_config::embedders::StableMemoryPageLimit;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status,
 };
+
+// Number of seconds in a day.
+const DAY: Duration = Duration::from_secs(24 * 60 * 60 as u64);
 
 fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
     format!(
@@ -341,6 +344,7 @@ fn dts_update_concurrent_cycles_change_fails() {
 
     let transferred_cycles = Cycles::new(1000);
 
+    let update_method = "update";
     let b = wasm()
         .accept_cycles(transferred_cycles)
         .message_payload()
@@ -351,7 +355,7 @@ fn dts_update_concurrent_cycles_change_fails() {
         .instruction_counter_is_at_least(1_000_000)
         .call_with_cycles(
             b_id,
-            "update",
+            update_method,
             call_args().other_side(b.clone()),
             transferred_cycles,
         )
@@ -362,14 +366,22 @@ fn dts_update_concurrent_cycles_change_fails() {
     test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
 
-    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    let (ingress_id, _) = test.ingress_raw(a_id, update_method, a);
 
     let freezing_threshold = test.freezing_threshold(a_id);
 
     // The memory usage of the canister increases during the message execution.
-    // `ic0.call_perform()` used the current freezing threshold. This value is
-    // an upper bound on the additional freezing threshold.
-    let additional_freezing_threshold = Cycles::new(2000);
+    // `ic0.call_perform()` used the current freezing threshold. The "magic"
+    // number below is empirically calculated (i.e. by running the test) to
+    // allow for one slice of execution to succeed while the second would
+    // fail because the canister does not have enough balance to support both
+    // the outgoing call and the ingress induction debit.
+    let additional_freezing_threshold = test.cycles_account_manager().memory_cost(
+        NumBytes::from(25_u64),
+        DAY,
+        test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
+    );
 
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
@@ -423,8 +435,8 @@ fn dts_update_concurrent_cycles_change_fails() {
             "Canister {} is out of cycles: \
              please top up the canister with at least {} additional cycles",
             a_id,
-            (freezing_threshold + call_charge)
-                - (initial_cycles - max_execution_cost - cycles_debit)
+            (freezing_threshold + additional_freezing_threshold + call_charge)
+                - (initial_cycles - max_execution_cost - cycles_debit),
         )
     );
 

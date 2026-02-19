@@ -381,16 +381,19 @@ impl InstallCodeHelper {
             }
 
             let reveal_top_up = self.canister.controllers().contains(&original.sender);
-            if let Err(err) = round.cycles_account_manager.can_withdraw_cycles_with_threshold(
-                &self.canister.system_state,
-                Cycles::zero(),
-                self.canister.memory_usage(),
-                self.canister.message_memory_usage(),
-                self.canister.system_state.reserved_balance(),
-                original.subnet_size,
-                round.cost_schedule,
-                reveal_top_up,
-            ) {
+            if let Err(err) = round
+                .cycles_account_manager
+                .can_withdraw_cycles_with_threshold(
+                    &self.canister.system_state,
+                    Cycles::zero(),
+                    self.canister.memory_usage(),
+                    self.canister.message_memory_usage(),
+                    self.canister.system_state.reserved_balance(),
+                    original.subnet_size,
+                    round.cost_schedule,
+                    reveal_top_up,
+                )
+            {
                 let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
                     bytes,
                     available: err.available,

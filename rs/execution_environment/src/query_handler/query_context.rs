@@ -398,7 +398,6 @@ impl<'a> QueryContext<'a> {
             .network_topology
             .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
-        let reveal_top_up = canister.controllers().contains(&query_kind.get_principal());
         if let Err(_) = self
             .cycles_account_manager
             .can_withdraw_cycles_with_threshold(
@@ -409,7 +408,7 @@ impl<'a> QueryContext<'a> {
                 canister.system_state.reserved_balance(),
                 subnet_size,
                 self.get_cost_schedule(),
-                reveal_top_up,
+                false,
             )
         {
             let canister_id = canister.canister_id();
