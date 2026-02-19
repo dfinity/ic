@@ -637,7 +637,7 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
+            LogMemoryStore::new(),
         )
     }
 
@@ -824,7 +824,7 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
+            LogMemoryStore::new(),
         )
     }
 
@@ -2446,7 +2446,7 @@ pub mod testing {
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
-            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
+            log_memory_store: LogMemoryStore::new(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),

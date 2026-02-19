@@ -27,8 +27,6 @@ use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
-    feature_flag: FlagStatus,
-
     #[validate_eq(CompareWithValidateEq)]
     maybe_page_map: Option<PageMap>,
 
@@ -50,18 +48,17 @@ impl LogMemoryStore {
     /// The store technically exists but has 0 capacity and is considered "uninitialized".
     /// Any attempts to append logs will be silently ignored until the store is
     /// explicitly resized to a non-zero capacity.
-    pub fn new(feature_flag: FlagStatus) -> Self {
-        Self::new_inner(feature_flag, None)
+    pub fn new() -> Self {
+        Self::new_inner(None)
     }
 
     /// Creates a new store from a checkpoint.
-    pub fn from_checkpoint(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
-        Self::new_inner(feature_flag, maybe_page_map)
+    pub fn from_checkpoint(maybe_page_map: Option<PageMap>) -> Self {
+        Self::new_inner(maybe_page_map)
     }
 
-    fn new_inner(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
+    fn new_inner(maybe_page_map: Option<PageMap>) -> Self {
         Self {
-            feature_flag,
             maybe_page_map,
             header_cache: OnceLock::new(),
             delta_log_sizes: VecDeque::new(),
@@ -159,7 +156,7 @@ impl LogMemoryStore {
     }
 
     fn resize_impl(&mut self, limit: usize, create_page_map: impl FnOnce() -> PageMap) {
-        if self.feature_flag == FlagStatus::Disabled || limit == 0 {
+        if limit == 0 {
             self.deallocate();
             return;
         }
@@ -213,10 +210,6 @@ impl LogMemoryStore {
 
     /// Appends a delta log to the ring buffer if it exists.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
-        if self.feature_flag == FlagStatus::Disabled {
-            self.deallocate();
-            return;
-        }
         if delta_log.is_empty() {
             return; // Don't append if delta is empty.
         }
@@ -258,7 +251,6 @@ impl LogMemoryStore {
 impl Clone for LogMemoryStore {
     fn clone(&self) -> Self {
         Self {
-            feature_flag: self.feature_flag,
             // PageMap is a persistent data structure, so clone is cheap and creates
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),
@@ -275,9 +267,7 @@ impl Clone for LogMemoryStore {
 impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
         // header_cache is a transient cache and should not be compared.
-        self.feature_flag == other.feature_flag
-            && self.maybe_page_map == other.maybe_page_map
-            && self.delta_log_sizes == other.delta_log_sizes
+        self.maybe_page_map == other.maybe_page_map && self.delta_log_sizes == other.delta_log_sizes
     }
 }
 
