@@ -1,4 +1,4 @@
-use canister_test::Canister;
+use canister_test::{Canister, Runtime};
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
@@ -31,10 +31,7 @@ use ic_sns_test_utils::{
 };
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::bytes;
-use std::{
-    collections::BTreeMap,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::BTreeMap, time::UNIX_EPOCH};
 
 const EXPECTED_MAX_BALLOT_AGE: f64 = 60.0;
 
@@ -226,15 +223,14 @@ fn test_manage_nervous_system_parameters_proposal_execution() {
 
 #[test]
 fn test_voting_with_three_neurons_with_the_same_stake() {
-    fn now_seconds() -> f64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs_f64()
-    }
-
     state_machine_test_on_sns_subnet(|runtime| {
         async move {
+            let state_machine_time_seconds = match &runtime {
+                Runtime::StateMachine(sm) => {
+                    sm.time().duration_since(UNIX_EPOCH).unwrap().as_secs_f64()
+                }
+                _ => unreachable!("expected StateMachine runtime"),
+            };
             // Initialize the ledger with three users (each will create its own neuron).
             let user_1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
             let user_2 = Sender::from_keypair(&TEST_USER2_KEYPAIR);
@@ -340,7 +336,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 assert_eq!(ballot.vote, vote as i32);
 
                 // Inspect ballot ages.
-                let age_seconds = now_seconds() - ballot.cast_timestamp_seconds as f64;
+                let age_seconds = state_machine_time_seconds - ballot.cast_timestamp_seconds as f64;
                 assert!(
                     0.0 < age_seconds,
                     "age_seconds = {age_seconds}. ballot = {ballot:?}"
