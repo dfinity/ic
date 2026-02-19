@@ -692,7 +692,7 @@ fn stress_timer_only_after_upgrade() {
     config.upgrade_to_master(&state_machine);
     let initial_synced = u64::try_from(index::status(&state_machine, index_canister_id).num_blocks_synced.0)
         .expect("num_blocks_synced should fit in u64");
-    let chain_length = get_blocks(state_machine, Principal::from(ledger_canister_id), 0, 0).chain_length;
+    let chain_length = get_blocks(&state_machine, Principal::from(ledger_canister_id), 0, 0).chain_length;
     // Do NOT call get_blocks on the index — only run the timer (build_index) path.
     for step in 0..TIMER_STEPS {
         state_machine.advance_time(SYNC_STEP_SECONDS);
@@ -806,7 +806,7 @@ fn stress_timer_only_after_upgrade() {
     config.upgrade_to_master(&state_machine);
     let initial_synced = u64::try_from(index::status(&state_machine, index_canister_id).num_blocks_synced.0)
         .expect("num_blocks_synced should fit in u64");
-    let chain_length = get_blocks(state_machine, Principal::from(ledger_canister_id), 0, 0).chain_length;
+    let chain_length = get_blocks(&state_machine, Principal::from(ledger_canister_id), 0, 0).chain_length;
     // Do NOT call get_blocks on the index — only run the timer (build_index) path.
     for step in 0..TIMER_STEPS {
         state_machine.advance_time(SYNC_STEP_SECONDS);
