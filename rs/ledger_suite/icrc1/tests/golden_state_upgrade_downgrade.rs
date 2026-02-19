@@ -658,6 +658,49 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     }
 }
 
+/// After upgrading the index to master, only advances time and ticks (no get_blocks
+/// on the index). Use to see if the dlmalloc panic is in the timer/build_index path
+/// rather than the decode/query path. Run with:
+///   cargo test --package icrc_ledger_suite_integration_tests --lib golden_state_upgrade_downgrade::stress_timer_only_after_upgrade -- --ignored
+#[cfg(not(feature = "u256-tokens"))]
+#[test]
+#[ignore]
+fn stress_timer_only_after_upgrade() {
+    const CK_BTC_LEDGER_CANISTER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
+    const CK_BTC_INDEX_CANISTER_ID: &str = "n5wcd-faaaa-aaaar-qaaea-cai";
+    const CK_BTC_LEDGER_SUITE: (&str, &str, &str) = (
+        CK_BTC_LEDGER_CANISTER_ID,
+        CK_BTC_INDEX_CANISTER_ID,
+        "ckBTC",
+    );
+    const TIMER_STEPS: u32 = 200;
+    const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
+
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+    let config = LedgerSuiteConfig::new(
+        CK_BTC_LEDGER_SUITE,
+        &MAINNET_CKBTC_WASMS,
+        &MASTER_WASMS,
+    );
+    let ledger_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.ledger_id).unwrap());
+    let index_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.index_id).unwrap());
+    top_up_canisters(&state_machine, ledger_canister_id, index_canister_id);
+    state_machine.advance_time(Duration::from_secs(1));
+    state_machine.tick();
+    config.upgrade_to_master(&state_machine);
+    // Do NOT call get_blocks on the index — only run the timer (build_index) path.
+    for step in 0..TIMER_STEPS {
+        state_machine.advance_time(SYNC_STEP_SECONDS);
+        state_machine.tick();
+        if step % 50 == 0 && step > 0 {
+            println!("stress_timer_only_after_upgrade: step {}/{}", step, TIMER_STEPS);
+        }
+    }
+    println!("stress_timer_only_after_upgrade: completed {} steps without panic", TIMER_STEPS);
+}
+
 /// Stress-tests only the index `get_blocks` (query) path without advancing time,
 /// so the sync timer never runs. Use to isolate whether the dlmalloc panic is in
 /// the decode/query path. Run with:
@@ -705,6 +748,63 @@ fn stress_get_blocks_only() {
         println!("stress_get_blocks_only: round {}", round + 1);
         let _ = index::get_all_index_blocks(&state_machine, index_canister_id, None, None);
     }
+}
+
+/// After upgrading the index to master, only advances time and ticks (no get_blocks
+/// on the index). Use to see if the dlmalloc panic is in the timer/build_index path.
+#[cfg(feature = "u256-tokens")]
+#[test]
+#[ignore]
+fn stress_timer_only_after_upgrade() {
+    const CK_ETH_LEDGER_SUITE: (&str, &str, &str) = (
+        "ss2fx-dyaaa-aaaar-qacoq-cai",
+        "s3zol-vqaaa-aaaar-qacpa-cai",
+        "ckETH",
+    );
+    const TIMER_STEPS: u32 = 200;
+    const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
+
+    let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {
+        owner: PrincipalId::from_str("sv3dd-oaaaa-aaaar-qacoa-cai")
+            .unwrap()
+            .0,
+        subaccount: None,
+    };
+    let ck_eth_burns_without_spender = BurnsWithoutSpender {
+        minter: ck_eth_minter,
+        burn_indexes: vec![
+            1051, 1094, 1276, 1759, 1803, 1929, 2449, 2574, 2218, 2219, 2231, 1777, 4, 9, 31, 1540,
+            1576, 1579, 1595, 1607, 1617, 1626, 1752, 1869, 1894, 2013, 2555,
+        ],
+    };
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+    let config = LedgerSuiteConfig::new_with_params(
+        CK_ETH_LEDGER_SUITE,
+        &MAINNET_U256_WASMS,
+        &MASTER_WASMS,
+        Some(ck_eth_burns_without_spender),
+        false,
+    );
+    let ledger_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.ledger_id).unwrap());
+    let index_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.index_id).unwrap());
+    top_up_canisters(&state_machine, ledger_canister_id, index_canister_id);
+    state_machine.advance_time(Duration::from_secs(1));
+    state_machine.tick();
+    config.upgrade_to_master(&state_machine);
+    // Do NOT call get_blocks on the index — only run the timer (build_index) path.
+    for step in 0..TIMER_STEPS {
+        state_machine.advance_time(SYNC_STEP_SECONDS);
+        state_machine.tick();
+        if step % 50 == 0 && step > 0 {
+            println!("stress_timer_only_after_upgrade: step {}/{}", step, TIMER_STEPS);
+        }
+    }
+    println!(
+        "stress_timer_only_after_upgrade: completed {} steps without panic",
+        TIMER_STEPS
+    );
 }
 
 #[cfg(not(feature = "u256-tokens"))]
