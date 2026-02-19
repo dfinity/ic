@@ -49,18 +49,21 @@ pub struct Options {
 
 #[cfg(debug_assertions)]
 fn get_logger() -> slog::Logger {
+    use slog::slog_o;
     let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
-    slog::Logger::root(slog_term::FullFormat::new(plain).build().fuse(), slog::o!())
+    slog::Logger::root(slog_term::FullFormat::new(plain).build().fuse(), slog_o!())
 }
 #[cfg(not(debug_assertions))]
 fn get_logger() -> slog::Logger {
+    use slog::slog_o;
+
     let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
     slog::Logger::root(
         slog_term::FullFormat::new(plain)
             .build()
             .filter_level(slog::Level::Info)
             .fuse(),
-        slog::o!(),
+        slog_o!(),
     )
 }
 

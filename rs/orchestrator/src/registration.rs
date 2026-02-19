@@ -198,10 +198,13 @@ impl NodeRegistration {
                 );
                 // Send a length-capped summary to the host ensuring message is not dropped
                 const CONSOLE_ERR_MAX: usize = 1500;
-                let trimmed_error = if error_message.len() > CONSOLE_ERR_MAX {
+                let trimmed_error = if error_message.chars().count() > CONSOLE_ERR_MAX {
                     format!(
                         "{} (see replica logs for full error)",
-                        &error_message[..CONSOLE_ERR_MAX],
+                        error_message
+                            .chars()
+                            .take(CONSOLE_ERR_MAX)
+                            .collect::<String>(),
                     )
                 } else {
                     error_message

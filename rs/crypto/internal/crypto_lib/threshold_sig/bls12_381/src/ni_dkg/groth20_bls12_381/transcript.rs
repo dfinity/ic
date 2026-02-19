@@ -206,21 +206,19 @@ fn compute_transcript(
             let indices = NodeIndices::from_slice(&reshare_x)
                 .expect("Cannot fail because all x are distinct.");
 
-            LagrangeCoefficients::at_zero(&indices)
-                .coefficients()
-                .to_vec()
+            LagrangeCoefficients::at_zero(&indices).into_coefficients()
         };
 
-        let mut combined = vec![];
+        let mut combined = Vec::with_capacity(threshold.get() as usize);
 
         // TODO(CRP-2550) this loop can run in parallel
         for i in 0..threshold.get() as usize {
-            let points = individual_public_coefficients
-                .iter()
-                .map(|pts| pts.1.coefficients[i].0.clone())
-                .collect::<Vec<_>>();
+            let points: Vec<_> = individual_public_coefficients
+                .values()
+                .map(|pc| &pc.coefficients[i].0)
+                .collect();
             combined.push(crate::types::PublicKey(
-                G2Projective::muln_affine_vartime(&points, &coefficients).to_affine(),
+                G2Projective::muln_affine_vartime_ref(&points, &coefficients).to_affine(),
             ));
         }
 
