@@ -1,5 +1,5 @@
 {
-  "checksum": "bcad446047f20bedcd1c8bb4dc9177b83d3892975895236dac7844090acd6ea2",
+  "checksum": "dc00165e55c027432eefaa834f7e311a7b2f3eff850d26374ef92fd55947bbe1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -197,7 +197,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -317,7 +317,7 @@
               "target": "brotli"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -909,7 +909,7 @@
               "target": "ahash"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -993,7 +993,7 @@
               "target": "socket2"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -1986,7 +1986,7 @@
               "target": "axum"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -3435,7 +3435,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -3525,7 +3525,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -5180,7 +5180,7 @@
               "target": "axum_core"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -5357,7 +5357,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -5523,7 +5523,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -5629,7 +5629,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -5741,7 +5741,7 @@
               "target": "axum_core"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -6068,7 +6068,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -10758,14 +10758,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "bytes 1.10.1": {
+    "bytes 1.11.1": {
       "name": "bytes",
-      "version": "1.10.1",
+      "version": "1.11.1",
       "package_url": "https://github.com/tokio-rs/bytes",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bytes/1.10.1/download",
-          "sha256": "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
+          "url": "https://static.crates.io/crates/bytes/1.11.1/download",
+          "sha256": "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
         }
       },
       "targets": [
@@ -10804,8 +10804,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "1.10.1"
+        "edition": "2021",
+        "version": "1.11.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -10889,7 +10889,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             }
           ],
@@ -11474,7 +11474,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -11581,7 +11581,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -11668,14 +11668,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.20": {
+    "candid 0.10.22": {
       "name": "candid",
-      "version": "0.10.20",
+      "version": "0.10.22",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.20/download",
-          "sha256": "8037a01ec09d6c06883a38bad4f47b8d06158ad360b841e0ae5707c9884dfaf6"
+          "url": "https://static.crates.io/crates/candid/0.10.22/download",
+          "sha256": "3b64a1b8e8c368f8ffd2aaa64c7189d0a84783ba162f64de647cefedb4f12c88"
         }
       },
       "targets": [
@@ -11760,7 +11760,7 @@
             }
           ],
           "selects": {
-            "cfg(not(target_arch = \"wasm32\"))": [
+            "cfg(not(target_family = \"wasm\"))": [
               {
                 "id": "stacker 0.1.15",
                 "target": "stacker"
@@ -11772,7 +11772,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "candid_derive 0.10.20",
+              "id": "candid_derive 0.10.22",
               "target": "candid_derive"
             },
             {
@@ -11807,7 +11807,7 @@
             ]
           }
         },
-        "version": "0.10.20"
+        "version": "0.10.22"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11815,14 +11815,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "candid_derive 0.10.20": {
+    "candid_derive 0.10.22": {
       "name": "candid_derive",
-      "version": "0.10.20",
+      "version": "0.10.22",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid_derive/0.10.20/download",
-          "sha256": "fb45f4d5eff3805598ee633dd80f8afb306c023249d34b5b7dfdc2080ea1df2e"
+          "url": "https://static.crates.io/crates/candid_derive/0.10.22/download",
+          "sha256": "8a3ad1d26683b72c7fd16c8b2e3ebacf8785c9532389286c89971c1770ee57ce"
         }
       },
       "targets": [
@@ -11866,7 +11866,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.20"
+        "version": "0.10.22"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11922,7 +11922,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -12031,7 +12031,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -14104,7 +14104,7 @@
               "target": "libc"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -15521,7 +15521,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -20186,14 +20186,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "deranged 0.3.11": {
+    "deranged 0.5.6": {
       "name": "deranged",
-      "version": "0.3.11",
+      "version": "0.5.6",
       "package_url": "https://github.com/jhpratt/deranged",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/deranged/0.3.11/download",
-          "sha256": "b42b6fa04a440b495c8b04d0e71b707c585f83cb9cb28cf8cd0d976c315e31b4"
+          "url": "https://static.crates.io/crates/deranged/0.5.6/download",
+          "sha256": "cc3dc5ad92c2e2d1c193bbbbdf2ea477cb81331de4f3103f267ca18368b988c4"
         }
       },
       "targets": [
@@ -20217,10 +20217,9 @@
         ],
         "crate_features": {
           "common": [
-            "alloc",
+            "default",
             "powerfmt",
-            "serde",
-            "std"
+            "serde"
           ],
           "selects": {}
         },
@@ -20231,14 +20230,14 @@
               "target": "powerfmt"
             },
             {
-              "id": "serde 1.0.228",
-              "target": "serde"
+              "id": "serde_core 1.0.228",
+              "target": "serde_core"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.11"
+        "version": "0.5.6"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -20769,11 +20768,11 @@
               "target": "byte_unit"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -20885,7 +20884,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -21356,7 +21355,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -21372,7 +21371,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -22459,7 +22458,7 @@
               "target": "tikv_jemallocator"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -22727,6 +22726,10 @@
             {
               "id": "rustversion 1.0.14",
               "target": "rustversion"
+            },
+            {
+              "id": "securefmt 0.1.5",
+              "target": "securefmt"
             },
             {
               "id": "strum_macros 0.26.4",
@@ -26025,7 +26028,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -26522,7 +26525,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -26598,7 +26601,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -30881,7 +30884,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -30974,7 +30977,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -31585,7 +31588,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -31656,7 +31659,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -32392,7 +32395,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -32456,7 +32459,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -33143,7 +33146,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -33206,7 +33209,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -33262,7 +33265,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -33317,7 +33320,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -33374,7 +33377,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -33660,7 +33663,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -33782,7 +33785,7 @@
               "target": "atomic_waker"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -34260,7 +34263,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -34604,7 +34607,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -34720,7 +34723,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -34824,7 +34827,7 @@
               "target": "backoff"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -34832,7 +34835,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -34952,7 +34955,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -35068,11 +35071,11 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -35404,7 +35407,7 @@
               "target": "axum"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -35566,7 +35569,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -35672,7 +35675,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -35746,7 +35749,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -35833,7 +35836,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -35896,7 +35899,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -36071,7 +36074,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -36230,7 +36233,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -36454,7 +36457,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -36584,7 +36587,7 @@
               "target": "axum"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -36718,7 +36721,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -36792,7 +36795,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -36882,7 +36885,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -37101,11 +37104,11 @@
               "target": "axum_extra"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -37241,7 +37244,7 @@
               "target": "tikv_jemallocator"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -37347,7 +37350,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -37425,11 +37428,11 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -37579,7 +37582,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -37634,7 +37637,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -37689,7 +37692,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -37837,7 +37840,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -38131,7 +38134,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -38190,7 +38193,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -38278,7 +38281,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -38372,7 +38375,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -38412,7 +38415,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -38476,7 +38479,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -38520,7 +38523,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -38737,7 +38740,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -38890,7 +38893,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -38965,7 +38968,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -39230,7 +39233,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -39301,7 +39304,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -41413,7 +41416,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -41525,7 +41528,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -49670,7 +49673,7 @@
               "target": "assert_json_diff"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -49993,7 +49996,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -51853,14 +51856,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num-conv 0.1.0": {
+    "num-conv 0.2.0": {
       "name": "num-conv",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "package_url": "https://github.com/jhpratt/num-conv",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/num-conv/0.1.0/download",
-          "sha256": "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
+          "url": "https://static.crates.io/crates/num-conv/0.2.0/download",
+          "sha256": "cf97ec579c3c42f953ef76dbf8d55ac91fb219dde70e49aa4a6b7d74e9919050"
         }
       },
       "targets": [
@@ -51883,7 +51886,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.1.0"
+        "version": "0.2.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -53279,7 +53282,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -53344,7 +53347,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -58181,7 +58184,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.20",
+              "id": "candid 0.10.22",
               "target": "candid"
             },
             {
@@ -61074,7 +61077,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             }
           ],
@@ -61139,7 +61142,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             }
           ],
@@ -61203,7 +61206,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             }
           ],
@@ -61268,7 +61271,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -61374,7 +61377,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -62815,7 +62818,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -62909,7 +62912,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -64848,7 +64851,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -64926,7 +64929,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -66199,7 +66202,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -66505,7 +66508,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -67686,7 +67689,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -71904,6 +71907,65 @@
       ],
       "license_file": "LICENSE"
     },
+    "securefmt 0.1.5": {
+      "name": "securefmt",
+      "version": "0.1.5",
+      "package_url": "https://gitlab.com/pfouilloux/securefmt",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/securefmt/0.1.5/download",
+          "sha256": "95d159bf5e6b8c35033c3742a00cb8e7370a217af82e5d304a0d3ce4930e41fe"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "securefmt",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "securefmt",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.103",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.42",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.110",
+              "target": "syn"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.5"
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "License"
+    },
     "security-framework 2.11.1": {
       "name": "security-framework",
       "version": "2.11.1",
@@ -74224,7 +74286,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -75115,7 +75177,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -75180,7 +75242,7 @@
               "target": "log"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -75297,7 +75359,7 @@
               "target": "termcolor"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -75762,7 +75824,7 @@
               "target": "slog"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -75947,7 +76009,7 @@
               "target": "thread_local"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -76518,7 +76580,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -79034,7 +79096,7 @@
               "target": "libc"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -81112,14 +81174,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "time 0.3.36": {
+    "time 0.3.47": {
       "name": "time",
-      "version": "0.3.36",
+      "version": "0.3.47",
       "package_url": "https://github.com/time-rs/time",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/time/0.3.36/download",
-          "sha256": "5dfd88e563464686c916c7e46e623e520ddc6d79fa6641390f2e3fa86e83e885"
+          "url": "https://static.crates.io/crates/time/0.3.47/download",
+          "sha256": "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
         }
       },
       "targets": [
@@ -81158,7 +81220,7 @@
         "deps": {
           "common": [
             {
-              "id": "deranged 0.3.11",
+              "id": "deranged 0.5.6",
               "target": "deranged"
             },
             {
@@ -81166,7 +81228,7 @@
               "target": "itoa"
             },
             {
-              "id": "num-conv 0.1.0",
+              "id": "num-conv 0.2.0",
               "target": "num_conv"
             },
             {
@@ -81174,11 +81236,11 @@
               "target": "powerfmt"
             },
             {
-              "id": "serde 1.0.228",
-              "target": "serde"
+              "id": "serde_core 1.0.228",
+              "target": "serde_core"
             },
             {
-              "id": "time-core 0.1.2",
+              "id": "time-core 0.1.8",
               "target": "time_core"
             }
           ],
@@ -81225,17 +81287,17 @@
             ]
           }
         },
-        "edition": "2021",
+        "edition": "2024",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "time-macros 0.2.18",
+              "id": "time-macros 0.2.27",
               "target": "time_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.3.36"
+        "version": "0.3.47"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -81244,14 +81306,14 @@
       ],
       "license_file": "LICENSE-Apache"
     },
-    "time-core 0.1.2": {
+    "time-core 0.1.8": {
       "name": "time-core",
-      "version": "0.1.2",
+      "version": "0.1.8",
       "package_url": "https://github.com/time-rs/time",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/time-core/0.1.2/download",
-          "sha256": "ef927ca75afb808a4d64dd374f00a2adf8d0fcff8e7b184af886c3c87ec4a3f3"
+          "url": "https://static.crates.io/crates/time-core/0.1.8/download",
+          "sha256": "7694e1cfe791f8d31026952abf09c69ca6f6fa4e1a1229e18988f06a04a12dca"
         }
       },
       "targets": [
@@ -81273,8 +81335,8 @@
         "compile_data_glob": [
           "**"
         ],
-        "edition": "2021",
-        "version": "0.1.2"
+        "edition": "2024",
+        "version": "0.1.8"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -81283,14 +81345,14 @@
       ],
       "license_file": "LICENSE-Apache"
     },
-    "time-macros 0.2.18": {
+    "time-macros 0.2.27": {
       "name": "time-macros",
-      "version": "0.2.18",
+      "version": "0.2.27",
       "package_url": "https://github.com/time-rs/time",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/time-macros/0.2.18/download",
-          "sha256": "3f252a68540fde3a3877aeea552b832b40ab9a69e318efd078774a01ddee1ccf"
+          "url": "https://static.crates.io/crates/time-macros/0.2.27/download",
+          "sha256": "2e70e4c5a0e0a8a4823ad65dfe1a6930e4f4d756dcd9dd7939022b5e8c501215"
         }
       },
       "targets": [
@@ -81323,18 +81385,18 @@
         "deps": {
           "common": [
             {
-              "id": "num-conv 0.1.0",
+              "id": "num-conv 0.2.0",
               "target": "num_conv"
             },
             {
-              "id": "time-core 0.1.2",
+              "id": "time-core 0.1.8",
               "target": "time_core"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.2.18"
+        "edition": "2024",
+        "version": "0.2.27"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -81920,7 +81982,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -82488,7 +82550,7 @@
               "alias": "bincode_crate"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -82698,7 +82760,7 @@
               "target": "async_stream"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -82912,7 +82974,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -83234,7 +83296,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -83377,7 +83439,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -83834,7 +83896,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -83966,7 +84028,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -84557,7 +84619,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -85225,7 +85287,7 @@
               "target": "thread_local"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             },
             {
@@ -85721,7 +85783,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -85815,7 +85877,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -85901,7 +85963,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -87876,7 +87938,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -88597,7 +88659,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.10.1",
+              "id": "bytes 1.11.1",
               "target": "bytes"
             },
             {
@@ -96584,7 +96646,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -96670,7 +96732,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -96977,7 +97039,7 @@
         "deps": {
           "common": [
             {
-              "id": "time 0.3.36",
+              "id": "time 0.3.47",
               "target": "time"
             }
           ],
@@ -98447,11 +98509,11 @@
     "by_address 1.1.0",
     "byte-unit 4.0.19",
     "byteorder 1.5.0",
-    "bytes 1.10.1",
+    "bytes 1.11.1",
     "cached 0.49.2",
     "canbench 0.4.0",
     "canbench-rs 0.4.0",
-    "candid 0.10.20",
+    "candid 0.10.22",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
     "cc 1.2.48",
@@ -98683,6 +98745,7 @@
     "scraper 0.17.1",
     "scrypt 0.11.0",
     "secp256k1 0.22.2",
+    "securefmt 0.1.5",
     "semver 1.0.27",
     "serde 1.0.228",
     "serde-bytes-repr 0.1.5",
@@ -98732,7 +98795,7 @@
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.6.0",
     "tikv-jemallocator 0.6.0",
-    "time 0.3.36",
+    "time 0.3.47",
     "tokio 1.48.0",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.4.0",
