@@ -29,10 +29,11 @@ enum PayloadValidationError {
     DisallowedSourceSubnetType(SubnetType),
     SourceSubnetIsSigningSubnet,
     UnhostedCanisterIds,
-    SimultaneousSubnetSplittingNotAllowed,
+    SplitAlreadyInProgress,
     EmptyDestinationCanisterIdRanges,
     EmptySourceCanisterIdRanges,
     NotEnabled,
+    DuplcateDestinationNodeIds,
 }
 
 #[cfg(not(test))]
@@ -224,7 +225,12 @@ impl Registry {
             })
             .collect();
 
-        if 2 * payload.destination_node_ids.len() != source_nodes.len() {
+        let destination_nodes: HashSet<&NodeId> = HashSet::from_iter(&payload.destination_node_ids);
+        if destination_nodes.len() != payload.destination_node_ids.len() {
+            return Err(PayloadValidationError::DuplcateDestinationNodeIds);
+        }
+
+        if 2 * destination_nodes.len() != source_nodes.len() {
             return Err(PayloadValidationError::UnequalSplit {
                 proposed_destination_subnet_size: payload.destination_node_ids.len(),
                 current_source_subnet_size: source_nodes.len(),
@@ -276,7 +282,7 @@ impl Registry {
                     .any(|(_, subnet_ids)| subnet_ids.contains(&payload.source_subnet_id))
             })
         {
-            return Err(PayloadValidationError::SimultaneousSubnetSplittingNotAllowed);
+            return Err(PayloadValidationError::SplitAlreadyInProgress);
         }
 
         Ok(source_subnet_record)
@@ -321,7 +327,7 @@ impl std::fmt::Display for PayloadValidationError {
                 f,
                 "Some the canister id ranges are not hosted by the source subnet"
             ),
-            PayloadValidationError::SimultaneousSubnetSplittingNotAllowed => {
+            PayloadValidationError::SplitAlreadyInProgress => {
                 write!(f, "Currently we allow only one subnet splitting at a time")
             }
             PayloadValidationError::EmptyDestinationCanisterIdRanges => {
@@ -335,6 +341,9 @@ impl std::fmt::Display for PayloadValidationError {
             }
             PayloadValidationError::NotEnabled => {
                 write!(f, "Subnet Splitting is not yet enabled on the IC")
+            }
+            PayloadValidationError::DuplcateDestinationNodeIds => {
+                write!(f, "The payload contains duplicate destination node ids")
             }
         }
     }
@@ -501,7 +510,18 @@ mod tests {
         SplitSubnetPayload {
             ..invariants_compliant_payload()
         },
-        Err(PayloadValidationError::SimultaneousSubnetSplittingNotAllowed)
+        Err(PayloadValidationError::SplitAlreadyInProgress)
+    )]
+    #[case::duplicate_destination_node_ids(
+        SubnetInfo {
+            is_already_being_split: true,
+            ..invariants_compliant_subnet_info()
+        },
+        SplitSubnetPayload {
+            destination_node_ids: vec![NODE_4, NODE_4],
+            ..invariants_compliant_payload()
+        },
+        Err(PayloadValidationError::DuplcateDestinationNodeIds)
     )]
     fn payload_validation_test(
         #[case] source_subnet_info: SubnetInfo,

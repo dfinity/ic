@@ -155,7 +155,7 @@ message RecoveryArgs {
 }
 
 message SubnetSplittingArgs {
-  /// The id of subnet the subnet will be split into.
+  /// The ID of the subnet created by the split.
   types.v1.SubnetId destination_subnet_id = 1;
 }
 

@@ -1017,7 +1017,7 @@ async fn split_subnet_(payload: SplitSubnetPayload) -> () {
         .await
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{LOG_PREFIX} Failed to split subnet: {error_message}"
+                "{LOG_PREFIX} Failed to trigger the subnet splitting: {error_message}"
             ))
         });
 

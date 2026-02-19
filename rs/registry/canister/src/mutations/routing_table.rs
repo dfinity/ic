@@ -330,9 +330,9 @@ impl Registry {
     ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
             routing_table_insert_subnet_and_reroute(
+                subnet_id_to_add,
                 routing_table,
                 canister_id_ranges,
-                subnet_id_to_add,
             )
             .unwrap();
         })
