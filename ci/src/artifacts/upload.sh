@@ -58,8 +58,8 @@ upload() {
     # using profile 'cf' to look up the right creds in ~/.aws/credentials
     log "uploading to Cloudflare"
     # unset env vars so it doesn't use AWS credentials
-    export AWS_ACCESS_KEY_ID="$CF_ACCESS_KEY_ID"
-    export AWS_SECRET_ACCESS_KEY="$CF_SECRET_ACCESS_KEY"
+    # export AWS_ACCESS_KEY_ID="$CF_ACCESS_KEY_ID"
+    # export AWS_SECRET_ACCESS_KEY="$CF_SECRET_ACCESS_KEY"
     rclone -v \
         "${rclone_common_flags[@]}" \
         --s3-provider=Cloudflare \
