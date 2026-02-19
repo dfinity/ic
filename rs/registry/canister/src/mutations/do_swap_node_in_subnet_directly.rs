@@ -317,6 +317,10 @@ pub enum SwapError {
     SubnetHalted {
         subnet_id: SubnetId,
     },
+    NonSevNodeToSevSubnet {
+        subnet_id: SubnetId,
+        node_id: PrincipalId,
+    },
 }
 
 impl Display for SwapError {
@@ -359,6 +363,9 @@ impl Display for SwapError {
                 ),
                 SwapError::SubnetHalted { subnet_id } => format!(
                     "Subnet {subnet_id} is halted and swapping is disabled. This is likely due to an on going recovery on that subnet"
+                ),
+                SwapError::NonSevNodeToSevSubnet { subnet_id, node_id } => format!(
+                    "Subnet {subnet_id} is an sev enabled subnet and the node {node_id} isn't sev enabled and cannot be used for this subnet"
                 ),
             }
         )
@@ -417,7 +424,7 @@ mod tests {
     };
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_nns_test_utils::registry::create_subnet_threshold_signing_pubkey_and_cup_mutations;
-    use ic_protobuf::registry::subnet::v1::SubnetType;
+    use ic_protobuf::registry::subnet::v1::{SubnetFeatures, SubnetType};
     use prost::Message;
 
     fn invalid_payloads_with_expected_errors() -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)>
@@ -522,11 +529,13 @@ mod tests {
         subnet_id: Option<SubnetId>,
         node_operator: PrincipalId,
         valid_pks: ValidNodePublicKeys,
+        sev: bool,
     }
 
     fn get_mutations_from_node_information(
         node_information: &[NodeInformation],
         halt_subnets: bool,
+        sev_subnets: bool,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
 
@@ -558,6 +567,8 @@ mod tests {
                     node_operator_id: node.node_operator.to_vec(),
                     xnet: Some(xnet_connection_endpoint),
                     http: Some(http_connection_endpoint),
+                    // If chip id is set that means the node is an SEV node
+                    chip_id: node.sev.then_some(vec![0, 1, 2, 3]),
                     ..Default::default()
                 },
                 node.valid_pks.clone(),
@@ -570,6 +581,16 @@ mod tests {
             let mut subnet_record = get_invariant_compliant_subnet_record(node_ids.clone());
             subnet_record.subnet_type = i32::from(SubnetType::System);
             subnet_record.is_halted = halt_subnets;
+            subnet_record.features = match subnet_record.features {
+                None => Some(SubnetFeatures {
+                    sev_enabled: Some(true),
+                    ..Default::default()
+                }),
+                Some(mut f) => {
+                    f.sev_enabled = Some(true);
+                    Some(f)
+                }
+            };
 
             mutations.push(upsert(
                 make_subnet_record_key(*subnet),
@@ -621,15 +642,18 @@ mod tests {
                     subnet_id: Some(subnet_id),
                     node_operator: node_operator_id,
                     valid_pks: old_node_keys,
+                    sev: false,
                 },
                 NodeInformation {
                     node_id: new_node_id,
                     subnet_id: None,
                     node_operator: node_operator_id,
                     valid_pks: new_node_keys,
+                    sev: false,
                 },
             ],
             halt_subnets,
+            false,
         );
         registry.apply_mutations_for_test(mutations);
 
@@ -915,14 +939,17 @@ mod tests {
                     subnet_id: Some(subnet_id),
                     node_operator: node_operator_id_1,
                     valid_pks: old_node_keys,
+                    sev: false,
                 },
                 NodeInformation {
                     node_id: new_node_id,
                     subnet_id: None,
                     node_operator: node_operator_id_2,
                     valid_pks: new_node_keys,
+                    sev: false,
                 },
             ],
+            false,
             false,
         );
         registry.apply_mutations_for_test(mutations);
@@ -995,14 +1022,17 @@ mod tests {
                     subnet_id: Some(subnet_id_1),
                     node_operator: node_operator_id_1,
                     valid_pks: old_node_keys,
+                    sev: false,
                 },
                 NodeInformation {
                     node_id: new_node_id,
                     subnet_id: Some(subnet_id_2),
                     node_operator: node_operator_id_2,
                     valid_pks: new_node_keys,
+                    sev: false,
                 },
             ],
+            false,
             false,
         );
         registry.apply_mutations_for_test(mutations);
@@ -1051,6 +1081,102 @@ mod tests {
             response, expected_err,
             "Expected err {expected_err:?} but got: {response:?}"
         );
+    }
+
+    #[test]
+    fn sev_subnet_prevent_swapping_in_non_sev() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+
+        let mut registry = invariant_compliant_registry(0);
+
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let (old_node_id, old_node_keys) = get_new_node_and_keys();
+        let (new_node_id, new_node_keys) = get_new_node_and_keys();
+        let node_operator_id = PrincipalId::new_user_test_id(1);
+
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
+
+        let mutations = get_mutations_from_node_information(
+            &[
+                NodeInformation {
+                    node_id: old_node_id,
+                    subnet_id: Some(subnet_id),
+                    node_operator: node_operator_id,
+                    valid_pks: old_node_keys,
+                    sev: true,
+                },
+                NodeInformation {
+                    node_id: new_node_id,
+                    subnet_id: None,
+                    node_operator: node_operator_id,
+                    valid_pks: new_node_keys,
+                    sev: false,
+                },
+            ],
+            false,
+            true,
+        );
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        let response = registry.swap_nodes_inner(payload, node_operator_id, now_system_time());
+        let expected_err = SwapError::NonSevNodeToSevSubnet {
+            subnet_id,
+            node_id: new_node_id.get(),
+        };
+
+        assert_eq!(response, Err(expected_err));
+    }
+
+    #[test]
+    fn sev_subnet_can_swap_out_non_sev_node() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+
+        let mut registry = invariant_compliant_registry(0);
+
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let (old_node_id, old_node_keys) = get_new_node_and_keys();
+        let (new_node_id, new_node_keys) = get_new_node_and_keys();
+        let node_operator_id = PrincipalId::new_user_test_id(1);
+
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
+
+        let mutations = get_mutations_from_node_information(
+            &[
+                NodeInformation {
+                    node_id: old_node_id,
+                    subnet_id: Some(subnet_id),
+                    node_operator: node_operator_id,
+                    valid_pks: old_node_keys,
+                    sev: false,
+                },
+                NodeInformation {
+                    node_id: new_node_id,
+                    subnet_id: None,
+                    node_operator: node_operator_id,
+                    valid_pks: new_node_keys,
+                    sev: true,
+                },
+            ],
+            false,
+            true,
+        );
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        let response = registry.swap_nodes_inner(payload, node_operator_id, now_system_time());
+
+        assert_eq!(response, Ok(()));
     }
 
     #[test]
