@@ -35,24 +35,24 @@ upload() {
     bucket_path="$2"
     bucket_dirname="$(dirname "$bucket_path")"
 
-    log "uploading to '$bucket_path' ('$artifact_localpath' -> '$bucket_dirname')"
-    log "uploading to AWS"
+    # log "uploading to '$bucket_path' ('$artifact_localpath' -> '$bucket_dirname')"
+    # log "uploading to AWS"
 
-    # NOTE: we upload a "directory" and narrow down the upload with --files-from so that only
-    # the current artifact is uploaded. Without this, --immutable does not work as expected.
-    # https://github.com/rclone/rclone/issues/4921
-    rclone \
-        "${rclone_common_flags[@]}" \
-        --s3-provider=AWS \
-        --s3-region=eu-central-1 \
-        --s3-env-auth \
-        copy \
-        --files-from <(echo "$(basename "$artifact_localpath")") \
-        --no-traverse \
-        --immutable \
-        "$(dirname "$artifact_localpath")" \
-        ":s3:dfinity-download-public/$bucket_dirname"
-    log "done uploading to AWS"
+    # # NOTE: we upload a "directory" and narrow down the upload with --files-from so that only
+    # # the current artifact is uploaded. Without this, --immutable does not work as expected.
+    # # https://github.com/rclone/rclone/issues/4921
+    # rclone \
+    #     "${rclone_common_flags[@]}" \
+    #     --s3-provider=AWS \
+    #     --s3-region=eu-central-1 \
+    #     --s3-env-auth \
+    #     copy \
+    #     --files-from <(echo "$(basename "$artifact_localpath")") \
+    #     --no-traverse \
+    #     --immutable \
+    #     "$(dirname "$artifact_localpath")" \
+    #     ":s3:dfinity-download-public/$bucket_dirname"
+    # log "done uploading to AWS"
 
     # Upload to Cloudflare's R2 (S3)
     # using profile 'cf' to look up the right creds in ~/.aws/credentials
