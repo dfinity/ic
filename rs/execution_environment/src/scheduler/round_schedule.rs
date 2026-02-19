@@ -370,6 +370,10 @@ impl RoundSchedule {
         state: &mut ReplicatedState,
         fully_executed_canister_ids: BTreeSet<CanisterId>,
     ) {
+        fn true_priority(canister_priority: &CanisterPriority) -> AccumulatedPriority {
+            canister_priority.accumulated_priority - canister_priority.priority_credit
+        }
+
         let number_of_canisters = state.canister_states().len();
 
         // Charge canisters for full executions in this round.
@@ -393,8 +397,7 @@ impl RoundSchedule {
                 RoundSchedule::apply_priority_credit(canister_priority);
             }
 
-            free_allocation -=
-                canister_priority.accumulated_priority - canister_priority.priority_credit;
+            free_allocation -= true_priority(canister_priority);
         }
 
         // Only ever apply positive free allocation. If the sum of all canisters'
@@ -412,6 +415,18 @@ impl RoundSchedule {
         // a default priority when not found), so this iteration covers all canisters.
         for (_, canister_priority) in subnet_schedule.iter_mut() {
             let canister_free_allocation = free_allocation / remaining_canisters;
+
+            // Max out at an arbitrary 5 rounds of accumulated priority.
+            //
+            // Without this, a canister with (nearly) 100 compute allocation could
+            // accumulate arbitrarily high priority from priority credit refunds whenever
+            // it has a long execution aborted.
+            const AP_ROUNDS_MAX: i64 = 5;
+            let canister_free_allocation = std::cmp::min(
+                canister_free_allocation,
+                ONE_HUNDRED_PERCENT * AP_ROUNDS_MAX - true_priority(canister_priority),
+            );
+
             canister_priority.accumulated_priority += canister_free_allocation;
             free_allocation -= canister_free_allocation;
 
