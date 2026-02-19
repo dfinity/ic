@@ -41,7 +41,7 @@ Edge cases for method names in update and query calls:
 
 end::catalog[] */
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use candid::Principal;
 use ic_agent::{Agent, AgentError};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -444,6 +444,7 @@ async fn deploy_wasm_to_fresh_canister(
 }
 
 fn method_name_edge_cases(env: TestEnv) {
+    let logger = env.logger();
     let snapshot = env.topology_snapshot();
 
     // We use an application subnet in this test
@@ -458,7 +459,9 @@ fn method_name_edge_cases(env: TestEnv) {
     block_on(async {
         let outer_futs: Vec<_> = [(subnet_replica_url, false), (api_bn_url, true)]
             .into_iter()
-            .map(|(url, is_api_bn)| async move {
+            .map(|(url, is_api_bn)| {
+                let logger = logger.clone();
+                async move {
                 let client = reqwest::Client::builder()
                     .danger_accept_invalid_certs(true)
                     .build()
@@ -598,81 +601,139 @@ fn method_name_edge_cases(env: TestEnv) {
                     );
                 }
 
+                // When sending a very large request body, the server may close the
+                // connection while the client is still streaming, causing a TransportError.
+                // We retry on TransportError to get the deterministic HTTP error response.
                 let too_long_method_name = 'x'.to_string().repeat(3 << 20);
-                let err = agent
-                    .update(&canister_id, &too_long_method_name)
-                    .call_and_wait()
-                    .await
-                    .unwrap_err();
-
-                // When sending a very large request body, the server may either:
-                // 1. Read the full body and respond with HTTP 413 Payload Too Large, or
-                // 2. Close the connection while the client is still sending the body,
-                //    resulting in a ConnectionReset (errno 104) or BrokenPipe (errno 32).
-                // Both are valid server behaviors for rejecting oversized requests.
-                let payload_too_large = |err: AgentError| match err {
-                    AgentError::HttpError(payload) => {
-                        assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
+                ic_system_test_driver::retry_with_msg_async!(
+                    format!("update 'x' * 3*2^20 (is_api_bn={})", is_api_bn),
+                    &logger,
+                    Duration::from_secs(60),
+                    Duration::from_secs(5),
+                    || async {
+                        match agent
+                            .update(&canister_id, &too_long_method_name)
+                            .call_and_wait()
+                            .await
+                        {
+                            Err(AgentError::TransportError(e)) => {
+                                bail!("transport error, retrying: {e}")
+                            }
+                            Err(AgentError::HttpError(ref payload))
+                                if is_api_bn
+                                    && payload.status == StatusCode::BAD_REQUEST.as_u16() =>
+                            {
+                                Ok(())
+                            }
+                            Err(AgentError::HttpError(ref payload))
+                                if !is_api_bn
+                                    && payload.status
+                                        == StatusCode::PAYLOAD_TOO_LARGE.as_u16() =>
+                            {
+                                Ok(())
+                            }
+                            other => panic!(
+                                "update 'x' * 3*2^20 (is_api_bn={}): unexpected result: {:?}",
+                                is_api_bn, other
+                            ),
+                        }
                     }
-                    AgentError::TransportError(_) => {}
-                    _ => panic!("Unexpected error: {:?}", err),
-                };
+                )
+                .await
+                .unwrap();
 
-                if is_api_bn {
-                    // The API BN has more generous limits, so it still responds with HTTP 400 Bad Request.
-                    // A TransportError is also acceptable if the server closes the connection
-                    // while the client is still sending the oversized body.
-                    assert!(
-                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16())
-                        || matches!(err, AgentError::TransportError(_)),
-                        "api bn update for 'x' * 3**20: got error {}",
-                        err
-                    );
-                } else {
-                    payload_too_large(err);
-                }
-
-                let err = agent
-                    .query(&canister_id, &too_long_method_name)
-                    .call()
-                    .await
-                    .unwrap_err();
-
-                if is_api_bn {
-                    // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
-                    // A TransportError is also acceptable if the server closes the connection
-                    // while the client is still sending the oversized body.
-                    assert!(
-                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16())
-                        || matches!(err, AgentError::TransportError(_)),
-                        "api bn query for 'x' * 3**20: got error {}",
-                        err
-                    );
-                } else {
-                    // When bypassing the API BN, the replica responds with a reject.
-                    // A TransportError is also acceptable if the server closes the connection
-                    // while the client is still sending the oversized body.
-                    assert!(
-                        matches!(err, AgentError::UncertifiedReject { .. })
-                        || matches!(err, AgentError::TransportError(_)),
-                        "direct replica query for 'x' * 3**20: got error {}",
-                        err
-                    );
-                }
+                ic_system_test_driver::retry_with_msg_async!(
+                    format!("query 'x' * 3*2^20 (is_api_bn={})", is_api_bn),
+                    &logger,
+                    Duration::from_secs(60),
+                    Duration::from_secs(5),
+                    || async {
+                        match agent
+                            .query(&canister_id, &too_long_method_name)
+                            .call()
+                            .await
+                        {
+                            Err(AgentError::TransportError(e)) => {
+                                bail!("transport error, retrying: {e}")
+                            }
+                            Err(AgentError::HttpError(ref payload))
+                                if is_api_bn
+                                    && payload.status == StatusCode::BAD_REQUEST.as_u16() =>
+                            {
+                                Ok(())
+                            }
+                            Err(AgentError::UncertifiedReject { .. }) if !is_api_bn => Ok(()),
+                            other => panic!(
+                                "query 'x' * 3*2^20 (is_api_bn={}): unexpected result: {:?}",
+                                is_api_bn, other
+                            ),
+                        }
+                    }
+                )
+                .await
+                .unwrap();
 
                 let too_long_method_name = 'x'.to_string().repeat(5 << 20);
-                let err = agent
-                    .update(&canister_id, &too_long_method_name)
-                    .call_and_wait()
-                    .await
-                    .unwrap_err();
-                payload_too_large(err);
-                let err = agent
-                    .query(&canister_id, &too_long_method_name)
-                    .call()
-                    .await
-                    .unwrap_err();
-                payload_too_large(err);
+                ic_system_test_driver::retry_with_msg_async!(
+                    "update 'x' * 5*2^20",
+                    &logger,
+                    Duration::from_secs(60),
+                    Duration::from_secs(5),
+                    || async {
+                        match agent
+                            .update(&canister_id, &too_long_method_name)
+                            .call_and_wait()
+                            .await
+                        {
+                            Err(AgentError::TransportError(e)) => {
+                                bail!("transport error, retrying: {e}")
+                            }
+                            Err(AgentError::HttpError(ref payload))
+                                if payload.status
+                                    == StatusCode::PAYLOAD_TOO_LARGE.as_u16() =>
+                            {
+                                Ok(())
+                            }
+                            other => panic!(
+                                "update 'x' * 5*2^20: unexpected result: {:?}",
+                                other
+                            ),
+                        }
+                    }
+                )
+                .await
+                .unwrap();
+
+                ic_system_test_driver::retry_with_msg_async!(
+                    "query 'x' * 5*2^20",
+                    &logger,
+                    Duration::from_secs(60),
+                    Duration::from_secs(5),
+                    || async {
+                        match agent
+                            .query(&canister_id, &too_long_method_name)
+                            .call()
+                            .await
+                        {
+                            Err(AgentError::TransportError(e)) => {
+                                bail!("transport error, retrying: {e}")
+                            }
+                            Err(AgentError::HttpError(ref payload))
+                                if payload.status
+                                    == StatusCode::PAYLOAD_TOO_LARGE.as_u16() =>
+                            {
+                                Ok(())
+                            }
+                            other => panic!(
+                                "query 'x' * 5*2^20: unexpected result: {:?}",
+                                other
+                            ),
+                        }
+                    }
+                )
+                .await
+                .unwrap();
+                }
             })
             .collect();
         futures::future::join_all(outer_futs).await;
