@@ -405,7 +405,8 @@ impl RoundSchedule {
             free_allocation = ZERO;
         }
 
-        // Distribute the free allocation equally to all canisters.
+        // Fully distribute the free allocation among all canisters, ensuring that we
+        // end up with exactly zero at the end of the loop.
         let mut remaining_canisters = number_of_canisters as i64;
         // We called `SubnetSchedule::get_mut()` for all canisters above (which inserts
         // a default priority when not found), so this iteration covers all canisters.
