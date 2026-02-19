@@ -2942,9 +2942,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-utils"
-version = "0.8.19"
+version = "0.8.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
+checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crossterm"
@@ -5973,9 +5973,9 @@ dependencies = [
 
 [[package]]
 name = "ic-bn-lib"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40500560a2a8de5f8a6028ade52f832cd36d18c5510c9b1aba74e121e55203ff"
+checksum = "bebf3f7882b98efacbbf60f2b215d4856f66aa3d5367eb0c9273a3f10bad676b"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -8451,25 +8451,21 @@ dependencies = [
 
 [[package]]
 name = "moka"
-version = "0.12.8"
+version = "0.12.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32cf62eb4dd975d2dde76432fb1075c49e3ee2331cf36f1f8fd4b66550d32b6f"
+checksum = "a3dec6bd31b08944e08b58fd99373893a6c17054d6f3ea5006cc894f4f4eee2a"
 dependencies = [
  "async-lock",
- "async-trait",
  "crossbeam-channel",
  "crossbeam-epoch",
  "crossbeam-utils",
+ "equivalent",
  "event-listener 5.3.1",
  "futures-util",
- "once_cell",
  "parking_lot 0.12.5",
- "quanta",
- "rustc_version",
+ "portable-atomic",
  "smallvec",
  "tagptr",
- "thiserror 1.0.68",
- "triomphe",
  "uuid",
 ]
 
@@ -14221,12 +14217,6 @@ checksum = "761e8d5ad7ce14bb82b7e61ccc0ca961005a275a060b9644a2431aa11553c2ff"
 dependencies = [
  "serde_json",
 ]
-
-[[package]]
-name = "triomphe"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0eee8098afad3fb0c54a9007aab6804558410503ad676d4633f9c2559a00ac0f"
 
 [[package]]
 name = "trust-dns-proto"
