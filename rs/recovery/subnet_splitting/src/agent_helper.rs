@@ -119,7 +119,7 @@ impl AgentHelper {
     }
 
     /// Reads the state tree and prunes it to contain only the following paths:
-    /// * /subnet_id/$subnet_id/public_key
+    /// * /subnet/$subnet_id/public_key
     /// * /canister_ranges/$subnet_id
     ///
     /// See: https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-subnet
