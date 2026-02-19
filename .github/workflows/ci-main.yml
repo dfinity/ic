@@ -261,7 +261,7 @@ jobs:
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
-          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+     #     credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
@@ -320,7 +320,7 @@ jobs:
         with:
           name: macOS Intel artifacts
           upload-command: bazel run --check_up_to_date //:upload-artifacts
-          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+    #      credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
       - name: Purge Bazel Output
         if: always()
@@ -464,7 +464,7 @@ jobs:
         with:
           name: arm64 artifacts
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
-          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+      #    credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
   python-ci-tests:
     name: Python CI Tests
