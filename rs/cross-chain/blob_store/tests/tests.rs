@@ -82,6 +82,32 @@ mod get {
     }
 }
 
+mod upgrade {
+    use crate::{Setup, sha256_hex};
+    use candid::Principal;
+
+    #[test]
+    fn should_preserve_data_after_upgrade() {
+        let setup = Setup::default();
+        let blob_store = setup.blob_store();
+
+        let data = b"hello".to_vec();
+        let hash = sha256_hex(&data);
+        assert_eq!(
+            blob_store.insert(Setup::CONTROLLER, &hash, data.clone()),
+            Ok(hash.clone())
+        );
+        assert_eq!(
+            blob_store.get(Principal::anonymous(), &hash),
+            Ok(data.clone())
+        );
+
+        setup.upgrade();
+
+        assert_eq!(blob_store.get(Principal::anonymous(), &hash), Ok(data));
+    }
+}
+
 pub struct Setup {
     pub env: PocketIc,
     pub canister_id: Principal,
@@ -101,6 +127,17 @@ impl Setup {
             Some(Self::CONTROLLER),
         );
         Self { env, canister_id }
+    }
+
+    pub fn upgrade(&self) {
+        self.env
+            .upgrade_canister(
+                self.canister_id,
+                blob_store_wasm(),
+                Encode!(&()).unwrap(),
+                Some(Self::CONTROLLER),
+            )
+            .expect("upgrade failed");
     }
 
     pub fn blob_store(&self) -> BlobStoreCanister<'_> {
