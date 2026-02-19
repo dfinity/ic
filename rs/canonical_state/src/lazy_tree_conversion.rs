@@ -13,6 +13,7 @@ use ic_crypto_tree_hash::Label;
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ExecutionState, ReplicatedState, Stream,
     canister_state::CanisterState,
@@ -914,6 +915,11 @@ fn subnets_as_tree<'a>(
                         subnet_id == own_subnet_id,
                         "metrics",
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
+                    )
+                    .with_tree_if(
+                        certification_version >= CertificationVersion::V25,
+                        "type",
+                        string(subnet_type_as_string(subnet_topology.subnet_type)),
                     ),
             )
         },
@@ -964,4 +970,15 @@ fn canister_metadata_as_tree(
         certification_version,
         mk_tree: |_name, section, _version| Blob(section.content(), Some(section.hash())),
     })
+}
+
+/// Helper function to turn a subnet type into a string.
+/// This is intentionally explicitly implemented here, so that the state tree representation cannot be changed outside this crate, as opposed
+/// to calling something like `subnet_type.to_string()`.
+fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
+    match subnet_type {
+        SubnetType::Application => "application",
+        SubnetType::System => "system",
+        SubnetType::VerifiedApplication => "verified_application",
+    }
 }

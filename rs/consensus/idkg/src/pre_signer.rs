@@ -3126,8 +3126,9 @@ mod tests {
         );
         let tid = params.transcript_id();
         let (dealings, supports) = get_dealings_and_support(&env, &params);
+        let t: TestTranscriptParams = (&params).into();
         let block_reader =
-            TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
+            TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![t.clone()]);
         let crypto = first_crypto(&env);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -3210,6 +3211,24 @@ mod tests {
                 assert!(
                     change_set.is_empty(),
                     "expected empty change set, got {change_set:?}"
+                );
+
+                // transcript is in source_subnet_xnet_transcripts: should not be built locally
+                let block_reader_xnet =
+                    TestIDkgBlockReader::for_pre_signer_test(tid.source_height(), vec![t.clone()])
+                        .with_source_subnet_xnet_transcripts(vec![t.transcript_params_ref]);
+                let change_set = pre_signer.build_transcripts(&idkg_pool, &block_reader_xnet);
+                assert!(
+                    change_set.is_empty(),
+                    "expected empty change set when transcript is in source_subnet_xnet_transcripts, got {change_set:?}"
+                );
+
+                // after adding the transcript to the pool, build_transcripts should not build it again
+                idkg_pool.apply(vec![IDkgChangeAction::AddTranscript(completed_transcript)]);
+                let change_set = pre_signer.build_transcripts(&idkg_pool, &block_reader);
+                assert!(
+                    change_set.is_empty(),
+                    "expected empty change set when transcript already in pool, got {change_set:?}"
                 );
             })
         });

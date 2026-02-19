@@ -215,8 +215,12 @@ pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
-// It usually takes below 60 secs to install nns canisters.
-const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+// NNS canister installation involves sequential canister creation at specific
+// IDs followed by parallel installation and controller setup. With ~12
+// canisters being created sequentially (~5s each) plus parallel installation
+// and controller setting, this typically takes 120-180s but can exceed 160s
+// under load.
+const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(300);
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
