@@ -418,9 +418,9 @@ impl RoundSchedule {
 
             // Max out at an arbitrary 5 rounds of accumulated priority.
             //
-            // Without this, a canister with (nearly) 100 compute allocation could
-            // accumulate arbitrarily high priority from priority credit refunds whenever
-            // it has a long execution aborted.
+            // Without this, a canister with 100 compute allocation will accumulate 100
+            // priority it can then never spend for every round of an aborted DTS execution
+            // (priority credit is increased by 100 per round, but reset on abort).
             const AP_ROUNDS_MAX: i64 = 5;
             let canister_free_allocation = std::cmp::min(
                 canister_free_allocation,
