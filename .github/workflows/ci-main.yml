@@ -486,6 +486,8 @@ jobs:
     runs-on: namespace-profile-ubuntu-24-04
     container:
       image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
+      options: >-
+         --privileged
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - *checkout
