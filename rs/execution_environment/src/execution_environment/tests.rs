@@ -718,11 +718,17 @@ fn stopping_a_stopping_canister_updates_ingress_history() {
 }
 
 #[test]
-fn stopping_a_canister_with_incorrect_controller_fails() {
+fn stopping_a_canister_with_incorrect_controller_or_subnet_admin_fails() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.universal_canister().unwrap();
     let controller = test.user_id();
-    test.set_user_id(user_test_id(13));
+    let subnet_admins = test.state().get_own_subnet_admins();
+    let test_user = user_test_id(13);
+    // Set a user that is a non-controller and not a subnet admin.
+    test.set_user_id(test_user);
+    assert_ne!(controller, test_user);
+    assert!(!subnet_admins.contains(test_user.get_ref()));
+
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
     let IngressStatus::Known {
@@ -735,17 +741,20 @@ fn stopping_a_canister_with_incorrect_controller_fails() {
         panic!("Unexpected ingress status {ingress_status:?}")
     };
     assert_eq!(receiver, ic00::IC_00.get());
-    assert_eq!(user_id, user_test_id(13));
+    assert_eq!(user_id, test_user);
     assert_eq!(time, test.time());
     error.assert_contains(
-        ErrorCode::CanisterInvalidController,
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
         &format!(
-            "Only the controllers of the canister {} can control it.\n\
-                    Canister's controllers: {}\n\
-                    Sender's ID: {}",
-            canister_id,
-            controller.get(),
-            user_test_id(13).get()
+            "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions.\n\
+            Canister's controllers: {controller}\n\
+            Subnet admins: {}\n\
+            Sender's ID: {test_user}",
+            subnet_admins
+                .iter()
+                .map(|id| format!("{id}"))
+                .collect::<Vec<String>>()
+                .join(" "),
         ),
     );
 }
