@@ -673,7 +673,8 @@ fn stress_timer_only_after_upgrade() {
         CK_BTC_INDEX_CANISTER_ID,
         "ckBTC",
     );
-    const TIMER_STEPS: u32 = 200;
+    // Keep low so "last N [dbg] lines" is not flooded by later timer invocations.
+    const TIMER_STEPS: u32 = 5;
     const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
@@ -776,7 +777,8 @@ fn stress_timer_only_after_upgrade() {
         "s3zol-vqaaa-aaaar-qacpa-cai",
         "ckETH",
     );
-    const TIMER_STEPS: u32 = 200;
+    // Keep low so "last N [dbg] lines" is not flooded by later timer invocations.
+    const TIMER_STEPS: u32 = 5;
     const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
 
     let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {

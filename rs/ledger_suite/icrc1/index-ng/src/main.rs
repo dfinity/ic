@@ -1,8 +1,7 @@
-#![allow(deprecated)]
-
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{SpanName, SpanStats, measure_span};
+use ic_cdk::call::Call;
 use ic_cdk::trap;
 use ic_cdk::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
@@ -560,14 +559,14 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
 
     #[cfg(feature = "debug_dlmalloc")]
     let supported_standard_names = {
-        // Use call_raw and log raw reply bytes (hex) before any Candid decode, then return
-        // empty to avoid panic and get insight into what the ledger returned.
-        ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: before call_raw");
-        let arg = candid::Encode!(&()).expect("empty arg");
-        let res = ic_cdk::api::call::call_raw(ledger_id, "icrc1_supported_standards", &arg, 0).await;
-        ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: after call_raw");
+        // Use Call::unbounded_wait (new API) and log raw reply bytes (hex) before any Candid
+        // decode, then return empty to avoid panic and get insight into what the ledger returned.
+        ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: before Call::unbounded_wait");
+        let res = Call::unbounded_wait(ledger_id, "icrc1_supported_standards").await;
+        ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: after Call::unbounded_wait");
         match res {
-            Ok(reply_bytes) => {
+            Ok(response) => {
+                let reply_bytes = response.into_bytes();
                 log_reply_hex_persistent(
                     "icrc1_supported_standards",
                     &reply_bytes,
@@ -576,14 +575,13 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
                 ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: returning empty (debug_dlmalloc)");
                 vec![]
             }
-            Err((code, msg)) => {
-                ic0_debug::debug_print_persistent(&format!("[dbg] get_supported_standards_from_ledger: call_raw err {:?} {}", code, msg));
+            Err(e) => {
+                ic0_debug::debug_print_persistent(&format!("[dbg] get_supported_standards_from_ledger: Call err {}", e));
                 log!(
                     P0,
-                    "[get_supported_standards_from_ledger]: failed (call_raw) on ledger {}. Error code: {:?} message: {}",
+                    "[get_supported_standards_from_ledger]: failed (Call::unbounded_wait) on ledger {}. Error: {}",
                     ledger_id,
-                    code,
-                    msg
+                    e
                 );
                 vec![]
             }
@@ -592,21 +590,25 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
 
     #[cfg(not(feature = "debug_dlmalloc"))]
     let supported_standard_names = {
-        let res = ic_cdk::api::call::call::<_, (Vec<StandardRecord>,)>(
-            ledger_id,
-            "icrc1_supported_standards",
-            (),
-        )
-        .await;
-        match res {
-            Ok((res,)) => res.into_iter().map(|s| s.name).collect::<Vec<_>>(),
-            Err((code, msg)) => {
+        match Call::unbounded_wait(ledger_id, "icrc1_supported_standards").await {
+            Ok(response) => match response.candid::<(Vec<StandardRecord>,)>() {
+                Ok((standards,)) => standards.into_iter().map(|s| s.name).collect::<Vec<_>>(),
+                Err(e) => {
+                    log!(
+                        P0,
+                        "[get_supported_standards_from_ledger]: candid decode failed on ledger {}. Error: {}",
+                        ledger_id,
+                        e
+                    );
+                    vec![]
+                }
+            },
+            Err(e) => {
                 log!(
                     P0,
-                    "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}. Error code: {:?} message: {}",
+                    "[get_supported_standards_from_ledger]: failed to call on ledger {}. Error: {}",
                     ledger_id,
-                    code,
-                    msg
+                    e
                 );
                 vec![]
             }
@@ -638,9 +640,11 @@ where
     ic_cdk::eprintln!("{} measured_call: entry method={}", DIAG_PREFIX, method);
     let req = measure_span(&PROFILING_DATA, encode_span_name, || Encode!(i))
         .map_err(|err| format!("failed to candid encode the input {i:?}: {err}"))?;
-    let res = ic_cdk::api::call::call_raw(id, method, &req, 0)
+    let response = Call::unbounded_wait(id, method)
+        .with_raw_args(&req)
         .await
-        .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
+        .map_err(|e| format!("call failed: {e}"))?;
+    let res = response.into_bytes();
     ic_cdk::eprintln!(
         "{} measured_call: before Decode method={} response_len={}",
         DIAG_PREFIX,
