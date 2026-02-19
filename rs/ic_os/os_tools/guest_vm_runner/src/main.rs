@@ -575,6 +575,9 @@ impl GuestVmService {
         )
         .context("Failed to assemble config media")?;
 
+        let available_hugepages_gib = Self::read_available_hugepages_gib();
+        println!("Available huge pages: {} GiB", available_hugepages_gib);
+
         let vm_config = generate_vm_config(
             &self.hostos_config,
             config_media.path(),
@@ -582,6 +585,8 @@ impl GuestVmService {
             &self.disk_device,
             &self.vm_serial_log_path,
             self.guest_vm_type,
+            available_hugepages_gib,
+            &self.metrics,
         )
         .context("Failed to generate GuestOS VM config")?;
 
@@ -651,6 +656,33 @@ impl GuestVmService {
         match guest_vm_type {
             GuestVMType::Default => Path::new(DEFAULT_METRICS_FILE_PATH),
             GuestVMType::Upgrade => Path::new(UPGRADE_METRICS_FILE_PATH),
+        }
+    }
+
+    /// Read available huge pages in GiB from /sys/kernel/mm/hugepages/hugepages-2048kB/free_hugepages
+    /// Returns 0 if the file cannot be read or parsed.
+    fn read_available_hugepages_gib() -> u32 {
+        const HUGEPAGE_SIZE_KB: u32 = 2048; // 2MB hugepages
+        const KB_PER_GIB: u32 = 1024 * 1024;
+        const HUGEPAGES_PATH: &str = "/sys/kernel/mm/hugepages/hugepages-2048kB/free_hugepages";
+
+        match std::fs::read_to_string(HUGEPAGES_PATH) {
+            Ok(content) => {
+                match content.trim().parse::<u32>() {
+                    Ok(free_hugepages) => {
+                        // Convert hugepages to GiB
+                        (free_hugepages * HUGEPAGE_SIZE_KB) / KB_PER_GIB
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to parse hugepages: {e}");
+                        0
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to read hugepages: {e}");
+                0
+            }
         }
     }
 
@@ -1084,6 +1116,11 @@ mod tests {
                 "GuestOS virtual machine launched",
                 "2001:db8::6800:d8ff:fecb:f597",
             ])
+            .unwrap();
+
+        // No hugepages available in the test environment
+        service
+            .check_metrics_contains("hostos_guestos_hugepages_enabled{vm_type=\"default\"} 0")
             .unwrap();
 
         // Ensure that the config media and kernel exist

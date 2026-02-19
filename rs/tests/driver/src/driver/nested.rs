@@ -455,6 +455,6 @@ impl TestEnvAttribute for UnassignedRecordConfig {
 pub fn bare_metal_vm_spec() -> VmSpec {
     VmSpec {
         v_cpus: 64,
-        memory_ki_b: 490 * 1024 * 1024,
+        memory_ki_b: 475 * 1024 * 1024,
     }
 }

@@ -30,6 +30,7 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/intel-microcode"): "/etc/default/intel-microcode",
     Label("early-boot/initramfs-tools/hostos/modules"): "/etc/initramfs-tools/modules",
     Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id",
+    Label("early-boot/initramfs-tools/hostos/setup-hugepages/setup-hugepages"): "/etc/initramfs-tools/scripts/init-bottom/setup-hugepages",
 
     # misc
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",

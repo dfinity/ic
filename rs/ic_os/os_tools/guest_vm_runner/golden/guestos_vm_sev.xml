@@ -8,6 +8,9 @@
   </metadata>
   <memory unit='GiB'>12</memory>
   <currentMemory unit='GiB'>12</currentMemory>
+  <memoryBacking>
+    <hugepages/>
+  </memoryBacking>
   <vcpu placement='static'>56</vcpu>
   <cpu mode='host-passthrough' migratable='off'>
     <cache mode='passthrough'/>
