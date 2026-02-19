@@ -1026,7 +1026,7 @@ fn stop_a_stopped_canister_from_another_canister() {
 }
 
 #[test]
-fn stop_a_canister_with_incorrect_controller_or_subnet_admin_fails() {
+fn stop_a_canister_with_incorrect_controller_fails() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
@@ -1047,12 +1047,6 @@ fn stop_a_canister_with_incorrect_controller_or_subnet_admin_fails() {
             .controllers()
             .contains(test_user.get_ref())
     );
-    assert!(
-        !test
-            .state()
-            .get_own_subnet_admins()
-            .contains(test_user.get_ref())
-    );
 
     let err = test
         .subnet_message(
@@ -1061,12 +1055,9 @@ fn stop_a_canister_with_incorrect_controller_or_subnet_admin_fails() {
         )
         .unwrap_err();
 
-    assert_eq!(
-        err.code(),
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
-    );
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+        "Only the controllers of the canister {canister_id} can control it"
     )));
     // Canister should still be running.
     assert_eq!(
@@ -1109,12 +1100,6 @@ fn start_a_canister_with_incorrect_controller_or_subnet_admin_fails() {
             .controllers()
             .contains(test_user.get_ref())
     );
-    assert!(
-        !test
-            .state()
-            .get_own_subnet_admins()
-            .contains(test_user.get_ref())
-    );
 
     let err = test
         .subnet_message(
@@ -1123,12 +1108,9 @@ fn start_a_canister_with_incorrect_controller_or_subnet_admin_fails() {
         )
         .unwrap_err();
 
-    assert_eq!(
-        err.code(),
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
-    );
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+        "Only the controllers of the canister {canister_id} can control it"
     )));
 }
 
@@ -1412,7 +1394,7 @@ fn start_a_stopping_canister_with_stop_contexts() {
 }
 
 #[test]
-fn get_canister_status_with_incorrect_controller_or_subnet_admin_fails() {
+fn get_canister_status_with_incorrect_controller_fails() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
@@ -1426,21 +1408,12 @@ fn get_canister_status_with_incorrect_controller_or_subnet_admin_fails() {
             .controllers()
             .contains(test_user.get_ref())
     );
-    assert!(
-        !test
-            .state()
-            .get_own_subnet_admins()
-            .contains(test_user.get_ref())
-    );
 
     let err = test.canister_status(canister_id).unwrap_err();
 
-    assert_eq!(
-        err.code(),
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
-    );
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+        "Only the controllers of the canister {canister_id} can control it"
     )));
 }
 
@@ -1865,13 +1838,12 @@ fn delete_non_existing_canister_fails() {
 }
 
 #[test]
-fn delete_canister_with_incorrect_controller_or_subnet_admin_fails() {
+fn delete_canister_with_incorrect_controller_fails() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
 
-    // Switch the user to attempt to delete the canister with as a non-controller
-    // and not a subnet admin.
+    // Switch the user to attempt to delete the canister with a non-controller.
     let test_user = user_test_id(42);
     test.set_user_id(test_user);
     assert!(
@@ -1880,21 +1852,12 @@ fn delete_canister_with_incorrect_controller_or_subnet_admin_fails() {
             .controllers()
             .contains(test_user.get_ref())
     );
-    assert!(
-        !test
-            .state()
-            .get_own_subnet_admins()
-            .contains(test_user.get_ref())
-    );
 
     let err = test.delete_canister(canister_id).unwrap_err();
 
-    assert_eq!(
-        err.code(),
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
-    );
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+        "Only the controllers of the canister {canister_id} can control it"
     )));
     // Canister should still be there.
     assert!(test.state().canister_state(&canister_id).is_some());
@@ -4942,18 +4905,9 @@ fn uninstall_code_with_wrong_controller_fails() {
             .controllers()
             .contains(test_user.get_ref())
     );
-    assert!(
-        !test
-            .state()
-            .get_own_subnet_admins()
-            .contains(test_user.get_ref())
-    );
 
     let err = test.uninstall_code(canister_id).unwrap_err();
-    assert_eq!(
-        err.code(),
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
-    );
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
 }
 
 /* Test that a given operation on a canister clears

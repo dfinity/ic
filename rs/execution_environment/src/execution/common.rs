@@ -360,17 +360,30 @@ pub(crate) fn validate_controller_or_subnet_admin(
     subnet_admins: &BTreeSet<PrincipalId>,
     sender: &PrincipalId,
 ) -> Result<(), CanisterManagerError> {
-    if !canister.controllers().contains(sender) && !subnet_admins.contains(sender) {
-        return Err(
-            CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin {
+    // In case the subnet admins list is empty, return the same error as
+    // `validate_controller` would to maintain backward compatibility.
+    if subnet_admins.is_empty() {
+        if !canister.controllers().contains(sender) {
+            return Err(CanisterManagerError::CanisterInvalidController {
                 canister_id: canister.canister_id(),
                 controllers_expected: canister.system_state.controllers.clone(),
-                subnet_admins_expected: subnet_admins.clone(),
-                caller: *sender,
-            },
-        );
+                controller_provided: *sender,
+            });
+        }
+        Ok(())
+    } else {
+        if !subnet_admins.contains(sender) {
+            return Err(
+                CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin {
+                    canister_id: canister.canister_id(),
+                    controllers_expected: canister.system_state.controllers.clone(),
+                    subnet_admins_expected: subnet_admins.clone(),
+                    caller: *sender,
+                },
+            );
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Unregisters the callback corresponding to the given response.
