@@ -55,7 +55,6 @@ upload() {
     log "done uploading to AWS"
 
     # Upload to Cloudflare's R2 (S3)
-    # using profile 'cf' to look up the right creds in ~/.aws/credentials
     log "uploading to Cloudflare"
     AWS_ACCESS_KEY_ID="$CF_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$CF_SECRET_ACCESS_KEY" rclone -v \
         "${rclone_common_flags[@]}" \
