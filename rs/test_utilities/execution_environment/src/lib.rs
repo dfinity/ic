@@ -132,12 +132,14 @@ pub fn generate_subnets(
     own_subnet_type: SubnetType,
     own_subnet_size: usize,
     own_subnet_cost_schedule: CanisterCyclesCostSchedule,
+    own_subnet_admins: BTreeSet<PrincipalId>,
 ) -> BTreeMap<SubnetId, SubnetTopology> {
     let mut result: BTreeMap<SubnetId, SubnetTopology> = Default::default();
     for subnet_id in subnet_ids {
         let mut subnet_type = SubnetType::System;
         let mut nodes = btreeset! {};
         let mut cost_schedule = CanisterCyclesCostSchedule::Normal;
+        let mut subnet_admins = BTreeSet::new();
         if subnet_id == own_subnet_id {
             subnet_type = own_subnet_type;
             cost_schedule = own_subnet_cost_schedule;
@@ -145,6 +147,7 @@ pub fn generate_subnets(
             for i in 0..own_subnet_size {
                 nodes.insert(node_test_id(i as u64));
             }
+            subnet_admins = own_subnet_admins.clone();
         }
         let public_key = if subnet_id == nns_subnet_id {
             root_key.clone().unwrap_or(vec![1, 2, 3, 4])
@@ -160,6 +163,7 @@ pub fn generate_subnets(
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule,
+                subnet_admins,
             },
         );
     }
@@ -174,6 +178,7 @@ pub fn generate_network_topology(
     subnets: Vec<SubnetId>,
     routing_table: Option<RoutingTable>,
     own_subnet_cost_schedule: CanisterCyclesCostSchedule,
+    own_subnet_admins: BTreeSet<PrincipalId>,
 ) -> NetworkTopology {
     let mut topo = NetworkTopology::default();
     topo.nns_subnet_id = nns_subnet_id;
@@ -185,6 +190,7 @@ pub fn generate_network_topology(
         own_subnet_type,
         subnet_size,
         own_subnet_cost_schedule,
+        own_subnet_admins,
     ));
     match routing_table {
         Some(rt) => topo.set_routing_table(rt),
@@ -211,7 +217,6 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
         node_ids: BTreeSet::new(),
         registry_version: RegistryVersion::default(),
-        subnet_admins: BTreeSet::new(),
     }
 }
 
@@ -2014,6 +2019,7 @@ pub struct ExecutionTestBuilder {
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
     cost_schedule: CanisterCyclesCostSchedule,
+    subnet_admins: BTreeSet<PrincipalId>,
     network_topology: Option<NetworkTopology>,
     log_level: Option<Level>,
 }
@@ -2050,6 +2056,7 @@ impl Default for ExecutionTestBuilder {
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_admins: BTreeSet::new(),
             network_topology: None,
             log_level: Some(Level::Warning),
         }
@@ -2500,7 +2507,7 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
-        self.registry_settings.subnet_admins = subnet_admins.into_iter().collect();
+        self.subnet_admins = subnet_admins.into_iter().collect();
         self
     }
 
@@ -2541,6 +2548,7 @@ impl ExecutionTestBuilder {
                 self.subnet_type,
                 self.registry_settings.subnet_size,
                 self.cost_schedule,
+                self.subnet_admins,
             ));
             network_topology.set_routing_table(routing_table);
             state.metadata.network_topology = network_topology;

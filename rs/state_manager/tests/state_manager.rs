@@ -5454,6 +5454,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
         );
 
@@ -5852,6 +5853,7 @@ fn certified_read_can_exclude_canister_ranges() {
                     subnet_features: SubnetFeatures::default(),
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
                 },
             );
             routing_table

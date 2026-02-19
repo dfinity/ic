@@ -355,7 +355,7 @@ pub(crate) fn validate_controller(
     Ok(())
 }
 
-pub(crate) fn validate_controller_or_super_user(
+pub(crate) fn validate_controller_or_subnet_admin(
     canister: &CanisterState,
     subnet_admins: &BTreeSet<PrincipalId>,
     sender: &PrincipalId,

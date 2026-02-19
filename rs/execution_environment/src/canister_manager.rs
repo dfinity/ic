@@ -1,5 +1,5 @@
 use crate::as_round_instructions;
-use crate::execution::common::{validate_controller, validate_controller_or_super_user};
+use crate::execution::common::{validate_controller, validate_controller_or_subnet_admin};
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
@@ -955,7 +955,7 @@ impl CanisterManager {
         // governance canister. The governance canister can forcefully
         // uninstall the code of any canister.
         if sender != GOVERNANCE_CANISTER_ID.get() {
-            validate_controller_or_super_user(canister, subnet_admins, &sender)?;
+            validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
         }
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
@@ -1019,7 +1019,7 @@ impl CanisterManager {
         };
 
         if let Err(err) =
-            validate_controller_or_super_user(canister, subnet_admins, stop_context.sender())
+            validate_controller_or_subnet_admin(canister, subnet_admins, stop_context.sender())
         {
             return StopCanisterResult::Failure {
                 error: err,
@@ -1055,7 +1055,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<Vec<StopCanisterContext>, CanisterManagerError> {
-        validate_controller_or_super_user(canister, subnet_admins, &sender)?;
+        validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
 
         let stop_contexts = canister.system_state.start_canister();
         canister.system_state.bump_canister_version();
@@ -1071,11 +1071,12 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         ready_for_migration: bool,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
         if sender != canister.canister_id().get() {
-            validate_controller(canister, &sender)?
+            validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?
         }
 
         let controller = canister.system_state.controller();
@@ -1218,7 +1219,7 @@ impl CanisterManager {
 
         let canister_to_delete = self.validate_canister_exists(state, canister_id_to_delete)?;
 
-        validate_controller_or_super_user(canister_to_delete, subnet_admins, &sender)?;
+        validate_controller_or_subnet_admin(canister_to_delete, subnet_admins, &sender)?;
 
         self.validate_canister_is_stopped(canister_to_delete)?;
 

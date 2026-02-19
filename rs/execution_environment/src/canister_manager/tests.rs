@@ -1568,7 +1568,7 @@ fn canister_status_module_hash() {
 
 #[test]
 fn get_canister_status_of_stopped_canister() {
-    with_setup(|canister_manager, mut state, _, _| {
+    with_setup(|canister_manager, mut state, _, subnet_admins| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
@@ -1582,6 +1582,7 @@ fn get_canister_status_of_stopped_canister() {
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
                 false,
+                subnet_admins,
             )
             .unwrap();
         assert_eq!(status_res.status(), CanisterStatusType::Stopped);
@@ -1595,6 +1596,7 @@ fn get_canister_status_of_stopped_canister() {
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
                 true,
+                subnet_admins,
             )
             .unwrap();
         assert!(status_res.ready_for_migration());
@@ -1603,7 +1605,7 @@ fn get_canister_status_of_stopped_canister() {
 
 #[test]
 fn get_canister_status_of_stopping_canister() {
-    with_setup(|canister_manager, mut state, _, _| {
+    with_setup(|canister_manager, mut state, _, subnet_admins| {
         let sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopping_canister(canister_id);
@@ -1617,6 +1619,7 @@ fn get_canister_status_of_stopping_canister() {
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
                 false,
+                subnet_admins,
             )
             .unwrap()
             .status();
@@ -8029,6 +8032,10 @@ fn subnet_admin_can_perform_actions_on_canister() {
         test.canister_state(canister_id).status(),
         CanisterStatusType::Running
     );
+
+    // ...status can be checked...
+    let status = test.canister_status(canister_id).unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Running);
 
     // ...code can be uninstalled...
     test.uninstall_code(canister_id).unwrap();

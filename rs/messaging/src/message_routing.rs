@@ -918,15 +918,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
-        let mut subnet_admins = BTreeSet::new();
-        for p in subnet_record.subnet_admins.into_iter() {
-            let super_user = PrincipalId::try_from(p).map_err(|err| {
-                ReadRegistryError::Persistent(format!(
-                    "'failed to read subnet admins from subnet record', err: {err:?}"
-                ))
-            })?;
-            subnet_admins.insert(super_user);
-        }
 
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
@@ -975,7 +966,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 subnet_size,
                 node_ids: nodes,
                 registry_version,
-                subnet_admins,
             },
             node_public_keys,
             api_boundary_nodes,
@@ -1084,6 +1074,15 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     ))
                 })?,
             );
+            let mut subnet_admins = BTreeSet::new();
+            for p in subnet_record.subnet_admins.into_iter() {
+                let subnet_admin = PrincipalId::try_from(p).map_err(|err| {
+                    ReadRegistryError::Persistent(format!(
+                        "'failed to read subnet admins from subnet record', err: {err:?}"
+                    ))
+                })?;
+                subnet_admins.insert(subnet_admin);
+            }
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -1093,6 +1092,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     subnet_features,
                     chain_keys_held,
                     cost_schedule,
+                    subnet_admins,
                 },
             );
         }

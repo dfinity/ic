@@ -780,6 +780,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::UninstallCode) => {
                 let res = UninstallCodeArgs::decode(payload).and_then(|args| {
+                    let subnet_admins = state.get_own_subnet_admins();
                     self.canister_manager
                         .uninstall_code(
                             msg.canister_change_origin(args.get_sender_canister_version()),
@@ -787,7 +788,7 @@ impl ExecutionEnvironment {
                             &mut state,
                             round_limits,
                             &self.metrics.canister_not_found_error,
-                            &registry_settings.subnet_admins,
+                            &subnet_admins,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into())
@@ -874,6 +875,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::CanisterStatus) => {
                 let res = CanisterIdRecord::decode(payload).and_then(|args| {
+                    let subnet_admins = state.get_own_subnet_admins();
                     let ready_for_migration = state.ready_for_migration(&args.get_canister_id());
                     self.get_canister_status(
                         *msg.sender(),
@@ -881,6 +883,7 @@ impl ExecutionEnvironment {
                         &state,
                         registry_settings.subnet_size,
                         ready_for_migration,
+                        &subnet_admins,
                     )
                     .map(|res| (res, Some(args.get_canister_id())))
                 });
@@ -932,12 +935,13 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::StartCanister) => {
+                let subnet_admins = state.get_own_subnet_admins();
                 let res = CanisterIdRecord::decode(payload).and_then(|args| {
                     self.start_canister(
                         args.get_canister_id(),
                         *msg.sender(),
                         &mut state,
-                        &registry_settings.subnet_admins,
+                        &subnet_admins,
                     )
                     .map(|res| (res, Some(args.get_canister_id())))
                 });
@@ -952,12 +956,10 @@ impl ExecutionEnvironment {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => self.stop_canister(
-                    args.get_canister_id(),
-                    &msg,
-                    &mut state,
-                    &registry_settings.subnet_admins,
-                ),
+                Ok(args) => {
+                    let subnet_admins = state.get_own_subnet_admins();
+                    self.stop_canister(args.get_canister_id(), &msg, &mut state, &subnet_admins)
+                }
             },
 
             Ok(Ic00Method::DeleteCanister) => {
@@ -965,9 +967,10 @@ impl ExecutionEnvironment {
                     // Start logging execution time for `delete_canister`.
                     let since = Instant::now();
 
+                    let subnet_admins = state.get_own_subnet_admins();
                     let result = self
                         .canister_manager
-                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits, &registry_settings.subnet_admins)
+                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits, &subnet_admins)
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into());
 
@@ -2362,6 +2365,7 @@ impl ExecutionEnvironment {
         state: &ReplicatedState,
         subnet_size: usize,
         ready_for_migration: bool,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister(canister_id, state)?;
@@ -2372,6 +2376,7 @@ impl ExecutionEnvironment {
                 subnet_size,
                 cost_schedule,
                 ready_for_migration,
+                subnet_admins,
             )
             .map(|status| status.encode())
             .map_err(|err| err.into())

@@ -32,6 +32,7 @@ message SubnetTopology {
   reserved "ecdsa_keys_held";
   repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
   registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
+  repeated types.v1.PrincipalId subnet_admins = 8;
 }
 
 message SubnetsEntry {

@@ -8,8 +8,8 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    Cycles, ExecutionRound, Height, NodeId, NumInstructions, PrincipalId, Randomness,
-    RegistryVersion, ReplicaVersion, Time,
+    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
+    ReplicaVersion, Time,
     batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
     messages::{
@@ -1457,7 +1457,6 @@ pub struct RegistryExecutionSettings {
     pub subnet_size: usize,
     pub node_ids: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
-    pub subnet_admins: BTreeSet<PrincipalId>,
 }
 
 /// Chain key configuration of execution that comes from the registry.
