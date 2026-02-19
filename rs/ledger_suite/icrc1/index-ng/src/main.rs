@@ -67,6 +67,25 @@ const DIAG_PREFIX: &str = "[index-ng]";
 #[cfg(feature = "debug_dlmalloc")]
 const DEBUG_MAX_BLOCK_BYTES: usize = 2 * 1024 * 1024;
 
+// ---- Persistent debug_print (survives trap; written to canister log) for pinpointing panic ----
+#[cfg(all(feature = "debug_dlmalloc", target_arch = "wasm32"))]
+mod ic0_debug {
+    #[link(wasm_import_module = "ic0")]
+    unsafe extern "C" {
+        fn debug_print(offset: u32, size: u32);
+    }
+    /// Logs to canister log via ic0.debug_print; not rolled back on trap.
+    pub fn debug_print_persistent(msg: &str) {
+        let bytes = msg.as_bytes();
+        unsafe { debug_print(bytes.as_ptr() as u32, bytes.len() as u32) }
+    }
+}
+
+#[cfg(all(feature = "debug_dlmalloc", not(target_arch = "wasm32")))]
+mod ic0_debug {
+    pub fn debug_print_persistent(_msg: &str) {}
+}
+
 // ---- Panic hook and context for pinpointing build_index panics (debug_dlmalloc) ----
 #[cfg(feature = "debug_dlmalloc")]
 mod panic_hook {
@@ -712,7 +731,10 @@ async fn find_get_blocks_method() -> GetBlocksMethod {
 
 pub async fn build_index() -> Option<()> {
     #[cfg(feature = "debug_dlmalloc")]
-    panic_hook::set_panic_context("build_index: start");
+    {
+        panic_hook::set_panic_context("build_index: start");
+        ic0_debug::debug_print_persistent("[dbg] build_index: start");
+    }
     ic_cdk::eprintln!("{} build_index: start", DIAG_PREFIX);
     if with_state(|state| state.is_build_index_running) {
         ic_cdk::eprintln!("{} build_index: skipped (already running)", DIAG_PREFIX);
@@ -722,9 +744,11 @@ pub async fn build_index() -> Option<()> {
         state.is_build_index_running = true;
     });
     #[cfg(feature = "debug_dlmalloc")]
-    let _build_index_op_guard = BuildIndexOpGuard::new("build_index");
-    #[cfg(feature = "debug_dlmalloc")]
-    panic_hook::set_panic_context("build_index: is_build_index_running=true");
+    {
+        let _build_index_op_guard = BuildIndexOpGuard::new("build_index");
+        panic_hook::set_panic_context("build_index: is_build_index_running=true");
+        ic0_debug::debug_print_persistent("[dbg] build_index: flag set");
+    }
     ic_cdk::eprintln!("{} build_index: set is_build_index_running=true", DIAG_PREFIX);
     let _reset_is_build_index_running_flag_guard = guard((), |_| {
         mutate_state(|state| {
@@ -732,9 +756,13 @@ pub async fn build_index() -> Option<()> {
         });
     });
     #[cfg(feature = "debug_dlmalloc")]
+    ic0_debug::debug_print_persistent("[dbg] build_index: before find_get_blocks_method");
+    #[cfg(feature = "debug_dlmalloc")]
     panic_hook::set_panic_context("build_index: before find_get_blocks_method");
     ic_cdk::eprintln!("{} build_index: calling find_get_blocks_method", DIAG_PREFIX);
     let get_blocks_method = find_get_blocks_method().await;
+    #[cfg(feature = "debug_dlmalloc")]
+    ic0_debug::debug_print_persistent(&format!("[dbg] build_index: get_blocks_method={:?}", get_blocks_method));
     ic_cdk::eprintln!(
         "{} build_index: fetch path={:?}",
         DIAG_PREFIX,
@@ -743,7 +771,10 @@ pub async fn build_index() -> Option<()> {
     let num_indexed = match get_blocks_method {
         GetBlocksMethod::GetBlocks => {
             #[cfg(feature = "debug_dlmalloc")]
-            panic_hook::set_panic_context("build_index: before fetch_blocks_via_get_blocks");
+            {
+                panic_hook::set_panic_context("build_index: before fetch_blocks_via_get_blocks");
+                ic0_debug::debug_print_persistent("[dbg] build_index: before fetch_blocks_via_get_blocks");
+            }
             ic_cdk::eprintln!("{} build_index: before fetch_blocks_via_get_blocks", DIAG_PREFIX);
             let r = fetch_blocks_via_get_blocks().await;
             match &r {
@@ -760,7 +791,10 @@ pub async fn build_index() -> Option<()> {
         }
         GetBlocksMethod::ICRC3GetBlocks => {
             #[cfg(feature = "debug_dlmalloc")]
-            panic_hook::set_panic_context("build_index: before fetch_blocks_via_icrc3");
+            {
+                panic_hook::set_panic_context("build_index: before fetch_blocks_via_icrc3");
+                ic0_debug::debug_print_persistent("[dbg] build_index: before fetch_blocks_via_icrc3");
+            }
             ic_cdk::eprintln!("{} build_index: before fetch_blocks_via_icrc3", DIAG_PREFIX);
             let r = fetch_blocks_via_icrc3().await;
             match &r {
@@ -776,6 +810,14 @@ pub async fn build_index() -> Option<()> {
             r
         }
     };
+    #[cfg(feature = "debug_dlmalloc")]
+    ic0_debug::debug_print_persistent(&format!(
+        "[dbg] build_index: num_indexed result is_build_index_running={}",
+        match &num_indexed {
+            Ok(n) => format!("ok({})", n),
+            Err(e) => format!("err({})", e.message),
+        }
+    ));
     match num_indexed {
         Ok(num_indexed) => {
             let retrieve_blocks_from_ledger_interval =
@@ -800,7 +842,10 @@ pub async fn build_index() -> Option<()> {
     };
 
     #[cfg(feature = "debug_dlmalloc")]
-    panic_hook::set_panic_context("build_index: return");
+    {
+        panic_hook::set_panic_context("build_index: return");
+        ic0_debug::debug_print_persistent("[dbg] build_index: return");
+    }
     ic_cdk::eprintln!("{} build_index: returning (guard will clear flag)", DIAG_PREFIX);
     Some(())
 }
@@ -842,7 +887,10 @@ async fn fetch_blocks_via_get_blocks() -> Result<u64, SyncError> {
 
 async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
     #[cfg(feature = "debug_dlmalloc")]
-    panic_hook::set_panic_context("fetch_blocks_via_icrc3: start");
+    {
+        panic_hook::set_panic_context("fetch_blocks_via_icrc3: start");
+        ic0_debug::debug_print_persistent("[dbg] fetch_blocks_via_icrc3: start");
+    }
     // The current number of blocks is also the id of the next
     // block to query from the Ledger.
     let previous_num_blocks = with_blocks(|blocks| blocks.len());
@@ -996,6 +1044,9 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), Sy
     {
         panic_hook::set_panic_context("append_block");
         panic_hook::set_panic_context_block_index(block_index);
+        if block_index < 5 || block_index % 50_000 == 0 {
+            ic0_debug::debug_print_persistent(&format!("[dbg] append_block: block_index={}", block_index));
+        }
     }
     if block_index % 100 == 0 || block_index < 3 {
         ic_cdk::eprintln!("{} append_block: block_index={}", DIAG_PREFIX, block_index);

@@ -703,6 +703,10 @@ fn stress_timer_only_after_upgrade() {
     }
     let final_synced = u64::try_from(index::status(&state_machine, index_canister_id).num_blocks_synced.0)
         .expect("num_blocks_synced should fit in u64");
+
+    // Print last [dbg] lines from canister log (from ic0.debug_print; persists across trap).
+    index::print_last_debug_canister_log(&state_machine, index_canister_id, 25);
+
     assert!(
         final_synced > initial_synced || final_synced == chain_length,
         "index made no progress after {} timer steps (initial_synced={}, final_synced={}, chain_length={}); \
@@ -817,6 +821,9 @@ fn stress_timer_only_after_upgrade() {
     }
     let final_synced = u64::try_from(index::status(&state_machine, index_canister_id).num_blocks_synced.0)
         .expect("num_blocks_synced should fit in u64");
+
+    index::print_last_debug_canister_log(&state_machine, index_canister_id, 25);
+
     assert!(
         final_synced > initial_synced || final_synced == chain_length,
         "index made no progress after {} timer steps (initial_synced={}, final_synced={}, chain_length={}); \
@@ -1232,6 +1239,31 @@ mod index {
             Ok(WasmResult::Reply(res)) => {
                 Decode!(&res, Status).expect("error decoding response to status query")
             }
+        }
+    }
+
+    /// Prints the last `limit` canister log records that contain "[dbg]" (from ic0.debug_print).
+    /// Use after a trap to see how far build_index got; debug_print is not rolled back on trap.
+    pub fn print_last_debug_canister_log(
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+        limit: usize,
+    ) {
+        let log = state_machine.canister_log(canister_id);
+        let records = log.records();
+        let mut dbg_records: Vec<_> = records
+            .iter()
+            .filter(|r| {
+                std::str::from_utf8(&r.content)
+                    .map(|s| s.contains("[dbg]"))
+                    .unwrap_or(false)
+            })
+            .collect();
+        dbg_records.reverse();
+        println!("[canister_log] last {} [dbg] lines (newest first):", limit.min(dbg_records.len()));
+        for rec in dbg_records.into_iter().take(limit) {
+            let s = String::from_utf8_lossy(&rec.content);
+            println!("  #{} {}", rec.idx, s.trim_end());
         }
     }
 }
