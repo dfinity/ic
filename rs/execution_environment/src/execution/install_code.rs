@@ -393,7 +393,7 @@ impl InstallCodeHelper {
             ) {
                 let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
                     bytes,
-                    available: self.canister.system_state.balance(),
+                    available: err.available,
                     required: err.threshold,
                 };
                 return finish_err(
