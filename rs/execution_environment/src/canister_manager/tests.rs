@@ -8031,6 +8031,93 @@ fn set_heap_and_stable_memory_during_reinstall() {
 }
 
 #[test]
+fn non_subnet_admin_cannot_perform_subnet_admin_actions_on_canister() {
+    let subnet_admin = user_test_id(42);
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    // Switch user id so the request comes from a user who's not
+    // a controller or a subnet admin.
+    let test_user = user_test_id(13);
+    test.set_user_id(test_user);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(test_user.get_ref())
+    );
+    assert!(
+        !test
+            .state()
+            .get_own_subnet_admins()
+            .contains(test_user.get_ref())
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
+
+    // Canister cannot be stopped...
+    let err = test
+        .subnet_message(
+            Method::StopCanister,
+            CanisterIdRecord::from(canister_id).encode(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+
+    // ...or cannot be started...
+    let err = test.start_canister(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+
+    // ...or status cannot be checked...
+    let err = test.canister_status(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+
+    // ...or code be uninstalled...
+    let err = test.uninstall_code(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+
+    // ...and finally cannot be deleted.
+    let err = test.delete_canister(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+}
+
+#[test]
 fn subnet_admin_can_perform_actions_on_canister() {
     let subnet_admin = user_test_id(42);
     let mut test = ExecutionTestBuilder::new()
