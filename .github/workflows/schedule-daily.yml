@@ -22,7 +22,7 @@ jobs:
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:95705ebaed40462eef167d1c4c10f84aff9949f4d33d0f26dd28e0d9cc7fe1c6
       options: >-
-        -e NODE_NAME --privileged --cgroupns host
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
     environment: Nightly Tests
     steps:
