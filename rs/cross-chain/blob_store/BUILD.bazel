@@ -69,6 +69,7 @@ rust_ic_test(
         # Keep sorted.
         ":lib",
         "//packages/pocket-ic",
+        "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:serde",

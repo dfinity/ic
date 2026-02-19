@@ -14,3 +14,9 @@ pub enum InsertError {
     HashMismatch { expected: String, actual: String },
     AlreadyExists,
 }
+
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub enum GetError {
+    InvalidHash(String),
+    NotFound,
+}

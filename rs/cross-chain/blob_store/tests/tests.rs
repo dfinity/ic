@@ -1,4 +1,4 @@
-use blob_store_lib::api::{InsertError, InsertRequest};
+use blob_store_lib::api::{GetError, InsertError, InsertRequest};
 use candid::{Decode, Encode, Principal};
 use pocket_ic::PocketIc;
 
@@ -47,6 +47,38 @@ mod insert {
             blob_store.insert(Setup::CONTROLLER, "not-a-hex-hash", data),
             Err(InsertError::InvalidHash(_))
         ));
+    }
+}
+
+mod get {
+    use crate::{Setup, sha256_hex};
+    use assert_matches::assert_matches;
+    use blob_store_lib::api::GetError;
+    use candid::Principal;
+
+    #[test]
+    fn should_get_stored_data() {
+        let setup = Setup::default();
+        let blob_store = setup.blob_store();
+        let data = b"hello".to_vec();
+        let hash = sha256_hex(&data);
+        assert_eq!(
+            blob_store.insert(Setup::CONTROLLER, &hash, data.clone()),
+            Ok(hash.clone())
+        );
+
+        for principal in [Principal::anonymous(), Setup::CONTROLLER] {
+            assert_eq!(blob_store.get(principal, &hash), Ok(data.clone()));
+
+            assert_eq!(
+                blob_store.get(principal, &sha256_hex(b"not-stored")),
+                Err(GetError::NotFound)
+            );
+            assert_matches!(
+                blob_store.get(principal, "not-a-hex-hash"),
+                Err(GetError::InvalidHash(_))
+            );
+        }
     }
 }
 
@@ -117,6 +149,14 @@ impl<'a> BlobStoreCanister<'a> {
             )
             .expect("update call failed");
         Decode!(&result, Result<String, InsertError>).unwrap()
+    }
+
+    pub fn get(&self, sender: Principal, hash: &str) -> Result<Vec<u8>, GetError> {
+        let result = self
+            .env
+            .query_call(self.canister_id, sender, "get", Encode!(&hash).unwrap())
+            .expect("update call failed");
+        Decode!(&result, Result<Vec<u8>, GetError>).unwrap()
     }
 }
 

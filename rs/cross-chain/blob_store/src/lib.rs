@@ -1,4 +1,5 @@
 pub mod api;
+pub mod query;
 pub mod storage;
 pub mod update;
 
@@ -65,8 +66,16 @@ impl Blob {
         Self { data, hash }
     }
 
+    pub fn new_unchecked(data: Vec<u8>, hash: Hash) -> Self {
+        Self { data, hash }
+    }
+
     pub fn hash(&self) -> &Hash {
         &self.hash
+    }
+
+    pub fn into_data(self) -> Vec<u8> {
+        self.data
     }
 }
 

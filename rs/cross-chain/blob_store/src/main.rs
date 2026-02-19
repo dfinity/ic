@@ -1,10 +1,15 @@
-use blob_store_lib::api::{InsertError, InsertRequest};
+use blob_store_lib::api::{GetError, InsertError, InsertRequest};
 
 #[ic_cdk::init]
 fn init() {}
 
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {}
+
+#[ic_cdk::query]
+fn get(hash: String) -> Result<Vec<u8>, GetError> {
+    blob_store_lib::query::get(&hash)
+}
 
 #[ic_cdk::update]
 fn insert(request: InsertRequest) -> Result<String, InsertError> {

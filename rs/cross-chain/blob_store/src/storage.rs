@@ -15,6 +15,13 @@ thread_local! {
         MEMORY_MANAGER.with(|m| RefCell::new(BlobStore::init(m.borrow().get(BLOB_STORE_MEMORY_ID))));
 }
 
+pub fn read_blob_store<F, R>(f: F) -> R
+where
+    F: FnOnce(&BlobStore<VMem>) -> R,
+{
+    BLOB_STORE.with(|s| f(&s.borrow()))
+}
+
 pub fn mutate_blob_store<F, R>(f: F) -> R
 where
     F: FnOnce(&mut BlobStore<VMem>) -> R,
@@ -31,6 +38,12 @@ impl<M: Memory> BlobStore<M> {
         Self {
             store: StableBTreeMap::init(memory),
         }
+    }
+
+    pub fn get(&self, hash: &Hash) -> Option<Blob> {
+        self.store
+            .get(hash)
+            .map(|b| Blob::new_unchecked(b, hash.clone()))
     }
 
     pub fn insert<B: Into<Blob>>(&mut self, blob: B) -> Option<Hash> {

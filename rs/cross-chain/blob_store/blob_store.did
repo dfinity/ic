@@ -1,11 +1,13 @@
+type HexHash = text;
+type GetError = variant { InvalidHash : text; NotFound };
 type InsertError = variant {
     NotAuthorized;
     InvalidHash : text;
     AlreadyExists;
     HashMismatch : record { actual : text; expected : text };
 };
-type InsertRequest = record { data : blob; hash : text };
-type Result = variant { Ok : text; Err : InsertError };
+type InsertRequest = record { data : blob; hash : HexHash };
 service : () -> {
-    insert : (InsertRequest) -> (Result);
+    get : (text) -> (variant { Ok : blob; Err : GetError }) query;
+    insert : (InsertRequest) -> (variant { Ok : HexHash; Err : InsertError });
 }

@@ -24,6 +24,7 @@ serde_bytes = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 hex = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
