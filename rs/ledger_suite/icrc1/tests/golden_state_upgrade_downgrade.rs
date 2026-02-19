@@ -690,6 +690,9 @@ fn stress_timer_only_after_upgrade() {
     state_machine.advance_time(Duration::from_secs(1));
     state_machine.tick();
     config.upgrade_to_master(&state_machine);
+    let initial_synced = u64::try_from(index::status(&state_machine, index_canister_id).num_blocks_synced.0)
+        .expect("num_blocks_synced should fit in u64");
+    let chain_length = get_blocks(state_machine, Principal::from(ledger_canister_id), 0, 0).chain_length;
     // Do NOT call get_blocks on the index — only run the timer (build_index) path.
     for step in 0..TIMER_STEPS {
         state_machine.advance_time(SYNC_STEP_SECONDS);
@@ -698,7 +701,15 @@ fn stress_timer_only_after_upgrade() {
             println!("stress_timer_only_after_upgrade: step {}/{}", step, TIMER_STEPS);
         }
     }
-    println!("stress_timer_only_after_upgrade: completed {} steps without panic", TIMER_STEPS);
+    let final_synced = u64::try_from(index::status(&state_machine, index_canister_id).num_blocks_synced.0)
+        .expect("num_blocks_synced should fit in u64");
+    assert!(
+        final_synced > initial_synced || final_synced == chain_length,
+        "index made no progress after {} timer steps (initial_synced={}, final_synced={}, chain_length={}); \
+         first build_index likely trapped (e.g. dlmalloc panic) and did not clear is_build_index_running",
+        TIMER_STEPS, initial_synced, final_synced, chain_length
+    );
+    println!("stress_timer_only_after_upgrade: completed {} steps, index progressed {} -> {}", TIMER_STEPS, initial_synced, final_synced);
 }
 
 /// Stress-tests only the index `get_blocks` (query) path without advancing time,
@@ -793,6 +804,9 @@ fn stress_timer_only_after_upgrade() {
     state_machine.advance_time(Duration::from_secs(1));
     state_machine.tick();
     config.upgrade_to_master(&state_machine);
+    let initial_synced = u64::try_from(index::status(&state_machine, index_canister_id).num_blocks_synced.0)
+        .expect("num_blocks_synced should fit in u64");
+    let chain_length = get_blocks(state_machine, Principal::from(ledger_canister_id), 0, 0).chain_length;
     // Do NOT call get_blocks on the index — only run the timer (build_index) path.
     for step in 0..TIMER_STEPS {
         state_machine.advance_time(SYNC_STEP_SECONDS);
@@ -801,9 +815,17 @@ fn stress_timer_only_after_upgrade() {
             println!("stress_timer_only_after_upgrade: step {}/{}", step, TIMER_STEPS);
         }
     }
+    let final_synced = u64::try_from(index::status(&state_machine, index_canister_id).num_blocks_synced.0)
+        .expect("num_blocks_synced should fit in u64");
+    assert!(
+        final_synced > initial_synced || final_synced == chain_length,
+        "index made no progress after {} timer steps (initial_synced={}, final_synced={}, chain_length={}); \
+         first build_index likely trapped (e.g. dlmalloc panic) and did not clear is_build_index_running",
+        TIMER_STEPS, initial_synced, final_synced, chain_length
+    );
     println!(
-        "stress_timer_only_after_upgrade: completed {} steps without panic",
-        TIMER_STEPS
+        "stress_timer_only_after_upgrade: completed {} steps, index progressed {} -> {}",
+        TIMER_STEPS, initial_synced, final_synced
     );
 }
 
@@ -1198,7 +1220,7 @@ mod index {
             .expect("Failed to decode GetBlocksResponse")
     }
 
-    fn status(state_machine: &StateMachine, canister_id: CanisterId) -> Status {
+    pub fn status(state_machine: &StateMachine, canister_id: CanisterId) -> Status {
         let arg = Encode!(&()).unwrap();
         match state_machine.query(canister_id, "status", arg) {
             Err(err) => {
