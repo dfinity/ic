@@ -229,7 +229,7 @@ crate.spec(
 )
 crate.spec(
     package = "bytes",
-    version = "^1.9.0",
+    version = "^1.11.1",
 )
 crate.spec(
     default_features = False,
@@ -246,7 +246,7 @@ crate.spec(
 )
 crate.spec(
     package = "candid",
-    version = "^0.10.20",
+    version = "^0.10.22",
 )
 crate.spec(
     package = "cargo_metadata",
@@ -1405,6 +1405,10 @@ crate.spec(
     version = "^0.11.0",
 )
 crate.spec(
+    package = "securefmt",
+    version = "^0.1.5",
+)
+crate.spec(
     features = [
         "global-context",
         "rand-std",
@@ -1655,7 +1659,7 @@ crate.spec(
 )
 crate.spec(
     package = "time",
-    version = "^0.3.36",
+    version = "^0.3.47",
 )
 crate.spec(
     features = ["full"],

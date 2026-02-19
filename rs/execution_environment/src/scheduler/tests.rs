@@ -20,16 +20,18 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
     canister_state::system_state::{CyclesUseCase, PausedExecutionId},
-    metadata_state::subnet_call_context_manager::EcdsaMatchedPreSignature,
+    metadata_state::{
+        subnet_call_context_manager::EcdsaMatchedPreSignature, testing::NetworkTopologyTesting,
+    },
+    testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
-    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
+    HistogramStats, fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_vec_buckets,
+    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, labels, metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -475,7 +477,7 @@ fn no_heap_delta_rate_limiting_for_system_subnet() {
 
     // Assert that we reached the subnet heap delta capacity (140 GiB) in 70 rounds.
     assert_ge!(
-        test.scheduler().metrics.current_heap_delta.get() as usize,
+        test.scheduler().state_metrics.current_heap_delta.get() as usize,
         SUBNET_HEAP_DELTA_CAPACITY
     );
 
@@ -914,15 +916,18 @@ fn test_message_limit_from_message_overhead() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // All messages are zero instruction messages so use  this metric to get their count.
-    let number_of_messages = test.scheduler().metrics.zero_instruction_messages.get();
-    assert_eq!(number_of_messages, expected_number_of_messages);
+    // All messages are zero instruction messages.
+    assert_eq!(
+        zero_instruction_messages(test.metrics_registry()),
+        expected_number_of_messages
+    );
+
     assert_eq!(
         test.state()
             .metadata
             .subnet_metrics
             .update_transactions_total,
-        expected_number_of_messages
+        0
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
 }
@@ -1060,12 +1065,18 @@ fn validate_consumed_instructions_metric() {
 
     let metrics = &test.scheduler().metrics;
 
+    // 1 round, 2 inner iterations, 2 messages. Each 100 instructions.
+    assert_eq!(metrics.round.instructions.get_sample_count(), 1);
+    assert_floats_are_equal(metrics.round.instructions.get_sample_sum(), 100_f64);
     assert_eq!(
-        metrics.instructions_consumed_per_round.get_sample_count(),
+        metrics
+            .round_inner_iteration
+            .instructions
+            .get_sample_count(),
         2
     );
     assert_floats_are_equal(
-        metrics.instructions_consumed_per_round.get_sample_sum(),
+        metrics.round_inner_iteration.instructions.get_sample_sum(),
         100_f64,
     );
     assert_eq!(
@@ -1331,7 +1342,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    for (_, canister) in test.state().canister_states.iter() {
+    for canister in test.state().canisters_iter() {
         assert!(canister.execution_state.is_none());
         assert_eq!(canister.compute_allocation(), ComputeAllocation::zero());
         assert_eq!(
@@ -1363,7 +1374,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         None,
         Some(canister_test_id(10).get()),
     );
-    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
             .canister_snapshots
@@ -1381,7 +1392,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);
     test.state_mut()
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
@@ -1470,7 +1481,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         None,
         Some(canister_test_id(10).get()),
     );
-    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(test.state().canister_states().len(), 1);
     assert_eq!(
         test.state()
             .canister_snapshots
@@ -1495,7 +1506,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);
     test.state_mut()
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
@@ -1734,27 +1745,27 @@ fn execute_idle_and_canisters_with_messages() {
 
     // We won't update `last_full_execution_round` for the canister without any
     // input messages.
-    let idle = test.canister_state(idle);
     assert_eq!(
         test.state()
-            .canister_priority(&idle.canister_id())
+            .canister_priority(&idle)
             .last_full_execution_round,
         test.last_round()
     );
+    let idle = test.canister_state(idle);
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
 
-    let active = test.canister_state(active);
-    let system_state = &active.system_state;
     assert_eq!(
         test.state()
-            .canister_priority(&active.canister_id())
+            .canister_priority(&active)
             .last_full_execution_round,
         ExecutionRound::from(1)
     );
-    assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
+    let active = test.canister_state(active);
+    assert_eq!(active.system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
     assert_eq!(
-        system_state
+        active
+            .system_state
             .canister_metrics()
             .interrupted_during_execution(),
         0
@@ -2268,7 +2279,10 @@ fn heartbeat_is_not_scheduled_if_the_canister_is_stopped() {
     test.send_ingress(canister, ingress(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.instructions_consumed_per_message.get_sample_count(),
+        1
+    );
 }
 
 #[test]
@@ -2288,7 +2302,10 @@ fn global_timer_is_not_scheduled_if_the_canister_is_stopped() {
     test.send_ingress(canister, ingress(1));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);
+    assert_eq!(
+        metrics.instructions_consumed_per_message.get_sample_count(),
+        1
+    );
 }
 
 #[test]
@@ -2604,19 +2621,18 @@ fn scheduler_executes_postponed_raw_rand_requests() {
     );
 
     assert_eq!(
-        fetch_histogram_stats(
-            test.metrics_registry(),
-            "execution_round_postponed_raw_rand_queue_messages",
-        ),
-        Some(HistogramStats { sum: 1.0, count: 1 })
+        fetch_histogram_vec_stats(test.metrics_registry(), "execution_round_phase_messages")
+            .get(&labels(&[("phase", "raw_rand")])),
+        Some(&HistogramStats { sum: 1.0, count: 1 })
     );
 
     assert_eq!(
-        fetch_histogram_stats(
+        fetch_histogram_vec_stats(
             test.metrics_registry(),
-            "execution_round_postponed_raw_rand_queue_instructions",
-        ),
-        Some(HistogramStats { sum: 0.0, count: 1 })
+            "execution_round_phase_instructions",
+        )
+        .get(&labels(&[("phase", "raw_rand")])),
+        Some(&HistogramStats { count: 1, sum: 0.0 })
     );
 }
 
@@ -2713,15 +2729,14 @@ fn can_record_metrics_single_scheduler_thread() {
         metrics.instructions_consumed_per_message.get_sample_count(),
         3
     );
+    assert_eq!(metrics.round.instructions.get_sample_count(), 1);
     assert_eq!(
-        metrics.instructions_consumed_per_round.get_sample_count(),
-        1
-    );
-    assert_eq!(
-        metrics.instructions_consumed_per_round.get_sample_sum() as i64,
+        metrics.round.instructions.get_sample_sum() as i64,
         5 + 4 + 4
     );
-    assert_eq!(metrics.canister_messages_where_cycles_were_charged.get(), 3);
+
+    // No messages consumed zero instructions.
+    assert_eq!(zero_instruction_messages(test.metrics_registry()), 0);
 }
 
 #[test]
@@ -2763,8 +2778,10 @@ fn can_record_metrics_for_a_round() {
         }
     }
 
-    for canister in test.state_mut().canister_states.values_mut() {
-        canister.system_state.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
+    for canister in test.state_mut().canisters_iter_mut() {
+        Arc::make_mut(canister)
+            .system_state
+            .time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
     }
     test.state_mut().metadata.batch_time = UNIX_EPOCH
         + Duration::from_secs(1)
@@ -2805,10 +2822,14 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.round_finalization_charge.get_sample_count(), 1);
     // Compute allocation violation is not observed for newly created canisters.
     assert_eq!(metrics.canister_compute_allocation_violation.get(), 0);
+
+    // `2 * scheduler_cores` messages were executed.
     assert_eq!(
-        metrics.canister_messages_where_cycles_were_charged.get(),
+        metrics.instructions_consumed_per_message.get_sample_count(),
         scheduler_cores as u64 * 2
     );
+    // All of them consumed some instructions.
+    assert_eq!(zero_instruction_messages(test.metrics_registry()), 0);
 
     assert_eq!(
         test.state()
@@ -2879,16 +2900,10 @@ fn prepay_failures_counted() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let metrics = &test.scheduler().metrics;
-    // We should have one entry for the canister with cycles which ran.
-    assert_eq!(
-        metrics
-            .round_inner_iteration_thread_message
-            .duration
-            .get_sample_count(),
-        1
-    );
-    // We should have one count for the canister which couldn't prepay.
-    assert_eq!(metrics.zero_instruction_messages.get(), 1);
+    // We should have one entry for the canister with cycles that ran.
+    assert_eq!(metrics.msg_execution_duration.get_sample_count(), 1);
+    // We should have one count for the canister that couldn't prepay.
+    assert_eq!(zero_instruction_messages(test.metrics_registry()), 1);
 }
 
 #[test]
@@ -2905,12 +2920,12 @@ fn heap_delta_rate_limiting_metrics_recorded() {
         .with_rate_limiting_of_heap_delta()
         .build();
 
-    // One canister starts with a heap delta already at the limit, so it should be
-    // rate limited.
+    // One canister starts with a heap delta already above the limit, so it should
+    // still be rate limited at the end of the round.
     let canister0 = test.create_canister();
     test.canister_state_mut(canister0)
         .scheduler_state
-        .heap_delta_debit = scheduler_config.heap_delta_rate_limit;
+        .heap_delta_debit = scheduler_config.heap_delta_rate_limit.increment();
     test.send_ingress(canister0, ingress(1).dirty_pages(1));
 
     let canister1 = test.create_canister();
@@ -2918,12 +2933,16 @@ fn heap_delta_rate_limiting_metrics_recorded() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.canister_heap_delta_debits.get_sample_count(), 2);
+    let state_metrics = &test.scheduler().state_metrics;
     assert_eq!(
-        metrics.canister_heap_delta_debits.get_sample_sum() as u64,
-        scheduler_config.heap_delta_rate_limit.get() + 4096
+        state_metrics.canister_heap_delta_debits.get_sample_count(),
+        2
     );
+    assert_eq!(
+        state_metrics.canister_heap_delta_debits.get_sample_sum(),
+        1.0
+    );
+    let metrics = &test.scheduler().metrics;
     assert_eq!(
         metrics
             .heap_delta_rate_limited_canisters_per_round
@@ -2950,12 +2969,16 @@ fn heap_delta_rate_limiting_disabled() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.canister_heap_delta_debits.get_sample_count(), 2);
+    let state_metrics = &test.scheduler().state_metrics;
     assert_eq!(
-        metrics.canister_heap_delta_debits.get_sample_sum() as u64,
+        state_metrics.canister_heap_delta_debits.get_sample_count(),
+        2
+    );
+    assert_eq!(
+        state_metrics.canister_heap_delta_debits.get_sample_sum() as u64,
         0,
     );
+    let metrics = &test.scheduler().metrics;
     assert_eq!(
         metrics
             .heap_delta_rate_limited_canisters_per_round
@@ -3216,13 +3239,14 @@ fn replicated_state_metrics_nothing_exported() {
     let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3378,39 +3402,13 @@ fn execution_round_metrics_are_recorded() {
     );
     assert_eq!(
         10,
-        metrics
-            .round_inner_iteration_thread_message
-            .duration
-            .get_sample_count()
-    );
-    assert_eq!(
-        10,
-        metrics
-            .round_inner_iteration_thread_message
-            .instructions
-            .get_sample_count(),
+        metrics.instructions_consumed_per_message.get_sample_count(),
     );
     assert_eq!(
         100,
-        metrics
-            .round_inner_iteration_thread_message
-            .instructions
-            .get_sample_sum() as u64,
+        metrics.instructions_consumed_per_message.get_sample_sum() as u64,
     );
-    assert_eq!(
-        10,
-        metrics
-            .round_inner_iteration_thread_message
-            .messages
-            .get_sample_count(),
-    );
-    assert_eq!(
-        10,
-        metrics
-            .round_inner_iteration_thread_message
-            .messages
-            .get_sample_sum() as u64,
-    );
+    assert_eq!(10, metrics.msg_execution_duration.get_sample_count());
 }
 
 #[test]
@@ -3451,32 +3449,13 @@ fn heartbeat_metrics_are_recorded() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(
         2,
-        metrics
-            .round_inner_iteration_thread_message
-            .instructions
-            .get_sample_count(),
+        metrics.instructions_consumed_per_message.get_sample_count(),
     );
     assert_eq!(
         200,
-        metrics
-            .round_inner_iteration_thread_message
-            .instructions
-            .get_sample_sum() as u64,
+        metrics.instructions_consumed_per_message.get_sample_sum() as u64,
     );
-    assert_eq!(
-        2,
-        metrics
-            .round_inner_iteration_thread_message
-            .messages
-            .get_sample_count(),
-    );
-    assert_eq!(
-        2,
-        metrics
-            .round_inner_iteration_thread_message
-            .messages
-            .get_sample_sum() as u64,
-    );
+    assert_eq!(2, metrics.msg_execution_duration.get_sample_count());
 }
 
 #[test]
@@ -3530,13 +3509,14 @@ fn replicated_state_metrics_running_canister() {
     state.put_canister_state(get_running_canister(canister_test_id(0)));
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3560,13 +3540,14 @@ fn replicated_state_metrics_different_canister_statuses() {
     state.put_canister_state(get_stopped_canister(canister_test_id(3)));
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3587,8 +3568,10 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(1)));
     state.put_canister_state(get_running_canister(canister_test_id(2)));
 
-    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    routing_table
+    state
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .insert(
             CanisterIdRange {
                 start: canister_test_id(0),
@@ -3599,13 +3582,14 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
         .unwrap();
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3638,19 +3622,17 @@ fn replicated_state_metrics_stop_contexts_with_missing_call_ids() {
     state.put_canister_state(canister);
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
-    assert_eq!(
-        scheduler_metrics.stop_canister_calls_without_call_id.get(),
-        1
-    );
+    assert_eq!(state_metrics.stop_canister_calls_without_call_id.get(), 1);
 }
 
 #[test]
@@ -3660,8 +3642,10 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(2)));
     state.put_canister_state(get_running_canister(canister_test_id(100)));
 
-    let routing_table = Arc::make_mut(&mut state.metadata.network_topology.routing_table);
-    routing_table
+    state
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .insert(
             CanisterIdRange {
                 start: canister_test_id(0),
@@ -3672,13 +3656,14 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
         .unwrap();
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3712,15 +3697,15 @@ fn long_open_call_context_is_recorded() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let metrics = &test.scheduler().metrics;
+    let state_metrics = &test.scheduler().state_metrics;
     let label = HashMap::from([("age", "1d")]);
-    let gauge = metrics
+    let gauge = state_metrics
         .old_open_call_contexts
         .get_metric_with(&label)
         .unwrap();
     assert_eq!(gauge.get(), 3);
 
-    let gauge = metrics
+    let gauge = state_metrics
         .canisters_with_old_open_call_contexts
         .get_metric_with(&label)
         .unwrap();
@@ -3806,7 +3791,8 @@ fn threshold_signature_agreements_metric_is_updated() {
         test.scheduler().own_subnet_id,
         test.state(),
         1.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -3848,14 +3834,34 @@ fn threshold_signature_agreements_metric_is_updated() {
         canister_id,
         InputQueueType::RemoteSubnet,
     );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Metrics are observed at the beginning of the round, so there should be no in flight contexts yet
+    // There should be no in flight contexts yet
     let in_flight_contexts_metric = fetch_histogram_vec_stats(
         test.metrics_registry(),
         "execution_in_flight_signature_request_contexts",
     );
     assert!(in_flight_contexts_metric.is_empty());
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // At the end of the round, the in flight contexts should have been observed.
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[("key_id", &master_ecdsa_key_id.to_string())],
+                HistogramStats { count: 1, sum: 2.0 }
+            ),
+            (
+                &[("key_id", &master_schnorr_key_id.to_string())],
+                HistogramStats { count: 1, sum: 1.0 }
+            ),
+        ]),
+        in_flight_contexts_metric,
+    );
 
     // Check that the SubnetCallContextManager contains all requests.
     let sign_with_ecdsa_contexts = &test
@@ -3880,33 +3886,6 @@ fn threshold_signature_agreements_metric_is_updated() {
 
     test.state_mut().consensus_queue.push(response);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    // At the beginning of the next round, the in flight contexts should have been observed
-    let in_flight_contexts_metric = fetch_histogram_vec_stats(
-        test.metrics_registry(),
-        "execution_in_flight_signature_request_contexts",
-    );
-    assert_eq!(
-        metric_vec(&[
-            (
-                &[("key_id", &master_ecdsa_key_id.to_string())],
-                HistogramStats { count: 1, sum: 2.0 }
-            ),
-            (
-                &[("key_id", &master_schnorr_key_id.to_string())],
-                HistogramStats { count: 1, sum: 1.0 }
-            ),
-        ]),
-        in_flight_contexts_metric,
-    );
-
-    observe_replicated_state_metrics(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        1.into(),
-        &test.scheduler().metrics,
-        &no_op_logger(),
-    );
 
     // After the round, the rejected context should be observed
     let in_flight_contexts_metric = fetch_histogram_vec_stats(
@@ -3978,7 +3957,8 @@ fn threshold_signature_agreements_metric_is_updated() {
         test.scheduler().own_subnet_id,
         test.state(),
         2.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4034,7 +4014,8 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4072,7 +4053,8 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
     let consumed_cycles_after = NominalCycles::from(
@@ -4108,7 +4090,8 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4175,7 +4158,8 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
     let consumed_cycles_after = NominalCycles::from(
@@ -4288,7 +4272,8 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4332,7 +4317,8 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4494,9 +4480,7 @@ fn construct_scheduler_for_prop_test(
             None,
         );
         test.state_mut()
-            .metadata
-            .subnet_schedule
-            .get_mut(canister)
+            .canister_priority_mut(canister)
             .last_full_execution_round = last_round;
         for _ in 0..messages_per_canister {
             test.send_ingress(canister, ingress(instructions_per_message as u64));
@@ -4706,9 +4690,9 @@ fn scheduler_does_not_lose_canisters(
     ),
 ) {
     let (mut test, _scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
-    let canisters_before = test.state().canisters_iter().count();
+    let canisters_before = test.state().canister_states().len();
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let canisters_after = test.state().canisters_iter().count();
+    let canisters_after = test.state().canister_states().len();
     assert_eq!(canisters_before, canisters_after);
 }
 
@@ -4725,7 +4709,7 @@ fn scheduler_respects_compute_allocation(
 ) {
     let (mut test, scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
     let replicated_state = test.state();
-    let number_of_canisters = replicated_state.canister_states.len();
+    let number_of_canisters = replicated_state.canister_states().len();
     let total_compute_allocation = replicated_state.total_compute_allocation();
     prop_assert!(total_compute_allocation <= 100 * scheduler_cores as u64);
 
@@ -4738,7 +4722,7 @@ fn scheduler_respects_compute_allocation(
     // for free, i.e. `100 * number_of_canisters` rounds.
     let number_of_rounds = 100 * number_of_canisters;
 
-    let canister_ids: Vec<_> = test.state().canister_states.iter().map(|x| *x.0).collect();
+    let canister_ids: Vec<_> = test.state().canister_states().keys().cloned().collect();
 
     // Add one more round as we update the accumulated priorities at the end of the round now.
     for _ in 0..=number_of_rounds {
@@ -4746,7 +4730,7 @@ fn scheduler_respects_compute_allocation(
             test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
-        for (canister_id, _) in test.state().canister_states.iter() {
+        for canister_id in test.state().canister_states().keys() {
             let priority = test.state().canister_priority(canister_id);
             if priority.last_full_execution_round == test.last_round() {
                 let count = scheduled_first_counters.entry(*canister_id).or_insert(0);
@@ -4756,7 +4740,7 @@ fn scheduler_respects_compute_allocation(
     }
 
     // Check that the compute allocations of the canisters are respected.
-    for (canister_id, canister) in test.state().canister_states.iter() {
+    for (canister_id, canister) in test.state().canister_states().iter() {
         let compute_allocation = canister.compute_allocation().as_percent() as usize;
 
         let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);
@@ -4895,7 +4879,7 @@ fn dts_long_execution_completes() {
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         9.0
@@ -4983,10 +4967,10 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
-        3.0
+        4.0
     );
 
     // Finish the long execution. The subnet message will also be processed.
@@ -5002,7 +4986,7 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         9.0
@@ -5038,7 +5022,7 @@ fn dts_long_execution_runs_out_of_instructions() {
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         9.0
@@ -5337,28 +5321,28 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
 
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         0.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_aborted_execution
             .get_sample_sum(),
         0.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_install_code
             .get_sample_sum(),
-        1.0
+        2.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_aborted_install_code
             .get_sample_sum(),
         0.0
@@ -5402,22 +5386,19 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             .get_sample_sum(),
         1.0
     );
-
-    // Execute another round to refresh the metrics
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_install_code
             .get_sample_sum(),
         2.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_install_code
             .get_sample_count(),
-        4
+        3
     );
 }
 
@@ -5457,14 +5438,14 @@ fn dts_resume_install_code_after_abort() {
 
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_install_code
             .get_sample_sum(),
         10.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_aborted_install_code
             .get_sample_sum(),
         1.0
@@ -5506,14 +5487,14 @@ fn dts_resume_long_execution_after_abort() {
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         10.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_aborted_execution
             .get_sample_sum(),
         1.0
@@ -5676,15 +5657,15 @@ fn test_is_next_method_added_to_task_queue() {
         None,
         None,
     );
-    let may_schedule_heartbeat = false;
-    let may_schedule_global_timer = false;
+    let has_heartbeat = false;
+    let has_active_timer = false;
 
-    let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
+    let mut heartbeat_and_timer_canisters = BTreeSet::new();
     assert!(
         !test
-            .canister_state_mut(canister)
+            .canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
@@ -5693,18 +5674,18 @@ fn test_is_next_method_added_to_task_queue() {
         // input, hence no method will be chosen.
         assert!(!is_next_method_chosen(
             test.canister_state_mut(canister),
-            &mut heartbeat_and_timer_canister_ids,
-            may_schedule_heartbeat,
-            may_schedule_global_timer,
+            has_heartbeat,
+            has_active_timer,
+            &mut heartbeat_and_timer_canisters,
         ));
-        assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+        assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
     }
 
     // Make canister able to schedule both heartbeat and global timer.
-    let may_schedule_heartbeat = true;
-    let may_schedule_global_timer = true;
+    let has_heartbeat = true;
+    let has_active_timer = true;
 
     // Set input.
     test.canister_state_mut(canister)
@@ -5721,16 +5702,13 @@ fn test_is_next_method_added_to_task_queue() {
         });
 
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
-            .queues_mut()
+            .queues()
             .has_input()
     );
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
-        != NextScheduledMethod::Message
+    while test.canister_state(canister).get_next_scheduled_method() != NextScheduledMethod::Message
     {
         test.canister_state_mut(canister)
             .inc_next_scheduled_method();
@@ -5738,25 +5716,23 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
     // and GlobalTimer are added to the queue.
     assert!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .is_empty()
     );
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::new());
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::Heartbeat
     {
         test.canister_state_mut(canister)
@@ -5767,14 +5743,14 @@ fn test_is_next_method_added_to_task_queue() {
     // and GlobalTimer are added at the front of the queue.
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5787,7 +5763,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5799,13 +5775,11 @@ fn test_is_next_method_added_to_task_queue() {
         .task_queue
         .pop_front();
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
 
-    heartbeat_and_timer_canister_ids = BTreeSet::new();
+    heartbeat_and_timer_canisters = BTreeSet::new();
 
-    while test
-        .canister_state_mut(canister)
-        .get_next_scheduled_method()
+    while test.canister_state(canister).get_next_scheduled_method()
         != NextScheduledMethod::GlobalTimer
     {
         test.canister_state_mut(canister)
@@ -5815,14 +5789,14 @@ fn test_is_next_method_added_to_task_queue() {
     // and Heartbeat are added at the front of the queue.
     assert!(is_next_method_chosen(
         test.canister_state_mut(canister),
-        &mut heartbeat_and_timer_canister_ids,
-        may_schedule_heartbeat,
-        may_schedule_global_timer,
+        has_heartbeat,
+        has_active_timer,
+        &mut heartbeat_and_timer_canisters,
     ));
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5835,7 +5809,7 @@ fn test_is_next_method_added_to_task_queue() {
         .pop_front();
 
     assert_eq!(
-        test.canister_state_mut(canister)
+        test.canister_state(canister)
             .system_state
             .task_queue
             .front(),
@@ -5847,7 +5821,7 @@ fn test_is_next_method_added_to_task_queue() {
         .task_queue
         .pop_front();
 
-    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(heartbeat_and_timer_canisters, BTreeSet::from([canister]));
 }
 
 pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {
@@ -5878,21 +5852,9 @@ fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
@@ -5916,22 +5878,10 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone()).try_into().unwrap();
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
@@ -5947,28 +5897,26 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
         },
     )]));
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If the stash is enabled, deliver pre-signatures only once.
-        // They should be stored in the stash and don't have to be delivered in every round.
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // If the stash is enabled, deliver pre-signatures only once.
+    // They should be stored in the stash and don't have to be delivered in every round.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        test.deliver_pre_signatures(BTreeMap::from_iter([(
-            master_key_id.clone(),
-            AvailablePreSignatures {
-                key_transcript: key_transcript.clone(),
-                pre_signatures: BTreeMap::new(),
-            },
-        )]));
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.deliver_pre_signatures(BTreeMap::from_iter([(
+        master_key_id.clone(),
+        AvailablePreSignatures {
+            key_transcript: key_transcript.clone(),
+            pre_signatures: BTreeMap::new(),
+        },
+    )]));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 1);
-        assert!(
-            stashes[&master_key_id]
-                .pre_signatures
-                .contains_key(&pre_sig_id),
-        );
-    }
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 1);
+    assert!(
+        stashes[&master_key_id]
+            .pre_signatures
+            .contains_key(&pre_sig_id),
+    );
 
     inject_ecdsa_signing_request(&mut test, &key_id);
 
@@ -6004,12 +5952,10 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If pre-signatures were stored in the state, they should now have been consumed.
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 1);
-        assert!(stashes[&master_key_id].pre_signatures.is_empty());
-    }
+    // If pre-signatures were stored in the state, they should now have been consumed.
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 1);
+    assert!(stashes[&master_key_id].pre_signatures.is_empty());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let contexts = test
@@ -6055,18 +6001,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_enabled() {
-    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Enabled);
-}
-
-#[test]
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_disabled() {
-    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Disabled);
-}
-
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
-    store_pre_signatures_in_state: FlagStatus,
-) {
+fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     let key_ids: Vec<_> = (0..3).map(make_ecdsa_key_id).collect();
     let master_key_ids: Vec<_> = key_ids
         .iter()
@@ -6075,7 +6010,6 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
         .flat_map(IDkgMasterPublicKeyId::try_from)
         .collect();
     let mut test = SchedulerTestBuilder::new()
-        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_keys(
             key_ids
                 .iter()
@@ -6112,22 +6046,20 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
     ]);
     test.deliver_pre_signatures(pre_signatures.clone());
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
-        // If the stash is enabled, deliver pre-signatures only once.
-        // They should be stored in the stash and don't have to be delivered in every round.
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Pre-signatures are delivered only once.
+    // They should be stored in the stash and don't have to be delivered in every round.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        pre_signatures
-            .values_mut()
-            .for_each(|pre_sigs| pre_sigs.pre_signatures.clear());
-        test.deliver_pre_signatures(pre_signatures);
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    pre_signatures
+        .values_mut()
+        .for_each(|pre_sigs| pre_sigs.pre_signatures.clear());
+    test.deliver_pre_signatures(pre_signatures);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let stashes = test.state().pre_signature_stashes();
-        assert_eq!(stashes.len(), 2);
-        assert_eq!(stashes[&master_key_ids[0]].pre_signatures, pre_sigs0);
-        assert_eq!(stashes[&master_key_ids[1]].pre_signatures, pre_sigs1);
-    }
+    let stashes = test.state().pre_signature_stashes();
+    assert_eq!(stashes.len(), 2);
+    assert_eq!(stashes[&master_key_ids[0]].pre_signatures, pre_sigs0);
+    assert_eq!(stashes[&master_key_ids[1]].pre_signatures, pre_sigs1);
 
     // Inject 3 contexts requesting the third, second and first key in order
     for i in (0..3).rev() {
@@ -6138,18 +6070,16 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
     for _ in 0..2 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        if store_pre_signatures_in_state == FlagStatus::Enabled {
-            // If pre-signatures were stored in the state, they should now have been consumed.
-            let stashes = test.state().pre_signature_stashes();
-            assert_eq!(stashes.len(), 2);
-            assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
-            assert!(
-                stashes[&master_key_ids[0]]
-                    .pre_signatures
-                    .contains_key(&PreSigId(1))
-            );
-            assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
-        }
+        // Pre-signatures in the state should now have been consumed.
+        let stashes = test.state().pre_signature_stashes();
+        assert_eq!(stashes.len(), 2);
+        assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
+        assert!(
+            stashes[&master_key_ids[0]]
+                .pre_signatures
+                .contains_key(&PreSigId(1))
+        );
+        assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
     }
 
     let sign_with_ecdsa_contexts = &test
@@ -6339,7 +6269,10 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
     assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id, own_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -6355,7 +6288,10 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates the canister to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -6747,7 +6683,6 @@ fn charge_idle_canisters_for_full_execution_round() {
         }
     }
 
-    let multiplier = scheduler_cores * test.state().canister_states.len();
     for round in 0..num_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
@@ -6769,8 +6704,8 @@ fn charge_idle_canisters_for_full_execution_round() {
             // Assert there is no divergency in accumulated priorities.
             let priority =
                 canister_priority.accumulated_priority - canister_priority.priority_credit;
-            assert_le!(priority.get(), 100 * multiplier as i64);
-            assert_ge!(priority.get(), -100 * multiplier as i64);
+            assert_le!(priority.get(), 100 * MULTIPLIER);
+            assert_ge!(priority.get(), -100 * MULTIPLIER);
 
             total_accumulated_priority += canister_priority.accumulated_priority.get();
             total_priority_credit += canister_priority.priority_credit.get();
@@ -6778,4 +6713,19 @@ fn charge_idle_canisters_for_full_execution_round() {
         // The accumulated priority invariant should be respected.
         assert_eq!(total_accumulated_priority - total_priority_credit, 0);
     }
+}
+
+fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
+    let instructions_consumed_per_message = fetch_histogram_vec_buckets(
+        metrics_registry,
+        "scheduler_instructions_consumed_per_message",
+    )
+    .remove(&BTreeMap::new())
+    .unwrap();
+
+    *instructions_consumed_per_message.get("0").unwrap()
+}
+
+fn default_subnet_memory_capacity() -> NumBytes {
+    ic_config::execution_environment::Config::default().subnet_memory_capacity
 }

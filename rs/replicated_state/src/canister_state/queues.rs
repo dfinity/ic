@@ -697,12 +697,22 @@ impl CanisterQueues {
         CanisterOutputQueuesIterator::new(&mut self.canister_queues, &mut self.store)
     }
 
-    /// See `IngressQueue::filter_messages()` for documentation.
-    pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
+    /// Returns `true` if all enqueued ingress messages satisfy the predicate,
+    /// `false` otherwise.
+    pub(crate) fn all_ingress_messages<F>(&self, predicate: F) -> bool
     where
-        F: FnMut(&Arc<Ingress>) -> bool,
+        F: FnMut(&Ingress) -> bool,
     {
-        self.ingress_queue.filter_messages(filter)
+        self.ingress_queue.all_messages(predicate)
+    }
+
+    /// Retains only the ingress messages that satisfy the predicate, removing and
+    /// returning all the ingress messages that don't.
+    pub(crate) fn retain_ingress_messages<F>(&mut self, predicate: F) -> Vec<Arc<Ingress>>
+    where
+        F: FnMut(&Ingress) -> bool,
+    {
+        self.ingress_queue.retain_messages(predicate)
     }
 
     /// Enqueues a canister-to-canister message into the induction pool.
@@ -848,7 +858,7 @@ impl CanisterQueues {
         callback_id: CallbackId,
         respondent: &CanisterId,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) -> Result<bool, String> {
         // For a not yet executed callback, there must be a queue with either a reserved
         // slot or an enqueued response.
@@ -1362,7 +1372,8 @@ impl CanisterQueues {
         self.message_stats().cycles
     }
 
-    /// Returns `true` if calling `garbage_collect()` would actually do something.
+    /// Returns `true` if calling `garbage_collect()` would actually garbage collect
+    /// anything.
     ///
     /// Time complexity: `O(|canister_queues|)`.
     pub(crate) fn can_garbage_collect(&self) -> bool {
@@ -1450,7 +1461,7 @@ impl CanisterQueues {
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) {
@@ -1484,7 +1495,7 @@ impl CanisterQueues {
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) -> bool {
@@ -1664,7 +1675,7 @@ impl CanisterQueues {
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) {
         let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
         self.input_schedule.split(&input_queue_type_fn);
@@ -1807,7 +1818,7 @@ fn generate_timeout_response(request: &Request) -> Response {
 /// mutating a canister's queues if they were still under `local_canisters`).
 fn input_queue_type_fn<'a>(
     own_canister_id: &'a CanisterId,
-    local_canisters: &'a BTreeMap<CanisterId, CanisterState>,
+    local_canisters: &'a BTreeMap<CanisterId, Arc<CanisterState>>,
 ) -> impl Fn(&CanisterId) -> InputQueueType + 'a {
     move |sender| {
         if sender == own_canister_id || local_canisters.contains_key(sender) {

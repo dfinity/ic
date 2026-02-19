@@ -85,7 +85,7 @@ pub type BoundedHttpHeaders = BoundedVec<
 ///   url : text;
 ///   max_response_bytes : opt nat64;
 ///   headers : vec http_header;
-///   method : variant { get; head; post };
+///   method : variant { get; head; post; put; delete };
 ///   body : opt blob;
 ///   transform : opt record {
 ///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
@@ -367,6 +367,10 @@ pub enum HttpMethod {
     POST,
     #[serde(rename = "head")]
     HEAD,
+    #[serde(rename = "put")]
+    PUT,
+    #[serde(rename = "delete")]
+    DELETE,
 }
 
 /// Represents the response for a canister http request.

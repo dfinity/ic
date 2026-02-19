@@ -2,7 +2,6 @@
 Rules for system-tests.
 """
 
-load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
@@ -35,6 +34,7 @@ def system_test(
         guestos = True,
         guestos_update = False,
         setupos = False,
+        hostos = False,
         hostos_update = False,
         env = {},
         env_inherit = [],
@@ -77,8 +77,9 @@ def system_test(
       For example: [ "performance" ]
       guestos: see configure_icos().
       guestos_update: see configure_icos().
-      setupos: see configure_icos().
+      hostos: see configure_icos().
       hostos_update: see configure_icos().
+      setupos: see configure_icos().
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
@@ -127,7 +128,7 @@ def system_test(
     icos_images = dict()
 
     # # IC-OS image configuration
-    icos_config = configure_icos(guestos = guestos, guestos_update = guestos_update, setupos = setupos, hostos_update = hostos_update)
+    icos_config = configure_icos(guestos = guestos, guestos_update = guestos_update, hostos = hostos, hostos_update = hostos_update, setupos = setupos)
     env_var_files |= icos_config.env_var_files
     env |= icos_config.env
     _runtime_deps |= icos_config.runtime_deps
@@ -325,21 +326,19 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
     )
     return struct(test_driver_target = mainnet_nns_systest.test_driver_target)
 
-def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None, testonly = True):
+def uvm_config_image(name, tags = None, visibility = None, srcmap = None, testonly = True):
     """This macro creates bazel targets for uvm config images.
 
     Args:
         name: This name will be used for the target.
         tags: Controls execution of targets. "manual" excludes a target from wildcard targets like (..., :*, :all). See: https://bazel.build/reference/test-encyclopedia#tag-conventions
         visibility: Target visibility controls who may depend on a target.
-        srcs: Source files that are copied into a vfat image.
-        remap_paths: Dict that maps a current filename to a desired filename,
-            e.g. {"activate.sh": "activate"}
+        srcmap: Dictionary of source files to copy into a vfat image mapped to their desired path in the image.
         testonly: If True, the target is only available in test configurations.
     """
     native.genrule(
         name = name + "_size",
-        srcs = srcs,
+        srcs = srcmap.keys(),
         outs = [name + "_size.txt"],
         cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
         tags = ["manual"],
@@ -365,9 +364,8 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
 
     mcopy(
         name = name + "_mcopy",
-        srcs = srcs,
+        srcmap = srcmap,
         fs = ":" + name + "_vfat",
-        remap_paths = remap_paths,
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
@@ -406,11 +404,11 @@ def oci_tar(name, image, repo_tags = []):
 
     basename = name.removesuffix(".tar")
 
-    name_image = basename + "_image"
+    tarball = basename + "_tarball"
 
     # First load the image
     oci_load(
-        name = name_image,
+        name = tarball,
         image = image,
         repo_tags = repo_tags,
         target_compatible_with = [
@@ -419,22 +417,10 @@ def oci_tar(name, image, repo_tags = []):
     )
 
     # create the tarball
-    name_tarballdir = basename + "_tarballdir"
     native.filegroup(
-        name = name_tarballdir,
-        srcs = [":" + name_image],
+        name = name,
+        srcs = [":" + tarball],
         output_group = "tarball",
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-        tags = ["manual"],
-    )
-
-    # Copy the tarball out so we can reference the file by 'name'
-    copy_file(
-        name = basename + "_tar",
-        src = ":" + name_tarballdir,
-        out = name,
         target_compatible_with = [
             "@platforms//os:linux",
         ],

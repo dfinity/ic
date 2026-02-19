@@ -11,24 +11,23 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_snapshots::CanisterSnapshot;
-use ic_replicated_state::canister_state::execution_state::{
-    CustomSection, CustomSectionType, WasmMetadata,
-};
-use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
-    SubnetCallContext,
-};
-use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
-use ic_replicated_state::replicated_state::{
-    MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
-};
-use ic_replicated_state::testing::{
-    CanisterQueuesTesting, FakeDropMessageMetrics, SystemStateTesting,
-};
 use ic_replicated_state::{
     CanisterState, ExecutionTask, IngressHistoryState, InputSource, ReplicatedState,
     SchedulerState, StateError, SystemState,
+    canister_snapshots::CanisterSnapshot,
+    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
+    metadata_state::{
+        subnet_call_context_manager::{
+            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
+            SubnetCallContext,
+        },
+        testing::NetworkTopologyTesting,
+    },
+    replicated_state::{
+        MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
+        testing::ReplicatedStateTesting,
+    },
+    testing::{CanisterQueuesTesting, FakeDropMessageMetrics, SystemStateTesting},
 };
 use ic_test_utilities_state::{ExecutionStateBuilder, arb_replicated_state_with_output_queues};
 use ic_test_utilities_types::ids::{SUBNET_1, canister_test_id, message_test_id, user_test_id};
@@ -165,7 +164,7 @@ impl ReplicatedStateFixture {
 
     fn pop_input(&mut self) -> Option<CanisterMessage> {
         self.state
-            .canister_state_mut(&CANISTER_ID)
+            .canister_state_make_mut(&CANISTER_ID)
             .unwrap()
             .pop_input()
     }
@@ -176,21 +175,21 @@ impl ReplicatedStateFixture {
         time: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
         self.state
-            .canister_state_mut(&CANISTER_ID)
+            .canister_state_make_mut(&CANISTER_ID)
             .unwrap()
             .push_output_request(request.into(), time)
     }
 
     fn push_output_response(&mut self, response: Response) {
         self.state
-            .canister_state_mut(&CANISTER_ID)
+            .canister_state_make_mut(&CANISTER_ID)
             .unwrap()
             .push_output_response(response.into());
     }
 
     fn pop_output(&mut self) -> Option<RequestOrResponse> {
         self.state
-            .canister_state_mut(&CANISTER_ID)
+            .canister_state_make_mut(&CANISTER_ID)
             .unwrap()
             .output_into_iter()
             .pop()
@@ -215,7 +214,7 @@ impl ReplicatedStateFixture {
     }
 
     fn stop_canister(&mut self) {
-        let canister = self.state.canister_state_mut(&CANISTER_ID).unwrap();
+        let canister = self.state.canister_state_make_mut(&CANISTER_ID).unwrap();
         canister
             .system_state
             .begin_stopping(ic_types::messages::StopCanisterContext::Ingress {
@@ -588,7 +587,7 @@ fn memory_taken_by_canister_history() {
         2 * (size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>());
 
     // Push two canister changes into canister history.
-    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.add_canister_change(
         Time::from_nanos_since_unix_epoch(0),
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
@@ -609,19 +608,19 @@ fn memory_taken_by_canister_history() {
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Test small fixed memory allocation.
-    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(2));
     assert_execution_memory_taken(canister_history_memory, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Test large fixed memory allocation.
-    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(888));
     assert_execution_memory_taken(888, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Reset canister memory allocation.
-    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.memory_allocation = MemoryAllocation::default();
 
     // Test a system subnet.
@@ -1075,6 +1074,20 @@ fn split() {
     // Fixture with 2 canisters.
     let mut fixture = ReplicatedStateFixture::with_canisters(&CANISTERS);
 
+    // Give the canisters non-default priorities.
+    fixture
+        .state
+        .metadata
+        .subnet_schedule
+        .get_mut(CANISTER_1)
+        .accumulated_priority = 1.into();
+    fixture
+        .state
+        .metadata
+        .subnet_schedule
+        .get_mut(CANISTER_2)
+        .accumulated_priority = 2.into();
+
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.
     fixture.push_to_stream(vec![
@@ -1158,7 +1171,7 @@ fn split() {
     // Start off with the original state.
     let mut expected = fixture.state.clone();
     // Only `CANISTER_1` should be left.
-    expected.canister_states.remove(&CANISTER_2);
+    expected.take_canister_state(&CANISTER_2);
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
     // Otherwise, the state should be the same.
@@ -1174,11 +1187,11 @@ fn split() {
     // Ingress history should only contain the message to `CANISTER_1`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
     // The input schedules of `CANISTER_1` should have been repartitioned.
-    let mut canister_state = expected.canister_states.remove(&CANISTER_1).unwrap();
-    canister_state
+    let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
+    Arc::make_mut(&mut canister_state)
         .system_state
-        .split_input_schedules(&CANISTER_1, &expected.canister_states);
-    expected.canister_states.insert(CANISTER_1, canister_state);
+        .split_input_schedules(&CANISTER_1, expected.canister_states());
+    expected.put_canister_state(canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
     // Everything else should be the same as in phase 1.
@@ -1195,33 +1208,40 @@ fn split() {
 
     // Subnet B state is based off of an empty state.
     let mut expected = ReplicatedState::new(SUBNET_B, fixture.state.metadata.own_subnet_type);
-    // Only `CANISTER_2` should be left.
-    expected.canister_states.insert(
-        CANISTER_2,
-        fixture.state.canister_state(&CANISTER_2).unwrap().clone(),
-    );
+    // Only `CANISTER_2` should be left, with no scheduling priority.
+    expected.put_canister_state(fixture.state.canister_state(&CANISTER_2).unwrap().clone());
+    expected.metadata.subnet_schedule.remove(&CANISTER_2);
     // The full ingress history should be preserved.
-    expected.metadata.ingress_history = fixture.state.metadata.ingress_history;
+    expected.metadata.ingress_history = fixture.state.metadata.ingress_history.clone();
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
+    // The logic preserves the full subnet schedule, even though only the priority
+    // of `CANISTER_2` will be persisted along with the canister state.
+    expected.metadata.subnet_schedule = fixture.state.metadata.subnet_schedule;
     // Otherwise, the state should be the same.
     assert_eq!(expected, state_b);
 
     //
     // Subnet B, phase 2.
     //
+
+    // Loading `state_b` will populate the scheduling priority for `CANISTER_2`.
+    state_b.canister_priority_mut(CANISTER_2);
+
     state_b.after_split();
 
     // Ingress history should only contain the message to `CANISTER_2`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_2]);
     // The input schedules of `CANISTER_2` should have been repartitioned.
-    let mut canister_state = expected.canister_states.remove(&CANISTER_2).unwrap();
-    canister_state
+    let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
+    Arc::make_mut(&mut canister_state)
         .system_state
-        .split_input_schedules(&CANISTER_2, &expected.canister_states);
-    expected.canister_states.insert(CANISTER_2, canister_state);
+        .split_input_schedules(&CANISTER_2, expected.canister_states());
+    expected.put_canister_state(canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
+    // The canister priority for `CANISTER_1` is gone, as it was not persisted.
+    expected.metadata.subnet_schedule.remove(&CANISTER_1);
     // Everything else should be the same as in phase 1.
     assert_eq!(expected, state_b);
 }
@@ -1247,7 +1267,11 @@ fn online_split() {
         CanisterIdRange {start: CanisterId::from_u64(CANISTER_2_U64 + 1), end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
     })
     .unwrap();
-    fixture.state.metadata.network_topology.routing_table = Arc::new(routing_table.clone());
+    fixture
+        .state
+        .metadata
+        .network_topology
+        .set_routing_table(routing_table.clone());
 
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.
@@ -1296,7 +1320,7 @@ fn online_split() {
 
     // Take snapshots of both canisters.
     let mut take_shapshot = |canister_id| {
-        let canister = fixture.state.canister_state_mut(&canister_id).unwrap();
+        let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
         let snapshot = CanisterSnapshot::from_canister(canister, UNIX_EPOCH).unwrap();
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
@@ -1310,7 +1334,7 @@ fn online_split() {
 
     // Add aborted `install_code` tasks to both canisters.
     let mut add_aborted_install_code_task = |canister_id| {
-        let canister = fixture.state.canister_state_mut(&canister_id).unwrap();
+        let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
         canister
             .system_state
             .task_queue
@@ -1337,11 +1361,11 @@ fn online_split() {
     // Only `CANISTER_1` should be left.
     expected.remove_canister(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
-    let mut canister_state = expected.canister_states.remove(&CANISTER_1).unwrap();
-    canister_state
+    let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
+    Arc::make_mut(&mut canister_state)
         .system_state
-        .split_input_schedules(&CANISTER_1, &expected.canister_states);
-    expected.canister_states.insert(CANISTER_1, canister_state);
+        .split_input_schedules(&CANISTER_1, expected.canister_states());
+    expected.put_canister_state(canister_state);
     // The snapshot of `CANISTER_2` should have been deleted.
     expected.canister_snapshots.remove(canister_2_snapshot_id);
 
@@ -1367,13 +1391,13 @@ fn online_split() {
     // Only `CANISTER_2` should be hosted.
     expected.remove_canister(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
-    let mut canister_state = expected.canister_states.remove(&CANISTER_2).unwrap();
-    canister_state
+    let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
+    Arc::make_mut(&mut canister_state)
         .system_state
-        .split_input_schedules(&CANISTER_2, &expected.canister_states);
+        .split_input_schedules(&CANISTER_2, expected.canister_states());
     // The in-progress `install_code` task should have been silently dropped.
-    canister_state.system_state.task_queue = Default::default();
-    expected.canister_states.insert(CANISTER_2, canister_state);
+    Arc::make_mut(&mut canister_state).system_state.task_queue = Default::default();
+    expected.put_canister_state(canister_state);
     // The snapshot of `CANISTER_1` should have been deleted.
     expected.canister_snapshots.remove(canister_1_snapshot_id);
 
@@ -1660,7 +1684,7 @@ fn iter_with_exclude_queue_yields_correct_elements(
     prop_assert_eq!(remaining_output, ignored_requests.len());
 
     for raw in ignored_requests {
-        let queues = if let Some(canister) = replicated_state.canister_states.get_mut(&raw.sender())
+        let queues = if let Some(canister) = replicated_state.canister_state_make_mut(&raw.sender())
         {
             canister.system_state.queues_mut()
         } else {

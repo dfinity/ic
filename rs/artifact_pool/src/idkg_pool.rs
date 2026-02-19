@@ -32,10 +32,11 @@ use ic_types::{
             VetKdKeyShare,
         },
     },
-    crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
-    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
+    crypto::canister_threshold_sig::idkg::{
+        IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId, SignedIDkgDealing,
+    },
 };
-use prometheus::IntCounter;
+use prometheus::{IntCounter, IntGauge};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -358,8 +359,10 @@ impl MutableIDkgPoolSection for InMemoryIDkgPoolSection {
 pub struct IDkgPoolImpl {
     validated: Box<dyn MutableIDkgPoolSection>,
     unvalidated: Box<dyn MutableIDkgPoolSection>,
+    transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     stats: Box<dyn IDkgStats>,
     invalidated_artifacts: IntCounter,
+    active_transcripts: IntGauge,
     log: ReplicaLogger,
 }
 
@@ -392,12 +395,17 @@ impl IDkgPoolImpl {
                 "idkg_invalidated_artifacts",
                 "The number of invalidated IDKG artifacts",
             ),
+            active_transcripts: metrics_registry.int_gauge(
+                "idkg_transcripts_in_pool",
+                "The number of IDKG transcripts in the IDKG pool",
+            ),
             validated,
             unvalidated: Box::new(InMemoryIDkgPoolSection::new(
                 metrics_registry,
                 POOL_IDKG,
                 POOL_TYPE_UNVALIDATED,
             )),
+            transcripts: BTreeMap::new(),
             stats,
             log,
         }
@@ -448,6 +456,10 @@ impl IDkgPool for IDkgPoolImpl {
         self.unvalidated.as_pool_section()
     }
 
+    fn transcripts(&self) -> &BTreeMap<IDkgTranscriptId, IDkgTranscript> {
+        &self.transcripts
+    }
+
     fn stats(&self) -> &dyn IDkgStats {
         self.stats.as_ref()
     }
@@ -494,6 +506,13 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                 IDkgChangeAction::RemoveUnvalidated(msg_id) => {
                     unvalidated_ops.remove(msg_id);
                 }
+                IDkgChangeAction::AddTranscript(transcript) => {
+                    self.transcripts
+                        .insert(transcript.transcript_id, transcript);
+                }
+                IDkgChangeAction::RemoveTranscript(transcript_id) => {
+                    self.transcripts.remove(&transcript_id);
+                }
                 IDkgChangeAction::HandleInvalid(msg_id, msg) => {
                     self.invalidated_artifacts.inc();
                     warn!(self.log, "Invalid IDKG artifact ({:?}): {:?}", msg, msg_id);
@@ -511,6 +530,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                 }
             }
         }
+        self.active_transcripts.set(self.transcripts.len() as i64);
         self.unvalidated.mutate(unvalidated_ops);
         self.validated.mutate(validated_ops);
         ArtifactTransmits {

@@ -385,7 +385,7 @@ fn can_read_canister_metadata(
     custom_section_name: &str,
     state: &ReplicatedState,
 ) -> Result<(), HttpError> {
-    let canister = match state.canister_states.get(canister_id) {
+    let canister = match state.canister_state(canister_id) {
         Some(canister) => canister,
         None => return Ok(()),
     };

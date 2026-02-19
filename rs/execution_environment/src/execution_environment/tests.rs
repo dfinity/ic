@@ -19,6 +19,7 @@ use ic_replicated_state::{
     canister_state::{
         DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase,
     },
+    metadata_state::testing::NetworkTopologyTesting,
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
@@ -44,7 +45,6 @@ use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::mem::size_of;
-use std::sync::Arc;
 
 #[cfg(test)]
 mod canister_task;
@@ -781,6 +781,9 @@ fn get_running_canister_status_from_another_canister() {
             + test
                 .canister_state(canister)
                 .canister_history_memory_usage()
+            + test
+                .canister_state(canister)
+                .log_memory_store_memory_usage()
     );
     assert_eq!(
         Cycles::new(csr.idle_cycles_burned_per_day()),
@@ -890,12 +893,14 @@ fn get_canister_status_memory_metrics() {
     let stable_memory_size = csr.stable_memory_size();
     let global_memory_size = csr.global_memory_size();
     let wasm_binary_size = csr.wasm_binary_size();
+    let log_memory_store_size = csr.log_memory_store_size();
     let custom_sections_size = csr.custom_sections_size();
 
     let execution_memory_size = wasm_memory_size
         + stable_memory_size
         + global_memory_size
         + wasm_binary_size
+        + log_memory_store_size
         + custom_sections_size;
 
     let canister_history_size = csr.canister_history_size();
@@ -1634,9 +1639,15 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, own_subnet_id);
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, own_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1651,7 +1662,10 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates canister 1 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1706,7 +1720,10 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     );
 
     // Simulate a subnet split that migrates canister 2 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1970,8 +1987,7 @@ fn canister_snapshots_after_split() {
 fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls: usize) {
     // Collect all `StopCanisterContexts` from all stopping canisters.
     let canister_stop_canister_contexts: Vec<_> = state
-        .canister_states
-        .values()
+        .canisters_iter()
         .filter_map(|canister| {
             if let CanisterStatus::Stopping {
                 call_context_manager: _,

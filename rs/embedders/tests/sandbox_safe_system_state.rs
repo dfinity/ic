@@ -13,6 +13,7 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
@@ -30,7 +31,6 @@ use ic_types::{ComputeAllocation, Cycles, NumInstructions};
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::convert::From;
-use std::sync::Arc;
 
 mod common;
 use common::*;
@@ -635,24 +635,23 @@ fn two_subnet_topology(
     test_subnet_id: SubnetId,
     test_canister_id: CanisterId,
 ) -> NetworkTopology {
-    let mut topo = NetworkTopology {
-        nns_subnet_id,
-        ..Default::default()
-    };
-    topo.subnets.insert(nns_subnet_id, Default::default());
-    topo.subnets.insert(test_subnet_id, Default::default());
+    let mut topo = NetworkTopology::default();
+    topo.nns_subnet_id = nns_subnet_id;
+    topo.subnets_mut().insert(nns_subnet_id, Default::default());
+    topo.subnets_mut()
+        .insert(test_subnet_id, Default::default());
     let nns_canister_range = CanisterIdRange {
         start: nns_canister_id,
         end: nns_canister_id,
     };
-    Arc::make_mut(&mut topo.routing_table)
+    topo.routing_table_mut()
         .insert(nns_canister_range, nns_subnet_id)
         .unwrap();
     let test_canister_range = CanisterIdRange {
         start: test_canister_id,
         end: test_canister_id,
     };
-    Arc::make_mut(&mut topo.routing_table)
+    topo.routing_table_mut()
         .insert(test_canister_range, test_subnet_id)
         .unwrap();
     topo

@@ -153,7 +153,6 @@ prop_compose! {
 }
 
 pub fn default_fs_encryption_key_set() -> CspSecretKey {
-    // TODO(CRP-862): produce random values rather than default.
     let fs_enc_key_set = ni_dkg_types::FsEncryptionKeySetWithPop {
         public_key: FsEncryptionPublicKey(Default::default()),
         pop: FsEncryptionPop {

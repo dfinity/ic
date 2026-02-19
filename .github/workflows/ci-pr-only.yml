@@ -217,7 +217,7 @@ jobs:
           filters: |
             generate-config-fixtures:
               - '.github/workflows/ci-pr-only.yml'
-              - 'rs/ic_os/config_types/**'
+              - 'rs/ic_os/config/types/**'
       - name: Run Generate Config Fixtures
         id: generate-config-fixtures
         if: steps.filter.outputs.generate-config-fixtures == 'true'

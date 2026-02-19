@@ -1317,7 +1317,7 @@ mod cketh_evm_rpc {
     fn should_not_panic_when_evm_rpc_canister_is_stopped() {
         let cketh = CkEthSetup::default();
         // The minter starts right away by scraping the logs,
-        // which leads the state machine to panick if we were to stop directly the EVM RPC canister.
+        // which leads the state machine to panic if we were to stop directly the EVM RPC canister.
         // So we first stop the minter to start fresh.
         cketh.stop_minter();
         cketh
