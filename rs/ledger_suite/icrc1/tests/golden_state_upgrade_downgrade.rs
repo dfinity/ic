@@ -622,82 +622,11 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
 #[cfg(feature = "u256-tokens")]
 #[test]
 fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
-    // u256 testnet ledgers
-    const CK_SEPOLIA_LINK_LEDGER_SUITE: (&str, &str, &str) = (
-        "r52mc-qaaaa-aaaar-qafzq-cai",
-        "ri55p-riaaa-aaaar-qaf2a-cai",
-        "ckSepoliaLINK",
-    );
-    const CK_SEPOLIA_PEPE_LEDGER_SUITE: (&str, &str, &str) = (
-        "hw4ru-taaaa-aaaar-qagdq-cai",
-        "g3sv2-4iaaa-aaaar-qagea-cai",
-        "ckSepoliaPEPE",
-    );
-    const CK_SEPOLIA_USDC_LEDGER_SUITE: (&str, &str, &str) = (
-        "yfumr-cyaaa-aaaar-qaela-cai",
-        "ycvkf-paaaa-aaaar-qaelq-cai",
-        "ckSepoliaUSDC",
-    );
     // u256 production ledgers
     const CK_ETH_LEDGER_SUITE: (&str, &str, &str) = (
         "ss2fx-dyaaa-aaaar-qacoq-cai",
         "s3zol-vqaaa-aaaar-qacpa-cai",
         "ckETH",
-    );
-    const CK_EURC_LEDGER_SUITE: (&str, &str, &str) = (
-        "pe5t5-diaaa-aaaar-qahwa-cai",
-        "pd4vj-oqaaa-aaaar-qahwq-cai",
-        "ckEURC",
-    );
-    const CK_LINK_LEDGER_SUITE: (&str, &str, &str) = (
-        "g4tto-rqaaa-aaaar-qageq-cai",
-        "gvqys-hyaaa-aaaar-qagfa-cai",
-        "ckLINK",
-    );
-    const CK_OCT_LEDGER_SUITE: (&str, &str, &str) = (
-        "ebo5g-cyaaa-aaaar-qagla-cai",
-        "egp3s-paaaa-aaaar-qaglq-cai",
-        "ckOCT",
-    );
-    const CK_PEPE_LEDGER_SUITE: (&str, &str, &str) = (
-        "etik7-oiaaa-aaaar-qagia-cai",
-        "eujml-dqaaa-aaaar-qagiq-cai",
-        "ckPEPE",
-    );
-    const CK_SHIB_LEDGER_SUITE: (&str, &str, &str) = (
-        "fxffn-xiaaa-aaaar-qagoa-cai",
-        "fqedz-2qaaa-aaaar-qagoq-cai",
-        "ckSHIB",
-    );
-    const CK_UNI_LEDGER_SUITE: (&str, &str, &str) = (
-        "ilzky-ayaaa-aaaar-qahha-cai",
-        "imymm-naaaa-aaaar-qahhq-cai",
-        "ckUNI",
-    );
-    const CK_USDC_LEDGER_SUITE: (&str, &str, &str) = (
-        "xevnm-gaaaa-aaaar-qafnq-cai",
-        "xrs4b-hiaaa-aaaar-qafoa-cai",
-        "ckUSDC",
-    );
-    const CK_USDT_LEDGER_SUITE: (&str, &str, &str) = (
-        "cngnf-vqaaa-aaaar-qag4q-cai",
-        "cefgz-dyaaa-aaaar-qag5a-cai",
-        "ckUSDT",
-    );
-    const CK_WBTC_LEDGER_SUITE: (&str, &str, &str) = (
-        "bptq2-faaaa-aaaar-qagxq-cai",
-        "dso6s-wiaaa-aaaar-qagya-cai",
-        "ckWBTC",
-    );
-    const CK_WSTETH_LEDGER_SUITE: (&str, &str, &str) = (
-        "j2tuh-yqaaa-aaaar-qahcq-cai",
-        "jtq73-oyaaa-aaaar-qahda-cai",
-        "ckWSTETH",
-    );
-    const CK_XAUT_LEDGER_SUITE: (&str, &str, &str) = (
-        "nza5v-qaaaa-aaaar-qahzq-cai",
-        "nmhmy-riaaa-aaaar-qah2a-cai",
-        "ckXAUT",
     );
 
     let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {
@@ -721,34 +650,221 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
         Some(ck_eth_burns_without_spender),
         true,
     )];
-    for canister_id_and_name in vec![
-        CK_SEPOLIA_LINK_LEDGER_SUITE,
-        CK_SEPOLIA_PEPE_LEDGER_SUITE,
-        CK_SEPOLIA_USDC_LEDGER_SUITE,
-        CK_EURC_LEDGER_SUITE,
-        CK_USDC_LEDGER_SUITE,
-        CK_LINK_LEDGER_SUITE,
-        CK_OCT_LEDGER_SUITE,
-        CK_PEPE_LEDGER_SUITE,
-        CK_SHIB_LEDGER_SUITE,
-        CK_UNI_LEDGER_SUITE,
-        CK_USDT_LEDGER_SUITE,
-        CK_WBTC_LEDGER_SUITE,
-        CK_WSTETH_LEDGER_SUITE,
-        CK_XAUT_LEDGER_SUITE,
-    ] {
-        canister_configs.push(LedgerSuiteConfig::new(
-            canister_id_and_name,
-            &MAINNET_U256_WASMS,
-            &MASTER_WASMS,
-        ));
-    }
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
     for canister_config in canister_configs {
         canister_config.perform_upgrade_downgrade_testing(&state_machine);
     }
+}
+
+/// After upgrading the index to master, only advances time and ticks (no get_blocks
+/// on the index). Use to see if the dlmalloc panic is in the timer/build_index path
+/// rather than the decode/query path. Run with:
+///   cargo test --package icrc_ledger_suite_integration_tests --lib golden_state_upgrade_downgrade::stress_timer_only_after_upgrade -- --ignored
+#[cfg(not(feature = "u256-tokens"))]
+#[test]
+#[ignore]
+fn stress_timer_only_after_upgrade() {
+    const CK_BTC_LEDGER_CANISTER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
+    const CK_BTC_INDEX_CANISTER_ID: &str = "n5wcd-faaaa-aaaar-qaaea-cai";
+    const CK_BTC_LEDGER_SUITE: (&str, &str, &str) =
+        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_INDEX_CANISTER_ID, "ckBTC");
+    // Keep low so "last N [dbg] lines" is not flooded by later timer invocations.
+    const TIMER_STEPS: u32 = 5;
+    const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
+
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+    let config = LedgerSuiteConfig::new(CK_BTC_LEDGER_SUITE, &MAINNET_CKBTC_WASMS, &MASTER_WASMS);
+    let ledger_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.ledger_id).unwrap());
+    let index_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.index_id).unwrap());
+    top_up_canisters(&state_machine, ledger_canister_id, index_canister_id);
+    state_machine.advance_time(Duration::from_secs(1));
+    state_machine.tick();
+    config.upgrade_to_master(&state_machine);
+    let initial_synced = u64::try_from(
+        index::status(&state_machine, index_canister_id)
+            .num_blocks_synced
+            .0,
+    )
+    .expect("num_blocks_synced should fit in u64");
+    let chain_length =
+        get_blocks(&state_machine, Principal::from(ledger_canister_id), 0, 0).chain_length;
+    // Do NOT call get_blocks on the index — only run the timer (build_index) path.
+    for step in 0..TIMER_STEPS {
+        state_machine.advance_time(SYNC_STEP_SECONDS);
+        state_machine.tick();
+        if step % 50 == 0 && step > 0 {
+            println!(
+                "stress_timer_only_after_upgrade: step {}/{}",
+                step, TIMER_STEPS
+            );
+        }
+    }
+    let final_synced = u64::try_from(
+        index::status(&state_machine, index_canister_id)
+            .num_blocks_synced
+            .0,
+    )
+    .expect("num_blocks_synced should fit in u64");
+
+    // Print last [dbg] lines from canister log (from ic0.debug_print; persists across trap).
+    index::print_last_debug_canister_log(&state_machine, index_canister_id, 25);
+    // Print [TRAP] records from canister log (trap message + Canister Backtrace from the EE).
+    index::print_trap_backtrace_from_canister_log(&state_machine, index_canister_id);
+
+    assert!(
+        final_synced > initial_synced || final_synced == chain_length,
+        "index made no progress after {} timer steps (initial_synced={}, final_synced={}, chain_length={}); \
+         first build_index likely trapped (e.g. dlmalloc panic) and did not clear is_build_index_running",
+        TIMER_STEPS,
+        initial_synced,
+        final_synced,
+        chain_length
+    );
+    println!(
+        "stress_timer_only_after_upgrade: completed {} steps, index progressed {} -> {}",
+        TIMER_STEPS, initial_synced, final_synced
+    );
+}
+
+/// Stress-tests only the index `get_blocks` (query) path without advancing time,
+/// so the sync timer never runs. Use to isolate whether the dlmalloc panic is in
+/// the decode/query path. Run with:
+///   cargo test --package icrc_ledger_suite_integration_tests --lib golden_state_upgrade_downgrade::stress_get_blocks_only -- --ignored
+#[cfg(feature = "u256-tokens")]
+#[test]
+#[ignore]
+fn stress_get_blocks_only() {
+    const CK_ETH_LEDGER_SUITE: (&str, &str, &str) = (
+        "ss2fx-dyaaa-aaaar-qacoq-cai",
+        "s3zol-vqaaa-aaaar-qacpa-cai",
+        "ckETH",
+    );
+    let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {
+        owner: PrincipalId::from_str("sv3dd-oaaaa-aaaar-qacoa-cai")
+            .unwrap()
+            .0,
+        subaccount: None,
+    };
+    let ck_eth_burns_without_spender = BurnsWithoutSpender {
+        minter: ck_eth_minter,
+        burn_indexes: vec![
+            1051, 1094, 1276, 1759, 1803, 1929, 2449, 2574, 2218, 2219, 2231, 1777, 4, 9, 31, 1540,
+            1576, 1579, 1595, 1607, 1617, 1626, 1752, 1869, 1894, 2013, 2555,
+        ],
+    };
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+    let config = LedgerSuiteConfig::new_with_params(
+        CK_ETH_LEDGER_SUITE,
+        &MAINNET_U256_WASMS,
+        &MASTER_WASMS,
+        Some(ck_eth_burns_without_spender),
+        false,
+    );
+    let ledger_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.ledger_id).unwrap());
+    let index_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.index_id).unwrap());
+    top_up_canisters(&state_machine, ledger_canister_id, index_canister_id);
+    state_machine.advance_time(Duration::from_secs(1));
+    state_machine.tick();
+    config.upgrade_to_master(&state_machine);
+    // Do NOT advance time or tick after this — only stress get_blocks (query) path.
+    for round in 0..5 {
+        println!("stress_get_blocks_only: round {}", round + 1);
+        let _ = index::get_all_index_blocks(&state_machine, index_canister_id, None, None);
+    }
+}
+
+/// After upgrading the index to master, only advances time and ticks (no get_blocks
+/// on the index). Use to see if the dlmalloc panic is in the timer/build_index path.
+#[cfg(feature = "u256-tokens")]
+#[test]
+#[ignore]
+fn stress_timer_only_after_upgrade() {
+    const CK_ETH_LEDGER_SUITE: (&str, &str, &str) = (
+        "ss2fx-dyaaa-aaaar-qacoq-cai",
+        "s3zol-vqaaa-aaaar-qacpa-cai",
+        "ckETH",
+    );
+    // Keep low so "last N [dbg] lines" is not flooded by later timer invocations.
+    const TIMER_STEPS: u32 = 5;
+    const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
+
+    let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {
+        owner: PrincipalId::from_str("sv3dd-oaaaa-aaaar-qacoa-cai")
+            .unwrap()
+            .0,
+        subaccount: None,
+    };
+    let ck_eth_burns_without_spender = BurnsWithoutSpender {
+        minter: ck_eth_minter,
+        burn_indexes: vec![
+            1051, 1094, 1276, 1759, 1803, 1929, 2449, 2574, 2218, 2219, 2231, 1777, 4, 9, 31, 1540,
+            1576, 1579, 1595, 1607, 1617, 1626, 1752, 1869, 1894, 2013, 2555,
+        ],
+    };
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+    let config = LedgerSuiteConfig::new_with_params(
+        CK_ETH_LEDGER_SUITE,
+        &MAINNET_U256_WASMS,
+        &MASTER_WASMS,
+        Some(ck_eth_burns_without_spender),
+        false,
+    );
+    let ledger_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.ledger_id).unwrap());
+    let index_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from_str(config.index_id).unwrap());
+    top_up_canisters(&state_machine, ledger_canister_id, index_canister_id);
+    state_machine.advance_time(Duration::from_secs(1));
+    state_machine.tick();
+    config.upgrade_to_master(&state_machine);
+    let initial_synced = u64::try_from(
+        index::status(&state_machine, index_canister_id)
+            .num_blocks_synced
+            .0,
+    )
+    .expect("num_blocks_synced should fit in u64");
+    let chain_length =
+        get_blocks(&state_machine, Principal::from(ledger_canister_id), 0, 0).chain_length;
+    // Do NOT call get_blocks on the index — only run the timer (build_index) path.
+    for step in 0..TIMER_STEPS {
+        state_machine.advance_time(SYNC_STEP_SECONDS);
+        state_machine.tick();
+        if step % 50 == 0 && step > 0 {
+            println!(
+                "stress_timer_only_after_upgrade: step {}/{}",
+                step, TIMER_STEPS
+            );
+        }
+    }
+    let final_synced = u64::try_from(
+        index::status(&state_machine, index_canister_id)
+            .num_blocks_synced
+            .0,
+    )
+    .expect("num_blocks_synced should fit in u64");
+
+    index::print_last_debug_canister_log(&state_machine, index_canister_id, 25);
+    index::print_trap_backtrace_from_canister_log(&state_machine, index_canister_id);
+
+    assert!(
+        final_synced > initial_synced || final_synced == chain_length,
+        "index made no progress after {} timer steps (initial_synced={}, final_synced={}, chain_length={}); \
+         first build_index likely trapped (e.g. dlmalloc panic) and did not clear is_build_index_running",
+        TIMER_STEPS,
+        initial_synced,
+        final_synced,
+        chain_length
+    );
+    println!(
+        "stress_timer_only_after_upgrade: completed {} steps, index progressed {} -> {}",
+        TIMER_STEPS, initial_synced, final_synced
+    );
 }
 
 #[cfg(not(feature = "u256-tokens"))]
@@ -1100,7 +1216,7 @@ mod index {
         index_id: CanisterId,
         ledger_id: CanisterId,
     ) {
-        const MAX_ATTEMPTS: u8 = 100;
+        const MAX_ATTEMPTS: u8 = 200;
         const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
 
         let mut num_blocks_synced = u64::MAX;
@@ -1115,8 +1231,11 @@ mod index {
                 return;
             }
         }
+        // Dump last [dbg] canister log lines (from ic0.debug_print; not rolled back on trap).
+        print_last_debug_canister_log(env, index_id, 25);
+        print_trap_backtrace_from_canister_log(env, index_id);
         panic!(
-            "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
+            "The index canister {index_id} was unable to sync all the blocks with the ledger {ledger_id}. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
         );
     }
 
@@ -1142,7 +1261,7 @@ mod index {
             .expect("Failed to decode GetBlocksResponse")
     }
 
-    fn status(state_machine: &StateMachine, canister_id: CanisterId) -> Status {
+    pub fn status(state_machine: &StateMachine, canister_id: CanisterId) -> Status {
         let arg = Encode!(&()).unwrap();
         match state_machine.query(canister_id, "status", arg) {
             Err(err) => {
@@ -1154,6 +1273,69 @@ mod index {
             Ok(WasmResult::Reply(res)) => {
                 Decode!(&res, Status).expect("error decoding response to status query")
             }
+        }
+    }
+
+    /// Prints the last `limit` canister log records that contain "[dbg]" (from ic0.debug_print).
+    /// Use after a trap to see how far build_index got; debug_print is not rolled back on trap.
+    pub fn print_last_debug_canister_log(
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+        limit: usize,
+    ) {
+        let log = state_machine.canister_log(canister_id);
+        let records = log.records();
+        let mut dbg_records: Vec<_> = records
+            .iter()
+            .filter(|r| {
+                std::str::from_utf8(&r.content)
+                    .map(|s| s.contains("[dbg]"))
+                    .unwrap_or(false)
+            })
+            .collect();
+        dbg_records.reverse();
+        println!(
+            "[canister_log] last {} [dbg] lines (newest first):",
+            limit.min(dbg_records.len())
+        );
+        for rec in dbg_records.into_iter().take(limit) {
+            let s = String::from_utf8_lossy(&rec.content);
+            println!("  #{} {}", rec.idx, s.trim_end());
+        }
+    }
+
+    /// Prints all canister log records that contain "[TRAP]" (added by the execution environment
+    /// when the canister traps). These include the trap message and Canister Backtrace if
+    /// wasm_backtrace is enabled. Call this after a failed assertion to see the backtrace.
+    pub fn print_trap_backtrace_from_canister_log(
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+    ) {
+        let log = state_machine.canister_log(canister_id);
+        let records = log.records();
+        let trap_records: Vec<_> = records
+            .iter()
+            .filter(|r| {
+                std::str::from_utf8(&r.content)
+                    .map(|s| s.contains("[TRAP]"))
+                    .unwrap_or(false)
+            })
+            .collect();
+        if trap_records.is_empty() {
+            println!(
+                "[canister_log] no [TRAP] records (backtrace may be in stderr or not yet written)"
+            );
+            return;
+        }
+        println!(
+            "[canister_log] {} [TRAP] record(s) (trap message + backtrace):",
+            trap_records.len()
+        );
+        for rec in trap_records {
+            let s = String::from_utf8_lossy(&rec.content);
+            println!("---------- [TRAP] #{} ----------", rec.idx);
+            println!("{}", s.trim_end());
+            println!("----------");
         }
     }
 }
