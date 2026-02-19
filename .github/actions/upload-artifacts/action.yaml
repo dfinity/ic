@@ -2,8 +2,6 @@ name: Upload Artifacts
 description: |
   Run an artifact upload command and set a step summary. This expects the upload command to write one line per artifact to stdout.
 inputs:
-  # credentials-content:
-  #   required: true
   upload-command:
     required: true
   name:
@@ -12,16 +10,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    # - name: Write AWS credentials
-    #   shell: bash
-    #   run: |
-    #     credentials_dir="${HOME}/.aws/credentials"
-    #     if ! [ -e "$credentials_dir" ]; then
-    #       echo "writing credentials"
-    #       mkdir -p "$(dirname "${credentials_dir}")"
-    #       echo '${{ inputs.credentials-content }}' >"$credentials_dir"
-    #     fi
-
     - name: Upload to S3
       uses: ./.github/actions/bazel
       with:
