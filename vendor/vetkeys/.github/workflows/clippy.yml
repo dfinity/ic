@@ -1,0 +1,36 @@
+name: Backend CI Rust Clippy
+
+permissions: {}
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - backend/rs/**
+      - examples/**/backend/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/provision-linux.sh
+      - .github/workflows/provision-darwin.sh
+      - .github/workflows/clippy.yml
+      - rust-toolchain.toml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  cargo-clippy-backend-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Provision Linux
+        run: bash .github/workflows/provision-linux.sh
+      - name: Run Clippy Linux
+        run: |
+          set -eExuo pipefail
+          export CARGO_TERM_COLOR=always # ensure output has colors
+          cargo clippy -- -Dwarnings
+          cargo fmt --check

@@ -1,0 +1,6 @@
+type Signature = record { signature : blob; message : text; timestamp : nat64 };
+service : (text) -> {
+  get_my_signatures : () -> (vec Signature) query;
+  get_my_verification_key : () -> (blob);
+  sign_message : (text) -> (blob);
+}

@@ -1,0 +1,6 @@
+build_cmd: cargo build --release --target wasm32-unknown-unknown --locked
+
+init_args:
+  hex: 4449444c0001710568656c6c6f
+
+wasm_path: ../../target/wasm32-unknown-unknown/release/init_arg.wasm

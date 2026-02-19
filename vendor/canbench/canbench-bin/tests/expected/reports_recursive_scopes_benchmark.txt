@@ -1,0 +1,42 @@
+---------------------------------------------------
+
+Benchmark: bench_recursive_scopes
+  total:
+    instructions: 30.09 M (0.31%) (change within noise threshold)
+    heap_increase: 0 pages (no change)
+    stable_memory_increase: 0 pages (no change)
+
+  recursive_scope_1 (scope):
+    calls: 10 (no change)
+    instructions: 10.03 M (0.26%) (change within noise threshold)
+    heap_increase: 0 pages (no change)
+    stable_memory_increase: 0 pages (no change)
+
+  recursive_scope_2 (scope):
+    calls: 20 (no change)
+    instructions: 20.06 M (0.31%) (change within noise threshold)
+    heap_increase: 0 pages (no change)
+    stable_memory_increase: 0 pages (no change)
+
+---------------------------------------------------
+
+Summary:
+  instructions:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max +91.74K | p75 +91.74K | median +91.74K | p25 +91.74K | min +91.74K]
+    change %: [max +0.31% | p75 +0.31% | median +0.31% | p25 +0.31% | min +0.31%]
+
+  heap_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+  stable_memory_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+---------------------------------------------------

@@ -1,0 +1,5 @@
+error: #[query] must be above a function with no generic parameters.
+ --> tests/compile_fail/no_generic.rs:4:10
+  |
+4 | fn method<T>(_arg: T) {}
+  |          ^

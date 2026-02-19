@@ -1,0 +1,17 @@
+type EncryptedNote = record {
+  id : nat;
+  encrypted_text : text;
+  owner : text;
+  users : vec text;
+};
+service : (text) -> {
+  add_user : (nat, text) -> ();
+  create_note : () -> (nat);
+  delete_note : (nat) -> ();
+  encrypted_symmetric_key_for_note : (nat, blob) -> (text);
+  get_notes : () -> (vec EncryptedNote);
+  remove_user : (nat, text) -> ();
+  symmetric_key_verification_key_for_note : () -> (text);
+  update_note : (nat, text) -> ();
+  whoami : () -> (text);
+}

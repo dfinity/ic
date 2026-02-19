@@ -1,0 +1,53 @@
+---------------------------------------------------
+
+Benchmark: bench_scope_new (new)
+  total:
+    instructions: 3987 (new)
+    heap_increase: 0 pages (new)
+    stable_memory_increase: 0 pages (new)
+
+  scope_1 (scope):
+    calls: 1 (new)
+    instructions: 1046 (new)
+    heap_increase: 0 pages (new)
+    stable_memory_increase: 0 pages (new)
+
+  scope_2 (scope):
+    calls: 1 (new)
+    instructions: 847 (new)
+    heap_increase: 0 pages (new)
+    stable_memory_increase: 0 pages (new)
+
+---------------------------------------------------
+
+Summary:
+  instructions:
+    status:   New benchmarks added ➕
+    counts:   [total 1 | regressed 0 | improved 0 | new 1 | unchanged 0]
+    change:   n/a
+    change %: n/a
+
+  heap_increase:
+    status:   New benchmarks added ➕
+    counts:   [total 1 | regressed 0 | improved 0 | new 1 | unchanged 0]
+    change:   n/a
+    change %: n/a
+
+  stable_memory_increase:
+    status:   New benchmarks added ➕
+    counts:   [total 1 | regressed 0 | improved 0 | new 1 | unchanged 0]
+    change:   n/a
+    change %: n/a
+
+---------------------------------------------------
+
+Only significant changes:
+| status | name                     | calls |   ins |  ins Δ% | HI |  HI Δ% | SMI |  SMI Δ% |
+|--------|--------------------------|-------|-------|---------|----|--------|-----|---------|
+|  new   | bench_scope_new          |       | 3.99K |         |  0 |        |   0 |         |
+|  new   | bench_scope_new::scope_1 |     1 | 1.05K |         |  0 |        |   0 |         |
+|  new   | bench_scope_new::scope_2 |     1 |   847 |         |  0 |        |   0 |         |
+
+ins = instructions, HI = heap_increase, SMI = stable_memory_increase, Δ% = percent change
+
+---------------------------------------------------

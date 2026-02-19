@@ -1,0 +1,3 @@
+[dependencies]
+base = "0.14.9"
+ic-vetkeys = "0.4.0"

@@ -1,0 +1,81 @@
+{
+  "name": "encrypted-notes-dapp",
+  "version": "0.2.0",
+  "keywords": [
+    "Internet Computer",
+    "Motoko",
+    "Svelte",
+    "Canister",
+    "Rust"
+  ],
+  "scripts": {
+    "build": "npm run build:bindings && rollup -c --bundleConfigAsCjs",
+    "build:bindings": "cd scripts && ./gen_bindings.sh",
+    "dev": "npm run build:bindings && rollup -c --bundleConfigAsCjs -w",
+    "start": "sirv public --single",
+    "test": "jest src",
+    "test:watch": "npm run test -- --watch",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.16.8",
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-json": "^6.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.2",
+    "@rollup/plugin-terser": "^0.4.3",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@tailwindcss/line-clamp": "^0.3.1",
+    "@testing-library/jest-dom": "^5.16.1",
+    "@testing-library/svelte": "^3.0.3",
+    "@tsconfig/svelte": "^2.0.0",
+    "autoprefixer": "^10.4.2",
+    "babel-jest": "^27.4.6",
+    "daisyui": "^1.25.4",
+    "idb-keyval": "6.2.1",
+    "jest": "^27.4.7",
+    "postcss": "^8.4.31",
+    "rollup": "^3.29.5",
+    "rollup-plugin-css-only": "^4.3.0",
+    "rollup-plugin-dotenv": "^0.5.1",
+    "rollup-plugin-inject": "^3.0.2",
+    "rollup-plugin-inject-process-env": "^1.3.1",
+    "rollup-plugin-livereload": "^2.0.0",
+    "rollup-plugin-polyfill-node": "^0.12.0",
+    "rollup-plugin-svelte": "^7.2.2",
+    "svelte": "^3.59.1",
+    "svelte-check": "^3.3.2",
+    "svelte-jester": "^2.3.2",
+    "svelte-preprocess": "^5.0.3",
+    "tailwindcss": "^3.0.17",
+    "tslib": "^2.0.0",
+    "typescript": "^4.0.0"
+  },
+  "dependencies": {
+    "@dfinity/agent": "^2.1.3",
+    "@dfinity/auth-client": "^2.1.3",
+    "@dfinity/candid": "^2.1.3",
+    "@dfinity/identity": "^2.1.3",
+    "@dfinity/principal": "^2.1.3",
+    "@dfinity/vetkeys": "^0.3.0",
+    "isomorphic-dompurify": "^2.25.0",
+    "sirv-cli": "^1.0.0",
+    "svelte-icons": "^2.1.0",
+    "svelte-router-spa": "^6.0.3",
+    "typewriter-editor": "^0.6.45"
+  },
+  "jest": {
+    "transform": {
+      "^.+\\.js$": "babel-jest",
+      "^.+\\.svelte$": "svelte-jester"
+    },
+    "moduleFileExtensions": [
+      "js",
+      "svelte"
+    ],
+    "setupFilesAfterEnv": [
+      "@testing-library/jest-dom/extend-expect",
+      "./jest-env.js"
+    ],
+    "testEnvironment": "jsdom"
+  }
+}

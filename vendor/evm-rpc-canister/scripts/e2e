@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Reinstall all canisters and run E2E tests in your local environment.
+(
+    dfx canister create --all &&
+    npm run generate &&
+    dfx deploy evm_rpc --mode reinstall -y &&
+    dfx deploy evm_rpc_local --mode reinstall -y &&
+    dfx deploy evm_rpc_demo --mode reinstall -y &&
+    dfx deploy evm_rpc_staging --mode reinstall -y &&
+    dfx deploy e2e_rust &&
+    dfx canister call e2e_rust test &&
+    dfx deploy e2e_motoko &&
+    dfx canister call e2e_motoko test &&
+    echo Done
+)

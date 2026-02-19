@@ -1,0 +1,17 @@
+{
+  "e2e_motoko": {
+    "ic": "rcfjk-jiaaa-aaaap-abuoq-cai"
+  },
+  "e2e_rust": {
+    "ic": "rlgcw-7aaaa-aaaap-abupa-cai"
+  },
+  "evm_rpc": {
+    "ic": "7hfb6-caaaa-aaaar-qadga-cai"
+  },
+  "evm_rpc_playground": {
+    "ic": "5smys-wiaaa-aaaar-qaiza-cai"
+  },
+  "evm_rpc_staging": {
+    "ic": "xhcuo-6yaaa-aaaar-qacqq-cai"
+  }
+}

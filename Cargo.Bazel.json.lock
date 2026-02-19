@@ -1,5 +1,5 @@
 {
-  "checksum": "1ddbcae71e2a9b76a3fab3ad8cc89d1e83da80ceb87ef331e03157777f5485e6",
+  "checksum": "3ca09c1ef01863e1f5bbb960e93be563202ee6840d96a1765a1370298caa7330",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2014,7 +2014,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -3521,7 +3521,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -11431,9 +11431,8 @@
       "version": "0.4.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/canbench/0.4.0/download",
-          "sha256": "83f64957491f613da3541e93a0228fa95bf75e9e4eaaccc1c8848975d98757ec"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canbench/canbench-bin"
         }
       },
       "targets": [
@@ -11471,7 +11470,8 @@
           "common": [
             {
               "id": "canbench-rs 0.4.0",
-              "target": "canbench_rs"
+              "target": "canbench_rs",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canbench/canbench-rs"
             },
             {
               "id": "candid 0.10.22",
@@ -11554,9 +11554,8 @@
       "version": "0.4.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs/0.4.0/download",
-          "sha256": "0dfe0fee0135b3face2ff259fddc28fff3c28e7acd84ae7746e25972f11230f9"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canbench/canbench-rs"
         }
       },
       "targets": [
@@ -11586,7 +11585,8 @@
             },
             {
               "id": "ic-cdk 0.19.0",
-              "target": "ic_cdk"
+              "target": "ic_cdk",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk"
             },
             {
               "id": "serde 1.0.228",
@@ -11600,7 +11600,8 @@
           "common": [
             {
               "id": "canbench-rs-macros 0.4.0",
-              "target": "canbench_rs_macros"
+              "target": "canbench_rs_macros",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canbench/canbench-rs-macros"
             }
           ],
           "selects": {}
@@ -11618,9 +11619,8 @@
       "version": "0.4.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs-macros/0.4.0/download",
-          "sha256": "237e2e5d914039918eee4bdf141e976ff34cf4130c6760808a047c081710e0a8"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canbench/canbench-rs-macros"
         }
       },
       "targets": [
@@ -14327,7 +14327,7 @@
               "target": "serde_with"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -14386,7 +14386,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -21364,11 +21364,13 @@
             },
             {
               "id": "canbench 0.4.0",
-              "target": "canbench"
+              "target": "canbench",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canbench/canbench-bin"
             },
             {
               "id": "canbench-rs 0.4.0",
-              "target": "canbench_rs"
+              "target": "canbench_rs",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canbench/canbench-rs"
             },
             {
               "id": "candid 0.10.22",
@@ -21520,8 +21522,9 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_client 0.3.0",
-              "target": "evm_rpc_client"
+              "id": "evm_rpc_client 0.4.0",
+              "target": "evm_rpc_client",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/evm-rpc-canister/evm_rpc_client"
             },
             {
               "id": "evm_rpc_types 3.1.0",
@@ -21664,8 +21667,9 @@
               "target": "ic_canister_log"
             },
             {
-              "id": "ic-canister-runtime 0.1.0",
-              "target": "ic_canister_runtime"
+              "id": "ic-canister-runtime 0.2.0",
+              "target": "ic_canister_runtime",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canhttp/ic-canister-runtime"
             },
             {
               "id": "ic-canister-sig-creation 1.3.0",
@@ -21677,15 +21681,18 @@
             },
             {
               "id": "ic-cdk 0.19.0",
-              "target": "ic_cdk"
+              "target": "ic_cdk",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk"
             },
             {
               "id": "ic-cdk-executor 2.0.0",
-              "target": "ic_cdk_executor"
+              "target": "ic_cdk_executor",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-executor"
             },
             {
               "id": "ic-cdk-timers 1.0.0",
-              "target": "ic_cdk_timers"
+              "target": "ic_cdk_timers",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-timers"
             },
             {
               "id": "ic-certificate-verification 3.0.3",
@@ -21762,7 +21769,8 @@
             },
             {
               "id": "ic-vetkeys 0.6.0",
-              "target": "ic_vetkeys"
+              "target": "ic_vetkeys",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/vetkeys/backend/rs/ic_vetkeys"
             },
             {
               "id": "ic-wasm 0.8.4",
@@ -22438,7 +22446,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -22702,6 +22710,11 @@
             {
               "id": "educe 0.4.22",
               "target": "educe"
+            },
+            {
+              "id": "ic-cdk-macros 0.19.0",
+              "target": "ic_cdk_macros",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-macros"
             },
             {
               "id": "indoc 1.0.9",
@@ -26493,14 +26506,13 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_client 0.3.0": {
+    "evm_rpc_client 0.4.0": {
       "name": "evm_rpc_client",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_client/0.3.0/download",
-          "sha256": "11d6b4ecbd21ee4f46919e9640838a54517fe36bad263a3778d8117eb284b44e"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/evm-rpc-canister/evm_rpc_client"
         }
       },
       "targets": [
@@ -26529,12 +26541,14 @@
               "target": "candid"
             },
             {
-              "id": "evm_rpc_types 3.1.0",
-              "target": "evm_rpc_types"
+              "id": "evm_rpc_types 3.1.1",
+              "target": "evm_rpc_types",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/evm-rpc-canister/evm_rpc_types"
             },
             {
-              "id": "ic-canister-runtime 0.1.0",
-              "target": "ic_canister_runtime"
+              "id": "ic-canister-runtime 0.2.0",
+              "target": "ic_canister_runtime",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canhttp/ic-canister-runtime"
             },
             {
               "id": "serde 1.0.228",
@@ -26561,7 +26575,7 @@
           ],
           "selects": {}
         },
-        "version": "0.3.0"
+        "version": "0.4.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -26633,7 +26647,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -26645,6 +26659,88 @@
         },
         "edition": "2021",
         "version": "3.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "evm_rpc_types 3.1.1": {
+      "name": "evm_rpc_types",
+      "version": "3.1.1",
+      "package_url": "https://github.com/dfinity/evm-rpc-canister",
+      "repository": {
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/evm-rpc-canister/evm_rpc_types"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "evm_rpc_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "evm_rpc_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.22",
+              "target": "candid"
+            },
+            {
+              "id": "canlog 0.2.0",
+              "target": "canlog"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-error-types 0.2.0",
+              "target": "ic_error_types"
+            },
+            {
+              "id": "ic-management-canister-types 0.5.0",
+              "target": "ic_management_canister_types"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "strum 0.27.2",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            },
+            {
+              "id": "url 2.5.4",
+              "target": "url"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "3.1.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -32455,7 +32551,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -32599,7 +32695,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -34719,7 +34815,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -34951,7 +35047,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -35271,7 +35367,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -35491,7 +35587,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -35643,14 +35739,13 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-canister-runtime 0.1.0": {
+    "ic-canister-runtime 0.2.0": {
       "name": "ic-canister-runtime",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "package_url": "https://github.com/dfinity/canhttp",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-canister-runtime/0.1.0/download",
-          "sha256": "01a81a68bc6825ab81142a4e176ee04d0cc73deeed69753603e90e57b3ddcd3f"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/canhttp/ic-canister-runtime"
         }
       },
       "targets": [
@@ -35680,7 +35775,8 @@
             },
             {
               "id": "ic-cdk 0.19.0",
-              "target": "ic_cdk"
+              "target": "ic_cdk",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk"
             },
             {
               "id": "ic-error-types 0.2.0",
@@ -35691,7 +35787,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -35707,7 +35803,7 @@
           ],
           "selects": {}
         },
-        "version": "0.1.0"
+        "version": "0.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35789,7 +35885,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -35872,9 +35968,8 @@
       "version": "0.19.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.19.0/download",
-          "sha256": "818d6d5416a8f0212e1b132703b0da51e36c55f2b96677e96f2bbe7702e1bd85"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk"
         }
       },
       "targets": [
@@ -35904,15 +35999,17 @@
             },
             {
               "id": "ic-cdk-executor 2.0.0",
-              "target": "ic_cdk_executor"
+              "target": "ic_cdk_executor",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-executor"
             },
             {
               "id": "ic-error-types 0.2.0",
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.5.0",
-              "target": "ic_management_canister_types"
+              "id": "ic-management-canister-types 0.6.0",
+              "target": "ic_management_canister_types",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-management-canister-types"
             },
             {
               "id": "ic0 1.0.1",
@@ -35935,7 +36032,7 @@
               "target": "slotmap"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -35946,7 +36043,8 @@
           "common": [
             {
               "id": "ic-cdk-macros 0.19.0",
-              "target": "ic_cdk_macros"
+              "target": "ic_cdk_macros",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-macros"
             }
           ],
           "selects": {}
@@ -35964,9 +36062,8 @@
       "version": "2.0.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-executor/2.0.0/download",
-          "sha256": "33716b730ded33690b8a704bff3533fda87d229e58046823647d28816e9bcee7"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-executor"
         }
       },
       "targets": [
@@ -36004,7 +36101,8 @@
           "common": [
             {
               "id": "ic-cdk-executor 2.0.0",
-              "target": "build_script_build"
+              "target": "build_script_build",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-executor"
             },
             {
               "id": "ic0 1.0.1",
@@ -36047,9 +36145,8 @@
       "version": "0.19.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.19.0/download",
-          "sha256": "66dad91a214945cb3605bc9ef6901b87e2ac41e3624284c2cabba49d43aa4f43"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-macros"
         }
       },
       "targets": [
@@ -36110,9 +36207,8 @@
       "version": "1.0.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-timers/1.0.0/download",
-          "sha256": "6852b9c1d4a82ff50fc7318599298aee8bfb082bd7e9fe7e5c1420692b2170f7"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-timers"
         }
       },
       "targets": [
@@ -36150,11 +36246,13 @@
           "common": [
             {
               "id": "ic-cdk-executor 2.0.0",
-              "target": "ic_cdk_executor"
+              "target": "ic_cdk_executor",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-executor"
             },
             {
               "id": "ic-cdk-timers 1.0.0",
-              "target": "build_script_build"
+              "target": "build_script_build",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-timers"
             },
             {
               "id": "ic0 1.0.1",
@@ -36184,7 +36282,8 @@
           "common": [
             {
               "id": "ic-cdk-executor 2.0.0",
-              "target": "ic_cdk_executor"
+              "target": "ic_cdk_executor",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk-executor"
             }
           ],
           "selects": {}
@@ -36505,7 +36604,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -36647,7 +36746,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -36733,7 +36832,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -36971,7 +37070,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -37232,7 +37331,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -37535,7 +37634,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -37708,6 +37807,60 @@
         },
         "edition": "2024",
         "version": "0.5.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-management-canister-types 0.6.0": {
+      "name": "ic-management-canister-types",
+      "version": "0.6.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-management-canister-types"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_management_canister_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_management_canister_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.22",
+              "target": "candid"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38225,7 +38378,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -38313,7 +38466,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -38411,7 +38564,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -38519,7 +38672,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -38705,9 +38858,8 @@
       "version": "0.6.0",
       "package_url": "https://github.com/dfinity/vetkeys",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-vetkeys/0.6.0/download",
-          "sha256": "fc87ee136e49cc95d9883d2b2c4fedadd6b286b17dd90ce531e7c56ebc36dc6e"
+        "Path": {
+          "path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/vetkeys/backend/rs/ic_vetkeys"
         }
       },
       "targets": [
@@ -38757,7 +38909,8 @@
             },
             {
               "id": "ic-cdk 0.19.0",
-              "target": "ic_cdk"
+              "target": "ic_cdk",
+              "local_path": "/Users/mathias/workspaces/ic/ic-vendored-cdk/vendor/cdk-rs/ic-cdk"
             },
             {
               "id": "ic-stable-structures 0.7.0",
@@ -41584,7 +41737,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -48079,7 +48232,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -58248,7 +58401,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -60777,7 +60930,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -65185,7 +65338,7 @@
               "target": "libredox"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -66966,7 +67119,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -69595,7 +69748,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -73079,7 +73232,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
@@ -76588,7 +76741,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -80600,14 +80753,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror 2.0.17": {
+    "thiserror 2.0.18": {
       "name": "thiserror",
-      "version": "2.0.17",
+      "version": "2.0.18",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/2.0.17/download",
-          "sha256": "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
+          "url": "https://static.crates.io/crates/thiserror/2.0.18/download",
+          "sha256": "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
         }
       },
       "targets": [
@@ -80651,7 +80804,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "build_script_build"
             }
           ],
@@ -80661,13 +80814,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 2.0.17",
+              "id": "thiserror-impl 2.0.18",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "2.0.17"
+        "version": "2.0.18"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -80743,14 +80896,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 2.0.17": {
+    "thiserror-impl 2.0.18": {
       "name": "thiserror-impl",
-      "version": "2.0.17",
+      "version": "2.0.18",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/2.0.17/download",
-          "sha256": "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.18/download",
+          "sha256": "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
         }
       },
       "targets": [
@@ -80790,7 +80943,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.17"
+        "version": "2.0.18"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -84393,7 +84546,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -84477,7 +84630,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -85905,7 +86058,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -90697,7 +90850,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -92301,7 +92454,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -96728,7 +96881,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.17",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -98553,7 +98706,7 @@
     "escargot 0.5.7",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
-    "evm_rpc_client 0.3.0",
+    "evm_rpc_client 0.4.0",
     "evm_rpc_types 3.1.0",
     "exec 0.3.1",
     "eyre 0.6.8",
@@ -98589,11 +98742,12 @@
     "ic-bn-lib-common 0.1.0",
     "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",
-    "ic-canister-runtime 0.1.0",
+    "ic-canister-runtime 0.2.0",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.0.3",
     "ic-cdk 0.19.0",
     "ic-cdk-executor 2.0.0",
+    "ic-cdk-macros 0.19.0",
     "ic-cdk-timers 1.0.0",
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
@@ -98790,7 +98944,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 2.0.17",
+    "thiserror 2.0.18",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.6.0",

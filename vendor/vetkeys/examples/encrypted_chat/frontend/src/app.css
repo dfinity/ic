@@ -1,0 +1,279 @@
+@import 'tailwindcss';
+
+/* Modern Professional Design System */
+:root {
+	/* Color Palette - Professional & Modern */
+	--primary-50: #eff6ff;
+	--primary-100: #dbeafe;
+	--primary-200: #bfdbfe;
+	--primary-300: #93c5fd;
+	--primary-400: #60a5fa;
+	--primary-500: #3b82f6;
+	--primary-600: #2563eb;
+	--primary-700: #1d4ed8;
+	--primary-800: #1e40af;
+	--primary-900: #1e3a8a;
+
+	/* CSS variable mappings for primary colors */
+	--color-primary-50: var(--primary-50);
+	--color-primary-100: var(--primary-100);
+	--color-primary-200: var(--primary-200);
+	--color-primary-300: var(--primary-300);
+	--color-primary-400: var(--primary-400);
+	--color-primary-500: var(--primary-500);
+	--color-primary-600: var(--primary-600);
+	--color-primary-700: var(--primary-700);
+	--color-primary-800: var(--primary-800);
+	--color-primary-900: var(--primary-900);
+
+	/* CSS variable mappings for surface colors */
+	--color-surface-50: var(--gray-50);
+	--color-surface-100: var(--gray-100);
+	--color-surface-200: var(--gray-200);
+	--color-surface-300: var(--gray-300);
+	--color-surface-400: var(--gray-400);
+	--color-surface-500: var(--gray-500);
+	--color-surface-600: var(--gray-600);
+	--color-surface-700: var(--gray-700);
+	--color-surface-800: var(--gray-800);
+	--color-surface-900: var(--gray-900);
+
+	--gray-50: #f9fafb;
+	--gray-100: #f3f4f6;
+	--gray-200: #e5e7eb;
+	--gray-300: #d1d5db;
+	--gray-400: #9ca3af;
+	--gray-500: #6b7280;
+	--gray-600: #4b5563;
+	--gray-700: #374151;
+	--gray-800: #1f2937;
+	--gray-900: #111827;
+
+	/* Modern shadows */
+	--shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+	--shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+	--shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+	--shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+	--shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+	/* Border radius */
+	--radius-sm: 0.375rem;
+	--radius: 0.5rem;
+	--radius-md: 0.75rem;
+	--radius-lg: 1rem;
+	--radius-xl: 1.5rem;
+}
+
+
+/* Professional Component Styles */
+.btn {
+	@apply inline-flex items-center justify-center rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200;
+	@apply focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:outline-none;
+	@apply disabled:pointer-events-none disabled:opacity-50;
+}
+
+.btn-sm {
+	@apply h-9 px-3;
+}
+
+.btn-md {
+	@apply h-10 px-4;
+}
+
+.btn-lg {
+	@apply h-11 px-8;
+}
+
+.variant-filled-primary {
+	@apply transform bg-blue-600 text-white shadow-md hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg;
+}
+
+.variant-outline-primary {
+	@apply border border-blue-200 bg-white text-blue-700 shadow-sm hover:bg-blue-50 hover:shadow-md;
+}
+
+.variant-ghost-primary {
+	@apply text-blue-700 hover:bg-blue-100 hover:text-blue-800;
+}
+
+.card {
+	@apply rounded-xl border border-gray-200 bg-white shadow-lg;
+}
+
+.input {
+	@apply flex w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm transition-all;
+	@apply focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none;
+}
+
+.badge {
+	@apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.badge-secondary {
+	@apply bg-gray-100 text-gray-800;
+}
+
+/* Modern Chat Interface Classes */
+.bg-surface-50-900 {
+	@apply bg-gray-50;
+}
+
+.bg-surface-100-800 {
+	@apply bg-gray-100;
+}
+
+.bg-surface-200-700 {
+	@apply bg-gray-200;
+}
+
+.border-surface-200-700 {
+	@apply border-gray-200;
+}
+
+.text-surface-500-400 {
+	@apply text-gray-500;
+}
+
+/* Professional glass effect */
+.glass-effect {
+	backdrop-filter: blur(16px);
+	background: rgba(255, 255, 255, 0.9);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	box-shadow:
+		0 20px 25px -5px rgba(0, 0, 0, 0.1),
+		0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* Message bubbles */
+.message-bubble-own {
+	@apply rounded-2xl rounded-br-md bg-blue-600 text-white shadow-lg;
+}
+
+.message-bubble-other {
+	@apply rounded-2xl rounded-bl-md border border-gray-200 bg-white text-gray-900 shadow-lg;
+}
+
+/* Modern scrollbar */
+.modern-scrollbar {
+	scrollbar-width: thin;
+	scrollbar-color: rgb(156 163 175) transparent;
+}
+
+.modern-scrollbar::-webkit-scrollbar {
+	width: 6px;
+}
+
+.modern-scrollbar::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.modern-scrollbar::-webkit-scrollbar-thumb {
+	@apply rounded-full bg-gray-300 hover:bg-gray-400;
+}
+
+/* Professional animations */
+@keyframes fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes slide-in {
+	from {
+		opacity: 0;
+		transform: translateX(-20px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+@keyframes pulse-glow {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+	}
+	50% {
+		box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+	}
+}
+
+.animate-fade-in {
+	animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-in {
+	animation: slide-in 0.3s ease-out;
+}
+
+.animate-pulse-glow {
+	animation: pulse-glow 2s infinite;
+}
+
+/* Professional gradients */
+.gradient-primary {
+	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.gradient-secondary {
+	background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.gradient-success {
+	background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.message-input {
+	scrollbar-width: thin;
+}
+
+.message-input::-webkit-scrollbar {
+	width: 4px;
+}
+
+.message-input::-webkit-scrollbar-thumb {
+	@apply bg-gray-400;
+	border-radius: 2px;
+}
+
+.alert {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 1rem;
+	border-radius: 0.5rem;
+}
+
+.alert-message {
+	flex: 1 1 0%;
+	min-width: 0;
+}
+
+.alert-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+/* Alert/Notification variants with softer, muted colors */
+.variant-filled-primary.alert {
+	@apply bg-blue-50 text-blue-900 border border-blue-200;
+}
+
+.variant-filled-success.alert {
+	@apply bg-green-50 text-green-900 border border-green-200;
+}
+
+.variant-filled-warning.alert {
+	@apply bg-orange-50 text-orange-900 border border-orange-200;
+}
+
+.variant-filled-error.alert {
+	@apply bg-red-50 text-red-900 border border-red-200;
+}

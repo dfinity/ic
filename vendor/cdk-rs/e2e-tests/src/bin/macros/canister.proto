@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package canister;
+
+service ExampleService {
+  rpc MethodOne (MethodOneRequest) returns (MethodOneResponse);
+  rpc MethodTwo (MethodTwoRequest) returns (MethodTwoResponse);
+}
+
+message MethodOneRequest {
+  string input = 1;
+}
+
+message MethodOneResponse {
+  int32 result = 1;
+}
+
+message MethodTwoRequest {
+  repeated float values = 1;
+}
+
+message MethodTwoResponse {
+  bool success = 1;
+  string message = 2;
+}

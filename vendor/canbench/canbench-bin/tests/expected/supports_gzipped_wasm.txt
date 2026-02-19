@@ -1,0 +1,48 @@
+---------------------------------------------------
+
+Benchmark: bench_1 (new)
+  total:
+    instructions: 207 (new)
+    heap_increase: 0 pages (new)
+    stable_memory_increase: 0 pages (new)
+
+---------------------------------------------------
+
+Benchmark: bench_2 (new)
+  total:
+    instructions: 207 (new)
+    heap_increase: 0 pages (new)
+    stable_memory_increase: 0 pages (new)
+
+---------------------------------------------------
+
+Summary:
+  instructions:
+    status:   New benchmarks added ➕
+    counts:   [total 2 | regressed 0 | improved 0 | new 2 | unchanged 0]
+    change:   n/a
+    change %: n/a
+
+  heap_increase:
+    status:   New benchmarks added ➕
+    counts:   [total 2 | regressed 0 | improved 0 | new 2 | unchanged 0]
+    change:   n/a
+    change %: n/a
+
+  stable_memory_increase:
+    status:   New benchmarks added ➕
+    counts:   [total 2 | regressed 0 | improved 0 | new 2 | unchanged 0]
+    change:   n/a
+    change %: n/a
+
+---------------------------------------------------
+
+Only significant changes:
+| status | name    | calls | ins |  ins Δ% | HI |  HI Δ% | SMI |  SMI Δ% |
+|--------|---------|-------|-----|---------|----|--------|-----|---------|
+|  new   | bench_1 |       | 207 |         |  0 |        |   0 |         |
+|  new   | bench_2 |       | 207 |         |  0 |        |   0 |         |
+
+ins = instructions, HI = heap_increase, SMI = stable_memory_increase, Δ% = percent change
+
+---------------------------------------------------

@@ -1,0 +1,86 @@
+name: examples-basic-bls-signing
+
+permissions: {}
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - examples/basic_bls_signing/**
+      - .github/workflows/provision-darwin.sh
+      - .github/workflows/provision-linux.sh
+      - .github/workflows/examples-basic-bls-signing.yml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  DFX_VERSION: 0.29.1
+jobs:
+  examples-basic-bls-signing-rust-darwin:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Provision Darwin
+        run: |
+          bash .github/workflows/provision-darwin.sh
+      - name: Deploy Basic BLS Signing Rust Darwin
+        run: |
+          set -eExuo pipefail
+          cargo install candid-extractor
+          pushd examples/basic_bls_signing/rust
+          dfx start --background && dfx deploy
+          cd frontend
+          npm run lint
+  examples-basic-bls-signing-rust-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Provision Linux
+        run: bash .github/workflows/provision-linux.sh
+      - name: Deploy Basic BLS Signing Rust Linux
+        run: |
+          set -eExuo pipefail
+          cargo install candid-extractor
+          pushd examples/basic_bls_signing/rust
+          dfx start --background && dfx deploy
+          cd frontend
+          npm run lint
+  examples-basic-bls-signing-motoko-darwin:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Provision Darwin
+        run: |
+          bash .github/workflows/provision-darwin.sh
+      - name: Deploy Basic BLS Signing Motoko Darwin
+        run: |
+          set -eExuo pipefail
+          cargo install candid-extractor
+          pushd examples/basic_bls_signing/motoko
+          dfx start --background && dfx deploy
+          cd frontend
+          npm run lint
+  examples-basic-bls-signing-motoko-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Provision Linux
+        run: bash .github/workflows/provision-linux.sh
+      - name: Deploy Basic BLS Signing Motoko Linux
+        run: |
+          set -eExuo pipefail
+          cargo install candid-extractor
+          pushd examples/basic_bls_signing/motoko
+          dfx start --background && dfx deploy
+          cd frontend
+          npm run lint

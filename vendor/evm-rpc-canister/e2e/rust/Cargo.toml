@@ -1,0 +1,17 @@
+[package]
+name = "e2e"
+version = "0.1.0"
+description = "End-to-end testing with a Rust canister."
+authors = ["DFINITY Foundation"]
+edition = "2021"
+
+[dependencies]
+candid = { workspace = true }
+evm_rpc_types = { path = "../../evm_rpc_types" }
+ic-cdk = { workspace = true }
+ic-certified-map = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+
+[build-dependencies]
+ic-cdk-bindgen = { workspace = true }

@@ -1,0 +1,6 @@
+status,name,scope_calls,scope_calls Δ,scope_calls Δ%,instructions,instructions Δ,instructions Δ%,heap_increase,heap_increase Δ,heap_increase Δ%,stable_memory_increase,stable_memory_increase Δ,stable_memory_increase Δ%
+,insert_users,,,,2558172165,0,0.00%,871,0,0.00%,0,0,0.00%
+,pre_upgrade_bench,,,,486879718,822,0.00%,519,0,0.00%,184,0,0.00%
+,pre_upgrade_bench::serialize_state,1,0,0.00%,423940091,822,0.00%,519,0,0.00%,0,0,0.00%
+,pre_upgrade_bench::writing_to_stable_memory,5,0,0.00%,62932528,0,0.00%,0,0,0.00%,184,0,0.00%
+,remove_users,,,,2109136823,0,0.00%,0,0,0.00%,0,0,0.00%

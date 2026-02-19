@@ -1,0 +1,39 @@
+---------------------------------------------------
+
+Benchmark: increase_heap_increase (new)
+  total:
+    instructions: 3.39 M (new)
+    heap_increase: 62 pages (new)
+    stable_memory_increase: 0 pages (new)
+
+---------------------------------------------------
+
+Summary:
+  instructions:
+    status:   New benchmarks added ➕
+    counts:   [total 1 | regressed 0 | improved 0 | new 1 | unchanged 0]
+    change:   n/a
+    change %: n/a
+
+  heap_increase:
+    status:   New benchmarks added ➕
+    counts:   [total 1 | regressed 0 | improved 0 | new 1 | unchanged 0]
+    change:   n/a
+    change %: n/a
+
+  stable_memory_increase:
+    status:   New benchmarks added ➕
+    counts:   [total 1 | regressed 0 | improved 0 | new 1 | unchanged 0]
+    change:   n/a
+    change %: n/a
+
+---------------------------------------------------
+
+Only significant changes:
+| status | name                   | calls |   ins |  ins Δ% | HI |  HI Δ% | SMI |  SMI Δ% |
+|--------|------------------------|-------|-------|---------|----|--------|-----|---------|
+|  new   | increase_heap_increase |       | 3.39M |         | 62 |        |   0 |         |
+
+ins = instructions, HI = heap_increase, SMI = stable_memory_increase, Δ% = percent change
+
+---------------------------------------------------

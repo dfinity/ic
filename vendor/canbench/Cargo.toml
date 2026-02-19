@@ -1,0 +1,32 @@
+[workspace]
+members = [
+    "canbench-bin",
+    "canbench-rs",
+    "canbench-rs-macros",
+    "examples",
+    "tests",
+]
+resolver = "2"
+
+[workspace.dependencies]
+candid = "0.10.20"
+clap = { version = "4.5.53", features = ["derive"] }
+colored = "3.0.0"
+flate2 = "1.1.5"
+hex = "0.4.3"
+ic-cdk = { path = "../cdk-rs/ic-cdk" }
+proc-macro2 = "1.0.103"
+quote = "1.0.42"
+reqwest = { version = "0.12.24", features = [
+    "blocking",
+    "rustls-tls-webpki-roots",
+], default-features = false }
+semver = "1.0.27"
+serde = "1.0.228"
+serde_yaml = "0.9.34"
+sha256 = "1.6.0"
+syn = "1.0.109"
+tempfile = "3.23.0"
+walrus = "0.23.3"
+wasmparser = "0.235.0"
+rustc-demangle = "0.1.26"

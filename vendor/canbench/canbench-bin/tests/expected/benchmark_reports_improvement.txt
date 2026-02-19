@@ -1,0 +1,39 @@
+---------------------------------------------------
+
+Benchmark: improvement_test
+  total:
+    instructions: 207 (improved by 93.32%)
+    heap_increase: 0 pages (no change)
+    stable_memory_increase: 0 pages (no change)
+
+---------------------------------------------------
+
+Summary:
+  instructions:
+    status:   Improvements detected 🟢
+    counts:   [total 1 | regressed 0 | improved 1 | new 0 | unchanged 0]
+    change:   [max -2.89K | p75 -2.89K | median -2.89K | p25 -2.89K | min -2.89K]
+    change %: [max -93.32% | p75 -93.32% | median -93.32% | p25 -93.32% | min -93.32%]
+
+  heap_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+  stable_memory_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+---------------------------------------------------
+
+Only significant changes:
+| status | name             | calls | ins |  ins Δ% | HI |  HI Δ% | SMI |  SMI Δ% |
+|--------|------------------|-------|-----|---------|----|--------|-----|---------|
+|   -    | improvement_test |       | 207 | -93.32% |  0 |  0.00% |   0 |   0.00% |
+
+ins = instructions, HI = heap_increase, SMI = stable_memory_increase, Δ% = percent change
+
+---------------------------------------------------

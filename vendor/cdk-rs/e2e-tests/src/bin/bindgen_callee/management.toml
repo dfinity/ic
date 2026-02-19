@@ -1,0 +1,5 @@
+[rust]
+visibility = "pub(crate)"
+attributes = "#[derive(CandidType, Deserialize, Clone, Debug)]"
+blob.use_type = "Vec<u8>"
+change_details.variant.creation.name = "CreationRecord"

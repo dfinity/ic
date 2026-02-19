@@ -1,0 +1,19 @@
+[workspace]
+
+[package]
+name = "ic-response-codes"
+version = "0.1.2"
+authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
+edition = "2021"
+repository = "https://github.com/dfinity/cdk-rs"
+rust-version = "1.75.0"
+license = "Apache-2.0"
+description = "Internet Computer Response Codes"
+homepage = "https://docs.rs/ic-response-codes"
+documentation = "https://docs.rs/ic-response-codes"
+readme = "README.md"
+categories = ["api-bindings", "data-structures"]
+keywords = ["internet-computer", "types", "dfinity"]
+include = ["src", "Cargo.toml", "LICENSE", "README.md"]
+
+[dependencies]

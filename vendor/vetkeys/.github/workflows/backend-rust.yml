@@ -1,0 +1,51 @@
+name: Backend CI Rust
+
+permissions: {}
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - backend/rs/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/provision-linux.sh
+      - .github/workflows/provision-darwin.sh
+      - .github/workflows/backend-rust.yml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  cargo-test-backend-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Provision Linux
+        run: bash .github/workflows/provision-linux.sh
+      - name: Run Tests Linux
+        run: |
+          set -eExuo pipefail
+          export CARGO_TERM_COLOR=always # ensure output has colors
+          cargo build --release --target wasm32-unknown-unknown -p ic-vetkeys-manager-canister -p ic-vetkeys-encrypted-maps-canister -p ic-vetkeys-canisters-tests
+          cargo test
+          cargo test --doc
+  cargo-test-backend-darwin:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Provision Darwin
+        run: |
+          bash .github/workflows/provision-darwin.sh
+      - name: Run Tests Darwin
+        run: |
+          set -eExuo pipefail
+          export CARGO_TERM_COLOR=always # ensure output has colors
+          cargo build --release --target wasm32-unknown-unknown -p ic-vetkeys-manager-canister -p ic-vetkeys-encrypted-maps-canister -p ic-vetkeys-canisters-tests
+          cargo test
+          cargo test --doc

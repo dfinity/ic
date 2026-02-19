@@ -1,0 +1,168 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+    paths-ignore:
+      - "README.md"
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: rustup component add clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Cargo clippy
+        # We run clippy twice (once without tests), so that it accurately reports dead code in the non-test configuration.
+        # `manual_range_contains` is disabled because a >= x && a < y reads more clearly than (x..y).contains(a) and
+        # there are additional caveats for floating point numbers (https://github.com/rust-lang/rust-clippy/issues/6455)
+        run: |
+          cargo clippy -- -D clippy::all -D warnings -A clippy::manual_range_contains
+          cargo clippy --tests --benches -- -D clippy::all -D warnings -A clippy::manual_range_contains
+
+      - name: Check dependencies
+        # evm_rpc_types is used in the [monorepo](https://github.com/dfinity/ic)
+        # and some crates there already have a dependency on the ic-cdk. To avoid any conflicting versions of the ic-cdk,
+        # we ensure that there is no transitive dependency on ic-cdk in evm_rpc_types
+        run: |
+          ! cargo tree -p evm_rpc_types --invert ic-cdk --locked
+
+  cargo-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: rustup component add clippy
+
+      - name: Cargo doc
+        run: |
+          cargo doc --workspace --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: "--deny warnings"
+
+  reproducible-build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - name: Docker build
+        run: |
+          ./scripts/docker-build
+
+      - name: Archive Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: evm_rpc.wasm.gz
+          path: evm_rpc.wasm.gz
+          if-no-files-found: error
+
+      - name: Add summary
+        run: |
+          hash=`sha256sum evm_rpc.wasm.gz`
+          echo "SHA-256 :hash: ${hash}" >> $GITHUB_STEP_SUMMARY
+
+  check-canister-wasm-endpoints:
+    needs: [ reproducible-build ]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: 'Download artifacts'
+        uses: actions/download-artifact@v4
+        with:
+          name: evm_rpc.wasm.gz
+
+      - name: 'Install `ic-wasm`'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: ic-wasm
+
+      - name: 'Check canister endpoints'
+        run: |
+          ic-wasm "$GITHUB_WORKSPACE/evm_rpc.wasm.gz" check-endpoints --hidden ./candid/hidden_endpoints.conf
+
+  cargo-test:
+    needs: [ reproducible-build ]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: evm_rpc.wasm.gz
+      
+      - name: Set EVM_RPC_WASM_PATH for load_wasm
+        run: |
+          echo "EVM_RPC_WASM_PATH=$GITHUB_WORKSPACE/evm_rpc.wasm.gz" >> "$GITHUB_ENV"
+
+      - name: Download wallet canister
+        run: |
+          wget https://github.com/dfinity/sdk/raw/0a82e042adec6f24ba53665312713923bf276a34/src/distributed/wallet.wasm.gz
+
+      - name: Set WALLET_WASM_PATH for load_wasm
+        run: |
+          echo "WALLET_WASM_PATH=$GITHUB_WORKSPACE/wallet.wasm.gz" >> "$GITHUB_ENV"
+ 
+      - name: Install PocketIC server
+        uses: dfinity/pocketic@main
+        with:
+          pocket-ic-server-version: "12.0.0"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Cargo test
+        run: cargo test --workspace --all-features -- --test-threads=2 --nocapture
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install dfx
+        uses: dfinity/setup-dfx@main
+
+      - name: Start dfx
+        run: dfx start --background
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: Run E2E tests
+        run: scripts/e2e
+
+      - name: Run examples
+        run: scripts/examples evm_rpc 'Number = 20000000'
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run anvil
+        run: anvil &
+
+      - name: Run local examples with Foundry
+        run: scripts/examples evm_rpc_local 'Number = 0'

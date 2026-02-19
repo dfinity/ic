@@ -1,0 +1,35 @@
+error: #[init] cannot have guard function(s).
+ --> tests/compile_fail/no_guard_function_for_lifecycle.rs:7:8
+  |
+7 | #[init(guard = "guard_function")]
+  |        ^^^^^
+
+error: #[pre_upgrade] cannot have guard function(s).
+  --> tests/compile_fail/no_guard_function_for_lifecycle.rs:10:15
+   |
+10 | #[pre_upgrade(guard = "guard_function")]
+   |               ^^^^^
+
+error: #[post_upgrade] cannot have guard function(s).
+  --> tests/compile_fail/no_guard_function_for_lifecycle.rs:13:16
+   |
+13 | #[post_upgrade(guard = "guard_function")]
+   |                ^^^^^
+
+error: #[heartbeat] cannot have guard function(s).
+  --> tests/compile_fail/no_guard_function_for_lifecycle.rs:16:13
+   |
+16 | #[heartbeat(guard = "guard_function")]
+   |             ^^^^^
+
+error: #[inspect_message] cannot have guard function(s).
+  --> tests/compile_fail/no_guard_function_for_lifecycle.rs:19:19
+   |
+19 | #[inspect_message(guard = "guard_function")]
+   |                   ^^^^^
+
+error: #[on_low_wasm_memory] cannot have guard function(s).
+  --> tests/compile_fail/no_guard_function_for_lifecycle.rs:22:22
+   |
+22 | #[on_low_wasm_memory(guard = "guard_function")]
+   |                      ^^^^^

@@ -1,0 +1,51 @@
+name: examples-basic-timelock-ibe
+
+permissions: {}
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - examples/basic_timelock_ibe/**
+      - .github/workflows/provision-darwin.sh
+      - .github/workflows/provision-linux.sh
+      - .github/workflows/examples-basic-timelock-ibe.yml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  examples-basic-timelock-ibe-rust-darwin:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Provision Darwin
+        run: |
+          bash .github/workflows/provision-darwin.sh
+      - name: Deploy Basic Timelock IBE Darwin
+        run: |
+          set -eExuo pipefail
+          cargo install candid-extractor
+          pushd examples/basic_timelock_ibe
+          dfx start --background && dfx deploy
+          cd frontend
+          npm run lint
+  examples-basic-timelock-ibe-rust-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Provision Linux
+        run: bash .github/workflows/provision-linux.sh
+      - name: Deploy Basic Timelock IBE Linux
+        run: |
+          set -eExuo pipefail
+          cargo install candid-extractor
+          pushd examples/basic_timelock_ibe
+          dfx start --background && dfx deploy
+          cd frontend
+          npm run lint 

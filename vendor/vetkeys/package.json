@@ -1,0 +1,12 @@
+{
+    "private": true,
+    "workspaces": [
+        "frontend/ic_vetkeys"
+    ],
+    "scripts": {
+        "build": "npm run build --workspaces --if-present; npm run bundle --workspaces --if-present"
+    },
+    "devDependencies": {
+        "svelte-hmr": "^0.16.0"
+    }
+}

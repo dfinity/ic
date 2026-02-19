@@ -1,0 +1,43 @@
+name: Deploy docs to GitHub Pages
+
+# 1) Manual trigger, with a required 'tag' input
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The git tag to build docs from'
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ${{ github.event.inputs.tag }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Build docs
+        run: |
+          bash ./scripts/gen_frontend_docs.sh
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

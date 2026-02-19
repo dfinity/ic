@@ -1,0 +1,98 @@
+{
+    "name": "@dfinity/vetkeys",
+    "version": "0.4.0",
+    "author": "DFINITY Stiftung",
+    "description": "JavaScript and TypeScript library to use Internet Computer vetKeys",
+    "homepage": "https://internetcomputer.org/docs/building-apps/network-features/vetkeys/introduction",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/dfinity/vetkeys.git",
+        "directory": "frontend/ic_vetkeys"
+    },
+    "bugs": {
+        "url": "https://github.com/dfinity/vetkeys/issues"
+    },
+    "keywords": [
+        "internet computer",
+        "internet-computer",
+        "ic",
+        "icp",
+        "dfinity",
+        "vetkeys",
+        "encryption",
+        "decryption",
+        "threshold",
+        "motoko",
+        "rust",
+        "javascript",
+        "typescript",
+        "blockchain",
+        "crypto",
+        "distributed",
+        "api",
+        "bls",
+        "bls12-381",
+        "ibe",
+        "signature",
+        "signing"
+    ],
+    "files": [
+        "dist"
+    ],
+    "exports": {
+        ".": {
+            "import": "./dist/lib/index.es.js",
+            "types": "./dist/types/index.d.ts"
+        },
+        "./key_manager": {
+            "import": "./dist/lib/key_manager.es.js",
+            "types": "./dist/types/key_manager/index.d.ts"
+        },
+        "./encrypted_maps": {
+            "import": "./dist/lib/encrypted_maps.es.js",
+            "types": "./dist/types/encrypted_maps/index.d.ts"
+        }
+    },
+    "module": "dist/lib/index.es.js",
+    "typings": "dist/types/index.d.ts",
+    "dependencies": {
+        "@dfinity/agent": "^3.4.0",
+        "@dfinity/candid": "^3.4.0",
+        "@dfinity/principal": "^3.4.0",
+        "idb-keyval": "^6.2.1"
+    },
+    "devDependencies": {
+        "@dfinity/identity": "^3.4.0",
+        "@eslint/js": "^9.22.0",
+        "@types/node": "^24.0.4",
+        "@vitest/coverage-v8": "^3.0.5",
+        "eslint": "^9.22",
+        "eslint-config-prettier": "^10.1.5",
+        "eslint-plugin-prettier": "^5.2.6",
+        "fake-indexeddb": "^6.0.0",
+        "happy-dom": "^20.0.2",
+        "isomorphic-fetch": "3.0.0",
+        "prettier": "^3.5.3",
+        "typedoc": "^0.28.3",
+        "typescript": "^5.7.3",
+        "typescript-eslint": "8.27",
+        "vite": "^7.0.8",
+        "vite-plugin-dts": "^4.5.3",
+        "vitest": "^3.0.5"
+    },
+    "scripts": {
+        "build": "tsc && vite build",
+        "prepare": "npm run build",
+        "coverage": "npm run test:deploy_all && export $(cat .test1.env .test2.env | xargs) && vitest run --coverage",
+        "lint": "eslint",
+        "make:docs": "mkdir -p $(git rev-parse --show-toplevel)/docs/key_manager && mkdir -p $(git rev-parse --show-toplevel)/docs/encrypted_maps && typedoc --out $(git rev-parse --show-toplevel)/docs",
+        "prettier": "prettier --write .",
+        "prettier-check": "prettier --check .",
+        "test_utils": "vitest utils",
+        "test": "npm run test:deploy_all && export $(cat .test1.env .test2.env | xargs) && vitest --sequence.concurrent",
+        "test:deploy_all": "npm run test:deploy_key_manager_canister && npm run test:deploy_encrypted_maps_canister",
+        "test:deploy_key_manager_canister": "cd $(git rev-parse --show-toplevel)/backend/rs/canisters/ic_vetkeys_manager_canister && dfx start --clean --background; dfx deploy --argument '(\"dfx_test_key\")' ic_vetkeys_manager_canister && grep CANISTER_ID .env > $(git rev-parse --show-toplevel)/frontend/ic_vetkeys/.test1.env",
+        "test:deploy_encrypted_maps_canister": "cd $(git rev-parse --show-toplevel)/backend/rs/canisters/ic_vetkeys_encrypted_maps_canister && dfx start --clean --background; dfx deploy --argument '(\"dfx_test_key\")' ic_vetkeys_encrypted_maps_canister && grep CANISTER_ID .env > $(git rev-parse --show-toplevel)/frontend/ic_vetkeys/.test2.env"
+    }
+}

@@ -1,0 +1,47 @@
+error: #[init] function cannot have a return value.
+ --> tests/compile_fail/lifecycle_functions_should_have_no_return.rs:3:1
+  |
+3 | #[init]
+  | ^^^^^^^
+  |
+  = note: this error originates in the attribute macro `init` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: #[pre_upgrade] function cannot have a return value.
+ --> tests/compile_fail/lifecycle_functions_should_have_no_return.rs:6:1
+  |
+6 | #[pre_upgrade]
+  | ^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `pre_upgrade` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: #[post_upgrade] function cannot have a return value.
+ --> tests/compile_fail/lifecycle_functions_should_have_no_return.rs:9:1
+  |
+9 | #[post_upgrade]
+  | ^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `post_upgrade` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: #[heartbeat] function cannot have a return value.
+  --> tests/compile_fail/lifecycle_functions_should_have_no_return.rs:12:1
+   |
+12 | #[heartbeat]
+   | ^^^^^^^^^^^^
+   |
+   = note: this error originates in the attribute macro `heartbeat` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: #[inspect_message] function cannot have a return value.
+  --> tests/compile_fail/lifecycle_functions_should_have_no_return.rs:15:1
+   |
+15 | #[inspect_message]
+   | ^^^^^^^^^^^^^^^^^^
+   |
+   = note: this error originates in the attribute macro `inspect_message` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: #[on_low_wasm_memory] function cannot have a return value.
+  --> tests/compile_fail/lifecycle_functions_should_have_no_return.rs:18:1
+   |
+18 | #[on_low_wasm_memory]
+   | ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: this error originates in the attribute macro `on_low_wasm_memory` (in Nightly builds, run with -Z macro-backtrace for more info)

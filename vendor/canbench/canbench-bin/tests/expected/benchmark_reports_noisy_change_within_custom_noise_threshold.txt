@@ -1,0 +1,30 @@
+---------------------------------------------------
+
+Benchmark: noisy_change_above_default_threshold_test
+  total:
+    instructions: 3.39 M (-4.36%) (change within noise threshold)
+    heap_increase: 62 pages (-4.62%) (change within noise threshold)
+    stable_memory_increase: 100 pages (-3.85%) (change within noise threshold)
+
+---------------------------------------------------
+
+Summary:
+  instructions:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max -154.23K | p75 -154.23K | median -154.23K | p25 -154.23K | min -154.23K]
+    change %: [max -4.36% | p75 -4.36% | median -4.36% | p25 -4.36% | min -4.36%]
+
+  heap_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max -3 | p75 -3 | median -3 | p25 -3 | min -3]
+    change %: [max -4.62% | p75 -4.62% | median -4.62% | p25 -4.62% | min -4.62%]
+
+  stable_memory_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max -4 | p75 -4 | median -4 | p25 -4 | min -4]
+    change %: [max -3.85% | p75 -3.85% | median -3.85% | p25 -3.85% | min -3.85%]
+
+---------------------------------------------------

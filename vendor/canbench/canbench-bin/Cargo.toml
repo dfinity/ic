@@ -1,0 +1,43 @@
+[package]
+description = "A benchmarking framework for canisters on the Internet Computer."
+edition = "2021"
+keywords = ["benchmark", "canister", "ic", "internet-computer", "perf"]
+license = "Apache-2.0"
+name = "canbench"
+readme = "../README.md"
+repository = "https://github.com/dfinity/canbench"
+# NOTE: Update `canbench-rs` version below when this changes.
+version = "0.4.0"
+
+[[bin]]
+name = "canbench"
+path = "src/main.rs"
+
+[dependencies]
+canbench-rs = { path = "../canbench-rs", version = "0.4.0" }
+candid.workspace = true
+clap.workspace = true
+colored.workspace = true
+flate2.workspace = true
+hex.workspace = true
+inferno = { version = "0.11", default-features = false, features = ["multithreaded", "nameattr"] }
+# `pocket-ic` should be pinned to an exact version so that the PocketIC server binary version
+# `POCKET_IC_SERVER_VERSION` defined in `canbench-bin/src/lib.rs` is compatible.
+pocket-ic = "=10.0.0"
+reqwest.workspace = true
+rustc-demangle.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+sha256.workspace = true
+tempfile.workspace = true
+walrus.workspace = true
+wasmparser.workspace = true
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+
+[features]
+# Enables automatic overwriting of expected test output files during test runs.
+calls = []
+overwrite = []

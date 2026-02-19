@@ -1,0 +1,10 @@
+node_modules/
+target/
+.dfx/
+.mops/
+.idea/
+
+*.generated.did
+*.wasm
+*.wasm.gz
+pocket-ic

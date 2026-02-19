@@ -1,0 +1,30 @@
+---------------------------------------------------
+
+Benchmark: state_check
+  total:
+    instructions: 841 (no change)
+    heap_increase: 0 pages (no change)
+    stable_memory_increase: 0 pages (no change)
+
+---------------------------------------------------
+
+Summary:
+  instructions:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+  heap_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+  stable_memory_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+---------------------------------------------------

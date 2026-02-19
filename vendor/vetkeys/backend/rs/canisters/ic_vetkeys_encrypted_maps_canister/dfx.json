@@ -1,0 +1,10 @@
+{
+  "canisters": {
+    "ic_vetkeys_encrypted_maps_canister": {
+      "candid": "ic_vetkeys_encrypted_maps_canister.did",
+      "package": "ic-vetkeys-encrypted-maps-canister",
+      "type": "rust"
+    }
+  },
+  "output_env_file": ".env"
+}

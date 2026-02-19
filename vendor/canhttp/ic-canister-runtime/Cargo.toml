@@ -1,0 +1,27 @@
+[package]
+name = "ic-canister-runtime"
+version = "0.2.0"
+description = "Rust library that abstracts the canister runtime on the Internet Computer"
+license.workspace = true
+homepage.workspace = true
+authors.workspace = true
+edition.workspace = true
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository.workspace = true
+documentation = "https://docs.rs/ic-canister-runtime"
+
+[features]
+wallet = ["dep:regex-lite", "dep:serde_bytes"]
+
+[dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
+ic-cdk = { path = "../../cdk-rs/ic-cdk" }
+ic-error-types = { workspace = true }
+regex-lite = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true, optional = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

@@ -238,11 +238,11 @@ crate.spec(
 )
 crate.spec(
     package = "canbench",
-    version = "^0.4.0",
+    path = "vendor/canbench/canbench-bin",
 )
 crate.spec(
     package = "canbench-rs",
-    version = "^0.4.0",
+    path = "vendor/canbench/canbench-rs",
 )
 crate.spec(
     package = "candid",
@@ -454,7 +454,7 @@ crate.spec(
 )
 crate.spec(
     package = "evm_rpc_client",
-    version = "^0.3.0",
+    path = "vendor/evm-rpc-canister/evm_rpc_client",
 )
 crate.spec(
     package = "evm_rpc_types",
@@ -635,7 +635,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-canister-runtime",
-    version = "^0.1.0",
+    path = "vendor/canhttp/ic-canister-runtime",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
@@ -648,15 +648,19 @@ crate.spec(
 )
 crate.spec(
     package = "ic-cdk",
-    version = "^0.19.0",
+    path = "vendor/cdk-rs/ic-cdk",
 )
 crate.spec(
     package = "ic-cdk-executor",
-    version = "^2.0.0",
+    path = "vendor/cdk-rs/ic-cdk-executor",
+)
+crate.spec(
+    package = "ic-cdk-macros",
+    path = "vendor/cdk-rs/ic-cdk-macros",
 )
 crate.spec(
     package = "ic-cdk-timers",
-    version = "^1.0.0",
+    path = "vendor/cdk-rs/ic-cdk-timers",
 )
 crate.spec(
     package = "ic-certified-map",
@@ -756,7 +760,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-vetkeys",
-    version = "^0.6.0",
+    path = "vendor/vetkeys/backend/rs/ic_vetkeys",
 )
 crate.spec(
     default_features = False,

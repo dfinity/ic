@@ -1,0 +1,29 @@
+[package]
+name = "ic-vetkeys-encrypted-maps-canister"
+authors = ["DFINITY Stiftung"]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "# Basic Identity Based Encryption"
+repository = "https://github.com/dfinity/vetkeys"
+rust-version = "1.85.0"
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+candid = "0.10.2"
+ic-cdk = { workspace = true }
+ic-dummy-getrandom-for-wasm = "0.1.0"
+ic-stable-structures = { workspace = true }
+ic-vetkeys = { workspace = true }
+serde = "1.0.217"
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+pocket-ic = "9.0.0"
+rand = "0.8.5"
+rand_chacha = "0.3.1"
+reqwest = "0.12.12"
+strum = "0.27.1"

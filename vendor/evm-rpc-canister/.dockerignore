@@ -1,0 +1,18 @@
+# These are all the files and directories that are _not_ included in the docker
+# build. They are not used in the docker build and including them would simply
+# invalidate the layer cache.
+node_modules
+target
+Dockerfile
+*.wasm
+*.wasm.gz
+*.swp
+
+# filter out all "hidden" files and directories
+# (.git, .dfx, .*ignore, etc)
+.*
+
+# Scripts are added explicitly as needed
+scripts/
+!scripts/build
+!scripts/bootstrap

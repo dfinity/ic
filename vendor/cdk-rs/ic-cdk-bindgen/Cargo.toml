@@ -1,0 +1,18 @@
+[package]
+name = "ic-cdk-bindgen"
+version = "0.2.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Internet Computer Binding Generator."
+readme = "README.md"
+categories = ["api-bindings", "development-tools::ffi"]
+keywords = ["internet-computer", "types", "dfinity", "canister", "cdk"]
+include = ["src", "Cargo.toml", "LICENSE", "README.md"]
+
+[dependencies]
+candid.workspace = true
+candid_parser.workspace = true
+thiserror.workspace = true

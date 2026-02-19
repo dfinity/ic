@@ -1,0 +1,53 @@
+---------------------------------------------------
+
+Benchmark: bench_scope_exists
+  total:
+    instructions: 3987 (regressed from 0)
+    heap_increase: 0 pages (no change)
+    stable_memory_increase: 0 pages (no change)
+
+  scope_1 (scope):
+    calls: 1 (no change)
+    instructions: 1046 (regressed by 30.75%)
+    heap_increase: 0 pages (improved by 100.00%)
+    stable_memory_increase: 0 pages (no change)
+
+  scope_2 (scope):
+    calls: 1 (new)
+    instructions: 847 (new)
+    heap_increase: 0 pages (new)
+    stable_memory_increase: 0 pages (new)
+
+---------------------------------------------------
+
+Summary:
+  instructions:
+    status:   Regressions detected 🔴
+    counts:   [total 1 | regressed 1 | improved 0 | new 0 | unchanged 0]
+    change:   [max +3.99K | p75 +3.99K | median +3.99K | p25 +3.99K | min +3.99K]
+    change %: [max +inf% | p75 +inf% | median +inf% | p25 +inf% | min +inf%]
+
+  heap_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+  stable_memory_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+---------------------------------------------------
+
+Only significant changes:
+| status | name                        | calls |   ins |  ins Δ% | HI |    HI Δ% | SMI |  SMI Δ% |
+|--------|-----------------------------|-------|-------|---------|----|----------|-----|---------|
+|   +    | bench_scope_exists          |       | 3.99K |   +inf% |  0 |    0.00% |   0 |   0.00% |
+|  +/-   | bench_scope_exists::scope_1 |     1 | 1.05K | +30.75% |  0 | -100.00% |   0 |   0.00% |
+|  new   | bench_scope_exists::scope_2 |     1 |   847 |         |  0 |          |   0 |         |
+
+ins = instructions, HI = heap_increase, SMI = stable_memory_increase, Δ% = percent change
+
+---------------------------------------------------

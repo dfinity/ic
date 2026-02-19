@@ -1,0 +1,3 @@
+[dependencies]
+core = "1.0.0"
+ic-vetkeys = "0.3.0"

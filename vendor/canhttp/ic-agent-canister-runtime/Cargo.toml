@@ -1,0 +1,22 @@
+[package]
+name = "ic-agent-canister-runtime"
+version = "0.2.0"
+description = "Implementation of a canister runtime of the Internet Computer for `ic-agent`"
+license.workspace = true
+homepage.workspace = true
+authors.workspace = true
+edition.workspace = true
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository.workspace = true
+documentation = "https://docs.rs/ic-agent-canister-runtime"
+
+[dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic-canister-runtime = { workspace = true }
+ic-error-types = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

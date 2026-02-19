@@ -1,0 +1,19 @@
+type AccessRights = variant { Read; ReadWrite; ReadWriteManage };
+type ByteBuf = record { inner : blob };
+type Result = variant { Ok : ByteBuf; Err : text };
+type Result_1 = variant {
+  Ok : vec record { principal; AccessRights };
+  Err : text;
+};
+type Result_2 = variant { Ok : opt AccessRights; Err : text };
+service : {
+  get_accessible_shared_key_ids : () -> (
+      vec record { principal; ByteBuf },
+    ) query;
+  get_encrypted_vetkey : (principal, ByteBuf, ByteBuf) -> (Result);
+  get_shared_user_access_for_key : (principal, ByteBuf) -> (Result_1) query;
+  get_user_rights : (principal, ByteBuf, principal) -> (Result_2) query;
+  get_vetkey_verification_key : () -> (ByteBuf);
+  remove_user : (principal, ByteBuf, principal) -> (Result_2);
+  set_user_rights : (principal, ByteBuf, principal, AccessRights) -> (Result_2);
+}

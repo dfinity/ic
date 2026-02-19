@@ -1,0 +1,37 @@
+[package]
+name = "ic-cdk-e2e-tests"
+version = "0.1.0"
+authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
+edition = "2021"
+description = "End-to-end tests for the Rust Canister Development Kit"
+license = "Apache-2.0"
+repository = "https://github.com/dfinity/cdk-rs"
+publish = false
+
+[dependencies]
+async-channel = "2.3.1"
+candid.workspace = true
+env_logger = "0.11.5"
+escargot = { version = "0.5.7" }
+futures.workspace = true
+ic-cdk = { workspace = true, features = ["transform-closure"] }
+ic-cdk-timers.workspace = true
+lazy_static = "1.4.0"
+serde.workspace = true
+serde_bytes.workspace = true
+sha2.workspace = true
+prost = "0.14"
+
+[dev-dependencies]
+candid_parser.workspace = true
+cargo_metadata = "0.21"
+futures = "0.3"
+hex.workspace = true
+ic-vetkd-utils = { git = "https://github.com/dfinity/ic", rev = "95231520" }
+pocket-ic = { git = "https://github.com/dfinity/ic", tag = "release-2025-10-17_03-17-base" }
+reqwest = "0.12"
+
+[build-dependencies]
+prost-build = "0.14"
+ic-cdk-bindgen.workspace = true
+candid.workspace = true

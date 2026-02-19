@@ -1,0 +1,44 @@
+name: Publish canbench crates to crates.io
+
+on:
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: "Run cargo publish with --dry-run"
+        required: false
+        type: boolean
+
+jobs:
+  publish-canbench:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write # Required for OIDC token exchange
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - run: echo "Preparing to cargo publish ${{ github.ref_name }}."
+      # Crates need to be published in this specific order
+      - run: cargo publish -p canbench-rs-macros ${{ inputs.dryRun == true && '--dry-run' || '' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - run: cargo publish -p canbench-rs ${{ inputs.dryRun == true && '--dry-run' || '' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - run: cargo publish -p canbench ${{ inputs.dryRun == true && '--dry-run' || '' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - name: Post to a Slack channel
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        with:
+          channel-id: eng-dsm-alerts
+          slack-message: "${{ inputs.dryRun == true && 'DRY RUN: ' || '' }}Cargo publish attempted for `canbench` crates (ref `${{ github.ref_name }}`). <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|Workflow run>."
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}

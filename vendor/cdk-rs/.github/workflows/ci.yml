@@ -1,0 +1,235 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "0 4 * * 0,3" # 4 a.m. UTC every Sun and Wed, keep actions-cache available
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  msrv:
+    name: cargo build with MSRV
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+      fail-fast: false
+    steps:
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0 # MSRV, should sync with `rust-toolchain` in `Cargo.toml`
+          targets: wasm32-unknown-unknown
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-msrv-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-msrv-
+            ${{ runner.os }}-
+      - name: Run builds
+        run: |
+          cargo build --workspace --exclude ic-cdk-e2e-tests --target wasm32-unknown-unknown
+          cargo build --workspace --exclude ic-cdk-e2e-tests --target wasm32-unknown-unknown --release
+          cargo build --example=work
+
+  test:
+    name: cargo test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+      fail-fast: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-test-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-
+      - name: Download pocket-ic server
+        run: bash scripts/download_pocket_ic_server.sh
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+      - name: Install protoc (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+      - name: Run tests
+        run:
+          | # https://github.com/rust-lang/cargo/issues/6669 we have to run ALL tests with two commands
+          cargo test --all-targets --no-fail-fast
+          cargo test --doc
+
+  wasm64:
+    name: wasm64 e2e
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+      fail-fast: false
+    steps:
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly-2025-05-09 # 1.88.0
+          targets: wasm64-unknown-unknown
+          components: rust-src
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-wasm64-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-wasm64-
+            ${{ runner.os }}-
+      - name: Download pocket-ic server
+        run: bash scripts/download_pocket_ic_server.sh
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+      - name: Install protoc (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+      - name: Run tests
+        run: WASM64=1 cargo test --package ic-cdk-e2e-tests --no-fail-fast
+
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-fmt-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-fmt-
+            ${{ runner.os }}-
+      - name: Check formatting
+        run: |
+          cargo fmt --all -- --check
+
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-clippy-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-clippy-
+            ${{ runner.os }}-
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack@0.6
+      - name: Install protoc (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+      - name: Run clippy
+        run: |
+          cargo hack clippy --feature-powerset --no-dev-deps -- -D warnings
+          cargo clippy --tests --benches -- -D warnings
+
+  doc:
+    name: cargo doc
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-doc-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-doc-
+            ${{ runner.os }}-
+      - name: Install protoc (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+      - name: Run doc
+        run: |
+          RUSTDOCFLAGS="-D warnings" cargo doc
+
+  aggregate:
+    name: ci:required
+    if: ${{ always() }}
+    needs: [msrv, test, wasm64, fmt, clippy, doc]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: check msrv result
+        if: ${{ needs.msrv.result != 'success' }}
+        run: exit 1
+      - name: check test result
+        if: ${{ needs.test.result != 'success' }}
+        run: exit 1
+      - name: check wasm64 result
+        if: ${{ needs.wasm64.result != 'success' }}
+        run: exit 1
+      - name: check fmt result
+        if: ${{ needs.fmt.result != 'success' }}
+        run: exit 1
+      - name: check clippy result
+        if: ${{ needs.clippy.result != 'success' }}
+        run: exit 1

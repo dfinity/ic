@@ -1,0 +1,37 @@
+benches:
+  fibonacci_20:
+    total:
+      calls: 1
+      instructions: 729
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  fibonacci_45:
+    total:
+      calls: 1
+      instructions: 1304
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  fibonacci_8a:
+    total:
+      calls: 1
+      instructions: 453
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  fibonacci_8b:
+    total:
+      calls: 1
+      instructions: 207
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  fibonacci_8c:
+    total:
+      calls: 1
+      instructions: 394
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+version: 0.2.1

@@ -1,0 +1,68 @@
+{
+  "dfx": "0.29.0",
+  "canisters": {
+    "evm_rpc": {
+      "candid": "candid/evm_rpc.did",
+      "type": "rust",
+      "package": "evm_rpc",
+      "declarations": {
+        "bindings": ["did", "mo"],
+        "output": "lib/motoko/src/declarations"
+      },
+      "pullable": {
+        "dependencies": [],
+        "wasm_url": "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/latest/download/evm_rpc.wasm.gz",
+        "init_guide": "Documentation: https://internetcomputer.org/docs/current/developer-docs/multi-chain/ethereum/evm-rpc/evm-rpc-canister"
+      },
+      "gzip": true,
+      "init_arg": "(record {})"
+    },
+    "evm_rpc_demo": {
+      "candid": "candid/evm_rpc.did",
+      "type": "rust",
+      "package": "evm_rpc",
+      "gzip": true,
+      "init_arg": "(record {demo = opt true})"
+    },
+    "evm_rpc_local": {
+      "candid": "candid/evm_rpc.did",
+      "type": "rust",
+      "package": "evm_rpc",
+      "gzip": true,
+      "init_arg": "( record {  overrideProvider = opt record { overrideUrl = opt record { pattern = \".*\"; replacement = \"http://127.0.0.1:8545\" } } })"
+    },
+    "evm_rpc_staging": {
+      "candid": "candid/evm_rpc.did",
+      "type": "rust",
+      "package": "evm_rpc",
+      "gzip": true,
+      "init_arg": "(record {})"
+    },
+    "evm_rpc_playground": {
+      "candid": "candid/evm_rpc.did",
+      "type": "rust",
+      "package": "evm_rpc",
+      "gzip": true,
+      "init_arg": "(record {demo = opt false; manageApiKeys = opt vec {principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"}; logFilter = null})"
+    },
+    "e2e_rust": {
+      "dependencies": ["evm_rpc_staging"],
+      "candid": "e2e/rust/e2e_rust.did",
+      "type": "rust",
+      "package": "e2e"
+    },
+    "e2e_motoko": {
+      "dependencies": [
+        "evm_rpc",
+        "evm_rpc_demo",
+        "evm_rpc_staging"
+      ],
+      "type": "motoko",
+      "main": "e2e/motoko/main.mo"
+    }
+  },
+  "defaults": {
+    "build": { "packtool": "npm run --silent sources" }
+  },
+  "version": 1
+}

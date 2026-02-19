@@ -1,0 +1,347 @@
+type Block = record {
+  miner : text;
+  totalDifficulty : opt nat;
+  receiptsRoot : text;
+  stateRoot : text;
+  hash : text;
+  difficulty : opt nat;
+  size : nat;
+  uncles : vec text;
+  baseFeePerGas : opt nat;
+  extraData : text;
+  transactionsRoot : opt text;
+  sha3Uncles : text;
+  nonce : nat;
+  number : nat;
+  timestamp : nat;
+  transactions : vec text;
+  gasLimit : nat;
+  logsBloom : text;
+  parentHash : text;
+  gasUsed : nat;
+  mixHash : text;
+};
+type BlockTag = variant {
+  Earliest;
+  Safe;
+  Finalized;
+  Latest;
+  Number : nat;
+  Pending;
+};
+type EthMainnetService = variant {
+  Alchemy;
+  Ankr;
+  BlockPi;
+  Cloudflare;
+  PublicNode;
+  Llama;
+};
+type EthSepoliaService = variant {
+  Alchemy;
+  Ankr;
+  BlockPi;
+  PublicNode;
+  Sepolia;
+};
+type L2MainnetService = variant {
+  Alchemy;
+  Ankr;
+  BlockPi;
+  PublicNode;
+  Llama;
+};
+type FeeHistory = record {
+  reward : vec vec nat;
+  gasUsedRatio : vec float64;
+  oldestBlock : nat;
+  baseFeePerGas : vec nat;
+};
+type FeeHistoryArgs = record {
+  blockCount : nat;
+  newestBlock : BlockTag;
+  rewardPercentiles : opt vec nat8;
+};
+type GetLogsArgs = record {
+  fromBlock : opt BlockTag;
+  toBlock : opt BlockTag;
+  addresses : vec text;
+  topics : opt vec Topic;
+};
+type GetTransactionCountArgs = record { address : text; block : BlockTag };
+type CallArgs = record {
+  transaction : TransactionRequest;
+  block : opt BlockTag;
+};
+type TransactionRequest = record {
+  "type" : opt text;
+  nonce : opt nat;
+  to : opt text;
+  from : opt text;
+  gas : opt nat;
+  value : opt nat;
+  input : opt text;
+  gasPrice : opt nat;
+  maxPriorityFeePerGas : opt nat;
+  maxFeePerGas : opt nat;
+  maxFeePerBlobGas : opt nat;
+  accessList: opt vec AccessListEntry;
+  blobVersionedHashes : opt vec text;
+  blobs : opt vec text;
+  chainId : opt nat;
+};
+type AccessListEntry = record {
+  address : text;
+  storageKeys : vec text;
+};
+type HttpHeader = record { value : text; name : text };
+type HttpOutcallError = variant {
+  IcError : record { code : RejectionCode; message : text };
+  InvalidHttpJsonRpcResponse : record {
+    status : nat16;
+    body : text;
+    parsingError : opt text;
+  };
+};
+type InstallArgs = record {
+  demo : opt bool;
+  manageApiKeys : opt vec principal;
+  logFilter : opt LogFilter;
+  overrideProvider : opt OverrideProvider;
+  nodesInSubnet : opt nat32;
+};
+type Regex = text;
+type LogFilter = variant {
+  ShowAll;
+  HideAll;
+  ShowPattern : Regex;
+  HidePattern : Regex;
+};
+type RegexSubstitution = record {
+  pattern : Regex;
+  replacement: text;
+};
+// Override resolved provider.
+// Useful for testing with a local Ethereum developer environment such as foundry.
+type OverrideProvider = record {
+  overrideUrl : opt RegexSubstitution
+};
+type JsonRpcError = record { code : int64; message : text };
+type LogEntry = record {
+  transactionHash : opt text;
+  blockNumber : opt nat;
+  data : text;
+  blockHash : opt text;
+  transactionIndex : opt nat;
+  topics : vec text;
+  address : text;
+  logIndex : opt nat;
+  removed : bool;
+};
+type MultiFeeHistoryResult = variant {
+  Consistent : FeeHistoryResult;
+  Inconsistent : vec record { RpcService; FeeHistoryResult };
+};
+type MultiGetBlockByNumberResult = variant {
+  Consistent : GetBlockByNumberResult;
+  Inconsistent : vec record { RpcService; GetBlockByNumberResult };
+};
+type MultiGetLogsResult = variant {
+  Consistent : GetLogsResult;
+  Inconsistent : vec record { RpcService; GetLogsResult };
+};
+type MultiGetTransactionCountResult = variant {
+  Consistent : GetTransactionCountResult;
+  Inconsistent : vec record { RpcService; GetTransactionCountResult };
+};
+type MultiGetTransactionReceiptResult = variant {
+  Consistent : GetTransactionReceiptResult;
+  Inconsistent : vec record { RpcService; GetTransactionReceiptResult };
+};
+type MultiSendRawTransactionResult = variant {
+  Consistent : SendRawTransactionResult;
+  Inconsistent : vec record { RpcService; SendRawTransactionResult };
+};
+type MultiCallResult = variant {
+  Consistent : CallResult;
+  Inconsistent : vec record { RpcService; CallResult };
+};
+type ProviderError = variant {
+  TooFewCycles : record { expected : nat; received : nat };
+  MissingRequiredProvider;
+  ProviderNotFound;
+  NoPermission;
+  InvalidRpcConfig : text ;
+};
+type ProviderId = nat64;
+type ChainId = nat64;
+type Provider = record {
+  providerId : ProviderId;
+  chainId : ChainId;
+  access : RpcAccess;
+  alias : opt RpcService;
+};
+type RpcAccess = variant {
+  Authenticated : record {
+    auth : RpcAuth;
+    publicUrl : opt text;
+  };
+  Unauthenticated : record {
+    publicUrl : text;
+  };
+};
+type RpcAuth = variant {
+  BearerToken : record { url : text };
+  UrlParameter : record { urlPattern : text };
+};
+type RejectionCode = variant {
+  NoError;
+  CanisterError;
+  SysTransient;
+  DestinationInvalid;
+  Unknown;
+  SysFatal;
+  CanisterReject;
+};
+type FeeHistoryResult = variant { Ok : FeeHistory; Err : RpcError };
+type GetBlockByNumberResult = variant { Ok : Block; Err : RpcError };
+type GetLogsResult = variant { Ok : vec LogEntry; Err : RpcError };
+type GetTransactionCountResult = variant { Ok : nat; Err : RpcError };
+type GetTransactionReceiptResult = variant {
+  Ok : opt TransactionReceipt;
+  Err : RpcError;
+};
+type SendRawTransactionResult = variant {
+  Ok : SendRawTransactionStatus;
+  Err : RpcError;
+};
+type CallResult = variant { Ok : text; Err : RpcError };
+type RequestResult = variant { Ok : text; Err : RpcError };
+type RequestCostResult = variant { Ok : nat; Err : RpcError };
+type RpcConfig = record { responseSizeEstimate : opt nat64; responseConsensus : opt ConsensusStrategy };
+type GetLogsRpcConfig = record { 
+    responseSizeEstimate : opt nat64;
+    responseConsensus : opt ConsensusStrategy;
+    // Most providers limit the block range that can be queried with `eth_getLogs`.
+    // By default, the chosen value should work for all supported JSON-RPC providers.
+    // This value could be changed if the providers are explicitly specified and they do support querying a larger block range.
+    // DEFAULT: 500
+    maxBlockRange : opt nat32;
+};
+type ConsensusStrategy = variant {
+  Equality;
+  Threshold : record {
+    // Total number of providers to be queried. Can be omitted, if that number can be inferred (e.g., providers are specified in the request).
+    total : opt nat8;
+    // Minimum number of providers that must return the same (non-error) result.
+    min : nat8;
+  };
+};
+type RpcError = variant {
+  JsonRpcError : JsonRpcError;
+  ProviderError : ProviderError;
+  ValidationError : ValidationError;
+  HttpOutcallError : HttpOutcallError;
+};
+type RpcApi = record { url : text; headers : opt vec HttpHeader };
+type RpcService = variant {
+  Provider : ProviderId;
+  Custom : RpcApi;
+  EthSepolia : EthSepoliaService;
+  EthMainnet : EthMainnetService;
+  ArbitrumOne : L2MainnetService;
+  BaseMainnet : L2MainnetService;
+  OptimismMainnet : L2MainnetService;
+};
+type RpcServices = variant {
+  Custom : record {
+    chainId : ChainId;
+    services : vec RpcApi;
+  };
+  EthSepolia : opt vec EthSepoliaService;
+  EthMainnet : opt vec EthMainnetService;
+  ArbitrumOne : opt vec L2MainnetService;
+  BaseMainnet : opt vec L2MainnetService;
+  OptimismMainnet : opt vec L2MainnetService;
+};
+type SendRawTransactionStatus = variant {
+  Ok : opt text;
+  NonceTooLow;
+  NonceTooHigh;
+  InsufficientFunds;
+};
+// Each topic is a `vec text` of topic data composed with the "or" operator.
+// See https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs
+type Topic = vec text;
+type TransactionReceipt = record {
+  to : opt text;
+  status : opt nat;
+  root : opt text;
+  transactionHash : text;
+  blockNumber : nat;
+  from : text;
+  logs : vec LogEntry;
+  blockHash : text;
+  "type" : text;
+  transactionIndex : nat;
+  effectiveGasPrice : nat;
+  logsBloom : text;
+  contractAddress : opt text;
+  gasUsed : nat;
+  cumulativeGasUsed : nat;
+};
+type ValidationError = variant {
+  Custom : text;
+  InvalidHex : text;
+};
+type JsonRequestResult = variant { Ok : text; Err : RpcError };
+type MultiJsonRequestResult = variant {
+  Consistent : JsonRequestResult;
+  Inconsistent : vec record { RpcService; JsonRequestResult };
+};
+service : (InstallArgs) -> {
+  // Call the `eth_feeHistory` RPC method and return the resulting fee history.
+  eth_feeHistory : (RpcServices, opt RpcConfig, FeeHistoryArgs) -> (MultiFeeHistoryResult);
+  eth_feeHistoryCyclesCost : (RpcServices, opt RpcConfig, FeeHistoryArgs) -> (RequestCostResult) query;
+
+  // Call the `eth_getBlockByNumber` RPC method and return the resulting block.
+  eth_getBlockByNumber : (RpcServices, opt RpcConfig, BlockTag) -> (MultiGetBlockByNumberResult);
+  eth_getBlockByNumberCyclesCost : (RpcServices, opt RpcConfig, BlockTag) -> (RequestCostResult) query;
+
+  // Call the `eth_getLogs` RPC method and return the resulting logs.
+  eth_getLogs : (RpcServices, opt GetLogsRpcConfig, GetLogsArgs) -> (MultiGetLogsResult);
+  eth_getLogsCyclesCost : (RpcServices, opt GetLogsRpcConfig, GetLogsArgs) -> (RequestCostResult) query;
+
+  // Call the `eth_getTransactionCount` RPC method and return the resulting transaction count.
+  eth_getTransactionCount : (RpcServices, opt RpcConfig, GetTransactionCountArgs) -> (MultiGetTransactionCountResult);
+  eth_getTransactionCountCyclesCost : (RpcServices, opt RpcConfig, GetTransactionCountArgs) -> (RequestCostResult) query;
+
+  // Call the `eth_getTransactionReceipt` RPC method and return the resulting transaction receipt.
+  eth_getTransactionReceipt : (RpcServices, opt RpcConfig, hash : text) -> (MultiGetTransactionReceiptResult);
+  eth_getTransactionReceiptCyclesCost : (RpcServices, opt RpcConfig, hash : text) -> (RequestCostResult) query;
+
+  // Call the `eth_sendRawTransaction` RPC method and return the resulting transaction hash.
+  eth_sendRawTransaction : (RpcServices, opt RpcConfig, rawSignedTransactionHex : text) -> (MultiSendRawTransactionResult);
+  eth_sendRawTransactionCyclesCost : (RpcServices, opt RpcConfig, rawSignedTransactionHex : text) -> (RequestCostResult) query;
+
+  // Call the `eth_call` RPC method and return the resulting output.
+  eth_call : (RpcServices, opt RpcConfig, CallArgs) -> (MultiCallResult);
+  eth_callCyclesCost : (RpcServices, opt RpcConfig, CallArgs) -> (RequestCostResult) query;
+
+  // Make a raw JSON-RPC request that sends the given JSON-RPC payload.
+  // This endpoint should be used instead of the `request` endpoint as it allows aggregating the responses from
+  // multiple providers. It also takes parameters consistent with `eth_*` endpoints, i.e. an `RpcServices` instead
+  // of an `RpcService`.
+  multi_request : (RpcServices, opt RpcConfig, json : text) -> (MultiJsonRequestResult);
+  multi_requestCyclesCost : (RpcServices, opt RpcConfig, json : text) -> (RequestCostResult) query;
+
+  // DEPRECATED: Use `multi_request` instead.
+  request : (RpcService, json : text, maxResponseBytes : nat64) -> (RequestResult);
+  // DEPRECATED: Use the specific `*RequestCost` endpoints instead (e.g. `eth_feeHistoryRequestCost`).
+  requestCost : (RpcService, json : text, maxResponseBytes : nat64) -> (RequestCostResult) query;
+
+  getNodesInSubnet : () -> (numberOfNodes : nat32) query;
+  getProviders : () -> (vec Provider) query;
+  getServiceProviderMap : () -> (vec record { RpcService; ProviderId }) query;
+  updateApiKeys : (vec record { ProviderId; opt text }) -> ();
+};

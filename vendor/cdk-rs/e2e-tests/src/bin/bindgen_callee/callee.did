@@ -1,0 +1,4 @@
+service : {
+  add : (int32, int32) -> (int32);
+  echo : (text) -> (text);
+}

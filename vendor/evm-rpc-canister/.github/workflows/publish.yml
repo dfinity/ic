@@ -1,0 +1,109 @@
+name: Publish
+
+on:
+  workflow_dispatch
+
+jobs:
+  # Release unpublished packages.
+  release-plz-release:
+    name: Publish artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    concurrency:
+      group: publish
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Download build for Release Candidate"
+        #     Adapted from [Internet Identity](https://github.com/dfinity/internet-identity/blob/c33e9f65a8045cbedde6f96cfb7f7cb677694fc9/.github/workflows/deploy-rc.yml#L22)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Find all artifacts for the production build, and filter for non-expired main artifacts
+            const allArtifacts = await github.paginate(github.rest.actions.listArtifactsForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: "evm_rpc.wasm.gz",
+            });
+            const artifactsByBranch = {};
+            const mainArtifacts = allArtifacts
+              .filter(artifact => !artifact.expired)
+              .filter(artifact => artifact.workflow_run.head_branch === "main");
+
+            // Grab the latest artifact
+            mainArtifacts.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
+            const latestMainArtifact = mainArtifacts[0];
+            if(!latestMainArtifact) {
+              const message = "Could not find an artifact to deploy from branch main, are artifacts expired?";
+              console.error(message);
+              throw new Error(message);
+            }
+            console.log("found artifact for commit", latestMainArtifact.workflow_run.head_sha);
+
+            // Download and unzip artifact
+            const { url } = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: latestMainArtifact.id,
+              archive_format: "zip",
+            });
+            await exec.exec('curl', ['-sSL', url, '-o', "artifact.zip"]);
+            await exec.exec('unzip', ["artifact.zip" ]);
+            await exec.exec('rm', ["artifact.zip" ]);
+
+      - name: "SHA256 of release asset"
+        run: |
+          set -e
+          SHA256=$(shasum -a 256 ./evm_rpc.wasm.gz | cut -d ' ' -f1)
+          echo "SHA256 of evm_rpc.wasm.gz: $SHA256"
+          echo "EVM_RPC_CANISTER_WASM_GZ_SHA256=$SHA256" >> "$GITHUB_ENV"
+
+      - name: "Install parse-changelog"
+        uses: taiki-e/install-action@parse-changelog
+
+      - name: "Run release-plz"
+        id: release-plz
+        uses: release-plz/action@bbd1afc9813d25602e002b29e96e0aacebab1160 # v0.5.105
+        with:
+          command: release
+          version: 0.3.142
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: "Generate Github release body"
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+          RELEASES_CREATED: ${{ steps.release-plz.outputs.releases_created }}
+        run: |
+          set -e
+          echo "releases: $RELEASES" # example: [{"package_name":"my-package","prs":[{"html_url":"https://github.com/user/proj/pull/1439","number":1439}],"tag":"v0.1.0","version":"0.1.0"}]
+          echo "releases_created: $RELEASES_CREATED" # example: true
+
+          release_tag=$(echo "$RELEASES" | jq -r '.[] | select(.package_name == "evm_rpc") | .tag')
+          echo "release_tag: $release_tag"
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+          
+          release_version=$(echo "$RELEASES" | jq -r '.[] | select(.package_name == "evm_rpc") | .version')
+          echo "release_version: $release_version"
+          echo "RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+          
+          notes=$(parse-changelog CHANGELOG.md "$release_version")
+          
+          CHANGELOG="$notes" envsubst < release_notes.md >> ${{ github.workspace }}-RELEASE.txt
+
+      - name: "Create Github release"
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ env.RELEASE_TAG}}
+          body_path: ${{ github.workspace }}-RELEASE.txt
+          files: |
+            evm_rpc.wasm.gz
+            candid/evm_rpc.did

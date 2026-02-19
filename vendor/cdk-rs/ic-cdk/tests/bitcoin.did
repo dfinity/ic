@@ -1,0 +1,148 @@
+type network = variant {
+    mainnet;
+    testnet; // Bitcoin testnet4.
+    regtest;
+};
+
+type satoshi = nat64;
+
+type address = text;
+
+type block_hash = blob;
+
+type block_header = blob;
+
+type block_height = nat32;
+
+type outpoint = record {
+    txid : blob;
+    vout : nat32;
+};
+
+type utxo = record {
+    outpoint : outpoint;
+    value : satoshi;
+    height : block_height;
+};
+
+type flag = variant {
+    enabled;
+    disabled;
+};
+
+type init_config = record {
+    stability_threshold : opt nat;
+    network : opt network;
+    blocks_source : opt principal;
+    syncing : opt flag;
+    fees : opt fees;
+    api_access : opt flag;
+    disable_api_if_not_fully_synced : opt flag;
+    watchdog_canister : opt opt principal;
+    burn_cycles : opt flag;
+    lazily_evaluate_fee_percentiles : opt flag;
+};
+
+type config = record {
+    stability_threshold : nat;
+    network : network;
+    blocks_source : principal;
+    syncing : flag;
+    fees : fees;
+    api_access : flag;
+    disable_api_if_not_fully_synced : flag;
+    watchdog_canister : opt principal;
+    burn_cycles : flag;
+    lazily_evaluate_fee_percentiles : flag;
+};
+
+type fees = record {
+    get_utxos_base : nat;
+    get_utxos_cycles_per_ten_instructions : nat;
+    get_utxos_maximum : nat;
+    get_balance : nat;
+    get_balance_maximum : nat;
+    get_current_fee_percentiles : nat;
+    get_current_fee_percentiles_maximum : nat;
+    send_transaction_base : nat;
+    send_transaction_per_byte : nat;
+    get_block_headers_base : nat;
+    get_block_headers_cycles_per_ten_instructions : nat;
+    get_block_headers_maximum : nat;
+};
+
+type get_balance_request = record {
+    network : network;
+    address : address;
+    min_confirmations : opt nat32;
+};
+
+type get_utxos_request = record {
+    network : network;
+    address : address;
+    filter : opt variant {
+        min_confirmations : nat32;
+        page : blob;
+    };
+};
+
+type get_utxos_response = record {
+    utxos : vec utxo;
+    tip_block_hash : block_hash;
+    tip_height : block_height;
+    next_page : opt blob;
+};
+
+type get_current_fee_percentiles_request = record {
+    network : network;
+};
+
+type send_transaction_request = record {
+    network : network;
+    transaction : blob;
+};
+
+type millisatoshi_per_byte = nat64;
+
+type set_config_request = record {
+    stability_threshold : opt nat;
+    syncing : opt flag;
+    fees : opt fees;
+    api_access : opt flag;
+    disable_api_if_not_fully_synced : opt flag;
+    watchdog_canister : opt opt principal;
+    burn_cycles : opt flag;
+    lazily_evaluate_fee_percentiles : opt flag;
+};
+
+type get_block_headers_request = record {
+    start_height : block_height;
+    end_height : opt block_height;
+    network : network;
+};
+
+type get_block_headers_response = record {
+    tip_height : block_height;
+    block_headers : vec block_header;
+};
+
+// service bitcoin : (init_config) -> {
+service bitcoin : {
+    bitcoin_get_balance : (get_balance_request) -> (satoshi);
+
+    // bitcoin_get_balance_query : (get_balance_request) -> (satoshi) query;
+
+    bitcoin_get_utxos : (get_utxos_request) -> (get_utxos_response);
+
+    // bitcoin_get_utxos_query : (get_utxos_request) -> (get_utxos_response) query;
+
+    bitcoin_get_current_fee_percentiles : (get_current_fee_percentiles_request) -> (vec millisatoshi_per_byte);
+
+    bitcoin_get_block_headers : (get_block_headers_request) -> (get_block_headers_response);
+
+    bitcoin_send_transaction : (send_transaction_request) -> ();
+
+    // get_config : () -> (config) query;
+
+    // set_config : (set_config_request) -> ();
+};

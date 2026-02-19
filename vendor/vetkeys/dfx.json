@@ -1,0 +1,8 @@
+{
+  "canisters": {
+    "docs": {
+      "type": "assets",
+      "source": ["docs"]
+    }
+  }
+}

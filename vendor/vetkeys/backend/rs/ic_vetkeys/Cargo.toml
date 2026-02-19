@@ -1,0 +1,60 @@
+[package]
+name = "ic-vetkeys"
+version = "0.6.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+documentation = "https://docs.rs/ic-vetkeys"
+homepage = "https://github.com/dfinity/vetkeys/tree/main/backend/rs/ic_vetkeys"
+categories = [
+    "api-bindings",
+    "authentication",
+    "cryptography",
+    "cryptography::cryptocurrencies",
+    "data-structures"
+]
+keywords = ["internet-computer", "ibe", "bls-signatures", "distributed-keys", "encrypted-storage"]
+include = ["src", "Cargo.toml", "LICENSE", "README.md"]
+description = "A set of tools designed to help canister developers integrate vetKeys into their Internet Computer (ICP) applications"
+readme = "README.md"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+aes-gcm = "0.10"
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
+    "groups",
+    "pairings",
+    "alloc",
+    "experimental",
+    "zeroize",
+] }
+hkdf = { version = "0.12" }
+futures = "0.3.31"
+hex-literal = { version = "1" }
+ic-cdk = { workspace = true }
+ic-stable-structures = { workspace = true }
+lazy_static = { workspace = true }
+pairing = "0.23.0"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+sha2 = "0.10.9"
+sha3 = "0.10.8"
+subtle = "2.6.1"
+strum = "0.27.1"
+strum_macros = "0.27.1"
+zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+hex = { workspace = true }
+ic-vetkeys-test-utils = { path = "../ic_vetkeys_test_utils" }
+pocket-ic = { workspace = true }

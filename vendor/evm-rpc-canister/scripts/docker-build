@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# vim: ft=bash
+# Build EVM RPC inside docker. This outputs evm_rpc.wasm.gz.
+
+set -euo pipefail
+
+# Make sure we always run from the root
+SCRIPTS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPTS_DIR/.."
+
+function title() {
+    echo "Build EVM RPC canister inside Docker"
+}
+
+function usage() {
+    cat << EOF
+
+Usage:
+  $0
+
+EOF
+}
+
+function help() {
+    cat << EOF
+
+This will create (and override) "./evm_rpc.wasm.gz".
+EOF
+}
+
+## Building
+
+function build() {
+    local canister="$1"
+
+    # image name and build args, made global because they're used in
+    # check_feature()
+    image_name="evm-rpc-docker-build"
+    docker_build_args=( --target "scratch_$canister" )
+
+    docker_build_args+=(--tag "$image_name" .)
+
+    echo "The following image name will be used: $image_name"
+
+    tmp_outdir=$(mktemp -d)
+
+    set -x
+    DOCKER_BUILDKIT=1 docker build \
+        "${docker_build_args[@]}" \
+        --output "$tmp_outdir"
+    set +x
+
+    echo "Copying build output from $tmp_outdir to $PWD"
+    cp "$tmp_outdir/$canister.wasm.gz" .
+
+    echo "Removing $tmp_outdir"
+    rm -rf "$tmp_outdir"
+}
+
+# ARGUMENT PARSING
+
+CANISTERS=()
+while [[ $# -gt 0 ]]
+do
+    case $1 in
+        -h|--help)
+            title
+            usage
+            help
+            exit 0
+            ;;
+        *)
+            echo "ERROR: unknown argument $1"
+            usage
+            echo
+            echo "Use '$0 --help' for more information"
+            exit 1
+            ;;
+    esac
+done
+
+if [ ${#CANISTERS[@]} -eq 0 ]; then
+    CANISTERS=("evm_rpc")
+fi
+
+for canister in "${CANISTERS[@]}"
+do
+    build "$canister"
+done

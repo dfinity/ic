@@ -1,0 +1,10 @@
+[
+  {
+    match: "**/*",
+    security_policy: "hardened",
+    headers: {
+      "Content-Security-Policy": "default-src 'self';script-src 'self';connect-src 'self' http://localhost:* https://icp0.io https://*.icp0.io https://icp-api.io;img-src 'self';style-src * 'unsafe-inline';object-src 'none';base-uri 'self';frame-ancestors 'none';form-action 'self';upgrade-insecure-requests;",
+    },
+    allow_raw_access: false
+  },
+]

@@ -1,0 +1,10 @@
+{
+    "entryPoints": [
+        "src/index.ts",
+        "src/key_manager/index.ts",
+        "src/encrypted_maps/index.ts"
+    ],
+    "excludeInternal": true,
+    "excludeExternals": true,
+    "includeVersion": true,
+}

@@ -1,0 +1,50 @@
+{
+    "canisters": {
+      "password_manager_with_metadata": {
+        "main": "backend/src/Main.mo",
+        "args": "--enhanced-orthogonal-persistence",
+        "type": "motoko",
+        "init_arg": "(\"test_key_1\")",
+        "metadata": [
+          {
+            "name": "candid:service",
+            "visibility": "public"
+          }
+        ]
+      },
+      "internet-identity": {
+        "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+        "type": "custom",
+        "specified_id": "rdmx6-jaaaa-aaaaa-aaadq-cai",
+        "remote": {
+        "id": {
+            "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+          }
+        },
+        "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
+      },
+      "www": {
+        "dependencies": ["password_manager_with_metadata", "internet-identity"],
+        "build": ["cd frontend && npm i --include=dev && npm run build && cd - && rm -r dist > /dev/null 2>&1; mv frontend/dist ./"],
+        "frontend": {
+          "entrypoint": "dist/index.html"
+        },
+        "source": ["dist/"],
+        "type": "assets",
+        "output_env_file": "frontend/.env"
+      }
+    },
+    "defaults": {
+      "build": {
+        "packtool": "npx ic-mops sources",
+        "args": ""
+      }
+    },
+    "networks": {
+      "local": {
+        "bind": "127.0.0.1:8000",
+        "type": "ephemeral"
+      }
+    }
+  }
+  

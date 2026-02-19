@@ -1,0 +1,39 @@
+---------------------------------------------------
+
+Benchmark: stable_memory_increase_from_zero
+  total:
+    instructions: 307 (regressed from 0)
+    heap_increase: 0 pages (no change)
+    stable_memory_increase: 123 pages (regressed from 0)
+
+---------------------------------------------------
+
+Summary:
+  instructions:
+    status:   Regressions detected 🔴
+    counts:   [total 1 | regressed 1 | improved 0 | new 0 | unchanged 0]
+    change:   [max +307 | p75 +307 | median +307 | p25 +307 | min +307]
+    change %: [max +inf% | p75 +inf% | median +inf% | p25 +inf% | min +inf%]
+
+  heap_increase:
+    status:   No significant changes 👍
+    counts:   [total 1 | regressed 0 | improved 0 | new 0 | unchanged 1]
+    change:   [max 0 | p75 0 | median 0 | p25 0 | min 0]
+    change %: [max 0.00% | p75 0.00% | median 0.00% | p25 0.00% | min 0.00%]
+
+  stable_memory_increase:
+    status:   Regressions detected 🔴
+    counts:   [total 1 | regressed 1 | improved 0 | new 0 | unchanged 0]
+    change:   [max +123 | p75 +123 | median +123 | p25 +123 | min +123]
+    change %: [max +inf% | p75 +inf% | median +inf% | p25 +inf% | min +inf%]
+
+---------------------------------------------------
+
+Only significant changes:
+| status | name                             | calls | ins |  ins Δ% | HI |  HI Δ% | SMI |  SMI Δ% |
+|--------|----------------------------------|-------|-----|---------|----|--------|-----|---------|
+|   +    | stable_memory_increase_from_zero |       | 307 |   +inf% |  0 |  0.00% | 123 |   +inf% |
+
+ins = instructions, HI = heap_increase, SMI = stable_memory_increase, Δ% = percent change
+
+---------------------------------------------------

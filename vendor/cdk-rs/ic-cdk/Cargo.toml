@@ -1,0 +1,48 @@
+[package]
+name = "ic-cdk"
+version = "0.19.0"                                                                   # sync with ic-cdk-macros and the doc comment in README.md
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Canister Developer Kit for the Internet Computer."
+homepage = "https://docs.rs/ic-cdk"
+documentation = "https://docs.rs/ic-cdk"
+readme = "README.md"
+categories = ["api-bindings", "data-structures", "no-std", "development-tools::ffi"]
+keywords = ["internet-computer", "types", "dfinity", "canister", "cdk"]
+include = ["src", "Cargo.toml", "LICENSE", "README.md"]
+
+[dependencies]
+candid.workspace = true
+ic0.workspace = true
+ic-cdk-executor.workspace = true
+# Pin ic-cdk-macros to a specific version.
+# This actually create a 1-to-1 mapping between ic-cdk and ic-cdk-macros.
+# Dependents won't accidentaly upgrading ic-cdk-macros only but not ic-cdk.
+# ic-cdk-macros is a hidden dependency, re-exported by ic-cdk.
+# It should not be included by users direcly.
+ic-cdk-macros = { path = "../ic-cdk-macros", version = "=0.19.0" }
+ic-error-types = "0.2.0"
+ic-management-canister-types.workspace = true
+pin-project-lite = "0.2.16"
+serde.workspace = true
+serde_bytes.workspace = true
+slotmap.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+anyhow = "1"
+candid_parser.workspace = true
+futures = "0.3"
+rstest = "0.12.0"
+trybuild = "1.0"
+
+[features]
+transform-closure = []
+
+[package.metadata.docs.rs]
+features = ["transform-closure"]
+default-target = "wasm32-unknown-unknown"
+rustdoc-args = ["--cfg=docsrs"]

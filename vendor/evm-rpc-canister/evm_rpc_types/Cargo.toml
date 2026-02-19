@@ -1,0 +1,37 @@
+[package]
+name = "evm_rpc_types"
+version = "3.1.1"
+description = "Candid types for interacting with the EVM RPC canister"
+license = "Apache-2.0"
+readme = "README.md"
+authors = ["DFINITY Foundation"]
+edition = "2021"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/evm-rpc-canister"
+documentation = "https://docs.rs/evm_rpc_types"
+
+[features]
+alloy = [
+    "dep:alloy-consensus",
+    "dep:alloy-primitives",
+    "dep:alloy-rpc-types",
+]
+
+[dependencies]
+alloy-consensus = { workspace = true, optional = true }
+alloy-primitives = { workspace = true, optional = true }
+alloy-rpc-types = { workspace = true, optional = true }
+candid = { workspace = true }
+canlog = { workspace = true }
+hex = { workspace = true }
+ic-error-types = { workspace = true }
+ic-management-canister-types = { workspace = true }
+num-bigint = { workspace = true }
+serde = { workspace = true }
+strum = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+serde_json = { workspace = true }

@@ -1,0 +1,11 @@
+# List of approved files that can be changed by a bot via an automated PR
+# This is to increase security and prevent accidentally updating files that shouldn't be changed by a bot
+
+# These files may be modified by the release-plz bot
+Cargo.lock
+Cargo.toml
+CHANGELOG.md
+evm_rpc_client/CHANGELOG.md
+evm_rpc_client/Cargo.toml
+evm_rpc_types/CHANGELOG.md
+evm_rpc_types/Cargo.toml

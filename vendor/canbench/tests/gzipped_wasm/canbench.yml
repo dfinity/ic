@@ -1,0 +1,5 @@
+build_cmd:
+  bash build.sh
+
+wasm_path:
+  ../../target/wasm32-unknown-unknown/release/gzipped_wasm.wasm.gz

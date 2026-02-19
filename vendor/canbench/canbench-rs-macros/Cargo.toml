@@ -1,0 +1,17 @@
+[package]
+description = "Macros for canbench-rs"
+edition = "2021"
+license = "Apache-2.0"
+name = "canbench-rs-macros"
+repository = "https://github.com/dfinity/canbench"
+version = "0.4.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2.workspace = true
+quote.workspace = true
+syn = { workspace = true, features = ["full"] }

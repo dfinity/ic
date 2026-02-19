@@ -1,0 +1,86 @@
+type ChatId = variant {
+  Group : nat64;
+  Direct : record { principal; principal };
+};
+type EncryptedMessage = record {
+  content : blob;
+  metadata : EncryptedMessageMetadata;
+};
+type EncryptedMessageMetadata = record {
+  vetkey_epoch : nat64;
+  sender : principal;
+  symmetric_key_epoch : nat64;
+  chat_message_id : nat64;
+  nonce : nat64;
+  timestamp : nat64;
+};
+type GroupChatMetadata = record { creation_timestamp : nat64; chat_id : nat64 };
+type GroupModification = record {
+  remove_participants : vec principal;
+  add_participants : vec principal;
+};
+type Result = variant { Ok : nat64; Err : text };
+type Result_1 = variant { Ok : GroupChatMetadata; Err : text };
+type Result_2 = variant { Ok : blob; Err : text };
+type Result_3 = variant { Ok : VetKeyEpochMetadata; Err : text };
+type Result_4 = variant { Ok : opt blob; Err : text };
+type Result_5 = variant { Ok; Err : text };
+type UserMessage = record {
+  vetkey_epoch : nat64;
+  content : blob;
+  symmetric_key_epoch : nat64;
+  nonce : nat64;
+};
+type VetKeyEpochMetadata = record {
+  symmetric_key_rotation_duration : nat64;
+  participants : vec principal;
+  messages_start_with_id : nat64;
+  creation_timestamp : nat64;
+  epoch_id : nat64;
+};
+service : (text) -> {
+  chat_public_key : (ChatId, nat64) -> (blob);
+  create_direct_chat : (principal, nat64, nat64) -> (Result);
+  create_group_chat : (vec principal, nat64, nat64) -> (Result_1);
+  // Derives a vetKey for an existing chat or creates a new one if the chat does not exist.
+  // 
+  // # Arguments
+  // * `chat_id`: The chat to derive a vetKey for.
+  // * `opt_vetkey_epoch`: The vetKey epoch to derive a vetKey for. If `None`, a new epoch is created.
+  // * `transport_key`: The transport key to derive a vetKey for.
+  // 
+  // # Errors
+  // * If the vetKey epoch has expired.
+  // * If the user does not have access to the chat or vetKey epoch.
+  // * If the user has already cached the key.
+  derive_chat_vetkey : (ChatId, opt nat64, blob) -> (Result_2);
+  get_encrypted_vetkey_for_my_cache_storage : (blob) -> (blob);
+  get_latest_chat_vetkey_epoch_metadata : (ChatId) -> (Result_3) query;
+  // Returns messages for a chat starting from a given message id.
+  // 
+  // # Arguments
+  // * `chat_id`: The chat to get messages for.
+  // * `message_id`: The message id to start from.
+  // * `limit`: The maximum number of messages to return.
+  // 
+  // # Notes
+  // * Does not fail if the chat does not exist or the user has no access -- returns empty vector instead.
+  get_messages : (ChatId, nat64, opt nat32) -> (vec EncryptedMessage) query;
+  get_my_chat_ids : () -> (vec record { ChatId; nat64 }) query;
+  get_my_reshared_ibe_encrypted_vetkey : (ChatId, nat64) -> (Result_4);
+  get_my_symmetric_key_cache : (ChatId, nat64) -> (Result_4);
+  get_vetkey_epoch_metadata : (ChatId, nat64) -> (Result_3) query;
+  get_vetkey_resharing_ibe_decryption_key : (blob) -> (blob);
+  get_vetkey_resharing_ibe_encryption_key : (principal) -> (blob);
+  get_vetkey_verification_key_for_my_cache_storage : () -> (blob);
+  modify_group_chat_participants : (nat64, GroupModification) -> (Result);
+  reshare_ibe_encrypted_vetkeys : (
+      ChatId,
+      nat64,
+      vec record { principal; blob },
+    ) -> (Result_5);
+  rotate_chat_vetkey : (ChatId) -> (Result);
+  send_direct_message : (UserMessage, principal) -> (Result);
+  send_group_message : (UserMessage, nat64) -> (Result);
+  update_my_symmetric_key_cache : (ChatId, nat64, blob) -> (Result_5);
+}

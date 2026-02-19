@@ -1,0 +1,52 @@
+[workspace]
+members = [
+    "ic-cdk",
+    "ic-cdk-bindgen",
+    "ic-cdk-executor",
+    "ic-cdk-macros",
+    "ic-cdk-timers",
+    "ic-management-canister-types",
+    "ic0",
+    "library/*",
+    "e2e-tests",
+]
+resolver = "3"
+exclude = ["candid-extractor"]
+
+[workspace.package]
+authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
+edition = "2024"
+repository = "https://github.com/dfinity/cdk-rs"
+# MSRV
+# Avoid updating this field unless we use new Rust features.
+# Sync with the `toolchain` field when setting up Rust toolchain in ci.yml msrv job.
+rust-version = "1.85.0"
+license = "Apache-2.0"
+
+[profile.canister-release]
+inherits = "release"
+debug = false
+panic = "abort"
+lto = true
+opt-level = 'z'
+
+[workspace.dependencies]
+ic0 = { path = "ic0", version = "1.0.1" }
+ic-cdk = { path = "ic-cdk", version = "0.19.0" }
+ic-cdk-bindgen = { path = "ic-cdk-bindgen", version = "0.2.0" }
+ic-cdk-timers = { path = "ic-cdk-timers", version = "1.0.0" }
+ic-cdk-executor = { path = "ic-cdk-executor", version = "2.0.0" }
+ic-management-canister-types = { path = "ic-management-canister-types", version = "0.6.0" }
+
+candid = "0.10.18"      # sync with the doc comment in ic-cdk/README.md
+candid_parser = "0.2.1"
+futures = "0.3"
+hex = "0.4"
+ic_principal = "0.1"
+quote = "1"
+serde = "1"
+serde_bytes = "0.11"
+sha2 = "0.10"
+slotmap = "1"
+syn = "2"
+thiserror = "2.0"

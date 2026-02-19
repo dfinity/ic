@@ -1,0 +1,41 @@
+type AccessRights = variant { Read; ReadWrite; ReadWriteManage };
+type ByteBuf = record { inner : blob };
+type EncryptedMapData = record {
+  access_control : vec record { principal; AccessRights };
+  keyvals : vec record { ByteBuf; ByteBuf };
+  map_name : ByteBuf;
+  map_owner : principal;
+};
+type Result = variant { Ok : opt ByteBuf; Err : text };
+type Result_1 = variant { Ok : vec record { ByteBuf; ByteBuf }; Err : text };
+type Result_2 = variant { Ok : ByteBuf; Err : text };
+type Result_3 = variant {
+  Ok : vec record { principal; AccessRights };
+  Err : text;
+};
+type Result_4 = variant { Ok : opt AccessRights; Err : text };
+type Result_5 = variant { Ok : vec ByteBuf; Err : text };
+service : (text) -> {
+  get_accessible_shared_map_names : () -> (
+      vec record { principal; ByteBuf },
+    ) query;
+  get_all_accessible_encrypted_maps : () -> (vec EncryptedMapData) query;
+  get_all_accessible_encrypted_values : () -> (
+      vec record {
+        record { principal; ByteBuf };
+        vec record { ByteBuf; ByteBuf };
+      },
+    ) query;
+  get_encrypted_value : (principal, ByteBuf, ByteBuf) -> (Result) query;
+  get_encrypted_values_for_map : (principal, ByteBuf) -> (Result_1) query;
+  get_encrypted_vetkey : (principal, ByteBuf, ByteBuf) -> (Result_2);
+  get_owned_non_empty_map_names : () -> (vec ByteBuf) query;
+  get_shared_user_access_for_map : (principal, ByteBuf) -> (Result_3) query;
+  get_user_rights : (principal, ByteBuf, principal) -> (Result_4) query;
+  get_vetkey_verification_key : () -> (ByteBuf);
+  insert_encrypted_value : (principal, ByteBuf, ByteBuf, ByteBuf) -> (Result);
+  remove_encrypted_value : (principal, ByteBuf, ByteBuf) -> (Result);
+  remove_map_values : (principal, ByteBuf) -> (Result_5);
+  remove_user : (principal, ByteBuf, principal) -> (Result_4);
+  set_user_rights : (principal, ByteBuf, principal, AccessRights) -> (Result_4);
+}

@@ -1,0 +1,21 @@
+[package]
+name = "json_rpc_canister"
+version = "1.0.0"
+edition.workspace = true
+
+[[bin]]
+name = "json_rpc_canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+canhttp = { path = "../../canhttp", features = ["http", "json"] }
+http = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tower = { workspace = true }
+
+[dev-dependencies]
+test_fixtures = { workspace = true }
+tokio = { workspace = true, features = ["full"] }

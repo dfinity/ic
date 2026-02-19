@@ -1,0 +1,22 @@
+[package]
+name = "ic-cdk-executor"
+version = "2.0.0"
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Async executor for `ic-cdk`"
+categories = ["asynchronous", "rust-patterns"]
+keywords = ["internet-computer", "dfinity", "canister", "cdk"]
+# DO NOT change this field, not even to update the link, unless you are updating every existing version of the package.
+# Update the link by updating the links-pin tag.
+links = "ic-cdk async executor, see https://github.com/dfinity/cdk-rs/blob/links-pin/TROUBLESHOOTING.md"
+
+[dependencies]
+ic0.workspace = true
+slotmap.workspace = true
+smallvec = "1.15.1"
+
+[package.metadata.docs.rs]
+targets = ["wasm32-unknown-unknown"]

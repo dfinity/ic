@@ -1,0 +1,4 @@
+[dependencies]
+base = "0.11.0"
+evm = "./lib/motoko/src"
+"json.mo" = "0.1.2"

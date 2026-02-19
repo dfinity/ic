@@ -1,0 +1,6 @@
+[toolchain]
+# This is not the MSRV, we just want to use the latest stable Rust for development
+# MSRV is defined in the `Cargo.toml` file
+channel = "stable"
+targets = ["wasm32-unknown-unknown"]
+components = ["rustfmt", "clippy"]

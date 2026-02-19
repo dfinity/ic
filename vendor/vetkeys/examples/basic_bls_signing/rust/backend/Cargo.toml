@@ -1,0 +1,23 @@
+[package]
+name = "ic-vetkeys-example-basic-bls-signing-backend"
+authors = ["DFINITY Stiftung"]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Basic BLS Signing"
+repository = "https://github.com/dfinity/vetkeys"
+rust-version = "1.85.0"
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+candid = "0.10.2"
+getrandom = { version = "0.2", features = ["custom"] }
+ic-cdk = "0.18.3"
+ic-stable-structures = "0.6.8"
+ic-vetkeys = "0.3.0"
+serde = "1.0.217"
+serde_bytes = "0.11.15"
+serde_cbor = "0.11.2"

@@ -1,0 +1,156 @@
+// Paste the function header from ic0.txt with no indentation, then indent a comment by four spaces on subsequent lines.
+// If the function is in any way unsafe, the safety comment should exhaustively describe all safety preconditions for the
+// parameters that have them, and list the parameters that do not.
+ic0.msg_arg_data_size : () -> I;                                                      // I U RQ NRQ CQ Ry CRy F
+    Always safe to call
+ic0.msg_arg_data_copy : (dst : I, offset : I, size : I) -> ();                        // I U RQ NRQ CQ Ry CRy F
+    `dst` must be a pointer to a writable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.msg_caller_size : () -> I;                                                        // *
+    Always safe to call
+ic0.msg_caller_copy : (dst : I, offset : I, size : I) -> ();                          // *
+    `dst` must be a pointer to a writable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.msg_reject_code : () -> i32;                                                      // Ry Rt CRy CRt
+    Always safe to call
+ic0.msg_reject_msg_size : () -> I  ;                                                  // Rt CRt
+    Always safe to call
+ic0.msg_reject_msg_copy : (dst : I, offset : I, size : I) -> ();                      // Rt CRt
+    `dst` must be a pointer to a writable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.msg_deadline : () -> i64;                                                         // U Q CQ Ry Rt CRy CRt
+    Always safe to call
+ic0.msg_reply_data_append : (src : I, size : I) -> ();                                // U RQ NRQ CQ Ry Rt CRy CRt
+    `src` must be a pointer to a readable sequence of bytes with size `size`.
+ic0.msg_reply : () -> ();                                                             // U RQ NRQ CQ Ry Rt CRy CRt
+    Always safe to call
+ic0.msg_reject : (src : I, size : I) -> ();                                           // U RQ NRQ CQ Ry Rt CRy CRt
+    `src` must be a pointer to a readable sequence of bytes with size `size`
+ic0.msg_cycles_available128 : (dst : I) -> ();                                        // U RQ Rt Ry
+    `dst` must be a pointer to a writable sequence of 16 bytes (LE u128)
+ic0.msg_cycles_refunded128 : (dst : I) -> ();                                         // Rt Ry
+    `dst` must be a pointer to a writable sequence of 16 bytes (LE u128)
+ic0.msg_cycles_accept128 : (max_amount_high : i64, max_amount_low: i64, dst : I)
+                           -> ();                                                         // U RQ Rt Ry
+    `dst` must be a pointer to a writable sequence of 16 bytes (LE u128). The `max_amount_high` and `max_amount_low` parameters do not affect safety.
+ic0.cycles_burn128 : (amount_high : i64, amount_low : i64, dst : I)
+                           -> ();                                                         // I G U RQ Ry Rt C T
+    `dst` must be a pointer to a writable sequence of 16 bytes (LE u128). The `amount_high` and `amount_low` parameters do not affect safety.
+ic0.canister_self_size : () -> I;                                                     // *
+    Always safe to call
+ic0.canister_self_copy : (dst : I, offset : I, size : I) -> ();                       // *
+    `dst` must be a pointer to a writable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.canister_cycle_balance128 : (dst : I) -> ();                                      // *
+    `dst` must be a pointer to a writable sequence of 16 bytes (LE u128)
+ic0.canister_liquid_cycle_balance128 : (dst : I) -> ();                               // *
+    `dst` must be a pointer to a writable sequence of 16 bytes (LE u128)
+ic0.canister_status : () -> i32;                                                      // *
+    Always safe to call
+ic0.canister_version : () -> i64;                                                     // *
+    Always safe to call
+ic0.subnet_self_size : () -> I;                                                       // *
+    Always safe to call
+ic0.subnet_self_copy : (dst : I, offset : I, size : I) -> ();                         // *
+    `dst` must be a pointer to a writable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.msg_method_name_size : () -> I;                                                   // F
+    Always safe to call
+ic0.msg_method_name_copy : (dst : I, offset : I, size : I) -> ();                     // F
+    `dst` must be a pointer to a writable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.accept_message : () -> ();                                                        // F
+    Always safe to call
+ic0.call_new :
+  ( callee_src  : I,
+    callee_size : I,
+    name_src    : I,
+    name_size   : I,
+    reply_fun   : I,
+    reply_env   : I,
+    reject_fun  : I,
+    reject_env  : I
+  ) -> ();                                                                            // U CQ Ry Rt CRy CRt T
+    - `callee_src` must be a pointer to a readable sequence of bytes with size `callee_size`
+    - `name_src` must be a pointer to a readable UTF-8 string with size `name_size`
+    - `reply_fun` must be a function pointer with signature (env : usize) -> (), safely callable as an entrypoint with `reply_env`
+    - `reject_fun` must be a function pointer with signature (env : usize) -> (), safely callable as an entrypoint with `reject_env`
+    - This function takes ownership of `reply_env` and `reject_env`
+    - If called, `reply_fun` will take ownership of `reply_env`, `reject_env`, and the `ic0.call_on_cleanup` `env`
+    - If called, `reject_fun` will take ownership of `reply_env`, `reject_env`, and the `ic0.call_on_cleanup` `env`
+ic0.call_on_cleanup : (fun : I, env : I) -> ();                                       // U CQ Ry Rt CRy CRt T
+    - `fun` must be a function pointer with signature (env : usize) -> (), safely callable as an entrypoint with `env`
+    - This function takes ownership of `env`
+    - If called, `fun` will take ownership of `env`, `reply_env`, and `reject_env`
+ic0.call_data_append : (src : I, size : I) -> ();                                     // U CQ Ry Rt CRy CRt T
+    `src` must be a pointer to a readable sequence of bytes with size `size`
+ic0.call_with_best_effort_response : (timeout_seconds : i32) -> ();                   // U CQ Ry Rt CRy CRt T
+    Always safe to call
+ic0.call_cycles_add128 : (amount_high : i64, amount_low: i64) -> ();                  // U Ry Rt T
+    Always safe to call
+ic0.call_perform : () -> ( err_code : i32 );                                          // U CQ Ry Rt CRy CRt T
+    Always safe to call.
+    - If this function returns a nonzero value, ownership of `reply_env`, `reject_env`, and the `ic0.call_on_cleanup` `env` is released to the caller
+    - If this function returns 0, then (from the perspective of safety, *not* semantics) exactly one of `reply_fun`, `reject_fun`, or the `ic0.call_on_cleanup` `fun` will be called, exactly once.
+ic0.stable64_size : () -> (page_count : i64);                                         // * s
+    Always safe to call
+ic0.stable64_grow : (new_pages : i64) -> (old_page_count : i64);                      // * s
+    Always safe to call
+ic0.stable64_write : (offset : i64, src : i64, size : i64) -> ();                     // * s
+    `src` must be a pointer to a readable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.stable64_read : (dst : i64, offset : i64, size : i64) -> ();                      // * s
+    `dst` must be a pointer to a writable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.root_key_size : () -> I;                                                          // I G U RQ Ry Rt C T
+    Always safe to call
+ic0.root_key_copy : (dst : I, offset : I, size : I) -> ();                            // I G U RQ Ry Rt C T
+    `dst` must be a pointer to a writable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.certified_data_set : (src : I, size : I) -> ();                                   // I G U Ry Rt T
+    `src` must be a pointer to a readable sequence of bytes with size `size`
+ic0.data_certificate_present : () -> i32;                                             // *
+    Always safe to call
+ic0.data_certificate_size : () -> I;                                                  // NRQ CQ
+    Always safe to call
+ic0.data_certificate_copy : (dst : I, offset : I, size : I) -> ();                    // NRQ CQ
+    `dst` must be a pointer to a writable sequence of bytes with size `size`. The `offset` parameter does not affect safety.
+ic0.time : () -> (timestamp : i64);                                                   // *
+    Always safe to call
+ic0.global_timer_set : (timestamp : i64) -> i64;                                      // I G U Ry Rt C T
+    Always safe to call
+ic0.performance_counter : (counter_type : i32) -> (counter : i64);                    // * s
+    Always safe to call
+ic0.is_controller : (src : I, size : I) -> ( result : i32);                           // * s
+    `src` must be a pointer to a readable sequence of bytes with size `size`
+ic0.in_replicated_execution : () -> (result : i32);                                   // * s
+    Always safe to call
+ic0.cost_call : (method_name_size: i64, payload_size : i64, dst : I) -> ();           // * s
+    `dst` must be a pointer to a writable sequence of 16 bytes (LE u128). The `method_name_size` and `payload_size` parameters do not affect safety.
+ic0.cost_create_canister : (dst : I) -> ();                                           // * s
+    `dst` must be a pointer to a writable sequence of 16 bytes (LE u128)
+ic0.cost_http_request : (request_size : i64, max_res_bytes : i64, dst : I) -> ();     // * s
+    `dst` must be a pointer to a writable sequence of 16 bytes (LE u128). The `request_size` and `max_res_bytes` parameters do not affect safety
+ic0.cost_sign_with_ecdsa : (src : I, size : I, ecdsa_curve: i32, dst : I) -> i32;     // * s
+    - `src` must be a pointer to a readable UTF-8 string with size `size`
+    - `dst` must be a pointer to a writable sequence of 16 bytes (LE u128)
+    - The `ecdsa_curve` parameter does not affect safety
+ic0.cost_sign_with_schnorr : (src : I, size : I, algorithm: i32, dst : I) -> i32;     // * s
+    - `src` must be a pointer to a readable UTF-8 string with size `size`
+    - `dst` must be a pointer to a writable sequence of 16 bytes (LE u128)
+    - The `algorithm` parameter does not affect safety
+ic0.cost_vetkd_derive_key : (src : I, size : I, vetkd_curve: i32, dst : I) -> i32;  // * s
+    - `src` must be a pointer to a readable UTF-8 string with size `size`
+    - `dst` must be a pointer to a writable sequence of 16 bytes (LE u128)
+    - The `vetkd_curve` parameter does not affect safety
+ic0.env_var_count : () -> I;                                                                      // *
+    Always safe to call
+ic0.env_var_name_size : (index: I) -> I;                                                          // *
+    Always safe to call
+ic0.env_var_name_copy : (index: I, dst: I, offset: I, size: I) -> ();                             // *
+    - The `index` parameter does not affect safety
+    - `dst` must be a pointer to a writable sequence of bytes with size `size`
+    - The `offset` parameter does not affect safety
+ic0.env_var_name_exists : (name_src: I, name_size: I) -> i32;                                     // *
+    `name_src` must be a pointer to a readable UTF-8 string with size `name_size`
+ic0.env_var_value_size : (name_src: I, name_size: I) -> I;                                        // *
+    `name_src` must be a pointer to a readable UTF-8 string with size `name_size`
+ic0.env_var_value_copy : (name_src: I, name_size: I, dst: I, offset: I, size: I) -> ();           // *
+    - `name_src` must be a pointer to a readable UTF-8 string with size `name_size`
+    - `dst` must be a pointer to a writable sequence of bytes with size `size`
+    - The `offset` parameter does not affect safety
+ic0.debug_print : (src : I, size : I) -> ();                                          // * s
+    `src` must be a pointer to a readable sequence of bytes with size `size`
+ic0.trap : (src : I, size : I) -> ();                                                 // * s
+    `src` must be a pointer to a readable sequence of bytes with size `size`

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# install build dependencies (rustup + ic-wasm)
+
+set -euo pipefail
+
+SCRIPTS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPTS_DIR/.."
+
+function run() {
+    1>&2 echo "running $*"
+    rc=0 && "$@" || rc="$?"
+    if ! [ "$rc" -eq 0 ]
+    then
+        1>&2 echo "Bootstrap command failed: $*"
+        exit "$rc"
+    fi
+}
+
+rust_version=$(cat ./rust-toolchain.toml | sed -n 's/^channel[[:space:]]*=[[:space:]]"\(.*\)"/\1/p')
+echo "using rust version '$rust_version'"
+
+# here we set the toolchain to 'none' and rustup will pick up on ./rust-toolchain.toml
+run curl --fail https://sh.rustup.rs -sSf | run sh -s -- -y --default-toolchain "none" --no-modify-path
+
+echo "Install active Rust toolchain"
+rustup show active-toolchain || rustup toolchain install
+
+echo "looking for ic-wasm 0.3.5"
+if [[ ! "$(command -v ic-wasm)" || "$(ic-wasm --version)" != "ic-wasm 0.3.5" ]]
+then
+    echo "installing ic-wasm 0.3.5"
+    run cargo install ic-wasm --version 0.3.5
+fi
+
+# make sure the packages are actually installed (rustup waits for the first invoke to lazyload)
+cargo --version
+cargo clippy --version
+cargo fmt --version

@@ -1,0 +1,21 @@
+name: Check PR title
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dfinity/conventional-pr-title-action@v4.0.0
+        with:
+          success-state: Title follows the specification.
+          failure-state: Title does not follow the specification.
+          context-name: conventional-pr-title
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

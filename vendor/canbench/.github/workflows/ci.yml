@@ -1,0 +1,159 @@
+name: CI
+on: [pull_request]
+
+env:
+  RUST_VERSION: 1.86.0
+  CARGO_TERM_COLOR: always # Force Cargo to use colors
+  TERM: xterm-256color
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.build }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ matrix.build }}-cargo-
+
+      - name: Install Rust
+        run: |
+          rustup update ${RUST_VERSION} --no-self-update
+          rustup default ${RUST_VERSION}
+          rustup component add rustfmt
+          rustup component add clippy
+
+      - name: Check Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --tests --benches -- -D clippy::all
+
+      - name: Test
+        # Do not use `--all-features` because it enables `overwrite`, which auto-updates expected outputs.
+        # This makes tests always pass by overwriting failures, effectively disabling test validation.
+        run: cargo test --features=canbench -- --color always --test-threads=1
+        env:
+          RUST_BACKTRACE: 1
+
+  benchmark:
+    runs-on: ubuntu-latest
+    needs: [build]
+    strategy:
+      matrix:
+        name:
+          - fibonacci-example
+          - btreemap-vs-hashmap-example
+        include:
+          - name: fibonacci-example
+            project_dir: ./examples/fibonacci
+          - name: btreemap-vs-hashmap-example
+            project_dir: ./examples/btreemap_vs_hashmap
+
+    env:
+      PROJECT_DIR: ${{ matrix.project_dir }}
+
+    steps:
+      - name: Checkout current PR
+        uses: actions/checkout@v4
+
+      - name: Checkout baseline branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: _canbench_baseline_branch
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-1
+
+      - name: Install Rust
+        run: |
+          rustup update ${RUST_VERSION} --no-self-update
+          rustup default ${RUST_VERSION}
+          rustup target add wasm32-unknown-unknown
+
+      - name: Benchmark
+        run: |
+          bash ./scripts/ci_run_benchmark.sh $PROJECT_DIR ${{ matrix.name }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canbench_result_${{ matrix.name }}
+          path: /tmp/canbench_result_${{ matrix.name }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canbench_results_persisted_${{ matrix.name }}_yml
+          path: /tmp/canbench_results_persisted_${{ matrix.name }}.yml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canbench_results_${{ matrix.name }}_csv
+          path: /tmp/canbench_results_${{ matrix.name }}.csv
+
+      - name: Pass or fail
+        run: |
+          bash ./scripts/ci_post_run_benchmark.sh
+
+  shell-checks:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        env:
+          SHELLCHECK_OPTS: -e SC1090 -e SC2119 -e SC1091
+
+  upload-pr-number:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Save PR number
+        run: |
+          echo ${{ github.event.number }} > /tmp/pr_number
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr_number
+          path: /tmp/pr_number
+
+  checks-pass:
+    # Always run this job!
+    if: always()
+    needs:
+      - build
+      - shell-checks
+      - benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: check build result
+        if: ${{ needs.build.result != 'success' }}
+        run: exit 1
+
+      - name: check shell-checks result
+        if: ${{ needs.shell-checks.result != 'success' }}
+        run: exit 1
+
+      - name: check benchmark result
+        if: ${{ needs.benchmark.result != 'success' }}
+        run: exit 1

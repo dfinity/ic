@@ -1,0 +1,42 @@
+[workspace]
+members = [
+    "backend/rs/ic_vetkeys",
+    "backend/rs/ic_vetkeys_test_utils",
+    "backend/rs/canisters/ic_vetkeys_encrypted_maps_canister",
+    "backend/rs/canisters/ic_vetkeys_manager_canister",
+    "backend/rs/canisters/tests",
+    "backend/rs/benchmarks",
+]
+resolver = "2"
+
+[workspace.package]
+authors = ["DFINITY Stiftung"]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Tools and examples for development with vetKeys on the Internet Computer"
+repository = "https://github.com/dfinity/vetkeys"
+rust-version = "1.85.0"
+documentation = "https://docs.rs/ic-vetkeys"
+
+[workspace.dependencies]
+anyhow = "1.0.95"
+canbench-rs = "0.4.0"
+candid = "0.10.16"
+hex = "0.4.3"
+ic-cdk = { path = "../cdk-rs/ic-cdk" }
+ic-stable-structures = "0.7.0"
+ic-vetkeys = { path = "backend/rs/ic_vetkeys" }
+lazy_static = "1.5.0"
+pocket-ic = "9.0.0"
+rand = "0.8.5"
+rand_chacha = "0.3.1"
+serde = "1.0.217"
+serde_bytes = "0.11.15"
+serde_cbor = "0.11.2"
+ic-dummy-getrandom-for-wasm = "0.1.0"
+
+[profile.release]
+lto = true
+opt-level = 'z'
+panic = 'abort'

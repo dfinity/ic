@@ -1,0 +1,25 @@
+[package]
+name = "ic-cdk-macros"
+version = "0.19.0"                                                                   # sync with ic-cdk
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Canister Developer Kit macros."
+homepage = "https://docs.rs/ic-cdk-macros"
+documentation = "https://docs.rs/ic-cdk-macros"
+readme = "README.md"
+categories = ["api-bindings", "data-structures", "no-std", "development-tools::ffi"]
+keywords = ["internet-computer", "types", "dfinity", "canister", "cdk"]
+include = ["src", "Cargo.toml", "LICENSE", "README.md"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+candid.workspace = true
+darling = "0.20.11"
+proc-macro2 = "1.0"
+quote.workspace = true
+syn = { workspace = true, features = ["fold", "full", "extra-traits"] }

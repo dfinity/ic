@@ -1,0 +1,39 @@
+{
+    "canisters": {
+      "encrypted_notes": {
+        "main": "backend/main.mo",
+        "type": "motoko",
+        "args": "--enhanced-orthogonal-persistence",
+        "init_arg": "(\"test_key_1\")"
+      },
+      "internet-identity": {
+        "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+        "type": "custom",
+        "specified_id": "rdmx6-jaaaa-aaaaa-aaadq-cai",
+        "remote": {
+          "id": {
+            "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+          }
+        },
+        "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
+      },
+      "www": {
+        "dependencies": ["encrypted_notes", "internet-identity"],
+        "build": [
+          "cd frontend && npm i --include=dev && npm run build && cd - && rm -r public > /dev/null 2>&1; cp -r frontend/public ./"
+        ],
+        "frontend": {
+          "entrypoint": "public/index.html"
+        },
+        "source": ["public/"],
+        "type": "assets",
+        "output_env_file": "frontend/.env"
+      }
+    },
+    "networks": {
+      "local": {
+        "bind": "127.0.0.1:8000",
+        "type": "ephemeral"
+      }
+    }
+  }

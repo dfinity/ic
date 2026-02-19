@@ -1,0 +1,26 @@
+[package]
+name = "ic-ledger-types"
+version = "0.16.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Types for interacting with the ICP ledger canister."
+homepage = "https://docs.rs/ic-ledger-types"
+documentation = "https://docs.rs/ic-ledger-types"
+readme = "README.md"
+keywords = ["internet-computer", "ledger"]
+categories = ["cryptography::cryptocurrencies", "data-structures"]
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ic-cdk.workspace = true
+candid.workspace = true
+crc32fast = "1.2.0"
+hex.workspace = true
+serde.workspace = true
+serde_bytes.workspace = true
+sha2.workspace = true

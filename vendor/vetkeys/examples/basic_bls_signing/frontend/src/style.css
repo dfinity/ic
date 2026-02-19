@@ -1,0 +1,374 @@
+/* Base styles */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+h1 {
+  font-size: 2.2em;
+  line-height: 1.1;
+  margin-bottom: 2rem;
+}
+
+h3 {
+  color: var(--text-color);
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  font-weight: 600;
+}
+
+h4 {
+  color: var(--text-color);
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+h5 {
+  color: var(--text-color);
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+/* Principal container */
+.principal-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  justify-content: center;
+}
+
+.principal-display {
+  font-family: monospace;
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  color: #a8a6a6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-width: 600px;
+}
+
+/* Buttons */
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+
+button:hover {
+  border-color: #646cff;
+}
+
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+#loginButton {
+  background-color: #28a745;
+  color: white;
+  min-width: 120px;
+}
+
+#loginButton:hover {
+  background-color: #218838;
+}
+
+#logoutButton {
+  background-color: #dc3545;
+  color: white;
+}
+
+#logoutButton:hover {
+  background-color: #c82333;
+}
+
+/* Signing actions */
+#signingActions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+#signingActions button {
+  background-color: #1a1a1a;
+  color: white;
+}
+
+#signingActions button:hover {
+  background-color: #2a2a2a;
+}
+
+/* Custom signature form */
+#customSignatureForm {
+  max-width: 600px;
+  margin: 2rem auto;
+  padding: 2rem 3rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+#customSignatureForm div {
+  margin-bottom: 1.5rem;
+}
+
+#customSignatureForm label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.87);
+}
+
+#customSignatureForm input {
+  width: 100%;
+  padding: 0.75rem;
+  background-color: #242424;
+  border: 1px solid #333;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+#customSignatureForm input:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+#customSignatureForm button {
+  width: 100%;
+  background-color: #28a745;
+  color: white;
+}
+
+#customSignatureForm button:hover {
+  background-color: #218838;
+}
+
+/* Signatures list */
+#signaturesList {
+  margin: 2rem 0;
+}
+
+.signature {
+  margin: 1.5rem 0;
+  padding: 1.5rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+  position: relative;
+}
+
+.signature:hover {
+  transform: translateY(-2px);
+}
+
+.signature h5 {
+  margin: 0 0 1rem 0;
+  color: rgba(255, 255, 255, 0.87);
+}
+
+.signature p {
+  margin: 0.5rem 0;
+  color: #a8a6a6;
+}
+
+.signature-hex {
+  font-family: monospace;
+  word-break: break-all;
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+.verification-key-hex {
+  font-family: monospace;
+  word-break: break-all;
+  background-color: rgba(0, 0, 0, 0.2);
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+.verification-status {
+  font-weight: 500;
+}
+
+.verification-status.valid {
+  color: #2ecc71;
+  font-weight: bold;
+}
+
+.verification-status.invalid {
+  color: #e03926;
+  font-weight: bold;
+}
+
+.principal {
+  font-family: monospace;
+  color: #a8a6a6;
+}
+
+.login-container {
+  display: flex;
+  justify-content: center;
+  margin: 2rem 0;
+  width: 100%;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  #app {
+    padding: 1rem;
+  }
+
+  h1 {
+    font-size: 1.8em;
+  }
+
+  .principal-container {
+    flex-direction: column;
+  }
+
+  #signingActions {
+    flex-direction: column;
+  }
+}
+
+/* Light theme */
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+
+  button {
+    background-color: #f9f9f9;
+  }
+
+  .principal-display {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  #customSignatureForm {
+    background-color: #f9f9f9;
+  }
+
+  #customSignatureForm label {
+    color: #213547;
+  }
+
+  #customSignatureForm input {
+    background-color: #ffffff;
+    border-color: #ddd;
+  }
+
+  .signature {
+    background-color: #f9f9f9;
+  }
+
+  .signature h5 {
+    color: #213547;
+  }
+
+  .signature p {
+    color: #666;
+  }
+
+  .signature-hex {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  .verification-key-hex {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  .principal {
+    color: #666;
+  }
+}
+
+.no-signatures {
+  text-align: center;
+  padding: 2rem;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+.no-signatures p {
+  color: #a8a6a6;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.timestamp {
+  color: #a8a6a6;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+/* Auth state classes */
+.hidden {
+  display: none !important;
+}
+
+/* Initial state classes for auth elements */
+#loginButton {
+  display: block;
+}
+
+#signingActions {
+  display: flex;
+}
+
+#principalDisplay {
+  display: block;
+}
+
+#logoutButton {
+  display: block;
+}
+
+#customSignatureForm {
+  display: block;
+}
+
+#signaturesList {
+  display: block;
+}

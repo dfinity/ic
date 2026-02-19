@@ -1,0 +1,9 @@
+benches:
+  state_check:
+    total:
+      calls: 1
+      instructions: 841
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+version: 0.1.10

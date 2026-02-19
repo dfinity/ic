@@ -1,0 +1,8 @@
+{
+    "overrides": [{
+      "files": "*.mo",
+      "options": {
+        "tabWidth": 4
+      }
+    }]
+  }

@@ -1,0 +1,33 @@
+[package]
+name = "evm_rpc_client"
+version = "0.4.0"
+description = "Rust client for interacting with the EVM RPC canister"
+license = "Apache-2.0"
+readme = "README.md"
+authors = ["DFINITY Foundation"]
+edition = "2021"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/evm-rpc-canister"
+documentation = "https://docs.rs/evm_rpc_client"
+
+[features]
+alloy = ["evm_rpc_types/alloy", "dep:alloy-primitives", "dep:alloy-rpc-types"]
+
+[dependencies]
+alloy-primitives = { workspace = true, optional = true }
+alloy-rpc-types = { workspace = true, optional = true }
+async-trait = { workspace = true }
+candid = { workspace = true }
+evm_rpc_types = { version = "3.1.1", path = "../evm_rpc_types" }
+ic-canister-runtime = { path = "../../canhttp/ic-canister-runtime" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+
+[dev-dependencies]
+alloy-primitives = { workspace = true }
+alloy-rpc-types = { workspace = true }
+alloy-sol-macro = { workspace = true }
+alloy-sol-types = { workspace = true }
+evm_rpc_types = { path = "../evm_rpc_types", features = ["alloy"] }
+tokio = { workspace = true, features = ["full"] }

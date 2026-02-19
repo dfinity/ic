@@ -1,0 +1,66 @@
+name: Publish
+
+on:
+  workflow_dispatch
+
+jobs:
+  # Release unpublished packages.
+  release-plz-release:
+    name: Publish artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+      id-token: write # Required for OIDC token exchange
+    concurrency:
+      group: publish
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Install parse-changelog"
+        uses: taiki-e/install-action@parse-changelog
+
+      - name: "Authenticate with crates.io"
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: "Run release-plz"
+        id: release-plz
+        uses: release-plz/action@8724d33cd97b8295051102e2e19ca592962238f5 # v0.5.108
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - name: "Generate Github release body"
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+          RELEASES_CREATED: ${{ steps.release-plz.outputs.releases_created }}
+        run: |
+          set -e
+          echo "releases: $RELEASES" # example: [{"package_name":"my-package","prs":[{"html_url":"https://github.com/user/proj/pull/1439","number":1439}],"tag":"v0.1.0","version":"0.1.0"}]
+          echo "releases_created: $RELEASES_CREATED" # example: true
+
+          release_tag=$(echo "$RELEASES" | jq -r '.[] | select(.package_name == "canhttp") | .tag')
+          echo "release_tag: $release_tag"
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+          
+          release_version=$(echo "$RELEASES" | jq -r '.[] | select(.package_name == "canhttp") | .version')
+          echo "release_version: $release_version"
+          echo "RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+          
+          notes=$(parse-changelog canhttp/CHANGELOG.md "$release_version")
+          
+          CHANGELOG="$notes" envsubst < release_notes.md >> ${{ github.workspace }}-RELEASE.txt
+
+      - name: "Create Github release"
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ env.RELEASE_TAG}}
+          body_path: ${{ github.workspace }}-RELEASE.txt

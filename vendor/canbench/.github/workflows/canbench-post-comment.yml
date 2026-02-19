@@ -1,0 +1,37 @@
+name: Post Canbench results
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+jobs:
+  download-results:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-benchmarks.outputs.matrix }}
+      pr_number: ${{ steps.set-benchmarks.outputs.pr_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dawidd6/action-download-artifact@09f2f74827fd3a8607589e5ad7f9398816f540fe
+        with:
+          run_id: ${{ github.event.workflow_run.id }}
+
+      - id: set-benchmarks
+        run: bash ./scripts/ci_download_canbench_artifacts.sh
+
+  post-comment:
+    runs-on: ubuntu-latest
+    needs: [download-results]
+    strategy:
+      matrix: ${{fromJSON(needs.download-results.outputs.matrix)}}
+    steps:
+      - name: Post comment
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            ${{ matrix.benchmark.result }}
+          comment_tag: ${{ matrix.benchmark.title }}
+          pr_number: ${{ needs.download-results.outputs.pr_number }}

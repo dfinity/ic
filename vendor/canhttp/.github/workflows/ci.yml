@@ -1,0 +1,84 @@
+name: 'CI'
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+    paths-ignore:
+      - "README.md"
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: 'Run clippy'
+        run: cargo clippy --locked --all-targets --all-features -- -D clippy::all
+
+      - name: 'Run rustfmt'
+        run: cargo fmt --all -- --check
+
+      - name: 'Install cargo-sort'
+        run: cargo install cargo-sort
+
+      - name: 'Check Cargo.toml'
+        run: cargo sort --workspace --check
+
+  cargo-doc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Cargo doc
+        run: |
+          cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: "--deny warnings"
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'Run unit tests'
+        run: cargo test --locked --workspace --exclude http_canister --exclude json_rpc_canister --exclude multi_canister
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    services:
+      httpbin:
+        image: kennethreitz/httpbin
+        ports:
+          - 80:80
+    env:
+      HTTPBIN_URL: http://localhost
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: 'Build example canisters'
+        run: |
+          cargo build -p http_canister -p json_rpc_canister -p multi_canister --target wasm32-unknown-unknown --release --locked
+
+      - name: 'Set WASM paths for load_wasm'
+        run: |
+          echo "HTTP_CANISTER_WASM_PATH=$GITHUB_WORKSPACE/target/wasm32-unknown-unknown/release/http_canister.wasm" >> "$GITHUB_ENV"
+          echo "JSON_RPC_CANISTER_WASM_PATH=$GITHUB_WORKSPACE/target/wasm32-unknown-unknown/release/json_rpc_canister.wasm" >> "$GITHUB_ENV"
+          echo "MULTI_CANISTER_WASM_PATH=$GITHUB_WORKSPACE/target/wasm32-unknown-unknown/release/multi_canister.wasm" >> "$GITHUB_ENV"
+
+      - name: 'Install PocketIC server'
+        uses: dfinity/pocketic@main
+        with:
+          pocket-ic-server-version: "12.0.0"
+
+      - name: 'Run integration tests'
+        run: cargo test --locked -p http_canister -p json_rpc_canister

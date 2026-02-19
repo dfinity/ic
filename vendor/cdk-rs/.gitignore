@@ -1,0 +1,16 @@
+# IDEs
+.idea/
+.vscode/
+
+# Build Output
+target/
+
+# DFX
+.dfx/
+
+# The root Cargo.lock is ignored because the workspace only has library crates.
+# The candid-extractor has its own Cargo.lock file which is tracked to build the binary.
+Cargo.lock
+
+# Generated bindings
+**/declarations/

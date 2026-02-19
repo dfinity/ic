@@ -1,0 +1,13 @@
+[package]
+name = "ic-vetkeys-encrypted-maps-canister"
+version = "0.1.0"
+repository = "https://github.com/dfinity/vetkeys/backend/mo/canisters/ic_vetkeys_encrypted_maps_canister"
+keywords = [
+  "vetkeys,vetkd,encryption,privacy,signature,BLS,key ",
+  "derivation,IBE"
+]
+license = "Apache-2.0"
+
+[dependencies]
+base = "0.14.6"
+ic-vetkeys = "0.4.0"

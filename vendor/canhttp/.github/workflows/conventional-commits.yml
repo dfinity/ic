@@ -1,0 +1,39 @@
+name: PR title format
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # When getting Rust dependencies, retry on network error:
+  CARGO_NET_RETRY: 10
+  # Use the local .curlrc
+  CURL_HOME: .
+  TITLE: ${{ github.event.pull_request.title }}
+jobs:
+  check:
+    name: conventional-pr-title:required
+    runs-on: ubuntu-latest
+    steps:
+      # Conventional commit patterns:
+      #   verb: description
+      #   verb!: description of breaking change
+      #   verb(scope): Description of change to $scope
+      #   verb(scope)!: Description of breaking change to $scope
+      # verb: feat, fix, ...
+      # scope: refers to the part of code being changed.  E.g. " (accounts)" or " (accounts,canisters)"
+      # !: Indicates that the PR contains a breaking change.
+      - run: |
+          if [[ "$TITLE" =~ ^(feat|fix|chore|build|ci|docs|style|refactor|perf|test)(\([-a-zA-Z0-9,]+\))?\!?\: ]]; then
+              echo pass
+          else
+              echo "PR title does not match conventions"
+              exit 1
+          fi

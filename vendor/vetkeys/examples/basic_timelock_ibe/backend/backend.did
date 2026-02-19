@@ -1,0 +1,27 @@
+type ClosedLotsResponse = record {
+  bids : vec vec record { principal; nat };
+  lots : vec LotInformation;
+};
+type LotInformation = record {
+  id : nat;
+  status : LotStatus;
+  creator : principal;
+  name : text;
+  description : text;
+  end_time : nat64;
+  start_time : nat64;
+};
+type LotStatus = variant { Open; ClosedWithWinner : principal; ClosedNoBids };
+type OpenLotsResponse = record {
+  lots : vec LotInformation;
+  bidders : vec vec principal;
+};
+type Result = variant { Ok : nat; Err : text };
+type Result_1 = variant { Ok; Err : text };
+service : (text) -> {
+  create_lot : (text, text, nat16) -> (Result);
+  get_ibe_public_key : () -> (blob);
+  get_lots : () -> (OpenLotsResponse, ClosedLotsResponse) query;
+  place_bid : (nat, blob) -> (Result_1);
+  start_lot_closing_timer_job_with_interval_secs : (nat64) -> ();
+}

@@ -1,0 +1,5 @@
+error: #[query] cannot be above functions with `self` as a parameter.
+ --> tests/compile_fail/no_self.rs:4:11
+  |
+4 | fn method(self) {}
+  |           ^^^^

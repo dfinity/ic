@@ -1,0 +1,62 @@
+name: Backend Motoko Tests
+
+permissions: {}
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    paths:
+      - backend/mo/**
+      - backend/rs/canisters/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/provision-linux.sh
+      - .github/workflows/provision-darwin.sh
+      - .github/workflows/backend-motoko.yml
+
+jobs:
+  backend-motoko-tests-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ZenVoich/setup-mops@v1
+        with:
+          mops-version: 1
+      - name: Provision Linux
+        run: bash .github/workflows/provision-linux.sh
+      - name: Run MOPS Test Linux
+        run: |
+          set -eExuo pipefail
+          cd backend/mo/ic_vetkeys
+          mops install
+          mops test
+          cd ../canisters/ic_vetkeys_manager_canister
+          make test
+          cd ../ic_vetkeys_encrypted_maps_canister
+          make test
+  backend-motoko-tests-darwin:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ZenVoich/setup-mops@v1
+        with:
+          mops-version: 1
+      - name: Provision Darwin
+        run: bash .github/workflows/provision-darwin.sh
+      - name: Run MOPS Test Darwin
+        run: |
+          set -eExuo pipefail
+          cd backend/mo/ic_vetkeys
+          mops install
+          mops test
+          cd ../canisters/ic_vetkeys_manager_canister
+          make test
+          cd ../ic_vetkeys_encrypted_maps_canister
+          make test

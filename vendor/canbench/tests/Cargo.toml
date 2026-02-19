@@ -1,0 +1,36 @@
+[package]
+edition = "2021"
+name = "tests"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "measurements_output"
+path = "measurements_output/src/main.rs"
+
+[[bin]]
+name = "gzipped_wasm"
+path = "gzipped_wasm/src/main.rs"
+
+[[bin]]
+name = "debug_print"
+path = "debug_print/src/main.rs"
+
+[[bin]]
+name = "init_arg"
+path = "init_arg/src/main.rs"
+
+[[bin]]
+name = "stable_memory"
+path = "stable_memory/src/main.rs"
+
+[[bin]]
+name = "stable_memory_invalid"
+path = "stable_memory_invalid/src/main.rs"
+
+[dependencies]
+canbench-rs = { path = "../canbench-rs" }
+candid.workspace = true
+ic-cdk.workspace = true
+serde.workspace = true

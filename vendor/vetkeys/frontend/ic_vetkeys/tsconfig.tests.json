@@ -1,0 +1,9 @@
+// tsconfig.tests.json  (for lint/type-checking)
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src",
+    "src/**/*.test.ts",
+    "test/**/*.ts"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "eth-rpc",
+  "version": "0.1.0",
+  "scripts": {
+    "generate": "npm run generate:did && npm run generate:declarations",
+    "generate:did": "cargo run > candid/evm_rpc.generated.did",
+    "generate:declarations": "dfx generate evm_rpc",
+    "postinstall": "mops install",
+    "sources": "mops sources"
+  },
+  "devDependencies": {
+    "ic-mops": "^0.27.2"
+  }
+}

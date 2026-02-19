@@ -1,0 +1,12 @@
+**/target
+**/.dfx
+**/.canbench
+
+# Various IDEs and Editors
+.vscode/
+.idea/
+**/*~
+tests/**/*.svg
+examples/**/*.svg
+
+tmp/

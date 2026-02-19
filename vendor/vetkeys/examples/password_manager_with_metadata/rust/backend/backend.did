@@ -1,0 +1,50 @@
+type AccessRights = variant { Read; ReadWrite; ReadWriteManage };
+type ByteBuf = record { inner : blob };
+type PasswordMetadata = record {
+  url : text;
+  number_of_modifications : nat64;
+  tags : vec text;
+  last_modification_date : nat64;
+  last_modified_principal : principal;
+  creation_date : nat64;
+};
+type Result = variant {
+  Ok : vec record { ByteBuf; ByteBuf; PasswordMetadata };
+  Err : text;
+};
+type Result_1 = variant { Ok : ByteBuf; Err : text };
+type Result_2 = variant {
+  Ok : vec record { principal; AccessRights };
+  Err : text;
+};
+type Result_3 = variant { Ok : opt AccessRights; Err : text };
+type Result_4 = variant {
+  Ok : opt record { ByteBuf; PasswordMetadata };
+  Err : text;
+};
+service : (text) -> {
+  get_accessible_shared_map_names : () -> (
+      vec record { principal; ByteBuf },
+    ) query;
+  get_encrypted_values_for_map_with_metadata : (principal, ByteBuf) -> (
+      Result,
+    ) query;
+  get_encrypted_vetkey : (principal, ByteBuf, ByteBuf) -> (Result_1);
+  get_owned_non_empty_map_names : () -> (vec ByteBuf) query;
+  get_shared_user_access_for_map : (principal, ByteBuf) -> (Result_2) query;
+  get_user_rights : (principal, ByteBuf, principal) -> (Result_3) query;
+  get_vetkey_verification_key : () -> (ByteBuf);
+  insert_encrypted_value_with_metadata : (
+      principal,
+      ByteBuf,
+      ByteBuf,
+      ByteBuf,
+      vec text,
+      text,
+    ) -> (Result_4);
+  remove_encrypted_value_with_metadata : (principal, ByteBuf, ByteBuf) -> (
+      Result_4,
+    );
+  remove_user : (principal, ByteBuf, principal) -> (Result_3);
+  set_user_rights : (principal, ByteBuf, principal, AccessRights) -> (Result_3);
+}

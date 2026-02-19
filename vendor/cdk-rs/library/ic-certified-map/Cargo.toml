@@ -1,0 +1,31 @@
+[package]
+name = "ic-certified-map"
+version = "0.4.1"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Merkleized map data structure."
+homepage = "https://docs.rs/ic-certified-map"
+documentation = "https://docs.rs/ic-certified-map"
+readme = "README.md"
+categories = [
+    "data-structures",
+    "cryptography",
+    "cryptography::cryptocurrencies",
+]
+keywords = ["internet-computer", "types", "dfinity", "map"]
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+
+[dependencies]
+serde.workspace = true
+serde_bytes.workspace = true
+sha2.workspace = true
+candid.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+serde_cbor = "0.11"
+ic-cdk.workspace = true
+bincode = "1.3.3"

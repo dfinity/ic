@@ -1,0 +1,30 @@
+[package]
+name = "ic-cdk-timers"
+version = "1.0.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Timers library for the Rust CDK."
+homepage = "https://docs.rs/ic-cdk"
+documentation = "https://docs.rs/ic-cdk-timers"
+readme = "README.md"
+categories = ["api-bindings", "data-structures", "no-std", "development-tools::ffi"]
+keywords = ["internet-computer", "dfinity", "canister", "cdk"]
+include = ["src", "Cargo.toml", "LICENSE", "README.md", "build.rs"]
+# DO NOT change this field, not even to update the link, unless you are updating every existing version of the package.
+# Update the link by updating the links-pin tag.
+links = "ic-cdk-timers (canister_global_timer), see https://github.com/dfinity/cdk-rs/blob/links-pin/TROUBLESHOOTING.md"
+
+[dependencies]
+ic0.workspace = true
+ic-cdk-executor.workspace = true
+slotmap.workspace = true
+
+[dev-dependencies]
+ic-cdk.workspace = true
+
+[package.metadata.docs.rs]
+default-target = "wasm32-unknown-unknown"
+rustc-args = ["--cfg=docsrs"]

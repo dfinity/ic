@@ -1,0 +1,38 @@
+name: Backend Motoko Format Check
+
+permissions: {}
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    paths:
+      - backend/mo/**
+      - .github/workflows/provision-linux.sh
+      - .github/workflows/backend-motoko-format-check.yml
+
+jobs:
+  backend-motoko-format-check-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ZenVoich/setup-mops@v1
+        with:
+          mops-version: 1
+      - name: Provision Linux
+        run: bash .github/workflows/provision-linux.sh
+      - name: Run MOPS Format Check Linux
+        run: |
+          for d in $(find . -type d -name '.mops' -prune -o -type f -name 'mops.toml' -printf '%h\n'); do
+            if [ -d "$d/src" ]; then
+              cd $d
+              echo "Checking directory: $(pwd)" && mops format --check
+              cd -
+            else
+              echo "Skipping directory $d (no src directory inside)"
+            fi
+          done

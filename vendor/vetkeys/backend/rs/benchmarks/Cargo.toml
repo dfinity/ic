@@ -1,0 +1,16 @@
+[package]
+edition = "2021"
+name = "benchmarks"
+version = "0.1.0"
+
+[[bin]]
+name = "ibe"
+path = "ibe/src/main.rs"
+
+[dependencies]
+canbench-rs = { workspace = true, optional = true }
+candid = { workspace = true }
+getrandom = { version = "0.2", features = ["custom"] }
+hex = { workspace = true }
+ic-cdk = { workspace = true }
+ic-vetkeys = { path = "../ic_vetkeys" }

@@ -1,0 +1,17 @@
+[package]
+edition = "2021"
+name = "example"
+version = "0.1.0"
+
+[[bin]]
+name = "fibonacci"
+path = "fibonacci/src/main.rs"
+
+[[bin]]
+name = "btreemap_vs_hashmap"
+path = "btreemap_vs_hashmap/src/main.rs"
+
+[dependencies]
+canbench-rs = { path = "../canbench-rs", optional = true }
+candid.workspace = true
+ic-cdk.workspace = true

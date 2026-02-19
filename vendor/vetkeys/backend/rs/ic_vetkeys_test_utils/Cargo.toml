@@ -1,0 +1,31 @@
+[package]
+name = "ic-vetkeys-test-utils"
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+hex = { workspace = true }
+ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
+    "groups",
+    "pairings",
+    "alloc",
+    "experimental",
+    "zeroize",
+] }
+ic-stable-structures = { workspace = true }
+ic-vetkeys = { path = "../ic_vetkeys" }
+lazy_static = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+sha2 = "0.10.9"

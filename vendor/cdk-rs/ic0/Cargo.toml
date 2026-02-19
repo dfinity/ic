@@ -1,0 +1,26 @@
+[package]
+name = "ic0"
+version = "1.0.1"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Internet Computer System API Binding."
+readme = "README.md"
+categories = ["api-bindings", "development-tools::ffi"]
+keywords = ["internet-computer", "types", "dfinity", "canister", "cdk"]
+include = ["src", "Cargo.toml", "LICENSE", "README.md"]
+
+[dev-dependencies]
+quote.workspace = true
+syn = { workspace = true, features = ["parsing", "full", "extra-traits"] }
+
+# This is not a real example but a utility for auto-generating ic0.rs
+[[example]]
+name = "ic0build"
+path = "util/ic0build.rs"
+
+[[example]]
+name = "work"
+path = "util/work.rs"

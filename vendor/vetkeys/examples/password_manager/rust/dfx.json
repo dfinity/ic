@@ -1,0 +1,31 @@
+{
+  "canisters": {
+    "ic_vetkeys_encrypted_maps_canister": {
+      "candid": "backend/ic_vetkeys_encrypted_maps_canister.did",
+      "package": "ic-vetkeys-encrypted-maps-canister",
+      "type": "rust",
+      "init_arg": "(\"test_key_1\")"
+    },
+    "internet-identity": {
+      "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+      "type": "custom",
+      "specified_id": "rdmx6-jaaaa-aaaaa-aaadq-cai",
+      "remote": {
+      "id": {
+          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        }
+      },
+      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
+    },
+    "www": {
+      "dependencies": ["ic_vetkeys_encrypted_maps_canister", "internet-identity"],
+      "build": ["cd frontend && npm i --include=dev && npm run build && cd - && rm -r dist > /dev/null 2>&1; mv frontend/dist ./"],
+      "frontend": {
+        "entrypoint": "dist/index.html"
+      },
+      "source": ["dist/"],
+      "type": "assets",
+      "output_env_file": "frontend/.env"
+    }
+  }
+}

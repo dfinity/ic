@@ -1,0 +1,29 @@
+pull_request_rules:
+  - name: Automatic merge
+    conditions:
+      - "#approved-reviews-by>=1"
+      - "#changes-requested-reviews-by=0"
+      - status-success=conventional-pr-title
+      - label=automerge-squash
+    actions:
+      merge:
+        method: squash
+        strict: smart
+        commit_message: title+body
+      delete_head_branch: {}
+
+  - name: Clean up automerge tags
+    conditions:
+      - closed
+    actions:
+      label:
+        remove:
+          - automerge-squash
+
+  - name: Auto-approve auto-PRs
+    conditions:
+      - author=dfinity-bot
+    actions:
+      review:
+        type: APPROVE
+        message: This bot trusts that bot

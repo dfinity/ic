@@ -1,0 +1,13 @@
+[package]
+name = "test_fixtures"
+version = "1.0.0"
+edition.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-canister-runtime = { workspace = true }
+ic-management-canister-types = { workspace = true }
+ic-pocket-canister-runtime = { workspace = true }
+ic-test-utilities-load-wasm = { workspace = true }
+pocket-ic = { workspace = true }
+serde = { workspace = true }
