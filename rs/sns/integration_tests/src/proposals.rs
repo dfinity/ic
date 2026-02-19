@@ -226,9 +226,11 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
     state_machine_test_on_sns_subnet(|runtime| {
         async move {
             let state_machine_time_seconds = match &runtime {
-                Runtime::StateMachine(state_machine) => {
-                    state_machine.time().duration_since(UNIX_EPOCH).unwrap().as_secs_f64()
-                }
+                Runtime::StateMachine(state_machine) => state_machine
+                    .time()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs_f64(),
                 _ => unreachable!("expected StateMachine runtime"),
             };
             // Initialize the ledger with three users (each will create its own neuron).
