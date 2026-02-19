@@ -1200,6 +1200,8 @@ mod index {
                 return;
             }
         }
+        // Dump last [dbg] canister log lines (from ic0.debug_print; not rolled back on trap).
+        print_last_debug_canister_log(env, index_id, 25);
         panic!(
             "The index canister {index_id} was unable to sync all the blocks with the ledger {ledger_id}. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
         );

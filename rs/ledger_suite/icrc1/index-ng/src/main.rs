@@ -535,20 +535,28 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
 }
 
 async fn get_supported_standards_from_ledger() -> Vec<String> {
+    #[cfg(feature = "debug_dlmalloc")]
+    ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: start");
     let ledger_id = with_state(|state| state.ledger_id);
     log!(
         P1,
         "[get_supported_standards_from_ledger]: making the call..."
     );
+    #[cfg(feature = "debug_dlmalloc")]
+    ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: before call");
     let res = ic_cdk::api::call::call::<_, (Vec<StandardRecord>,)>(
         ledger_id,
         "icrc1_supported_standards",
         (),
     )
     .await;
+    #[cfg(feature = "debug_dlmalloc")]
+    ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: after call");
     match res {
         Ok((res,)) => {
             let supported_standard_names = res.into_iter().map(|s| s.name).collect::<Vec<_>>();
+            #[cfg(feature = "debug_dlmalloc")]
+            ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: ok");
             log!(
                 P1,
                 "[get_supported_standards_from_ledger]: ledger {} supports {:?}",
@@ -558,6 +566,8 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
             supported_standard_names
         }
         Err((code, msg)) => {
+            #[cfg(feature = "debug_dlmalloc")]
+            ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: err");
             // log the error but do not propagate it
             log!(
                 P0,
@@ -717,14 +727,22 @@ async fn icrc3_get_blocks_from_archive(
 
 async fn find_get_blocks_method() -> GetBlocksMethod {
     if let Some(get_blocks_method) = CACHE.with(|cache| cache.borrow().get_blocks_method) {
+        #[cfg(feature = "debug_dlmalloc")]
+        ic0_debug::debug_print_persistent("[dbg] find_get_blocks_method: cache hit");
         return get_blocks_method;
     }
+    #[cfg(feature = "debug_dlmalloc")]
+    ic0_debug::debug_print_persistent("[dbg] find_get_blocks_method: cache miss, before get_supported_standards");
     let standards = get_supported_standards_from_ledger().await;
+    #[cfg(feature = "debug_dlmalloc")]
+    ic0_debug::debug_print_persistent("[dbg] find_get_blocks_method: after get_supported_standards");
     let get_blocks_method = if standards.into_iter().any(|standard| standard == "ICRC-3") {
         GetBlocksMethod::ICRC3GetBlocks
     } else {
         GetBlocksMethod::GetBlocks
     };
+    #[cfg(feature = "debug_dlmalloc")]
+    ic0_debug::debug_print_persistent(&format!("[dbg] find_get_blocks_method: returning {:?}", get_blocks_method));
     CACHE.with(|cache| cache.borrow_mut().get_blocks_method = Some(get_blocks_method));
     get_blocks_method
 }
