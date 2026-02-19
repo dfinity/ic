@@ -1,13 +1,15 @@
 // This module defines how response callbacks are executed.
 // See https://internetcomputer.org/docs/interface-spec/index.html#callback-invocation
 
-use std::sync::Arc;
-
+use crate::execution::common::{
+    self, action_to_response, apply_canister_state_changes, log_dirty_pages, update_round_limits,
+};
+use crate::execution_environment::{
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
+};
+use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
-use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
-use more_asserts::debug_assert_le;
-
+use ic_config::{embedders::FeatureFlags, flag_status::FlagStatus};
 use ic_embedders::{
     wasm_executor::{
         CanisterStateChanges, PausedWasmExecution, WasmExecutionResult, wasm_execution_error,
@@ -17,7 +19,10 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
+use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, info};
+use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
 use ic_types::Cycles;
@@ -30,16 +35,8 @@ use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
-
-use crate::execution::common::{
-    self, action_to_response, apply_canister_state_changes, log_dirty_pages, update_round_limits,
-};
-use crate::execution_environment::{
-    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
-};
-use crate::metrics::CallTreeMetrics;
-use ic_config::flag_status::FlagStatus;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
+use more_asserts::debug_assert_le;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -416,6 +413,7 @@ impl ResponseHelper {
             call_tree_metrics,
             original.call_context_creation_time,
             is_composite_query(&original.call_origin),
+            &original.feature_flags,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -490,6 +488,7 @@ impl ResponseHelper {
             call_tree_metrics,
             original.call_context_creation_time,
             is_composite_query(&original.call_origin),
+            &original.feature_flags,
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -675,6 +674,7 @@ struct OriginalContext {
     canister_id: CanisterId,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
+    feature_flags: Arc<FeatureFlags>,
 }
 
 fn is_composite_query(origin: &CallOrigin) -> bool {
@@ -915,6 +915,7 @@ pub fn execute_response(
     subnet_size: usize,
     call_tree_metrics: &dyn CallTreeMetrics,
     log_dirty_pages: FlagStatus,
+    feature_flags: &FeatureFlags,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
     let (call_context, call_context_id) = match common::get_call_context(
@@ -963,6 +964,7 @@ pub fn execute_response(
         canister_id: clean_canister.canister_id(),
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,
+        feature_flags: Arc::new(*feature_flags),
     };
 
     let mut helper = ResponseHelper::new(

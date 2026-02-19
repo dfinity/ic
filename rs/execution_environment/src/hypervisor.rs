@@ -1,6 +1,9 @@
 use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
-use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
-use ic_config::flag_status::FlagStatus;
+use ic_config::{
+    embedders::FeatureFlags,
+    execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE},
+    flag_status::FlagStatus,
+};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
@@ -122,11 +125,16 @@ pub struct Hypervisor {
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
+    feature_flags: Arc<FeatureFlags>,
 }
 
 impl Hypervisor {
     pub(crate) fn subnet_id(&self) -> SubnetId {
         self.own_subnet_id
+    }
+
+    pub fn feature_flags(&self) -> &Arc<FeatureFlags> {
+        &self.feature_flags
     }
 
     pub fn create_execution_state(
@@ -235,6 +243,7 @@ impl Hypervisor {
                 .cost_to_compile_wasm_instruction,
             dirty_page_overhead,
             canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
+            feature_flags: Arc::new(config.embedders_config.feature_flags),
         }
     }
 
@@ -247,6 +256,7 @@ impl Hypervisor {
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
+        feature_flags: Arc<FeatureFlags>,
     ) -> Self {
         Self {
             wasm_executor,
@@ -263,6 +273,7 @@ impl Hypervisor {
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
             canister_guaranteed_callback_quota,
+            feature_flags,
         }
     }
 
@@ -332,6 +343,7 @@ impl Hypervisor {
             call_tree_metrics,
             call_context_creation_time,
             is_composite_query,
+            &self.feature_flags,
             &|system_state| std::mem::drop(system_state),
         );
         (output, execution_state, system_state)

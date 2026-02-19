@@ -5,7 +5,7 @@ use super::{
     routing::ResolveDestinationError,
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
+use ic_config::{embedders::FeatureFlags, flag_status::FlagStatus};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
@@ -333,10 +333,11 @@ impl SystemStateModifications {
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
         is_composite_query: bool,
+        feature_flags: &FeatureFlags,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
-        if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        if feature_flags.log_memory_store_feature == FlagStatus::Enabled {
             let log_memory_store = &mut system_state.log_memory_store;
             // TODO(DSM-11): cleanup population logic after migration is done.
             // We need to copy existing canister_log to log_memory_store in order

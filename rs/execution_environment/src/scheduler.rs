@@ -8,10 +8,11 @@ use crate::{
     metrics::MeasurementScope,
     util::process_responses,
 };
-use ic_config::embedders::Config as HypervisorConfig;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
-use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::{
+    embedders::{Config as HypervisorConfig, FeatureFlags},
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
+};
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::InstructionLimits;
@@ -1140,6 +1141,7 @@ impl SchedulerImpl {
             current_round,
             self.exec_env.subnet_memory_capacity(),
             &self.state_metrics,
+            &self.hypervisor_config.feature_flags,
             logger,
         );
 
@@ -1512,10 +1514,13 @@ impl Scheduler for SchedulerImpl {
 
                     let new_log = &canister.system_state.log_memory_store;
                     let old_log = &canister.system_state.canister_log;
-                    let delta_log_sizes = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                        new_log.delta_log_sizes()
-                    } else {
-                        old_log.delta_log_sizes()
+                    let delta_log_sizes = match self
+                        .hypervisor_config
+                        .feature_flags
+                        .log_memory_store_feature
+                    {
+                        FlagStatus::Enabled => new_log.delta_log_sizes(),
+                        FlagStatus::Disabled => old_log.delta_log_sizes(),
                     };
                     if new_log.has_delta_log_sizes() || old_log.has_delta_log_sizes() {
                         // Only clone state if delta log sizes are not empty.
@@ -1881,6 +1886,7 @@ fn observe_replicated_state_metrics(
     current_round: ExecutionRound,
     subnet_memory_capacity: NumBytes,
     metrics: &ReplicatedStateMetrics,
+    feature_flags: &FeatureFlags,
     logger: &ReplicaLogger,
 ) {
     // Observe the number of registered canisters keyed by their status.
@@ -2155,10 +2161,9 @@ fn observe_replicated_state_metrics(
             .canister_install_code_debits
             .observe(canister.scheduler_state.install_code_debit.get() as f64);
 
-        let log_memory_usage = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-            canister.system_state.log_memory_store.memory_usage()
-        } else {
-            canister.system_state.canister_log.bytes_used()
+        let log_memory_usage = match feature_flags.log_memory_store_feature {
+            FlagStatus::Enabled => canister.system_state.log_memory_store.memory_usage(),
+            FlagStatus::Disabled => canister.system_state.canister_log.bytes_used(),
         };
         metrics
             .canister_log_memory_usage_v2

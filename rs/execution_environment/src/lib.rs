@@ -326,6 +326,7 @@ fn setup_execution_helper(
             config.embedders_config.cost_to_compile_wasm_instruction,
             config.embedders_config.dirty_page_overhead,
             config.canister_guaranteed_callback_quota,
+            Arc::new(config.embedders_config.feature_flags),
         ),
     });
 

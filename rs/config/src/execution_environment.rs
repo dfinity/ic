@@ -12,11 +12,6 @@ const TIB: u64 = 1024 * GIB;
 
 // TODO(DSM-105): remove after the feature is enabled by default.
 pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = false;
-pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-    FlagStatus::Enabled
-} else {
-    FlagStatus::Disabled
-};
 pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = if LOG_MEMORY_STORE_FEATURE_ENABLED {
     4 * KIB
 } else {

@@ -295,6 +295,7 @@ fn correct_charging_source_canister_for_a_request() {
             &default_network_topology(),
             subnet_test_id(1),
             false,
+            &Default::default(),
             &no_op_logger(),
         )
         .unwrap();
@@ -512,6 +513,7 @@ fn call_increases_cycles_consumed_metric() {
             &default_network_topology(),
             subnet_test_id(1),
             false,
+            &Default::default(),
             &no_op_logger(),
         )
         .unwrap();
@@ -620,6 +622,7 @@ fn test_inter_canister_call(
             topo,
             subnet_id,
             false,
+            &Default::default(),
             &no_op_logger(),
         )
         .unwrap();

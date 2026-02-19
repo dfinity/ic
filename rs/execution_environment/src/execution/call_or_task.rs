@@ -11,7 +11,7 @@ use crate::execution_environment::{
 };
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
-use ic_config::flag_status::FlagStatus;
+use ic_config::{embedders::FeatureFlags, flag_status::FlagStatus};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
     wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
@@ -33,6 +33,7 @@ use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -50,6 +51,7 @@ pub fn execute_call_or_task(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
     call_tree_metrics: &dyn CallTreeMetrics,
+    feature_flags: &FeatureFlags,
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
@@ -149,6 +151,7 @@ pub fn execute_call_or_task(
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
         log_dirty_pages,
+        feature_flags: Arc::new(*feature_flags),
     };
 
     let helper = match CallOrTaskHelper::new(&clean_canister, &original, deallocation_sender) {
@@ -324,6 +327,7 @@ struct OriginalContext {
     freezing_threshold: Cycles,
     canister_id: CanisterId,
     log_dirty_pages: FlagStatus,
+    feature_flags: Arc<FeatureFlags>,
 }
 
 /// Contains fields of `CallOrTaskHelper` that are necessary for resuming an update
@@ -567,6 +571,7 @@ impl CallOrTaskHelper {
                     call_tree_metrics,
                     original.time,
                     is_composite_query,
+                    &original.feature_flags,
                     &|system_state| self.deallocation_sender.send(Box::new(system_state)),
                 );
 
@@ -586,6 +591,7 @@ impl CallOrTaskHelper {
                         round.network_topology,
                         round.hypervisor.subnet_id(),
                         is_composite_query,
+                        &original.feature_flags,
                         round.log,
                     )
                 {

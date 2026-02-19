@@ -11,7 +11,6 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
-use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
@@ -245,6 +244,12 @@ impl LogMemoryStore {
     /// Clears the delta_log sizes.
     pub fn clear_delta_log_sizes(&mut self) {
         self.delta_log_sizes.clear();
+    }
+}
+
+impl Default for LogMemoryStore {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

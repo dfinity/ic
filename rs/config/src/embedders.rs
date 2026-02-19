@@ -1,4 +1,4 @@
-use crate::{execution_environment::LOG_MEMORY_STORE_FEATURE, flag_status::FlagStatus};
+use crate::{execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED, flag_status::FlagStatus};
 use ic_base_types::NumBytes;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
@@ -137,7 +137,10 @@ impl FeatureFlags {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             environment_variables: FlagStatus::Enabled,
             deterministic_memory_tracker: FlagStatus::Disabled,
-            log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
+            log_memory_store_feature: match LOG_MEMORY_STORE_FEATURE_ENABLED {
+                true => FlagStatus::Enabled,
+                false => FlagStatus::Disabled,
+            },
         }
     }
 }

@@ -2114,6 +2114,7 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_size,
                     &self.call_tree_metrics,
+                    &self.config.embedders_config.feature_flags,
                     self.config.dirty_page_logging,
                     self.deallocator_thread.sender(),
                 );
@@ -2147,6 +2148,7 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_size,
                     &self.call_tree_metrics,
+                    &self.config.embedders_config.feature_flags,
                     self.config.dirty_page_logging,
                     self.deallocator_thread.sender(),
                 )
@@ -2185,6 +2187,7 @@ impl ExecutionEnvironment {
             round_limits,
             subnet_size,
             &self.call_tree_metrics,
+            &self.config.embedders_config.feature_flags,
             self.config.dirty_page_logging,
             self.deallocator_thread.sender(),
         )
@@ -2997,6 +3000,7 @@ impl ExecutionEnvironment {
             subnet_size,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
+            &self.config.embedders_config.feature_flags,
             self.deallocator_thread.sender(),
         )
     }

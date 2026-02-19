@@ -1,19 +1,17 @@
-use crate::as_round_instructions;
-use crate::execution::{common::validate_controller, install_code::OriginalContext};
-use crate::execution::{install::execute_install, upgrade::execute_upgrade};
-use crate::execution_environment::{
-    CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
-};
-use crate::util::MIGRATION_CANISTER_ID;
 use crate::{
+    as_round_instructions,
     canister_settings::{CanisterSettings, ValidatedCanisterSettings},
+    execution::{
+        common::validate_controller, install::execute_install, install_code::OriginalContext,
+        upgrade::execute_upgrade,
+    },
+    execution_environment::{CompilationCostHandling, RoundContext, RoundCounters, RoundLimits},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
-    util::GOVERNANCE_CANISTER_ID,
+    util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID},
 };
 use ic_base_types::NumSeconds;
-use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::flag_status::FlagStatus;
+use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
     wasm_utils::decoding::decode_wasm, wasmtime_embedder::system_api::ExecutionParameters,
@@ -556,11 +554,14 @@ impl CanisterManager {
         if let Some(log_visibility) = settings.log_visibility() {
             canister.system_state.log_visibility = log_visibility.clone();
         }
-        if let Some(log_memory_limit) = settings.log_memory_limit() {
+        if let (Some(limit), FlagStatus::Enabled) = (
+            settings.log_memory_limit(),
+            self.hypervisor.feature_flags().log_memory_store_feature,
+        ) {
             canister
                 .system_state
                 .log_memory_store
-                .resize(log_memory_limit.get() as usize, self.fd_factory.clone());
+                .resize(limit.get() as usize, self.fd_factory.clone());
         }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
