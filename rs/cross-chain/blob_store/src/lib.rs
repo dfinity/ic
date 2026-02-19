@@ -2,6 +2,9 @@ pub mod api;
 pub mod storage;
 pub mod update;
 
+#[cfg(test)]
+mod tests;
+
 use ic_stable_structures::Storable;
 use ic_stable_structures::storable::Bound;
 use std::borrow::Cow;
@@ -23,6 +26,7 @@ impl FromStr for Hash {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use hex::FromHex;
+        let s = s.strip_prefix("0x").unwrap_or(s);
         <[u8; 32]>::from_hex(s).map(Hash)
     }
 }
