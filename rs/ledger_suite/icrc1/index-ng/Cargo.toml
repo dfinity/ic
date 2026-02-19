@@ -48,6 +48,9 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types = { path = "../../../types/types" }
 proptest = { workspace = true }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wee_alloc = "0.4"
+
 [features]
 default = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]

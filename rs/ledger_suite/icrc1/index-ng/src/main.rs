@@ -1,3 +1,8 @@
+// Use wee_alloc for WASM to avoid dlmalloc (smaller footprint; different allocator path).
+#[cfg(target_arch = "wasm32")]
+#[global_allocator]
+static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{SpanName, SpanStats, measure_span};

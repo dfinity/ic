@@ -64,17 +64,26 @@ rust_library(
         (
             "",
             [],
-            ["//rs/ledger_suite/icrc1/tokens_u64"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u64",
+                "@crate_index//:wee_alloc",
+            ],
         ),
         (
             "_u256",
             ["u256-tokens"],
-            ["//rs/ledger_suite/icrc1/tokens_u256"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u256",
+                "@crate_index//:wee_alloc",
+            ],
         ),
         (
             "_u256_debug_dlmalloc",
             ["u256-tokens", "debug_dlmalloc"],
-            ["//rs/ledger_suite/icrc1/tokens_u256"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u256",
+                "@crate_index//:wee_alloc",
+            ],
         ),
     ]
 ]
