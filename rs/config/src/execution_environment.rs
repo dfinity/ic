@@ -378,9 +378,6 @@ pub struct Config {
 
     /// Enables the replicated inter-canister calls to `fetch_canister_logs`.
     pub replicated_inter_canister_log_fetch: FlagStatus,
-
-    /// Enables the log memory store feature.
-    pub log_memory_store_feature: FlagStatus,
 }
 
 impl Default for Config {
@@ -467,7 +464,6 @@ impl Default for Config {
             max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
             max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
             replicated_inter_canister_log_fetch: FlagStatus::Disabled,
-            log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
         }
     }
 }

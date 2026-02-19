@@ -194,7 +194,10 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        self.config.log_memory_store_feature,
+                        self.config
+                            .embedders_config
+                            .feature_flags
+                            .log_memory_store_feature,
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(

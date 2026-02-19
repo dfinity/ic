@@ -1619,7 +1619,10 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 &state,
                                                 args,
-                                                self.config.log_memory_store_feature,
+                                                self.config
+                                                    .embedders_config
+                                                    .feature_flags
+                                                    .log_memory_store_feature,
                                             )
                                         })
                                         .map(|resp| {
