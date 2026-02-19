@@ -7,13 +7,13 @@ use crate::{
         encode_subnet_canister_ranges, encode_subnet_metrics,
     },
 };
-use ic_registry_subnet_type::SubnetType;
 use LazyTree::Blob;
 use ic_canonical_state_tree_hash::lazy_tree::{Lazy, LazyFork, LazyTree, blob, fork, num, string};
 use ic_crypto_tree_hash::Label;
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ExecutionState, ReplicatedState, Stream,
     canister_state::CanisterState,
@@ -919,7 +919,7 @@ fn subnets_as_tree<'a>(
                     .with_tree_if(
                         certification_version >= CertificationVersion::V25,
                         "type",
-                        string(subnet_type_as_string(subnet_topology.subnet_type))
+                        string(subnet_type_as_string(subnet_topology.subnet_type)),
                     ),
             )
         },
