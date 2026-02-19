@@ -171,6 +171,21 @@ impl Recovery {
             x => x,
         }?;
 
+        // NOTE FOR NNS RECOVERY
+        // The initialization of the registry helper below uses the given NNS URL to make query
+        // calls to `get_certified_changes_since` to the registry canister. In case all NNS nodes
+        // are down in such a way that they cannot even serve query calls, then the call below will
+        // stay stuck in an infinite loop trying to initialize the local store.
+        // In such a case, it is possible to manually initialize the local store before starting the
+        // recovery, because then the registry helper will not perform any calls to the registry
+        // canister.
+        // To do so, you should download the local store of a node that is up-to-date and honest,
+        // and place it in the expected location (i.e.
+        // `{dir}/recovery/working_dir/data/ic_registry_local_store`), for example using the
+        // following commands:
+        //
+        // mkdir -p {dir}/recovery/working_dir/data/ic_registry_local_store
+        // rsync --archive --checksum --delete --partial --progress --no-g backup@[IPV6]:/var/lib/ic/data/ic_registry_local_store/ {dir}/recovery/working_dir/data/ic_registry_local_store -e "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A
         let registry_helper = RegistryHelper::new(
             logger.clone(),
             registry_nns_url,
