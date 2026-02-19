@@ -385,17 +385,23 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         std::fs::create_dir_all(&local_store_path_dest).unwrap();
         let ssh_helper = RecoverySshHelper::new(
             logger.clone(),
-            RecoverySshUser::Admin,
+            RecoverySshUser::Backup,
             dfinity_owned_node.get_ip_addr(),
             false,
-            Some(ssh_admin_priv_key_path.clone()),
+            Some(ssh_backup_priv_key_path.clone()),
+        );
+
+        info!(
+            logger,
+            "All nodes are broken, manually initialize the local store of ic-recovery by downloading it from node {}",
+            dfinity_owned_node.node_id,
         );
         ssh_helper
             .rsync(
                 ssh_helper.remote_path(&local_store_path_src),
                 &local_store_path_dest,
             )
-            .expect("Failed to manually initialize the local store of ic-recovery by downloading it from a node");
+            .expect("Failed to initialize the local store of ic-recovery");
 
         // Skip validating the output if all nodes are broken, as in this case no replica will be
         // running to compare the heights to.
