@@ -1,13 +1,32 @@
+// Content-addressable blob store canister.
+// Blobs are stored and retrieved by their SHA-256 hash.
+
 type HexHash = text;
+
+// Errors returned by the `get` query.
+//   - InvalidHash: hash string is not valid hex.
+//   - NotFound: no blob stored with this hash.
 type GetError = variant { InvalidHash : text; NotFound };
+
+// Errors returned by the `insert` update.
+//   - NotAuthorized: caller is not a controller.
+//   - InvalidHash: hash string is not valid hex.
+//   - AlreadyExists: a blob with this hash is already stored.
+//   - HashMismatch: provided hash does not match the SHA-256 of the data.
 type InsertError = variant {
     NotAuthorized;
     InvalidHash : text;
     AlreadyExists;
     HashMismatch : record { actual : text; expected : text };
 };
+
 type InsertRequest = record { data : blob; hash : HexHash };
+
 service : () -> {
+    // Retrieves a blob by its hex-encoded SHA-256 hash. Can be called by anyone.
     get : (text) -> (variant { Ok : blob; Err : GetError }) query;
+
+    // Stores a blob. Only canister controllers are authorized to call this method.
+    // The caller must provide the expected SHA-256 hash of the data.
     insert : (InsertRequest) -> (variant { Ok : HexHash; Err : InsertError });
 }
