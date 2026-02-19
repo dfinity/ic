@@ -61,7 +61,9 @@ impl CanisterRoundState {
         // );
         Self {
             canister_id: canister.canister_id(),
-            // Compute allocation is applied at the beginning of the round.
+            // Compute allocation is applied at the beginning of the round. All
+            // else being equal, schedule canisters with higher compute allocation
+            // first.
             accumulated_priority: canister_priority.accumulated_priority + compute_allocation,
             compute_allocation,
             long_execution_mode: canister_priority.long_execution_mode,
@@ -130,9 +132,9 @@ pub struct RoundSchedule {
     long_executions_compute_allocation: AccumulatedPriority,
 
     /// Full round: canisters that were scheduled.
-    scheduled_canisters: BTreeSet<CanisterId>,
+    round_scheduled_canisters: BTreeSet<CanisterId>,
     /// Full round: canisters that had a long execution at round start.
-    long_execution_canisters: BTreeSet<CanisterId>,
+    round_long_execution_canisters: BTreeSet<CanisterId>,
     /// Full round: canisters that completed message executions.
     canisters_with_completed_messages: BTreeSet<CanisterId>,
     /// Full round: canisters that got a "full execution" (scheduled first or
@@ -158,8 +160,8 @@ impl RoundSchedule {
             total_compute_allocation: ZERO,
             long_executions_count: 0,
             long_executions_compute_allocation: ZERO,
-            scheduled_canisters: BTreeSet::new(),
-            long_execution_canisters: BTreeSet::new(),
+            round_scheduled_canisters: BTreeSet::new(),
+            round_long_execution_canisters: BTreeSet::new(),
             canisters_with_completed_messages: BTreeSet::new(),
             fully_executed_canisters: BTreeSet::new(),
             rate_limited_canisters: BTreeSet::new(),
@@ -231,7 +233,6 @@ impl RoundSchedule {
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
         // Collect all active canisters and their next executions.
-        // TODO(DSM-102): Consider using `left_outer_join()` here.
         self.schedule = canister_states
             .iter_mut()
             .filter_map(|(canister_id, canister)| {
@@ -243,40 +244,41 @@ impl RoundSchedule {
                     return None;
                 }
 
-                let next_execution = canister.next_execution();
-                // If this is the first iteration, add `Heartbeat` or `GlobalTimer` tasks...
+                // If this is the first iteration add `Heartbeat` and/or `GlobalTimer` tasks...
                 if is_first_iteration
-                    // ...to canisters with new or no execution...
-                    && (next_execution == NextExecution::StartNew || next_execution == NextExecution::None)
-                    // ... that are running...
+                    // ...to canisters that are running...
                     && canister.system_state.status() == CanisterStatusType::Running
                 {
-                    // ... and that have a heartbeat or an active global timer.
-                    let has_heartbeat = has_heartbeat(canister);
-                    let has_active_timer = has_active_timer(canister, now);
-                    if has_heartbeat || has_active_timer {
-                        super::maybe_add_heartbeat_or_global_timer_tasks(
-                            Arc::make_mut(canister),
-                            has_heartbeat,
-                            has_active_timer,
-                            &mut self.heartbeat_and_timer_canisters,
-                        );
+                    // ...that have a new or no next execution...
+                    let next_execution = canister.next_execution();
+                    if next_execution == NextExecution::StartNew
+                        || next_execution == NextExecution::None
+                    {
+                        // ... and that have a heartbeat or an active global timer.
+                        let has_heartbeat = has_heartbeat(canister);
+                        let has_active_timer = has_active_timer(canister, now);
+                        if has_heartbeat || has_active_timer {
+                            super::maybe_add_heartbeat_or_global_timer_tasks(
+                                Arc::make_mut(canister),
+                                has_heartbeat,
+                                has_active_timer,
+                                &mut self.heartbeat_and_timer_canisters,
+                            );
+                        }
                     }
                 }
 
-                // Check next execution again, we may have added a heartbeat or timer task.
-                let next_execution = canister.next_execution();
-                let canister_round_state = match next_execution {
+                let canister_round_state = match canister.next_execution() {
                     NextExecution::StartNew => {
                         // Don't schedule canisters that completed a long execution this round.
-                        if self.long_execution_canisters.contains(canister_id) {
+                        if self.round_long_execution_canisters.contains(canister_id) {
                             return None;
                         }
                         CanisterRoundState::new(canister, subnet_schedule.get(canister_id))
                     }
                     NextExecution::ContinueLong => {
                         if is_first_iteration {
-                            self.long_execution_canisters.insert(*canister_id);
+                            self.round_long_execution_canisters.insert(*canister_id);
                         }
                         CanisterRoundState::new(canister, subnet_schedule.get(canister_id))
                     }
@@ -290,7 +292,7 @@ impl RoundSchedule {
                         canister_round_state.compute_allocation;
                 }
 
-                self.scheduled_canisters.insert(*canister_id);
+                self.round_scheduled_canisters.insert(*canister_id);
 
                 Some(canister_round_state)
             })
@@ -421,7 +423,6 @@ impl RoundSchedule {
         state: &mut ReplicatedState,
         canisters_with_completed_messages: &BTreeSet<CanisterId>,
     ) {
-        // TODO(DSM-102): Consider using `left_outer_join()` here.
         for canister_id in canisters_with_completed_messages {
             self.canisters_with_completed_messages.insert(*canister_id);
             // If a canister has completed a long execution, reset its long execution mode.
@@ -453,8 +454,6 @@ impl RoundSchedule {
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
         // Charge canisters for full executions in this round.
-        //
-        // TODO(DSM-102): Consider using `left_outer_join()` here.
         for canister_id in self.fully_executed_canisters.iter() {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
             if canister_states.get(canister_id).is_some() {
@@ -469,8 +468,6 @@ impl RoundSchedule {
 
         // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
         // because they will be added again in the next round.
-        //
-        // TODO(DSM-102): Consider using `left_outer_join()` here.
         for canister_id in &self.heartbeat_and_timer_canisters {
             let canister = canister_states.get_mut(canister_id).unwrap();
             if canister
@@ -495,13 +492,10 @@ impl RoundSchedule {
         // accumulated priority, including priority credit).
         let mut free_allocation = ZERO;
         let relevant_canister_ids = self
-            .scheduled_canisters
+            .round_scheduled_canisters
             .iter()
             .chain(self.rate_limited_canisters.iter())
-            .chain(self.heartbeat_and_timer_canisters.iter())
             .collect::<BTreeSet<_>>();
-        //
-        // TODO(DSM-102): Consider using `left_outer_join()` here.
         for canister_id in relevant_canister_ids {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
             if let Some(canister) = canister_states.get_mut(canister_id) {
@@ -574,9 +568,9 @@ impl RoundSchedule {
 
                 // Max out at an arbitrary 5 rounds of accumulated priority.
                 //
-                // Without this, a canister with (nearly) 100 compute allocation could
-                // accumulate arbitrarily high priority from priority credit refunds whenever
-                // it has a long execution aborted.
+                // Without this, a canister with 100 compute allocation will accumulate 100
+                // priority it can then never spend for every round of an aborted DTS execution
+                // (priority credit is increased by 100 per round, but reset on abort).
                 const AP_ROUNDS_MAX: i64 = 5;
                 let canister_free_allocation = std::cmp::min(
                     canister_free_allocation,
@@ -630,11 +624,11 @@ impl RoundSchedule {
         canister_priority.long_execution_mode = LongExecutionMode::default();
     }
 
-    pub fn active_canisters(&self) -> impl Iterator<Item = &CanisterId> {
-        self.schedule.iter().map(|rs| &rs.canister_id)
+    pub fn round_scheduled_canisters(&self) -> &BTreeSet<CanisterId> {
+        &self.round_scheduled_canisters
     }
 
-    pub fn active_canister_count(&self) -> usize {
+    pub fn schedule_length(&self) -> usize {
         self.schedule.len()
     }
 

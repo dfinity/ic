@@ -423,58 +423,23 @@ impl SchedulerImpl {
 
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_inner_iteration, &measurement_scope);
-            let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
 
             // Update subnet available memory before taking out the canisters.
-            let prep_step_timer = self
-                .metrics
-                .round_inner_iteration_prep_step
-                .with_label_values(&["subnet_available_memory"])
-                .start_timer();
+            let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
             round_limits.subnet_available_memory =
                 self.exec_env.scaled_subnet_available_memory(&state);
-            drop(prep_step_timer);
-            // let prep_step_timer = self
-            //     .metrics
-            //     .round_inner_iteration_prep_step
-            //     .with_label_values(&["charge_idle_canisters"])
-            //     .start_timer();
-            // round_schedule.charge_idle_canisters(
-            //     &mut canisters,
-            //     &mut round_fully_executed_canister_ids,
-            //     is_first_iteration,
-            // );
-            // drop(prep_step_timer);
+            drop(preparation_timer);
 
             // Scheduling.
-            let prep_step_timer = self
-                .metrics
-                .round_inner_iteration_prep_step
-                .with_label_values(&["scheduling"])
-                .start_timer();
+            let scheduling_timer = self.metrics.round_inner_iteration_scheduling.start_timer();
             round_schedule.start_iteration(&mut state, &self.metrics, round_log);
-            if round_schedule.active_canister_count() == 0 {
+            if round_schedule.schedule_length() == 0 {
                 break state;
             }
-            // let (active_round_schedule, rate_limited_canister_ids) = round_schedule
-            //     .filter_canisters(
-            //         &canisters,
-            //         self.config.heap_delta_rate_limit,
-            //         self.rate_limiting_of_heap_delta,
-            //     );
-            // round_filtered_canisters
-            //     .add_canisters(&active_round_schedule, &rate_limited_canister_ids);
-            drop(prep_step_timer);
 
-            let prep_step_timer = self
-                .metrics
-                .round_inner_iteration_prep_step
-                .with_label_values(&["partition_canisters_to_cores"])
-                .start_timer();
             let canisters = state.take_canister_states();
             let (mut active_canisters_partitioned_by_cores, inactive_canisters) =
                 round_schedule.partition_canisters_to_cores(canisters);
-            drop(prep_step_timer);
 
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
@@ -486,7 +451,7 @@ impl SchedulerImpl {
                     }
                 }
             }
-            drop(preparation_timer);
+            drop(scheduling_timer);
 
             let execution_timer = self.metrics.round_inner_iteration_exe.start_timer();
             let instructions_before = round_limits.instructions;
@@ -570,7 +535,7 @@ impl SchedulerImpl {
 
         // We only export metrics for "executable" canisters to ensure that the metrics
         // are not polluted by canisters that haven't had any messages for a long time.
-        for canister_id in round_schedule.active_canisters() {
+        for canister_id in round_schedule.round_scheduled_canisters() {
             // Newly created canisters have `last_full_execution_round` set to zero,
             // and hence skew the `canister_age` metric.
             let last_full_execution_round = if round_schedule
@@ -606,7 +571,7 @@ impl SchedulerImpl {
         }
         self.metrics
             .executable_canisters_per_round
-            .observe(round_schedule.active_canister_count() as f64);
+            .observe(round_schedule.round_scheduled_canisters().len() as f64);
         // FIXME
         self.metrics
             .executed_canisters_per_round
@@ -987,12 +952,12 @@ impl SchedulerImpl {
     /// Iterates through the provided canisters and checks if the invariants are still valid.
     ///
     /// Returns `true` if all canisters are valid, `false` otherwise.
-    fn check_canister_invariants<'a>(
+    fn check_canister_invariants(
         &self,
         round_log: &ReplicaLogger,
         current_round: &ExecutionRound,
         state: &ReplicatedState,
-        canister_ids: impl Iterator<Item = &'a CanisterId>,
+        canister_ids: &BTreeSet<CanisterId>,
     ) -> bool {
         for canister_id in canister_ids {
             let canister = state.canister_state(canister_id).unwrap();
@@ -1101,14 +1066,6 @@ impl SchedulerImpl {
                 .task_queue
                 .check_dts_invariants(current_round_type, &canister.canister_id());
         }
-    }
-
-    fn new_round_schedule(&self) -> RoundSchedule {
-        RoundSchedule::new(
-            self.config.scheduler_cores,
-            self.config.heap_delta_rate_limit,
-            self.rate_limiting_of_heap_delta,
-        )
     }
 }
 
@@ -1373,12 +1330,16 @@ impl Scheduler for SchedulerImpl {
                 .instructions
                 .max(RoundInstructions::from(0));
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
-        };
+        }
 
         // TODO: Consider routing messages from subnet output queues to local canisters.
 
         // Inner round.
-        let mut round_schedule = self.new_round_schedule();
+        let mut round_schedule = RoundSchedule::new(
+            self.config.scheduler_cores,
+            self.config.heap_delta_rate_limit,
+            self.rate_limiting_of_heap_delta,
+        );
         let mut state = self.inner_round(
             state,
             current_round,
@@ -1499,7 +1460,7 @@ impl Scheduler for SchedulerImpl {
                     &round_log,
                     &current_round,
                     &state,
-                    round_schedule.active_canisters(),
+                    round_schedule.round_scheduled_canisters(),
                 );
 
                 // NOTE: The logic for deleting canisters assumes that transitioning
@@ -1522,7 +1483,10 @@ impl Scheduler for SchedulerImpl {
                     );
                 }
             }
-            round_schedule.finish_round(&mut final_state, current_round);
+            {
+                let _timer = self.metrics.round_scheduling_duration.start_timer();
+                round_schedule.finish_round(&mut final_state, current_round);
+            }
             self.finish_round(
                 &mut final_state,
                 current_round,

@@ -56,10 +56,10 @@ pub struct SchedulerMetrics {
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_update_signature_request_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
-    pub(super) round_inner_heartbeat_overhead_duration: Histogram,
+    pub(super) round_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
     pub(super) round_inner_iteration_prep: Histogram,
-    pub(super) round_inner_iteration_prep_step: HistogramVec,
+    pub(super) round_inner_iteration_scheduling: Histogram,
     pub(super) round_inner_iteration_exe: Histogram,
     pub(super) round_inner_iteration_thread: ScopedMetrics,
     pub(super) round_inner_iteration_fin: Histogram,
@@ -253,7 +253,7 @@ impl SchedulerMetrics {
                 slices: round_phase_slices_histogram("inner", metrics_registry),
                 messages: round_phase_messages_histogram("inner", metrics_registry),
             },
-            round_inner_heartbeat_overhead_duration: round_inner_phase_duration_histogram("heartbeat overhead", metrics_registry),
+            round_heartbeat_overhead_duration: round_phase_duration_histogram("heartbeat overhead", metrics_registry),
             round_inner_iteration: ScopedMetrics {
                 duration: duration_histogram(
                     "execution_round_inner_iteration_duration_seconds",
@@ -277,12 +277,7 @@ impl SchedulerMetrics {
                 ),
             },
             round_inner_iteration_prep: round_inner_phase_duration_histogram("preparation", metrics_registry),
-            round_inner_iteration_prep_step: metrics_registry.histogram_vec(
-                "execution_round_inner_preparation_step_duration_seconds",
-                "The duration of inner execution round preparation step in seconds.",
-                decimal_buckets_with_zero(-4, 1),
-                &["step"],
-            ),
+            round_inner_iteration_scheduling: round_inner_phase_duration_histogram("scheduling", metrics_registry),
             round_inner_iteration_exe: round_inner_phase_duration_histogram("execution", metrics_registry),
             round_inner_iteration_thread: ScopedMetrics {
                 duration: duration_histogram(

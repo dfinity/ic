@@ -2749,11 +2749,9 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.canister_age.get_sample_sum() as i64, 0);
     assert_eq!(metrics.round_preparation_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
+    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
     assert_eq!(
-        metrics
-            .round_inner_iteration_prep_step
-            .with_label_values(&["scheduling"])
-            .get_sample_count(),
+        metrics.round_inner_iteration_scheduling.get_sample_count(),
         1
     );
     assert_ge!(metrics.round_inner_iteration_prep.get_sample_count(), 1);
