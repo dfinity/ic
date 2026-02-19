@@ -14,18 +14,22 @@ const NNS_KEY_DEFAULT_PATH: &str = "opt/ic/share/nns_public_key.pem";
 const NNS_KEY_PATH: &str = "run/config/nns_public_key.pem";
 const NODE_OPERATOR_KEY_PATH: &str = "data/node_operator_private_key.pem";
 
-pub fn populate_nns_public_key(bootstrap_dir: &Path, guestos_config: &GuestOSConfig) -> Result<()> {
-    populate_nns_public_key_impl(Path::new("/"), bootstrap_dir, guestos_config)
+pub fn populate_nns_public_key(
+    #[cfg(feature = "dev")] guestos_config: &GuestOSConfig,
+) -> Result<()> {
+    populate_nns_public_key_impl(
+        Path::new("/"),
+        #[cfg(feature = "dev")]
+        guestos_config,
+    )
 }
 
 /// Populates the NNS root key where `ic-replica` expects it.
 /// In a dev environment it will take the overriden key from the GuestOS config
 /// if it's provided there.
-#[allow(unused_variables)]
 fn populate_nns_public_key_impl(
     root: &Path,
-    bootstrap_dir: &Path,
-    guestos_config: &GuestOSConfig,
+    #[cfg(feature = "dev")] guestos_config: &GuestOSConfig,
 ) -> Result<()> {
     let nns_key_dst = root.join(NNS_KEY_PATH);
 
@@ -648,11 +652,9 @@ mod tests {
         let test_root = TestRoot::new();
         test_root.create_rootfs_nns_key("default_nns_key");
 
-        let bootstrap_dir = TempDir::new().unwrap();
-
         populate_nns_public_key_impl(
             test_root.root_path(),
-            bootstrap_dir.path(),
+            #[cfg(feature = "dev")]
             &GuestOSConfig::default(),
         )
         .unwrap();
@@ -671,16 +673,18 @@ mod tests {
         let test_root = TestRoot::new();
         test_root.create_rootfs_nns_key("default_nns_key");
 
-        let bootstrap_dir = create_test_bootstrap_dir();
-
         let mut guest_config = GuestOSConfig::default();
         guest_config
             .guestos_settings
             .guestos_dev_settings
             .nns_pub_key_override = Some("abc".to_string());
 
-        populate_nns_public_key_impl(test_root.root_path(), bootstrap_dir.path(), &guest_config)
-            .unwrap();
+        populate_nns_public_key_impl(
+            test_root.root_path(),
+            #[cfg(feature = "dev")]
+            &guest_config,
+        )
+        .unwrap();
 
         // Verify NNS public key was copied with override content
         let nns_key_dst = test_root.path("run/config/nns_public_key.pem");

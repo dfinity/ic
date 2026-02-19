@@ -64,8 +64,6 @@ pub enum Commands {
     PopulateNnsPublicKey {
         #[arg(long, default_value = config_tool::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
         guestos_config_json_path: PathBuf,
-        #[arg(long, default_value = config_tool::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
-        bootstrap_dir: PathBuf,
     },
     /// Dumps OS configuration
     DumpOSConfig {
@@ -236,12 +234,16 @@ pub fn main() -> Result<()> {
             bootstrap_ic_node(&bootstrap_dir, guestos_config)
         }
         Some(Commands::PopulateNnsPublicKey {
+            #[allow(unused_variables)]
             guestos_config_json_path,
-            bootstrap_dir,
         }) => {
+            #[cfg(feature = "dev")]
             let guestos_config: GuestOSConfig =
                 config_tool::deserialize_config(&guestos_config_json_path)?;
-            populate_nns_public_key(&bootstrap_dir, &guestos_config)
+            populate_nns_public_key(
+                #[cfg(feature = "dev")]
+                &guestos_config,
+            )
         }
         Some(Commands::GenerateICConfig {
             guestos_config_json_path,
