@@ -779,7 +779,7 @@ mod tests {
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: BTreeSet::new(),
-                subnet_type: SubnetType::Application,
+                subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
@@ -921,7 +921,7 @@ mod tests {
                 (certification_version >= V25).then_some(
                     vec![
                         edge("type"),
-                        E::VisitBlob(b"application".to_vec())
+                        E::VisitBlob(b"system".to_vec())
                     ]
                 ),
                 Some(vec![
@@ -960,7 +960,7 @@ mod tests {
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: BTreeSet::new(),
-                subnet_type: SubnetType::Application,
+                subnet_type: SubnetType::VerifiedApplication,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
@@ -1163,7 +1163,7 @@ mod tests {
                 (certification_version >= V25).then_some(
                     vec![
                         edge("type"),
-                        E::VisitBlob(b"application".to_vec())
+                        E::VisitBlob(b"verified_application".to_vec())
                     ]
                 ),
                 Some(vec![

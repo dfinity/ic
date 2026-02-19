@@ -7,6 +7,7 @@ use crate::{
         encode_subnet_canister_ranges, encode_subnet_metrics,
     },
 };
+use ic_registry_subnet_type::SubnetType;
 use LazyTree::Blob;
 use ic_canonical_state_tree_hash::lazy_tree::{Lazy, LazyFork, LazyTree, blob, fork, num, string};
 use ic_crypto_tree_hash::Label;
@@ -918,7 +919,7 @@ fn subnets_as_tree<'a>(
                     .with_tree_if(
                         certification_version >= CertificationVersion::V25,
                         "type",
-                        string(subnet_topology.subnet_type.as_ref()),
+                        string(subnet_type_as_string(subnet_topology.subnet_type))
                     ),
             )
         },
@@ -969,4 +970,15 @@ fn canister_metadata_as_tree(
         certification_version,
         mk_tree: |_name, section, _version| Blob(section.content(), Some(section.hash())),
     })
+}
+
+/// Helper function to turn a subnet type into a string.
+/// This is intentionally explicitly implemented here, so that the state tree representation cannot be changed outside this crate, as opposed
+/// to calling something like `subnet_type.to_string()`.
+fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
+    match subnet_type {
+        SubnetType::Application => "application",
+        SubnetType::System => "system",
+        SubnetType::VerifiedApplication => "verified_application",
+    }
 }
