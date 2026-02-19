@@ -5,7 +5,7 @@ use ic_execution_environment::RoundSchedule;
 use ic_replicated_state::{
     CanisterState, SchedulerState, SystemState, canister_state::UnflushedCheckpointOps,
 };
-use ic_types::Cycles;
+use ic_types::{AccumulatedPriority, Cycles};
 use ic_types_test_utils::ids::{canister_test_id, user_test_id};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -45,7 +45,7 @@ fn main() {
     let round_schedule = RoundSchedule::new(
         scheduler_cores,
         long_execution_cores,
-        0,
+        AccumulatedPriority::default(),
         ordered_new_execution_canister_ids,
         ordered_long_execution_canister_ids,
     );

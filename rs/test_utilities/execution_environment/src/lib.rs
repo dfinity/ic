@@ -27,7 +27,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
+use ic_logger::{
+    ReplicaLogger,
+    replica_logger::{no_op_logger, test_logger},
+};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
@@ -81,6 +84,7 @@ use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
 use num_traits::ops::saturating::SaturatingAdd;
 use prometheus::IntCounter;
+use slog::Level;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
@@ -337,7 +341,9 @@ impl ExecutionTest {
     }
 
     pub fn canister_state_mut(&mut self, canister_id: CanisterId) -> &mut CanisterState {
-        self.state_mut().canister_state_mut(&canister_id).unwrap()
+        self.state_mut()
+            .canister_state_make_mut(&canister_id)
+            .unwrap()
     }
 
     pub fn execution_state(&self, canister_id: CanisterId) -> &ExecutionState {
@@ -1157,7 +1163,7 @@ impl ExecutionTest {
             .method_payload(method_payload)
             .build();
         state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap()
             .push_ingress(ingress.clone());
         self.ingress_history_writer.set_status(
@@ -1947,7 +1953,7 @@ impl ExecutionTest {
             .prepayment_for_response_transmission(self.subnet_size(), self.cost_schedule());
         self.cycles_account_manager
             .refund_for_response_transmission(
-                &no_op_logger(),
+                &self.log,
                 &no_op_counter,
                 response,
                 prepayment_for_response_transmission,
@@ -1995,7 +2001,6 @@ pub struct ExecutionTestBuilder {
     own_subnet_id: SubnetId,
     caller_subnet_id: Option<SubnetId>,
     subnet_type: SubnetType,
-    log: ReplicaLogger,
     caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
@@ -2011,6 +2016,7 @@ pub struct ExecutionTestBuilder {
     precompiled_universal_canister: bool,
     cost_schedule: CanisterCyclesCostSchedule,
     network_topology: Option<NetworkTopology>,
+    log_level: Option<Level>,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -2031,7 +2037,6 @@ impl Default for ExecutionTestBuilder {
             own_subnet_id: subnet_test_id(1),
             caller_subnet_id: None,
             subnet_type,
-            log: no_op_logger(),
             caller_canister_id: None,
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
@@ -2047,6 +2052,7 @@ impl Default for ExecutionTestBuilder {
             precompiled_universal_canister: true,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
             network_topology: None,
+            log_level: Some(Level::Warning),
         }
     }
 }
@@ -2123,8 +2129,10 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_log(self, log: ReplicaLogger) -> Self {
-        Self { log, ..self }
+    /// Specifies log level for replica logs.
+    /// Passing `None` turns off replica logs completely.
+    pub fn with_log_level(self, log_level: Option<Level>) -> Self {
+        Self { log_level, ..self }
     }
 
     pub fn with_ecdsa_signature_fee(self, ecdsa_signing_fee: u128) -> Self {
@@ -2688,8 +2696,9 @@ impl ExecutionTestBuilder {
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let state_manager = Arc::new(FakeStateManager::new());
 
+        let log = test_logger(self.log_level);
         let execution_services = ExecutionServicesForTesting::setup_execution(
-            self.log.clone(),
+            log.clone(),
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
@@ -2767,7 +2776,7 @@ impl ExecutionTestBuilder {
                 ..Default::default()
             },
             current_round: self.current_round,
-            log: self.log,
+            log,
             checkpoint_files: vec![],
             replica_version: self.replica_version,
             canister_snapshot_baseline_instructions: self
