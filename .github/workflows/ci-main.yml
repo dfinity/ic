@@ -25,6 +25,7 @@ jobs:
     name: Bazel Run Fuzzers
     runs-on: &dind-large-setup
       labels: dind-large
+      group: dm2
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:95705ebaed40462eef167d1c4c10f84aff9949f4d33d0f26dd28e0d9cc7fe1c6
       options: >-
@@ -633,6 +634,7 @@ jobs:
     name: Cargo  ${{ matrix.name }} Linux
     runs-on:
       labels: dind-small
+      group: dm2
     container: *container-setup
     timeout-minutes: 30
     steps:
