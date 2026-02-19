@@ -144,13 +144,17 @@ mod panic_hook {
     }
 
     /// Installs a panic hook that logs current context and panic info before the trap.
+    /// Also logs a Rust backtrace when available (often "disabled" in WASM; the EE adds a
+    /// Canister Backtrace to the log when the trap is handled).
     pub fn set_panic_hook() {
         std::panic::set_hook(Box::new(|info| {
             with_context_str(|ctx| {
                 ic_cdk::eprintln!("{} [panic hook] context: {}", DIAG_PREFIX, ctx);
+                super::ic0_debug::debug_print_persistent(&format!("[dbg] [panic hook] context: {}", ctx));
             });
             let last_block = unsafe { core::ptr::read(core::ptr::addr_of!(LAST_BLOCK_INDEX)) };
             ic_cdk::eprintln!("{} [panic hook] last_block_index: {}", DIAG_PREFIX, last_block);
+            super::ic0_debug::debug_print_persistent(&format!("[dbg] [panic hook] last_block_index: {}", last_block));
             let payload: &str = info
                 .payload()
                 .downcast_ref::<&str>()
@@ -158,6 +162,7 @@ mod panic_hook {
                 .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
                 .unwrap_or("(no message)");
             ic_cdk::eprintln!("{} [panic hook] payload: {}", DIAG_PREFIX, payload);
+            super::ic0_debug::debug_print_persistent(&format!("[dbg] [panic hook] payload: {}", payload));
             if let Some(loc) = info.location() {
                 ic_cdk::eprintln!(
                     "{} [panic hook] at {}:{}:{}",
@@ -166,6 +171,19 @@ mod panic_hook {
                     loc.line(),
                     loc.column()
                 );
+                super::ic0_debug::debug_print_persistent(&format!(
+                    "[dbg] [panic hook] at {}:{}:{}",
+                    loc.file(),
+                    loc.line(),
+                    loc.column()
+                ));
+            }
+            // Log Rust backtrace when available (in WASM this is often "disabled"; the EE will add a Canister Backtrace).
+            let bt = std::backtrace::Backtrace::capture();
+            let bt_str = format!("{:?}", bt);
+            super::ic0_debug::debug_print_persistent("[dbg] [panic hook] Rust backtrace (may be disabled in WASM):");
+            for line in bt_str.lines().take(30) {
+                super::ic0_debug::debug_print_persistent(&format!("[dbg]   {}", line));
             }
         }));
     }

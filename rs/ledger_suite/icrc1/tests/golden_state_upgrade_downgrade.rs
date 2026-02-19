@@ -707,6 +707,8 @@ fn stress_timer_only_after_upgrade() {
 
     // Print last [dbg] lines from canister log (from ic0.debug_print; persists across trap).
     index::print_last_debug_canister_log(&state_machine, index_canister_id, 25);
+    // Print [TRAP] records from canister log (trap message + Canister Backtrace from the EE).
+    index::print_trap_backtrace_from_canister_log(&state_machine, index_canister_id);
 
     assert!(
         final_synced > initial_synced || final_synced == chain_length,
@@ -825,6 +827,7 @@ fn stress_timer_only_after_upgrade() {
         .expect("num_blocks_synced should fit in u64");
 
     index::print_last_debug_canister_log(&state_machine, index_canister_id, 25);
+    index::print_trap_backtrace_from_canister_log(&state_machine, index_canister_id);
 
     assert!(
         final_synced > initial_synced || final_synced == chain_length,
@@ -1204,6 +1207,7 @@ mod index {
         }
         // Dump last [dbg] canister log lines (from ic0.debug_print; not rolled back on trap).
         print_last_debug_canister_log(env, index_id, 25);
+        print_trap_backtrace_from_canister_log(env, index_id);
         panic!(
             "The index canister {index_id} was unable to sync all the blocks with the ledger {ledger_id}. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
         );
@@ -1268,6 +1272,36 @@ mod index {
         for rec in dbg_records.into_iter().take(limit) {
             let s = String::from_utf8_lossy(&rec.content);
             println!("  #{} {}", rec.idx, s.trim_end());
+        }
+    }
+
+    /// Prints all canister log records that contain "[TRAP]" (added by the execution environment
+    /// when the canister traps). These include the trap message and Canister Backtrace if
+    /// wasm_backtrace is enabled. Call this after a failed assertion to see the backtrace.
+    pub fn print_trap_backtrace_from_canister_log(
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+    ) {
+        let log = state_machine.canister_log(canister_id);
+        let records = log.records();
+        let trap_records: Vec<_> = records
+            .iter()
+            .filter(|r| {
+                std::str::from_utf8(&r.content)
+                    .map(|s| s.contains("[TRAP]"))
+                    .unwrap_or(false)
+            })
+            .collect();
+        if trap_records.is_empty() {
+            println!("[canister_log] no [TRAP] records (backtrace may be in stderr or not yet written)");
+            return;
+        }
+        println!("[canister_log] {} [TRAP] record(s) (trap message + backtrace):", trap_records.len());
+        for rec in trap_records {
+            let s = String::from_utf8_lossy(&rec.content);
+            println!("---------- [TRAP] #{} ----------", rec.idx);
+            println!("{}", s.trim_end());
+            println!("----------");
         }
     }
 }
