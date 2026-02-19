@@ -130,6 +130,8 @@ const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_all
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
+const CRITICAL_ERROR_NON_RENTED_SUBNET_NON_EMPTY_SUBNET_ADMINS: &str =
+    "mr_non_rented_subnet_non_empty_subnet_admins";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -364,6 +366,8 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
+    /// Critical error: a non-rental subnet has a non-empty subnet admins list.
+    critical_error_non_rented_subnet_non_empty_subnet_admins: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -523,6 +527,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
             critical_error_induct_response_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
+            critical_error_non_rented_subnet_non_empty_subnet_admins: metrics_registry
+                .error_counter(CRITICAL_ERROR_NON_RENTED_SUBNET_NON_EMPTY_SUBNET_ADMINS),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
 
@@ -1082,6 +1088,30 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     ))
                 })?;
                 subnet_admins.insert(subnet_admin);
+            }
+            let own_subnet_type: SubnetType =
+                subnet_record.subnet_type.try_into().unwrap_or_default();
+            // If the subnet is not rented, i.e. an application subnet on a "free" cost schedule,
+            // then it cannot have a non-empty subnet admins list. If that's the case, this indicates
+            // a bug and a critical error is raised. The subnet admins is set to empty list in that case
+            // to avoid any potential errors in using an incorrect list.
+            if own_subnet_type != SubnetType::Application
+                || (own_subnet_type == SubnetType::Application
+                    && cost_schedule != CanisterCyclesCostSchedule::Free)
+            {
+                if !subnet_admins.is_empty() {
+                    self.metrics
+                        .critical_error_non_rented_subnet_non_empty_subnet_admins
+                        .inc();
+                    warn!(
+                        self.log,
+                        "{}: subnet {} is a non-rental subnet, but has a non-empty list of subnet admins {:?}.",
+                        CRITICAL_ERROR_NON_RENTED_SUBNET_NON_EMPTY_SUBNET_ADMINS,
+                        subnet_id,
+                        subnet_admins,
+                    );
+                    subnet_admins = BTreeSet::new();
+                }
             }
             subnets.insert(
                 *subnet_id,
