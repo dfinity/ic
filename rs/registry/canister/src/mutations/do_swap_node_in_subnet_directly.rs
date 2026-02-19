@@ -230,6 +230,22 @@ impl Registry {
             return Err(SwapError::SubnetHalted { subnet_id });
         }
 
+        // If subnet is sev enabled the nodes coming in (new_node) should
+        // also be sev enabled.
+        // If the nodes already in the subnet are somehow not sev (old_node)
+        // they should be allowed to be swapped out with this feature.
+        if subnet_record
+            .features
+            .map(|features| features.sev_enabled.unwrap_or_default())
+            .unwrap_or_default()
+            && new_node.chip_id.is_none()
+        {
+            return Err(SwapError::NonSevNodeToSevSubnet {
+                subnet_id,
+                node_id: new_node_id.get(),
+            });
+        }
+
         Ok(())
     }
 
@@ -581,16 +597,18 @@ mod tests {
             let mut subnet_record = get_invariant_compliant_subnet_record(node_ids.clone());
             subnet_record.subnet_type = i32::from(SubnetType::System);
             subnet_record.is_halted = halt_subnets;
-            subnet_record.features = match subnet_record.features {
-                None => Some(SubnetFeatures {
-                    sev_enabled: Some(true),
-                    ..Default::default()
-                }),
-                Some(mut f) => {
-                    f.sev_enabled = Some(true);
-                    Some(f)
-                }
-            };
+            if sev_subnets {
+                subnet_record.features = match subnet_record.features {
+                    None => Some(SubnetFeatures {
+                        sev_enabled: Some(true),
+                        ..Default::default()
+                    }),
+                    Some(mut f) => {
+                        f.sev_enabled = Some(true);
+                        Some(f)
+                    }
+                };
+            }
 
             mutations.push(upsert(
                 make_subnet_record_key(*subnet),
