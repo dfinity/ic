@@ -86,6 +86,21 @@ mod ic0_debug {
     pub fn debug_print_persistent(_msg: &str) {}
 }
 
+/// Logs raw reply bytes as hex in small chunks (avoids one huge allocation).
+#[cfg(feature = "debug_dlmalloc")]
+fn log_reply_hex_persistent(prefix: &str, bytes: &[u8], max_bytes: usize) {
+    ic0_debug::debug_print_persistent(&format!("[dbg] {} reply_len={}", prefix, bytes.len()));
+    let take = bytes.len().min(max_bytes);
+    const CHUNK: usize = 64;
+    for (i, chunk) in bytes[..take].chunks(CHUNK).enumerate() {
+        let hex_str: String = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+        ic0_debug::debug_print_persistent(&format!("[dbg] {} hex[{}]: {}", prefix, i, hex_str));
+    }
+    if bytes.len() > max_bytes {
+        ic0_debug::debug_print_persistent(&format!("[dbg] {} truncated (logged {} of {})", prefix, max_bytes, bytes.len()));
+    }
+}
+
 // ---- Panic hook and context for pinpointing build_index panics (debug_dlmalloc) ----
 #[cfg(feature = "debug_dlmalloc")]
 mod panic_hook {
@@ -542,43 +557,71 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
         P1,
         "[get_supported_standards_from_ledger]: making the call..."
     );
+
     #[cfg(feature = "debug_dlmalloc")]
-    ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: before call");
-    let res = ic_cdk::api::call::call::<_, (Vec<StandardRecord>,)>(
+    let supported_standard_names = {
+        // Use call_raw and log raw reply bytes (hex) before any Candid decode, then return
+        // empty to avoid panic and get insight into what the ledger returned.
+        ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: before call_raw");
+        let arg = candid::Encode!(&()).expect("empty arg");
+        let res = ic_cdk::api::call::call_raw(ledger_id, "icrc1_supported_standards", &arg, 0).await;
+        ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: after call_raw");
+        match res {
+            Ok(reply_bytes) => {
+                log_reply_hex_persistent(
+                    "icrc1_supported_standards",
+                    &reply_bytes,
+                    2048, // max bytes to log (then truncate)
+                );
+                ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: returning empty (debug_dlmalloc)");
+                vec![]
+            }
+            Err((code, msg)) => {
+                ic0_debug::debug_print_persistent(&format!("[dbg] get_supported_standards_from_ledger: call_raw err {:?} {}", code, msg));
+                log!(
+                    P0,
+                    "[get_supported_standards_from_ledger]: failed (call_raw) on ledger {}. Error code: {:?} message: {}",
+                    ledger_id,
+                    code,
+                    msg
+                );
+                vec![]
+            }
+        }
+    };
+
+    #[cfg(not(feature = "debug_dlmalloc"))]
+    let supported_standard_names = {
+        let res = ic_cdk::api::call::call::<_, (Vec<StandardRecord>,)>(
+            ledger_id,
+            "icrc1_supported_standards",
+            (),
+        )
+        .await;
+        match res {
+            Ok((res,)) => res.into_iter().map(|s| s.name).collect::<Vec<_>>(),
+            Err((code, msg)) => {
+                log!(
+                    P0,
+                    "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}. Error code: {:?} message: {}",
+                    ledger_id,
+                    code,
+                    msg
+                );
+                vec![]
+            }
+        }
+    };
+
+    #[cfg(not(feature = "debug_dlmalloc"))]
+    log!(
+        P1,
+        "[get_supported_standards_from_ledger]: ledger {} supports {:?}",
         ledger_id,
-        "icrc1_supported_standards",
-        (),
-    )
-    .await;
-    #[cfg(feature = "debug_dlmalloc")]
-    ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: after call");
-    match res {
-        Ok((res,)) => {
-            let supported_standard_names = res.into_iter().map(|s| s.name).collect::<Vec<_>>();
-            #[cfg(feature = "debug_dlmalloc")]
-            ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: ok");
-            log!(
-                P1,
-                "[get_supported_standards_from_ledger]: ledger {} supports {:?}",
-                ledger_id,
-                supported_standard_names,
-            );
-            supported_standard_names
-        }
-        Err((code, msg)) => {
-            #[cfg(feature = "debug_dlmalloc")]
-            ic0_debug::debug_print_persistent("[dbg] get_supported_standards_from_ledger: err");
-            // log the error but do not propagate it
-            log!(
-                P0,
-                "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}. Error code: {:?} message: {}",
-                ledger_id,
-                code,
-                msg
-            );
-            vec![]
-        }
-    }
+        supported_standard_names,
+    );
+
+    supported_standard_names
 }
 
 async fn measured_call<I, O>(
