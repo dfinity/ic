@@ -4,7 +4,8 @@ load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+# Dependencies for the library (used by tests and canister).
+LIBRARY_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -27,6 +28,11 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
 ]
 
+# wee_alloc is used as global allocator for the wasm canister only (see main.rs).
+CANISTER_EXTRA_DEPS = [
+    "@crate_index//:wee_alloc",
+]
+
 MACRO_DEPENDENCIES = [
     # Keep sorted.
 ]
@@ -36,7 +42,7 @@ rust_library(
     srcs = ["src/lib.rs"],
     crate_name = "ic_icrc1_index_ng",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = LIBRARY_DEPENDENCIES,
 )
 
 [
@@ -58,7 +64,7 @@ rust_library(
         deps = [
             # Keep sorted.
             ":index-ng",
-        ] + DEPENDENCIES + extra_deps,
+        ] + LIBRARY_DEPENDENCIES + CANISTER_EXTRA_DEPS + extra_deps,
     )
     for (name_suffix, features, extra_deps) in [
         (
