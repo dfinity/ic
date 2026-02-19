@@ -225,14 +225,6 @@ fn test_manage_nervous_system_parameters_proposal_execution() {
 fn test_voting_with_three_neurons_with_the_same_stake() {
     state_machine_test_on_sns_subnet(|runtime| {
         async move {
-            let state_machine_time_seconds = match &runtime {
-                Runtime::StateMachine(state_machine) => state_machine
-                    .time()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs_f64(),
-                _ => unreachable!("expected StateMachine runtime"),
-            };
             // Initialize the ledger with three users (each will create its own neuron).
             let user_1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
             let user_2 = Sender::from_keypair(&TEST_USER2_KEYPAIR);
@@ -273,6 +265,14 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
             let user_3_subaccount = user_3_neuron_id.subaccount().unwrap();
 
             // Make a proposal.
+            let proposal_creation_time_seconds = match &runtime {
+                Runtime::StateMachine(state_machine) => state_machine
+                    .time()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs_f64(),
+                _ => unreachable!("expected StateMachine runtime"),
+            };
             let proposal_id = sns_canisters
                 .make_proposal(
                     &user_1,
@@ -338,7 +338,8 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 assert_eq!(ballot.vote, vote as i32);
 
                 // Inspect ballot ages.
-                let age_seconds = state_machine_time_seconds - ballot.cast_timestamp_seconds as f64;
+                let age_seconds =
+                    proposal_creation_time_seconds - ballot.cast_timestamp_seconds as f64;
                 assert!(
                     0.0 < age_seconds,
                     "age_seconds = {age_seconds}. ballot = {ballot:?}"
