@@ -381,7 +381,7 @@ fn lazy_pagemaps() {
 
     env.execute_ingress(canister_id, "write_heap_64k", vec![])
         .unwrap();
-    assert!(page_maps_by_status("loaded", &env) > 0);
+    assert_eq!(page_maps_by_status("loaded", &env), 2);
 }
 
 #[test]

@@ -21,7 +21,8 @@ type StorageType = Vec<u8>;
 
 /// Wrapper around the raw state tree with some utility functions.
 ///
-/// Note: the state tree is pruned to include only the public key of a single subnet.
+/// Note: the state tree is pruned to include only the information (public key and canister ranges)
+/// of a single subnet.
 pub(crate) struct StateTree {
     certificate: Certificate,
     subnet_id: SubnetId,
@@ -118,7 +119,8 @@ impl AgentHelper {
     }
 
     /// Reads the state tree and prunes it to contain only the following paths:
-    /// * /subnet_id/$subnet_id/public_key
+    /// * /subnet/$subnet_id/public_key
+    /// * /canister_ranges/$subnet_id
     ///
     /// See: https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-subnet
     /// for more information
