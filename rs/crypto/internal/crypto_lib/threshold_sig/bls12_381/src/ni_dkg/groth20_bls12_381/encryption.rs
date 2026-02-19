@@ -22,9 +22,9 @@ use ic_crypto_internal_types::sign::threshold_sig::{
 };
 use ic_types::{NumberOfNodes, crypto::AlgorithmId, crypto::error::InvalidArgumentError};
 use rand::{CryptoRng, RngCore};
+use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use rayon::prelude::*;
 
 mod crypto {
 

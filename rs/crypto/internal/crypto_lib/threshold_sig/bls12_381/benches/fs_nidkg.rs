@@ -1,10 +1,10 @@
 use criterion::*;
 use ic_crypto_internal_bls12_381_type::Scalar;
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::*;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::Epoch;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::*;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
-    create_forward_secure_key_pair, update_key_inplace_to_epoch, SecretKey,
+    SecretKey, create_forward_secure_key_pair, update_key_inplace_to_epoch,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng, RngCore};
@@ -47,10 +47,7 @@ fn setup_keys_and_ciphertext<R: RngCore + CryptoRng>(
     epoch: Epoch,
     associated_data: &[u8],
     rng: &mut R,
-) -> (
-    Vec<(PublicKeyWithPop, SecretKey)>,
-    FsEncryptionCiphertext,
-) {
+) -> (Vec<(PublicKeyWithPop, SecretKey)>, FsEncryptionCiphertext) {
     let sys = SysParam::global();
     let key_gen_assoc_data = rng.r#gen::<[u8; 32]>();
 
@@ -91,20 +88,17 @@ fn fs_encrypt_decrypt(c: &mut Criterion) {
     let mut group = c.benchmark_group("fs_nidkg_enc_dec");
     group.sample_size(10);
 
-    group.bench_function(
-        BenchmarkId::new("enc_chunks", node_count),
-        |b| {
-            let pks_and_chunks: Vec<_> = keys
-                .iter()
-                .map(|k| {
-                    let s = Scalar::random(rng);
-                    (k.0.public_key().clone(), PlaintextChunks::from_scalar(&s))
-                })
-                .collect();
+    group.bench_function(BenchmarkId::new("enc_chunks", node_count), |b| {
+        let pks_and_chunks: Vec<_> = keys
+            .iter()
+            .map(|k| {
+                let s = Scalar::random(rng);
+                (k.0.public_key().clone(), PlaintextChunks::from_scalar(&s))
+            })
+            .collect();
 
-            b.iter(|| enc_chunks(&pks_and_chunks, epoch, &associated_data, sys, rng))
-        },
-    );
+        b.iter(|| enc_chunks(&pks_and_chunks, epoch, &associated_data, sys, rng))
+    });
 
     group.bench_function("verify_ciphertext_integrity", |b| {
         b.iter(|| verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys))

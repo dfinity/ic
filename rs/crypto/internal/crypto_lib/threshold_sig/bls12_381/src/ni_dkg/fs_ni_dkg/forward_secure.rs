@@ -9,7 +9,6 @@
 //    g^x  corresponds to g * x
 
 pub use crate::ni_dkg::fs_ni_dkg::chunking::*;
-use rayon::prelude::*;
 use crate::ni_dkg::fs_ni_dkg::dlog_recovery::{
     CheatingDealerDlogSolver, HonestDealerDlogLookupTable,
 };
@@ -17,6 +16,7 @@ use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
     EncryptionKeyInstance, EncryptionKeyPop, prove_pop, verify_pop,
 };
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{HashedMap, random_oracle};
+use rayon::prelude::*;
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::CiphertextIntegrityError::{
     CrszVectorsLengthMismatch, InvalidNidkgCiphertext,

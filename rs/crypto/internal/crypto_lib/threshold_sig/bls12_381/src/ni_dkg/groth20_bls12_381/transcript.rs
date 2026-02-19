@@ -11,9 +11,9 @@ use crate::types as threshold_types;
 use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
+use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use rayon::prelude::*;
 use std::ops::{AddAssign, MulAssign};
 
 // Code reuse
