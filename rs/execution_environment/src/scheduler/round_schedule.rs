@@ -241,6 +241,7 @@ impl RoundSchedule {
                 {
                     // Record and filter out rate limited canisters.
                     self.rate_limited_canisters.insert(*canister_id);
+                    self.round_scheduled_canisters.insert(*canister_id);
                     return None;
                 }
 
@@ -280,18 +281,16 @@ impl RoundSchedule {
                         if is_first_iteration {
                             self.round_long_execution_canisters.insert(*canister_id);
                         }
-                        CanisterRoundState::new(canister, subnet_schedule.get(canister_id))
+                        let rs =
+                            CanisterRoundState::new(canister, subnet_schedule.get(canister_id));
+                        self.long_executions_count += 1;
+                        self.long_executions_compute_allocation += rs.compute_allocation;
+                        rs
                     }
                     NextExecution::None | NextExecution::ContinueInstallCode => return None,
                 };
 
                 self.total_compute_allocation += canister_round_state.compute_allocation;
-                if canister_round_state.is_long_execution() {
-                    self.long_executions_count += 1;
-                    self.long_executions_compute_allocation +=
-                        canister_round_state.compute_allocation;
-                }
-
                 self.round_scheduled_canisters.insert(*canister_id);
 
                 Some(canister_round_state)
@@ -357,12 +356,12 @@ impl RoundSchedule {
                 });
         }
 
-        println!("is_first_iteration: {}", is_first_iteration);
-        println!("schedule: {:?}", self.schedule);
-        println!(
-            "heartbeat_and_timer_canisters: {:?}",
-            self.heartbeat_and_timer_canisters
-        );
+        // println!("is_first_iteration: {}", is_first_iteration);
+        // println!("schedule: {:?}", self.schedule);
+        // println!(
+        //     "heartbeat_and_timer_canisters: {:?}",
+        //     self.heartbeat_and_timer_canisters
+        // );
     }
 
     /// Partitions the executable Canisters to the available cores for execution.
@@ -491,22 +490,19 @@ impl RoundSchedule {
         // free allocation (as the deviation from zero of all canisters' total
         // accumulated priority, including priority credit).
         let mut free_allocation = ZERO;
-        let relevant_canister_ids = self
-            .round_scheduled_canisters
-            .iter()
-            .chain(self.rate_limited_canisters.iter())
-            .collect::<BTreeSet<_>>();
-        for canister_id in relevant_canister_ids {
+        for canister_id in &self.round_scheduled_canisters {
+            let Some(canister) = canister_states.get_mut(canister_id) else {
+                // Canister was deleted.
+                subnet_schedule.remove(canister_id);
+                continue;
+            };
             let canister_priority = subnet_schedule.get_mut(*canister_id);
-            if let Some(canister) = canister_states.get_mut(canister_id) {
-                canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
-                let canister = Arc::make_mut(canister);
-                canister
-                    .system_state
-                    .canister_metrics_mut()
-                    .observe_round_scheduled();
-            }
+            canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
             free_allocation -= true_priority(canister_priority);
+            Arc::make_mut(canister)
+                .system_state
+                .canister_metrics_mut()
+                .observe_round_scheduled();
         }
 
         // Only ever apply positive free allocation. If the sum of all canisters'

@@ -1011,6 +1011,9 @@ impl SchedulerImpl {
     ///
     /// NOTE: This is also called by `checkpoint_round_with_no_execution()`, so it
     /// must be safe to call even when no execution has taken place.
+    //
+    // TODO(DSM-103): Consider only aborting / checking DTS invariants for actually
+    // scheduled canisters.
     fn finish_round(
         &self,
         state: &mut ReplicatedState,
@@ -1029,6 +1032,8 @@ impl SchedulerImpl {
                 // Abort all paused execution before the checkpoint.
                 self.exec_env.abort_all_paused_executions(state, &self.log);
 
+                // Reset all priority credits to zero. A canister must not be charged for an
+                // aborted DTS execution.
                 for (_, priority) in state.metadata.subnet_schedule.iter_mut() {
                     priority.priority_credit = Default::default();
                 }
@@ -1383,6 +1388,7 @@ impl Scheduler for SchedulerImpl {
 
             let mut final_state;
             {
+                // TODO(DSM-103): Consider only covering actually scheduled canisters.
                 for canister in state.canisters_iter_mut() {
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                     if heap_delta_debit > 0 {
