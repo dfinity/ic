@@ -1083,26 +1083,19 @@ impl SchedulerImpl {
             .filter_map(|canister| {
                 if canister.has_paused_execution() {
                     let canister_priority = state.canister_priority(&canister.canister_id());
-                    Some(CanisterRoundState {
-                        canister_id: canister.canister_id(),
-                        accumulated_priority: canister_priority.accumulated_priority,
-                        compute_allocation: Default::default(), // not used
-                        long_execution_mode: canister_priority.long_execution_mode,
-                        has_aborted_or_paused_execution: true,
-                    })
+                    Some(CanisterRoundState::new(canister, canister_priority))
                 } else {
                     None
                 }
             })
             .collect::<Vec<_>>();
-
-        RoundSchedule::order_canister_round_states(&mut paused_round_states);
+        paused_round_states.sort();
 
         paused_round_states
             .iter()
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
-                let canister = state.canister_state_mut_arc(&rs.canister_id).unwrap();
+                let canister = state.canister_state_mut_arc(&rs.canister_id()).unwrap();
                 self.exec_env.abort_canister(canister, &self.log);
             });
     }
