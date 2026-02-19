@@ -32,7 +32,7 @@ jobs:
     container:
       image: ubuntu:24.04
       options: >-
-        -e NODE_NAME --privileged --cgroupns host
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     steps:
       - name: Setup podman
         shell: bash
