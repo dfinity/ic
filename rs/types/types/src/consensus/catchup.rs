@@ -93,7 +93,7 @@ impl CatchUpContent {
         let payload_hash = block.payload.get_hash();
         let block_payload = block.payload.as_ref();
 
-        if block.payload.is_summary() == block_payload.is_summary() {
+        if block.payload.is_summary() != block_payload.is_summary() {
             return Err(String::from("Payload type mismatch"));
         }
 
