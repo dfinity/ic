@@ -121,8 +121,6 @@ jobs:
               skip_buf_checks="false"
           fi
 
-          release_build="true"
-
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -418,7 +416,7 @@ jobs:
     if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
     # The `Upload artifacts` step below requires the CLOUD_CREDENTIALS_CONTENT secret
     # which is only available in the `upload-artifacts` environment.
-#    environment: upload-artifacts
+    environment: upload-artifacts
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 90
