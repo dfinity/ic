@@ -4520,13 +4520,14 @@ dependencies = [
 
 [[package]]
 name = "evm_rpc_client"
-version = "0.3.0"
-source = "git+https://github.com/dfinity/evm-rpc-canister.git?branch=gdemay%2FDEFI-2566-prevent-calls-when-stopping#94a38c2f02abcb4e6590ae860d3572e3a193a8a4"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "023af59e299f1591daf2ac441129ba338fc9c6759c884bd05e222a99ffc19c9c"
 dependencies = [
  "async-trait",
  "candid",
  "evm_rpc_types",
- "ic-canister-runtime 0.1.2 (git+https://github.com/dfinity/canhttp.git?branch=gdemay%2FDEFI-2566-stopping)",
+ "ic-canister-runtime",
  "serde",
  "serde_json",
  "strum 0.27.2",
@@ -4534,8 +4535,9 @@ dependencies = [
 
 [[package]]
 name = "evm_rpc_types"
-version = "3.1.0"
-source = "git+https://github.com/dfinity/evm-rpc-canister.git?branch=gdemay%2FDEFI-2566-prevent-calls-when-stopping#94a38c2f02abcb4e6590ae860d3572e3a193a8a4"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c348e834a97e2ca221259d6ec813009346904860be95cf756123630c44b79d5c"
 dependencies = [
  "candid",
  "canlog 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -7118,21 +7120,9 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-runtime"
-version = "0.1.2"
-source = "git+https://github.com/dfinity/canhttp.git?branch=gdemay%2FDEFI-2566-stopping#f8eec859504fe009711d6183c91b326ed0f2e216"
-dependencies = [
- "async-trait",
- "candid",
- "ic-cdk",
- "ic-error-types 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "ic-canister-runtime"
-version = "0.1.2"
-source = "git+https://github.com/dfinity/canhttp.git?rev=f8eec859504fe009711d6183c91b326ed0f2e216#f8eec859504fe009711d6183c91b326ed0f2e216"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03ed95be893b8d9b7309dcfd34aac7af9414f18ea8f14f71a065f89f5b94583c"
 dependencies = [
  "async-trait",
  "candid",
@@ -7609,7 +7599,7 @@ dependencies = [
  "ic-agent 0.40.1",
  "ic-base-types",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ic-canister-runtime 0.1.2 (git+https://github.com/dfinity/canhttp.git?rev=f8eec859504fe009711d6183c91b326ed0f2e216)",
+ "ic-canister-runtime",
  "ic-cdk",
  "ic-cdk-timers",
  "ic-cketh-test-utils",

@@ -1,5 +1,5 @@
 {
-  "checksum": "be63255a29db22bfe304c2578227933e73c3de701f98d3e735c17eb321b16b76",
+  "checksum": "bcad446047f20bedcd1c8bb4dc9177b83d3892975895236dac7844090acd6ea2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21521,11 +21521,11 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_client 0.3.0",
+              "id": "evm_rpc_client 0.4.0",
               "target": "evm_rpc_client"
             },
             {
-              "id": "evm_rpc_types 3.1.0",
+              "id": "evm_rpc_types 3.1.1",
               "target": "evm_rpc_types"
             },
             {
@@ -21665,7 +21665,7 @@
               "target": "ic_canister_log"
             },
             {
-              "id": "ic-canister-runtime 0.1.2",
+              "id": "ic-canister-runtime 0.2.0",
               "target": "ic_canister_runtime"
             },
             {
@@ -26490,17 +26490,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_client 0.3.0": {
+    "evm_rpc_client 0.4.0": {
       "name": "evm_rpc_client",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/evm-rpc-canister.git",
-          "commitish": {
-            "Rev": "94a38c2f02abcb4e6590ae860d3572e3a193a8a4"
-          },
-          "strip_prefix": "evm_rpc_client"
+        "Http": {
+          "url": "https://static.crates.io/crates/evm_rpc_client/0.4.0/download",
+          "sha256": "023af59e299f1591daf2ac441129ba338fc9c6759c884bd05e222a99ffc19c9c"
         }
       },
       "targets": [
@@ -26529,11 +26526,11 @@
               "target": "candid"
             },
             {
-              "id": "evm_rpc_types 3.1.0",
+              "id": "evm_rpc_types 3.1.1",
               "target": "evm_rpc_types"
             },
             {
-              "id": "ic-canister-runtime 0.1.2",
+              "id": "ic-canister-runtime 0.2.0",
               "target": "ic_canister_runtime"
             },
             {
@@ -26561,7 +26558,7 @@
           ],
           "selects": {}
         },
-        "version": "0.3.0"
+        "version": "0.4.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -26569,17 +26566,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "evm_rpc_types 3.1.0": {
+    "evm_rpc_types 3.1.1": {
       "name": "evm_rpc_types",
-      "version": "3.1.0",
+      "version": "3.1.1",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/evm-rpc-canister.git",
-          "commitish": {
-            "Rev": "94a38c2f02abcb4e6590ae860d3572e3a193a8a4"
-          },
-          "strip_prefix": "evm_rpc_types"
+        "Http": {
+          "url": "https://static.crates.io/crates/evm_rpc_types/3.1.1/download",
+          "sha256": "c348e834a97e2ca221259d6ec813009346904860be95cf756123630c44b79d5c"
         }
       },
       "targets": [
@@ -26647,7 +26641,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.1.0"
+        "version": "3.1.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35646,17 +35640,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-canister-runtime 0.1.2": {
+    "ic-canister-runtime 0.2.0": {
       "name": "ic-canister-runtime",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "package_url": "https://github.com/dfinity/canhttp",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canhttp.git",
-          "commitish": {
-            "Rev": "f8eec859504fe009711d6183c91b326ed0f2e216"
-          },
-          "strip_prefix": "ic-canister-runtime"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-canister-runtime/0.2.0/download",
+          "sha256": "03ed95be893b8d9b7309dcfd34aac7af9414f18ea8f14f71a065f89f5b94583c"
         }
       },
       "targets": [
@@ -35713,7 +35704,7 @@
           ],
           "selects": {}
         },
-        "version": "0.1.2"
+        "version": "0.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -98500,8 +98491,8 @@
     "escargot 0.5.7",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
-    "evm_rpc_client 0.3.0",
-    "evm_rpc_types 3.1.0",
+    "evm_rpc_client 0.4.0",
+    "evm_rpc_types 3.1.1",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
@@ -98536,7 +98527,7 @@
     "ic-bn-lib-common 0.1.0",
     "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",
-    "ic-canister-runtime 0.1.2",
+    "ic-canister-runtime 0.2.0",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.0.3",
     "ic-cdk 0.19.0",
