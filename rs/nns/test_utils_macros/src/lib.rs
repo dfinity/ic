@@ -47,7 +47,7 @@ pub fn parameterized_upgrades(_attr: TokenStream, item: TokenStream) -> TokenStr
       // Export a #[test] with the `Always` upgrade scenario
       #[test]
       fn #always_testname() {
-          ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+          ic_nns_test_utils::itest_helpers::state_machine_test_on_nns_subnet(|runtime| async move {
             #original_fn_ident(
                 &runtime,
                 ic_nns_test_utils::itest_helpers::UpgradeTestingScenario::Always).await;
@@ -58,7 +58,7 @@ pub fn parameterized_upgrades(_attr: TokenStream, item: TokenStream) -> TokenStr
       // Export a #[test] with the `Never` upgrade scenario
       #[test]
       fn #never_testname() {
-          ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+          ic_nns_test_utils::itest_helpers::state_machine_test_on_nns_subnet(|runtime| async move {
             #original_fn_ident(
                 &runtime,
                 ic_nns_test_utils::itest_helpers::UpgradeTestingScenario::Never).await;

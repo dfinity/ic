@@ -13,25 +13,24 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
-use ic_test_utilities_types::{
-    ids::{canister_test_id, subnet_test_id, user_test_id},
-    messages::{RequestBuilder, ResponseBuilder},
+use ic_test_utilities_types::ids::{
+    call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE};
+use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
-use ic_types::{
-    ComputeAllocation, Cycles, NumInstructions,
-    messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    time::UNIX_EPOCH,
-};
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{ComputeAllocation, Cycles, NumInstructions};
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::convert::From;
-use std::sync::Arc;
 
 mod common;
 use common::*;
@@ -566,13 +565,6 @@ fn test_inter_canister_call(
         CanisterCyclesCostSchedule::Normal,
     );
 
-    let request = RequestBuilder::default()
-        .sender(sender)
-        .receiver(recv)
-        .method_name(method_name)
-        .method_payload(arg)
-        .build();
-
     let prepayment_for_response_execution = cycles_account_manager
         .prepayment_for_response_execution(
             SMALL_APP_SUBNET_MAX_SIZE,
@@ -584,6 +576,30 @@ fn test_inter_canister_call(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
         );
+
+    // Register a callback for the response.
+    let callback = Callback::new(
+        call_context_test_id(0),
+        recv,
+        Cycles::zero(),
+        prepayment_for_response_execution,
+        prepayment_for_response_transmission,
+        WasmClosure::new(0, 0),
+        WasmClosure::new(0, 0),
+        None,
+        NO_DEADLINE,
+    );
+    let callback_id = sandbox_safe_system_state
+        .register_callback(callback)
+        .unwrap();
+
+    let request = RequestBuilder::default()
+        .sender(sender)
+        .receiver(recv)
+        .method_name(method_name)
+        .method_payload(arg)
+        .sender_reply_callback(callback_id)
+        .build();
 
     // Enqueue the Request.
     sandbox_safe_system_state
@@ -619,24 +635,23 @@ fn two_subnet_topology(
     test_subnet_id: SubnetId,
     test_canister_id: CanisterId,
 ) -> NetworkTopology {
-    let mut topo = NetworkTopology {
-        nns_subnet_id,
-        ..Default::default()
-    };
-    topo.subnets.insert(nns_subnet_id, Default::default());
-    topo.subnets.insert(test_subnet_id, Default::default());
+    let mut topo = NetworkTopology::default();
+    topo.nns_subnet_id = nns_subnet_id;
+    topo.subnets_mut().insert(nns_subnet_id, Default::default());
+    topo.subnets_mut()
+        .insert(test_subnet_id, Default::default());
     let nns_canister_range = CanisterIdRange {
         start: nns_canister_id,
         end: nns_canister_id,
     };
-    Arc::make_mut(&mut topo.routing_table)
+    topo.routing_table_mut()
         .insert(nns_canister_range, nns_subnet_id)
         .unwrap();
     let test_canister_range = CanisterIdRange {
         start: test_canister_id,
         end: test_canister_id,
     };
-    Arc::make_mut(&mut topo.routing_table)
+    topo.routing_table_mut()
         .insert(test_canister_range, test_subnet_id)
         .unwrap();
     topo
@@ -700,10 +715,10 @@ fn assert_failed_call(
     expected_message: String,
 ) {
     match system_state.pop_input().unwrap() {
-        CanisterMessage::Response(resp) => {
-            assert_eq!(resp.originator, originator);
-            assert_eq!(resp.respondent, respondent);
-            match &resp.response_payload {
+        CanisterMessage::Response { response, .. } => {
+            assert_eq!(response.originator, originator);
+            assert_eq!(response.respondent, respondent);
+            match &response.response_payload {
                 ic_types::messages::Payload::Reject(ctxt) => {
                     assert_eq!(ctxt.message(), &expected_message)
                 }

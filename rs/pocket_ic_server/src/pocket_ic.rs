@@ -1,7 +1,7 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, InternetIdentityInit,
-    NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig, SnsAggregatorConfig,
-    StaticCaptchaTrigger,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, DogecoinCanisterArg,
+    InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig,
+    SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -56,7 +56,7 @@ use ic_https_outcalls_service::HttpsOutcallResponse;
 use ic_https_outcalls_service::HttpsOutcallResult;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsService;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
-use ic_icp_index::InitArg as IcpIndexInitArg;
+use ic_icp_index::{IndexArg as IcpIndexArg, InitArg as IcpIndexInitArg};
 use ic_icrc1_index_ng::{IndexArg as CyclesLedgerIndexArg, InitArg as CyclesLedgerIndexInitArg};
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
@@ -170,7 +170,11 @@ use tower::{service_fn, util::ServiceExt};
 #[template(path = "dashboard.html", escape = "html")]
 struct Dashboard<'a> {
     height: Height,
-    canisters: &'a Vec<(&'a ic_replicated_state::CanisterState, SubnetId)>,
+    canisters: &'a Vec<(
+        &'a ic_replicated_state::CanisterState,
+        &'a ic_replicated_state::CanisterPriority,
+        SubnetId,
+    )>,
 }
 
 const MAINNET_NNS_SUBNET_ID: &str =
@@ -1463,16 +1467,30 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, LEDGER_INDEX_CANISTER_ID);
 
             // Install the ICP index.
-            let icp_index_init_arg = IcpIndexInitArg {
-                ledger_id: LEDGER_CANISTER_ID.get().0,
-            };
+            // Mainnet PocketIC embeds an older ICP Index WASM that expects the pre-DEFI-2617 init
+            // format (InitArg with ledger_id only). Head build uses the unified IndexArg::Init(InitArg) format.
+            // TODO(DEFI-2655): remove once release of Mainnet PocketIC embeds new ICP Index arg.
+            let icp_index_init_payload: Vec<u8> =
+                if option_env!("POCKET_IC_USE_LEGACY_ICP_INDEX_INIT_ARGS").unwrap_or("0") == "1" {
+                    let legacy_arg = IcpIndexInitArg {
+                        ledger_id: LEDGER_CANISTER_ID.get().0,
+                        retrieve_blocks_from_ledger_interval_seconds: None,
+                    };
+                    Encode!(&legacy_arg).unwrap()
+                } else {
+                    let arg = IcpIndexArg::Init(IcpIndexInitArg {
+                        ledger_id: LEDGER_CANISTER_ID.get().0,
+                        retrieve_blocks_from_ledger_interval_seconds: None,
+                    });
+                    Encode!(&arg).unwrap()
+                };
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
                     ICP_INDEX_CANISTER_WASM.to_vec(),
-                    Encode!(&icp_index_init_arg).unwrap(),
+                    icp_index_init_payload,
                 )
                 .unwrap();
         }
@@ -2321,11 +2339,12 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, DOGECOIN_CANISTER_ID);
 
             // Install the Dogecoin mainnet canister configured for the regtest network.
-            let args = DogecoinInitConfig {
+            let init_config = DogecoinInitConfig {
                 network: Some(DogecoinNetwork::Regtest),
                 fees: Some(DogecoinFees::mainnet()),
                 ..Default::default()
             };
+            let args = DogecoinCanisterArg::Init(init_config);
             btc_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -2810,7 +2829,7 @@ impl PocketIc {
                     let subnet_id = metadata.own_subnet_id;
                     let ranges: Vec<_> = metadata
                         .network_topology
-                        .routing_table
+                        .routing_table()
                         .ranges(subnet_id)
                         .iter()
                         .cloned()
@@ -3246,6 +3265,8 @@ fn http_method_from(
         ic_types::canister_http::CanisterHttpMethod::GET => CanisterHttpMethod::GET,
         ic_types::canister_http::CanisterHttpMethod::POST => CanisterHttpMethod::POST,
         ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
+        ic_types::canister_http::CanisterHttpMethod::PUT => CanisterHttpMethod::PUT,
+        ic_types::canister_http::CanisterHttpMethod::DELETE => CanisterHttpMethod::DELETE,
     }
 }
 
@@ -4282,7 +4303,13 @@ impl Operation for DashboardRequest {
                 state
                     .get_ref()
                     .canisters_iter()
-                    .map(|c| (c, *subnet_id))
+                    .map(|canister| {
+                        (
+                            canister,
+                            state.get_ref().canister_priority(&canister.canister_id()),
+                            *subnet_id,
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .concat();

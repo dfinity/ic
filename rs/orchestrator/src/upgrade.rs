@@ -1688,7 +1688,7 @@ mod tests {
                 local_cup.subnet_id,
                 local_cup.registry_version,
             );
-            let cup_proto = pb::CatchUpPackage::from(&cup);
+            let cup_proto = pb::CatchUpPackage::from(cup);
             let cup_file = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
             std::fs::write(&cup_file, cup_proto.encode_to_vec()).unwrap();
         }
@@ -2772,7 +2772,7 @@ mod tests {
         }
         // - A successful upgrade loop means the subnet assignment cannot be
         // `Unknown`
-        assert_ne!(new_subnet_assignment, SubnetAssignment::Unknown);
+        assert!(!matches!(new_subnet_assignment, SubnetAssignment::Unknown));
         // - There is a local CUP after the upgrade loop <=> the subnet assignment
         // must be `Assigned`
         assert_eq!(

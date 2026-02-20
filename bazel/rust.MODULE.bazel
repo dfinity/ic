@@ -229,7 +229,7 @@ crate.spec(
 )
 crate.spec(
     package = "bytes",
-    version = "^1.9.0",
+    version = "^1.11.1",
 )
 crate.spec(
     default_features = False,
@@ -246,7 +246,7 @@ crate.spec(
 )
 crate.spec(
     package = "candid",
-    version = "^0.10.20",
+    version = "^0.10.22",
 )
 crate.spec(
     package = "cargo_metadata",
@@ -407,7 +407,7 @@ crate.spec(
 )
 crate.spec(
     package = "dfx-core",
-    version = "^0.1.4",
+    version = "^0.3.0",
 )
 crate.spec(
     package = "dyn-clone",
@@ -486,7 +486,7 @@ crate.spec(
 )
 crate.spec(
     package = "fqdn",
-    version = "0.3.11",
+    version = "0.5.2",
 )
 crate.spec(
     package = "fs_extra",
@@ -612,18 +612,18 @@ crate.spec(
         "ring",
     ],
     package = "ic-agent",
-    version = "^0.40.1",
+    version = "^0.45.0",
 )
 crate.spec(
     features = [
         "acme-alpn",
     ],
     package = "ic-bn-lib",
-    version = "0.1.7",
+    version = "0.1.15",
 )
 crate.spec(
     package = "ic-bn-lib-common",
-    version = "0.1",
+    version = "0.1.4",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -678,20 +678,27 @@ crate.spec(
     default_features = False,
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    rev = "92ee522a4514584ccf6de487ba40d92063effd9a",
+    rev = "339c9b0c678407d05577350ad2b069a806bf9495",
+)
+crate.spec(
+    package = "ic-custom-domains-backend",
+    version = "0.1.4",
+)
+crate.spec(
+    package = "ic-custom-domains-base",
+    version = "0.1.4",
+)
+crate.spec(
+    package = "ic-custom-domains-canister-client",
+    version = "0.1.4",
 )
 crate.spec(
     package = "ic-http-certification",
     version = "3.0.3",
 )
 crate.spec(
-    git = "https://github.com/dfinity/http-gateway",
-    package = "ic-http-gateway",
-    rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730",
-)
-crate.spec(
     package = "ic-identity-hsm",
-    version = "^0.40.1",
+    version = "^0.45.0",
 )
 crate.spec(
     package = "ic-metrics-encoder",
@@ -708,7 +715,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-response-verification",
-    version = "3.0.3",
+    version = "3.1.0",
 )
 crate.spec(
     package = "ic-sha3",
@@ -739,12 +746,12 @@ crate.spec(
 )
 crate.spec(
     package = "ic-transport-types",
-    version = "^0.40.1",
+    version = "^0.45.0",
 )
 crate.spec(
     features = ["raw"],
     package = "ic-utils",
-    version = "^0.40.1",
+    version = "^0.45.0",
 )
 crate.spec(
     default_features = False,
@@ -1160,7 +1167,7 @@ crate.spec(
 )
 crate.spec(
     package = "proptest",
-    version = "^1.5.0",
+    version = "=1.6.0",
 )
 crate.spec(
     package = "prometheus-parse",
@@ -1403,6 +1410,10 @@ crate.spec(
     default_features = False,
     package = "scrypt",
     version = "^0.11.0",
+)
+crate.spec(
+    package = "securefmt",
+    version = "^0.1.5",
 )
 crate.spec(
     features = [
@@ -1655,7 +1666,7 @@ crate.spec(
 )
 crate.spec(
     package = "time",
-    version = "^0.3.36",
+    version = "^0.3.47",
 )
 crate.spec(
     features = ["full"],
@@ -1980,7 +1991,7 @@ DEFAULT_SANITIZERS = [
     "-Zsanitizer=address",
     # zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
     "-Zexternal-clangrt",
-    "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
+    "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
 ]
 
 # This flag will be used by third party crates and internal rust_libraries during fuzzing
@@ -2004,12 +2015,12 @@ crate.annotation_select(
 )
 crate.annotation(
     build_script_data = [
-        "@@_main~_repo_rules~openssl//:gen_dir",
+        "@@+_repo_rules+openssl//:gen_dir",
     ],
     build_script_env = {
         "OPENSSL_NO_VENDOR": "1",
-        "OPENSSL_LIB_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/lib64",
-        "OPENSSL_INCLUDE_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/include",
+        "OPENSSL_LIB_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/lib64",
+        "OPENSSL_INCLUDE_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/include",
         "OPENSSL_STATIC": "1",
     },
     crate = "openssl-sys",
@@ -2025,7 +2036,7 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@_main~_repo_rules~openssl//:gen_dir",
+        "@@+_repo_rules+openssl//:gen_dir",
     ],
     crate = "libssh2-sys",
     # Patch for determinism issues
@@ -2064,12 +2075,12 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@_main~_repo_rules~lmdb//:liblmdb",
-        "@@_main~_repo_rules~lmdb//:lmdb.h",
+        "@@+_repo_rules+lmdb//:liblmdb",
+        "@@+_repo_rules+lmdb//:lmdb.h",
     ],
     build_script_env = {
-        "LMDB_OVERRIDE": "$(location @@_main~_repo_rules~lmdb//:liblmdb)",
-        "LMDB_H_PATH": "$(location @@_main~_repo_rules~lmdb//:lmdb.h)",
+        "LMDB_OVERRIDE": "$(location @@+_repo_rules+lmdb//:liblmdb)",
+        "LMDB_H_PATH": "$(location @@+_repo_rules+lmdb//:lmdb.h)",
     },
     crate = "lmdb-rkv-sys",
     # patch our fork of the lmdb-rkv-sys to allow specifying the path
@@ -2086,8 +2097,8 @@ crate.annotation(
 )
 crate.annotation_select(
     # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
-    build_script_data = ["@@_main~_repo_rules~jemalloc//:libjemalloc"],
-    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @@_main~_repo_rules~jemalloc//:libjemalloc)"},
+    build_script_data = ["@@+_repo_rules+jemalloc//:libjemalloc"],
+    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @@+_repo_rules+jemalloc//:libjemalloc)"},
     crate = "tikv-jemalloc-sys",
     triples = ["x86_64-unknown-linux-gnu"],
 )
@@ -2137,10 +2148,10 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@protobuf~//:protoc",
+        "@@protobuf+//:protoc",
     ],
     build_script_env = {
-        "PROTOC": "$(execpath @@protobuf~//:protoc)",
+        "PROTOC": "$(execpath @@protobuf+//:protoc)",
     },
     crate = "pprof",
 )

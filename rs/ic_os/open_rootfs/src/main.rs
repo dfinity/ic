@@ -1,18 +1,17 @@
 mod partitions;
 mod proposal;
 mod recovery;
+mod verity;
+
 #[cfg(test)]
 mod tests;
-mod verity;
 
 use anyhow::{Context, Result};
 use command_runner::{CommandRunner, RealCommandRunner};
-use ic_device::mount::{PartitionProvider, UdevPartitionProvider};
+use ic_device::mount::PartitionProvider;
 use linux_kernel_command_line::KernelCommandLine;
 use recovery::extract_and_verify_recovery_rootfs_hash;
 use sev_guest::firmware::SevGuestFirmware;
-use std::env;
-use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 use verity::veritysetup;
@@ -28,9 +27,10 @@ fn main() -> Result<()> {
     // We should be very careful about erroring out before the run() call. We should not block
     // the regular (non-recovery) code path just because some dependency for the recovery
     // code path has failed.
-    let root_device = env::var("ROOT").context("Missing ROOT environment variable")?;
-    let kernel_command_line = KernelCommandLine::from_str(&fs::read_to_string("/proc/cmdline")?)
-        .context("Failed to parse kernel command line")?;
+    let root_device = std::env::var("ROOT").context("Missing ROOT environment variable")?;
+    let kernel_command_line =
+        KernelCommandLine::from_str(&std::fs::read_to_string("/proc/cmdline")?)
+            .context("Failed to parse kernel command line")?;
     run(
         Path::new(&root_device),
         &kernel_command_line,
@@ -40,7 +40,7 @@ fn main() -> Result<()> {
                 .map(|firmware| Box::new(firmware) as _)
         },
         &RealCommandRunner,
-        &UdevPartitionProvider,
+        &ic_device::mount::UdevPartitionProvider,
     )
 }
 
@@ -74,8 +74,7 @@ pub fn run(
         command_runner,
         partition_provider,
     )
-    .context("Failed to extract/verify alternative GuestOS proposal")?
-    .context("No alternative GuestOS proposal found and base root hash failed")?;
+    .context("Failed to extract/verify alternative GuestOS proposal")?;
 
     eprintln!(
         "Found and verified alternative GuestOS proposal, attempting to open with recovery root \

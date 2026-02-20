@@ -11,8 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-- Change the minimum requirement for maturity disbursement from ~1.06 to 1 (ICP equivalent).
-
 ## Deprecated
 
 ## Removed

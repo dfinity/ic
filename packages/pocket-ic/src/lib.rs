@@ -1997,8 +1997,16 @@ fn check_pocketic_server_version(version_line: &str) -> Result<(), String> {
 fn get_and_check_pocketic_server_version(server_binary: &PathBuf) -> Result<(), String> {
     let mut cmd = pocket_ic_server_cmd(server_binary);
     cmd.arg("--version");
-    let version = cmd.output().map_err(|e| e.to_string())?.stdout;
-    let version_str = String::from_utf8(version)
+    let output = cmd.output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(format!(
+            "PocketIC server failed to print its version.\nStatus: {}\nStdout: {}\nStderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        ));
+    }
+    let version_str = String::from_utf8(output.stdout)
         .map_err(|e| format!("Failed to parse PocketIC server version: {e}."))?;
     let version_line = version_str.trim_end_matches('\n');
     check_pocketic_server_version(version_line)

@@ -204,7 +204,7 @@ impl ConsensusDependencies {
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
-            (&cup).into(),
+            cup.into(),
             pool_config.clone(),
             metrics_registry.clone(),
             no_op_logger(),

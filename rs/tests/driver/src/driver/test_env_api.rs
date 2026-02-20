@@ -215,8 +215,12 @@ pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
-// It usually takes below 60 secs to install nns canisters.
-const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+// NNS canister installation involves sequential canister creation at specific
+// IDs followed by parallel installation and controller setup. With ~12
+// canisters being created sequentially (~5s each) plus parallel installation
+// and controller setting, this typically takes 120-180s but can exceed 160s
+// under load.
+const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(300);
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -933,6 +937,56 @@ impl IcNodeSnapshot {
             .contains(&self.node_id)
     }
 
+    pub fn await_api_bn_healthy(&self) -> Result<()> {
+        block_on(self.await_api_bn_healthy_async())
+    }
+
+    pub async fn await_api_bn_healthy_async(&self) -> Result<()> {
+        let domain = self
+            .get_domain()
+            .ok_or_else(|| anyhow!("API BN has no domain configured"))?;
+        let api_bn_addr = SocketAddr::new(self.get_ip_addr(), 443);
+        let log = self.env.logger();
+
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .danger_accept_invalid_certs(true)
+            .resolve(&domain, api_bn_addr)
+            .build()
+            .map_err(|e| anyhow!("Failed to build HTTP client: {e}"))?;
+
+        retry_with_msg_async!(
+            format!("await_api_bn_healthy for {domain}"),
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let url = format!("https://{domain}/health");
+                info!(log, "Checking API BN health endpoint {url}");
+
+                let response = client.get(&url).send().await;
+
+                match response {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            info!(log, "API BN with domain {domain} is healthy");
+                            Ok(())
+                        } else {
+                            bail!(
+                                "API BN with domain {domain} returned non-success status: {}",
+                                resp.status()
+                            )
+                        }
+                    }
+                    Err(e) => {
+                        bail!("API BN with domain {domain} not reachable: {e}")
+                    }
+                }
+            }
+        )
+        .await
+    }
+
     pub fn effective_canister_id(&self) -> PrincipalId {
         match self.subnet_id() {
             Some(subnet_id) => {
@@ -1128,13 +1182,10 @@ impl IcNodeSnapshot {
         ))
     }
 
-    pub fn assert_no_critical_errors(&self) {
+    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>) {
         block_on(async {
-            let replica_metric_name_prefix = "critical_errors";
-            let replica_metrics_fetcher = MetricsFetcher::new(
-                std::iter::once(self.clone()),
-                vec![replica_metric_name_prefix.to_string()],
-            );
+            let replica_metrics_fetcher =
+                MetricsFetcher::new(std::iter::once(self.clone()), metrics_to_check);
             let replica_metrics_result = replica_metrics_fetcher.fetch::<u64>().await;
             let replica_metrics = match replica_metrics_result {
                 Ok(replica_metrics) => replica_metrics,
@@ -1148,14 +1199,16 @@ impl IcNodeSnapshot {
             };
             assert!(
                 !replica_metrics.is_empty(),
-                "No critical error counters were found in replica metrics for node {}",
+                "No error counters were found in replica metrics for node {}",
                 self.node_id
             );
             for (name, value) in replica_metrics {
                 assert_eq!(
                     value[0], 0,
-                    "Critical error {} raised by node {}. Create `SystemTestGroup` using `without_assert_no_critical_errors` if critical errors are expected in your test",
-                    name, self.node_id
+                    "The metric `{name}` on node {} has non-zero value. \
+                    If the metric is allowed to be non-zero in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
+                    self.node_id,
                 );
             }
         });

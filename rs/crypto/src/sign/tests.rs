@@ -167,8 +167,6 @@ pub fn registry_returning_none() -> Arc<dyn RegistryClient> {
     Arc::new(registry)
 }
 
-// TODO(DFN-1397): add exact error checks to the tests that
-// expect a specific error.
 pub fn registry_returning(error: RegistryClientError) -> Arc<dyn RegistryClient> {
     let mut registry = MockRegistryClient::new();
     registry

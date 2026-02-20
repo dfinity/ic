@@ -267,20 +267,13 @@ pub trait StateManager: StateReader {
     /// at heights strictly less than the specified `height`.
     fn update_fast_forward_height(&self, height: Height);
 
-    /// Commits the `state` at given `height`, limits the certification to
-    /// `scope`. The `state` must be the mutable state obtained via a call to
-    /// `take_tip`.
-    ///
-    /// Does nothing if `height ≤ state_manager.latest_state_height()`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the state at `height` has already been committed before but
-    /// has a different hash.
+    /// Increments the `tip_height` and commits the `state` at the new height.
+    /// Limits the certification to `scope`.
+    /// The `state` must be the mutable state obtained via a call to `take_tip`, which
+    /// also returns `tip_height`.
     fn commit_and_certify(
         &self,
         state: Self::State,
-        height: Height,
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     );

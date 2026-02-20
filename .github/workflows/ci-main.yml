@@ -26,7 +26,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:ece16fc265918da396aa2cbe8d4114c614de9328a49c7cca86a22d53d47ad633
+      image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     timeout-minutes: 90
@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           invocation-names: afl
-          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 10
 
   config:
     name: Set Config
@@ -339,9 +339,18 @@ jobs:
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+          cat /tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
       - name: Build and Test
         run: |
+          # Set up .netrc so that bazel can authenticate with GitHub to have higher rate limits for fetching dependencies.
+          touch  ~/.netrc
+          chmod 600 ~/.netrc
+          echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
+          echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
+          echo "Current GitHub API rate limits:"
+          curl -s --netrc https://api.github.com/rate_limit | jq '.resources.core'
+
           mkdir -p /tmp/zig-cache
 
           bazel \

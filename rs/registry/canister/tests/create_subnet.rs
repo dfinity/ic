@@ -18,7 +18,7 @@ use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        set_up_universal_canister, state_machine_test_on_nns_subnet,
     },
     registry::{INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req},
 };
@@ -49,7 +49,7 @@ mod common;
 
 #[test]
 fn test_the_anonymous_user_cannot_create_a_subnet() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let (init_mutate, node_ids) = prepare_registry_with_nodes(4, INITIAL_MUTATION_ID);
         let mut registry = set_up_registry_canister(
             &runtime,
@@ -97,7 +97,7 @@ fn test_the_anonymous_user_cannot_create_a_subnet() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_create_a_subnet() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -422,6 +422,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         ssh_backup_access: vec![],
         chain_key_config: None,
         canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+        subnet_admins: Some(vec![]),
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
