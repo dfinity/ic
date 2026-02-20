@@ -55,6 +55,10 @@ use std::{fmt::Debug, time::Duration};
 
 pub const KEY_ID1: &str = "secp256k1";
 
+/// The default DKG interval takes too long before the keys are created and
+/// passed to execution.
+pub const DKG_INTERVAL: u64 = 19;
+
 pub const NUMBER_OF_NODES: usize = 4;
 
 const VETKD_TRANSPORT_SECRET_KEY_SEED: [u8; 32] = [13; 32];
