@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Do not wait forever when calling the Exchange Rate canister.
+
 ## Deprecated
 
 ## Removed

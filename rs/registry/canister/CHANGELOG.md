@@ -11,6 +11,36 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-02-11: Proposal 140316
+
+http://dashboard.internetcomputer.org/proposal/140316
+
+## Added
+
+* Enabling direct node swapping feature on all subnets for all node operators.
+
+## Fixed
+
+* When performing `RemoveNodes`, generate 1 update mutation per node operator key. Before this change, a single node operator record would be changed multiple times in a single version if the remove nodes proposal removed multiple nodes from the same node operator, which caused confusion. This bug resulted in incorrect tracking of node operator allowance depending on how they are fetched from the registry (given the different implementations in the registry utility functions).
+
+
+# 2026-01-16: Proposal 140014
+
+http://dashboard.internetcomputer.org/proposal/140014
+
+## Changed
+
+* Promoted the check for empty SEV measurements in replica versions from a check on proposals, to an invariant of the registry.
+
+* When performing subnet creation, subnet update, or subnet recovery, it is now mandatory to omit the `KeyConfig`'s `pre_signatures_to_create_in_advance` field for keys that do not have pre-signatures. Currently only vetKD keys do not have pre-signatures (unlike Ecdsa/Schnorr keys).
+
+  This is a *breaking* change because setting the `pre_signatures_to_create_in_advance` field for vetKD keys is no longer allowed. However, only governance proposals are affected, which are typically constructed via ic-admin, which was adapted to behave correctly.
+
+## Fixed
+
+* Migrate vetKD chain keys in specific subnets: change the chain key config's `pre_signatures_to_create_in_advance` field from `Some(0)` to `None` to align with the correct representation for keys that do not have pre-signatures
+
+
 # 2026-01-09: Proposal 139941
 
 http://dashboard.internetcomputer.org/proposal/139941

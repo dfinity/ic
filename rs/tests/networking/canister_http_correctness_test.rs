@@ -124,6 +124,12 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_get_hello_world_call))
                 .add_test(systest!(test_post_call))
                 .add_test(systest!(test_head_call))
+                .add_test(systest!(test_put_call))
+                // TODO(CON-1636): Uncomment this test when PUT is supported in non-replicated mode.
+                // .add_test(systest!(test_put_without_non_replicated_rejected))
+                .add_test(systest!(test_delete_call))
+                // TODO(CON-1636): Uncomment this test when DELETE is supported in non-replicated mode.
+                // .add_test(systest!(test_delete_without_non_replicated_rejected))
                 .add_test(systest!(test_max_possible_request_size))
                 .add_test(systest!(test_max_possible_request_size_exceeded))
                 // This section tests the request headers limits scenarios
@@ -1806,6 +1812,146 @@ fn test_head_call(env: TestEnv) {
     );
 }
 
+fn test_put_call(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{webserver_ipv6}]/anything");
+    let body = Some("put_request_body".as_bytes().to_vec());
+    let headers = vec![HttpHeader {
+        name: "name1".to_string(),
+        value: "value1".to_string(),
+    }];
+
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers,
+        method: HttpMethod::PUT,
+        body,
+        transform: None,
+        max_response_bytes: None,
+        is_replicated: Some(false),
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(response, Err(RejectResponse { reject_code: RejectCode::CanisterReject, reject_message, .. }) => {
+        assert!(reject_message.contains("PUT and DELETE are not supported yet"));
+    });
+
+    // TODO(CON-1636): Switch to this assertion once PUT is supported in non-replicated mode.
+    // assert_matches!(response, Ok(response) => {
+    //     assert_matches!(response, RemoteHttpResponse { status: 200, .. });
+    //     assert_distinct_headers(&response);
+    //     assert_http_json_response(&request, &response);
+    // });
+}
+
+fn _test_put_without_non_replicated_rejected(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{webserver_ipv6}]/anything");
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers: vec![],
+        method: HttpMethod::PUT,
+        body: Some(vec![]),
+        transform: None,
+        max_response_bytes: None,
+        is_replicated: None,
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+    assert_matches!(response, Err(RejectResponse { reject_message, .. }) => {
+        assert!(reject_message.contains("only allowed for non-replicated requests"));
+    });
+}
+
+fn test_delete_call(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{webserver_ipv6}]/anything");
+    let headers = vec![HttpHeader {
+        name: "name1".to_string(),
+        value: "value1".to_string(),
+    }];
+
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers,
+        method: HttpMethod::DELETE,
+        body: None,
+        transform: None,
+        max_response_bytes: None,
+        is_replicated: Some(false),
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(response, Err(RejectResponse { reject_code: RejectCode::CanisterReject, reject_message, .. }) => {
+        assert!(reject_message.contains("PUT and DELETE are not supported yet"));
+    });
+
+    // TODO(CON-1636): Switch to this assertion once DELETE is supported in non-replicated mode.
+    // assert_matches!(response, Ok(response) => {
+    //     assert_matches!(response, RemoteHttpResponse { status: 200, .. });
+    //     assert_distinct_headers(&response);
+    //     assert_http_json_response(&request, &response);
+    // });
+}
+
+fn _test_delete_without_non_replicated_rejected(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{}]/{}", webserver_ipv6, "anything");
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers: vec![],
+        method: HttpMethod::DELETE,
+        body: None,
+        transform: None,
+        max_response_bytes: Some(1024),
+        is_replicated: None,
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(response, Err(RejectResponse { reject_message, .. }) => {
+        assert!(reject_message.contains("only allowed for non-replicated requests"));
+    });
+}
+
 fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
@@ -2375,10 +2521,13 @@ fn assert_http_json_response(
         "2. Http bin server received headers that were not specified in the outcall. Specified headers: {request_headers:?}, received headers: {http_bin_server_received_headers:?}"
     );
 
+    // Rule 3: Request method must match the method in the response.
     let request_method = match request.method {
         HttpMethod::GET => "GET",
         HttpMethod::POST => "POST",
         HttpMethod::HEAD => "HEAD",
+        HttpMethod::PUT => "PUT",
+        HttpMethod::DELETE => "DELETE",
     };
 
     assert_eq!(
@@ -2387,6 +2536,7 @@ fn assert_http_json_response(
         "3. Mismatch in HTTP method."
     );
 
+    // Rule 4: Request body must match the body in the response.
     let server_received_body = response_body["data"].as_str().unwrap();
     let outcall_sent_body = String::from_utf8(request.body.clone().unwrap_or_default()).unwrap();
 
@@ -2493,6 +2643,7 @@ fn expected_cycle_cost(
             .build(),
         request.into(),
         &BTreeSet::new(),
+        0,
         &mut rand::thread_rng(),
     )
     .unwrap();

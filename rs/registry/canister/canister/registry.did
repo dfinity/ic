@@ -37,13 +37,25 @@ type AddNodePayload = record {
   domain : opt text;
   public_ipv4_config : opt IPv4Config;
   xnet_endpoint : text;
-  chip_id : opt blob;
   committee_signing_pk : blob;
   node_signing_pk : blob;
   transport_tls_cert : blob;
   ni_dkg_dealing_encryption_pk : blob;
   p2p_flow_endpoints : vec text;
   node_reward_type : opt text;
+  node_registration_attestation : opt SevAttestationPackage;
+};
+
+type SevAttestationPackage = record {
+  attestation_report : opt blob;
+  certificate_chain : opt SevCertificateChain;
+  custom_data_debug_info : opt text;
+};
+
+type SevCertificateChain = record {
+  ark_pem : opt text;
+  ask_pem : opt text;
+  vcek_pem : opt text;
 };
 
 type AddNodesToSubnetPayload = record {
@@ -90,6 +102,8 @@ type CreateSubnetPayload = record {
   node_ids : vec principal;
 
   canister_cycles_cost_schedule: opt CanisterCyclesCostSchedule;
+
+  subnet_admins: opt vec principal;
 
   // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
   ingress_bytes_per_block_soft_cap : nat64;

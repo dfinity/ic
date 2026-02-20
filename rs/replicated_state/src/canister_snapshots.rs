@@ -408,7 +408,7 @@ impl CanisterSnapshot {
             canister_id,
             source: SnapshotSource::taken_from_canister(),
             taken_at_timestamp,
-            canister_version: canister.system_state.canister_version,
+            canister_version: canister.system_state.canister_version(),
             certified_data: canister.system_state.certified_data.clone(),
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,

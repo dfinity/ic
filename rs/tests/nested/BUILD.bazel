@@ -13,6 +13,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/canister_client",
+        "//rs/ic_os/dev_test_tools/bare_metal_deployment",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/common",
         "//rs/protobuf",
@@ -25,9 +26,11 @@ rust_library(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:nix",
         "@crate_index//:prost",
         "@crate_index//:regex",
         "@crate_index//:reqwest",
+        "@crate_index//:serde",
         "@crate_index//:slog",
     ],
 )
@@ -48,9 +51,9 @@ system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
+    setupos = True,
     tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -81,27 +84,48 @@ system_test_nns(
     env = MAINNET_ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current",
-    env = MAINNET_ENV | {
-        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-    },
     flaky = True,
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
+    setupos = "mainnet_latest_dev",
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_setupos_mainnet_latest_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
+)
+
+# Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
+# on SEV-enabled nodes
+# This test requires manually injecting the baremetal configuration
+# ict test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(cat zh2-dll01.ini)"
+# zh2-dll01.ini can be retrieved from our 1password
+system_test_nns(
+    name = "guestos_upgrade_from_latest_release_to_current_sev",
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
+    guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
+    guestos_update = True,
+    hostos = "mainnet_latest_dev",
+    tags = [
+        "long_test",
+        "manual",
+    ],
+    test_driver_target = ":guestos_upgrade_test_bin",
+    test_timeout = "eternal",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
 )
 
 rust_binary(
@@ -123,26 +147,25 @@ system_test_nns(
     name = "hostos_upgrade_smoke_test",
     env = MAINNET_ENV,
     flaky = True,
+    hostos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_hostos_test_update = True,
-    uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
-    env = MAINNET_ENV | {
-        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-    },
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
+    hostos_update = True,
+    setupos = "mainnet_latest_dev",
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_hostos_update = True,
-    uses_setupos_mainnet_latest_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
 )

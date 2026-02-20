@@ -147,7 +147,7 @@ fn change_nns_canister(request: ChangeCanisterRequest) {
     // Because change_canister is async, and because we can't directly use
     // `await`, we need to use the `spawn` trick.
     let future = async move {
-        let change_canister_result = change_canister::<CdkRuntime>(request).await;
+        let change_canister_result = change_canister(request).await;
         match change_canister_result {
             Ok(()) => {
                 println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
@@ -235,7 +235,7 @@ async fn take_canister_snapshot(
     take_canister_snapshot_request: TakeCanisterSnapshotRequest,
 ) -> TakeCanisterSnapshotResponse {
     check_caller_is_governance();
-    canister_management::take_canister_snapshot(
+    ic_nervous_system_root::take_canister_snapshot::take_canister_snapshot(
         take_canister_snapshot_request,
         &mut new_management_canister_client(),
     )
@@ -249,7 +249,7 @@ async fn load_canister_snapshot(
     load_canister_snapshot_request: LoadCanisterSnapshotRequest,
 ) -> LoadCanisterSnapshotResponse {
     check_caller_is_governance();
-    canister_management::load_canister_snapshot(
+    ic_nervous_system_root::load_canister_snapshot::load_canister_snapshot(
         load_canister_snapshot_request,
         &mut new_management_canister_client(),
     )

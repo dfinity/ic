@@ -1556,7 +1556,7 @@ mod assertions {
             self.has_href_value(
                 &format!(
                     "#helper-smart-contract-{} > td:nth-child(4) > code > a",
-                    lower_alphanumeric(id).unwrap()
+                    lower_alphanumeric::default().execute(id, &()).unwrap()
                 ),
                 expected_href,
                 &format!("wrong last {id} synced block href"),
@@ -1624,7 +1624,7 @@ mod assertions {
         pub fn has_no_helper_contract(&self, id: LogScrapingId) -> &Self {
             self.has_no_elements_matching(&format!(
                 "#helper-smart-contract-{}",
-                lower_alphanumeric(id).unwrap()
+                lower_alphanumeric::default().execute(id, &()).unwrap()
             ))
         }
 
@@ -1636,7 +1636,7 @@ mod assertions {
             self.has_string_value(
                 &format!(
                     "#helper-smart-contract-{} > td:nth-child(2)",
-                    lower_alphanumeric(id).unwrap()
+                    lower_alphanumeric::default().execute(id, &()).unwrap()
                 ),
                 expected_address,
                 &format!("wrong {id} helper contract address"),

@@ -537,8 +537,6 @@ pub fn create_subnet_threshold_signing_pubkey_and_cup_mutations(
     subnet_id: SubnetId,
     receiver_keys: &BTreeMap<NodeId, PublicKey>,
 ) -> Vec<RegistryMutation> {
-    // TODO: CRP-2345: Refactor such that the `ReproducibleRng` is not instantiated here, but at
-    //  the test initialization, and passed down to this function.
     let rng = &mut ReproducibleRng::new();
     let subnet_transcript = generate_nidkg_initial_transcript(
         receiver_keys,
@@ -932,7 +930,7 @@ pub fn prepare_add_node_payload(
         idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
         xnet_endpoint: format!("128.0.{mutation_id}.1:1234"),
         http_endpoint: format!("128.0.{mutation_id}.1:4321"),
-        chip_id: None,
+        node_registration_attestation: None,
         public_ipv4_config: None,
         domain: None,
         // Unused section follows

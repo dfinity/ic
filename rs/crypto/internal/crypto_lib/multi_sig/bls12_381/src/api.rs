@@ -4,16 +4,13 @@ use super::types::{
     CombinedSignature, CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes, Pop,
     PopBytes, PublicKey, PublicKeyBytes, SecretKey, SecretKeyBytes,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::{AlgorithmId, CryptoError};
-use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 
-#[cfg(test)]
-mod tests;
-
-/// Generates a keypair using the given `rng`.
-pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKeyBytes, PublicKeyBytes) {
-    let (secret_key, public_key) = crypto::keypair_from_rng(rng);
+/// Generates a keypair from the given `seed`.
+pub fn keypair_from_seed(seed: Seed) -> (SecretKeyBytes, PublicKeyBytes) {
+    let (secret_key, public_key) = crypto::keypair_from_rng(&mut seed.into_rng());
     (
         SecretKeyBytes::from(&secret_key),
         PublicKeyBytes::from(&public_key),

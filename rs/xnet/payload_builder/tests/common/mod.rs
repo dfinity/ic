@@ -91,7 +91,7 @@ impl StateManagerFixture {
 
         height.inc_assign();
         self.state_manager
-            .commit_and_certify(state, height, CertificationScope::Metadata, None);
+            .commit_and_certify(state, CertificationScope::Metadata, None);
         certify_height(&self.state_manager, height);
         self.certified_height = height;
 
@@ -163,7 +163,13 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
     let hash = state_manager
         .list_state_hashes_to_certify()
         .into_iter()
-        .find_map(|(height, hash)| if height == h { Some(hash) } else { None })
+        .find_map(|state_hash_metadata| {
+            if state_hash_metadata.height == h {
+                Some(state_hash_metadata.hash)
+            } else {
+                None
+            }
+        })
         .expect("no hash to certify");
 
     let certification = Certification {

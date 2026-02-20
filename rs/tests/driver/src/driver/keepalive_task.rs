@@ -6,7 +6,6 @@ use crate::driver::{
     test_env_api::HasFarmUrl,
     test_setup::GroupSetup,
 };
-use crate::util::block_on;
 use slog::{debug, info};
 
 pub(crate) const KEEPALIVE_TASK_NAME: &str = "keepalive";
@@ -22,9 +21,9 @@ pub(crate) fn keepalive_task(group_ctx: GroupContext) -> () {
             match GroupSetup::try_read_attribute(&env) {
                 Ok(group_setup) => {
                     let farm_url = env.get_farm_url().unwrap();
-                    let farm = block_on(Farm::new(farm_url.clone(), env.logger()));
+                    let farm = Farm::new(farm_url.clone(), env.logger());
                     let group_name = group_setup.infra_group_name;
-                    if let Err(e) = block_on(farm.set_group_ttl(&group_name, GROUP_TTL)) {
+                    if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
                         panic!(
                             "{}",
                             format!(

@@ -9,8 +9,8 @@ use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_root_canister, set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_root_canister,
+        set_up_universal_canister, state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
@@ -24,7 +24,7 @@ use std::convert::TryFrom;
 /// Tests that the root can add a canister.
 #[test]
 fn test_add_nns_canister() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // Set up the registry first so that it gets its expected id.
         let init_payload = RegistryCanisterInitPayloadBuilder::new()
             .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))

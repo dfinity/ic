@@ -2446,6 +2446,7 @@ impl From<pb::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -2465,6 +2466,7 @@ impl From<api::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -2492,6 +2494,30 @@ impl From<api::create_service_nervous_system::governance_parameters::VotingRewar
             initial_reward_rate: item.initial_reward_rate,
             final_reward_rate: item.final_reward_rate,
             reward_rate_transition_duration: item.reward_rate_transition_duration,
+        }
+    }
+}
+impl From<pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for api::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: Some(item.additional_critical_native_action_ids),
+        }
+    }
+}
+impl From<api::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: api::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: item
+                .additional_critical_native_action_ids
+                .unwrap_or_default(),
         }
     }
 }
@@ -3499,232 +3525,6 @@ impl From<api::settle_neurons_fund_participation_response::Result>
             }
             api::settle_neurons_fund_participation_response::Result::Ok(v) => {
                 pb::settle_neurons_fund_participation_response::Result::Ok(v.into())
-            }
-        }
-    }
-}
-
-impl From<pb::AuditEvent> for api::AuditEvent {
-    fn from(item: pb::AuditEvent) -> Self {
-        Self {
-            timestamp_seconds: item.timestamp_seconds,
-            payload: item.payload.map(|x| x.into()),
-        }
-    }
-}
-impl From<api::AuditEvent> for pb::AuditEvent {
-    fn from(item: api::AuditEvent) -> Self {
-        Self {
-            timestamp_seconds: item.timestamp_seconds,
-            payload: item.payload.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::audit_event::ResetAging> for api::audit_event::ResetAging {
-    fn from(item: pb::audit_event::ResetAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-impl From<api::audit_event::ResetAging> for pb::audit_event::ResetAging {
-    fn from(item: api::audit_event::ResetAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::audit_event::reset_aging::NeuronDissolveState>
-    for api::audit_event::reset_aging::NeuronDissolveState
-{
-    fn from(item: pb::audit_event::reset_aging::NeuronDissolveState) -> Self {
-        match item {
-            pb::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => {
-                api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            pb::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
-                api::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-impl From<api::audit_event::reset_aging::NeuronDissolveState>
-    for pb::audit_event::reset_aging::NeuronDissolveState
-{
-    fn from(item: api::audit_event::reset_aging::NeuronDissolveState) -> Self {
-        match item {
-            api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                v,
-            ) => {
-                pb::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            api::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
-                pb::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-
-impl From<pb::audit_event::RestoreAging> for api::audit_event::RestoreAging {
-    fn from(item: pb::audit_event::RestoreAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-impl From<api::audit_event::RestoreAging> for pb::audit_event::RestoreAging {
-    fn from(item: api::audit_event::RestoreAging) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-            new_aging_since_timestamp_seconds: item.new_aging_since_timestamp_seconds,
-            neuron_stake_e8s: item.neuron_stake_e8s,
-            neuron_dissolve_state: item.neuron_dissolve_state.map(|x| x.into()),
-        }
-    }
-}
-
-impl From<pb::audit_event::restore_aging::NeuronDissolveState>
-    for api::audit_event::restore_aging::NeuronDissolveState
-{
-    fn from(item: pb::audit_event::restore_aging::NeuronDissolveState) -> Self {
-        match item {
-            pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                v,
-            ) => {
-                api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                    v,
-                )
-            }
-            pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
-                api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-impl From<api::audit_event::restore_aging::NeuronDissolveState>
-    for pb::audit_event::restore_aging::NeuronDissolveState
-{
-    fn from(item: api::audit_event::restore_aging::NeuronDissolveState) -> Self {
-        match item {
-            api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                v,
-            ) => {
-                pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                    v,
-                )
-            }
-            api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
-                pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-
-impl From<pb::audit_event::NormalizeDissolveStateAndAge>
-    for api::audit_event::NormalizeDissolveStateAndAge
-{
-    fn from(item: pb::audit_event::NormalizeDissolveStateAndAge) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            neuron_legacy_case: item.neuron_legacy_case,
-            previous_when_dissolved_timestamp_seconds: item
-                .previous_when_dissolved_timestamp_seconds,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-        }
-    }
-}
-impl From<api::audit_event::NormalizeDissolveStateAndAge>
-    for pb::audit_event::NormalizeDissolveStateAndAge
-{
-    fn from(item: api::audit_event::NormalizeDissolveStateAndAge) -> Self {
-        Self {
-            neuron_id: item.neuron_id,
-            neuron_legacy_case: item.neuron_legacy_case,
-            previous_when_dissolved_timestamp_seconds: item
-                .previous_when_dissolved_timestamp_seconds,
-            previous_aging_since_timestamp_seconds: item.previous_aging_since_timestamp_seconds,
-        }
-    }
-}
-
-impl From<pb::audit_event::NeuronLegacyCase> for api::audit_event::NeuronLegacyCase {
-    fn from(item: pb::audit_event::NeuronLegacyCase) -> Self {
-        match item {
-            pb::audit_event::NeuronLegacyCase::Unspecified => {
-                api::audit_event::NeuronLegacyCase::Unspecified
-            }
-            pb::audit_event::NeuronLegacyCase::DissolvingOrDissolved => {
-                api::audit_event::NeuronLegacyCase::DissolvingOrDissolved
-            }
-            pb::audit_event::NeuronLegacyCase::Dissolved => {
-                api::audit_event::NeuronLegacyCase::Dissolved
-            }
-            pb::audit_event::NeuronLegacyCase::NoneDissolveState => {
-                api::audit_event::NeuronLegacyCase::NoneDissolveState
-            }
-        }
-    }
-}
-impl From<api::audit_event::NeuronLegacyCase> for pb::audit_event::NeuronLegacyCase {
-    fn from(item: api::audit_event::NeuronLegacyCase) -> Self {
-        match item {
-            api::audit_event::NeuronLegacyCase::Unspecified => {
-                pb::audit_event::NeuronLegacyCase::Unspecified
-            }
-            api::audit_event::NeuronLegacyCase::DissolvingOrDissolved => {
-                pb::audit_event::NeuronLegacyCase::DissolvingOrDissolved
-            }
-            api::audit_event::NeuronLegacyCase::Dissolved => {
-                pb::audit_event::NeuronLegacyCase::Dissolved
-            }
-            api::audit_event::NeuronLegacyCase::NoneDissolveState => {
-                pb::audit_event::NeuronLegacyCase::NoneDissolveState
-            }
-        }
-    }
-}
-
-impl From<pb::audit_event::Payload> for api::audit_event::Payload {
-    fn from(item: pb::audit_event::Payload) -> Self {
-        match item {
-            pb::audit_event::Payload::ResetAging(v) => {
-                api::audit_event::Payload::ResetAging(v.into())
-            }
-            pb::audit_event::Payload::RestoreAging(v) => {
-                api::audit_event::Payload::RestoreAging(v.into())
-            }
-            pb::audit_event::Payload::NormalizeDissolveStateAndAge(v) => {
-                api::audit_event::Payload::NormalizeDissolveStateAndAge(v.into())
-            }
-        }
-    }
-}
-impl From<api::audit_event::Payload> for pb::audit_event::Payload {
-    fn from(item: api::audit_event::Payload) -> Self {
-        match item {
-            api::audit_event::Payload::ResetAging(v) => {
-                pb::audit_event::Payload::ResetAging(v.into())
-            }
-            api::audit_event::Payload::RestoreAging(v) => {
-                pb::audit_event::Payload::RestoreAging(v.into())
-            }
-            api::audit_event::Payload::NormalizeDissolveStateAndAge(v) => {
-                pb::audit_event::Payload::NormalizeDissolveStateAndAge(v.into())
             }
         }
     }

@@ -1,6 +1,6 @@
 use std::fs::write;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
@@ -243,34 +243,34 @@ fn generate_network_config_ipv4_contents(ipv4_info: Option<IpAddressInfo>) -> St
         .unwrap_or_default()
 }
 
-fn get_interface_name() -> Result<String> {
-    let interfaces: Vec<PathBuf> = get_interface_paths();
-    eprintln!("Found raw network interfaces: {interfaces:?}");
+/// Picks the best interface from the list
+fn pick_best_interface(mut interfaces: Vec<String>) -> Option<String> {
+    interfaces.sort();
 
-    let valid_interfaces: Vec<_> = interfaces
+    // Try to pick eth* interface first, then others.
+    // On Azure both eth* and en* are created, but we should use eth* one.
+    // In other environments we have only en* interfaces.
+    interfaces
         .iter()
-        .filter(is_valid_network_interface)
-        .collect();
-    eprintln!("Found valid network interfaces: {valid_interfaces:?}");
-
-    let first_valid_interface = valid_interfaces
-        .first()
-        .context("ERROR: No valid network interfaces found.")?;
-
-    let interface_name = get_valid_interface_name(first_valid_interface)?;
-    eprintln!("Chosen interface name: {interface_name:?}");
-    Ok(interface_name)
+        .find(|x| x.starts_with("eth"))
+        .or_else(|| interfaces.iter().find(|x| x.starts_with("en")))
+        .cloned()
 }
 
-fn is_valid_network_interface(path: &&PathBuf) -> bool {
-    let Some(filename) = path.file_name() else {
-        eprintln!("ERROR: Invalid network interface path: {path:#?}");
-        return false;
-    };
-    let filename = filename.to_string_lossy();
+fn get_interface_name() -> Result<String> {
+    // Get a list of all network interfaces in the system
+    let interfaces = get_interface_paths()
+        .into_iter()
+        .map(|x| get_valid_interface_name(&x))
+        .collect::<Result<Vec<_>>>()
+        .context("ERROR: Unable to extract interface name")?;
+    eprintln!("Found network interfaces: {interfaces:?}");
 
-    let first2_chars = filename.chars().take(2).collect::<String>().to_lowercase();
-    matches!(first2_chars.as_str(), "en")
+    let valid_interface =
+        pick_best_interface(interfaces).context("ERROR: No valid network interfaces found")?;
+
+    eprintln!("Chosen interface name: {valid_interface:?}");
+    Ok(valid_interface)
 }
 
 // Turn off duplicate address detection for testnets running on k8s
@@ -461,5 +461,38 @@ mod tests {
         let expected_output =
             "[Match]\nName=enp65s0f1\nVirtualization=!container\n[Network]\nIPv6AcceptRA=true\n";
         assert_eq!(result, expected_output);
+    }
+
+    #[test]
+    fn test_pick_best_interface() {
+        let interfaces = vec!["lo", "ens0", "eth1", "ens1", "eth0"]
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(pick_best_interface(interfaces), Some("eth0".to_string()));
+
+        let interfaces = vec!["lo", "eth0", "eth1", "ens0", "ens1"]
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(pick_best_interface(interfaces), Some("eth0".to_string()));
+
+        let interfaces = vec!["lo", "ens0"]
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(pick_best_interface(interfaces), Some("ens0".to_string()));
+
+        let interfaces = vec!["lo", "enp0"]
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(pick_best_interface(interfaces), Some("enp0".to_string()));
+
+        let interfaces = vec!["lo"]
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>();
+        assert!(pick_best_interface(interfaces).is_none());
     }
 }

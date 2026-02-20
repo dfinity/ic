@@ -1,10 +1,7 @@
 use crate::{
     canister_agent::CanisterAgent,
     canister_api::GenericRequest,
-    driver::{
-        group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS},
-        test_env_api::*,
-    },
+    driver::{group::MAX_RUNTIME_THREADS, test_env_api::*},
     generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics},
     retry_with_msg, retry_with_msg_async,
     types::*,
@@ -24,6 +21,7 @@ use ic_agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
     },
+    agent_error::TransportError,
     export::Principal,
     identity::BasicIdentity,
 };
@@ -85,7 +83,7 @@ pub mod delegations;
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
 pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
-pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
+pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(40);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 
@@ -95,10 +93,8 @@ pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 pub const MAX_TCP_ERROR_RETRIES: usize = 5;
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
-    ic_agent::identity::BasicIdentity::from_pem(std::io::Cursor::new(
-        TEST_IDENTITY_KEYPAIR.to_pem(),
-    ))
-    .expect("Invalid secret key.")
+    ic_agent::identity::BasicIdentity::from_pem(TEST_IDENTITY_KEYPAIR.to_pem())
+        .expect("Invalid secret key.")
 }
 
 /// Initializes a testing [Runtime] from a node's url. You should really
@@ -141,9 +137,7 @@ lazy_static! {
 }
 
 fn get_canister_wasm(env_var: &str) -> Vec<u8> {
-    let uc_wasm_path = get_dependency_path(
-        std::env::var(env_var).unwrap_or_else(|e| panic!("{env_var:?} not set: {e:?}")),
-    );
+    let uc_wasm_path = get_dependency_path_from_env(env_var);
     std::fs::read(&uc_wasm_path)
         .unwrap_or_else(|e| panic!("Could not read WASM from {uc_wasm_path:?}: {e:?}"))
 }
@@ -691,6 +685,31 @@ impl<'a> MessageCanister<'a> {
             .unwrap()
     }
 
+    pub async fn new_with_cycles_with_retries<C: Into<u128>>(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        cycles: C,
+        log: &slog::Logger,
+    ) -> MessageCanister<'a> {
+        let c = cycles.into();
+        retry_with_msg_async!(
+            format!(
+                "install MessageCanister {}",
+                effective_canister_id.to_string()
+            ),
+            log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                Self::new_with_params(agent, effective_canister_id, None, Some(c))
+                    .await
+                    .map_err(|e| anyhow!(e))
+            }
+        )
+        .await
+        .expect("Could not create message canister with cycles.")
+    }
+
     pub fn canister_id(&self) -> Principal {
         self.canister_id
     }
@@ -935,7 +954,9 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder.build().map_err(AgentError::TransportError)?;
+    let client = builder
+        .build()
+        .map_err(|e| AgentError::TransportError(TransportError::Reqwest(e)))?;
     agent_with_client_identity(url, client, identity).await
 }
 
@@ -949,7 +970,7 @@ pub async fn agent_with_client_identity(
         .with_http_client(client)
         .with_identity(identity)
         // Setting a large polling time for the sake of long-running update calls.
-        .with_max_polling_time(Duration::from_secs(3600))
+        .with_max_polling_time(Duration::from_secs(600))
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
@@ -1317,10 +1338,8 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
             let rt = {
                 let cpus = num_cpus::get();
                 let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
-                let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
                 Builder::new_multi_thread()
                     .worker_threads(workers)
-                    .max_blocking_threads(blocking_threads)
                     .enable_all()
                     .build()
             }

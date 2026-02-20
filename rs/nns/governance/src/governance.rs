@@ -266,9 +266,9 @@ pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
-/// The number of seconds between automated Node Provider reward events
-/// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
-pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
+/// The amount of time between when node providers are rewarded (for hosting
+/// canisters). (Such rewards come in the form of minted ICP.)
+pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = ONE_MONTH_SECONDS;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
@@ -5037,14 +5037,16 @@ impl Governance {
             ));
         }
 
-        let self_describing_action =
-            if is_self_describing_proposal_actions_enabled() && cfg!(target_arch = "wasm32") {
-                // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-                // implemented.
-                action.to_self_describing(self.env.clone()).await.ok()
-            } else {
-                None
-            };
+        let self_describing_action = if is_self_describing_proposal_actions_enabled()
+            && cfg!(target_arch = "wasm32")
+            && !cfg!(feature = "canbench-rs")
+        {
+            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
+            // implemented.
+            action.to_self_describing(self.env.clone()).await.ok()
+        } else {
+            None
+        };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the

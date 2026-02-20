@@ -552,8 +552,6 @@ pub enum IcpConfigFlag {
 pub struct IcpConfig {
     /// Beta features (disabled on the ICP mainnet).
     pub beta_features: Option<IcpConfigFlag>,
-    /// Canister backtraces (enabled on the ICP mainnet).
-    pub canister_backtrace: Option<IcpConfigFlag>,
     /// Limits on function name length in canister WASM (enabled on the ICP mainnet).
     pub function_name_length_limits: Option<IcpConfigFlag>,
     /// Rate-limiting of canister execution (enabled on the ICP mainnet).
@@ -648,6 +646,7 @@ pub struct InstanceConfig {
     pub icp_features: Option<IcpFeatures>,
     pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
+    pub mainnet_nns_subnet_id: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -959,6 +958,8 @@ pub enum CanisterHttpMethod {
     GET,
     POST,
     HEAD,
+    PUT,
+    DELETE,
 }
 
 #[derive(

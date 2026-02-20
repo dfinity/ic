@@ -10,6 +10,7 @@ use crate::vault::api::{
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_multi_sig_bls12381 as multi_bls12381;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_node_key_validation::ValidCommitteeSigningPublicKey;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::{AlgorithmId, CryptoError};
@@ -61,9 +62,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn gen_committee_signing_key_pair_internal(
         &self,
     ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
-        let (secret_key, pk_and_pop) = self.gen_multi_bls12381_keypair_with_pop()?;
+        let seed = self.generate_seed();
+        let (secret_key, pk_and_pop) = gen_multi_bls12381_keypair_with_pop(seed)?;
         let key_id = KeyId::from(&pk_and_pop.0);
-        let committee_public_key_proto = committee_signing_pk_to_proto(pk_and_pop.clone());
+        let mut committee_public_key_proto = committee_signing_pk_to_proto(pk_and_pop.clone());
+        self.set_timestamp(&mut committee_public_key_proto);
         let valid_public_key = validate_committee_signing_public_key(committee_public_key_proto)?;
         self.store_committee_signing_key_pair(key_id, secret_key, valid_public_key.get().clone())?;
         Ok(pk_and_pop)
@@ -146,34 +149,34 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             }),
         }
     }
+}
 
-    fn gen_multi_bls12381_keypair_with_pop(
-        &self,
-    ) -> Result<(CspSecretKey, (CspPublicKey, CspPop)), CspMultiSignatureKeygenError> {
-        let (sk_bytes, pk_bytes) = multi_bls12381::keypair_from_rng(&mut *self.rng_write_lock());
-        let pk = CspPublicKey::MultiBls12_381(pk_bytes);
-        let sk = CspSecretKey::MultiBls12_381(sk_bytes.clone());
+fn gen_multi_bls12381_keypair_with_pop(
+    seed: Seed,
+) -> Result<(CspSecretKey, (CspPublicKey, CspPop)), CspMultiSignatureKeygenError> {
+    let (sk_bytes, pk_bytes) = multi_bls12381::keypair_from_seed(seed);
+    let pk = CspPublicKey::MultiBls12_381(pk_bytes);
+    let sk = CspSecretKey::MultiBls12_381(sk_bytes.clone());
 
-        let pop_bytes = multi_bls12381::create_pop(&pk_bytes, &sk_bytes).map_err(|e| match e {
-            CryptoError::MalformedPublicKey {
-                algorithm,
-                key_bytes,
-                internal_error,
-            } => CspMultiSignatureKeygenError::MalformedPublicKey {
-                algorithm,
-                key_bytes,
-                internal_error,
-            },
-            _ => CspMultiSignatureKeygenError::MalformedPublicKey {
-                algorithm: AlgorithmId::MultiBls12_381,
-                key_bytes: Some(pk_bytes.0.to_vec()),
-                internal_error: format!("Unexpected error returned from create_pop: {e}"),
-            },
-        })?;
-        let pop = CspPop::MultiBls12_381(pop_bytes);
+    let pop_bytes = multi_bls12381::create_pop(&pk_bytes, &sk_bytes).map_err(|e| match e {
+        CryptoError::MalformedPublicKey {
+            algorithm,
+            key_bytes,
+            internal_error,
+        } => CspMultiSignatureKeygenError::MalformedPublicKey {
+            algorithm,
+            key_bytes,
+            internal_error,
+        },
+        _ => CspMultiSignatureKeygenError::MalformedPublicKey {
+            algorithm: AlgorithmId::MultiBls12_381,
+            key_bytes: Some(pk_bytes.0.to_vec()),
+            internal_error: format!("Unexpected error returned from create_pop: {e}"),
+        },
+    })?;
+    let pop = CspPop::MultiBls12_381(pop_bytes);
 
-        Ok((sk, (pk, pop)))
-    }
+    Ok((sk, (pk, pop)))
 }
 
 fn validate_committee_signing_public_key(

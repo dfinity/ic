@@ -21,9 +21,10 @@ deterministic_ips = { path = "../../networking/deterministic_ips" }
 tempfile = { workspace = true }
 rust-ini = { workspace = true }
 fs_extra = { workspace = true }
-walkdir = { workspace = true }
 get_if_addrs = { workspace = true }
-ic_sev = { path = "../../sev" }
+sev_guest = { path = "../../sev/guest" }
+strum = { workspace = true }
+securefmt = { workspace = true }
 
 [dev-dependencies]
 once_cell = "1.8"

@@ -140,7 +140,7 @@ impl CallCanister for UpdateCanisterSettings {
 
 impl LocallyDescribableProposalAction for UpdateCanisterSettings {
     const TYPE_NAME: &'static str = "Update Canister Settings";
-    const TYPE_DESCRIPTION: &'static str = "Updates the settings of an NNS canister.";
+    const TYPE_DESCRIPTION: &'static str = "Update the settings of an NNS-controlled canister.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
@@ -400,8 +400,6 @@ mod tests {
 
     #[test]
     fn test_update_canister_settings_to_self_describing() {
-        use SelfDescribingValue::*;
-
         let update_canister_settings = UpdateCanisterSettings {
             canister_id: Some(SNS_WASM_CANISTER_ID.get()),
             settings: Some(CanisterSettings {
@@ -423,18 +421,18 @@ mod tests {
         assert_eq!(
             value,
             SelfDescribingValue::Map(hashmap! {
-                "canister_id".to_string() => Text(SNS_WASM_CANISTER_ID.get().to_string()),
-                "settings".to_string() => Map(hashmap! {
-                    "controllers".to_string() => Array(vec![
-                        Text(ROOT_CANISTER_ID.get().to_string()),
-                        Text(LEDGER_CANISTER_ID.get().to_string()),
+                "canister_id".to_string() => SelfDescribingValue::from(SNS_WASM_CANISTER_ID.get().to_string()),
+                "settings".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "controllers".to_string() => SelfDescribingValue::Array(vec![
+                        SelfDescribingValue::from(ROOT_CANISTER_ID.get().to_string()),
+                        SelfDescribingValue::from(LEDGER_CANISTER_ID.get().to_string()),
                     ]),
-                    "memory_allocation".to_string() => Nat(candid::Nat::from(1_u64 << 32)),
-                    "wasm_memory_limit".to_string() => Nat(candid::Nat::from(1_u64 << 31)),
-                    "wasm_memory_threshold".to_string() => Nat(candid::Nat::from(1_u64 << 30)),
-                    "compute_allocation".to_string() => Nat(candid::Nat::from(10_u64)),
-                    "freezing_threshold".to_string() => Nat(candid::Nat::from(100_u64)),
-                    "log_visibility".to_string() => Text("Public".to_string()),
+                    "memory_allocation".to_string() => SelfDescribingValue::from(1_u64 << 32),
+                    "wasm_memory_limit".to_string() => SelfDescribingValue::from(1_u64 << 31),
+                    "wasm_memory_threshold".to_string() => SelfDescribingValue::from(1_u64 << 30),
+                    "compute_allocation".to_string() => SelfDescribingValue::from(10_u64),
+                    "freezing_threshold".to_string() => SelfDescribingValue::from(100_u64),
+                    "log_visibility".to_string() => SelfDescribingValue::from("Public"),
                 }),
             })
         );
@@ -442,8 +440,6 @@ mod tests {
 
     #[test]
     fn test_update_canister_settings_to_self_describing_minimal() {
-        use SelfDescribingValue::*;
-
         let update_canister_settings = UpdateCanisterSettings {
             canister_id: Some(LEDGER_CANISTER_ID.get()),
             settings: Some(CanisterSettings {
@@ -458,15 +454,15 @@ mod tests {
         assert_eq!(
             value,
             SelfDescribingValue::Map(hashmap! {
-                "canister_id".to_string() => Text(LEDGER_CANISTER_ID.get().to_string()),
-                "settings".to_string() => Map(hashmap! {
-                    "controllers".to_string() => Null,
-                    "memory_allocation".to_string() => Nat(candid::Nat::from(1_u64 << 30)),
-                    "compute_allocation".to_string() => Null,
-                    "freezing_threshold".to_string() => Null,
-                    "wasm_memory_limit".to_string() => Null,
-                    "wasm_memory_threshold".to_string() => Null,
-                    "log_visibility".to_string() => Null,
+                "canister_id".to_string() => SelfDescribingValue::from(LEDGER_CANISTER_ID.get().to_string()),
+                "settings".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "controllers".to_string() => SelfDescribingValue::Null,
+                    "memory_allocation".to_string() => SelfDescribingValue::from(1_u64 << 30),
+                    "compute_allocation".to_string() => SelfDescribingValue::Null,
+                    "freezing_threshold".to_string() => SelfDescribingValue::Null,
+                    "wasm_memory_limit".to_string() => SelfDescribingValue::Null,
+                    "wasm_memory_threshold".to_string() => SelfDescribingValue::Null,
+                    "log_visibility".to_string() => SelfDescribingValue::Null,
                 }),
             })
         );

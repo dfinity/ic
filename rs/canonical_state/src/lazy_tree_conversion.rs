@@ -13,6 +13,7 @@ use ic_crypto_tree_hash::Label;
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ExecutionState, ReplicatedState, Stream,
     canister_state::CanisterState,
@@ -23,7 +24,7 @@ use ic_replicated_state::{
     replicated_state::ReplicatedStateMessageRouting,
 };
 use ic_types::{
-    CanisterId, NodeId, PrincipalId, SubnetId,
+    CanisterId, Height, NodeId, PrincipalId, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
@@ -417,7 +418,7 @@ fn split_inverted_routing_table(
 }
 
 /// Converts replicated state into a lazy tree.
-pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
+pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
         MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version
@@ -426,7 +427,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
     );
     let own_subnet_id = state.metadata.own_subnet_id;
     let inverted_routing_table = Arc::new(invert_routing_table(
-        &state.metadata.network_topology.routing_table,
+        state.metadata.network_topology.routing_table(),
     ));
     let split_routing_table = Arc::new(split_inverted_routing_table(
         &inverted_routing_table,
@@ -442,13 +443,13 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
                 )
             })
             .with("metadata", move || {
-                system_metadata_as_tree(&state.metadata, certification_version)
+                system_metadata_as_tree(&state.metadata, height, certification_version)
             })
             .with("streams", move || {
                 streams_as_tree(state.streams(), own_subnet_id, certification_version)
             })
             .with("canister", move || {
-                canisters_as_tree(&state.canister_states, certification_version)
+                canisters_as_tree(state.canister_states(), certification_version)
             })
             .with_tree(
                 "request_status",
@@ -456,7 +457,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
             )
             .with("subnet", move || {
                 subnets_as_tree(
-                    &state.metadata.network_topology.subnets,
+                    state.metadata.network_topology.subnets(),
                     own_subnet_id,
                     &state.metadata.node_public_keys,
                     inverted_routing_table.clone(),
@@ -473,7 +474,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
                 "canister_ranges",
                 move || {
                     canister_ranges_as_tree(
-                        &state.metadata.network_topology.subnets,
+                        state.metadata.network_topology.subnets(),
                         Arc::clone(&split_routing_table),
                         certification_version,
                     )
@@ -550,11 +551,64 @@ fn streams_as_tree<'a>(
     }
 }
 
+const HEIGHT_LABEL: &[u8] = b"height";
+const PREV_STATE_HASH_LABEL: &[u8] = b"prev_state_hash";
+
+const METADATA_LABELS: [&[u8]; 2] = [HEIGHT_LABEL, PREV_STATE_HASH_LABEL];
+
+#[derive(Clone)]
+struct MetadataFork<'a> {
+    height: Height,
+    metadata: &'a SystemMetadata,
+}
+
+impl<'a> LazyFork<'a> for MetadataFork<'a> {
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
+        match label.as_bytes() {
+            HEIGHT_LABEL => Some(num(self.height.get())),
+            PREV_STATE_HASH_LABEL => self
+                .metadata
+                .prev_state_hash
+                .as_ref()
+                .map(|hash| Blob(hash.as_ref().0.as_slice(), None)),
+            _ => None,
+        }
+    }
+
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + 'a> {
+        let fork = self.clone();
+        Box::new(
+            METADATA_LABELS
+                .iter()
+                .filter(move |label| fork.edge(&Label::from(label)).is_some())
+                .map(From::from),
+        )
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
+        let fork = self.clone();
+        Box::new(METADATA_LABELS.iter().filter_map(move |label| {
+            let label = Label::from(label);
+            let edge = fork.edge(&label)?;
+            Some((label, edge))
+        }))
+    }
+
+    fn len(&self) -> usize {
+        self.labels().count()
+    }
+}
+
 fn system_metadata_as_tree(
-    m: &SystemMetadata,
-    certification_version: CertificationVersion,
+    metadata: &SystemMetadata,
+    height: Height,
+    version: CertificationVersion,
 ) -> LazyTree<'_> {
-    blob(move || encode_metadata(m, certification_version))
+    if version >= CertificationVersion::V24 {
+        fork(MetadataFork { height, metadata })
+    } else {
+        blob(move || encode_metadata(metadata, version))
+    }
 }
 
 struct IngressHistoryFork<'a>(&'a IngressHistoryState);
@@ -811,7 +865,7 @@ fn api_boundary_nodes_as_tree(
 }
 
 fn canisters_as_tree(
-    canisters: &BTreeMap<CanisterId, CanisterState>,
+    canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
     fork(MapTransformFork {
@@ -861,6 +915,11 @@ fn subnets_as_tree<'a>(
                         subnet_id == own_subnet_id,
                         "metrics",
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
+                    )
+                    .with_tree_if(
+                        certification_version >= CertificationVersion::V25,
+                        "type",
+                        string(subnet_type_as_string(subnet_topology.subnet_type)),
                     ),
             )
         },
@@ -911,4 +970,15 @@ fn canister_metadata_as_tree(
         certification_version,
         mk_tree: |_name, section, _version| Blob(section.content(), Some(section.hash())),
     })
+}
+
+/// Helper function to turn a subnet type into a string.
+/// This is intentionally explicitly implemented here, so that the state tree representation cannot be changed outside this crate, as opposed
+/// to calling something like `subnet_type.to_string()`.
+fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
+    match subnet_type {
+        SubnetType::Application => "application",
+        SubnetType::System => "system",
+        SubnetType::VerifiedApplication => "verified_application",
+    }
 }

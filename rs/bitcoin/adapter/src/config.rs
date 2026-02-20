@@ -88,7 +88,6 @@ pub fn address_limits(network: AdapterNetwork) -> (usize, usize) {
                 Testnet4 => (100, 1000),
                 Signet => (1, 1),
                 Regtest => (1, 1),
-                _ => (1, 1),
             }
         }
         AdapterNetwork::Dogecoin(network) => {

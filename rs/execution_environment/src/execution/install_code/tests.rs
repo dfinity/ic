@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
+use ic_config::execution_environment::TEST_DEFAULT_LOG_MEMORY_USAGE;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
@@ -8,10 +9,13 @@ use ic_management_canister_types_private::{
     InstallCodeArgs, InstallCodeArgsV2, Method, Payload, UploadChunkArgs, UploadChunkReply,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_replicated_state::canister_state::NextExecution;
-use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
-use ic_replicated_state::{ExecutionTask, ReplicatedState};
+use ic_replicated_state::{
+    ExecutionTask, ReplicatedState,
+    canister_state::{
+        NextExecution, execution_state::WasmExecutionMode, system_state::wasm_chunk_store,
+    },
+    metadata_state::testing::NetworkTopologyTesting,
+};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
 };
@@ -25,8 +29,8 @@ use ic_types::{
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
+use more_asserts::assert_le;
 use std::mem::size_of;
-use std::sync::Arc;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
@@ -344,7 +348,7 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
     let total_memory_taken_per_canister_in_bytes =
-        364441 + canister_history_memory_per_canister as i64;
+        364441 + canister_history_memory_per_canister as i64 + TEST_DEFAULT_LOG_MEMORY_USAGE as i64;
 
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
@@ -383,7 +387,8 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
     assert_eq!(
         test.subnet_available_memory().get_execution_memory()
             + iterations * total_memory_taken_per_canister_in_bytes
-            + canister_history_memory_for_creation as i64,
+            + canister_history_memory_for_creation as i64
+            + TEST_DEFAULT_LOG_MEMORY_USAGE as i64,
         subnet_available_memory_before
     );
 }
@@ -614,10 +619,11 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         .build();
     // canister history memory usage at the beginning of attempted install
     let canister_history_memory_usage = size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    let canister_log_memory_store_usage = TEST_DEFAULT_LOG_MEMORY_USAGE;
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::default(),
-        NumBytes::new(canister_history_memory_usage as u64),
+        NumBytes::new(canister_history_memory_usage as u64 + canister_log_memory_store_usage),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
@@ -1175,12 +1181,18 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
 
     let own_subnet_id = test.state().metadata.own_subnet_id;
     let other_subnet_id = subnet_test_id(13);
-    assert!(own_subnet_id != other_subnet_id);
+    assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, own_subnet_id);
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, own_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1195,7 +1207,10 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates canister 1 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1261,7 +1276,10 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     );
 
     // Simulate a subnet split that migrates canister 2 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1392,8 +1410,7 @@ fn consistent_install_code_calls_after_split() {
 fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls: usize) {
     // Collect the call IDs and calls of all aborted install code calls.
     let canister_install_code_contexts: Vec<_> = state
-        .canister_states
-        .values()
+        .canisters_iter()
         .filter_map(|canister| {
             if let Some(ExecutionTask::AbortedInstallCode {
                 message, call_id, ..
@@ -1420,8 +1437,9 @@ fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls:
     }
 
     // And ensure that no `InstallCodeCalls` are left over in the `SubnetCallContextManager`.
-    assert!(
-        subnet_call_context_manager.install_code_calls_len() == 0,
+    assert_eq!(
+        subnet_call_context_manager.install_code_calls_len(),
+        0,
         "InstallCodeCalls in SubnetCallContextManager without matching canister AbortedInstallCode task: {:?}",
         subnet_call_context_manager.remove_non_local_install_code_calls(|_| false)
     );
@@ -2070,7 +2088,7 @@ fn install_with_dts_correctly_updates_system_state() {
     let version_before = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     let history_entries_before = test
         .canister_state(canister_id)
@@ -2121,7 +2139,7 @@ fn install_with_dts_correctly_updates_system_state() {
     let version_after = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     assert_eq!(version_before + 1, version_after);
 
@@ -2195,7 +2213,7 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let version_before = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     let history_entries_before = test
         .canister_state(canister_id)
@@ -2248,7 +2266,7 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let version_after = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     assert_eq!(version_before + 1, version_after);
 
@@ -2312,9 +2330,9 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     let final_cycles = test.canister_state(canister_id).system_state.balance();
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
-    assert!(
-        charged_cycles - expected_cost <= Cycles::from(1_u64)
-            && expected_cost - charged_cycles <= Cycles::from(1_u64),
+    assert_le!(
+        charged_cycles.max(expected_cost) - charged_cycles.min(expected_cost),
+        Cycles::from(1_u64),
         "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }
@@ -2395,9 +2413,9 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     let final_cycles = test.canister_state(canister_id).system_state.balance();
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
-    assert!(
-        charged_cycles - expected_cost <= Cycles::from(1_u64)
-            && expected_cost - charged_cycles <= Cycles::from(1_u64),
+    assert_le!(
+        charged_cycles.max(expected_cost) - charged_cycles.min(expected_cost),
+        Cycles::from(1_u64),
         "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }

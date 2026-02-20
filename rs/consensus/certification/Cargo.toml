@@ -17,7 +17,6 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 slog = { workspace = true }
-strum_macros = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]

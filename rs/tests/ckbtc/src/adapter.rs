@@ -11,7 +11,9 @@ use ic_management_canister_types_private::{
 };
 use ic_system_test_driver::util::{MESSAGE_CANISTER_WASM, MessageCanister};
 use ic_types::PrincipalId;
-use ic_utils::interfaces::{ManagementCanister, management_canister::CanisterStatus};
+use ic_utils::interfaces::{
+    ManagementCanister, management_canister::CanisterStatusType as CanisterStatus,
+};
 use slog::{Logger, info};
 use std::{str::FromStr, time::Duration};
 
@@ -216,7 +218,7 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
     }
 }
 
-pub fn fund_with_btc<T: RpcClientType>(
+pub fn fund_with_tokens<T: RpcClientType>(
     to_fund_client: &RpcClient<T>,
     to_fund_address: &T::Address,
 ) -> ListUnspentResultEntry {

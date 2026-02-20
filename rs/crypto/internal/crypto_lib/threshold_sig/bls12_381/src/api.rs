@@ -124,7 +124,7 @@ pub fn combined_public_key(
 ///
 /// # Arguments
 /// * `message` is the bytes to be signed.  Note: This may be changed to a
-///   `[u8;32]` and renamed to hash pending discussion.  See TODO: DFN-1430
+///   `[u8;32]` and renamed to hash pending discussion.
 /// * `secret_key` is the individual signing key.
 /// # Panics
 /// This method is not expected to panic.
@@ -183,7 +183,7 @@ pub fn combine_signatures(
 ///
 /// # Arguments:
 /// * `message` is the bytes that have been signed.  Note: This may be changed
-///   to a `[u8;32]` and renamed to hash pending discussion.  See TODO: DFN-1430
+///   to a `[u8;32]` and renamed to hash pending discussion.
 /// * `signature` is the individual signature to be verified.
 /// * `public_key` is the individual public key of the signatory.
 /// # Panics

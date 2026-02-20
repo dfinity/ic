@@ -11,7 +11,9 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_replicated_state::{
-    ReplicatedState, Stream, metadata_state::StreamMap, testing::ReplicatedStateTesting,
+    ReplicatedState, Stream,
+    metadata_state::StreamMap,
+    testing::{ReplicatedStateTesting, StreamTesting},
 };
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_registry::test_subnet_record;
@@ -166,9 +168,13 @@ pub(crate) fn put_replicated_state_for_testing(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     streams: StreamMap,
 ) {
-    let (_height, mut state) = state_manager.take_tip();
+    let (mut height, mut state) = state_manager.take_tip();
+    while height < CERTIFIED_HEIGHT.decrement() {
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+        (height, state) = state_manager.take_tip();
+    }
     state.with_streams(streams);
-    state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata, None);
+    state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 }
 
 /// Creates a `CertifiedStreamSlice` from the given subnet, containing a stream
@@ -178,10 +184,14 @@ pub(crate) fn make_certified_stream_slice(
     config: StreamConfig,
 ) -> CertifiedStreamSlice {
     let state_manager = FakeStateManager::new();
-    let (_height, mut state) = state_manager.take_tip();
+    let (mut height, mut state) = state_manager.take_tip();
+    while height < CERTIFIED_HEIGHT.decrement() {
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+        (height, state) = state_manager.take_tip();
+    }
     let stream = generate_stream(&config);
     state.with_streams(btreemap![from => stream]);
-    state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata, None);
+    state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
     state_manager
         .encode_certified_stream_slice(
             from,

@@ -262,6 +262,7 @@ fn test_create_service_nervous_system_to_self_describing() {
                         "seconds".to_string() => SelfDescribingValue::from(378025_u64),
                     }),
                 }),
+                "custom_proposal_criticality".to_string() => SelfDescribingValue::Null,
             }),
             "swap_parameters".to_string() => SelfDescribingValue::Map(hashmap! {
                 "minimum_participants".to_string() => SelfDescribingValue::from(50_u64),
@@ -293,7 +294,7 @@ fn test_create_service_nervous_system_to_self_describing() {
                 "duration".to_string() => SelfDescribingValue::Map(hashmap! {
                     "seconds".to_string() => SelfDescribingValue::from(604_800_u64),
                 }),
-                "neurons_fund_participation".to_string() => SelfDescribingValue::from(0_u64),
+                "neurons_fund_participation".to_string() => SelfDescribingValue::from(false),
                 "minimum_icp".to_string() => SelfDescribingValue::Null,
                 "maximum_icp".to_string() => SelfDescribingValue::Null,
                 "neurons_fund_investment_icp".to_string() => SelfDescribingValue::Null,
@@ -382,7 +383,7 @@ fn test_derive_single_tuple_enum() {
         TestSingleTupleEnum::First(InnerValue { id: 123 }),
         SelfDescribingValue::Map(hashmap! {
             "First".to_string() => SelfDescribingValue::Map(hashmap! {
-                "id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123_u64)),
+                "id".to_string() => SelfDescribingValue::from(123_u64),
             }),
         }),
     );
@@ -390,10 +391,7 @@ fn test_derive_single_tuple_enum() {
 
 #[test]
 fn test_derive_mixed_enum_unit_variant() {
-    assert_self_describing_value_is(
-        TestMixedEnum::Empty,
-        SelfDescribingValue::Text("Empty".to_string()),
-    );
+    assert_self_describing_value_is(TestMixedEnum::Empty, SelfDescribingValue::from("Empty"));
 }
 
 #[test]
@@ -402,7 +400,7 @@ fn test_derive_mixed_enum_tuple_variant() {
         TestMixedEnum::WithValue(InnerValue { id: 456 }),
         SelfDescribingValue::Map(hashmap! {
             "WithValue".to_string() => SelfDescribingValue::Map(hashmap! {
-                "id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(456_u64)),
+                "id".to_string() => SelfDescribingValue::from(456_u64),
             }),
         }),
     );
