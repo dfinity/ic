@@ -372,7 +372,7 @@ pub(crate) fn validate_controller_or_subnet_admin(
         }
         Ok(())
     } else {
-        if !subnet_admins.contains(sender) {
+        if !canister.controllers().contains(sender) && !subnet_admins.contains(sender) {
             return Err(
                 CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin {
                     canister_id: canister.canister_id(),
