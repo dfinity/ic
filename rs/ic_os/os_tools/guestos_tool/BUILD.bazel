@@ -9,7 +9,11 @@ DEPENDENCIES = [
     "//rs/ic_os/networking/network",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
+    "@crate_index//:base64",
     "@crate_index//:clap",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
 ]
 
 MACRO_DEPENDENCIES = [
