@@ -21,6 +21,11 @@ DEPENDENCIES = [
     "@crate_index//:zeroize",
 ]
 
+RAYON_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:rayon",
+]
+
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:paste",
@@ -44,6 +49,17 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "type_rayon",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_features = ["rayon"],
+    crate_name = "ic_crypto_internal_bls12_381_type",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + RAYON_DEPENDENCIES,
 )
 
 rust_bench(

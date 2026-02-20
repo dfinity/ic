@@ -8230,6 +8230,7 @@ dependencies = [
  "paste",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rayon",
  "sha2 0.10.9",
  "subtle",
  "zeroize",

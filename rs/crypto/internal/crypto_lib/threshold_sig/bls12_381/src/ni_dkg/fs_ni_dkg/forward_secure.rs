@@ -660,7 +660,7 @@ impl FsEncryptionCiphertext {
 
         let cc: Vec<[G1Affine; NUM_CHUNKS]> = ciphertext
             .ciphertext_chunks
-            .iter()
+            .par_iter()
             .map(|cj| G1Affine::batch_deserialize_array(cj).or(Err("Malformed ciphertext_chunk")))
             .collect::<Result<Vec<_>, _>>()?;
 
