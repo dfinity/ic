@@ -234,6 +234,7 @@ impl RegistryHelper {
         }
     }
 
+    /// Return the `UnassignedNodesConfigRecord` at the given registry version
     pub(crate) fn get_unassigned_nodes_config(
         &self,
         version: RegistryVersion,
@@ -279,7 +280,8 @@ impl RegistryHelper {
         }
     }
 
-    /// Return the genesis cup at the given registry version for this node
+    /// Return the registry CUP (genesis/recovery) at the given registry version for the given
+    /// subnet ID
     pub(crate) fn get_registry_cup(
         &self,
         version: RegistryVersion,
