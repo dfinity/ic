@@ -23,6 +23,7 @@ use std::{
     convert::TryFrom,
     fmt::Display,
     io::{Write, stdin, stdout},
+    path::Path,
     str::FromStr,
 };
 use strum::EnumMessage;
@@ -47,10 +48,9 @@ On a high level, this process consists of the following steps:
 6. Uploading the obtained state to one of the nodes.
 7. Unhalting the recovered subnet.";
 
-/// We use a macro here to be able to nicely format the disclaimer text with the directory path,
-/// that can be passed with a call to `format!`.
-macro_rules! NNS_RECOVERY_DISCLAIMER {
-    () => { r#"
+fn nns_recovery_disclaimer(dir_path: &Path) -> String {
+    format!(
+        r#"
 The initialization of the local store uses the given NNS URL to make query calls to
 `get_certified_changes_since` to the registry canister. In case all NNS nodes are down in
 such a way that they cannot even serve query calls, then the local store initialization will
@@ -65,7 +65,9 @@ for example using the following commands:
 
 mkdir -p {dir}/recovery/working_dir/data/ic_registry_local_store
 rsync --archive --checksum --delete --partial --progress --no-g backup@[IPV6]:/var/lib/ic/data/ic_registry_local_store/ {dir}/recovery/working_dir/data/ic_registry_local_store -e "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A
-"# }
+"#,
+        dir = dir_path.display()
+    )
 }
 
 pub fn app_subnet_recovery(
@@ -116,7 +118,7 @@ pub fn nns_recovery_same_nodes(
         wait_for_confirmation(&logger);
     }
 
-    info!(logger, NNS_RECOVERY_DISCLAIMER!(), dir = args.dir.display());
+    info!(logger, "{}", nns_recovery_disclaimer(&args.dir));
 
     let nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args.clone(), nns_recovery_args);
 
@@ -150,7 +152,7 @@ pub fn nns_recovery_failover_nodes(
         neuron_args = Some(read_neuron_args(&logger));
     }
 
-    info!(logger, NNS_RECOVERY_DISCLAIMER!(), dir = args.dir.display());
+    info!(logger, "{}", nns_recovery_disclaimer(&args.dir));
 
     let nns_recovery =
         NNSRecoveryFailoverNodes::new(logger.clone(), args.clone(), neuron_args, nns_recovery_args);
