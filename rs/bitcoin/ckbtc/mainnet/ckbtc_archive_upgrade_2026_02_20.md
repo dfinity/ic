@@ -15,7 +15,7 @@ Previous ckBTC archive proposal: https://dashboard.internetcomputer.org/proposal
 ---
 
 ## Motivation
-Upgrade the ckBTC index canister to the latest version [ledger-suite-icrc-2026-02-02](https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2026-02-02).
+Upgrade the ckBTC archive canister to the latest version [ledger-suite-icrc-2026-02-02](https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2026-02-02).
 
 
 ## Release Notes
