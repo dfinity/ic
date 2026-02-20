@@ -501,45 +501,42 @@ fn test_filtering_with_multiple_records_in_same_segment() {
     assert_eq!(records[0].idx, 10);
     assert_eq!(records[4].idx, 14);
 }
-mod cache_tests {
-    use super::*;
 
-    #[test]
-    fn test_cache_lifecycle() {
-        let mut s = LogMemoryStore::new();
+#[test]
+fn test_cache_lifecycle() {
+    let mut s = LogMemoryStore::new();
 
-        // 1. Initial state: Uninitialized (None in OnceLock)
-        assert!(s.header_cache.get().is_none());
+    // 1. Initial state: Uninitialized (None in OnceLock)
+    assert!(s.header_cache.get().is_none());
 
-        // 2. Read triggers load: Uninitialized -> Empty (since no ring buffer yet)
-        assert_eq!(s.byte_capacity(), 0);
-        assert_eq!(s.header_cache.get(), Some(&None));
+    // 2. Read triggers load: Uninitialized -> Empty (since no ring buffer yet)
+    assert_eq!(s.byte_capacity(), 0);
+    assert_eq!(s.header_cache.get(), Some(&None));
 
-        // 3. Set limit: Empty -> Initialized
-        s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
-        match s.header_cache.get() {
-            Some(Some(h)) => {
-                assert_eq!(h.data_capacity.get() as usize, TEST_LOG_MEMORY_LIMIT);
-            }
-            state => panic!("Expected Initialized, got {:?}", state),
+    // 3. Set limit: Empty -> Initialized
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+    match s.header_cache.get() {
+        Some(Some(h)) => {
+            assert_eq!(h.data_capacity.get() as usize, TEST_LOG_MEMORY_LIMIT);
         }
-
-        // 4. Append: Initialized -> Initialized (updated)
-        let mut delta = CanisterLog::default_delta();
-        delta.add_record(1, b"test".to_vec());
-        s.append_delta_log(&mut delta);
-
-        match s.header_cache.get() {
-            Some(Some(h)) => {
-                assert_gt!(h.data_size.get(), 0);
-            }
-            state => panic!("Expected Initialized, got {:?}", state),
-        }
-
-        // 5. Strip deltas: cache is preserved.
-        s.maybe_page_map_mut();
-        assert!(s.header_cache.get().is_some());
+        state => panic!("Expected Initialized, got {:?}", state),
     }
+
+    // 4. Append: Initialized -> Initialized (updated)
+    let mut delta = CanisterLog::default_delta();
+    delta.add_record(1, b"test".to_vec());
+    s.append_delta_log(&mut delta);
+
+    match s.header_cache.get() {
+        Some(Some(h)) => {
+            assert_gt!(h.data_size.get(), 0);
+        }
+        state => panic!("Expected Initialized, got {:?}", state),
+    }
+
+    // 5. Strip deltas: cache is preserved.
+    s.maybe_page_map_mut();
+    assert!(s.header_cache.get().is_some());
 }
 
 #[test]

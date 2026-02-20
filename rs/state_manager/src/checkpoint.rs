@@ -1,5 +1,6 @@
 use crossbeam_channel::{Sender, unbounded};
 use ic_base_types::{CanisterId, SnapshotId, subnet_id_try_from_protobuf};
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
@@ -908,19 +909,20 @@ pub fn load_canister_state(
     // PageMap is a lazy pointer that doesn't verify file existence on creation.
     // To avoid redundant disk I/O during restoration, we only initialize page_map
     // if the log memory limit is non-zero.
-    let log_memory_store_data = if canister_state_bits.log_memory_limit.get() > 0 {
-        let starting_time = Instant::now();
-        let log_memory_store_layout = canister_layout.log_memory_store();
-        let log_memory_store_data = PageMap::open(
-            Box::new(log_memory_store_layout),
-            height,
-            Arc::clone(&fd_factory),
-        )?;
-        durations.insert("log_memory_store", starting_time.elapsed());
-        Some(log_memory_store_data)
-    } else {
-        None
-    };
+    let log_memory_store_data =
+        if LOG_MEMORY_STORE_FEATURE_ENABLED && canister_state_bits.log_memory_limit.get() > 0 {
+            let starting_time = Instant::now();
+            let log_memory_store_layout = canister_layout.log_memory_store();
+            let log_memory_store_data = PageMap::open(
+                Box::new(log_memory_store_layout),
+                height,
+                Arc::clone(&fd_factory),
+            )?;
+            durations.insert("log_memory_store", starting_time.elapsed());
+            Some(log_memory_store_data)
+        } else {
+            None
+        };
 
     let system_state = SystemState::new_from_checkpoint(
         canister_state_bits.controllers,
