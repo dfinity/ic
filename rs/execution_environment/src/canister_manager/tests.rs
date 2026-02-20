@@ -20,9 +20,10 @@ use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
-        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION,
+        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
+        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -551,10 +552,12 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
     // Try installing canister2, should fail due to insufficient memory capacity on the subnet.
     let err = test.install_canister(canister2, wasm).unwrap_err();
-    err.assert_contains(
-        ErrorCode::SubnetOversubscribed,
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet.",
-    );
+    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
+    } else {
+        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
+    };
+    err.assert_contains(ErrorCode::SubnetOversubscribed, msg);
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
         initial_cycles - test.canister_execution_cost(canister2)
@@ -1340,7 +1343,7 @@ fn start_a_stopped_canister_succeeds() {
         );
 
         // Start the canister.
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         canister_manager
             .start_canister(sender, canister, subnet_admins)
             .unwrap();
@@ -1362,7 +1365,7 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
 
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         assert_eq!(
             canister_manager.start_canister(sender, canister, subnet_admins),
             Ok(Vec::new())
@@ -1385,7 +1388,7 @@ fn start_a_stopping_canister_with_stop_contexts() {
 
         state.put_canister_state(canister);
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         assert_eq!(
             canister_manager.start_canister(sender, canister, subnet_admins),
             Ok(vec![stop_context])
@@ -2233,7 +2236,7 @@ fn add_cycles_sender_in_whitelist() {
     let initial_cycles = canister.system_state.balance();
     state.put_canister_state(canister);
 
-    let canister = state.canister_state_mut(&canister_id).unwrap();
+    let canister = state.canister_state_make_mut(&canister_id).unwrap();
     canister_manager
         .add_cycles(
             sender,
@@ -2262,7 +2265,7 @@ fn add_cycles_sender_not_in_whitelist() {
 
         // By default, the `CanisterManager`'s whitelist is set to `None`.
         // A call to `add_cycles` should fail.
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         assert_eq!(
             canister_manager.add_cycles(
                 sender,
@@ -2311,13 +2314,14 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
     // Try upgrading the canister, should fail because there is not enough memory capacity
     // on the subnet.
+    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
+    } else {
+        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
+    };
     test.upgrade_canister(canister2, wasm)
         .unwrap_err()
-        .assert_contains(
-            ErrorCode::SubnetOversubscribed,
-            "Canister requested 10.00 MiB of memory but only 10.00 MiB are available \
-            in the subnet.",
-        );
+        .assert_contains(ErrorCode::SubnetOversubscribed, msg);
 
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
@@ -2962,7 +2966,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .certified_data
         .clone_from(&certified_data);
     state
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
         .certified_data = certified_data;
@@ -3028,7 +3032,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
 
     // Insert data to the chunk store to verify it is cleared on uninstall.
     let store = &mut state
-        .canister_state_mut(&canister_test_id(0))
+        .canister_state_make_mut(&canister_test_id(0))
         .unwrap()
         .system_state
         .wasm_chunk_store;
@@ -4819,45 +4823,62 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
     let canister_id = test.create_canister(CYCLES);
 
     let canister_history_memory_usage = |test: &mut ExecutionTest| {
-        let canister_history_memory_usage = test
-            .canister_state(canister_id)
-            .canister_history_memory_usage()
-            .get();
-        let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
-        let canister_memory_allocated_bytes = test
-            .canister_state(canister_id)
-            .memory_allocated_bytes()
-            .get();
-        assert_eq!(canister_history_memory_usage, canister_memory_usage);
+        let canister_state = test.canister_state(canister_id);
+        let log_memory_store_memory_usage = canister_state.log_memory_store_memory_usage().get();
+        let canister_history_memory_usage = canister_state.canister_history_memory_usage().get();
+        let canister_memory_usage = canister_state.memory_usage().get();
+        let canister_memory_allocated_bytes = canister_state.memory_allocated_bytes().get();
+        assert_eq!(
+            canister_history_memory_usage + log_memory_store_memory_usage,
+            canister_memory_usage
+        );
         assert_eq!(canister_memory_usage, canister_memory_allocated_bytes);
         canister_history_memory_usage
     };
 
     let initial_subnet_available_memory =
         test.subnet_available_memory().get_execution_memory() as u64;
+    // Assert that canister history memory was non empty.
     let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
     assert_gt!(initial_canister_history_memory_usage, 0);
+    let initial_log_memory_store_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get();
+    if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        // Assert that canister log memory store memory was non empty.
+        assert_gt!(initial_log_memory_store_memory_usage, 0);
+    } else {
+        assert_eq!(initial_log_memory_store_memory_usage, 0);
+    }
 
     test.uninstall_code(canister_id).unwrap();
 
     let final_subnet_available_memory =
         test.subnet_available_memory().get_execution_memory() as u64;
-    assert_lt!(
-        final_subnet_available_memory,
-        initial_subnet_available_memory
-    );
+    // Assert that canister history memory usage has increased.
     let final_canister_history_memory_usage = canister_history_memory_usage(&mut test);
     assert_gt!(
         final_canister_history_memory_usage,
         initial_canister_history_memory_usage
     );
+    // Assert that canister log memory store memory was cleared.
+    let final_log_memory_store_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get();
+    assert_eq!(final_log_memory_store_memory_usage, 0);
 
-    let extra_subnet_memory_usage = initial_subnet_available_memory - final_subnet_available_memory;
+    let extra_subnet_available_memory_usage =
+        final_subnet_available_memory as i64 - initial_subnet_available_memory as i64;
     let extra_canister_history_memory_usage =
-        final_canister_history_memory_usage - initial_canister_history_memory_usage;
+        final_canister_history_memory_usage as i64 - initial_canister_history_memory_usage as i64;
+    let extra_canister_log_memory_store_memory_usage =
+        final_log_memory_store_memory_usage as i64 - initial_log_memory_store_memory_usage as i64;
+    // Assert that subnet available memory usage has opposite sign to canister memory usage.
     assert_eq!(
-        extra_subnet_memory_usage,
-        extra_canister_history_memory_usage
+        -extra_subnet_available_memory_usage,
+        extra_canister_history_memory_usage + extra_canister_log_memory_store_memory_usage
     );
 }
 
@@ -5465,7 +5486,7 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
-const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222);
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222 + TEST_DEFAULT_LOG_MEMORY_USAGE);
 
 #[test]
 fn empty_canister_memory_usage() {
@@ -7596,12 +7617,14 @@ fn create_canister_updates_subnet_available_memory() {
     let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
     assert_lt!(subnet_available_memory, initial_subnet_available_memory);
     let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
-    let canister_history_memory_usage = test
-        .canister_state(canister_id)
-        .canister_history_memory_usage()
-        .get();
+    let canister_state = test.canister_state(canister_id);
+    let canister_history_memory_usage = canister_state.canister_history_memory_usage().get();
+    let log_memory_store_memory_usage = canister_state.log_memory_store_memory_usage().get();
     assert_gt!(canister_history_memory_usage, 0);
-    assert_eq!(subnet_memory_usage, canister_history_memory_usage);
+    assert_eq!(
+        subnet_memory_usage,
+        canister_history_memory_usage + log_memory_store_memory_usage
+    );
 }
 
 #[test]

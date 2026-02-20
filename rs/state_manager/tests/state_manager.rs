@@ -381,7 +381,7 @@ fn lazy_pagemaps() {
 
     env.execute_ingress(canister_id, "write_heap_64k", vec![])
         .unwrap();
-    assert!(page_maps_by_status("loaded", &env) > 0);
+    assert_eq!(page_maps_by_status("loaded", &env), 2);
 }
 
 #[test]
@@ -795,7 +795,9 @@ fn stable_memory_is_persisted() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         canister_state
             .execution_state
             .as_mut()
@@ -864,7 +866,9 @@ fn missing_stable_memory_file_is_handled() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         canister_state.execution_state = None;
         state_manager.commit_and_certify(state, CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -1271,7 +1275,7 @@ fn missing_manifest_is_computed_incrementally() {
 
             insert_dummy_canister(&mut state, canister_id);
             state
-                .canister_state_mut(&canister_id)
+                .canister_state_make_mut(&canister_id)
                 .unwrap()
                 .execution_state
                 .as_mut()
@@ -1397,7 +1401,7 @@ fn first_manifest_after_restart_is_incremental() {
         // We need at least one canister, as incremental manifest computation only considers
         // heap and stable memory
         insert_dummy_canister(&mut state, canister_test_id(1));
-        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+        let canister_state = state.canister_state_make_mut(&canister_test_id(1)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
 
         const NEW_WASM_PAGE: u64 = 300;
@@ -2801,7 +2805,9 @@ fn can_state_sync_from_cache() {
 
         // Modify the first canister to ensure that its chunks are not identical to the
         // other canister
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         canister_state.system_state.add_canister_change(
             Time::from_nanos_since_unix_epoch(42),
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
@@ -3060,7 +3066,9 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
 
         // Modify the first canister to ensure that its chunks are not identical to the
         // other canister
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         canister_state.system_state.add_canister_change(
             Time::from_nanos_since_unix_epoch(42),
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
@@ -3240,7 +3248,9 @@ fn state_sync_can_hardlink_files_from_checkpoint_or_cache_to_scratchpad() {
 
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
-        let canister_state = state.canister_state_mut(&canister_test_id(200)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(200))
+            .unwrap();
         canister_state.system_state.add_canister_change(
             Time::from_nanos_since_unix_epoch(42),
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
@@ -3782,7 +3792,9 @@ fn can_state_sync_based_on_unverified_state_sync_checkpoint() {
         insert_dummy_canister(&mut state, canister_test_id(200));
 
         // Add ~20 MiB of memory data to canister 200
-        let canister_state = state.canister_state_mut(&canister_test_id(200)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(200))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         let pages_for_20mb = (20 * 1024 * 1024) / PAGE_SIZE;
         // Write data to many pages to create a reasonably large state
@@ -3904,7 +3916,9 @@ fn can_archive_state_sync_checkpoints_and_recover_from_verified_checkpoints() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
         // Add some pages to wasm_memory so overlay files are created
-        let canister_state = state.canister_state_mut(&canister_test_id(200)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(200))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(0), &[42u8; PAGE_SIZE]),
@@ -4292,14 +4306,18 @@ fn can_recover_from_corruption_on_state_sync() {
         insert_dummy_canister(state, canister_test_id(100));
         insert_dummy_canister(state, canister_test_id(110));
 
-        let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(90))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
             (PageIndex::new(300), &[99u8; PAGE_SIZE]),
         ]);
 
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         canister_state
             .execution_state
             .as_mut()
@@ -4313,7 +4331,9 @@ fn can_recover_from_corruption_on_state_sync() {
             (PageIndex::new(3000), &[100u8; PAGE_SIZE]),
         ]);
 
-        let canister_state = state.canister_state_mut(&canister_test_id(110)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(110))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(0), &[111u8; PAGE_SIZE]),
@@ -4335,7 +4355,9 @@ fn can_recover_from_corruption_on_state_sync() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
 
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         // Add a new page much further in the file so that the first one could
         // be re-used as a chunk, and so that there are all-zero chunks inbetween.
@@ -4344,7 +4366,9 @@ fn can_recover_from_corruption_on_state_sync() {
             .page_map
             .update(&[(PageIndex::new(3000), &[2u8; PAGE_SIZE])]);
 
-        let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(90))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         // Add a new page much further in the file so that the first one could
         // be re-used as a chunk.
@@ -4354,7 +4378,9 @@ fn can_recover_from_corruption_on_state_sync() {
             .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
 
         // Exchange pages in the canister heap to check applying chunks out of order.
-        let canister_state = state.canister_state_mut(&canister_test_id(110)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(110))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(0), &[112u8; PAGE_SIZE]),
@@ -4506,7 +4532,9 @@ fn state_sync_can_handle_corrupted_base_checkpoint_after_restart() {
 
     let populate_original_state = |state: &mut ReplicatedState| {
         insert_dummy_canister(state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         for i in 0..10000 {
             execution_state
@@ -4673,7 +4701,9 @@ fn can_detect_divergence_with_rehash() {
 
         insert_dummy_canister(&mut state, canister_test_id(100));
 
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         for i in 0..10000 {
             execution_state
@@ -4747,7 +4777,9 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
     let populate_original_state = |state: &mut ReplicatedState| {
         insert_dummy_canister(state, canister_test_id(90));
 
-        let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(90))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
@@ -4756,7 +4788,9 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
     };
 
     let update_state = |state: &mut ReplicatedState| {
-        let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(90))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state
             .wasm_memory
@@ -5235,7 +5269,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
     state_manager_test(|metrics, state_manager| {
         let (_, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(1));
-        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+        let canister_state = state.canister_state_make_mut(&canister_test_id(1)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
 
         const WASM_PAGES: u64 = 300;
@@ -6341,7 +6375,9 @@ fn can_reset_memory() {
 
         // One canister with some data.
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(0), &[99u8; PAGE_SIZE]),
@@ -6368,7 +6404,9 @@ fn can_reset_memory() {
         let (_height, mut state) = state_manager.take_tip();
 
         // Wipe data and write different data
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
         execution_state.wasm_memory.page_map.update(&[
@@ -6405,7 +6443,9 @@ fn can_reset_memory() {
         assert!(vmemory_size(&canister_layout) < 8 * PAGE_SIZE as u64);
 
         let (_height, mut state) = state_manager.take_tip();
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
 
         // Check again after checkpoint that no remnants of old data remain.
@@ -6527,7 +6567,9 @@ fn can_reset_stable_memory() {
 
         // One canister with some data.
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.stable_memory.page_map.update(&[
             (PageIndex::new(0), &[99u8; PAGE_SIZE]),
@@ -6554,7 +6596,9 @@ fn can_reset_stable_memory() {
         let (_height, mut state) = state_manager.take_tip();
 
         // Wipe data and write different data
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.stable_memory =
             Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
@@ -6592,7 +6636,9 @@ fn can_reset_stable_memory() {
         assert!(stable_memory_size(&canister_layout) < 8 * PAGE_SIZE as u64);
 
         let (_height, mut state) = state_manager.take_tip();
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
 
         // Check again after checkpoint that no remnants of old data remain.
@@ -6638,7 +6684,9 @@ fn can_reset_wasm_chunk_store() {
 
         // One canister with some data.
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         canister_state
             .system_state
             .wasm_chunk_store
@@ -6668,7 +6716,9 @@ fn can_reset_wasm_chunk_store() {
         let (_height, mut state) = state_manager.take_tip();
 
         // Wipe data and write different data.
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing();
         canister_state
             .system_state
@@ -6710,7 +6760,9 @@ fn can_reset_wasm_chunk_store() {
         assert!(wasm_chunk_store_size(&canister_layout) < 8 * PAGE_SIZE as u64);
 
         let (_height, mut state) = state_manager.take_tip();
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
 
         // Check again after checkpoint that no remnants of old data remain.
         assert_eq!(
@@ -6806,7 +6858,9 @@ fn can_uninstall_code() {
 
         // Insert a canister a write checkpoint
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
@@ -6839,7 +6893,7 @@ fn can_uninstall_code() {
 
         // Remove the execution state
         state
-            .canister_state_mut(&canister_test_id(100))
+            .canister_state_make_mut(&canister_test_id(100))
             .unwrap()
             .execution_state = None;
 
@@ -6931,7 +6985,9 @@ fn tip_is_initialized_correctly() {
 
         // One canister with some data
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state
             .wasm_memory
@@ -7056,7 +7112,9 @@ fn checkpoints_are_readonly() {
         // Add a canister
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state
             .wasm_memory
@@ -7069,7 +7127,9 @@ fn checkpoints_are_readonly() {
 
         // Modify the canister
         let (_height, mut state) = state_manager.take_tip();
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state
             .wasm_memory
@@ -7087,7 +7147,9 @@ fn checkpoints_are_readonly() {
 
         // Modify the canister again
         let (_height, mut state) = state_manager.take_tip();
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let canister_state = state
+            .canister_state_make_mut(&canister_test_id(100))
+            .unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state
             .wasm_memory
@@ -7108,7 +7170,7 @@ fn can_merge_unexpected_number_of_files() {
             let (_height, mut state) = state_manager.take_tip();
 
             insert_dummy_canister(&mut state, canister_test_id(1));
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let canister_state = state.canister_state_make_mut(&canister_test_id(1)).unwrap();
             let execution_state = canister_state.execution_state.as_mut().unwrap();
 
             const NUM_PAGES: usize = 100;
@@ -7202,7 +7264,7 @@ fn batch_summary_is_respected_for_writing_overlay_files() {
 
             for h in 2_u64..600 {
                 let (_, mut state) = state_manager.take_tip();
-                let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+                let canister_state = state.canister_state_make_mut(&canister_test_id(1)).unwrap();
                 let execution_state = canister_state.execution_state.as_mut().unwrap();
                 execution_state
                     .wasm_memory
@@ -7537,7 +7599,7 @@ fn can_create_and_restore_snapshot() {
             // Install a canister and give it some initial state
             let (_height, mut state) = state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_id);
-            let canister_state = state.canister_state_mut(&canister_id).unwrap();
+            let canister_state = state.canister_state_make_mut(&canister_id).unwrap();
             let execution_state = canister_state.execution_state.as_mut().unwrap();
             execution_state
                 .wasm_memory
@@ -7567,7 +7629,7 @@ fn can_create_and_restore_snapshot() {
 
             // Modify the canister.
             let (_height, mut state) = state_manager.take_tip();
-            let canister_state = state.canister_state_mut(&canister_id).unwrap();
+            let canister_state = state.canister_state_make_mut(&canister_id).unwrap();
             let execution_state = canister_state.execution_state.as_mut().unwrap();
             execution_state
                 .wasm_memory
@@ -7989,7 +8051,7 @@ fn can_split_with_inflight_restore_snapshot() {
 
             // Install `CANISTER_1` and give it some initial state.
             insert_dummy_canister(&mut state, CANISTER_1);
-            let canister_state = state.canister_state_mut(&CANISTER_1).unwrap();
+            let canister_state = state.canister_state_make_mut(&CANISTER_1).unwrap();
             let execution_state = canister_state.execution_state.as_mut().unwrap();
             execution_state
                 .wasm_memory
@@ -8133,7 +8195,7 @@ fn can_rename_canister() {
             // Install a canister and give it some initial state
             let (_height, mut state) = state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_id);
-            let canister_state = state.canister_state_mut(&canister_id).unwrap();
+            let canister_state = state.canister_state_make_mut(&canister_id).unwrap();
             let execution_state = canister_state.execution_state.as_mut().unwrap();
             execution_state
                 .wasm_memory

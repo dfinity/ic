@@ -36,7 +36,7 @@ use ic_types::{
         IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId, SignedIDkgDealing,
     },
 };
-use prometheus::IntCounter;
+use prometheus::{IntCounter, IntGauge};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -362,6 +362,7 @@ pub struct IDkgPoolImpl {
     transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     stats: Box<dyn IDkgStats>,
     invalidated_artifacts: IntCounter,
+    active_transcripts: IntGauge,
     log: ReplicaLogger,
 }
 
@@ -393,6 +394,10 @@ impl IDkgPoolImpl {
             invalidated_artifacts: metrics_registry.int_counter(
                 "idkg_invalidated_artifacts",
                 "The number of invalidated IDKG artifacts",
+            ),
+            active_transcripts: metrics_registry.int_gauge(
+                "idkg_transcripts_in_pool",
+                "The number of IDKG transcripts in the IDKG pool",
             ),
             validated,
             unvalidated: Box::new(InMemoryIDkgPoolSection::new(
@@ -525,6 +530,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                 }
             }
         }
+        self.active_transcripts.set(self.transcripts.len() as i64);
         self.unvalidated.mutate(unvalidated_ops);
         self.validated.mutate(validated_ops);
         ArtifactTransmits {

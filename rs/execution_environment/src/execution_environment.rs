@@ -829,7 +829,7 @@ impl ExecutionEnvironment {
                         // high that topping up the canister is not feasible.
                         if let CanisterCall::Ingress(ingress) = &msg {
                             let cost_schedule = state.get_own_cost_schedule();
-                            if let Ok(canister) = get_canister_mut(canister_id, &mut state)
+                            if let Ok(canister) = canister_make_mut(canister_id, &mut state)
                                 && is_delayed_ingress_induction_cost(&ingress.method_payload)
                             {
                                 let bytes_to_charge =
@@ -1950,7 +1950,7 @@ impl ExecutionEnvironment {
             state.metadata.subnet_call_context_manager.push_context(
                 SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
             );
-            if let Some(canister_stats) = state.canister_state_mut(&request.sender) {
+            if let Some(canister_stats) = state.canister_state_make_mut(&request.sender) {
                 canister_stats
                     .system_state
                     .canister_metrics_mut()
@@ -2282,7 +2282,7 @@ impl ExecutionEnvironment {
         subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
-        let canister = get_canister_mut(canister_id, state)?;
+        let canister = canister_make_mut(canister_id, state)?;
         self.canister_manager
             .update_settings(
                 timestamp_nanos,
@@ -2305,7 +2305,7 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<Vec<u8>, UserError> {
-        let canister = get_canister_mut(canister_id, state)?;
+        let canister = canister_make_mut(canister_id, state)?;
 
         let result = self
             .canister_manager
@@ -2327,7 +2327,7 @@ impl ExecutionEnvironment {
         msg: &mut CanisterCall,
         state: &mut ReplicatedState,
     ) -> ExecuteSubnetMessageResult {
-        match state.canister_state_mut(&canister_id) {
+        match state.canister_state_make_mut(&canister_id) {
             None => ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
                     ErrorCode::CanisterNotFound,
@@ -2468,7 +2468,7 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
     ) -> Result<Vec<u8>, UserError> {
-        let canister = get_canister_mut(canister_id, state)?;
+        let canister = canister_make_mut(canister_id, state)?;
         self.canister_manager
             .add_cycles(sender, cycles, canister, provisional_whitelist)
             .map(|()| EmptyBlob.encode())
@@ -2485,7 +2485,7 @@ impl ExecutionEnvironment {
         resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
-        let canister = get_canister_mut(args.get_canister_id(), state)?;
+        let canister = canister_make_mut(args.get_canister_id(), state)?;
         self.canister_manager
             .upload_chunk(
                 sender,
@@ -2518,7 +2518,7 @@ impl ExecutionEnvironment {
         resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
-        let canister = get_canister_mut(args.get_canister_id(), state)?;
+        let canister = canister_make_mut(args.get_canister_id(), state)?;
         self.canister_manager
             .clear_chunk_store(
                 sender,
@@ -3928,7 +3928,7 @@ impl ExecutionEnvironment {
         subnet_size: usize,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let task = state
-            .canister_state_mut(canister_id)
+            .canister_state_make_mut(canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -4476,11 +4476,15 @@ fn get_canister(
     }
 }
 
-fn get_canister_mut(
+/// Makes a mutable reference to the canister state if it exists, cloning it if
+/// necessary.
+///
+/// Make sure to only call this when actually mutating the canister state.
+fn canister_make_mut(
     canister_id: CanisterId,
     state: &mut ReplicatedState,
 ) -> Result<&mut CanisterState, UserError> {
-    match state.canister_state_mut(&canister_id) {
+    match state.canister_state_make_mut(&canister_id) {
         Some(canister) => Ok(canister),
         None => Err(UserError::new(
             ErrorCode::CanisterNotFound,

@@ -282,7 +282,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
 
             IngressInductionCost::Fee { payer, cost } => {
                 // Get the paying canister from the state.
-                let canister = match state.canister_state_mut(&payer) {
+                let canister = match state.canister_state_make_mut(&payer) {
                     Some(canister) => canister,
                     None => return Err(IngressInductionError::CanisterNotFound(payer)),
                 };

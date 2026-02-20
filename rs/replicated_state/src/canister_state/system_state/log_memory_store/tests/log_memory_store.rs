@@ -538,9 +538,9 @@ mod cache_tests {
             state => panic!("Expected Initialized, got {:?}", state),
         }
 
-        // 5. Invalidate: Initialized -> Uninitialized
+        // 5. Strip deltas: cache is preserved.
         s.maybe_page_map_mut();
-        assert!(s.header_cache.get().is_none());
+        assert!(s.header_cache.get().is_some());
     }
 }
 
