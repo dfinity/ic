@@ -41,7 +41,9 @@ upload() {
     # NOTE: we upload a "directory" and narrow down the upload with --files-from so that only
     # the current artifact is uploaded. Without this, --immutable does not work as expected.
     # https://github.com/rclone/rclone/issues/4921
-    AWS_ACCESS_KEY_ID="$AWS_AWS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AWS_AWS_SECRET_ACCESS_KEY" rclone \
+    AWS_ACCESS_KEY_ID="${AWS_AWS_ACCESS_KEY_ID:?AWS credentials required for AWS upload}" \
+        AWS_SECRET_ACCESS_KEY="${AWS_AWS_SECRET_ACCESS_KEY:?AWS credentials required for AWS upload}" \
+        rclone \
         "${rclone_common_flags[@]}" \
         --s3-provider=AWS \
         --s3-region=eu-central-1 \
@@ -56,7 +58,9 @@ upload() {
 
     # Upload to Cloudflare's R2 (S3)
     log "uploading to Cloudflare"
-    AWS_ACCESS_KEY_ID="$CF_AWS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$CF_AWS_SECRET_ACCESS_KEY" rclone -v \
+    AWS_ACCESS_KEY_ID="${CF_AWS_ACCESS_KEY_ID:?CloudFlare R2 credentials required for CF upload}" \
+        AWS_SECRET_ACCESS_KEY="${CF_AWS_SECRET_ACCESS_KEY:?Cloudflare R2 credentials required for CF upload}" \
+        rclone -v \
         "${rclone_common_flags[@]}" \
         --s3-provider=Cloudflare \
         --s3-region=weur \
