@@ -741,7 +741,7 @@ impl ReplicatedState {
             .subnets()
             .get(&subnet_id)
             .map(|x| x.subnet_admins.clone())
-            .unwrap_or(BTreeSet::new())
+            .unwrap_or_default()
     }
 
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
