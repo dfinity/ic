@@ -407,7 +407,6 @@ pub fn verify_zk_proofs(
 
     // More conversions
 
-    // TODO(CRP-2550) this loop can run in parallel
     let public_coefficients = public_coefficients
         .coefficients
         .par_iter()

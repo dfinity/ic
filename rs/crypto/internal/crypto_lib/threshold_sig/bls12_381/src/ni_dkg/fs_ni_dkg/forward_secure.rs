@@ -220,7 +220,7 @@ impl BTENode {
             b: G2Affine::deserialize_unchecked(&node.b).expect("Malformed secret key at BTENode.b"),
             d_t: node
                 .d_t
-                .iter()
+                .par_iter()
                 .map(|g2| {
                     G2Affine::deserialize_unchecked(&g2)
                         .expect("Malformed secret key at BTENode.d_t")
@@ -228,7 +228,7 @@ impl BTENode {
                 .collect(),
             d_h: node
                 .d_h
-                .iter()
+                .par_iter()
                 .map(|g2| {
                     G2Affine::deserialize_unchecked(&g2)
                         .expect("Malformed secret key at BTENode.d_h")
@@ -519,19 +519,24 @@ impl SecretKey {
                 b_blind += (&f_acc + &sys.f[n]) * &delta;
 
                 let e_blind = (&sys.h * &delta) + &node.e;
-                let mut d_t_blind = LinkedList::new();
-                let mut k = n + 1;
-                d_t.iter().for_each(|d| {
-                    let tmp = (&sys.f[k] * &delta) + d;
-                    d_t_blind.push_back(tmp.to_affine());
-                    k += 1;
-                });
 
-                let mut d_h_blind = Vec::new();
-                node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-                    let tmp = (f * &delta) + d;
-                    d_h_blind.push(tmp);
-                });
+                let d_t_vec: Vec<_> = d_t.iter().collect();
+                let d_t_blind_vec: Vec<G2Affine> = d_t_vec
+                    .par_iter()
+                    .enumerate()
+                    .map(|(i, d)| (&sys.f[n + 1 + i] * &delta + *d).to_affine())
+                    .collect();
+                let mut d_t_blind = LinkedList::new();
+                d_t_blind_vec
+                    .into_iter()
+                    .for_each(|d| d_t_blind.push_back(d));
+
+                let d_h_blind: Vec<G2Projective> = node
+                    .d_h
+                    .par_iter()
+                    .zip(sys.f_h.par_iter())
+                    .map(|(d, f)| (f * &delta) + d)
+                    .collect();
                 let d_h_blind = G2Projective::batch_normalize(&d_h_blind);
 
                 self.bte_nodes.push_back(BTENode {
@@ -555,20 +560,26 @@ impl SecretKey {
         let e = &sys.h * &delta + &node.e;
         b_acc += f_acc * &delta;
 
-        let mut d_t_blind = LinkedList::new();
         // Typically `d_t_blind` remains empty.
         // It is only nontrivial if `epoch` is less than LAMBDA_T bits.
-        let mut k = epoch.len();
-        d_t.iter().for_each(|d| {
-            let tmp = (&sys.f[k] * &delta) + d;
-            d_t_blind.push_back(tmp.to_affine());
-            k += 1;
-        });
-        let mut d_h_blind = Vec::new();
-        node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-            let tmp = f * &delta + d;
-            d_h_blind.push(tmp.to_affine());
-        });
+        let epoch_len = epoch.len();
+        let d_t_vec: Vec<_> = d_t.iter().collect();
+        let d_t_blind_vec: Vec<G2Affine> = d_t_vec
+            .par_iter()
+            .enumerate()
+            .map(|(i, d)| (&sys.f[epoch_len + i] * &delta + *d).to_affine())
+            .collect();
+        let mut d_t_blind = LinkedList::new();
+        d_t_blind_vec
+            .into_iter()
+            .for_each(|d| d_t_blind.push_back(d));
+
+        let d_h_blind: Vec<G2Affine> = node
+            .d_h
+            .par_iter()
+            .zip(sys.f_h.par_iter())
+            .map(|(d, f)| (f * &delta + d).to_affine())
+            .collect();
 
         self.bte_nodes.push_back(BTENode {
             tau,
@@ -605,7 +616,7 @@ impl SecretKey {
         Self {
             bte_nodes: secret_key
                 .bte_nodes
-                .iter()
+                .par_iter()
                 .map(BTENode::deserialize_unchecked)
                 .collect(),
         }
