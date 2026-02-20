@@ -64,7 +64,7 @@ use ic_system_test_driver::{
 use ic_types::{CanisterId, PrincipalId};
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::ManagementCanister;
-use ic_utils::interfaces::management_canister::builders::InstallMode;
+use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use maplit::btreemap;
 use reqwest::{Response, StatusCode};
 use serde_cbor::Value;
@@ -436,7 +436,7 @@ async fn deploy_wasm_to_fresh_canister(
         .unwrap()
         .0;
     ic00.install_code(&canister_id, wasm)
-        .with_mode(InstallMode::Reinstall)
+        .with_mode(CanisterInstallMode::Reinstall)
         .call_and_wait()
         .await
         .unwrap();
