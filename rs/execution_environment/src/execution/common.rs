@@ -361,7 +361,7 @@ pub(crate) fn validate_controller_or_subnet_admin(
     sender: &PrincipalId,
 ) -> Result<(), CanisterManagerError> {
     // In case the subnet admins list is empty, return the same error as
-    // `validate_controller` would to maintain backward compatibility.
+    // the legacy `validate_controller` would to maintain backward compatibility.
     if subnet_admins.is_empty() {
         if !canister.controllers().contains(sender) {
             return Err(CanisterManagerError::CanisterInvalidController {
