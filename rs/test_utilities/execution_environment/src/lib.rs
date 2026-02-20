@@ -1470,6 +1470,10 @@ impl ExecutionTest {
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             if let Some(message_instructions_used) = message_instructions_used {
+                // cycles charging proceeds by prepaying for the message instruction limit
+                // and subsequently refunding based on `message_instructions_used`
+                // and thus `message_instructions_used` are capped
+                // at the message instruction limit
                 let capped_slice_instructions_used = std::cmp::min(
                     slice_instructions_used.get() as u64,
                     self.install_code_instruction_limits.message().get(),
@@ -1619,6 +1623,10 @@ impl ExecutionTest {
                     let instructions_used =
                         NumInstructions::from(slice_instructions_used.get() as u64)
                             + instructions_used_before;
+                    // cycles charging proceeds by prepaying for the message instruction limit
+                    // and subsequently refunding based on `message_instructions_used`
+                    // and thus `message_instructions_used` are capped
+                    // at the message instruction limit
                     let capped_instructions_used = std::cmp::min(
                         instructions_used,
                         self.install_code_instruction_limits.message(),
