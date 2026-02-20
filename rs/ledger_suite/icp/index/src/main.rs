@@ -45,6 +45,10 @@ const ACCOUNTIDENTIFIER_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNTIDENTIFIER_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
+/// The minimum allowed value for the interval for retrieving blocks from the ledger and archive(s)
+/// for (re)building the index. The interval has to be larger than 0, but any epsilon should be fine.
+/// A minimum of 1 second would mean that the timer potentially only runs every other round.
+const MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_nanos(1);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;
@@ -267,8 +271,10 @@ fn init(index_arg: Option<IndexArg>) {
     // stable memory initialization
     mutate_state(|state| {
         state.ledger_id = ledger_id;
-        state.retrieve_blocks_from_ledger_interval =
-            retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
+        state.retrieve_blocks_from_ledger_interval = retrieve_blocks_from_ledger_interval_seconds
+            .map(|interval| {
+                Duration::from_secs(interval).max(MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL)
+            });
     });
 
     // set the first build_index to be called after init
@@ -294,8 +300,10 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
                 }
 
                 if let Some(new_value) = retrieve_blocks_from_ledger_interval_seconds {
-                    state.retrieve_blocks_from_ledger_interval =
-                        Some(Duration::from_secs(new_value));
+                    state.retrieve_blocks_from_ledger_interval = Some(
+                        Duration::from_secs(new_value)
+                            .max(MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL),
+                    );
                 }
             });
         }
