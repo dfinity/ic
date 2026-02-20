@@ -19,7 +19,6 @@ use ic_system_test_driver::{
     systest,
     util::{MessageCanister, MetricsFetcher, block_on, runtime_from_url},
 };
-use ic_types::consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE;
 use slog::info;
 
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
@@ -54,21 +53,19 @@ fn test(test_env: TestEnv) {
             &log,
         )
         .await;
-        if STORE_PRE_SIGNATURES_IN_STATE {
-            // Stash size should be 5 before the roation
-            await_pre_signature_stash_size(&app_subnet, 5, key_ids.as_slice(), &log);
-            // Turn off pre-signature creation to verify that the stash is purged correctly
-            set_pre_signature_stash_size(
-                &governance,
-                app_subnet.subnet_id,
-                key_ids.as_slice(),
-                /* max_parallel_pre_signatures */ 0,
-                /* max_stash_size */ 5,
-                key_rotation_period,
-                &log,
-            )
-            .await;
-        }
+        // Stash size should be 5 before the roation
+        await_pre_signature_stash_size(&app_subnet, 5, key_ids.as_slice(), &log);
+        // Turn off pre-signature creation to verify that the stash is purged correctly
+        set_pre_signature_stash_size(
+            &governance,
+            app_subnet.subnet_id,
+            key_ids.as_slice(),
+            /* max_parallel_pre_signatures */ 0,
+            /* max_stash_size */ 5,
+            key_rotation_period,
+            &log,
+        )
+        .await;
 
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
         // Get the public key first to make sure feature is working
@@ -116,10 +113,9 @@ fn test(test_env: TestEnv) {
             }
         }
 
-        if STORE_PRE_SIGNATURES_IN_STATE {
-            // Stash size should be 0 after the roation
-            await_pre_signature_stash_size(&app_subnet, 0, key_ids.as_slice(), &log);
-        }
+        // Stash size should be 0 after the roation
+        await_pre_signature_stash_size(&app_subnet, 0, key_ids.as_slice(), &log);
+
         // Ensure that public keys are the same after the rotation
         for key_id in &key_ids {
             let public_key = get_public_key_with_logger(key_id, &msg_can, &log)

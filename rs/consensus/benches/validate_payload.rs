@@ -115,7 +115,7 @@ where
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),
-            (&make_genesis(summary)).into(),
+            make_genesis(summary).into(),
             pool_config.clone(),
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
@@ -218,12 +218,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
         );
     }
 
-    state_manager.commit_and_certify(
-        state,
-        Height::new(CERTIFIED_HEIGHT),
-        CertificationScope::Full,
-        None,
-    );
+    state_manager.commit_and_certify(state, CertificationScope::Full, None);
 
     let to_certify = state_manager.list_state_hashes_to_certify();
     assert_eq!(to_certify.len(), 1);

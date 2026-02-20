@@ -2,6 +2,7 @@ use crate::guest_direct_boot::{DirectBoot, prepare_direct_boot};
 use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
+use crate::metrics::GuestVmMetrics;
 use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{Context, Error, Result, anyhow, bail};
@@ -9,10 +10,9 @@ use clap::{Parser, ValueEnum};
 use command_runner::{AsyncCommandRunner, RealAsyncCommandRunner};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use ic_device::device_mapping::MappedDevice;
 use ic_device::mount::{GptPartitionProvider, PartitionProvider};
-use ic_metrics_tool::{Metric, MetricsWriter};
 use nix::unistd::getuid;
 use sev_host::HostSevCertificateProvider;
 use std::fmt::{Debug, Formatter};
@@ -38,6 +38,7 @@ use virt::sys::{
 mod boot_args;
 mod guest_direct_boot;
 mod guest_vm_config;
+mod metrics;
 mod systemd_notifier;
 mod upgrade_device_mapper;
 
@@ -373,7 +374,7 @@ impl Debug for GuestVmServiceError {
 
 /// Service responsible for managing the GuestOS virtual machine lifecycle
 pub struct GuestVmService {
-    metrics_writer: MetricsWriter,
+    metrics: GuestVmMetrics,
     libvirt_connection: Connect,
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
@@ -397,7 +398,8 @@ impl GuestVmService {
 
     #[cfg(target_os = "linux")]
     pub fn new(guest_vm_type: GuestVMType) -> Result<Self> {
-        let metrics_writer = MetricsWriter::new(PathBuf::from(Self::metrics_path(guest_vm_type)));
+        let metrics = GuestVmMetrics::new(PathBuf::from(Self::metrics_path(guest_vm_type)))
+            .context("Failed to create metrics")?;
         let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
             config_tool::deserialize_config(config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
@@ -435,7 +437,7 @@ impl GuestVmService {
             .unwrap_or(Path::new(GUESTOS_DEVICE));
 
         Ok(Self {
-            metrics_writer,
+            metrics,
             libvirt_connection,
             hostos_config,
             guest_vm_type,
@@ -503,23 +505,11 @@ impl GuestVmService {
     ) -> Result<(), GuestVmServiceError> {
         let virtual_machine = match self.start_virtual_machine().await {
             Ok(virtual_machine) => {
-                self.metrics_writer
-                    .write_metrics(&[Metric::with_annotation(
-                        "hostos_guestos_service_start",
-                        1.0,
-                        "GuestOS virtual machine define state",
-                    )
-                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
+                self.metrics.set_service_start(self.guest_vm_type, true);
                 virtual_machine
             }
             Err(err) => {
-                self.metrics_writer
-                    .write_metrics(&[Metric::with_annotation(
-                        "hostos_guestos_service_start",
-                        0.0,
-                        "GuestOS virtual machine define state",
-                    )
-                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
+                self.metrics.set_service_start(self.guest_vm_type, false);
                 return Err(err);
             }
         };
@@ -641,7 +631,6 @@ impl GuestVmService {
         let generated_mac = calculate_deterministic_mac(
             &self.hostos_config.icos_settings.mgmt_mac,
             self.hostos_config.icos_settings.deployment_environment,
-            IpVariant::V6,
             NodeType::HostOS,
         );
 
@@ -997,7 +986,7 @@ mod tests {
                 mock_host_sev_certificate_provider()
                     .expect("Failed to create mock SEV cert provider");
             let mut service = GuestVmService {
-                metrics_writer: MetricsWriter::new(metrics_file.path().to_path_buf()),
+                metrics: GuestVmMetrics::new(metrics_file.path().to_path_buf()).unwrap(),
                 libvirt_connection: self.libvirt_connection.clone(),
                 hostos_config: self.hostos_config.clone(),
                 systemd_notifier: systemd_notifier.clone(),

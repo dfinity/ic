@@ -134,14 +134,14 @@ pub mod v2 {
         #[test]
         fn test_from_btreemap_parsing_reduction_coefficient() {
             let json = r#"{
-                "North America,US":            { "type0": [100, null],  "type2": [200, null],  "type3": [300, 70] },
+                "North America,US":            { "type0": [100, null],  "type2": [200, null],  "type3": [300, 70], "type4": [350, null] },
                 "North America,CA":            { "type0": [400, null],  "type2": [500, null],  "type3": [600, 70] },
-                "North America,US,California": { "type0": [700, null],                         "type3": [800, 70] },
+                "North America,US,California": { "type0": [700, null],                         "type3": [800, 70], "type4": [850, null] },
                 "North America,US,Florida":    { "type0": [900, null],                         "type3": [1000, 70] },
                 "North America,US,Georgia":    { "type0": [1100, null],                        "type3": [1200, null] },
-                "Asia,SG":                     { "type0": [10000, 100],  "type2": [11000, 100],  "type3": [12000, 70] },
+                "Asia,SG":                     { "type0": [10000, 100],  "type2": [11000, 100],  "type3": [12000, 70], "type4": [13000, null] },
                 "Asia":                        { "type0": [13000, 100],  "type2": [14000, 100],  "type3": [15000, 70] },
-                "Europe":                      { "type0": [20000, null], "type2": [21000, null], "type3": [22000, 70] }
+                "Europe":                      { "type0": [20000, null], "type2": [21000, null], "type3": [22000, 70], "type4": [25000, null] }
             }"#;
 
             let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
@@ -173,6 +173,15 @@ pub mod v2 {
             let rewards = europe.rates.get("type3").unwrap();
             assert_eq!(rewards.xdr_permyriad_per_node_per_month, 22000);
             assert_eq!(rewards.reward_coefficient_percent, Some(70));
+
+            // Verify type4 is parsed correctly (flat rewards, no coefficient)
+            let rewards = europe.rates.get("type4").unwrap();
+            assert_eq!(rewards.xdr_permyriad_per_node_per_month, 25000);
+            assert_eq!(rewards.reward_coefficient_percent, None);
+
+            let rewards = us_california.rates.get("type4").unwrap();
+            assert_eq!(rewards.xdr_permyriad_per_node_per_month, 850);
+            assert_eq!(rewards.reward_coefficient_percent, None);
         }
 
         #[test]
