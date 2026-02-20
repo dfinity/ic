@@ -6,17 +6,19 @@ use ic_execution_environment::scheduler::scheduler_metrics::SchedulerMetrics;
 use ic_logger::new_replica_logger_from_config;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterState, ReplicatedState, SchedulerState, SystemState};
-use ic_types::{Cycles, NumBytes, PrincipalId, SubnetId};
+use ic_replicated_state::{
+    CanisterState, InputQueueType, ReplicatedState, SchedulerState, SystemState,
+};
+use ic_test_utilities_types::messages::RequestBuilder;
+use ic_types::{Cycles, ExecutionRound, NumBytes, PrincipalId, SubnetId};
 use ic_types_test_utils::ids::{canister_test_id, user_test_id};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 fn main() {
     let mut canisters = BTreeMap::new();
-    let mut ordered_new_execution_canister_ids = Vec::new();
-    let mut ordered_long_execution_canister_ids = Vec::new();
-    for i in 0..50_000 {
+    let mut canisters_with_completed_messages = BTreeSet::new();
+    for i in 0..100_000 {
         let canister_id = canister_test_id(i);
         let scheduler_state = SchedulerState::default();
         let system_state = SystemState::new_running_for_testing(
@@ -25,16 +27,21 @@ fn main() {
             Cycles::from_parts(1, 2),
             NumSeconds::from(100_000),
         );
-        canisters.insert(
-            canister_test_id(i),
-            Arc::new(CanisterState::new(system_state, None, scheduler_state)),
-        );
-
-        if i % 10 == 0 {
-            ordered_long_execution_canister_ids.push(canister_id);
-        } else {
-            ordered_new_execution_canister_ids.push(canister_id);
+        let mut canister_state = CanisterState::new(system_state, None, scheduler_state);
+        // First 1k canisters are active and will complete an execution every round.
+        if i < 1_000 {
+            let mut available_memory = i64::MAX;
+            canister_state
+                .push_input(
+                    RequestBuilder::new().receiver(canister_id).build().into(),
+                    &mut available_memory,
+                    SubnetType::Application,
+                    InputQueueType::RemoteSubnet,
+                )
+                .unwrap();
+            canisters_with_completed_messages.insert(canister_id);
         }
+        canisters.insert(canister_id, Arc::new(canister_state));
     }
     let mut state = ReplicatedState::new(
         SubnetId::new(PrincipalId::new_subnet_test_id(0)),
@@ -57,9 +64,19 @@ fn main() {
     let mut criterion = Criterion::default();
     let mut group = criterion.benchmark_group("RoundSchedule");
 
-    group.bench_function("filter_canisters", |bench| {
+    group.bench_function("iteration", |bench| {
         bench.iter(|| {
             round_schedule.start_iteration(&mut state, &metrics, &log);
+            round_schedule.end_iteration(&mut state, &canisters_with_completed_messages);
+        });
+    });
+
+    // Populate the subnet schedule, even if the iteration benchmark is not run.
+    round_schedule.start_iteration(&mut state, &metrics, &log);
+
+    group.bench_function("finish_round", |bench| {
+        bench.iter(|| {
+            round_schedule.finish_round(&mut state, ExecutionRound::from(0));
         });
     });
 }

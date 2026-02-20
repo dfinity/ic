@@ -448,7 +448,7 @@ impl RoundSchedule {
         }
     }
 
-    pub(crate) fn finish_round(&self, state: &mut ReplicatedState, current_round: ExecutionRound) {
+    pub fn finish_round(&self, state: &mut ReplicatedState, current_round: ExecutionRound) {
         let now = state.time();
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 

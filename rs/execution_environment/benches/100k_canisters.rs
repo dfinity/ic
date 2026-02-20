@@ -1,7 +1,6 @@
 use criterion::Criterion;
 use ic_base_types::PrincipalId;
 use ic_state_machine_tests::StateMachine;
-use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats};
 use ic_types::Cycles;
 use std::sync::{Arc, Mutex};
 
@@ -63,36 +62,6 @@ fn round(c: &mut Criterion) {
             },
             |_| {
                 env.tick();
-                for metric in &[
-                    "execution_round_preparation_duration_seconds",
-                    "execution_round_consensus_queue_duration_seconds",
-                    "execution_round_advance_long_install_code_duration_seconds",
-                    "execution_round_scheduling_duration_seconds",
-                    "execution_round_inner_duration_seconds",
-                    "execution_round_subnet_queue_duration_seconds",
-                    "execution_round_inner_heartbeat_overhead_duration_seconds",
-                    "execution_round_inner_preparation_duration_seconds",
-                    "execution_round_inner_execution_duration_seconds",
-                    "execution_round_inner_finalization_duration_seconds",
-                    "execution_round_finalization_duration_seconds",
-                    "execution_round_finalization_stop_canisters_duration_seconds",
-                    "execution_round_finalization_ingress_history_prune_duration_seconds",
-                    "execution_round_finalization_charge_resources_duration_seconds",
-                ] {
-                    println!(
-                        "\"{metric}\": {:?},",
-                        fetch_histogram_stats(&env.metrics_registry, metric)
-                    );
-                }
-                for metric in &[
-                    "execution_round_inner_preparation_step_duration_seconds",
-                    "mr_process_batch_phase_duration_seconds",
-                ] {
-                    println!(
-                        "\"{metric}\": {:?},",
-                        fetch_histogram_vec_stats(&env.metrics_registry, metric)
-                    );
-                }
             },
             criterion::BatchSize::SmallInput,
         );
@@ -132,5 +101,4 @@ criterion::criterion_group! {
     targets = checkpoint
 }
 
-// criterion::criterion_main!(bench_clone, bench_round, bench_checkpoint);
-criterion::criterion_main!(bench_clone, bench_round);
+criterion::criterion_main!(bench_clone, bench_round, bench_checkpoint);
