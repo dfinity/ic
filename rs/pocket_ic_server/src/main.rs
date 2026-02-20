@@ -98,6 +98,10 @@ struct Args {
     /// Defaults to the latest registry version.
     #[clap(long, requires = "fetch_mainnet_routing_table")]
     mainnet_registry_version: Option<u64>,
+    /// Local file path to use as custom domain provider for the HTTP gateway.
+    /// The file should contain lines of the form `domain:canister-id`.
+    #[clap(long)]
+    domain_custom_provider_local_file: Option<PathBuf>,
 }
 
 /// Get the path of the current running binary.
@@ -218,6 +222,7 @@ async fn start(runtime: Arc<Runtime>) {
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default()
         .with_port(real_port)
+        .with_domain_custom_provider_local_file(args.domain_custom_provider_local_file)
         .build();
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while.

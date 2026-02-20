@@ -36666,7 +36666,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "339c9b0c678407d05577350ad2b069a806bf9495"
+            "Rev": "f33afac2aa47b8760090c93823b7fa7f5ba67dc4"
           }
         }
       },
@@ -36796,7 +36796,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "maxminddb 0.26.0",
+              "id": "maxminddb 0.27.3",
               "target": "maxminddb"
             },
             {
@@ -47399,21 +47399,21 @@
       ],
       "license_file": "LICENSE"
     },
-    "maxminddb 0.26.0": {
+    "maxminddb 0.27.3": {
       "name": "maxminddb",
-      "version": "0.26.0",
+      "version": "0.27.3",
       "package_url": "https://github.com/oschwald/maxminddb-rust",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/maxminddb/0.26.0/download",
-          "sha256": "2a197e44322788858682406c74b0b59bf8d9b4954fe1f224d9a25147f1880bba"
+          "url": "https://static.crates.io/crates/maxminddb/0.27.3/download",
+          "sha256": "76371bd37ce742f8954daabd0fde7f1594ee43ac2200e20c003ba5c3d65e2192"
         }
       },
       "targets": [
         {
           "Library": {
             "crate_name": "maxminddb",
-            "crate_root": "src/maxminddb/lib.rs",
+            "crate_root": "src/lib.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -47460,7 +47460,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.26.0"
+        "version": "0.27.3"
       },
       "license": "ISC",
       "license_ids": [
