@@ -8052,29 +8052,7 @@ fn set_heap_and_stable_memory_during_reinstall() {
     check_data(&mut test, canister_id);
 }
 
-#[test]
-fn non_subnet_admin_cannot_perform_subnet_admin_actions_on_canister_but_controllers_can() {
-    let controller = user_test_id(1);
-    let subnet_admin = user_test_id(2);
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_admins(vec![subnet_admin.get()])
-        .build();
-
-    // Create canister with specific controller who's not a subnet admin.
-    test.set_user_id(controller);
-    let canister_id = test.universal_canister().unwrap();
-    assert!(
-        !test
-            .state()
-            .get_own_subnet_admins()
-            .contains(controller.get_ref())
-    );
-
-    assert_eq!(
-        test.canister_state(canister_id).status(),
-        CanisterStatusType::Running
-    );
-
+fn assert_subnet_admin_actions_can_be_performed(mut test: ExecutionTest, canister_id: CanisterId) {
     // Canister can be stopped...
     let _ = test.stop_canister(canister_id);
     test.process_stopping_canisters();
@@ -8103,6 +8081,32 @@ fn non_subnet_admin_cannot_perform_subnet_admin_actions_on_canister_but_controll
     test.process_stopping_canisters();
     test.delete_canister(canister_id).unwrap();
     assert_eq!(test.state().canister_state(&canister_id), None);
+}
+
+#[test]
+fn non_subnet_admin_cannot_perform_subnet_admin_actions_on_canister_but_controllers_can() {
+    let controller = user_test_id(1);
+    let subnet_admin = user_test_id(2);
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    // Create canister with specific controller who's not a subnet admin.
+    test.set_user_id(controller);
+    let canister_id = test.universal_canister().unwrap();
+    assert!(
+        !test
+            .state()
+            .get_own_subnet_admins()
+            .contains(controller.get_ref())
+    );
+
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Running
+    );
+
+    assert_subnet_admin_actions_can_be_performed(test, canister_id);
 }
 
 #[test]
@@ -8219,34 +8223,7 @@ fn subnet_admin_can_perform_actions_on_canister() {
         CanisterStatusType::Running
     );
 
-    // Canister can be stopped...
-    let _ = test.stop_canister(canister_id);
-    test.process_stopping_canisters();
-    assert_eq!(
-        test.canister_state(canister_id).status(),
-        CanisterStatusType::Stopped
-    );
-
-    // ...started again...
-    test.start_canister(canister_id).unwrap();
-    assert_eq!(
-        test.canister_state(canister_id).status(),
-        CanisterStatusType::Running
-    );
-
-    // ...status can be checked...
-    let status = test.canister_status(canister_id).unwrap();
-    assert_eq!(status.status(), CanisterStatusType::Running);
-
-    // ...code can be uninstalled...
-    test.uninstall_code(canister_id).unwrap();
-    assert_eq!(test.canister_state(canister_id).execution_state, None);
-
-    // ...and finally can be deleted.
-    let _ = test.stop_canister(canister_id);
-    test.process_stopping_canisters();
-    test.delete_canister(canister_id).unwrap();
-    assert_eq!(test.state().canister_state(&canister_id), None);
+    assert_subnet_admin_actions_can_be_performed(test, canister_id);
 }
 
 #[test]
