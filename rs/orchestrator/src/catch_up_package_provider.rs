@@ -32,7 +32,7 @@
 
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
-    registry_helper::RegistryHelper,
+    registry_helper::{RegistryError, RegistryHelper},
     utils::https_endpoint_to_url,
 };
 use http_body_util::{BodyExt, Full};
@@ -396,10 +396,7 @@ impl CatchUpPackageProvider {
     fn persist_cup(&self, cup_proto: &pb::CatchUpPackage) -> OrchestratorResult<PathBuf> {
         let cup_file_path = self.get_cup_path();
         let cup = CatchUpPackage::try_from(cup_proto).map_err(|e| {
-            OrchestratorError::IoError(
-                "Failed to deserialize CUP! Couldn't persist.".to_string(),
-                std::io::Error::new(std::io::ErrorKind::InvalidData, e),
-            )
+            OrchestratorError::deserialize_cup_error(get_cup_proto_height(cup_proto), e)
         })?;
         info!(
             self.logger,
@@ -474,9 +471,8 @@ impl CatchUpPackageProvider {
             .into_iter()
             .flatten()
             .max_by_key(get_cup_proto_height)
-            .ok_or(OrchestratorError::MakeRegistryCupError(
-                subnet_id,
-                registry_version,
+            .ok_or(OrchestratorError::RegistryError(
+                RegistryError::MakeRegistryCupError(subnet_id, registry_version),
             ))?;
         let latest_cup = CatchUpPackage::try_from(&latest_cup_proto).map_err(|err| {
             OrchestratorError::deserialize_cup_error(get_cup_proto_height(&latest_cup_proto), err)

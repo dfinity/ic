@@ -1,4 +1,3 @@
-use crate::error::{OrchestratorError, OrchestratorResult};
 use ic_consensus_cup_utils::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
@@ -6,6 +5,7 @@ use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord, firewall::v1::FirewallRuleSet,
     hostos_version::v1::HostosVersionRecord, node::v1::IPv4InterfaceConfig,
     replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry, firewall::FirewallRegistry,
@@ -14,12 +14,118 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::{
-    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
-    hostos_version::HostosVersion,
+    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    consensus::CatchUpPackage,
+    hostos_version::{HostosVersion, HostosVersionParseError},
+    registry::RegistryClientError,
+    replica_version::ReplicaVersionParseError,
 };
-use std::{convert::TryFrom, net::IpAddr, sync::Arc};
+use std::{convert::TryFrom, error::Error, fmt, net::IpAddr, sync::Arc};
 
-/// Calls the Registry and converts errors into `OrchestratorError`
+pub(crate) type RegistryResult<T> = Result<T, RegistryError>;
+
+#[derive(Debug)]
+pub(crate) enum RegistryError {
+    /// An error occurred when querying the registry
+    RegistryClientError(RegistryClientError),
+
+    /// The given node is not assigned to any subnet
+    NodeUnassigned(NodeId, RegistryVersion),
+
+    /// The root subnet ID is missing in the registry at the given version
+    RootSubnetIdMissing(RegistryVersion),
+
+    /// The given subnet ID does not map to a `SubnetRecord` at the given version
+    SubnetMissing(SubnetId, RegistryVersion),
+
+    /// The given node ID does not map to a `NodeRecord` at the given version
+    NodeMissing(NodeId, RegistryVersion),
+
+    /// The unassigned nodes config is missing in the registry at the given version
+    UnassignedNodesConfigMissing(RegistryVersion),
+
+    /// The given node ID does not map to an `ApiBoundaryNodeRecord` at the given version
+    ApiBoundaryNodeMissing(NodeId, RegistryVersion),
+
+    /// The given replica version is missing in the registry at the given version
+    ReplicaVersionMissing(ReplicaVersion, RegistryVersion),
+
+    /// The given HostOS version is missing in the registry at the given version
+    HostOsVersionMissing(HostosVersion, RegistryVersion),
+
+    /// The genesis or recovery CUP failed to be constructed
+    MakeRegistryCupError(SubnetId, RegistryVersion),
+
+    /// A replica version could not be parsed
+    ReplicaVersionParseError(ReplicaVersionParseError),
+
+    /// A HostOS version could not be parsed
+    HostOsVersionParseError(HostosVersionParseError),
+}
+
+impl fmt::Display for RegistryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RegistryError::RegistryClientError(e) => write!(f, "Registry client error: {e}"),
+            RegistryError::NodeUnassigned(node_id, registry_version) => write!(
+                f,
+                "Node {node_id} is not found in any subnet at registry version {registry_version}"
+            ),
+            RegistryError::RootSubnetIdMissing(registry_version) => write!(
+                f,
+                "Root subnet ID is missing in the Registry at registry version {registry_version}"
+            ),
+            RegistryError::SubnetMissing(subnet_id, registry_version) => write!(
+                f,
+                "Subnet ID {subnet_id} does not exist in the Registry at registry version {registry_version}"
+            ),
+            RegistryError::NodeMissing(node_id, registry_version) => write!(
+                f,
+                "Node ID {node_id} does not exist in the Registry at registry version {registry_version}"
+            ),
+            RegistryError::UnassignedNodesConfigMissing(registry_version) => write!(
+                f,
+                "Unassigned nodes config is missing in the Registry at registry version {registry_version}"
+            ),
+            RegistryError::ApiBoundaryNodeMissing(node_id, registry_version) => write!(
+                f,
+                "API Boundary Node ID {node_id} does not exist in the Registry at registry version {registry_version}"
+            ),
+            RegistryError::ReplicaVersionMissing(replica_version, registry_version) => {
+                write!(
+                    f,
+                    "Replica version {replica_version} was not found in the Registry at registry version {registry_version}"
+                )
+            }
+            RegistryError::HostOsVersionMissing(hostos_version, registry_version) => {
+                write!(
+                    f,
+                    "HostOS version {hostos_version} was not found in the Registry at registry version {registry_version}"
+                )
+            }
+            RegistryError::MakeRegistryCupError(subnet_id, registry_version) => write!(
+                f,
+                "Failed to construct the genesis/recovery CUP, subnet_id: {subnet_id}, registry_version: {registry_version}",
+            ),
+            RegistryError::ReplicaVersionParseError(e) => {
+                write!(f, "Failed to parse replica version: {e}")
+            }
+            RegistryError::HostOsVersionParseError(e) => {
+                write!(f, "Failed to parse HostOS version: {e}")
+            }
+        }
+    }
+}
+
+impl From<RegistryClientError> for RegistryError {
+    fn from(err: RegistryClientError) -> Self {
+        RegistryError::RegistryClientError(err)
+    }
+}
+
+impl Error for RegistryError {}
+
+/// Calls the Registry and converts errors into `RegistryError`.
 #[derive(Clone)]
 pub(crate) struct RegistryHelper {
     node_id: NodeId,
@@ -67,7 +173,7 @@ impl RegistryHelper {
     /// Return the `SubnetId` this node belongs to (i.e. the Subnet that
     /// contains `self.node_id`) iff the node belongs to a subnet and that
     /// subnet does not have the `start_as_nns`-flag set.
-    pub(crate) fn get_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
+    pub(crate) fn get_subnet_id(&self, version: RegistryVersion) -> RegistryResult<SubnetId> {
         if let Some((subnet_id, subnet_record)) = self
             .registry_client
             .get_listed_subnet_for_node_id(self.node_id, version)?
@@ -76,10 +182,7 @@ impl RegistryHelper {
             return Ok(subnet_id);
         }
 
-        Err(OrchestratorError::NodeUnassignedError(
-            self.node_id,
-            version,
-        ))
+        Err(RegistryError::NodeUnassigned(self.node_id, version))
     }
 
     /// Return the `SubnetRecord` for the given subnet
@@ -87,40 +190,43 @@ impl RegistryHelper {
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<SubnetRecord> {
-        match self.registry_client.get_subnet_record(subnet_id, version) {
-            Ok(Some(record)) => Ok(record),
-            _ => Err(OrchestratorError::SubnetMissingError(subnet_id, version)),
+    ) -> RegistryResult<SubnetRecord> {
+        match self.registry_client.get_subnet_record(subnet_id, version)? {
+            Some(record) => Ok(record),
+            None => Err(RegistryError::SubnetMissing(subnet_id, version)),
         }
     }
 
     /// Return the root `SubnetId`
-    pub(crate) fn get_root_subnet_id(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<SubnetId> {
+    pub(crate) fn get_root_subnet_id(&self, version: RegistryVersion) -> RegistryResult<SubnetId> {
         match self.registry_client.get_root_subnet_id(version)? {
             Some(subnet_id) => Ok(subnet_id),
-            None => Err(OrchestratorError::UpgradeError(
-                "Root subnet ID missing in registry".to_string(),
-            )),
+            None => Err(RegistryError::RootSubnetIdMissing(version)),
         }
     }
 
+    /// Return the `ApiBoundaryNodeRecord` for the given node ID
     pub(crate) fn get_api_boundary_node_record(
         &self,
         node_id: NodeId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<ApiBoundaryNodeRecord> {
+    ) -> RegistryResult<ApiBoundaryNodeRecord> {
         match self
             .registry_client
             .get_api_boundary_node_record(node_id, version)?
         {
             Some(record) => Ok(record),
-            _ => Err(OrchestratorError::ApiBoundaryNodeMissingError(
-                node_id, version,
-            )),
+            None => Err(RegistryError::ApiBoundaryNodeMissing(node_id, version)),
         }
+    }
+
+    pub(crate) fn get_unassigned_nodes_config(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryResult<Option<UnassignedNodesConfigRecord>> {
+        self.registry_client
+            .get_unassigned_nodes_config(version)
+            .map_err(RegistryError::RegistryClientError)
     }
 
     /// Return the `ReplicaVersionRecord` for the given replica version
@@ -128,13 +234,17 @@ impl RegistryHelper {
         &self,
         replica_version_id: ReplicaVersion,
         version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersionRecord> {
-        self.registry_client
+    ) -> RegistryResult<ReplicaVersionRecord> {
+        match self
+            .registry_client
             .get_replica_version_record_from_version_id(&replica_version_id, version)?
-            .ok_or(OrchestratorError::ReplicaVersionMissingError(
+        {
+            Some(record) => Ok(record),
+            None => Err(RegistryError::ReplicaVersionMissing(
                 replica_version_id,
                 version,
-            ))
+            )),
+        }
     }
 
     /// Return the `HostosVersionRecord` for the given HostOS version
@@ -142,12 +252,17 @@ impl RegistryHelper {
         &self,
         hostos_version_id: HostosVersion,
         version: RegistryVersion,
-    ) -> OrchestratorResult<HostosVersionRecord> {
-        self.registry_client
+    ) -> RegistryResult<HostosVersionRecord> {
+        match self
+            .registry_client
             .get_hostos_version_record(&hostos_version_id, version)?
-            .ok_or(OrchestratorError::UpgradeError(
-                "HostOS version record not found at the given ID".to_string(),
-            ))
+        {
+            Some(record) => Ok(record),
+            None => Err(RegistryError::HostOsVersionMissing(
+                hostos_version_id,
+                version,
+            )),
+        }
     }
 
     /// Return the genesis cup at the given registry version for this node
@@ -155,25 +270,27 @@ impl RegistryHelper {
         &self,
         version: RegistryVersion,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<CatchUpPackage> {
-        make_registry_cup(&*self.registry_client, subnet_id, &self.logger)
-            .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
+    ) -> RegistryResult<CatchUpPackage> {
+        match make_registry_cup(self.registry_client.as_ref(), subnet_id, &self.logger) {
+            Some(cup) => Ok(cup),
+            None => Err(RegistryError::MakeRegistryCupError(subnet_id, version)),
+        }
     }
 
     pub(crate) fn get_firewall_rules(
         &self,
         version: RegistryVersion,
         scope: &FirewallRulesScope,
-    ) -> OrchestratorResult<Option<FirewallRuleSet>> {
+    ) -> RegistryResult<Option<FirewallRuleSet>> {
         self.registry_client
             .get_firewall_rules(version, scope)
-            .map_err(OrchestratorError::RegistryClientError)
+            .map_err(RegistryError::RegistryClientError)
     }
 
     pub(crate) fn get_all_nodes_ip_addresses(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<IpAddr>> {
+    ) -> RegistryResult<Vec<IpAddr>> {
         let ips = self.registry_client.get_all_nodes_ip_addresses(version)?;
 
         Ok(ips.unwrap_or_default())
@@ -182,7 +299,7 @@ impl RegistryHelper {
     pub(crate) fn get_app_subnet_nodes_ip_addresses(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<IpAddr>> {
+    ) -> RegistryResult<Vec<IpAddr>> {
         let ips = self
             .registry_client
             .get_app_subnet_nodes_ip_addresses(version)?;
@@ -193,7 +310,7 @@ impl RegistryHelper {
     pub(crate) fn get_system_subnet_nodes_ip_addresses(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<IpAddr>> {
+    ) -> RegistryResult<Vec<IpAddr>> {
         let ips = self
             .registry_client
             .get_system_subnet_nodes_ip_addresses(version)?;
@@ -205,10 +322,10 @@ impl RegistryHelper {
         &self,
         node_id: NodeId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Option<SubnetId>> {
+    ) -> RegistryResult<Option<SubnetId>> {
         self.registry_client
             .get_subnet_id_from_node_id(node_id, version)
-            .map_err(OrchestratorError::RegistryClientError)
+            .map_err(RegistryError::RegistryClientError)
     }
 
     /// Get the replica version of the given subnet in the given registry
@@ -217,10 +334,11 @@ impl RegistryHelper {
         &self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion> {
+    ) -> RegistryResult<ReplicaVersion> {
         let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
+
         ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
-            .map_err(OrchestratorError::ReplicaVersionParseError)
+            .map_err(RegistryError::ReplicaVersionParseError)
     }
 
     /// Get the recalled replica versions of the given subnet in the given registry
@@ -229,18 +347,19 @@ impl RegistryHelper {
         &self,
         _subnet_id: SubnetId,
         _registry_version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<ReplicaVersion>> {
+    ) -> RegistryResult<Vec<ReplicaVersion>> {
         // TODO(NODE-1754): Remove this placeholder and replace with the commented code below once
         // registry changes were merged
         Ok(vec![])
 
         // let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
+        //
         // subnet_record
         //     .recalled_replica_version_ids
         //     .iter()
         //     .map(|version_str| {
         //         ReplicaVersion::try_from(version_str.as_ref())
-        //             .map_err(OrchestratorError::ReplicaVersionParseError)
+        //             .map_err(RegistryError::ReplicaVersionParseError)
         //     })
         //     .collect()
     }
@@ -248,29 +367,24 @@ impl RegistryHelper {
     pub(crate) fn get_expected_replica_version(
         &self,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<(ReplicaVersion, RegistryVersion)> {
+    ) -> RegistryResult<(ReplicaVersion, RegistryVersion)> {
         let registry_version = self.get_latest_version();
         let new_replica_version = self.get_replica_version(subnet_id, registry_version)?;
+
         Ok((new_replica_version, registry_version))
     }
 
     pub(crate) fn get_unassigned_replica_version(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion> {
-        match self.registry_client.get_unassigned_nodes_config(version) {
-            Ok(Some(record)) => {
+    ) -> RegistryResult<ReplicaVersion> {
+        match self.registry_client.get_unassigned_nodes_config(version)? {
+            Some(record) => {
                 let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
-                    .map_err(|err| {
-                        OrchestratorError::UpgradeError(format!(
-                            "Couldn't parse the replica version: {err}"
-                        ))
-                    })?;
+                    .map_err(RegistryError::ReplicaVersionParseError)?;
                 Ok(replica_version)
             }
-            _ => Err(OrchestratorError::UpgradeError(
-                "No replica version for unassigned nodes found".to_string(),
-            )),
+            None => Err(RegistryError::UnassignedNodesConfigMissing(version)),
         }
     }
 
@@ -278,24 +392,25 @@ impl RegistryHelper {
         &self,
         node_id: NodeId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion> {
+    ) -> RegistryResult<ReplicaVersion> {
         let api_boundary_node_record = self.get_api_boundary_node_record(node_id, version)?;
+
         ReplicaVersion::try_from(api_boundary_node_record.version.as_ref())
-            .map_err(OrchestratorError::ReplicaVersionParseError)
+            .map_err(RegistryError::ReplicaVersionParseError)
     }
 
     pub(crate) fn is_system_api_boundary_node(
         &self,
         node_id: NodeId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<bool> {
+    ) -> RegistryResult<bool> {
         self.registry_client
             .is_system_api_boundary_node(node_id, version)
-            .map_err(OrchestratorError::RegistryClientError)
+            .map_err(RegistryError::RegistryClientError)
     }
 
     /// Return the DC ID where the current replica is located.
-    pub fn dc_id(&self) -> Option<String> {
+    pub(crate) fn dc_id(&self) -> Option<String> {
         let registry_version = self.get_latest_version();
         let node_record = self
             .registry_client
@@ -318,16 +433,13 @@ impl RegistryHelper {
     pub(crate) fn get_ssh_recovery_access(
         &self,
         registry_version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<String>> {
+    ) -> RegistryResult<Vec<String>> {
         match self
             .registry_client
             .get_node_record(self.node_id, registry_version)?
         {
             Some(record) => Ok(record.ssh_node_state_write_access),
-            None => Err(OrchestratorError::NodeRecordMissingError(
-                self.node_id,
-                registry_version,
-            )),
+            None => Err(RegistryError::NodeMissing(self.node_id, registry_version)),
         }
     }
 
@@ -335,7 +447,7 @@ impl RegistryHelper {
     pub(crate) fn get_node_hostos_version(
         &self,
         registry_version: RegistryVersion,
-    ) -> OrchestratorResult<Option<HostosVersion>> {
+    ) -> RegistryResult<Option<HostosVersion>> {
         let node_record = self
             .registry_client
             .get_node_record(self.node_id, registry_version)?;
@@ -343,11 +455,7 @@ impl RegistryHelper {
         node_record
             .and_then(|node_record| node_record.hostos_version_id)
             .map(|node_record| {
-                HostosVersion::try_from(node_record).map_err(|err| {
-                    OrchestratorError::UpgradeError(format!(
-                        "Could not parse HostOS version: {err}"
-                    ))
-                })
+                HostosVersion::try_from(node_record).map_err(RegistryError::HostOsVersionParseError)
             })
             .transpose()
     }
@@ -355,22 +463,24 @@ impl RegistryHelper {
     pub(crate) fn get_node_ipv4_config(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Option<IPv4InterfaceConfig>> {
+    ) -> RegistryResult<Option<IPv4InterfaceConfig>> {
         let result = self
             .registry_client
             .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.public_ipv4_config);
+
         Ok(result)
     }
 
     pub(crate) fn get_node_domain_name(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Option<String>> {
+    ) -> RegistryResult<Option<String>> {
         let result = self
             .registry_client
             .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.domain);
+
         Ok(result)
     }
 }

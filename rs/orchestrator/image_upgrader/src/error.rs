@@ -1,4 +1,5 @@
 use ic_http_utils::file_downloader::FileDownloadError;
+use ic_types::{RegistryVersion, ReplicaVersion};
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -10,6 +11,16 @@ pub type UpgradeResult<T> = Result<T, UpgradeError>;
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
 pub enum UpgradeError {
+    /// Generic upgrade error
+    GenericError(String),
+
+    /// An error occurred when querying the registry that prevents the orchestrator from making
+    /// progress
+    RegistryError(String),
+
+    /// An error occurred when trying to determine the node's subnet ID
+    FailedToDetermineSubnetId(String),
+
     /// An IO error occurred
     IoError(String, io::Error),
 
@@ -17,13 +28,19 @@ pub enum UpgradeError {
     /// downloaded file
     FileDownloadError(FileDownloadError),
 
-    /// Generic upgrade error
-    GenericError(String),
-
     /// Generic error while handling reboot time
     RebootTimeError(String),
 
+    /// An error occurred while exchanging disk encryption keys
     DiskEncryptionKeyExchangeError(String),
+
+    /// The replicator is not caught up with the registry, and thus cannot determine whether the
+    /// given replica version is recalled or not. Contains the latest registry version known to the
+    /// replicator
+    ReplicatorNotCaughtUp(ReplicaVersion, RegistryVersion),
+
+    /// The given replica version is recalled at the given registry version
+    RecalledReplicaVersion(ReplicaVersion, RegistryVersion),
 }
 
 impl UpgradeError {
@@ -39,6 +56,11 @@ impl UpgradeError {
 impl fmt::Display for UpgradeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            UpgradeError::GenericError(msg) => write!(f, "Failed to upgrade: {msg}"),
+            UpgradeError::RegistryError(e) => write!(f, "Registry error: {e}"),
+            UpgradeError::FailedToDetermineSubnetId(msg) => {
+                write!(f, "Failed to determine subnet ID: {msg}")
+            }
             UpgradeError::IoError(msg, e) => {
                 write!(f, "IO error, message: {msg:?}, error: {e:?}")
             }
@@ -46,10 +68,17 @@ impl fmt::Display for UpgradeError {
             UpgradeError::RebootTimeError(msg) => {
                 write!(f, "Failed to read or write reboot time: {msg}")
             }
-            UpgradeError::GenericError(msg) => write!(f, "Failed to upgrade: {msg}"),
             UpgradeError::DiskEncryptionKeyExchangeError(msg) => {
                 write!(f, "Failed to exchange disk encryption key: {msg}")
             }
+            UpgradeError::ReplicatorNotCaughtUp(replica_version, registry_version) => write!(
+                f,
+                "Delaying upgrade to {replica_version} until registry data is recent enough. Latest registry version: {registry_version}",
+            ),
+            UpgradeError::RecalledReplicaVersion(replica_version, registry_version) => write!(
+                f,
+                "The replica version {replica_version} is recalled at registry version {registry_version}",
+            ),
         }
     }
 }
