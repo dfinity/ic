@@ -868,7 +868,6 @@ fn test_error_backoff() {
         let mut found_backoff_message = false;
         let mut log_contents = String::new();
         for _ in 0..10 {
-            log_contents = String::new();
             log_file
                 .read_to_string(&mut log_contents)
                 .expect("failed to read log file");

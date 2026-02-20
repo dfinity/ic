@@ -89,10 +89,11 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let (app_subnet, app_node) = get_app_subnet_and_node(&env.topology_snapshot());
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
 
-    let principal = block_on(MessageCanister::new_with_cycles(
+    let principal = block_on(MessageCanister::new_with_cycles_with_retries(
         &app_agent,
         app_node.effective_canister_id(),
         u128::MAX,
+        &logger,
     ))
     .canister_id();
 

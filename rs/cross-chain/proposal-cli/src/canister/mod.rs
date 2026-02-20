@@ -213,7 +213,6 @@ impl TargetCanister {
             | TargetCanister::CkBtcMinter
             | TargetCanister::CkDogeIndex
             | TargetCanister::CkDogeLedger
-            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -223,6 +222,10 @@ impl TargetCanister {
             | TargetCanister::CyclesLedger
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc => self.repo_dir().into_iter().collect(),
+            TargetCanister::CkDogeMinter => vec![
+                PathBuf::from("rs/bitcoin/ckbtc"),
+                PathBuf::from("rs/dogecoin/ckdoge"),
+            ],
             TargetCanister::Bitcoin => vec![PathBuf::from("canister")],
             TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => {
                 vec![PathBuf::from("watchdog")]
