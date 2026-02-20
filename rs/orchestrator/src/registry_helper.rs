@@ -31,7 +31,7 @@ pub(crate) enum RegistryError {
     /// An error occurred when querying the registry
     RegistryClientError(RegistryClientError),
 
-    /// The given node is not assigned to any subnet
+    /// The given node is not assigned to any subnet at the given version
     NodeUnassigned(NodeId, RegistryVersion),
 
     /// The root subnet ID is missing in the registry at the given version
@@ -55,7 +55,7 @@ pub(crate) enum RegistryError {
     /// The given HostOS version is missing in the registry at the given version
     HostOsVersionMissing(HostosVersion, RegistryVersion),
 
-    /// The genesis or recovery CUP failed to be constructed
+    /// The genesis or recovery CUP failed to be constructed at the given version
     MakeRegistryCupError(SubnetId, RegistryVersion),
 
     /// A replica version could not be parsed
