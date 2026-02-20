@@ -1040,8 +1040,7 @@ fn stop_a_canister_with_incorrect_controller_fails() {
         CanisterStatusType::Running
     );
 
-    // Switch the user so the stop request comes from a non-controller
-    // and not a subnet admin.
+    // Switch the user so the stop request comes from a non-controller.
     let test_user = user_test_id(42);
     test.set_user_id(test_user);
     assert!(
