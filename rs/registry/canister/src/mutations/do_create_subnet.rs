@@ -13,7 +13,8 @@ use ic_protobuf::{
         node::v1::NodeRecord,
         subnet::v1::{
             CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-            ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+            ChainKeyConfig as ChainKeyConfigPb, GenesisArgs, SubnetFeatures as SubnetFeaturesPb,
+            SubnetRecord, catch_up_package_contents::CupType,
         },
     },
     types::v1::PrincipalId as PrincipalIdPb,
@@ -102,7 +103,7 @@ impl Registry {
         };
 
         // 3. Create subnet record and associated entries
-        let cup_contents = CatchUpPackageContents {
+        let mut cup_contents = CatchUpPackageContents {
             initial_ni_dkg_transcript_low_threshold: Some(response.low_threshold_transcript_record),
             initial_ni_dkg_transcript_high_threshold: Some(
                 response.high_threshold_transcript_record,
@@ -110,6 +111,8 @@ impl Registry {
             chain_key_initializations,
             ..Default::default()
         };
+
+        cup_contents.cup_type = Some(CupType::Genesis(GenesisArgs {}));
 
         let new_subnet_dkg = RegistryMutation {
             mutation_type: registry_mutation::Type::Insert as i32,
