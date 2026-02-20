@@ -1,5 +1,4 @@
-use std::time::Duration;
-
+use crate::{execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED, flag_status::FlagStatus};
 use ic_base_types::NumBytes;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
@@ -7,8 +6,7 @@ use ic_types::{
     NumInstructions, NumOsPages,
 };
 use serde::{Deserialize, Serialize};
-
-use crate::flag_status::FlagStatus;
+use std::time::Duration;
 
 // Defining 100000 globals in a module can result in significant overhead in
 // each message's execution time (about 40x), so set a limit 3 orders of
@@ -122,10 +120,15 @@ pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
+
     /// If this flag is enabled, then the environment variables are supported.
     pub environment_variables: FlagStatus,
+
     /// Use deterministic memory tracker.
     pub deterministic_memory_tracker: FlagStatus,
+
+    /// Enables the log memory store feature.
+    pub log_memory_store_feature: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -134,6 +137,10 @@ impl FeatureFlags {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             environment_variables: FlagStatus::Enabled,
             deterministic_memory_tracker: FlagStatus::Disabled,
+            log_memory_store_feature: match LOG_MEMORY_STORE_FEATURE_ENABLED {
+                true => FlagStatus::Enabled,
+                false => FlagStatus::Disabled,
+            },
         }
     }
 }

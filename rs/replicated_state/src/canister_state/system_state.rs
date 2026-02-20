@@ -22,7 +22,6 @@ use crate::{
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::{EnvironmentVariables, NumSeconds};
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{ReplicaLogger, error};
@@ -637,7 +636,7 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
+            LogMemoryStore::new(),
         )
     }
 
@@ -746,10 +745,7 @@ impl SystemState {
             ),
             log_visibility,
             canister_log,
-            log_memory_store: LogMemoryStore::from_checkpoint(
-                LOG_MEMORY_STORE_FEATURE,
-                log_memory_store_data,
-            ),
+            log_memory_store: LogMemoryStore::from_checkpoint(log_memory_store_data),
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
@@ -824,7 +820,7 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
-            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
+            LogMemoryStore::new(),
         )
     }
 
@@ -2446,7 +2442,7 @@ pub mod testing {
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
-            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
+            log_memory_store: LogMemoryStore::new(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),

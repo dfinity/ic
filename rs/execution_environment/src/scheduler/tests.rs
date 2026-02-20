@@ -8,6 +8,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::{
+    embedders::FeatureFlags,
     execution_environment::STOP_CANISTER_TIMEOUT_DURATION,
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
@@ -3247,6 +3248,7 @@ fn replicated_state_metrics_nothing_exported() {
         0.into(),
         default_subnet_memory_capacity(),
         &state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -3517,6 +3519,7 @@ fn replicated_state_metrics_running_canister() {
         0.into(),
         default_subnet_memory_capacity(),
         &state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -3548,6 +3551,7 @@ fn replicated_state_metrics_different_canister_statuses() {
         0.into(),
         default_subnet_memory_capacity(),
         &state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -3590,6 +3594,7 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
         0.into(),
         default_subnet_memory_capacity(),
         &state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -3629,6 +3634,7 @@ fn replicated_state_metrics_stop_contexts_with_missing_call_ids() {
         0.into(),
         default_subnet_memory_capacity(),
         &state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -3664,6 +3670,7 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
         0.into(),
         default_subnet_memory_capacity(),
         &state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -3793,6 +3800,7 @@ fn threshold_signature_agreements_metric_is_updated() {
         1.into(),
         test.scheduler().exec_env.subnet_memory_capacity(),
         &test.scheduler().state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -3959,6 +3967,7 @@ fn threshold_signature_agreements_metric_is_updated() {
         2.into(),
         test.scheduler().exec_env.subnet_memory_capacity(),
         &test.scheduler().state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -4016,6 +4025,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         0.into(),
         test.scheduler().exec_env.subnet_memory_capacity(),
         &test.scheduler().state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -4055,6 +4065,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         0.into(),
         test.scheduler().exec_env.subnet_memory_capacity(),
         &test.scheduler().state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
     let consumed_cycles_after = NominalCycles::from(
@@ -4092,6 +4103,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         0.into(),
         test.scheduler().exec_env.subnet_memory_capacity(),
         &test.scheduler().state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -4160,6 +4172,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         0.into(),
         test.scheduler().exec_env.subnet_memory_capacity(),
         &test.scheduler().state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
     let consumed_cycles_after = NominalCycles::from(
@@ -4274,6 +4287,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         0.into(),
         test.scheduler().exec_env.subnet_memory_capacity(),
         &test.scheduler().state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 
@@ -4319,6 +4333,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         0.into(),
         test.scheduler().exec_env.subnet_memory_capacity(),
         &test.scheduler().state_metrics,
+        &FeatureFlags::default(),
         &no_op_logger(),
     );
 

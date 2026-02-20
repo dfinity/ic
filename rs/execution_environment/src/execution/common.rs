@@ -1,12 +1,13 @@
 // This module defines common helper functions.
 // TODO(RUN-60): Move helper functions here.
 
-use crate::execution_environment::ExecutionResponse;
 use crate::{
     ExecuteMessageResult, RoundLimits, as_round_instructions,
-    canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
+    canister_manager::types::CanisterManagerError, execution_environment::ExecutionResponse,
+    metrics::CallTreeMetrics,
 };
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
+use ic_config::embedders::FeatureFlags;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
     wasmtime_embedder::system_api::sandbox_safe_system_state::{
@@ -444,6 +445,7 @@ fn try_apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     is_composite_query: bool,
+    feature_flags: &FeatureFlags,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
@@ -460,6 +462,7 @@ fn try_apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
+        feature_flags,
         log,
     )
 }
@@ -488,6 +491,7 @@ pub fn apply_canister_state_changes(
     call_tree_metrics: &dyn CallTreeMetrics,
     call_context_creation_time: Time,
     is_composite_query: bool,
+    feature_flags: &FeatureFlags,
     deallocate: &dyn Fn(SystemState),
 ) {
     let CanisterStateChanges {
@@ -509,6 +513,7 @@ pub fn apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
+        feature_flags,
         log,
     ) {
         Ok(request_stats) => {
