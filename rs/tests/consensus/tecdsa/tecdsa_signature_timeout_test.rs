@@ -21,6 +21,7 @@ use ic_system_test_driver::{
     systest,
     util::{MessageCanister, block_on, runtime_from_url},
 };
+use ic_types::Height;
 
 /// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` can be timed out when setting signature_request_timeout_ns.
 fn test(env: TestEnv) {
@@ -80,9 +81,13 @@ fn test(env: TestEnv) {
     });
 }
 
+fn setup(test_env: TestEnv) {
+    setup_without_ecdsa_on_nns(test_env, Height::from(19));
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup_without_ecdsa_on_nns)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
