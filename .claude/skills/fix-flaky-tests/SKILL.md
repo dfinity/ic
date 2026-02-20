@@ -50,9 +50,9 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
 6. Run `bazel test <label>` to verify the test still passes.
 
-7. Create a new git branch named like `ai/fix-flaky-<test_name>`, replacing `<test_name>` with the name of the test
+7. Create a new git branch named like `ai/deflake-<test_name>`, replacing `<test_name>` with the name of the test
    and commit your fix to that branch.
 
-8. Submit a PR with the fix.
+8. Submit a draft PR with the fix.
    Name it: `fix: deflake <label>`.
    Include the root cause analysis in the PR description and link to this `SKILL.md` file.
