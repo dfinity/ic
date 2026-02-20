@@ -2828,7 +2828,7 @@ fn management_message_with_forbidden_method_is_not_accepted() {
 }
 
 #[test]
-fn management_message_with_invalid_sender_is_not_accepted() {
+fn management_message_with_invalid_sender_is_not_accepted_without_subnet_admins() {
     let mut test = ExecutionTestBuilder::new().build();
     test.set_user_id(user_test_id(0));
     let canister = test.universal_canister().unwrap();
@@ -2838,6 +2838,28 @@ fn management_message_with_invalid_sender_is_not_accepted() {
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterInvalidController, err.code());
+}
+
+#[test]
+fn management_message_with_invalid_sender_is_not_accepted_with_subnet_admins() {
+    let subnet_admin = user_test_id(1);
+    let controller = user_test_id(2);
+    let test_user = user_test_id(3);
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+    test.set_user_id(controller);
+    let canister = test.universal_canister().unwrap();
+
+    test.set_user_id(test_user);
+    let arg: CanisterIdRecord = canister.into();
+    let err = test
+        .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
+        .unwrap_err();
+    assert_eq!(
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
+        err.code()
+    );
 }
 
 // A Wasm module that allocates 10 wasm pages of heap memory and 10 wasm

@@ -187,8 +187,49 @@ impl CanisterManager {
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
-            | Ok(Ic00Method::DeleteCanister)
-            | Ok(Ic00Method::UpdateSettings)
+            | Ok(Ic00Method::DeleteCanister) => {
+                match effective_canister_id {
+                    Some(canister_id) => {
+                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            format!("Canister {canister_id} not found"),
+                        ))?;
+                        let sender_principal = sender.get();
+                        let is_controller = canister.controllers().contains(&sender_principal);
+                        let subnet_admins = state.get_own_subnet_admins();
+                        let is_subnet_admin = subnet_admins.contains(&sender_principal);
+                        match is_controller || is_subnet_admin {
+                            true => Ok(()),
+                            false => {
+                                // If subnet admins list is empty, then return the
+                                // legacy error code for backwards compatibility.
+                                if subnet_admins.is_empty() {
+                                    Err(UserError::new(
+                                        ErrorCode::CanisterInvalidController,
+                                        format!(
+                                            "Only controllers of canister {canister_id} can call ic00 method {method_name}",
+                                        ),
+                                    ))
+                                }
+                                else {
+                                    Err(UserError::new(
+                                        ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
+                                        format!(
+                                            "Only controllers of canister {canister_id} or subnet admins can call ic00 method {method_name}",
+                                        ),
+                                    ))
+                                }
+                            }
+                        }
+                    },
+                    None => Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Failed to decode payload for ic00 method: {method_name}"),
+                    )),
+                }
+            },
+
+            Ok(Ic00Method::UpdateSettings)
             | Ok(Ic00Method::InstallCode)
             | Ok(Ic00Method::InstallChunkedCode)
             | Ok(Ic00Method::UploadChunk)
