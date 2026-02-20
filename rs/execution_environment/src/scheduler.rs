@@ -998,12 +998,14 @@ impl SchedulerImpl {
             .collect::<Vec<_>>();
         paused_round_states.sort();
 
+        let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         paused_round_states
             .iter()
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
-                let canister = state.canister_state_mut_arc(&rs.canister_id()).unwrap();
-                self.exec_env.abort_canister(canister, &self.log);
+                let canister = canister_states.get_mut(&rs.canister_id()).unwrap();
+                self.exec_env
+                    .abort_canister(canister, subnet_schedule, &self.log);
             });
     }
 
@@ -1489,6 +1491,7 @@ impl Scheduler for SchedulerImpl {
                     );
                 }
             }
+
             {
                 let _timer = self.metrics.round_scheduling_duration.start_timer();
                 round_schedule.finish_round(&mut final_state, current_round);
@@ -1499,6 +1502,7 @@ impl Scheduler for SchedulerImpl {
                 current_round_type,
                 &round_log,
             );
+
             final_state
                 .metadata
                 .subnet_metrics
