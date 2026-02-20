@@ -715,66 +715,72 @@ impl SystemTestGroup {
             false,
         );
 
-        let assert_no_metric_errors_fn: Option<(String, Box<dyn PotSetupFn>)> = if !self
-            .metrics_to_check
-            .is_empty()
-        {
-            let teardown_fn = move |env: TestEnv| {
-                let topology = match env.safe_topology_snapshot() {
-                    Ok(topology) => topology,
-                    Err(e) => {
-                        info!(
-                            env.logger(),
-                            "Could not get topology ({e:?}) => skipping checks of critical errors."
-                        );
-                        return;
+        let assert_no_metric_errors_fn: Option<(String, Box<dyn PotSetupFn>)> =
+            if !self.metrics_to_check.is_empty() {
+                let teardown_fn = move |env: TestEnv| {
+                    let topology = match env.safe_topology_snapshot() {
+                        Ok(topology) => topology,
+                        Err(e) => {
+                            info!(
+                                env.logger(),
+                                "Could not get topology ({e:?}) =>
+                                skipping checks of metric errors."
+                            );
+                            return;
+                        }
+                    };
+                    for node in topology
+                        .subnets()
+                        .flat_map(|subnet| subnet.nodes())
+                        // we skip the check for malicious nodes, because as part of their malicious
+                        // behavior they might break some invariants resulting in errors/crashes
+                        // in their own replica process.
+                        .filter(|node| !node.is_malicious())
+                    {
+                        node.assert_no_metrics_errors(self.metrics_to_check.clone());
                     }
                 };
-                let nodes: Vec<IcNodeSnapshot> = topology
-                    .subnets()
-                    .flat_map(|subnet| subnet.nodes())
-                    .collect();
-                for node in nodes {
-                    node.assert_no_metrics_errors(self.metrics_to_check.clone());
-                }
+                Some((
+                    ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
+                    Box::new(teardown_fn),
+                ))
+            } else {
+                None
             };
-            Some((
-                ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
-                Box::new(teardown_fn),
-            ))
-        } else {
-            None
-        };
 
-        let assert_no_replica_restarts_fn: Option<(String, Box<dyn PotSetupFn>)> = if self
-            .assert_no_replica_restarts
-        {
-            let teardown_fn = |env: TestEnv| {
-                let topology = match env.safe_topology_snapshot() {
-                    Ok(topology) => topology,
-                    Err(e) => {
-                        info!(
-                            env.logger(),
-                            "Could not get topology ({e:?}) => skipping checks that the replica process did not restart."
-                        );
-                        return;
+        let assert_no_replica_restarts_fn: Option<(String, Box<dyn PotSetupFn>)> =
+            if self.assert_no_replica_restarts {
+                let teardown_fn = |env: TestEnv| {
+                    let topology = match env.safe_topology_snapshot() {
+                        Ok(topology) => topology,
+                        Err(e) => {
+                            info!(
+                                env.logger(),
+                                "Could not get topology ({e:?}) => \
+                                skipping checks that the replica process did not restart."
+                            );
+                            return;
+                        }
+                    };
+
+                    for node in topology
+                        .subnets()
+                        .flat_map(|subnet| subnet.nodes())
+                        // we skip the check for malicious nodes, because as part of their malicious
+                        // behavior they might break some invariants resulting in errors/crashes
+                        // in their own replica process.
+                        .filter(|node| !node.is_malicious())
+                    {
+                        node.assert_no_replica_restarts();
                     }
                 };
-                let nodes: Vec<IcNodeSnapshot> = topology
-                    .subnets()
-                    .flat_map(|subnet| subnet.nodes())
-                    .collect();
-                for node in nodes {
-                    node.assert_no_replica_restarts();
-                }
+                Some((
+                    ASSERT_NO_REPLICA_RESTARTS_TASK_NAME.to_string(),
+                    Box::new(teardown_fn),
+                ))
+            } else {
+                None
             };
-            Some((
-                ASSERT_NO_REPLICA_RESTARTS_TASK_NAME.to_string(),
-                Box::new(teardown_fn),
-            ))
-        } else {
-            None
-        };
 
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardown
