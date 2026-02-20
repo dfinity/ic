@@ -4,8 +4,8 @@ use ic_types::hostos_version::HostosVersion;
 use itertools::Itertools;
 use registry_canister::mutations::{
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
-    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
     do_update_nodes_guestos_version::DeployGuestosToSomeNodes,
+    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
 };
 
 use crate::{

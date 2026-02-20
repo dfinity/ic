@@ -60,10 +60,10 @@ use registry_canister::{
         },
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
+        do_update_nodes_guestos_version::DeployGuestosToSomeNodes,
         do_update_nodes_hostos_version::{
             DeployHostosToSomeNodes, UpdateNodesHostosVersionPayload,
         },
-        do_update_nodes_guestos_version::DeployGuestosToSomeNodes,
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,

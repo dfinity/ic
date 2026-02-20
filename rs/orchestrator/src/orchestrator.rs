@@ -1,5 +1,6 @@
 use crate::{
     args::OrchestratorArgs,
+    async_upgrade::AsyncUpgrader,
     boundary_node::BoundaryNodeManager,
     catch_up_package_provider::{CatchUpPackageProvider, LocalCUPReader},
     dashboard::{Dashboard, OrchestratorDashboard},
@@ -10,7 +11,6 @@ use crate::{
     process_manager::ProcessManager,
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
-    async_upgrade::AsyncUpgrader,
     ssh_access_manager::SshAccessManager,
     upgrade::{OrchestratorControlFlow, Upgrade},
 };

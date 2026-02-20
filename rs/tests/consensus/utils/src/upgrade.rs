@@ -9,8 +9,8 @@ use ic_system_test_driver::{
     driver::test_env_api::*,
     nns::{
         get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
-        submit_update_elected_replica_versions_proposal, submit_update_nodes_guestos_version_proposal,
-        vote_execute_proposal_assert_executed,
+        submit_update_elected_replica_versions_proposal,
+        submit_update_nodes_guestos_version_proposal, vote_execute_proposal_assert_executed,
     },
     util::runtime_from_url,
 };

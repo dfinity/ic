@@ -23,9 +23,7 @@ impl Registry {
             // Get the node record
             let node_key = make_node_record_key(node_id);
             let mut node_record = self.get_node_or_panic(node_id);
-            node_record
-                .version_id
-                .clone_from(&payload.version_id);
+            node_record.version_id.clone_from(&payload.version_id);
 
             // Update HostOS version
             mutations.push(update(node_key, node_record.encode_to_vec()));
