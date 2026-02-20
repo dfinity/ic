@@ -620,6 +620,7 @@ fn method_name_edge_cases(env: TestEnv) {
                                 bail!("transport error, retrying: {e}")
                             }
                             Err(AgentError::HttpError(ref payload))
+                                // The API BN has more generous limits, so it still responds with HTTP 400 Bad Request.
                                 if is_api_bn
                                     && payload.status == StatusCode::BAD_REQUEST.as_u16() =>
                             {
@@ -656,12 +657,14 @@ fn method_name_edge_cases(env: TestEnv) {
                             Err(AgentError::TransportError(e)) => {
                                 bail!("transport error, retrying: {e}")
                             }
+                            // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
                             Err(AgentError::HttpError(ref payload))
                                 if is_api_bn
                                     && payload.status == StatusCode::BAD_REQUEST.as_u16() =>
                             {
                                 Ok(())
                             }
+                            // When bypassing the API BN, the replica responds with a reject.
                             Err(AgentError::UncertifiedReject { .. }) if !is_api_bn => Ok(()),
                             other => panic!(
                                 "query 'x' * 3*2^20 (is_api_bn={}): unexpected result: {:?}",
