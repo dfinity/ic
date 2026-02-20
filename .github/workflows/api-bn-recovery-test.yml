@@ -9,6 +9,10 @@ on:
       - '.github/workflows/api-bn-recovery-test.yml'
       - 'ic-os/api-bn-recovery/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
