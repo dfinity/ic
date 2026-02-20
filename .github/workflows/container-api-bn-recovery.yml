@@ -4,10 +4,6 @@ on:
   schedule:
     - cron: "0 8 * * 4"
   workflow_dispatch:
-  # TODO: remove this push trigger before merging to master
-  push:
-    branches:
-      - andrew/api-bn-recovery
   pull_request:
     paths:
       - '.github/workflows/container-api-bn-recovery.yml'
@@ -77,8 +73,7 @@ jobs:
           echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
 
       - name: Push container image
-        # TODO: revert to github.ref_name == 'master' before merging
-        if: github.ref_name == 'master' || github.ref_name == 'andrew/api-bn-recovery'
+        if: github.ref_name == 'master'
         run: |
           set -euo pipefail
           for tag in "${{ env.DATE }}" "${{ env.SHORT_SHA }}" latest; do
