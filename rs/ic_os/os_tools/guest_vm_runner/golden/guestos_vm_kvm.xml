@@ -12,6 +12,7 @@
   <cpu mode='host-passthrough' migratable='off'>
     <cache mode='passthrough'/>
     <topology sockets='2' cores='14' threads='2'/>
+    <feature policy='require' name='topoext'/>
   </cpu>
   <resource>
     <partition>/machine</partition>
