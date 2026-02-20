@@ -4,6 +4,3 @@
 /// in the ingress pool and IDKG dealings in the IDKG pool, or, if they are not there, by fetching
 /// missing artifacts from peers who are advertising the blocks.
 pub const HASHES_IN_BLOCKS_ENABLED: bool = true;
-
-/// [IC-1877]: Whether the NNS driven subnet splitting is enabled in the consensus layer.
-pub const SUBNET_SPLITTING_V2_ENABLED: bool = false;

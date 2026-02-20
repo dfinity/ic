@@ -279,7 +279,6 @@ mod tests {
                         registry_store_uri: None,
                         ecdsa_initializations: vec![],
                         chain_key_initializations: vec![],
-                        cup_type: None,
                     };
 
                 // Encode the cup to protobuf
