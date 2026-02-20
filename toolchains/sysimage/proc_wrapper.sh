@@ -7,6 +7,5 @@
 set -euo pipefail
 
 tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
-# NOTE: Ignore failure to cleanup the directory for now. This should not be a problem after NODE-1048.
-trap 'sudo rm -rf "$tmpdir" || true' INT TERM EXIT
+trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT
 TMPDIR="$tmpdir" "$@"
