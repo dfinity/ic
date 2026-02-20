@@ -27,7 +27,7 @@ use crate::{
 use wirm::{
     DataSegment, DataSegmentKind, DataType, InitInstr, Module,
     ir::{
-        id::TypeID,
+        id::{FunctionID, TypeID},
         module::{
             LocalOrImport, module_functions::FuncKind, module_globals::GlobalKind,
             module_types::Types,
@@ -65,6 +65,7 @@ pub const WASM_VALID_SYSTEM_FUNCTIONS: [&str; 7] = [
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
+pub const MAX_WASM_FUNCTION_NAME_LENGTH: usize = 50 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -1241,18 +1242,40 @@ fn validate_global_section(module: &Module, max_globals: usize) -> Result<(), Wa
 }
 
 // Checks that no more than `max_functions` are defined in the
-// module.
+// module and all function names are less than MAX_WASM_FUNCTION_NAME_LENGTH
+// characters.
 fn validate_function_section(
     module: &Module,
     max_functions: usize,
 ) -> Result<(), WasmValidationError> {
-    let func_count = module.functions.iter().filter(|f| f.is_local()).count();
+    let local_indexes = module
+        .functions
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.is_local())
+        .map(|(i, _)| FunctionID(i as u32))
+        .collect::<Vec<FunctionID>>();
+
+    let func_count = local_indexes.len();
     if func_count > max_functions {
         return Err(WasmValidationError::TooManyFunctions {
             defined: func_count,
             allowed: max_functions,
         });
     }
+
+    for id in local_indexes {
+        if let Some(name) = module.functions.get_name(id)
+            && name.len() > MAX_WASM_FUNCTION_NAME_LENGTH
+        {
+            return Err(WasmValidationError::FunctionNameTooLarge {
+                index: *id as usize,
+                size: name.len(),
+                allowed: MAX_WASM_FUNCTION_NAME_LENGTH,
+            });
+        }
+    }
+
     Ok(())
 }
 
