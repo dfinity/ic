@@ -344,6 +344,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let a = wasm()
         .instruction_counter_is_at_least(1_000_000)
         .stable64_grow(pages_to_grow as u64)
+        .reply()
         .build();
 
     let freezing_threshold_period = NumSeconds::from(1);
@@ -352,7 +353,10 @@ fn dts_update_concurrent_cycles_change_fails() {
     test.canister_update_allocations_settings(canister_id, Some(1), None)
         .unwrap();
 
-    let (ingress_id, _) = test.ingress_raw(canister_id, "update", a);
+    // We first successfully execute the payload on the universal canister to set up its heap.
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", a.clone());
+    test.execute_message(canister_id);
+    check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
 
     let canister = test.canister_state(canister_id);
 
@@ -385,6 +389,10 @@ fn dts_update_concurrent_cycles_change_fails() {
     test.canister_state_mut(canister_id)
         .system_state
         .set_balance(initial_cycles);
+
+    // Now we execute the same payload on the universal canister again
+    // and expect a failure due to low cycles balance.
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", a);
 
     test.execute_slice(canister_id);
     assert_eq!(
