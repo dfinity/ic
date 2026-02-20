@@ -2601,6 +2601,7 @@ mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_helpers::parse_metric;
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
+    use ic_ledger_suite_state_machine_tests_constants::NUM_BLOCKS_TO_ARCHIVE;
 
     #[test]
     fn should_export_num_archives_metrics() {
@@ -2713,6 +2714,13 @@ mod metrics {
             count_value, 1,
             "Expected 1 archiving operation, got {}",
             count_value
+        );
+
+        let blocks_archived = parse_metric(&env, ledger_id, "ledger_archived_blocks");
+        assert_eq!(
+            blocks_archived, NUM_BLOCKS_TO_ARCHIVE,
+            "Expected {} blocks to be archived, got {}",
+            NUM_BLOCKS_TO_ARCHIVE, blocks_archived
         );
     }
 }
