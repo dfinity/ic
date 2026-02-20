@@ -3,8 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = [
     "//rs/consensus:__subpackages__",
     "//rs/ingress_manager:__subpackages__",
-    "//rs/replica:__subpackages__",
     "//rs/registry:__subpackages__",
+    "//rs/replica:__subpackages__",
     "//rs/test_utilities:__subpackages__",
 ])
 
