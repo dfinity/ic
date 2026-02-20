@@ -56,7 +56,7 @@ upload() {
 
     # Upload to Cloudflare's R2 (S3)
     log "uploading to Cloudflare"
-    AWS_ACCESS_KEY_ID="$CF_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$CF_SECRET_ACCESS_KEY" rclone -v \
+    AWS_ACCESS_KEY_ID="$CF_AWS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$CF_AWS_SECRET_ACCESS_KEY" rclone -v \
         "${rclone_common_flags[@]}" \
         --s3-provider=Cloudflare \
         --s3-region=weur \
