@@ -107,14 +107,12 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        // The list of subnet_admins must be empty for non-application subnets as well as
-        // for application subnets on "normal" cycles cost schedule.
-        let is_not_application_subnet =
-            subnet_record.subnet_type != i32::from(SubnetType::Application);
+        // The list of subnet_admins can be non-empty only for rented subnets, i.e. for subnets of type
+        // application and on a free schedule.
         let is_application_subnet = subnet_record.subnet_type == i32::from(SubnetType::Application);
-        let is_on_normal_cost_schedule = subnet_record.canister_cycles_cost_schedule
-            == i32::from(CanisterCyclesCostSchedule::Normal);
-        if (is_not_application_subnet || (is_application_subnet && is_on_normal_cost_schedule))
+        let is_on_free_cost_schedule = subnet_record.canister_cycles_cost_schedule
+            == i32::from(CanisterCyclesCostSchedule::Free);
+        if !(is_application_subnet && is_on_free_cost_schedule)
             && !subnet_record.subnet_admins.is_empty()
         {
             return Err(InvariantCheckError {
