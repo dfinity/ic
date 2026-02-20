@@ -723,7 +723,7 @@ fn stopping_a_canister_with_incorrect_controller_fails() {
     let canister_id = test.universal_canister().unwrap();
     let controller = test.user_id();
     let test_user = user_test_id(13);
-    // Set a user that is a non-controller and not a subnet admin.
+    // Set a user that is a non-controller.
     test.set_user_id(test_user);
     assert_ne!(controller, test_user);
 
