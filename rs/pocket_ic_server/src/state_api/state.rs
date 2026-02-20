@@ -814,7 +814,7 @@ impl ApiState {
                 args.push("--domain-skip-authority-validation".to_string());
                 if let Some(ref path) = domain_custom_provider_local_file {
                     args.push("--domain-custom-provider-local-file".to_string());
-                    args.push(path.clone());
+                    args.push(path.to_string_lossy().to_string());
                 }
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
