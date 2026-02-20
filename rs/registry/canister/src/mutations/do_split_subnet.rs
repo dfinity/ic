@@ -1,14 +1,14 @@
-use crate::registry::Registry;
+use crate::registry::{Registry, Version};
 use candid::{CandidType, Encode};
 use dfn_core::call;
 use ic_base_types::SubnetId;
 use ic_management_canister_types_private::{SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::subnet::v1::{self as pb, CatchUpPackageContents, SubnetRecord};
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_canister_migrations_record_key, make_catch_up_package_contents_key,
+    make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, is_subset_of};
+use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, WellFormedError, is_subset_of};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, update};
 use ic_types::{CanisterId, NodeId, PrincipalId, RegistryVersion, subnet_id_into_protobuf};
@@ -34,6 +34,7 @@ enum PayloadValidationError {
     EmptySourceCanisterIdRanges,
     NotEnabled,
     DuplcateDestinationNodeIds,
+    InvalidCanisterIdRanges(WellFormedError),
 }
 
 #[cfg(not(test))]
@@ -61,8 +62,10 @@ impl Registry {
     /// 6. modify the CanisterMigrations entry, to also include the information that the source
     ///    subnet is being split.
     pub async fn split_subnet(&mut self, payload: SplitSubnetPayload) -> Result<(), String> {
-        let mut source_subnet_record = self
-            .validate_subnet_splitting_payload(&payload)
+        let pre_call_registry_version = self.latest_version();
+
+        let (mut source_subnet_record, ranges_to_migrate) = self
+            .validate_subnet_splitting_payload(&payload, pre_call_registry_version)
             .map_err(|err| format!("Failed to validate the payload: {err}"))?;
         let mut destination_subnet_record = source_subnet_record.clone();
         let source_nodes: Vec<NodeId> = source_subnet_record
@@ -84,7 +87,7 @@ impl Registry {
 
         let create_cup_contents = |nodes| async {
             let request =
-                SetupInitialDKGArgs::new(nodes, RegistryVersion::new(self.latest_version()));
+                SetupInitialDKGArgs::new(nodes, RegistryVersion::new(pre_call_registry_version));
             let raw_response = call(
                 CanisterId::ic_00(),
                 "setup_initial_dkg",
@@ -113,6 +116,22 @@ impl Registry {
             create_cup_contents(payload.destination_node_ids.clone()),
             create_cup_contents(source_nodes)
         );
+        let post_call_registry_version = self.latest_version();
+
+        self.check_if_registry_changed_across_versions(
+            payload.source_subnet_id,
+            pre_call_registry_version,
+            post_call_registry_version,
+        )
+        .map_err(|err| {
+            format!("The registry was updated during the `setup_initial_dkg` calls: {err}")
+        })?;
+        // Just a safety check that the payload is still valid after the `setup_initial_dkg` calls
+        self.validate_subnet_splitting_payload(&payload, post_call_registry_version)
+            .map_err(|err| {
+                format!("Failed to validate the payload after `setup_initial_dkg` calls: {err}")
+            })?;
+
         let destination_subnet_id = destination_cup_contents.1.fresh_subnet_id;
         source_cup_contents.0.cup_type = Some(
             pb::catch_up_package_contents::CupType::SubnetSplitting(pb::SubnetSplittingArgs {
@@ -173,18 +192,15 @@ impl Registry {
             ),
         ];
 
-        let ranges_to_migrate =
-            CanisterIdRanges::try_from(payload.destination_canister_ranges).expect("FIXME");
-
         mutations.push(self.migrate_canister_ranges_mutation(
-            self.latest_version(),
+            post_call_registry_version,
             ranges_to_migrate.clone(),
             payload.source_subnet_id,
             destination_subnet_id,
         ));
 
         mutations.extend(self.add_subnet_to_routing_table_and_reroute(
-            self.latest_version(),
+            post_call_registry_version,
             ranges_to_migrate,
             destination_subnet_id,
         ));
@@ -199,13 +215,14 @@ impl Registry {
     fn validate_subnet_splitting_payload(
         &self,
         payload: &SplitSubnetPayload,
-    ) -> Result<SubnetRecord, PayloadValidationError> {
+        registry_version: Version,
+    ) -> Result<(SubnetRecord, CanisterIdRanges), PayloadValidationError> {
         if !ENABLED {
             return Err(PayloadValidationError::NotEnabled);
         }
 
         let source_subnet_record = self
-            .get_subnet(payload.source_subnet_id, self.latest_version())
+            .get_subnet(payload.source_subnet_id, registry_version)
             .map_err(PayloadValidationError::FailedToGetSourceSubnetRecord)?;
 
         let source_subnet_type = SubnetType::try_from(source_subnet_record.subnet_type)
@@ -251,7 +268,7 @@ impl Registry {
             return Err(PayloadValidationError::SourceSubnetIsSigningSubnet);
         }
 
-        let routing_table = self.get_routing_table_or_panic(self.latest_version());
+        let routing_table = self.get_routing_table_or_panic(registry_version);
         let source_subnet_ranges = routing_table.ranges(payload.source_subnet_id);
 
         if payload.destination_canister_ranges.is_empty() {
@@ -275,7 +292,7 @@ impl Registry {
         }
 
         if self
-            .get_canister_migrations(self.latest_version())
+            .get_canister_migrations(registry_version)
             .is_some_and(|migrations| {
                 migrations
                     .iter()
@@ -285,7 +302,60 @@ impl Registry {
             return Err(PayloadValidationError::SplitAlreadyInProgress);
         }
 
-        Ok(source_subnet_record)
+        let ranges_to_migrate =
+            CanisterIdRanges::try_from(payload.destination_canister_ranges.clone())
+                .map_err(PayloadValidationError::InvalidCanisterIdRanges)?;
+
+        Ok((source_subnet_record, ranges_to_migrate))
+    }
+
+    /// Checks to make sure records did not change during the async call
+    fn check_if_registry_changed_across_versions(
+        &self,
+        source_subnet_id: SubnetId,
+        initial_registry_version: Version,
+        current_registry_version: Version,
+    ) -> Result<(), &str> {
+        let record_changed_across_versions = |key: String| {
+            let initial_record_version =
+                self.get_record_version_as_of_registry_version(&key, initial_registry_version);
+            let current_record_version =
+                self.get_record_version_as_of_registry_version(&key, current_registry_version);
+
+            initial_record_version != current_record_version
+        };
+
+        if record_changed_across_versions(make_subnet_record_key(source_subnet_id)) {
+            return Err("Subnet changed");
+        }
+
+        if record_changed_across_versions(make_crypto_threshold_signing_pubkey_key(
+            source_subnet_id,
+        )) {
+            return Err("Threshold signing public key changed");
+        }
+
+        if record_changed_across_versions(make_catch_up_package_contents_key(source_subnet_id)) {
+            return Err("CUP changed");
+        }
+
+        if record_changed_across_versions(make_canister_migrations_record_key()) {
+            return Err("Canister migrations changed");
+        }
+
+        Ok(())
+    }
+
+    fn get_record_version_as_of_registry_version(
+        &self,
+        record_key: &str,
+        version: Version,
+    ) -> Version {
+        self.get(record_key.as_bytes(), version)
+            .map(|record| record.version)
+            .unwrap_or_else(|| {
+                panic!("Record for {record_key} not found in registry");
+            })
     }
 }
 
@@ -344,6 +414,12 @@ impl std::fmt::Display for PayloadValidationError {
             }
             PayloadValidationError::DuplcateDestinationNodeIds => {
                 write!(f, "The payload contains duplicate destination node ids")
+            }
+            PayloadValidationError::InvalidCanisterIdRanges(error) => {
+                write!(
+                    f,
+                    "The payload contains invalid canister id ranges: {error:?}"
+                )
             }
         }
     }
@@ -523,6 +599,33 @@ mod tests {
         },
         Err(PayloadValidationError::DuplcateDestinationNodeIds)
     )]
+    #[case::non_disjoint_canister_ranges(
+            SubnetInfo {
+                canister_id_ranges: vec![CanisterIdRange {
+                    start: canister_test_id(0),
+                    end: canister_test_id(20),
+                }],
+                ..invariants_compliant_subnet_info()
+            },
+            SplitSubnetPayload {
+                destination_canister_ranges: vec![
+                    CanisterIdRange {
+                        start: canister_test_id(5),
+                        end: canister_test_id(10),
+                    },
+                    CanisterIdRange {
+                        start: canister_test_id(5),
+                        end: canister_test_id(15),
+                    },
+                ],
+                ..invariants_compliant_payload()
+            },
+            Err(PayloadValidationError::InvalidCanisterIdRanges(
+                WellFormedError::CanisterIdRangeNotSortedOrNotDisjoint(
+                    "previous_end qaa6y-5yaaa-aaaaa-aaafa-cai >= current_start rno2w-sqaaa-aaaaa-aaacq-cai".into()
+                )
+            )),
+        )]
     fn payload_validation_test(
         #[case] source_subnet_info: SubnetInfo,
         #[case] payload: SplitSubnetPayload,
@@ -547,7 +650,7 @@ mod tests {
         };
 
         let validation_result = registry
-            .validate_subnet_splitting_payload(&payload)
+            .validate_subnet_splitting_payload(&payload, registry.latest_version())
             .map(|_| ());
         assert_eq!(validation_result, expected_result);
     }
