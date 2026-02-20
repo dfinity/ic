@@ -2954,6 +2954,7 @@ pub mod governance {
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
         pub fully_lost_voting_power_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        pub total_maturity_disbursements_in_progress_e8s_equivalent: u64,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
