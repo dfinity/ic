@@ -1033,12 +1033,6 @@ impl SchedulerImpl {
 
                 // Abort all paused execution before the checkpoint.
                 self.exec_env.abort_all_paused_executions(state, &self.log);
-
-                // Reset all priority credits to zero. A canister must not be charged for an
-                // aborted DTS execution.
-                for (_, priority) in state.metadata.subnet_schedule.iter_mut() {
-                    priority.priority_credit = Default::default();
-                }
             }
             ExecutionRoundType::OrdinaryRound => {
                 self.abort_paused_executions_above_limit(state);
@@ -1494,7 +1488,7 @@ impl Scheduler for SchedulerImpl {
 
             {
                 let _timer = self.metrics.round_scheduling_duration.start_timer();
-                round_schedule.finish_round(&mut final_state, current_round);
+                round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
             }
             self.finish_round(
                 &mut final_state,

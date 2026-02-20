@@ -448,7 +448,12 @@ impl RoundSchedule {
         }
     }
 
-    pub fn finish_round(&self, state: &mut ReplicatedState, current_round: ExecutionRound) {
+    pub fn finish_round(
+        &self,
+        state: &mut ReplicatedState,
+        current_round: ExecutionRound,
+        metrics: &SchedulerMetrics,
+    ) {
         let now = state.time();
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
@@ -529,6 +534,7 @@ impl RoundSchedule {
             .map(|(c, p)| (*c, true_priority(p)))
             .collect::<Vec<_>>();
         sorted_canister_priorities.sort_by_key(|(c, p)| (std::cmp::Reverse(*p), *c));
+        let mut accumulated_priority_deviation = 0.0;
         let mut remaining_canisters = subnet_schedule.len() as i64;
         // println!(
         //     "sorted_canister_priorities: {:?}",
@@ -576,6 +582,10 @@ impl RoundSchedule {
                 canister_priority.accumulated_priority += canister_free_allocation;
                 free_allocation -= canister_free_allocation;
 
+                let accumulated_priority =
+                    canister_priority.accumulated_priority.get() as f64 / MULTIPLIER as f64;
+                accumulated_priority_deviation += accumulated_priority * accumulated_priority;
+
                 // Not in the same long execution as at the beginning of the round. Safe to
                 // apply the priority credit.
                 if next_execution != NextExecution::ContinueLong
@@ -593,6 +603,10 @@ impl RoundSchedule {
             }
             remaining_canisters -= 1;
         }
+
+        metrics
+            .scheduler_accumulated_priority_deviation
+            .set((accumulated_priority_deviation / subnet_schedule.len() as f64).sqrt());
     }
 
     /// Returns scheduler compute capacity in percent.

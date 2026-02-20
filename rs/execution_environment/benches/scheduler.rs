@@ -76,7 +76,7 @@ fn main() {
 
     group.bench_function("finish_round", |bench| {
         bench.iter(|| {
-            round_schedule.finish_round(&mut state, ExecutionRound::from(0));
+            round_schedule.finish_round(&mut state, ExecutionRound::from(0), &metrics);
         });
     });
 }
