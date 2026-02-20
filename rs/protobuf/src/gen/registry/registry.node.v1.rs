@@ -67,6 +67,9 @@ pub struct NodeRecord {
     /// to nodes in all the subnet.
     #[prost(string, repeated, tag = "21")]
     pub ssh_node_state_write_access: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// ID of the GuestOS version to run.
+    #[prost(string, optional, tag = "22")]
+    pub version_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// The type of the node.
 #[derive(

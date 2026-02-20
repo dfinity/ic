@@ -435,6 +435,11 @@ type DeployHostosToSomeNodes = record {
   node_ids : vec principal;
 };
 
+type DeployGuestosToSomeNodes = record {
+  version_id : opt text;
+  node_ids : vec principal;
+};
+
 type UpdateSshReadOnlyAccessForAllUnassignedNodesPayload = record {
   ssh_readonly_keys : vec text;
 };
