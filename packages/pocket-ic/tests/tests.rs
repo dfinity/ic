@@ -3101,6 +3101,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
             cert_path: "".to_string(),
             key_path: "".to_string(),
         }),
+        domain_custom_provider_local_file: None,
     };
     let subnet_config_set = SubnetConfigSet {
         application: 1,
