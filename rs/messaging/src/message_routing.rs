@@ -1095,9 +1095,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             // then it cannot have a non-empty subnet admins list. If that's the case, this indicates
             // a bug and a critical error is raised. The subnet admins is set to empty list in that case
             // to avoid any potential errors in using an incorrect list.
-            if own_subnet_type != SubnetType::Application
-                || (own_subnet_type == SubnetType::Application
-                    && cost_schedule != CanisterCyclesCostSchedule::Free)
+            if !(own_subnet_type == SubnetType::Application
+                    && cost_schedule == CanisterCyclesCostSchedule::Free)
             {
                 if !subnet_admins.is_empty() {
                     self.metrics
