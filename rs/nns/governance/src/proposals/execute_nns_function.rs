@@ -918,7 +918,8 @@ impl ValidNnsFunction {
                 or bring it back online as part of subnet recovery."
             }
             ValidNnsFunction::SplitSubnet => {
-                "A proposal to split a subnet into two. A new subnet will be created and \
+                "Split a subnet (both the replicas forming the subnet and the canisters hosted \
+                on the subnet) into two. A new subnet will be created and \
                 the nodes specified in the proposal will be moved to the newly created subnet. \
                 Additionally in the routing table some canister ID ranges will be remapped \
                 from the original subnet to the newly created one."

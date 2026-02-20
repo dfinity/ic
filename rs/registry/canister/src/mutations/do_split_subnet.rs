@@ -33,7 +33,7 @@ enum PayloadValidationError {
     EmptyDestinationCanisterIdRanges,
     EmptySourceCanisterIdRanges,
     NotEnabled,
-    DuplcateDestinationNodeIds,
+    DuplicateDestinationNodeIds,
     InvalidCanisterIdRanges(WellFormedError),
 }
 
@@ -57,7 +57,7 @@ impl Registry {
     /// 3. update the catch up package contents of the `source` subnet, to include an information
     ///    that the subnet is split,
     /// 4. create catch up package contents for the newly added subnet,
-    /// 5. modify the routing table and reroute some of the canister ids from the source subnet to
+    /// 5. modify the routing table and reroute some of the canister IDs from the source subnet to
     ///    the newly added subnet,
     /// 6. modify the CanisterMigrations entry, to also include the information that the source
     ///    subnet is being split.
@@ -244,7 +244,7 @@ impl Registry {
 
         let destination_nodes: HashSet<&NodeId> = HashSet::from_iter(&payload.destination_node_ids);
         if destination_nodes.len() != payload.destination_node_ids.len() {
-            return Err(PayloadValidationError::DuplcateDestinationNodeIds);
+            return Err(PayloadValidationError::DuplicateDestinationNodeIds);
         }
 
         if 2 * destination_nodes.len() != source_nodes.len() {
@@ -283,7 +283,7 @@ impl Registry {
             return Err(PayloadValidationError::UnhostedCanisterIds);
         }
 
-        // Make sure we don't migrate all the canister ids from the source subnet.
+        // Make sure we don't migrate all the canister IDs from the source subnet.
         if is_subset_of(
             source_subnet_ranges.iter(),
             payload.destination_canister_ranges.iter(),
@@ -375,7 +375,7 @@ impl std::fmt::Display for PayloadValidationError {
             ),
             PayloadValidationError::UnknownNodeId(node_id) => write!(
                 f,
-                "The node with id {node_id} is not a member of the source subnet"
+                "The node with ID {node_id} is not a member of the source subnet"
             ),
             PayloadValidationError::UnequalSplit {
                 proposed_destination_subnet_size,
@@ -386,16 +386,15 @@ impl std::fmt::Display for PayloadValidationError {
                 Current source subnet size: {current_source_subnet_size} vs \
                 proposed destination subnet size: {proposed_destination_subnet_size}"
             ),
-            PayloadValidationError::DisallowedSourceSubnetType(subnet_type) => write!(
-                f,
-                "Subnets of type {subnet_type:?} is not allowed to be split"
-            ),
+            PayloadValidationError::DisallowedSourceSubnetType(subnet_type) => {
+                write!(f, "Subnets of type {subnet_type:?} may not to be split")
+            }
             PayloadValidationError::SourceSubnetIsSigningSubnet => {
                 write!(f, "Signing subnets are not allowed to be split")
             }
             PayloadValidationError::UnhostedCanisterIds => write!(
                 f,
-                "Some the canister id ranges are not hosted by the source subnet"
+                "Some the canister ID ranges are not hosted by the source subnet"
             ),
             PayloadValidationError::SplitAlreadyInProgress => {
                 write!(f, "Currently we allow only one subnet splitting at a time")
@@ -412,13 +411,13 @@ impl std::fmt::Display for PayloadValidationError {
             PayloadValidationError::NotEnabled => {
                 write!(f, "Subnet Splitting is not yet enabled on the IC")
             }
-            PayloadValidationError::DuplcateDestinationNodeIds => {
+            PayloadValidationError::DuplicateDestinationNodeIds => {
                 write!(f, "The payload contains duplicate destination node ids")
             }
             PayloadValidationError::InvalidCanisterIdRanges(error) => {
                 write!(
                     f,
-                    "The payload contains invalid canister id ranges: {error:?}"
+                    "The payload contains invalid canister ID ranges: {error:?}"
                 )
             }
         }
@@ -597,7 +596,7 @@ mod tests {
             destination_node_ids: vec![NODE_4, NODE_4],
             ..invariants_compliant_payload()
         },
-        Err(PayloadValidationError::DuplcateDestinationNodeIds)
+        Err(PayloadValidationError::DuplicateDestinationNodeIds)
     )]
     #[case::non_disjoint_canister_ranges(
             SubnetInfo {
@@ -633,8 +632,8 @@ mod tests {
     ) {
         let (registry, node_infos) = set_up_registry(source_subnet_info);
         // Warning: hack ahead! When we set up the registry, we create public keys of the nodes, and
-        // then derive the subnet ids from these public keys. Since, we can't know a priori what the
-        // subnet ids will look like, we are remapping the static subnet ids provided as an input
+        // then derive the subnet IDs from these public keys. Since, we can't know a priori what the
+        // subnet IDs will look like, we are remapping the static subnet IDs provided as an input
         // (e.g. SUBNET_1, SUBNET_2) to the dynamically created ones. This simplifies slightly
         // setting up the test cases.
         let payload_node_ids = payload
@@ -747,7 +746,7 @@ mod tests {
         );
         registry.maybe_apply_mutation_internal(subnet_mutations);
 
-        // Add canister id ranges to the routing table
+        // Add canister ID ranges to the routing table
         let mut routing_table = RoutingTable::new();
         routing_table
             .assign_ranges(
