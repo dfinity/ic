@@ -17,7 +17,7 @@ use ic_ledger_suite_state_machine_tests::{
     expect_icrc2_disabled, extract_icrc21_fields_message, extract_icrc21_message_string,
     modify_field, setup,
 };
-use ic_ledger_suite_state_machine_tests_constants::FEE;
+use ic_ledger_suite_state_machine_tests_constants::{FEE, NUM_BLOCKS_TO_ARCHIVE};
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,
@@ -2600,16 +2600,8 @@ fn test_burn_whole_balance() {
     assert_eq!(balance_of(&env, canister_id, p1.0), 0);
 }
 
-/// Tests that `ChangeArchiveOptions` correctly updates archive configuration during upgrade.
-/// This test is similar to `test_upgrade_archive_options` for the ICRC ledger in
-/// `rs/ledger_suite/tests/sm-tests/src/lib.rs`.
-///
-/// The test verifies that:
-/// 1. First archive is created with initial cycles_for_archive_creation = 0
-/// 2. After upgrading with new archive options (cycles_for_archive_creation = 100T)
-/// 3. The second archive is created with the new cycles amount
 #[test]
-fn test_upgrade_archive_options() {
+fn test_change_initially_set_archive_options() {
     const ARCHIVE_TRIGGER_THRESHOLD: usize = 10;
     const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
     // Use a small node_max_memory_size_bytes so the first archive fills up quickly
@@ -2637,7 +2629,7 @@ fn test_upgrade_archive_options() {
             max_message_size_bytes: Some(128 * 1024),
             controller_id: archive_controller,
             more_controller_ids: None,
-            cycles_for_archive_creation: Some(0),
+            cycles_for_archive_creation: Some(10),
             max_transactions_per_response: None,
         })
         .feature_flags(FeatureFlags { icrc2: true })
@@ -2647,6 +2639,25 @@ fn test_upgrade_archive_options() {
     let ledger_id = env
         .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister");
+
+    // Change archive options with an upgrade (set cycles_for_archive_creation to 0 so the first archive is created with 0 cycles)
+    let upgrade_args = LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+        icrc1_minting_account: None,
+        feature_flags: None,
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: None,
+            num_blocks_to_archive: None,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: None,
+            more_controller_ids: None,
+            cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
+        }),
+    }));
+
+    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&upgrade_args).unwrap())
+        .expect("failed to upgrade the ledger canister");
 
     // Transfer enough to trigger archiving (1 mint + ARCHIVE_TRIGGER_THRESHOLD transfers)
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
@@ -2733,6 +2744,71 @@ fn test_upgrade_archive_options() {
         second_archive_status.cycles(),
         100_000_000_000_000,
         "Second archive should have 100T cycles (the new cycles_for_archive_creation value)"
+    );
+}
+
+#[test]
+fn test_change_empty_initial_archive_options() {
+    const ARCHIVE_TRIGGER_THRESHOLD: usize = 10;
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let archive_controller = PrincipalId::new_user_test_id(100);
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000_000));
+
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+
+    let ledger_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister");
+
+    // Change archive options with an upgrade (set cycles_for_archive_creation to 0 so the first archive is created with 0 cycles)
+    let upgrade_args = LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+        icrc1_minting_account: None,
+        feature_flags: None,
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD),
+            num_blocks_to_archive: Some(NUM_BLOCKS_TO_ARCHIVE as usize),
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: Some(archive_controller),
+            more_controller_ids: None,
+            cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
+        }),
+    }));
+
+    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&upgrade_args).unwrap())
+        .expect("failed to upgrade the ledger canister");
+
+    // Transfer enough to trigger archiving (1 mint + ARCHIVE_TRIGGER_THRESHOLD transfers)
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i as u64).expect("transfer failed");
+    }
+
+    // Verify the first archive was created
+    let archives = Decode!(
+        &env.query(ledger_id, "archives", Encode!().unwrap())
+            .expect("failed to query archives")
+            .bytes(),
+        icp_ledger::Archives
+    )
+    .expect("failed to decode archives response");
+
+    assert_eq!(
+        archives.archives.len(),
+        1,
+        "First archive should have been created"
     );
 }
 

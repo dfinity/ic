@@ -516,6 +516,29 @@ impl ChangeArchiveOptions {
     }
 }
 
+impl TryFrom<ChangeArchiveOptions> for ArchiveOptions {
+    type Error = String;
+
+    fn try_from(change_archive_options: ChangeArchiveOptions) -> Result<Self, Self::Error> {
+        Ok(Self {
+            trigger_threshold: change_archive_options
+                .trigger_threshold
+                .ok_or("trigger_threshold must be set in ChangeArchiveOptions")?,
+            num_blocks_to_archive: change_archive_options
+                .num_blocks_to_archive
+                .ok_or("num_blocks_to_archive must be set in ChangeArchiveOptions")?,
+            node_max_memory_size_bytes: change_archive_options.node_max_memory_size_bytes,
+            max_message_size_bytes: change_archive_options.max_message_size_bytes,
+            controller_id: change_archive_options
+                .controller_id
+                .ok_or("controller_id must be set in ChangeArchiveOptions")?,
+            more_controller_ids: change_archive_options.more_controller_ids,
+            cycles_for_archive_creation: change_archive_options.cycles_for_archive_creation,
+            max_transactions_per_response: change_archive_options.max_transactions_per_response,
+        })
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
