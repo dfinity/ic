@@ -4,10 +4,6 @@ on:
   workflow_dispatch:  # manual trigger for testing
   schedule:
     - cron: '0 6 * * 1'  # weekly on Monday at 06:00 UTC
-  # TODO: remove this push trigger before merging to master
-  push:
-    branches:
-      - andrew/api-bn-recovery
 
 permissions:
   contents: read
