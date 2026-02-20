@@ -158,6 +158,7 @@ pub async fn decode_hash_tree(
                 key,
                 value,
                 version,
+                timestamp_nanoseconds: atomic_mutation.0.timestamp_nanoseconds,
             });
         }
     }
