@@ -446,26 +446,32 @@ async fn deploy_wasm_to_fresh_canister(
 /// Retries a request (update or query) and asserts it fails with the expected error.
 /// Transport errors are retried since the server may close the connection while
 /// the client is still streaming a large request body.
-macro_rules! assert_large_request_rejected {
-    ($label:expr, $logger:expr, $call:expr, $is_expected:expr) => {
-        ic_system_test_driver::retry_with_msg_async!(
-            $label,
-            $logger,
-            Duration::from_secs(60),
-            Duration::from_secs(5),
-            || async {
-                match $call.await {
-                    Err(AgentError::TransportError(e)) => {
-                        bail!("transport error, retrying: {e}")
-                    }
-                    Err(ref e) if ($is_expected)(e) => Ok(()),
-                    other => panic!("{}: unexpected result: {:?}", $label, other),
+async fn assert_large_request_rejected<F, Fut>(
+    label: String,
+    logger: &Logger,
+    call: F,
+    is_expected: impl Fn(&AgentError) -> bool,
+) where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<u8>, AgentError>>,
+{
+    ic_system_test_driver::retry_with_msg_async!(
+        label.as_str(),
+        logger,
+        Duration::from_secs(60),
+        Duration::from_secs(5),
+        || async {
+            match call().await {
+                Err(AgentError::TransportError(e)) => {
+                    bail!("transport error, retrying: {e}")
                 }
+                Err(ref e) if is_expected(e) => Ok(()),
+                other => panic!("{}: unexpected result: {:?}", label, other),
             }
-        )
-        .await
-        .unwrap()
-    };
+        }
+    )
+    .await
+    .unwrap()
 }
 
 fn is_http_status(err: &AgentError, status: StatusCode) -> bool {
@@ -634,44 +640,48 @@ fn method_name_edge_cases(env: TestEnv) {
                 // The API BN has more generous limits, so it still responds with HTTP 400 Bad Request.
                 // When bypassing the API BN, the replica responds with PAYLOAD_TOO_LARGE for updates
                 // or an UncertifiedReject for queries.
-                let payload_too_large =
-                    |e: &AgentError| is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE);
-                assert_large_request_rejected!(
+                assert_large_request_rejected(
                     format!("update 'x' * 3*2^20 (is_api_bn={})", is_api_bn),
                     &logger,
-                    agent.update(&canister_id, &too_long_method_name).call_and_wait(),
+                    || agent.update(&canister_id, &too_long_method_name).call_and_wait(),
                     |e: &AgentError| {
                         if is_api_bn {
-                            return is_http_status(e, StatusCode::BAD_REQUEST)
+                            is_http_status(e, StatusCode::BAD_REQUEST)
+                        } else {
+                            is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE)
                         }
-                        payload_too_large(e)
-                    }
-                );
-                assert_large_request_rejected!(
+                    },
+                )
+                .await;
+                assert_large_request_rejected(
                     format!("query 'x' * 3*2^20 (is_api_bn={})", is_api_bn),
                     &logger,
-                    agent.query(&canister_id, &too_long_method_name).call(),
+                    || agent.query(&canister_id, &too_long_method_name).call(),
                     |e: &AgentError| {
                         if is_api_bn {
-                            return is_http_status(e, StatusCode::BAD_REQUEST)
+                            is_http_status(e, StatusCode::BAD_REQUEST)
+                        } else {
+                            matches!(e, AgentError::UncertifiedReject { .. })
                         }
-                        matches!(e, AgentError::UncertifiedReject { .. })
-                    }
-                );
+                    },
+                )
+                .await;
 
                 let too_long_method_name = 'x'.to_string().repeat(5 << 20);
-                assert_large_request_rejected!(
-                    "update 'x' * 5*2^20",
+                assert_large_request_rejected(
+                    "update 'x' * 5*2^20".to_string(),
                     &logger,
-                    agent.update(&canister_id, &too_long_method_name).call_and_wait(),
-                    payload_too_large
-                );
-                assert_large_request_rejected!(
-                    "query 'x' * 5*2^20",
+                    || agent.update(&canister_id, &too_long_method_name).call_and_wait(),
+                    |e: &AgentError| is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE),
+                )
+                .await;
+                assert_large_request_rejected(
+                    "query 'x' * 5*2^20".to_string(),
                     &logger,
-                    agent.query(&canister_id, &too_long_method_name).call(),
-                    payload_too_large
-                );
+                    || agent.query(&canister_id, &too_long_method_name).call(),
+                    |e: &AgentError| is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE),
+                )
+                .await;
                 }
             })
             .collect();
