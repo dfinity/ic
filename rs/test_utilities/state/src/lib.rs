@@ -1192,7 +1192,7 @@ fn new_replicated_state_with_output_queues(
             canister.system_state.put_queues(queues);
             total_requests += raw_requests.len();
             requests.push_back(raw_requests);
-            (canister_id, canister)
+            (canister_id, Arc::new(canister))
         })
         .collect();
 

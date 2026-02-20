@@ -477,7 +477,7 @@ fn no_heap_delta_rate_limiting_for_system_subnet() {
 
     // Assert that we reached the subnet heap delta capacity (140 GiB) in 70 rounds.
     assert_ge!(
-        test.scheduler().metrics.current_heap_delta.get() as usize,
+        test.scheduler().state_metrics.current_heap_delta.get() as usize,
         SUBNET_HEAP_DELTA_CAPACITY
     );
 
@@ -1394,7 +1394,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);
     test.state_mut()
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
@@ -1514,7 +1514,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);
     test.state_mut()
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .system_state
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
@@ -2791,7 +2791,9 @@ fn can_record_metrics_for_a_round() {
     }
 
     for canister in test.state_mut().canisters_iter_mut() {
-        canister.system_state.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
+        Arc::make_mut(canister)
+            .system_state
+            .time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
     }
     test.state_mut().metadata.batch_time = UNIX_EPOCH
         + Duration::from_secs(1)
@@ -2930,12 +2932,12 @@ fn heap_delta_rate_limiting_metrics_recorded() {
         .with_rate_limiting_of_heap_delta()
         .build();
 
-    // One canister starts with a heap delta already at the limit, so it should be
-    // rate limited.
+    // One canister starts with a heap delta already above the limit, so it should
+    // still be rate limited at the end of the round.
     let canister0 = test.create_canister();
     test.canister_state_mut(canister0)
         .scheduler_state
-        .heap_delta_debit = scheduler_config.heap_delta_rate_limit;
+        .heap_delta_debit = scheduler_config.heap_delta_rate_limit.increment();
     test.send_ingress(canister0, ingress(1).dirty_pages(1));
 
     let canister1 = test.create_canister();
@@ -2943,12 +2945,16 @@ fn heap_delta_rate_limiting_metrics_recorded() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.canister_heap_delta_debits.get_sample_count(), 2);
+    let state_metrics = &test.scheduler().state_metrics;
     assert_eq!(
-        metrics.canister_heap_delta_debits.get_sample_sum() as u64,
-        scheduler_config.heap_delta_rate_limit.get() + 4096
+        state_metrics.canister_heap_delta_debits.get_sample_count(),
+        2
     );
+    assert_eq!(
+        state_metrics.canister_heap_delta_debits.get_sample_sum(),
+        1.0
+    );
+    let metrics = &test.scheduler().metrics;
     assert_eq!(
         metrics
             .heap_delta_rate_limited_canisters_per_round
@@ -2975,12 +2981,16 @@ fn heap_delta_rate_limiting_disabled() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let metrics = &test.scheduler().metrics;
-    assert_eq!(metrics.canister_heap_delta_debits.get_sample_count(), 2);
+    let state_metrics = &test.scheduler().state_metrics;
     assert_eq!(
-        metrics.canister_heap_delta_debits.get_sample_sum() as u64,
+        state_metrics.canister_heap_delta_debits.get_sample_count(),
+        2
+    );
+    assert_eq!(
+        state_metrics.canister_heap_delta_debits.get_sample_sum() as u64,
         0,
     );
+    let metrics = &test.scheduler().metrics;
     assert_eq!(
         metrics
             .heap_delta_rate_limited_canisters_per_round
@@ -3241,13 +3251,14 @@ fn replicated_state_metrics_nothing_exported() {
     let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3510,13 +3521,14 @@ fn replicated_state_metrics_running_canister() {
     state.put_canister_state(get_running_canister(canister_test_id(0)));
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3540,13 +3552,14 @@ fn replicated_state_metrics_different_canister_statuses() {
     state.put_canister_state(get_stopped_canister(canister_test_id(3)));
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3581,13 +3594,14 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
         .unwrap();
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3620,19 +3634,17 @@ fn replicated_state_metrics_stop_contexts_with_missing_call_ids() {
     state.put_canister_state(canister);
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
-    assert_eq!(
-        scheduler_metrics.stop_canister_calls_without_call_id.get(),
-        1
-    );
+    assert_eq!(state_metrics.stop_canister_calls_without_call_id.get(), 1);
 }
 
 #[test]
@@ -3656,13 +3668,14 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
         .unwrap();
 
     let registry = MetricsRegistry::new();
-    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    let state_metrics = ReplicatedStateMetrics::new(&registry);
 
     observe_replicated_state_metrics(
         subnet_test_id(1),
         &state,
         0.into(),
-        &scheduler_metrics,
+        default_subnet_memory_capacity(),
+        &state_metrics,
         &no_op_logger(),
     );
 
@@ -3696,15 +3709,15 @@ fn long_open_call_context_is_recorded() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let metrics = &test.scheduler().metrics;
+    let state_metrics = &test.scheduler().state_metrics;
     let label = HashMap::from([("age", "1d")]);
-    let gauge = metrics
+    let gauge = state_metrics
         .old_open_call_contexts
         .get_metric_with(&label)
         .unwrap();
     assert_eq!(gauge.get(), 3);
 
-    let gauge = metrics
+    let gauge = state_metrics
         .canisters_with_old_open_call_contexts
         .get_metric_with(&label)
         .unwrap();
@@ -3790,7 +3803,8 @@ fn threshold_signature_agreements_metric_is_updated() {
         test.scheduler().own_subnet_id,
         test.state(),
         1.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -3832,14 +3846,34 @@ fn threshold_signature_agreements_metric_is_updated() {
         canister_id,
         InputQueueType::RemoteSubnet,
     );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // Metrics are observed at the beginning of the round, so there should be no in flight contexts yet
+    // There should be no in flight contexts yet
     let in_flight_contexts_metric = fetch_histogram_vec_stats(
         test.metrics_registry(),
         "execution_in_flight_signature_request_contexts",
     );
     assert!(in_flight_contexts_metric.is_empty());
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // At the end of the round, the in flight contexts should have been observed.
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[("key_id", &master_ecdsa_key_id.to_string())],
+                HistogramStats { count: 1, sum: 2.0 }
+            ),
+            (
+                &[("key_id", &master_schnorr_key_id.to_string())],
+                HistogramStats { count: 1, sum: 1.0 }
+            ),
+        ]),
+        in_flight_contexts_metric,
+    );
 
     // Check that the SubnetCallContextManager contains all requests.
     let sign_with_ecdsa_contexts = &test
@@ -3864,33 +3898,6 @@ fn threshold_signature_agreements_metric_is_updated() {
 
     test.state_mut().consensus_queue.push(response);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    // At the beginning of the next round, the in flight contexts should have been observed
-    let in_flight_contexts_metric = fetch_histogram_vec_stats(
-        test.metrics_registry(),
-        "execution_in_flight_signature_request_contexts",
-    );
-    assert_eq!(
-        metric_vec(&[
-            (
-                &[("key_id", &master_ecdsa_key_id.to_string())],
-                HistogramStats { count: 1, sum: 2.0 }
-            ),
-            (
-                &[("key_id", &master_schnorr_key_id.to_string())],
-                HistogramStats { count: 1, sum: 1.0 }
-            ),
-        ]),
-        in_flight_contexts_metric,
-    );
-
-    observe_replicated_state_metrics(
-        test.scheduler().own_subnet_id,
-        test.state(),
-        1.into(),
-        &test.scheduler().metrics,
-        &no_op_logger(),
-    );
 
     // After the round, the rejected context should be observed
     let in_flight_contexts_metric = fetch_histogram_vec_stats(
@@ -3962,7 +3969,8 @@ fn threshold_signature_agreements_metric_is_updated() {
         test.scheduler().own_subnet_id,
         test.state(),
         2.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4018,7 +4026,8 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4056,7 +4065,8 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
     let consumed_cycles_after = NominalCycles::from(
@@ -4092,7 +4102,8 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4159,7 +4170,8 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
     let consumed_cycles_after = NominalCycles::from(
@@ -4272,7 +4284,8 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4316,7 +4329,8 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        &test.scheduler().metrics,
+        test.scheduler().exec_env.subnet_memory_capacity(),
+        &test.scheduler().state_metrics,
         &no_op_logger(),
     );
 
@@ -4877,7 +4891,7 @@ fn dts_long_execution_completes() {
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         9.0
@@ -4965,10 +4979,10 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
-        3.0
+        4.0
     );
 
     // Finish the long execution. The subnet message will also be processed.
@@ -4984,7 +4998,7 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         9.0
@@ -5020,7 +5034,7 @@ fn dts_long_execution_runs_out_of_instructions() {
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         9.0
@@ -5319,28 +5333,28 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
 
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         0.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_aborted_execution
             .get_sample_sum(),
         0.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_install_code
             .get_sample_sum(),
-        1.0
+        2.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_aborted_install_code
             .get_sample_sum(),
         0.0
@@ -5384,22 +5398,19 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             .get_sample_sum(),
         1.0
     );
-
-    // Execute another round to refresh the metrics
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_install_code
             .get_sample_sum(),
         2.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_install_code
             .get_sample_count(),
-        4
+        3
     );
 }
 
@@ -5439,14 +5450,14 @@ fn dts_resume_install_code_after_abort() {
 
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_install_code
             .get_sample_sum(),
         10.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_aborted_install_code
             .get_sample_sum(),
         1.0
@@ -5488,14 +5499,14 @@ fn dts_resume_long_execution_after_abort() {
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_paused_execution
             .get_sample_sum(),
         10.0
     );
     assert_eq!(
         test.scheduler()
-            .metrics
+            .state_metrics
             .canister_aborted_execution
             .get_sample_sum(),
         1.0
@@ -6684,7 +6695,6 @@ fn charge_idle_canisters_for_full_execution_round() {
         }
     }
 
-    let multiplier = scheduler_cores * test.state().canister_states().len();
     for round in 0..num_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
@@ -6706,8 +6716,8 @@ fn charge_idle_canisters_for_full_execution_round() {
             // Assert there is no divergency in accumulated priorities.
             let priority =
                 canister_priority.accumulated_priority - canister_priority.priority_credit;
-            assert_le!(priority.get(), 100 * multiplier as i64);
-            assert_ge!(priority.get(), -100 * multiplier as i64);
+            assert_le!(priority.get(), 100 * MULTIPLIER);
+            assert_ge!(priority.get(), -100 * MULTIPLIER);
 
             total_accumulated_priority += canister_priority.accumulated_priority.get();
             total_priority_credit += canister_priority.priority_credit.get();
@@ -6726,4 +6736,8 @@ fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
     .unwrap();
 
     *instructions_consumed_per_message.get("0").unwrap()
+}
+
+fn default_subnet_memory_capacity() -> NumBytes {
+    ic_config::execution_environment::Config::default().subnet_memory_capacity
 }

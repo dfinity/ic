@@ -5,15 +5,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
-use ic_replicated_state::canister_state::execution_state::{
-    SandboxMemory, WasmBinary, WasmExecutionMode,
-};
+use ic_replicated_state::canister_state::system_state::LoadMetrics;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
-use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, PageMap, storage::validate};
+use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
-    CanisterMetrics, CanisterPriority, CanisterState, CheckpointLoadingMetrics, ExecutionState,
-    Memory, ReplicatedState, SchedulerState, SubnetSchedule, SystemState,
+    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
+    canister_state::execution_state::{SandboxMemory, WasmBinary, WasmExecutionMode},
+    page_map::PageMap,
 };
+use ic_replicated_state::{CanisterPriority, CheckpointLoadingMetrics, Memory, SubnetSchedule};
 use ic_state_layout::{
     AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
     PageMapLayout, ReadOnly, SnapshotLayout, error::LayoutError, try_mmap_wasm_file,
@@ -184,6 +184,7 @@ pub(crate) enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
     WasmChunkStore(CanisterId),
+    LogMemoryStore(CanisterId),
     SnapshotWasmMemory(SnapshotId),
     SnapshotStableMemory(SnapshotId),
     SnapshotWasmChunkStore(SnapshotId),
@@ -195,6 +196,9 @@ impl PageMapType {
         let mut result = vec![];
         for (id, canister) in state.canister_states() {
             result.push(Self::WasmChunkStore(id.to_owned()));
+            if canister.system_state.log_memory_store.is_allocated() {
+                result.push(Self::LogMemoryStore(id.to_owned()));
+            }
             if canister.execution_state.is_some() {
                 result.push(Self::WasmMemory(id.to_owned()));
                 result.push(Self::StableMemory(id.to_owned()));
@@ -221,6 +225,7 @@ impl PageMapType {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
+            PageMapType::LogMemoryStore(id) => Ok(layout.canister(id)?.log_memory_store()),
             PageMapType::SnapshotWasmMemory(id) => Ok(layout.snapshot(id)?.vmemory_0()),
             PageMapType::SnapshotStableMemory(id) => Ok(layout.snapshot(id)?.stable_memory()),
             PageMapType::SnapshotWasmChunkStore(id) => Ok(layout.snapshot(id)?.wasm_chunk_store()),
@@ -243,6 +248,9 @@ impl PageMapType {
             PageMapType::WasmChunkStore(id) => state
                 .canister_state(id)
                 .map(|can| can.system_state.wasm_chunk_store.page_map()),
+            PageMapType::LogMemoryStore(id) => state
+                .canister_state(id)
+                .and_then(|can| can.system_state.log_memory_store.maybe_page_map()),
             PageMapType::SnapshotWasmMemory(id) => {
                 state.canister_state(&id.get_canister_id()).and_then(|can| {
                     can.canister_snapshots
@@ -277,11 +285,16 @@ fn strip_page_map_deltas(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
     for canister in state.canisters_iter_mut() {
+        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
+        let canister = Arc::make_mut(canister);
         canister
             .system_state
             .wasm_chunk_store
             .page_map_mut()
             .strip_all_deltas(Arc::clone(&fd_factory));
+        if let Some(page_map) = canister.system_state.log_memory_store.maybe_page_map_mut() {
+            page_map.strip_all_deltas(Arc::clone(&fd_factory));
+        }
         if let Some(execution_state) = canister.execution_state.as_mut() {
             execution_state
                 .wasm_memory
@@ -314,6 +327,10 @@ fn strip_page_map_deltas(
     // Reset the sandbox state to force full synchronization on the next execution
     // since the page deltas are out of sync now.
     for canister in state.canisters_iter_mut() {
+        if canister.execution_state.is_none() {
+            continue;
+        }
+        let canister = Arc::make_mut(canister);
         if let Some(execution_state) = &mut canister.execution_state {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
             execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
@@ -358,11 +375,16 @@ pub(crate) fn flush_page_maps(
     };
 
     for canister in tip_state.canisters_iter_mut() {
+        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
+        let canister = Arc::make_mut(canister);
         let id = canister.canister_id();
         add_to_pagemaps_and_strip(
             PageMapType::WasmChunkStore(id),
             canister.system_state.wasm_chunk_store.page_map_mut(),
         );
+        if let Some(page_map) = canister.system_state.log_memory_store.maybe_page_map_mut() {
+            add_to_pagemaps_and_strip(PageMapType::LogMemoryStore(id.to_owned()), page_map);
+        }
         if let Some(execution_state) = canister.execution_state.as_mut() {
             add_to_pagemaps_and_strip(
                 PageMapType::WasmMemory(id),
@@ -504,8 +526,8 @@ impl CheckpointLoader {
     fn load_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(BTreeMap<CanisterId, CanisterState>, SubnetSchedule), CheckpointError> {
-        let _canister_states_timer = self
+    ) -> Result<(BTreeMap<CanisterId, Arc<CanisterState>>, SubnetSchedule), CheckpointError> {
+        let _timer = self
             .metrics
             .load_checkpoint_step_duration
             .with_label_values(&["canister_states"])
@@ -538,7 +560,7 @@ impl CheckpointLoader {
         for result in results.into_iter() {
             let (canister_state, canister_priority, durations) = result?;
             priorities.insert(canister_state.canister_id(), canister_priority);
-            canister_states.insert(canister_state.canister_id(), canister_state);
+            canister_states.insert(canister_state.canister_id(), Arc::new(canister_state));
 
             durations.apply(&self.metrics);
         }
@@ -551,7 +573,7 @@ impl CheckpointLoader {
     fn validate_eq_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-        ref_canister_states: &BTreeMap<CanisterId, CanisterState>,
+        ref_canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) -> Result<BTreeMap<CanisterId, CanisterPriority>, String> {
         let on_disk_canister_ids = self
             .checkpoint_layout
@@ -841,6 +863,14 @@ pub fn load_canister_state(
         canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles,
         canister_state_bits.consumed_cycles_by_use_cases,
+        canister_state_bits.instructions_executed,
+        LoadMetrics::new(
+            canister_state_bits.ingress_messages_executed,
+            canister_state_bits.remote_subnet_messages_executed,
+            canister_state_bits.local_subnet_messages_executed,
+            canister_state_bits.http_outcalls_executed,
+            canister_state_bits.heartbeats_and_global_timers_executed,
+        ),
     );
 
     let starting_time = Instant::now();
@@ -851,6 +881,23 @@ pub fn load_canister_state(
         Arc::clone(&fd_factory),
     )?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
+
+    // PageMap is a lazy pointer that doesn't verify file existence on creation.
+    // To avoid redundant disk I/O during restoration, we only initialize page_map
+    // if the log memory limit is non-zero.
+    let log_memory_store_data = if canister_state_bits.log_memory_limit.get() > 0 {
+        let starting_time = Instant::now();
+        let log_memory_store_layout = canister_layout.log_memory_store();
+        let log_memory_store_data = PageMap::open(
+            Box::new(log_memory_store_layout),
+            height,
+            Arc::clone(&fd_factory),
+        )?;
+        durations.insert("log_memory_store", starting_time.elapsed());
+        Some(log_memory_store_data)
+    } else {
+        None
+    };
 
     let system_state = SystemState::new_from_checkpoint(
         canister_state_bits.controllers,
@@ -876,8 +923,8 @@ pub fn load_canister_state(
         wasm_chunk_store_data,
         canister_state_bits.wasm_chunk_store_metadata,
         canister_state_bits.log_visibility,
-        canister_state_bits.log_memory_limit,
         canister_state_bits.canister_log,
+        log_memory_store_data,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
         canister_state_bits.snapshots_memory_usage,

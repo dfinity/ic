@@ -1,5 +1,7 @@
 use canister_test::*;
+use ic_config::execution_environment::TEST_DEFAULT_LOG_MEMORY_USAGE;
 use ic_state_machine_tests::StateMachine;
+use more_asserts::{assert_le, assert_lt};
 
 // 1. This constant has been obtained empirically by running the tests.
 // The old value of the const was 1_820_000.
@@ -64,10 +66,9 @@ fn creating_canisters_works() {
 
     // Assert the number of running canisters is equal to the number of created canisters.
     assert_eq!(env.num_running_canisters(), 1_001);
-    assert!(
-        env.canister_memory_usage_bytes() <= CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES,
-        "Actual: {} bytes",
-        env.canister_memory_usage_bytes()
+    assert_le!(
+        env.canister_memory_usage_bytes(),
+        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * TEST_DEFAULT_LOG_MEMORY_USAGE,
     );
 }
 
@@ -87,10 +88,9 @@ fn install_code_works() {
         .unwrap();
     assert_eq!(result, WasmResult::Reply("null".as_bytes().to_vec()));
     assert_eq!(env.num_running_canisters(), 1_001);
-    assert!(
-        env.canister_memory_usage_bytes() <= CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES,
-        "Actual: {} bytes",
-        env.canister_memory_usage_bytes()
+    assert_le!(
+        env.canister_memory_usage_bytes(),
+        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * TEST_DEFAULT_LOG_MEMORY_USAGE,
     );
 
     // Install code.
@@ -114,9 +114,8 @@ fn install_code_works() {
     // Assert there are 1_001 canisters running with the memory usage below the
     // subnet storage capacity, which is currently 2 TiB
     assert_eq!(env.num_running_canisters(), 1_001);
-    assert!(
-        env.canister_memory_usage_bytes() < 2 * 1024 * 1024 * 1024 * 1024,
-        "Actual: {} bytes",
-        env.canister_memory_usage_bytes()
+    assert_lt!(
+        env.canister_memory_usage_bytes(),
+        2 * 1024 * 1024 * 1024 * 1024,
     );
 }

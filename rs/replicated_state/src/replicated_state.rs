@@ -146,14 +146,21 @@ struct OutputIterator<'a> {
 
 impl<'a> OutputIterator<'a> {
     fn new(
-        canisters: &'a mut BTreeMap<CanisterId, CanisterState>,
+        canisters: &'a mut BTreeMap<CanisterId, Arc<CanisterState>>,
         subnet_queues: &'a mut CanisterQueues,
         seed: u64,
     ) -> Self {
         let mut canister_iterators: VecDeque<_> = canisters
             .values_mut()
-            .filter(|canister| canister.has_output())
-            .map(|canister| canister.system_state.output_into_iter())
+            .filter_map(|canister| {
+                if !canister.has_output() {
+                    return None;
+                }
+                // TODO(DSM-102): Consider making `CanisterOutputQueuesIterator` initialize
+                // lazily, from a `&mut Arc<_>`.
+                let canister = Arc::make_mut(canister);
+                Some(canister.system_state.output_into_iter())
+            })
             .collect();
 
         let mut rng = ChaChaRng::seed_from_u64(seed);
@@ -404,7 +411,7 @@ impl MemoryTaken {
 pub struct ReplicatedState {
     /// Canister states indexed by canister ID.
     #[validate_eq(CompareWithValidateEq)]
-    canister_states: BTreeMap<CanisterId, CanisterState>,
+    canister_states: BTreeMap<CanisterId, Arc<CanisterState>>,
 
     /// Deterministic processing metadata.
     #[validate_eq(CompareWithValidateEq)]
@@ -460,7 +467,7 @@ impl ReplicatedState {
 
     /// Creates a replicated state from a checkpoint.
     pub fn new_from_checkpoint(
-        canister_states: BTreeMap<CanisterId, CanisterState>,
+        canister_states: BTreeMap<CanisterId, Arc<CanisterState>>,
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
         refunds: RefundPool,
@@ -477,10 +484,11 @@ impl ReplicatedState {
     }
 
     /// References into _all_ fields.
+    #[allow(clippy::type_complexity)]
     pub fn component_refs(
         &self,
     ) -> (
-        &BTreeMap<CanisterId, CanisterState>,
+        &BTreeMap<CanisterId, Arc<CanisterState>>,
         &SystemMetadata,
         &CanisterQueues,
         &RefundPool,
@@ -506,10 +514,28 @@ impl ReplicatedState {
     }
 
     pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterState> {
-        self.canister_states.get(canister_id)
+        self.canister_states
+            .get(canister_id)
+            .map(|canister| canister.as_ref())
     }
 
-    pub fn canister_state_mut(&mut self, canister_id: &CanisterId) -> Option<&mut CanisterState> {
+    /// Makes a mutable reference to the canister state, cloning it if necessary.
+    ///
+    /// Make sure to only call this when actually mutating the canister state.
+    pub fn canister_state_make_mut(
+        &mut self,
+        canister_id: &CanisterId,
+    ) -> Option<&mut CanisterState> {
+        self.canister_states.get_mut(canister_id).map(Arc::make_mut)
+    }
+
+    /// Returns a mutable reference to the canister state without cloning it.
+    ///
+    /// The caller may call `Arc::make_mut()` if and when necessary to mutate it.
+    pub fn canister_state_mut_arc(
+        &mut self,
+        canister_id: &CanisterId,
+    ) -> Option<&mut Arc<CanisterState>> {
         self.canister_states.get_mut(canister_id)
     }
 
@@ -518,7 +544,7 @@ impl ReplicatedState {
     ///
     /// Intended to work around borrow checker limitations (e.g. routing messages
     /// from one canister's output queues into another canister's input queues).
-    pub fn take_canister_state(&mut self, canister_id: &CanisterId) -> Option<CanisterState> {
+    pub fn take_canister_state(&mut self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
         self.canister_states.remove(canister_id)
     }
 
@@ -528,7 +554,8 @@ impl ReplicatedState {
     /// It is the responsibility of the caller of this function to ensure that any
     /// relevant state associated with the older canister state are properly
     /// cleaned up.
-    pub fn put_canister_state(&mut self, canister_state: CanisterState) {
+    pub fn put_canister_state<CS: Into<Arc<CanisterState>>>(&mut self, canister_state: CS) {
+        let canister_state = canister_state.into();
         // Also insert a scheduling priority for the canister. This is a temporary
         // measure to ensure that every canister has an explicit priority.
         self.metadata
@@ -540,13 +567,13 @@ impl ReplicatedState {
 
     /// Permanently removes the canister and its scheduling priority from the subnet
     /// schedule.
-    pub fn remove_canister(&mut self, canister_id: &CanisterId) -> Option<CanisterState> {
+    pub fn remove_canister(&mut self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
         self.metadata.subnet_schedule.remove(canister_id);
         self.canister_states.remove(canister_id)
     }
 
     /// Returns a reference to the canister states.
-    pub fn canister_states(&self) -> &BTreeMap<CanisterId, CanisterState> {
+    pub fn canister_states(&self) -> &BTreeMap<CanisterId, Arc<CanisterState>> {
         &self.canister_states
     }
 
@@ -555,7 +582,7 @@ impl ReplicatedState {
     ///
     /// Intended to work around borrow checker limitations (e.g. routing messages
     /// from one canister's output queues into another canister's input queues).
-    pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, CanisterState> {
+    pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, Arc<CanisterState>> {
         std::mem::take(&mut self.canister_states)
     }
 
@@ -565,22 +592,22 @@ impl ReplicatedState {
     /// call `put_canister_states()` after `take_canister_states()`, with no
     /// other canister-related calls in-between, in order to prevent concurrent
     /// mutations from replacing each other.
-    pub fn put_canister_states(&mut self, canisters: BTreeMap<CanisterId, CanisterState>) {
+    pub fn put_canister_states(&mut self, canisters: BTreeMap<CanisterId, Arc<CanisterState>>) {
         assert!(self.canister_states.is_empty());
         self.canister_states = canisters;
     }
 
     /// Returns an iterator over canister states, ordered by canister ID.
-    pub fn canisters_iter(
-        &self,
-    ) -> std::collections::btree_map::Values<'_, CanisterId, CanisterState> {
-        self.canister_states.values()
+    pub fn canisters_iter(&self) -> impl Iterator<Item = &CanisterState> {
+        self.canister_states
+            .values()
+            .map(|canister| canister.as_ref())
     }
 
     /// Returns a mutable iterator over canister states, ordered by canister ID.
     pub fn canisters_iter_mut(
         &mut self,
-    ) -> std::collections::btree_map::ValuesMut<'_, CanisterId, CanisterState> {
+    ) -> std::collections::btree_map::ValuesMut<'_, CanisterId, Arc<CanisterState>> {
         self.canister_states.values_mut()
     }
 
@@ -634,7 +661,7 @@ impl ReplicatedState {
     pub fn canisters_and_schedule_mut(
         &mut self,
     ) -> (
-        &mut BTreeMap<CanisterId, CanisterState>,
+        &mut BTreeMap<CanisterId, Arc<CanisterState>>,
         &mut SubnetSchedule,
     ) {
         (
@@ -948,7 +975,7 @@ impl ReplicatedState {
         };
 
         let receiver = msg.receiver();
-        match self.canister_state_mut(&receiver) {
+        match self.canister_state_make_mut(&receiver) {
             Some(receiver_canister) => receiver_canister.push_input(
                 msg,
                 subnet_available_guaranteed_response_memory,
@@ -1001,7 +1028,7 @@ impl ReplicatedState {
             self.subnet_queues.push_ingress(msg);
         } else {
             let canister_id = msg.receiver;
-            match self.canister_state_mut(&canister_id) {
+            match self.canister_state_make_mut(&canister_id) {
                 Some(canister) => canister.push_ingress(msg),
                 None => return Err(IngressInductionError::CanisterNotFound(canister_id)),
             }
@@ -1014,7 +1041,7 @@ impl ReplicatedState {
     /// Returns `true` if the recipient canister exists and was credited, `false`
     /// otherwise.
     pub fn credit_refund(&mut self, refund: &Refund) -> bool {
-        if let Some(canister) = self.canister_state_mut(&refund.recipient()) {
+        if let Some(canister) = self.canister_state_make_mut(&refund.recipient()) {
             canister
                 .system_state
                 .add_cycles(refund.amount(), CyclesUseCase::NonConsumed);
@@ -1101,12 +1128,13 @@ impl ReplicatedState {
         self.refunds.retain(|refund| !f(refund));
     }
 
-    /// See `IngressQueue::filter_messages()` for documentation.
-    pub fn filter_subnet_queues_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
+    /// In the subnet queues, retains only the ingress messages that satisfy the
+    /// predicate, removing and returning all the ingress messages that don't.
+    pub fn subnet_queues_retain_ingress_messages<F>(&mut self, predicate: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.subnet_queues.filter_ingress_messages(filter)
+        self.subnet_queues.retain_ingress_messages(predicate)
     }
 
     /// Returns an immutable reference to `self.epoch_query_stats`.
@@ -1122,7 +1150,11 @@ impl ReplicatedState {
     /// Garbage collects empty canister and subnet queues.
     pub fn garbage_collect_canister_queues(&mut self) {
         for (_canister_id, canister) in self.canister_states.iter_mut() {
-            canister.system_state.garbage_collect_canister_queues();
+            if canister.system_state.can_garbage_collect_canister_queues() {
+                Arc::make_mut(canister)
+                    .system_state
+                    .garbage_collect_canister_queues();
+            }
         }
         self.subnet_queues.garbage_collect();
     }
@@ -1162,7 +1194,7 @@ impl ReplicatedState {
 
         for canister_id in canister_ids_with_expired_deadlines {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            canister.system_state.time_out_messages(
+            Arc::make_mut(&mut canister).system_state.time_out_messages(
                 current_time,
                 &canister_id,
                 &self.canister_states,
@@ -1211,7 +1243,7 @@ impl ReplicatedState {
         let mut errors = Vec::new();
         for canister_id in canister_ids_with_expired_callbacks {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            let (canister_expired_callback_count, canister_errors) = canister
+            let (canister_expired_callback_count, canister_errors) = Arc::make_mut(&mut canister)
                 .system_state
                 .time_out_callbacks(current_time, &canister_id, &self.canister_states);
             expired_callback_count += canister_expired_callback_count;
@@ -1290,7 +1322,8 @@ impl ReplicatedState {
                 // Shed from a canister's queues: remove the canister, shed its largest message,
                 // replace it.
                 let mut canister = self.canister_states.remove(&canister_id).unwrap();
-                let message_shed = canister.system_state.shed_largest_message(
+                let canister_state = Arc::make_mut(&mut canister);
+                let message_shed = canister_state.system_state.shed_largest_message(
                     &canister_id,
                     &self.canister_states,
                     &mut self.refunds,
@@ -1439,9 +1472,11 @@ impl ReplicatedState {
         let local_canister_ids = canister_states.keys().cloned().collect::<Vec<_>>();
         for canister_id in local_canister_ids.iter() {
             let mut canister_state = canister_states.remove(canister_id).unwrap();
-            canister_state
-                .system_state
-                .split_input_schedules(canister_id, canister_states);
+            if canister_state.has_input() {
+                Arc::make_mut(&mut canister_state)
+                    .system_state
+                    .split_input_schedules(canister_id, canister_states);
+            }
             canister_states.insert(*canister_id, canister_state);
         }
 
@@ -1450,7 +1485,7 @@ impl ReplicatedState {
         // subnet A', ensuring consistency across subnet and canister states.
         if metadata.split_from != Some(metadata.own_subnet_id) {
             for canister_state in canister_states.values_mut() {
-                canister_state.drop_in_progress_management_calls_after_split();
+                Arc::make_mut(canister_state).drop_in_progress_management_calls_after_split();
             }
         }
 
@@ -1538,9 +1573,11 @@ impl ReplicatedState {
         let local_canister_ids = canister_states.keys().cloned().collect::<Vec<_>>();
         for canister_id in local_canister_ids.iter() {
             let mut canister_state = canister_states.remove(canister_id).unwrap();
-            canister_state
-                .system_state
-                .split_input_schedules(canister_id, &canister_states);
+            if canister_state.has_input() {
+                Arc::make_mut(&mut canister_state)
+                    .system_state
+                    .split_input_schedules(canister_id, &canister_states);
+            }
             canister_states.insert(*canister_id, canister_state);
         }
 
@@ -1569,7 +1606,7 @@ impl ReplicatedState {
             // The corresponding calls are rejected by the *subnet A'* call context manager,
             // ensuring consistency across subnet call context manager and canister states.
             for canister_state in canister_states.values_mut() {
-                canister_state.drop_in_progress_management_calls_after_split();
+                Arc::make_mut(canister_state).drop_in_progress_management_calls_after_split();
             }
         }
 

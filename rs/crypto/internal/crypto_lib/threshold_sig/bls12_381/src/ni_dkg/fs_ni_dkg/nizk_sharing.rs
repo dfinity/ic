@@ -321,12 +321,11 @@ pub fn verify_sharing(
         // The two expressions are re-arranged so that it becomes possible to compute
         // everything with a single multi scalar multiplication.
 
-        let instance_inputs = instance
+        let instance_inputs: Vec<_> = instance
             .combined_ciphertexts
             .iter()
             .chain(&instance.public_keys)
-            .cloned()
-            .collect::<Vec<G1Affine>>();
+            .collect();
         let challenges = {
             let mut c = Vec::with_capacity(xpow.len() * 2);
             for xp in &xpow {
@@ -339,7 +338,7 @@ pub fn verify_sharing(
             c
         };
 
-        let lhs = G1Projective::muln_affine_vartime(&instance_inputs, &challenges);
+        let lhs = G1Projective::muln_affine_vartime_ref(&instance_inputs, &challenges);
         let rhs = &instance.g1_gen.mul_vartime(&nizk.z_alpha) + &nizk.yy.neg();
 
         if lhs != rhs {

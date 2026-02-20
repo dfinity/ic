@@ -165,7 +165,7 @@ impl ReplicatedStateFixture {
 
     fn pop_input(&mut self) -> Option<CanisterMessage> {
         self.state
-            .canister_state_mut(&CANISTER_ID)
+            .canister_state_make_mut(&CANISTER_ID)
             .unwrap()
             .pop_input()
     }
@@ -176,21 +176,21 @@ impl ReplicatedStateFixture {
         time: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
         self.state
-            .canister_state_mut(&CANISTER_ID)
+            .canister_state_make_mut(&CANISTER_ID)
             .unwrap()
             .push_output_request(request.into(), time)
     }
 
     fn push_output_response(&mut self, response: Response) {
         self.state
-            .canister_state_mut(&CANISTER_ID)
+            .canister_state_make_mut(&CANISTER_ID)
             .unwrap()
             .push_output_response(response.into());
     }
 
     fn pop_output(&mut self) -> Option<RequestOrResponse> {
         self.state
-            .canister_state_mut(&CANISTER_ID)
+            .canister_state_make_mut(&CANISTER_ID)
             .unwrap()
             .output_into_iter()
             .pop()
@@ -215,7 +215,7 @@ impl ReplicatedStateFixture {
     }
 
     fn stop_canister(&mut self) {
-        let canister = self.state.canister_state_mut(&CANISTER_ID).unwrap();
+        let canister = self.state.canister_state_make_mut(&CANISTER_ID).unwrap();
         canister
             .system_state
             .begin_stopping(ic_types::messages::StopCanisterContext::Ingress {
@@ -588,7 +588,7 @@ fn memory_taken_by_canister_history() {
         2 * (size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>());
 
     // Push two canister changes into canister history.
-    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.add_canister_change(
         Time::from_nanos_since_unix_epoch(0),
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
@@ -609,19 +609,19 @@ fn memory_taken_by_canister_history() {
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Test small fixed memory allocation.
-    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(2));
     assert_execution_memory_taken(canister_history_memory, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Test large fixed memory allocation.
-    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(888));
     assert_execution_memory_taken(888, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Reset canister memory allocation.
-    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.memory_allocation = MemoryAllocation::default();
 
     // Test a system subnet.
@@ -1189,7 +1189,7 @@ fn split() {
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_1, expected.canister_states());
     expected.put_canister_state(canister_state);
@@ -1235,7 +1235,7 @@ fn split() {
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_2]);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_2, expected.canister_states());
     expected.put_canister_state(canister_state);
@@ -1321,7 +1321,7 @@ fn online_split() {
 
     // Take snapshots of both canisters.
     let mut take_shapshot = |canister_id| {
-        let canister = fixture.state.canister_state_mut(&canister_id).unwrap();
+        let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
         let snapshot = CanisterSnapshot::from_canister(canister, UNIX_EPOCH).unwrap();
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
@@ -1333,7 +1333,7 @@ fn online_split() {
 
     // Add aborted `install_code` tasks to both canisters.
     let mut add_aborted_install_code_task = |canister_id| {
-        let canister = fixture.state.canister_state_mut(&canister_id).unwrap();
+        let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
         canister
             .system_state
             .task_queue
@@ -1360,7 +1360,8 @@ fn online_split() {
     // Only `CANISTER_1` should be left.
     expected.remove_canister(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
-    let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
+    let mut canister_state_arc = expected.take_canister_state(&CANISTER_1).unwrap();
+    let canister_state = Arc::make_mut(&mut canister_state_arc);
     canister_state
         .system_state
         .split_input_schedules(&CANISTER_1, expected.canister_states());
@@ -1368,7 +1369,7 @@ fn online_split() {
     canister_state
         .canister_snapshots
         .remove(canister_2_snapshot_id);
-    expected.put_canister_state(canister_state);
+    expected.put_canister_state(canister_state_arc);
 
     // And the split marker should be set.
     expected.metadata.subnet_split_from = Some(SUBNET_A);
@@ -1392,7 +1393,8 @@ fn online_split() {
     // Only `CANISTER_2` should be hosted.
     expected.remove_canister(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
-    let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
+    let mut canister_state_arc = expected.take_canister_state(&CANISTER_2).unwrap();
+    let canister_state = Arc::make_mut(&mut canister_state_arc);
     canister_state
         .system_state
         .split_input_schedules(&CANISTER_2, expected.canister_states());
@@ -1402,7 +1404,7 @@ fn online_split() {
     canister_state
         .canister_snapshots
         .remove(canister_1_snapshot_id);
-    expected.put_canister_state(canister_state);
+    expected.put_canister_state(canister_state_arc);
 
     // Streams, subnet queues and refunds should be empty.
     expected.take_streams();
@@ -1687,7 +1689,8 @@ fn iter_with_exclude_queue_yields_correct_elements(
     prop_assert_eq!(remaining_output, ignored_requests.len());
 
     for raw in ignored_requests {
-        let queues = if let Some(canister) = replicated_state.canister_state_mut(&raw.sender()) {
+        let queues = if let Some(canister) = replicated_state.canister_state_make_mut(&raw.sender())
+        {
             canister.system_state.queues_mut()
         } else {
             replicated_state.subnet_queues_mut()
