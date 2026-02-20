@@ -1,9 +1,13 @@
 name: API BN Recovery Test
 
 on:
-  workflow_dispatch:  # manual trigger for testing
+  workflow_dispatch:
   schedule:
     - cron: '0 6 * * 1'  # weekly on Monday at 06:00 UTC
+  pull_request:
+    paths:
+      - '.github/workflows/api-bn-recovery-test.yml'
+      - 'ic-os/api-bn-recovery/**'
 
 permissions:
   contents: read
@@ -18,18 +22,10 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host
         --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Build binaries with Bazel
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            bazel build \
-              //rs/boundary_node/ic_boundary:ic-boundary \
-              //rs/orchestrator/registry_replicator:ic-registry-replicator
 
       - name: Install dfx
         run: |
