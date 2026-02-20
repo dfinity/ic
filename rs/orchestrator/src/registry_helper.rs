@@ -1,4 +1,6 @@
+use crate::error::OrchestratorError;
 use ic_consensus_cup_utils::make_registry_cup;
+use ic_image_upgrader::error::UpgradeError;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::{
@@ -120,6 +122,18 @@ impl fmt::Display for RegistryError {
 impl From<RegistryClientError> for RegistryError {
     fn from(err: RegistryClientError) -> Self {
         RegistryError::RegistryClientError(err)
+    }
+}
+
+impl From<RegistryError> for OrchestratorError {
+    fn from(e: RegistryError) -> Self {
+        OrchestratorError::RegistryError(e)
+    }
+}
+
+impl From<RegistryError> for UpgradeError {
+    fn from(e: RegistryError) -> Self {
+        UpgradeError::RegistryError(e.to_string())
     }
 }
 

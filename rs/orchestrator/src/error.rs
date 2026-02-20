@@ -107,12 +107,6 @@ impl fmt::Display for OrchestratorError {
     }
 }
 
-impl From<RegistryError> for OrchestratorError {
-    fn from(e: RegistryError) -> Self {
-        OrchestratorError::RegistryError(e)
-    }
-}
-
 impl From<OrchestratorError> for UpgradeError {
     fn from(e: OrchestratorError) -> UpgradeError {
         match e {
@@ -120,12 +114,6 @@ impl From<OrchestratorError> for UpgradeError {
             OrchestratorError::IoError(msg, err) => UpgradeError::IoError(msg, err),
             err => UpgradeError::GenericError(err.to_string()),
         }
-    }
-}
-
-impl From<RegistryError> for UpgradeError {
-    fn from(e: RegistryError) -> Self {
-        UpgradeError::RegistryError(e.to_string())
     }
 }
 
