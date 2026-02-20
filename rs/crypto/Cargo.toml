@@ -114,9 +114,9 @@ harness = false
 name = "threshold_sig"
 harness = false
 
-#[[bench]]
-#name = "idkg"
-#harness = false
+[[bench]]
+name = "idkg"
+harness = false
 
 [[bench]]
 name = "tecdsa"
