@@ -1089,7 +1089,7 @@ fn stop_a_non_existing_canister() {
 }
 
 #[test]
-fn start_a_canister_with_incorrect_controller_or_subnet_admin_fails() {
+fn start_a_canister_with_incorrect_controller_fails() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
