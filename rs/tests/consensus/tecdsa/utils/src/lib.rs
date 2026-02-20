@@ -55,10 +55,6 @@ use std::{fmt::Debug, time::Duration};
 
 pub const KEY_ID1: &str = "secp256k1";
 
-/// The default DKG interval takes too long before the keys are created and
-/// passed to execution.
-pub const DKG_INTERVAL: u64 = 19;
-
 pub const NUMBER_OF_NODES: usize = 4;
 
 const VETKD_TRANSPORT_SECRET_KEY_SEED: [u8; 32] = [13; 32];
@@ -127,7 +123,7 @@ pub fn setup_without_ecdsa_on_nns(test_env: TestEnv, dkg_interval_length: Height
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_dkg_interval_length(dkg_interval_length)
                 .add_nodes(NUMBER_OF_NODES),
         )
         .with_unassigned_nodes(NUMBER_OF_NODES)
