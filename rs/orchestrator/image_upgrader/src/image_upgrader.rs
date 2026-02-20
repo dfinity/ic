@@ -15,7 +15,10 @@ use crate::error::{UpgradeError, UpgradeResult};
 pub mod error;
 
 /// Used to signal that the system is rebooting.
-pub struct Rebooting;
+pub enum State {
+    Rebooting,
+    Continue,
+}
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
@@ -83,7 +86,11 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 /// ```
 ///
 #[async_trait]
-pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send + Sync {
+pub trait ImageUpgrader<
+    V: Clone + Debug + PartialEq + Eq + Send + Sync,
+    S: Clone + Debug + PartialEq + Eq + Send + Sync,
+>: Send + Sync
+{
     type UpgradeType;
 
     /// Return the currently prepared version, if there is one. Default is None.
@@ -99,6 +106,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     fn binary_dir(&self) -> &PathBuf;
     /// Path to the image image download and unpacking destination.
     fn image_path(&self) -> &PathBuf;
+    /// Path to the image image download and unpacking destination.
+    fn replica_path(&self) -> &PathBuf;
     /// Optional data path, used for storing latest reboot time. Default is None.
     fn data_dir(&self) -> Option<&PathBuf> {
         None
@@ -114,6 +123,13 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
 
     /// Runs the disk encryption key exchange process if SEV is active. NOOP otherwise.
     async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()>;
+
+    /// Return the replica url and optional SHA256 hex string for the given version.
+    /// Used to download the replica during `prepare_upgrade()`.
+    fn get_replica_urls_and_hash(
+        &self,
+        version: &V,
+    ) -> UpgradeResult<(Vec<String>, Option<String>)>;
 
     /// Calls a corresponding script to "confirm" that the base OS could boot
     /// successfully. Without a confirmation the image will be reverted on the next
@@ -138,9 +154,15 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// Releases are downloaded using [`FileDownloader::download_file()`] which
     /// returns immediately if the file with matching hash already exists.
     async fn download_release_package(&self, version: &V) -> UpgradeResult<()> {
-        let (mut release_package_urls, hash) = self.get_release_package_urls_and_hash(version)?;
+        let (mut urls, hash, path) = if self.is_slow_upgrade(version)? {
+            let (release_package_urls, hash) = self.get_release_package_urls_and_hash(version)?;
+            (release_package_urls, hash, self.image_path())
+        } else {
+            let (release_package_urls, hash) = self.get_replica_urls_and_hash(version)?;
+            (release_package_urls, hash, self.replica_path())
+        };
 
-        let url_count = release_package_urls.len();
+        let url_count = urls.len();
         if url_count == 0 {
             return Err(UpgradeError::GenericError(format!(
                 "No download URLs are provided for version {version:?}"
@@ -150,18 +172,18 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         // Load-balance, by making each node rotate the `release_package_urls` by some number.
         // Note that the order is the same for everyone; only the starting point is different.
         // This is okay because we do expect the first attempt to be successful.
-        release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
+        urls.rotate_right(self.get_load_balance_number() % url_count);
 
         // We return the last error if download attempts from all the URLs fail.
         // We will always either set `error`, or return `Ok` from this loop.
         let mut error = UpgradeError::GenericError("unreachable".to_string());
-        for release_package_url in release_package_urls.iter() {
+        for release_package_url in urls.iter() {
             let req = format!("Request to download image {version:?} from {release_package_url}");
             let file_downloader =
                 FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
             let start_time = std::time::Instant::now();
             let download_result = file_downloader
-                .download_file(release_package_url, self.image_path(), hash.clone())
+                .download_file(release_package_url, path, hash.clone())
                 .await;
             let duration = start_time.elapsed();
 
@@ -183,6 +205,14 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// has already been prepared. Thus it may be called manually in advance, to minimize
     /// downtime of upgrades scheduled at a specific time.
     async fn prepare_upgrade(&mut self, version: &V) -> UpgradeResult<()> {
+        if self.is_slow_upgrade(version)? {
+            self.prepare_slow_upgrade(version).await
+        } else {
+            self.prepare_fast_upgrade(version).await
+        }
+    }
+
+    async fn prepare_slow_upgrade(&mut self, version: &V) -> UpgradeResult<()> {
         // Return immediately if 'version' is already prepared for an upgrade.
         if self.get_prepared_version() == Some(version) {
             return Ok(());
@@ -218,9 +248,37 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         Ok(())
     }
 
+    async fn prepare_fast_upgrade(&mut self, version: &V) -> UpgradeResult<()> {
+        // Return immediately if 'version' is already prepared for an upgrade.
+        if self.get_prepared_version() == Some(version) {
+            return Ok(());
+        }
+
+        self.download_release_package(version).await?;
+
+        self.set_prepared_version(Some(version.clone()));
+        Ok(())
+    }
+
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<Rebooting> {
+    async fn execute_upgrade(
+        &mut self,
+        version: &V,
+        subnet_id: Option<&S>,
+    ) -> UpgradeResult<State> {
+        if self.is_slow_upgrade(version)? {
+            self.execute_slow_upgrade(version, subnet_id).await
+        } else {
+            self.execute_fast_upgrade(version, subnet_id).await
+        }
+    }
+
+    async fn execute_slow_upgrade(
+        &mut self,
+        version: &V,
+        _subnet_id: Option<&S>,
+    ) -> UpgradeResult<State> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -261,8 +319,16 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
             ))
         } else {
             info!(self.log(), "Rebooting {:?}", out);
-            Ok(Rebooting)
+            Ok(State::Rebooting)
         }
+    }
+
+    async fn execute_fast_upgrade(
+        &mut self,
+        _version: &V,
+        subnet_id: Option<&S>,
+    ) -> UpgradeResult<State> {
+        self.shim_swap_restart_replica(subnet_id).await
     }
 
     /// Return the path of the reboot time file in the data directory.
@@ -309,4 +375,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
     async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
+
+    async fn shim_swap_restart_replica(&mut self, subnet_id: Option<&S>) -> UpgradeResult<State>;
+
+    fn is_slow_upgrade(&self, version: &V) -> UpgradeResult<bool>;
 }

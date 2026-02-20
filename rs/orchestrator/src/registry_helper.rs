@@ -352,6 +352,27 @@ impl RegistryHelper {
             .transpose()
     }
 
+    /// Get the GuestOS version of this node in the given registry version
+    pub(crate) fn get_node_guestos_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> OrchestratorResult<Option<ReplicaVersion>> {
+        let node_record = self
+            .registry_client
+            .get_node_record(self.node_id, registry_version)?;
+
+        node_record
+            .and_then(|node_record| node_record.slow_version_id)
+            .map(|node_record| {
+                ReplicaVersion::try_from(node_record).map_err(|err| {
+                    OrchestratorError::UpgradeError(format!(
+                        "Could not parse replica version: {err}"
+                    ))
+                })
+            })
+            .transpose()
+    }
+
     pub(crate) fn get_node_ipv4_config(
         &self,
         version: RegistryVersion,

@@ -28,6 +28,7 @@ pub mod do_update_node_operator_config;
 pub mod do_update_node_operator_config_directly;
 pub mod do_update_node_rewards_table;
 pub mod do_update_nodes_hostos_version;
+pub mod do_update_nodes_slow_version;
 pub mod do_update_ssh_readonly_access_for_all_unassigned_nodes;
 pub mod do_update_subnet;
 pub mod do_update_unassigned_nodes_config;

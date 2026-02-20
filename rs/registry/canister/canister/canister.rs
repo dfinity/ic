@@ -63,6 +63,7 @@ use registry_canister::{
         do_update_nodes_hostos_version::{
             DeployHostosToSomeNodes, UpdateNodesHostosVersionPayload,
         },
+        do_update_nodes_slow_version::DeploySlowToSomeNodes,
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -588,6 +589,18 @@ fn deploy_hostos_to_some_nodes() {
 #[candid_method(update, rename = "deploy_hostos_to_some_nodes")]
 fn deploy_hostos_to_some_nodes_(payload: DeployHostosToSomeNodes) {
     registry_mut().do_deploy_hostos_to_some_nodes(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update deploy_slow_to_some_nodes")]
+fn deploy_slow_to_some_nodes() {
+    check_caller_is_governance_and_log("deploy_slow_to_some_nodes");
+    over(candid_one, deploy_slow_to_some_nodes_);
+}
+
+#[candid_method(update, rename = "deploy_slow_to_some_nodes")]
+fn deploy_slow_to_some_nodes_(payload: DeploySlowToSomeNodes) {
+    registry_mut().do_deploy_slow_to_some_nodes(payload);
     recertify_registry();
 }
 

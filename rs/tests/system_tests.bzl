@@ -134,6 +134,9 @@ def system_test(
     _runtime_deps |= icos_config.runtime_deps
     icos_images |= icos_config.icos_images
 
+    # NOTE: Use the malicious replica just so it has a different hash
+    icos_images["ENV_DEPS__REPLICA_UPDATE"] = "//publish/malicious:replica"
+
     env_var_files["FARM_METADATA"] = "//rs/tests:farm_metadata.txt"
 
     extra_args_simple = []
