@@ -16,8 +16,8 @@ use ic_protobuf::registry::{
         CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
         ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
     },
-    types::v1::PrincipalId as PrincipalIdPb,
 };
+use ic_protobuf::types::v1::PrincipalId as PrincipalIdPb;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
