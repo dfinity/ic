@@ -21,6 +21,7 @@ use prost::Message;
 ///    * There is at least one system subnet
 ///    * Each subnet in the registry occurs in the subnet list and vice versa
 ///    * Only application subnets can be rented and therefore have a "free" cycles cost schedule
+///    * Only rented subnets can have subnet admins set to a non-empty list
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -101,6 +102,22 @@ pub(crate) fn check_subnet_invariants(
             return Err(InvariantCheckError {
                 msg: format!(
                     "Subnet {subnet_id:} is not an application subnet but has a free cycles cost schedule"
+                ),
+                source: None,
+            });
+        }
+
+        // The list of subnet_admins can be non-empty only for rented subnets, i.e. for subnets of type
+        // application and on a free schedule.
+        let is_application_subnet = subnet_record.subnet_type == i32::from(SubnetType::Application);
+        let is_on_free_cost_schedule = subnet_record.canister_cycles_cost_schedule
+            == i32::from(CanisterCyclesCostSchedule::Free);
+        if !(is_application_subnet && is_on_free_cost_schedule)
+            && !subnet_record.subnet_admins.is_empty()
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Subnet {subnet_id:} is not a rented subnet but has a non-empty subnet admins list"
                 ),
                 source: None,
             });

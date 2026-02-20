@@ -513,6 +513,34 @@ type NodeSshAccess = record {
   public_keys : opt vec text;
 };
 
+type OperationType = variant {
+  Add: vec principal;
+  Remove: vec principal;
+  Clear: reserved;
+};
+
+type UpdateSubnetAdminsPayload = record {
+  subnet_id: principal;
+  operation_type: opt OperationType;
+};
+
+type UpdateSubnetAdminsError = variant {
+  TooManySubnetAdmins: record {
+    provided: nat64;
+    max_allowed: nat64;
+  };
+  PrincipalListEmpty;
+  SubnetAdminsNotInList;
+  SubnetAdminsInCurrentList;
+  HasDuplicates;
+  UnknownOperationType;
+};
+
+type UpdateSubnetAdminsResult = variant {
+  Ok;
+  Err: opt UpdateSubnetAdminsError;
+};
+
 service : {
   add_api_boundary_nodes : (AddApiBoundaryNodesPayload) -> ();
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
@@ -571,6 +599,7 @@ service : {
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
   ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
+  update_subnet_admins : (UpdateSubnetAdminsPayload) -> (UpdateSubnetAdminsResult);
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
   swap_node_in_subnet_directly : (SwapNodeInSubnetDirectlyPayload) -> ();
 };
