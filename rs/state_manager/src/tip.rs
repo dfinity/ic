@@ -209,7 +209,6 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     )
                                 });
-                            println!("filtering tip snapshots: {:?}", snapshot_ids);
                             tip_handler
                                 .filter_tip_snapshots(height, &snapshot_ids)
                                 .unwrap_or_else(|err| {
@@ -479,7 +478,6 @@ pub(crate) fn spawn_tip_thread(
                             );
                             tip_state.latest_checkpoint_state.verified = true;
 
-                            println!("I'm also hre");
                             if let Err(err) =
                                 validate_and_finalize_checkpoint_and_remove_unverified_marker(
                                     &checkpoint_layout,
@@ -629,7 +627,6 @@ fn switch_to_checkpoint(
         .canisters_iter_mut()
         .flat_map(|canister| Arc::make_mut(canister).canister_snapshots.iter_mut())
     {
-        println!("writing snapshot {}", tip_id);
         let new_snapshot: &mut CanisterSnapshot = Arc::make_mut(tip_snapshot);
         let snapshot_layout = layout.snapshot(tip_id).unwrap();
 

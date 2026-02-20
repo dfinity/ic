@@ -514,7 +514,6 @@ impl TipHandler {
     ) -> Result<(), LayoutError> {
         let tip = self.tip(height)?;
         let snapshots_on_disk = tip.snapshot_ids()?;
-        println!("snapshots on disk: {:?}", snapshots_on_disk);
         for id in snapshots_on_disk {
             if !ids.contains(&id) {
                 tip.snapshot(&id)?.delete_dir()?;
