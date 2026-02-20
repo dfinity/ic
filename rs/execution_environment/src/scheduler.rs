@@ -357,6 +357,58 @@ impl SchedulerImpl {
         (new_state, message_instructions)
     }
 
+    /// Invoked in the first iteration of the inner round to add the `Heartbeat`
+    /// and `GlobalTimer` tasks that are carried out prior to processing
+    /// any input messages.
+    ///
+    /// Returns the IDs of all canisters that actually had a `Heartbeat` and/or
+    /// `GlobalTimer` task enqueued.
+    fn add_heartbeat_and_global_timer_tasks(
+        &self,
+        state: &mut ReplicatedState,
+    ) -> BTreeSet<CanisterId> {
+        let _timer = self
+            .metrics
+            .round_inner_heartbeat_overhead_duration
+            .start_timer();
+
+        let mut heartbeat_and_timer_canisters = BTreeSet::new();
+        let now = state.time();
+
+        for canister in state.canisters_iter_mut() {
+            // Add `Heartbeat` or `GlobalTimer` for running canisters only.
+            match canister.system_state.status() {
+                CanisterStatusType::Running => {}
+                CanisterStatusType::Stopping | CanisterStatusType::Stopped => {
+                    continue;
+                }
+            }
+
+            let has_heartbeat = has_heartbeat(canister);
+            let has_active_timer = has_active_timer(canister, now);
+            if !has_heartbeat && !has_active_timer {
+                // Canister has no heartbeat and no active global timer.
+                continue;
+            }
+
+            match canister.next_execution() {
+                NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
+                    // Do not add a heartbeat task if a long execution is pending.
+                }
+                NextExecution::None | NextExecution::StartNew => {
+                    let canister = Arc::make_mut(canister);
+                    maybe_add_heartbeat_or_global_timer_tasks(
+                        canister,
+                        has_heartbeat,
+                        has_active_timer,
+                        &mut heartbeat_and_timer_canisters,
+                    );
+                }
+            }
+        }
+        heartbeat_and_timer_canisters
+    }
+
     /// Performs multiple iterations of canister execution until the instruction
     /// limit per round is reached or the canisters become idle. The canisters
     /// are executed in parallel using the thread pool.
@@ -378,10 +430,11 @@ impl SchedulerImpl {
         let cost_schedule = state.get_own_cost_schedule();
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
+
         let mut ingress_execution_results = Vec::new();
         let mut is_first_iteration = true;
-
         let mut total_heap_delta = NumBytes::from(0);
+        let mut heartbeat_and_timer_canisters = BTreeSet::new();
 
         // Start iteration loop:
         //      - Execute subnet messages.
@@ -419,6 +472,12 @@ impl SchedulerImpl {
                     .inner_round_loop_consumed_max_instructions
                     .inc();
                 break state;
+            }
+
+            // Add `Heartbeat` and `GlobalTimer` tasks to be executed before input messages.
+            if is_first_iteration {
+                heartbeat_and_timer_canisters =
+                    self.add_heartbeat_and_global_timer_tasks(&mut state);
             }
 
             let measurement_scope =
@@ -524,6 +583,25 @@ impl SchedulerImpl {
             is_first_iteration = false;
             drop(finalization_timer);
         }; // end iteration loop.
+
+        {
+            let _timer = self
+                .metrics
+                .round_inner_heartbeat_overhead_duration
+                .start_timer();
+            // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
+            // because they will be added again in the next round.
+            for canister_id in &heartbeat_and_timer_canisters {
+                // It's OK to indiscriminately `make_mut()` here because we've already mutated
+                // this canister state this round.
+                if let Some(canister) = state.canister_state_make_mut(canister_id) {
+                    canister
+                        .system_state
+                        .task_queue
+                        .remove_heartbeat_and_global_timer();
+                }
+            }
+        }
 
         for canister_id in round_schedule.fully_executed_canisters().iter() {
             state

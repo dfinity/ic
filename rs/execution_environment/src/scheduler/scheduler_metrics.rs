@@ -56,6 +56,7 @@ pub struct SchedulerMetrics {
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_update_signature_request_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
+    pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
     pub(super) round_inner_iteration_prep: Histogram,
     pub(super) round_inner_iteration_scheduling: Histogram,
@@ -251,6 +252,7 @@ impl SchedulerMetrics {
                 slices: round_phase_slices_histogram("inner", metrics_registry),
                 messages: round_phase_messages_histogram("inner", metrics_registry),
             },
+            round_inner_heartbeat_overhead_duration: round_inner_phase_duration_histogram("heartbeat overhead", metrics_registry),
             round_inner_iteration: ScopedMetrics {
                 duration: duration_histogram(
                     "execution_round_inner_iteration_duration_seconds",

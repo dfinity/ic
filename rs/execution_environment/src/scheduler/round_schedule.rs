@@ -6,7 +6,6 @@ use crate::util::debug_assert_or_critical_error;
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{ReplicaLogger, error};
-use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::{CanisterPriority, CanisterState, ReplicatedState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
@@ -142,8 +141,6 @@ pub struct RoundSchedule {
     fully_executed_canisters: BTreeSet<CanisterId>,
     /// Full round: canisters that were heap delta rate-limited.
     rate_limited_canisters: BTreeSet<CanisterId>,
-    /// Full round: canisters that have had heartbeat or global timer tasks enqueued.
-    heartbeat_and_timer_canisters: BTreeSet<CanisterId>,
 }
 
 impl RoundSchedule {
@@ -165,7 +162,6 @@ impl RoundSchedule {
             canisters_with_completed_messages: BTreeSet::new(),
             fully_executed_canisters: BTreeSet::new(),
             rate_limited_canisters: BTreeSet::new(),
-            heartbeat_and_timer_canisters: BTreeSet::new(),
         }
     }
 
@@ -224,7 +220,6 @@ impl RoundSchedule {
         logger: &ReplicaLogger,
     ) {
         let is_first_iteration = self.schedule.is_empty();
-        let now = state.time();
 
         self.total_compute_allocation = ZERO;
         self.long_executions_count = 0;
@@ -243,30 +238,6 @@ impl RoundSchedule {
                     self.rate_limited_canisters.insert(*canister_id);
                     self.round_scheduled_canisters.insert(*canister_id);
                     return None;
-                }
-
-                // If this is the first iteration add `Heartbeat` and/or `GlobalTimer` tasks...
-                if is_first_iteration
-                    // ...to canisters that are running...
-                    && canister.system_state.status() == CanisterStatusType::Running
-                {
-                    // ...that have a new or no next execution...
-                    let next_execution = canister.next_execution();
-                    if next_execution == NextExecution::StartNew
-                        || next_execution == NextExecution::None
-                    {
-                        // ... and that have a heartbeat or an active global timer.
-                        let has_heartbeat = has_heartbeat(canister);
-                        let has_active_timer = has_active_timer(canister, now);
-                        if has_heartbeat || has_active_timer {
-                            super::maybe_add_heartbeat_or_global_timer_tasks(
-                                Arc::make_mut(canister),
-                                has_heartbeat,
-                                has_active_timer,
-                                &mut self.heartbeat_and_timer_canisters,
-                            );
-                        }
-                    }
                 }
 
                 let canister_round_state = match canister.next_execution() {
@@ -470,22 +441,6 @@ impl RoundSchedule {
                 .insert(*canister_id);
         }
 
-        // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
-        // because they will be added again in the next round.
-        for canister_id in &self.heartbeat_and_timer_canisters {
-            let canister = canister_states.get_mut(canister_id).unwrap();
-            if canister
-                .system_state
-                .task_queue
-                .has_heartbeat_or_global_timer()
-            {
-                Arc::make_mut(canister)
-                    .system_state
-                    .task_queue
-                    .remove_heartbeat_and_global_timer();
-            }
-        }
-
         fn true_priority(canister_priority: &CanisterPriority) -> AccumulatedPriority {
             canister_priority.accumulated_priority - canister_priority.priority_credit
         }
@@ -655,11 +610,14 @@ impl RoundSchedule {
     }
 }
 
-fn has_heartbeat(canister: &CanisterState) -> bool {
+/// Returns true if the canister exports the heartbeat method.
+pub(super) fn has_heartbeat(canister: &CanisterState) -> bool {
     canister.exports_heartbeat_method()
 }
 
-fn has_active_timer(canister: &CanisterState, now: ic_types::Time) -> bool {
+/// Returns true if the canister exports the global timer method and the global
+/// timer has reached its deadline.
+pub(super) fn has_active_timer(canister: &CanisterState, now: ic_types::Time) -> bool {
     canister.exports_global_timer_method()
         && canister.system_state.global_timer.has_reached_deadline(now)
 }
