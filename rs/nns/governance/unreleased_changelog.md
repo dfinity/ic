@@ -11,6 +11,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Lowered the maximum page size of list_neurons to 50. The vast majority (> 95%)
+  have no more than 50 neurons, so for them, this has no noticeable impact.
+
 ## Deprecated
 
 ## Removed
