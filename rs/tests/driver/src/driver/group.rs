@@ -2,10 +2,7 @@
 use crate::driver::{
     farm::{Farm, HostFeature},
     task_scheduler::TaskScheduler,
-    test_env_api::{
-        FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
-        IcNodeSnapshot,
-    },
+    test_env_api::{FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer},
     {
         action_graph::ActionGraph,
         context::{GroupContext, ProcessContext},
