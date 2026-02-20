@@ -526,7 +526,7 @@ impl RoundSchedule {
         // if it has no more inputs and has reached zero accumulated priority.
         let mut sorted_canister_priorities = subnet_schedule
             .iter()
-            .map(|(c, p)| (*c, p.accumulated_priority - p.priority_credit))
+            .map(|(c, p)| (*c, true_priority(p)))
             .collect::<Vec<_>>();
         sorted_canister_priorities.sort_by_key(|(c, p)| (std::cmp::Reverse(*p), *c));
         let mut remaining_canisters = subnet_schedule.len() as i64;
