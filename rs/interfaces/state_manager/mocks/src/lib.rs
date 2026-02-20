@@ -65,7 +65,6 @@ mock! {
         fn commit_and_certify(
             &self,
             state: ReplicatedState,
-            height: Height,
             scope: CertificationScope,
             batch_summary: Option<BatchSummary>,
         );

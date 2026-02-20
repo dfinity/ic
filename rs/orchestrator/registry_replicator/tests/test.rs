@@ -264,6 +264,19 @@ async fn random_mutate(pocket_ic: &PocketIcHelper, rng: &mut ReproducibleRng) ->
     }
 }
 
+async fn sleep_until_canister_certified_time_larger_than(
+    after_time: Time,
+    pocket_ic: &PocketIcHelper,
+) {
+    loop {
+        let (_, _, certified_time) = pocket_ic.get_all_certified_records().await;
+        if certified_time > after_time {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
 #[tokio::test]
 #[should_panic(expected = "Registry Local Store is empty and no NNS Public Key is provided.")]
 async fn test_new_replicator_panics_on_empty_store_without_nns_pub_key() {
@@ -415,16 +428,25 @@ async fn test_has_replicated_all_versions_certified_before_init() {
     let mut rng = reproducible_rng();
     let (pocket_ic, nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
     let time_before_init = current_time();
+
+    // Wait until the canister replies with a certified time that is before the replicator's
+    // initialization time, so that we can test that the replicator does not claim to have
+    // replicated all versions certified before init until it actually starts polling
+    sleep_until_canister_certified_time_larger_than(time_before_init, &pocket_ic).await;
+
     let replicator =
         new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, Some(nns_pub_key)).await;
     let token = CancellationToken::new();
+    let time_after_init = current_time();
 
     // Before the replicator starts polling, it should not claim to have replicated all versions
     // certified before its initialization time
     assert!(*replicator.get_latest_certified_time().read().unwrap() < time_before_init);
     assert!(!replicator.has_replicated_all_versions_certified_before_init());
 
-    random_mutate(&pocket_ic, &mut rng).await;
+    // Wait until the canister replies with a certified time that is after the replicator's
+    // initialization time
+    sleep_until_canister_certified_time_larger_than(time_after_init, &pocket_ic).await;
 
     tokio::spawn(replicator.start_polling(token).unwrap());
     tokio::time::sleep(replicator.get_poll_delay() + DELAY_LEEWAY).await;
@@ -434,12 +456,16 @@ async fn test_has_replicated_all_versions_certified_before_init() {
     // canister is behind (it has only 1 version). This mocks the scenario where the replicator
     // contacts a node that is behind.
     let latest_certified_time = *replicator.get_latest_certified_time().read().unwrap();
-    assert!(latest_certified_time > time_before_init);
+    assert!(latest_certified_time > time_after_init);
     assert!(replicator.has_replicated_all_versions_certified_before_init());
 
-    for _ in 0..INIT_NUM_VERSIONS {
+    for _ in 0..(INIT_NUM_VERSIONS + 2) {
         random_mutate(&pocket_ic, &mut rng).await;
     }
+
+    // Wait until the canister replies with a larger certified time
+    sleep_until_canister_certified_time_larger_than(latest_certified_time, &pocket_ic).await;
+
     tokio::time::sleep(replicator.get_poll_delay() + DELAY_LEEWAY).await;
 
     // We have waited for the poll delay, so the replicator should have polled the NNS again and its
@@ -458,21 +484,32 @@ async fn test_has_not_replicated_all_versions_certified_before_init_when_caniste
     }
 
     let time_before_init = current_time();
+
+    // Wait until the canister replies with a certified time that is before the replicator's
+    // initialization time, so that we can test that the replicator does not claim to have
+    // replicated all versions certified before init until it actually starts polling
+    sleep_until_canister_certified_time_larger_than(time_before_init, &pocket_ic).await;
+
     let replicator =
         new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, Some(nns_pub_key)).await;
     let token = CancellationToken::new();
+    let time_after_init = current_time();
 
     // Before the replicator starts polling, it should not claim to have replicated all versions
     // certified before its initialization time, even if the canister is ahead
     assert!(*replicator.get_latest_certified_time().read().unwrap() < time_before_init);
     assert!(!replicator.has_replicated_all_versions_certified_before_init());
 
+    // Wait until the canister replies with a certified time that is after the replicator's
+    // initialization time
+    sleep_until_canister_certified_time_larger_than(time_after_init, &pocket_ic).await;
+
     tokio::spawn(replicator.start_polling(token).unwrap());
     tokio::time::sleep(replicator.get_poll_delay() + DELAY_LEEWAY).await;
 
     // We have waited for the poll delay, so the replicator should have polled the NNS and its
     // response should have been certified after the replicator's initialization time
-    assert!(*replicator.get_latest_certified_time().read().unwrap() > time_before_init);
+    assert!(*replicator.get_latest_certified_time().read().unwrap() > time_after_init);
     assert!(replicator.has_replicated_all_versions_certified_before_init());
 }
 

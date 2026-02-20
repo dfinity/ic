@@ -91,7 +91,7 @@ pub mod exhaustive;
 
 pub use crate::canister_log::{
     CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_DELTA_LOG_MEMORY_LIMIT, MIN_AGGREGATE_LOG_MEMORY_LIMIT,
+    MAX_DELTA_LOG_MEMORY_LIMIT,
 };
 pub use crate::cycles::Cycles;
 pub use crate::replica_version::ReplicaVersion;
@@ -235,7 +235,7 @@ pub struct ComputeAllocation(u64);
 
 impl ComputeAllocation {
     /// Returns the raw percent contained in this `ComputeAllocation`.
-    pub fn as_percent(self) -> u64 {
+    pub const fn as_percent(self) -> u64 {
         self.0
     }
 

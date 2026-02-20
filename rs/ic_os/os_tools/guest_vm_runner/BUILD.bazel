@@ -1,16 +1,13 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    ":build_script",
     "//rs/ic_os/boot/grub",
     "//rs/ic_os/command_runner",
     "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/device",
-    "//rs/ic_os/metrics/metrics_tool",
     "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/sev/host",
     "@crate_index//:anyhow",
@@ -21,6 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:macaddr",
     "@crate_index//:memchr",
     "@crate_index//:nix",
+    "@crate_index//:prometheus",
     "@crate_index//:regex",
     "@crate_index//:strum",
     "@crate_index//:sysinfo",
@@ -36,24 +34,17 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/build_tools/partition_tools",
     "@crate_index//:goldenfile",
-    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:strum_macros",
 ]
 
-cargo_build_script(
-    name = "build_script",
-    srcs = ["build.rs"],
-    data = ["templates/guestos_vm_template.xml"],
-)
-
 rust_binary(
     name = "guest_vm_runner",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = ["templates/guestos_vm_template.xml"],
     crate_name = "guest_vm_runner",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
@@ -65,6 +56,7 @@ rust_binary(
 rust_binary(
     name = "guest_vm_runner_dev",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = ["templates/guestos_vm_template.xml"],
     crate_features = ["dev"],
     crate_name = "guest_vm_runner",
     proc_macro_deps = MACRO_DEPENDENCIES,

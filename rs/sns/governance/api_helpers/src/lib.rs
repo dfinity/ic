@@ -53,6 +53,7 @@ pub fn default_nervous_system_parameters() -> NervousSystemParameters {
         max_age_bonus_percentage: Some(25),
         maturity_modulation_disabled: Some(false),
         automatically_advance_target_version: Some(true),
+        custom_proposal_criticality: None,
     }
 }
 

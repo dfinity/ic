@@ -62,12 +62,13 @@ message WasmClosure {
 }
 
 message Callback {
+  reserved 6;
+
   uint64 call_context_id = 1;
   WasmClosure on_reply = 2;
   WasmClosure on_reject = 3;
   WasmClosure on_cleanup = 4;
   state.queues.v1.Cycles cycles_sent = 5;
-  types.v1.CanisterId originator = 6;
   types.v1.CanisterId respondent = 7;
   state.queues.v1.Cycles prepayment_for_response_execution = 8;
   state.queues.v1.Cycles prepayment_for_response_transmission = 9;
@@ -211,7 +212,7 @@ message ExecutionTask {
 
     oneof input {
       state.queues.v1.Request request = 1;
-      // TODO(DSM-95): Remove once we switch to `AbortedResponse` below.
+      // TODO(DSM-95): Remove after we have switched to `AbortedResponse`.
       state.queues.v1.Response response = 2;
       AbortedResponse aborted_response = 6;
       ingress.v1.Ingress ingress = 3;
@@ -409,7 +410,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 58
+// Next ID: 64
 message CanisterStateBits {
   reserved 1, 3, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 53;
 
@@ -427,6 +428,12 @@ message CanisterStateBits {
   uint64 scheduled_as_first = 15;
   // In how many rounds a canister is executed.
   uint64 executed = 18;
+  uint64 ingress_messages_executed = 58;
+  uint64 remote_subnet_messages_executed = 59;
+  uint64 local_subnet_messages_executed = 60;
+  uint64 http_outcalls_executed = 61;
+  uint64 heartbeats_and_global_timers_executed = 62;
+  uint64 instructions_executed = 63;
   bytes certified_data = 20;
   uint64 interrupted_during_execution = 21;
   types.v1.NominalCycles consumed_cycles = 22;

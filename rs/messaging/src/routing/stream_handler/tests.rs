@@ -9,11 +9,13 @@ use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
-use ic_replicated_state::metadata_state::StreamMap;
-use ic_replicated_state::replicated_state::LABEL_VALUE_OUT_OF_MEMORY;
-use ic_replicated_state::testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting};
-use ic_replicated_state::{CanisterStatus, ReplicatedState, Stream};
+use ic_replicated_state::{
+    CanisterStatus, ReplicatedState, Stream,
+    canister_state::system_state::CyclesUseCase::DroppedMessages,
+    metadata_state::{StreamMap, testing::NetworkTopologyTesting},
+    replicated_state::LABEL_VALUE_OUT_OF_MEMORY,
+    testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
+};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter,
@@ -1844,7 +1846,7 @@ fn check_stream_handler_generated_reject_signal_canister_not_found() {
     check_stream_handler_generated_reject_signal_impl(
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
-            state.canister_states.remove(&LOCAL_CANISTER).unwrap();
+            state.remove_canister(&LOCAL_CANISTER).unwrap();
         },
         RejectReason::CanisterNotFound,
     );
@@ -1856,7 +1858,7 @@ fn check_stream_handler_generated_reject_signal_canister_stopped() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_state_mut(&LOCAL_CANISTER)
+                .canister_state_make_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopped);
@@ -1871,7 +1873,7 @@ fn check_stream_handler_generated_reject_signal_canister_stopping() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_state_mut(&LOCAL_CANISTER)
+                .canister_state_make_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopping {
@@ -2033,7 +2035,7 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
         |state| {
             // Set `LOCAL_CANISTER` to stopped.
             state
-                .canister_state_mut(&LOCAL_CANISTER)
+                .canister_state_make_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopped);
@@ -2056,7 +2058,7 @@ fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_ra
     failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
         |state| {
             // Remove the `LOCAL_CANISTER`.
-            state.canister_states.remove(&LOCAL_CANISTER).unwrap();
+            state.remove_canister(&LOCAL_CANISTER).unwrap();
         },
         |expected_state, refund| {
             // Cycles attached to the dropped response are lost.
@@ -3252,13 +3254,11 @@ fn with_test_setup_and_config(
             start: CanisterId::from(0x100),
             end: CanisterId::from(0x1ff),
         };
-        let routing_table = Arc::new(
-            RoutingTable::try_from(btreemap! {
-                local_range => LOCAL_SUBNET,
-                remote_range => REMOTE_SUBNET,
-            })
-            .unwrap(),
-        );
+        let routing_table = RoutingTable::try_from(btreemap! {
+            local_range => LOCAL_SUBNET,
+            remote_range => REMOTE_SUBNET,
+        })
+        .unwrap();
         assert_eq!(
             Some((local_range, LOCAL_SUBNET)),
             routing_table.lookup_entry(*LOCAL_CANISTER)
@@ -3268,12 +3268,15 @@ fn with_test_setup_and_config(
             routing_table.lookup_entry(*REMOTE_CANISTER)
         );
         assert!(routing_table.lookup_entry(*UNKNOWN_CANISTER).is_none());
-        state.metadata.network_topology.routing_table = routing_table;
+        state
+            .metadata
+            .network_topology
+            .set_routing_table(routing_table);
         for subnet in [LOCAL_SUBNET, REMOTE_SUBNET] {
             state
                 .metadata
                 .network_topology
-                .subnets
+                .subnets_mut()
                 .insert(subnet, Default::default());
         }
 
@@ -3322,12 +3325,8 @@ fn with_test_setup_and_config(
                     // corresponds to `LOCAL_CANISTER`; else use a dummy callback id.
                     if originator == *LOCAL_CANISTER {
                         // Register a `Callback` and get a `CallbackId`.
-                        let callback_id = register_callback(
-                            &mut canister_state,
-                            originator,
-                            respondent,
-                            deadline,
-                        );
+                        let callback_id =
+                            register_callback(&mut canister_state, respondent, deadline);
 
                         // Make an input queue reservation.
                         canister_state
@@ -3846,11 +3845,19 @@ fn complete_canister_migration(
     }])
     .unwrap();
 
-    let mut routing_table = (*state.metadata.network_topology.routing_table).clone();
+    let mut routing_table = state
+        .metadata
+        .network_topology
+        .routing_table()
+        .as_ref()
+        .clone();
     routing_table
         .assign_ranges(canister_id_ranges, destination)
         .unwrap();
-    state.metadata.network_topology.routing_table = Arc::new(routing_table);
+    state
+        .metadata
+        .network_topology
+        .set_routing_table(routing_table);
 
     state
 }

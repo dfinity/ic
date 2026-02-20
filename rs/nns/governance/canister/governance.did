@@ -403,6 +403,7 @@ type GovernanceParameters = record {
   proposal_initial_voting_period : opt Duration;
   proposal_rejection_fee : opt Tokens;
   voting_reward_parameters : opt VotingRewardParameters;
+  custom_proposal_criticality : opt CustomProposalCriticality;
 };
 
 type IdealMatchedParticipationFunction = record {
@@ -1396,6 +1397,10 @@ type VotingRewardParameters = record {
   reward_rate_transition_duration : opt Duration;
   initial_reward_rate : opt Percentage;
   final_reward_rate : opt Percentage;
+};
+
+type CustomProposalCriticality = record {
+  additional_critical_native_action_ids : opt vec nat64;
 };
 
 type WaitForQuietState = record {

@@ -9,10 +9,22 @@ on:
       crate-version:
         description: 'The version of the crate to publish'
         required: true
+      dry-run:
+        description: "If true, run publish in dry-run mode (don't actually publish the crate)"
+        required: false
+        default: 'false'
+        type: boolean
+
+run-name: >-
+  ${{ format('Publish Crate {0} {1}', github.event.inputs.crate-name, github.event.inputs.crate-version) }}
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   publish-crates:
-    name: Publish Crates
+    name: Publish Crate ${{ github.event.inputs.crate-name }} ${{ github.event.inputs.crate-version }}
     runs-on: ubuntu-latest
     environment: publish-crates
     steps:
@@ -38,6 +50,12 @@ jobs:
           cargo build --package ${{ github.event.inputs.crate-name }}
           cargo test --package ${{ github.event.inputs.crate-name }}
 
-      - run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty
+      - name: Publish Dry Run
+        if: ${{ github.event.inputs.dry-run == 'true' }}
+        run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty --dry-run
+
+      - name: Publish Crate
+        if: ${{ github.event.inputs.dry-run == 'false' }}
+        run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

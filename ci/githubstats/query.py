@@ -6,18 +6,27 @@
 #
 import argparse
 import contextlib
+import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import threading
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from queue import Queue
+from typing import List, Optional
 
 import codeowners
+import dacite
 import pandas as pd
 import psycopg
 import requests
+from proto import target_pb2
 from psycopg import sql
 from tabulate import tabulate
 
@@ -25,6 +34,9 @@ THIS_SCRIPT_DIR = Path(__file__).parent
 
 ORG = "dfinity"
 REPO = "ic"
+
+FAILED = "FAILED"
+PASSED = "PASSED"
 
 
 def die(*args):
@@ -212,6 +224,737 @@ def normalize_duration(td: pd.Timedelta):
     )
 
 
+def filter_columns(columns_metadata, columns_list):
+    """
+    Filter and reorder columns based on user specification.
+
+    Args:
+        columns_metadata: List of 3-tuples (column_name, header, alignment)
+        columns_list: List of column names like ["label", "total", "non_success"] or ["-owners", "-timeout"]
+
+    Returns:
+        Filtered/reordered colalignments list of 3-tuples (dataframe_column, header, alignment)
+
+    """
+    if not columns_list:
+        # Return colalignments (without user_facing_name)
+        return [(column_name, header, align) for column_name, header, align in columns_metadata]
+
+    # Build mappings
+    available_columns = {column_name: (column_name, header, align) for column_name, header, align in columns_metadata}
+
+    # Check if all columns start with '-' (exclusion mode)
+    if all(col.startswith("-") for col in columns_list):
+        # Exclusion mode: start with all columns, remove specified ones
+        exclude_set = {col[1:] for col in columns_list}
+
+        # Validate that excluded columns exist
+        invalid_cols = exclude_set - set(available_columns.keys())
+        if invalid_cols:
+            die(
+                f"Invalid column names: {', '.join(sorted(invalid_cols))}\n"
+                f"Available columns: {', '.join(sorted(available_columns.keys()))}"
+            )
+
+        return [
+            (column_name, header, align)
+            for column_name, header, align in columns_metadata
+            if column_name not in exclude_set
+        ]
+
+    # Check if any columns start with '-' (mixed mode - not allowed)
+    if any(col.startswith("-") for col in columns_list):
+        die(
+            "Cannot mix inclusion and exclusion modes. Either specify columns to include, or prefix all with '-' to exclude."
+        )
+
+    # Inclusion mode: return only specified columns in specified order
+    # Validate that all columns exist
+    invalid_cols = set(columns_list) - set(available_columns.keys())
+    if invalid_cols:
+        die(
+            f"Invalid column names: {', '.join(sorted(invalid_cols))}\n"
+            f"Available columns: {', '.join(sorted(available_columns.keys()))}"
+        )
+
+    result = [available_columns[col] for col in columns_list if col in available_columns]
+
+    if not result:
+        die("No valid columns to display after filtering.")
+
+    return result
+
+
+def download_and_process_logs(
+    logs_base_dir, test_target: str, download_console_logs: bool, download_ic_logs: bool, df: pd.DataFrame
+):
+    """
+    Download the logs of all runs of test_target in the given DataFrame,
+    save them to the specified logs_base_dir
+    and annotate the DataFrame with error summaries from the downloaded logs.
+    """
+    original_cwd = Path(os.environ.get("BUILD_WORKING_DIRECTORY", Path.cwd()))
+    test_name = test_target.split(":")[-1]
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    output_dir = original_cwd / logs_base_dir / test_name / timestamp
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Downloading logs to: {output_dir}", file=sys.stderr)
+
+    # Create a new column "error_summaries" in the DataFrame of type dict[int, SystemGroupSummary | str]
+    # mapping the attempt number to either the SystemGroupSummary in case of a system-test
+    # or the last line of the log for other tests.
+    df["error_summaries"] = [{} for _ in range(len(df))]
+
+    # Collect all download tasks
+    download_tasks = []
+    for _ix, row in df.iterrows():
+        # Add a lock to each row for thread-safe updates when annotating the DataFrame with errors below
+        row["lock"] = threading.Lock()
+
+        buildbuddy_url = row["buildbuddy_url"]
+        invocation_id = row["build_id"]
+        last_started_at = row["first_start_time"].strftime("%Y-%m-%dT%H:%M:%S")
+        invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
+
+        # Parse the BuildBuddy URL to extract the cluster and its base URL for use with gRPC later.
+        parsed_buildbuddy_url = urllib.parse.urlparse(buildbuddy_url)
+        cluster = parsed_buildbuddy_url.netloc.split(".")[1]  # e.g., "dash.zh1-idx1.dfinity.network'" -> "zh1-idx1"
+        buildbuddy_base_url = f"{parsed_buildbuddy_url.scheme}://{parsed_buildbuddy_url.netloc}"
+
+        # Get all log URLs for this test run
+        log_urls = get_all_log_urls_from_buildbuddy(buildbuddy_base_url, cluster, str(invocation_id), test_target)
+
+        for attempt_num, download_url, attempt_status in log_urls:
+            attempt_dir = invocation_dir / str(attempt_num)
+            download_to_path = attempt_dir / f"{attempt_status}.log"
+            download_tasks.append((row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path))
+
+    execute_download_tasks(download_tasks, test_target, output_dir, download_console_logs, download_ic_logs, df)
+
+    write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
+
+
+def get_all_log_urls_from_buildbuddy(
+    buildbuddy_base_url: str, cluster: str, invocation_id: str, test_target: str
+) -> list[tuple[int, str, str]]:
+    """
+    Get all log download URLs from BuildBuddy using its gRPC-based API.
+
+    Args:
+        buildbuddy_base_url: Base URL like "https://dash.dm1-idx1.dfinity.network"
+        cluster: the IDX cluster like "dm1-idx1" from which bazel-remote we'll download the logs from.
+        invocation_id: The Bazel invocation UUID like "7ba81d70-..."
+        test_target: The Bazel test target like "//rs/tests/consensus/upgrade:upgrade_downgrade_nns_subnet_test"
+
+    Returns:
+        List of tuples: [(attempt_number, download_url, attempt_status), ...]
+        where attempt_status is PASSED or FAILED
+
+    """
+
+    try:
+        # See: https://github.com/buildbuddy-io/buildbuddy/blob/v2.241.0/proto/target.proto
+        target_request = target_pb2.GetTargetRequest()
+        target_request.invocation_id = invocation_id
+        target_request.target_label = test_target
+
+        response = requests.post(
+            f"{buildbuddy_base_url}/rpc/BuildBuddyService/GetTarget",
+            headers={"Content-Type": "application/proto"},
+            data=target_request.SerializeToString(),
+            timeout=10,
+        )
+
+        if not response.ok:
+            return []
+
+        # Parse the protobuf response
+        target_response = target_pb2.GetTargetResponse()
+        target_response.ParseFromString(response.content)
+
+        # Collect all log URLs with their attempt numbers and status
+        log_urls = []
+
+        for target_group in target_response.target_groups:
+            for target in target_group.targets:
+                if not target.HasField("test_summary"):
+                    continue
+
+                # See: https://github.com/buildbuddy-io/buildbuddy/blob/v2.241.0/proto/build_event_stream.proto
+                test_summary = target.test_summary
+
+                # Collect failed attempts
+                for attempt_num, file in enumerate(test_summary.failed, start=1):
+                    if file.uri:
+                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), FAILED))
+
+                # Collect passed attempts (continue numbering from failed attempts)
+                start_num = len(test_summary.failed) + 1
+                for attempt_num, file in enumerate(test_summary.passed, start=start_num):
+                    if file.uri:
+                        log_urls.append((attempt_num, convert_download_url(file.uri, cluster), PASSED))
+
+        return log_urls
+
+    except Exception as e:
+        print(f"Error calling BuildBuddy API: {e}", file=sys.stderr)
+        return []
+
+
+def convert_download_url(uri, cluster) -> str:
+    """
+    The log URLs are retrieved from BuildBuddy like:
+
+    "bytestream://bazel-remote.idx.dfinity.network/blobs/{hash}/{size}"
+
+    We could download the log via BuildBuddy using the download_url:
+
+        encoded_file_uri = urllib.parse.quote(uri, safe="")
+        download_url = f"{buildbuddy_base_url}/file/download?bytestream_url={encoded_file_uri}&invocation_id={invocation_id}"
+
+    However, to reduce the dependency on BuildBuddy,
+    we download the log directly from our bazel-remote HTTP server at:
+
+    "https://artifacts.{cluster}.dfinity.network/cas/{hash}"
+
+    This has the additional benefit of getting 404 errors instead of 500
+    for already garbage collected logs, which we can handle more gracefully.
+    """
+    parsed = urllib.parse.urlparse(uri)
+    hash = parsed.path.split("/")[2]
+    return f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
+
+
+def execute_download_tasks(
+    download_tasks: list,
+    test_target: str,
+    output_dir: Path,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+    df: pd.DataFrame,
+):
+    print(f"Downloading {len(download_tasks)} log files...", file=sys.stderr)
+
+    # These executors are used for downloading IC logs from ElasticSearch
+    # and console logs from Farm concurrently. Limit to 10 concurrent downloads
+    # to not overwhelm both services.
+    with (
+        ThreadPoolExecutor(max_workers=10) as download_ic_log_executor,
+        ThreadPoolExecutor(max_workers=10) as download_console_log_executor,
+    ):
+
+        def download_log(task):
+            row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path = task
+            shortened_path = download_to_path.relative_to(output_dir)
+            try:
+                response = requests.get(download_url, timeout=60, stream=True)
+                if response.ok:
+                    download_to_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(download_to_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    # Fork a thread to process the log while the other logs are still downloading to speed up the whole process.
+                    thread = threading.Thread(
+                        target=process_log,
+                        args=(
+                            row,
+                            test_target,
+                            attempt_num,
+                            attempt_status,
+                            attempt_dir,
+                            download_to_path,
+                            df,
+                            download_console_logs,
+                            download_ic_logs,
+                            download_console_log_executor,
+                            download_ic_log_executor,
+                        ),
+                    )
+                    thread.start()
+                    return thread
+                else:
+                    error_line = shorten(response.text.split("\n")[0].strip(), 80)
+                    msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
+                    if response.status_code == 404:
+                        msg += " The log has probably already been garbage collected from the bazel-remote cache."
+                    print(msg, file=sys.stderr)
+                    return None
+            except Exception as e:
+                print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
+                return None
+
+        # Download test logs concurrently.
+        # Limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server.
+        with ThreadPoolExecutor(max_workers=10) as download_test_log_executor:
+            threads = list(download_test_log_executor.map(download_log, download_tasks))
+
+        # Wait for all annotation threads to finish.
+        successes = 0
+        for thread in threads:
+            if thread is not None:
+                successes += 1
+                thread.join()
+
+    # Render the error_summaries to human-readable form.
+    df["errors"] = df["error_summaries"].apply(render_error_summaries)
+
+    print(
+        f"Successfully downloaded and processed {successes}/{len(download_tasks)} logs to {output_dir}",
+        file=sys.stderr,
+    )
+
+
+TIMESTAMP_LEN = 23
+
+
+def process_log(
+    row: pd.Series,
+    test_target: str,
+    attempt_num: int,
+    attempt_status: str,
+    attempt_dir: Path,
+    download_to_path: Path,
+    df: pd.DataFrame,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+    download_console_log_executor: ThreadPoolExecutor,
+    download_ic_log_executor: ThreadPoolExecutor,
+):
+    """
+    Process the log
+
+    * Download IC logs from ElasticSearch in case of a system-test.
+    * Annotate the DataFrame with a summary of the error(s).
+    """
+
+    last_seen_timestamp = None
+    test_start_time = None
+    group_name = None
+    summary = None
+    vm_ipv6s = {}
+    vm_console_links = {}
+
+    # system-tests have structured logs with JSON objects that we can parse to get more detailed error summaries
+    # and to determine the group (testnet) name for downloading the IC logs from ElasticSearch.
+    # Non-system-tests just get annotated with the last line of the log which usually contains the error message.
+    if test_target.startswith("//rs/tests/"):
+        with open(download_to_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if len(line) < TIMESTAMP_LEN:
+                    continue
+                try:
+                    # Here we try parsing a timestamp from the first 23 characters of a line
+                    # assuming the line looks something like: "2026-02-03 13:55:09.645 INFO..."
+                    last_seen_timestamp = datetime.strptime(line[:TIMESTAMP_LEN], "%Y-%m-%d %H:%M:%S.%f")
+                except ValueError:
+                    continue
+
+                ix = line.find("{", TIMESTAMP_LEN)
+                if ix == -1:
+                    continue
+                obj = line[ix:]
+
+                try:
+                    log_event = LogEvent.from_json(obj)
+                    match log_event.event_name:
+                        case "infra_group_name_created_event":
+                            group_name = GroupName.from_dict(log_event.body).group
+                            test_start_time = last_seen_timestamp
+                        case "farm_vm_created_event":
+                            farm_vm_created = FarmVMCreated.from_dict(log_event.body)
+                            vm_ipv6s[farm_vm_created.vm_name] = farm_vm_created.ipv6
+                        case "vm_console_link_created_event":
+                            console_link = ConsoleLink.from_dict(log_event.body)
+                            vm_console_links[console_link.vm_name] = f"{console_link.url}raw"
+                        case "json_report_created_event":
+                            summary = SystemGroupSummary.from_dict(log_event.body)
+                            break
+                except (ValueError, dacite.DaciteError):
+                    continue
+
+        if download_console_logs:
+            if len(vm_console_links) > 0:
+                console_logs_dir = attempt_dir / "console_logs"
+                console_logs_dir.mkdir(exist_ok=True)
+            for vm_name, console_link_raw in vm_console_links.items():
+                # Fork threads for downloading console logs from Farm concurrently to speed up the whole process.
+                download_console_log_executor.submit(
+                    download_console_log,
+                    console_link_raw,
+                    console_logs_dir / f"{vm_name}.log",
+                )
+
+        if group_name is not None and download_ic_logs:
+            # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
+            # We fork a thread for downloading the IC logs to speed up the whole process instead of doing it sequentially after downloading all test logs.
+            download_ic_log_executor.submit(
+                download_and_process_ic_logs_for_system_test,
+                attempt_dir,
+                group_name,
+                test_start_time,
+                last_seen_timestamp,
+                vm_ipv6s,
+            )
+    else:
+        # Efficiently get the last line of the log:
+        parts = download_to_path.read_text().rstrip().rsplit(sep="\n", maxsplit=1)
+        line = (parts[0] if len(parts) == 1 else parts[1]).lstrip()
+        if line == "":
+            line = None
+
+    with row["lock"]:
+        row["error_summaries"][attempt_num] = (
+            summary if summary is not None else line if attempt_status == FAILED else None
+        )
+
+
+@dataclass
+class DataClassJsonMixin:
+    @classmethod
+    def from_dict(cls, data: dict):
+        return dacite.from_dict(data_class=cls, data=data, config=dacite.Config(strict=True))
+
+    @classmethod
+    def from_json(cls, json_str: str):
+        try:
+            value = json.loads(json_str)
+            if not isinstance(value, dict):
+                raise ValueError(f"Expected dict but got {type(value).__name__}: {value}")
+            return cls.from_dict(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+        except dacite.DaciteError as e:
+            raise ValueError(f"JSON does not match {cls.__name__} structure: {e}")
+
+
+@dataclass
+class LogEvent(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::log_events::LogEvent`"""
+
+    event_name: str
+    body: dict
+
+
+@dataclass
+class GroupName(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::driver::test_env_api::emit_group_event::GroupName`"""
+
+    message: str
+    group: str
+
+
+@dataclass
+class FarmVMCreated(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::driver::farm::FarmVMCreated`"""
+
+    vm_name: str
+    hostname: str
+    ipv6: str
+    v_cpus: int
+    memory_ki_b: int
+
+
+@dataclass
+class ConsoleLink(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::farm::ConsoleLink`"""
+
+    url: str
+    vm_name: str
+
+
+@dataclass
+class TaskReport:
+    """Matches the Rust struct `ic_system_test_driver::report::TaskReport`"""
+
+    name: str
+    runtime: float
+    message: Optional[str]
+
+
+@dataclass
+class SystemGroupSummary(DataClassJsonMixin):
+    """Matches the Rust struct `ic_system_test_driver::report::SystemGroupSummary`"""
+
+    test_name: str
+    success: List[TaskReport]
+    failure: List[TaskReport]
+    skipped: List[TaskReport]
+
+
+def render_error_summaries(summaries: dict[int, SystemGroupSummary | str | None]) -> str:
+    """
+    Render the error summaries of all attempts to a human-readable string. For example:
+
+    "1: upgrade_downgrade_nns_subnet: Replica did reboot, but never came back online!
+        assert_no_replica_restarts: assertion `left == right` failed: The replica process on node 4q7mj-2koq2-vbcih-...
+     2: upgrade_downgrade_nns_subnet: Replica did reboot, but never came back online!
+        assert_no_replica_restarts: assertion `left == right` failed: The replica process on node l6edn-e5wfk-ooxb7-...
+     3: upgrade_downgrade_nns_subnet: Replica did reboot, but never came back online!
+        assert_no_replica_restarts: assertion `left == right` failed: The replica process on node yafn5-op57q-xfatj-..."
+    """
+    lines = []
+    for attempt_num, summary in sorted(summaries.items()):
+        summary_lines = render_error_summary(summary)
+        if len(summary_lines) > 0:
+            lines.append(
+                f"{attempt_num}: {summary_lines[0]}"
+                + (
+                    "\n" + "\n".join([f"   {summary_line}" for summary_line in summary_lines[1:]])
+                    if len(summary_lines[1:]) > 0
+                    else ""
+                )
+            )
+    return "\n".join(lines)
+
+
+def render_error_summary(summary: SystemGroupSummary | str | None) -> list[str]:
+    MAX_ERROR_LINE_LENGTH = 80
+
+    if summary is None:
+        return []
+
+    if isinstance(summary, str):
+        return [shorten(summary, MAX_ERROR_LINE_LENGTH)]
+
+    return [
+        f"{failed_task.name}: {shorten(failed_task.message.replace("\n", "\\n"), MAX_ERROR_LINE_LENGTH)}"
+        for failed_task in summary.failure
+    ]
+
+
+def shorten(msg: str, max_length: int) -> str:
+    if len(msg) > max_length:
+        return msg[:max_length] + "..."
+    return msg
+
+
+def download_console_log(console_link_raw: str, output_path: Path):
+    """Download the log of the console of a Farm VM"""
+    try:
+        response = requests.get(console_link_raw, timeout=60, stream=True)
+        if response.ok:
+            with open(output_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print(f"Downloaded console log to {output_path}", file=sys.stderr)
+        else:
+            print(
+                f"Failed to download console log from {console_link_raw} with HTTP {response.status_code}: '{response.text.strip()}'",
+                file=sys.stderr,
+            )
+    except Exception as e:
+        print(f"Error downloading console log from {console_link_raw}: {e}", file=sys.stderr)
+
+
+def download_and_process_ic_logs_for_system_test(
+    attempt_dir: Path,
+    group_name: str,
+    test_start_time: datetime,
+    test_end_time: datetime,
+    vm_ipv6s: dict[str, str],
+):
+    # Create a queue for passing hits from download thread to processing thread
+    hits_queue = Queue(maxsize=100)  # Limit memory usage with bounded queue
+
+    # Start processing thread
+    processing_thread = threading.Thread(
+        target=process_elasticsearch_hits_from_queue, args=(attempt_dir, group_name, hits_queue, vm_ipv6s)
+    )
+    processing_thread.start()
+
+    gte = test_start_time.isoformat()
+    lte = test_end_time.isoformat()
+
+    max_size = 10000
+
+    elasticsearch_query = {
+        "size": max_size,
+        "query": {
+            "bool": {
+                "must": [
+                    {"match_phrase": {"ic": group_name}},
+                    {
+                        "range": {
+                            "timestamp": {
+                                "gte": gte,
+                                "lte": lte,
+                            }
+                        }
+                    },
+                ]
+            }
+        },
+        "_source": ["timestamp", "ic_node", "MESSAGE"],
+        # Sort by timestamp, using _doc as a tie-breaker for stable pagination.
+        "sort": [{"timestamp": {"order": "asc", "format": "strict_date_optional_time_nanos"}}, {"_doc": "asc"}],
+    }
+
+    try:
+        # Download logs from ElasticSearch (Producer):
+        url = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search"
+        params = {"filter_path": "hits.hits"}
+
+        try:
+            while True:
+                print(
+                    f"Downloading a maximum  {max_size} IC logs for attempt {attempt_dir.name} for testnet {group_name} from ElasticSearch between {gte} - {lte} with search_after={elasticsearch_query.get('search_after', None)} ...",
+                    file=sys.stderr,
+                )
+                response = requests.post(url, params=params, json=elasticsearch_query, timeout=60)
+
+                if not response.ok:
+                    print(
+                        f"Failed to download IC logs for {group_name}: {response.status_code} {response.text}",
+                        file=sys.stderr,
+                    )
+                    return
+
+                hits = response.json().get("hits", {}).get("hits", [])
+
+                # Push hits to queue for concurrent processing
+                hits_queue.put(hits)
+
+                if len(hits) < max_size:
+                    break
+
+                last_hit = hits[-1]
+                elasticsearch_query["search_after"] = last_hit["sort"]
+
+        finally:
+            # Always send sentinel to signal completion, even if download fails
+            hits_queue.put(None)
+            # Wait for processing thread to finish
+            processing_thread.join()
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading IC logs for {group_name}: {e}", file=sys.stderr)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON response for {group_name}: {e}", file=sys.stderr)
+
+
+def process_elasticsearch_hits_from_queue(
+    attempt_dir: Path,
+    group_name: str,
+    hits_queue: Queue,
+    vm_ipv6s: dict[str, str],
+):
+    """Consumer thread: Process ElasticSearch hits from queue and write IC node log files."""
+    log_file_by_node = {}
+
+    ic_logs_dir = attempt_dir / "ic_logs"
+    ic_logs_dir.mkdir(exist_ok=True)
+
+    try:
+        while True:
+            hits = hits_queue.get()
+            if hits is None:
+                break
+
+            print(
+                f"Processing and writing {len(hits)} IC logs for attempt {attempt_dir.name} for testnet {group_name} ...",
+                file=sys.stderr,
+            )
+            for hit in hits:
+                # Sentinel value signals end of download
+                if hit is None:
+                    break
+
+                # Process the hit
+                if "_source" not in hit:
+                    continue
+                source = hit["_source"]
+                if "ic_node" not in source or "timestamp" not in source or "MESSAGE" not in source:
+                    continue
+
+                node = source["ic_node"]
+                try:
+                    timestamp = datetime.strptime(source["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
+                except ValueError:
+                    continue
+
+                if node in log_file_by_node:
+                    log_file = log_file_by_node[node]
+                else:
+                    log_file_name = f"{node}.log"
+                    log_file = open(ic_logs_dir / log_file_name, "w", encoding="utf-8")
+                    log_file_by_node[node] = log_file
+                    if node in vm_ipv6s:
+                        (ic_logs_dir / f"{vm_ipv6s[node]}.log").symlink_to(log_file_name)
+
+                log_file.write(f"{timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')} {source["MESSAGE"]}\n")
+    finally:
+        for log_file in log_file_by_node.values():
+            log_file.close()
+
+
+# fmt: off
+TOP_COLUMNS = [
+    # (column_name,     header,                  alignment)
+    ("label",           "label",                 "left"),
+    ("total",           "total",                 "decimal"),
+    ("non_success",     "non_success",           "decimal"),
+    ("flaky",           "flaky",                 "decimal"),
+    ("timeout",         "timeout",               "decimal"),
+    ("fail",            "fail",                  "decimal"),
+    ("non_success%",    "non_success%",          "decimal"),
+    ("flaky%",          "flaky%",                "decimal"),
+    ("timeout%",        "timeout%",              "decimal"),
+    ("fail%",           "fail%",                 "decimal"),
+    ("impact",          "impact",                "right"),
+    ("total_duration",  "total duration",        "right"),
+    ("duration_p90",    "duration_p90",          "right"),
+    ("owners",          "owners",                "left"),
+]
+
+LAST_COLUMNS = [
+    # (column_name,      header,                  alignment)
+    ("last_started_at",  "last started at (UTC)", "right"),
+    ("duration",         "duration",              "right"),
+    ("status",           "status",                "left"),
+    ("branch",           "branch",                "left"),
+    ("PR",               "PR",                    "left"),
+    ("commit",           "commit",                "left"),
+    ("buildbuddy",       "buildbuddy",            "left"),
+    ("errors",           "errors per attempt",    "left")
+]
+# fmt: on
+
+
+def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
+    """
+    Write a nice README.md in the log output directory describing the //ci/githubstats:query invocation
+    that was used to generate the log output directory. This is useful when the invocation has to be redone or tweaked later.
+    """
+    # fmt: off
+    colalignments = [
+        # (df_column,           header,                  alignment)
+        ("last_started_at",     "last started at (UTC)", "right"),
+        ("duration",            "duration",              "right"),
+        ("status",              "status",                "left"),
+        ("head_branch",         "branch",                "left"),
+        ("pull_request_number", "PR",                    "left"),
+        ("head_sha",            "commit",                "left"),
+        ("buildbuddy_url",      "buildbuddy",            "left"),
+    ]
+    # fmt: on
+
+    cmd = shlex.join(["bazel", "run", "//ci/githubstats:query", "--", *sys.argv[1:]])
+    columns, headers, alignments = zip(*colalignments)
+    kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
+    table_md = tabulate(df[list(columns)], headers=list(headers), tablefmt="github", **kwargs)
+    readme = f"""Logs of `{test_target}`
+===
+Generated at {timestamp} using:
+```
+{cmd}
+```
+{table_md}
+"""
+    readme_path.write_text(readme)
+
+
 def top(args):
     """
     Get the top N non-successful / flaky / failed / timed-out tests
@@ -232,7 +975,7 @@ def top(args):
         else (None, None)
     )
     if value is not None:
-        if args.order_by in ("impact", "duration_p90"):
+        if args.order_by in ("impact", "total_duration", "duration_p90"):
             try:
                 value = pd.Timedelta(value).to_pytimedelta()
             except ValueError as e:
@@ -270,6 +1013,7 @@ def top(args):
         df = pd.DataFrame(cursor, columns=headers)
 
     df["impact"] = df["impact"].apply(normalize_duration)
+    df["total_duration"] = df["total_duration"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
 
     # Find the CODEOWNERS for each test target:
@@ -290,24 +1034,11 @@ def top(args):
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
-    colalignments = [
-        "decimal",  # idx
-        "left",  # label
-        "decimal",  # total
-        "decimal",  # non_success
-        "decimal",  # flaky
-        "decimal",  # timeout
-        "decimal",  # fail
-        "decimal",  # non_success%
-        "decimal",  # flaky%
-        "decimal",  # timeout%
-        "decimal",  # fail%
-        "right",  # impact
-        "right",  # duration_p90
-        "left",  # owners
-    ]
-
-    print(tabulate(df, headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
+    # Apply column filtering if --columns is specified, otherwise use all columns
+    colalignments = filter_columns(TOP_COLUMNS, args.columns)
+    columns, headers, alignments = zip(*colalignments)
+    kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
+    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
 
 
 def last(args):
@@ -316,17 +1047,19 @@ def last(args):
     that have either succeeded, flaked, timed out or failed
     in the specified period.
     """
-    overall_statuses = []
+    overall_statuses = set()
     if args.success:
-        overall_statuses.append(1)
+        overall_statuses.add(1)
     if args.flaky:
-        overall_statuses.append(2)
+        overall_statuses.add(2)
     if args.timedout:
-        overall_statuses.append(3)
+        overall_statuses.add(3)
     if args.failed:
-        overall_statuses.append(4)
+        overall_statuses.add(4)
+    if args.non_success:
+        overall_statuses.update({2, 3, 4})
     if len(overall_statuses) == 0:
-        overall_statuses = [1, 2, 3, 4]
+        overall_statuses = {1, 2, 3, 4}
 
     query = sql.SQL((THIS_SCRIPT_DIR / "last.sql").read_text()).format(
         test_target=sql.Literal(args.test_target),
@@ -343,55 +1076,67 @@ def last(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
-    # Turn the buildbuddy URLs into terminal hyperlinks to the logs of the test target.
-    # Since the buildbuddy_url column points to the BuildBuddy redirect service
-    # we first need to resolve the redirect to the cluster-specific BuildBuddy URL.
-    # Since this I/O takes time we parallelize it speeding it up by a factor of 6.
-    def direct_url_to_buildbuddy(url):
+    # We need to create links to the cluster-specific BuildBuddy service.
+    # To get the cluster-specific BuildBuddy URL we need to resolve the redirect via the BuildBuddy redirect service.
+    # Since this I/O takes time we parallelize to speed it up by an order of magnitude.
+    def direct_url_to_buildbuddy(invocation_id):
+        url = f"https://dash.idx.dfinity.network/invocation/{invocation_id}"
         redirect = get_redirect_location(url)
-        url = f"{redirect}?target={args.test_target}"
-        return terminal_hyperlink("log", url)
+        return f"{redirect}?target={args.test_target}" if redirect else url
 
     with ThreadPoolExecutor() as executor:
-        df["buildbuddy"] = list(executor.map(direct_url_to_buildbuddy, df["buildbuddy_url"]))
+        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["build_id"]))
+
+    df["buildbuddy"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
-    df["commit"] = df["commit"].apply(
+    df["commit"] = df["head_sha"].apply(
         lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/{ORG}/{REPO}/commit/{commit}")
     )
 
-    df["last started at (UTC)"] = df["last started at (UTC)"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
+    # Bazel's first_start_time is really the time the last attempt started.
+    df["last_started_at"] = df["first_start_time"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
 
-    df["branch"] = df["branch"].apply(
-        lambda branch: terminal_hyperlink(branch, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
+    df["branch"] = df["head_branch"].apply(
+        lambda branch: terminal_hyperlink(shorten(branch, 16), f"https://github.com/{ORG}/{REPO}/tree/{branch}")
     )
 
-    df["PR"] = df["PR"].apply(
+    df["PR"] = df["pull_request_number"].apply(
         lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
     )
 
-    df = df.drop(columns=["buildbuddy_url"])
-
     df["duration"] = df["duration"].apply(normalize_duration)
 
-    colalignments = [
-        "decimal",  # idx
-        "right",  # last started at (UTC)
-        "right",  # duration
-        "left",  # status
-        "left",  # branch
-        "left",  # PR
-        "left",  # commit
-        "left",  # buildbuddy
-    ]
+    if not args.skip_download:
+        download_and_process_logs(
+            args.logs_base_dir, args.test_target, args.download_console_logs, args.download_ic_logs, df
+        )
 
-    columns = list(df.columns)
-    print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
+    columns_metadata = LAST_COLUMNS
+    # When downlods are skipped we don't have any error information so skip the "errors" column.
+    if args.skip_download:
+        columns_metadata = [col for col in columns_metadata if col[0] != "errors"]
+
+    # Apply column filtering if --columns is specified, otherwise use all columns
+    colalignments = filter_columns(columns_metadata, args.columns)
+    columns, headers, alignments = zip(*colalignments)
+    kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
+    print(tabulate(df[list(columns)], headers=list(headers), tablefmt=args.tablefmt, **kwargs))
 
 
 # argparse formatter to allow newlines in --help.
 class RawDefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
     pass
+
+
+def add_columns_argument(parser, columns_metadata):
+    parser.add_argument(
+        "--columns",
+        metavar="COLS",
+        type=lambda s: [col.strip() for col in s.split(",")],
+        help=f"""Comma-separated list of columns to display in order or hide if preceded by '-'. Available columns:
+{",".join([column_name.replace("%", "%%") for column_name, _, _ in columns_metadata])}""",
+    )
 
 
 def main():
@@ -409,13 +1154,6 @@ def main():
     )
     common_parser.add_argument(
         "--timeout", metavar="T", type=int, default=60, help="PostgreSQL connect and query timeout in seconds"
-    )
-    common_parser.add_argument(
-        "--tablefmt",
-        metavar="FMT",
-        type=str,
-        default="mixed_outline",
-        help="Table format. See: https://pypi.org/project/tabulate/",
     )
 
     filter_parser = argparse.ArgumentParser(add_help=False)
@@ -490,6 +1228,7 @@ Examples:
             "timeout%",
             "fail%",
             "impact",
+            "total_duration",
             "duration_p90",
         ],
         help="""COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to.
@@ -503,7 +1242,8 @@ non_success%%:\tPercentage of non-successful runs in the specified period
 flaky%%:\t\tPercentage of flaky runs in the specified period
 timeout%%:\tPercentage of timed-out runs in the specified period
 fail%%:\t\tPercentage of failed runs in the specified period
-impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures
+impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures in the specified period
+total_duration:\ttotal * duration_p90. A rough estimate on the total duration of all runs in the specified period
 duration_p90:\t90th percentile duration of all runs in the specified period""",
     )
 
@@ -525,6 +1265,16 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
 
     top_parser.set_defaults(func=top)
 
+    top_parser.add_argument(
+        "--tablefmt",
+        metavar="FMT",
+        type=str,
+        default="mixed_outline",
+        help="Table format. See: https://pypi.org/project/tabulate/",
+    )
+
+    add_columns_argument(top_parser, TOP_COLUMNS)
+
     ## last ###################################################################
 
     last_runs_parser = subparsers.add_parser(
@@ -534,8 +1284,8 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
         help="Get the last runs of the specified test in the given period",
         epilog="""
 Examples:
-  # Show the last flaky runs of the rent_subnet_test in the last week
-  bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
+  # Show the last flaky runs of the root_tests in the last week
+  bazel run //ci/githubstats:query -- last --flaky //rs/tests/node:root_tests --week
 
   # Show all runs of a test in a specific date range
   bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'
@@ -545,12 +1295,76 @@ Examples:
 """,
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
+    last_runs_parser.add_argument(
+        "--non_success", action="store_true", help="Include non-successful runs (i.e. flaky, failed and timed-out)"
+    )
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
     last_runs_parser.add_argument("--failed", action="store_true", help="Include failed runs")
     last_runs_parser.add_argument("--timedout", action="store_true", help="Include timed-out runs")
 
+    last_runs_parser.add_argument(
+        "--skip-download", action="store_true", help="Don't download logs of the runs, just show the table"
+    )
+
+    last_runs_parser.add_argument(
+        "--download-console-logs",
+        action="store_true",
+        help="Download console logs from farm.dfinity.systems for every VM in system-tests",
+    )
+
+    last_runs_parser.add_argument(
+        "--download-ic-logs", action="store_true", help="Download IC logs from ElasticSearch for system-tests"
+    )
+
+    last_runs_parser.add_argument(
+        "--logs-base-dir",
+        metavar="DIR",
+        type=str,
+        default="logs",
+        help="""Download the logs of all runs of test_target to {DIR}/{test_name}/{now}.
+That directory will contain log files named like `{invocation_timestamp}_{invocation_id}/{attempt_num}/{attempt_status}.log`, for example:
+logs
+└── unstuck_subnet_test
+    └── 2026-02-10T15:51:30
+        ├── 2026-02-10T09:44:34_9e523887-572b-41e9-89e0-85db6cc6d307
+        │   ├── 1
+        │   │   ├── FAILED.log
+        │   │   └── ic_logs    # Only available for system-tests when --download-ic-logs is specified
+        │   │       ├── 2602:fb2b:110:10:5021:ccff:fe09:9c04.log -> eps42-sqcwm-mxa3t-v5udw-hvnhs-cpyhm-hlemr-rv5gn-ysojg-eo2tw-tqe.log
+        │   │       ├── 2602:fb2b:110:10:5063:d6ff:fed9:84ea.log -> e57ej-6tme6-pisxz-6xhho-a5hag-xhqnm-ll6a6-ywghj-a4wes-yrmw6-iae.log
+        │   │       ├── 2602:fb2b:110:10:506b:8ff:feca:8381.log -> oyqdk-jrqx2-rh2i4-myf6p-svq5r-erpyu-7iizo-fmjuk-oqmsp-rj4ua-bqe.log
+        │   │       ├── 2602:fb2b:110:10:50dc:f7ff:fe99:e6e9.log -> uwls4-qoxto-stzfb-cmngz-ynygb-lf3fs-eahfe-l5bgs-koaw2-m6rum-3qe.log
+        │   │       ├── e57ej-6tme6-pisxz-6xhho-a5hag-xhqnm-ll6a6-ywghj-a4wes-yrmw6-iae.log
+        │   │       ├── eps42-sqcwm-mxa3t-v5udw-hvnhs-cpyhm-hlemr-rv5gn-ysojg-eo2tw-tqe.log
+        │   │       ├── oyqdk-jrqx2-rh2i4-myf6p-svq5r-erpyu-7iizo-fmjuk-oqmsp-rj4ua-bqe.log
+        │   │       └── uwls4-qoxto-stzfb-cmngz-ynygb-lf3fs-eahfe-l5bgs-koaw2-m6rum-3qe.log
+        │   └── 2
+        │       ├── PASSED.log
+        │       └── ic_logs
+        │           ├── 2602:fb2b:110:10:5027:50ff:fe3b:646f.log -> th33r-jxkvk-3cdru-fzrcc-w2smz-bnovv-a5jue-isjz5-ax4v6-au7tw-nqe.log
+        │           ├── 2602:fb2b:110:10:5035:efff:fea1:fbf5.log -> flemd-fap2g-uohsu-ahgbv-sndvl-jvyzk-uytpv-4tazh-7jej7-bcqrn-mqe.log
+        │           ├── 2602:fb2b:110:10:508a:3eff:fe00:8438.log -> xvyo4-ngkcp-sj6j5-yxh4i-pmc5b-6ev4k-64xbw-tmnid-epliz-s2woi-2ae.log
+        │           ├── 2602:fb2b:110:10:50c4:e9ff:fe10:e4f1.log -> qmovl-k62dw-6z4ik-d4tn3-wwhlk-33rsp-7442w-52zjq-3yaxd-cqsee-gqe.log
+        │           ├── flemd-fap2g-uohsu-ahgbv-sndvl-jvyzk-uytpv-4tazh-7jej7-bcqrn-mqe.log
+        │           ├── qmovl-k62dw-6z4ik-d4tn3-wwhlk-33rsp-7442w-52zjq-3yaxd-cqsee-gqe.log
+        │           ├── th33r-jxkvk-3cdru-fzrcc-w2smz-bnovv-a5jue-isjz5-ax4v6-au7tw-nqe.log
+        │           └── xvyo4-ngkcp-sj6j5-yxh4i-pmc5b-6ev4k-64xbw-tmnid-epliz-s2woi-2ae.log
+        └── README.md
+""",
+    )
+
     last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
     last_runs_parser.set_defaults(func=last)
+
+    last_runs_parser.add_argument(
+        "--tablefmt",
+        metavar="FMT",
+        type=str,
+        default="fancy_grid",
+        help="Table format. See: https://pypi.org/project/tabulate/",
+    )
+
+    add_columns_argument(last_runs_parser, LAST_COLUMNS)
 
     ###########################################################################
 

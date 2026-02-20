@@ -90,8 +90,6 @@ pub struct Callback {
     pub on_cleanup: ::core::option::Option<WasmClosure>,
     #[prost(message, optional, tag = "5")]
     pub cycles_sent: ::core::option::Option<super::super::queues::v1::Cycles>,
-    #[prost(message, optional, tag = "6")]
-    pub originator: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag = "7")]
     pub respondent: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag = "8")]
@@ -332,7 +330,7 @@ pub mod execution_task {
         pub enum Input {
             #[prost(message, tag = "1")]
             Request(super::super::super::super::queues::v1::Request),
-            /// TODO(DSM-95): Remove once we switch to `AbortedResponse` below.
+            /// TODO(DSM-95): Remove after we have switched to `AbortedResponse`.
             #[prost(message, tag = "2")]
             Response(super::super::super::super::queues::v1::Response),
             #[prost(message, tag = "6")]
@@ -622,7 +620,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 58
+/// Next ID: 64
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -642,6 +640,18 @@ pub struct CanisterStateBits {
     /// In how many rounds a canister is executed.
     #[prost(uint64, tag = "18")]
     pub executed: u64,
+    #[prost(uint64, tag = "58")]
+    pub ingress_messages_executed: u64,
+    #[prost(uint64, tag = "59")]
+    pub remote_subnet_messages_executed: u64,
+    #[prost(uint64, tag = "60")]
+    pub local_subnet_messages_executed: u64,
+    #[prost(uint64, tag = "61")]
+    pub http_outcalls_executed: u64,
+    #[prost(uint64, tag = "62")]
+    pub heartbeats_and_global_timers_executed: u64,
+    #[prost(uint64, tag = "63")]
+    pub instructions_executed: u64,
     #[prost(bytes = "vec", tag = "20")]
     pub certified_data: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "21")]

@@ -8,10 +8,11 @@ use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::{
-    CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting,
+use ic_replicated_state::{
+    CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology,
+    metadata_state::testing::NetworkTopologyTesting,
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
-use ic_replicated_state::{CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     MetricVec, fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec,
@@ -38,6 +39,7 @@ use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, VecDeque};
 use std::convert::TryFrom;
 use std::mem::size_of;
+use std::sync::Arc;
 
 const LOCAL_SUBNET: SubnetId = SUBNET_27;
 const REMOTE_SUBNET: SubnetId = SUBNET_42;
@@ -97,7 +99,7 @@ fn reject_local_request() {
 
         // With a reservation on an input queue.
         let payment = Cycles::new(100);
-        let callback_id = register_callback(&mut canister_state, sender, receiver, NO_DEADLINE);
+        let callback_id = register_callback(&mut canister_state, receiver, NO_DEADLINE);
         let msg = generate_message_for_test(
             sender,
             receiver,
@@ -166,7 +168,7 @@ fn reject_local_request() {
 fn build_streams_success() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
+        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
@@ -207,7 +209,10 @@ fn build_streams_success() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -275,6 +280,7 @@ fn build_streams_local_canisters() {
                         *INITIAL_CYCLES,
                         NumSeconds::from(100_000),
                     )
+                    .into()
                 });
         }
 
@@ -282,10 +288,13 @@ fn build_streams_local_canisters() {
         provided_state.put_canister_states(provided_canister_states);
 
         // Ensure the routing table knows about the `LOCAL_SUBNET`.
-        let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
+        let routing_table = RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => LOCAL_SUBNET,
-        }).unwrap());
-        provided_state.metadata.network_topology.routing_table = Arc::clone(&routing_table);
+        }).unwrap();
+        provided_state
+            .metadata
+            .network_topology
+            .set_routing_table(routing_table.clone());
 
         // Set up the expected Stream from the messages.
         let expected_stream = Stream::new(
@@ -309,11 +318,17 @@ fn build_streams_local_canisters() {
             streams.insert(LOCAL_SUBNET, expected_stream);
         });
 
-        expected_state.metadata.network_topology.routing_table = routing_table;
+        expected_state
+            .metadata
+            .network_topology
+            .set_routing_table(routing_table.clone());
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -363,7 +378,7 @@ fn build_streams_at_limit_leaves_state_untouched_impl(
             target_stream_size_bytes,
             SYSTEM_SUBNET_STREAM_MSG_LIMIT,
         );
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
+        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
@@ -452,7 +467,7 @@ fn build_streams_respects_limits(
             target_stream_size_bytes,
             SYSTEM_SUBNET_STREAM_MSG_LIMIT,
         );
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
+        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
@@ -493,7 +508,10 @@ fn build_streams_respects_limits(
         // Act.
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 
@@ -572,7 +590,10 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -613,7 +634,7 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         // Ensure the routing table knows about the `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
+        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
             },
@@ -621,7 +642,7 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         provided_state
             .metadata
             .network_topology
-            .subnets
+            .subnets_mut()
             .insert(REMOTE_SUBNET, Default::default());
 
         // Set up the provided_canister_states.
@@ -649,7 +670,10 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -704,12 +728,12 @@ fn build_streams_with_best_effort_messages_impl(
         let (stream_builder, mut provided_state, _) = new_fixture(&log);
 
         // Set the subnet types of the local and remote subnets.
-        provided_state.metadata.network_topology.subnets = btreemap! {
+        provided_state.metadata.network_topology.set_subnets(btreemap! {
             LOCAL_SUBNET => SubnetTopology {subnet_type: local_subnet_type, ..Default::default()},
             REMOTE_SUBNET => SubnetTopology {subnet_type: remote_subnet_type, ..Default::default()},
-        };
+        });
         // Ensure that the routing table knows about `LOCAL_SUBNET` and `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
+        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
                 CanisterIdRange{ start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
@@ -844,13 +868,16 @@ fn build_streams_with_refunds(
         );
 
         // Set the type of both subnets.
-        provided_state.metadata.network_topology.subnets = btreemap! {
-            LOCAL_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
-            REMOTE_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
-        };
+        provided_state
+            .metadata
+            .network_topology
+            .set_subnets(btreemap! {
+                LOCAL_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
+                REMOTE_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
+            });
 
         // Map local canisters to `LOCAL_SUBNET`, remote canisters to `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
+        provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: first_local_canister, end: last_local_canister } => LOCAL_SUBNET,
                 CanisterIdRange{ start: first_remote_canister, end: last_remote_canister } => REMOTE_SUBNET,
@@ -1139,7 +1166,7 @@ fn build_streams_with_oversized_payloads() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         // Map local canister to `LOCAL_SUBNET` and remote canister to `REMOTE_SUBNET`.
-        provided_state.metadata.network_topology.routing_table = Arc::new(
+        provided_state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
                 CanisterIdRange{ start: remote_canister, end: remote_canister } => REMOTE_SUBNET,
@@ -1160,7 +1187,9 @@ fn build_streams_with_oversized_payloads() {
         let mut expected_state = consume_output_queues(&provided_state);
 
         // Expecting a reject response for the remote request.
-        let local_canister = expected_state.canister_state_mut(&local_canister).unwrap();
+        let local_canister = expected_state
+            .canister_state_make_mut(&local_canister)
+            .unwrap();
         push_input(local_canister, remote_request_reject.into());
 
         // Expecting a loopback stream consisting of:
@@ -1180,7 +1209,10 @@ fn build_streams_with_oversized_payloads() {
         // Act
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 
@@ -1247,7 +1279,7 @@ fn test_observe_misrouted_messages_on_splitting_subnet() {
 
         // Routing table: `migrating_canister` is still hosted by the local subnet;
         // `migrated_canister` has already migrated from the local subnet to B.
-        state.metadata.network_topology.routing_table = Arc::new(
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
                 CanisterIdRange{ start: migrating_canister, end: migrating_canister } => LOCAL_SUBNET,
@@ -1358,7 +1390,7 @@ fn test_observe_misrouted_messages_on_third_party_subnet() {
 
         // Routing table: `migrating_canister` is still hosted by subnet A;
         // `migrated_canister` has already migrated from A to B.
-        state.metadata.network_topology.routing_table = Arc::new(
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
                 CanisterIdRange{ start: canister_on_a, end: canister_on_a } => REMOTE_SUBNET_A,
@@ -1573,24 +1605,24 @@ fn generate_message_for_test(
 // Generates `CanisterStates` with the given messages in output queues.
 fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
     msgs: Vec<M>,
-) -> BTreeMap<CanisterId, CanisterState> {
-    let mut canister_states = BTreeMap::<CanisterId, CanisterState>::new();
+) -> BTreeMap<CanisterId, Arc<CanisterState>> {
+    let mut canister_states = BTreeMap::<CanisterId, Arc<CanisterState>>::new();
 
     for msg in msgs {
         let msg = msg.into();
         let canister_state = canister_states.entry(msg.sender()).or_insert_with(|| {
-            new_canister_state(
+            Arc::new(new_canister_state(
                 msg.sender(),
                 msg.sender().get(),
                 *INITIAL_CYCLES,
                 NumSeconds::from(100_000),
-            )
+            ))
         });
+        let canister_state = Arc::make_mut(canister_state);
 
         match msg {
             RequestOrResponse::Request(req) => {
-                let callback_id =
-                    register_callback(canister_state, req.sender, req.receiver, req.deadline);
+                let callback_id = register_callback(canister_state, req.receiver, req.deadline);
                 // Check the implicit assumption that the test messages were generated with a
                 // `sender_reply_callback` that is consistent with the callback IDs that the
                 // `CallContextManager` generates and registers.

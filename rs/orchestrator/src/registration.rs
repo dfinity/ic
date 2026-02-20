@@ -184,9 +184,26 @@ impl NodeRegistration {
             }
 
             if let Err(error_message) = self.do_register_node(&add_node_payload).await {
-                warn!(self.log, "{}", error_message);
+                // Log full payload for debugging
+                warn!(
+                    self.log,
+                    "{}. Used payload: {:?}", error_message, add_node_payload
+                );
+                // Send a length-capped summary to the host ensuring message is not dropped
+                const CONSOLE_ERR_MAX: usize = 1500;
+                let trimmed_error = if error_message.chars().count() > CONSOLE_ERR_MAX {
+                    format!(
+                        "{} (see replica logs for full error)",
+                        error_message
+                            .chars()
+                            .take(CONSOLE_ERR_MAX)
+                            .collect::<String>(),
+                    )
+                } else {
+                    error_message
+                };
                 UtilityCommand::notify_host(
-                    format!("node-id {}: {}", self.node_id, error_message).as_str(),
+                    format!("node-id {}: {}", self.node_id, trimmed_error).as_str(),
                     1,
                 );
             };
@@ -243,8 +260,8 @@ impl NodeRegistration {
             .await
             .map_err(|e| {
                 format!(
-                    "Node {} registration request failed with error: {}\nUsed payload: {:?}",
-                    self.node_id, e, add_node_payload
+                    "Node {} registration request failed with error: {}",
+                    self.node_id, e
                 )
             })?;
 
