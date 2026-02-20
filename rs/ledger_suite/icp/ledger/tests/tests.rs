@@ -2812,6 +2812,77 @@ fn test_change_empty_initial_archive_options() {
     );
 }
 
+#[test]
+fn test_incomplete_change_empty_initial_archive_options() {
+    const ARCHIVE_TRIGGER_THRESHOLD: usize = 10;
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let archive_controller = PrincipalId::new_user_test_id(100);
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000_000));
+
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+
+    let ledger_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister");
+
+    // Change archive options with an upgrade (set cycles_for_archive_creation to 0 so the first archive is created with 0 cycles)
+    let upgrade_args = LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+        icrc1_minting_account: None,
+        feature_flags: None,
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: None, // Not setting trigger_threshold should cause the upgrade to fail.
+            num_blocks_to_archive: Some(NUM_BLOCKS_TO_ARCHIVE as usize),
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: Some(archive_controller),
+            more_controller_ids: None,
+            cycles_for_archive_creation: Some(0),
+            max_transactions_per_response: None,
+        }),
+    }));
+
+    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&upgrade_args).unwrap())
+        .expect_err(
+            "ledger canister successfully upgraded despite incomplete change archive options",
+        )
+        .assert_contains(
+            ErrorCode::CanisterCalledTrap,
+            "ChangeArchiveOptions did not specify all mandatory fields",
+        );
+
+    // Transfer enough to trigger archiving (1 mint + ARCHIVE_TRIGGER_THRESHOLD transfers)
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i as u64).expect("transfer failed");
+    }
+
+    // Verify the archiving is still disabled
+    let archives = Decode!(
+        &env.query(ledger_id, "archives", Encode!().unwrap())
+            .expect("failed to query archives")
+            .bytes(),
+        icp_ledger::Archives
+    )
+    .expect("failed to decode archives response");
+
+    assert_eq!(
+        archives.archives.len(),
+        0,
+        "No archive should have been created"
+    );
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
