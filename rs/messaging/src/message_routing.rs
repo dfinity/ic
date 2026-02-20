@@ -1089,14 +1089,12 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 })?;
                 subnet_admins.insert(subnet_admin);
             }
-            let own_subnet_type: SubnetType =
-                subnet_record.subnet_type.try_into().unwrap_or_default();
             // If the subnet is not rented, i.e., if the subnet is not an application subnet on a "free" cost schedule,
             // then it cannot have a non-empty subnet admins list. If that's the case, this indicates
             // a bug and a critical error is raised. The subnet admins is set to empty list in that case
             // to avoid any potential errors in using an incorrect list.
-            if !(own_subnet_type == SubnetType::Application
-                    && cost_schedule == CanisterCyclesCostSchedule::Free)
+            if !(subnet_type == SubnetType::Application
+                && cost_schedule == CanisterCyclesCostSchedule::Free)
             {
                 if !subnet_admins.is_empty() {
                     self.metrics
