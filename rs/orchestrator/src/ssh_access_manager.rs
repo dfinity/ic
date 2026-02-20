@@ -215,7 +215,7 @@ mod tests {
     use crate::{
         error::OrchestratorError,
         metrics::OrchestratorMetrics,
-        registry_helper::RegistryHelper,
+        registry_helper::{RegistryError, RegistryHelper},
         ssh_access_manager::{KeySets, SshAccessManager},
     };
 
@@ -623,7 +623,9 @@ mod tests {
 
                 assert_matches!(
                     keys.readonly_backup,
-                    Err(OrchestratorError::SubnetMissingError(_, _))
+                    Err(OrchestratorError::RegistryError(
+                        RegistryError::SubnetMissing(_, _)
+                    ))
                 );
                 assert!(keys.has_recovery());
             }
@@ -672,7 +674,9 @@ mod tests {
 
                 assert_matches!(
                     keys.recovery,
-                    Err(OrchestratorError::NodeRecordMissingError(_, _))
+                    Err(OrchestratorError::RegistryError(
+                        RegistryError::NodeMissing(_, _)
+                    ))
                 );
                 assert!(keys.has_assigned_readonly());
                 assert!(keys.has_backup());
@@ -697,11 +701,15 @@ mod tests {
 
                 assert_matches!(
                     keys.readonly_backup,
-                    Err(OrchestratorError::RegistryClientError(_))
+                    Err(OrchestratorError::RegistryError(
+                        RegistryError::RegistryClientError(_)
+                    ))
                 );
                 assert_matches!(
                     keys.recovery,
-                    Err(OrchestratorError::RegistryClientError(_))
+                    Err(OrchestratorError::RegistryError(
+                        RegistryError::RegistryClientError(_)
+                    ))
                 );
             }
         })
