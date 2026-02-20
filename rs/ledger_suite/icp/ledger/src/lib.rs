@@ -794,12 +794,6 @@ impl AllowancesData for StableAllowancesData {
             .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0))
     }
 
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
-        panic!("The method `pop_first_allowance` should not be called for StableAllowancesData")
-    }
-
     fn len_allowances(&self) -> usize {
         ALLOWANCES_MEMORY
             .with_borrow(|allowances| allowances.len())

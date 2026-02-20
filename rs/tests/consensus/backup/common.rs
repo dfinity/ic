@@ -100,13 +100,13 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
     info!(log, "Elect the target replica version");
-    let binary_version = get_current_branch_version();
+    let binary_version = get_ic_build_version();
     let target_version = get_guestos_update_img_version();
 
     // Bless target version
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     block_on(bless_replica_version(
         &nns_node,
         &target_version,
@@ -147,28 +147,22 @@ pub fn test(env: TestEnv) {
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
     copy_file(
-        &get_dependency_path(std::env::var("IC_REPLAY_PATH").expect("IC_REPLAY_PATH not set")),
+        &get_dependency_path_from_env("IC_REPLAY_PATH"),
         &backup_binaries_dir,
         "ic-replay",
     );
     copy_file(
-        &get_dependency_path(
-            std::env::var("SANDBOX_LAUNCHER_PATH").expect("SANDBOX_LAUNCHER_PATH not set"),
-        ),
+        &get_dependency_path_from_env("SANDBOX_LAUNCHER_PATH"),
         &backup_binaries_dir,
         "sandbox_launcher",
     );
     copy_file(
-        &get_dependency_path(
-            std::env::var("CANISTER_SANDBOX_PATH").expect("CANISTER_SANDBOX_PATH not set"),
-        ),
+        &get_dependency_path_from_env("CANISTER_SANDBOX_PATH"),
         &backup_binaries_dir,
         "canister_sandbox",
     );
     copy_file(
-        &get_dependency_path(
-            std::env::var("COMPILER_SANDBOX_PATH").expect("COMPILER_SANDBOX_PATH not set"),
-        ),
+        &get_dependency_path_from_env("COMPILER_SANDBOX_PATH"),
         &backup_binaries_dir,
         "compiler_sandbox",
     );
@@ -268,8 +262,7 @@ pub fn test(env: TestEnv) {
     write!(f, "{config_str}").expect("Should be able to write the config file");
 
     info!(log, "Start the backup process in a separate thread");
-    let ic_backup_path =
-        &get_dependency_path(std::env::var("IC_BACKUP_PATH").expect("IC_BACKUP_PATH not set"));
+    let ic_backup_path = &get_dependency_path_from_env("IC_BACKUP_PATH");
     let mut command = Command::new(ic_backup_path);
     command
         .arg("--config-file")

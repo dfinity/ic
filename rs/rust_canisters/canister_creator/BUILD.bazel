@@ -7,23 +7,23 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_json",
     "//rs/types/management_canister_types",
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:rand",
     "@crate_index//:rand_pcg",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
     "@crate_index//:wat",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/config",
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
+    "//rs/sys",
     "//rs/types/types",
+    "@crate_index//:more-asserts",
 ]
 
 MACRO_DEPENDENCIES = []

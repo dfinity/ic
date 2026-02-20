@@ -37,10 +37,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
-use strum::EnumString;
+use strum::{Display, EnumString};
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.11.0";
+pub const CONFIG_VERSION: &str = "1.12.1";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
@@ -50,6 +50,14 @@ pub static RESERVED_FIELD_PATHS: &[&str] = &[
     "hostos_settings.vm_memory",
     "hostos_settings.vm_nr_of_vcpus",
 ];
+
+/// Type of the operating system
+#[derive(Debug, Clone, EnumString, Display)]
+pub enum OsType {
+    SetupOS,
+    HostOS,
+    GuestOS,
+}
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -120,7 +128,7 @@ pub struct GuestOSConfig {
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+#[derive(Serialize, Deserialize, securefmt::Debug, PartialEq, Eq, Clone, Default)]
 pub struct ICOSSettings {
     /// The node reward type determines node rewards
     pub node_reward_type: Option<String>,
@@ -132,7 +140,12 @@ pub struct ICOSSettings {
     pub deployment_environment: DeploymentEnvironment,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
+    /// TODO(NODE-1838): Remove after HostOS is upgraded and `node_operator_private_key` is used
+    #[serde(default)]
     pub use_node_operator_private_key: bool,
+    /// PEM-encoded Node Operator private key
+    #[sensitive]
+    pub node_operator_private_key: Option<String>,
     /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
     /// by the hardware. Once deployment is successful, we rely on the hardware supporting
@@ -143,11 +156,11 @@ pub struct ICOSSettings {
     /// wrapper from the `ic_sev` crate, as this cannot be faked by a malicious HostOS.
     #[serde(default)]
     pub enable_trusted_execution_environment: bool,
-    /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
+    /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`, `recovery`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`
     /// is transferred to `~admin/.ssh/authorized_keys` on the target system.
-    /// backup and readonly can only be modified via an NNS proposal
+    /// `backup`, `readonly` and `recovery` can only be modified via an NNS proposal
     /// and are in place for subnet recovery or issue debugging purposes.
     /// use_ssh_authorized_keys triggers the use of the ssh keys directory
     pub use_ssh_authorized_keys: bool,
@@ -206,12 +219,15 @@ pub struct GuestOSSettings {
     /// Must be a directory with contents matching the internal representation of the ic_crypto directory.
     /// When given, this provides the private keys of the node.
     /// If not given, the node will generate its own private/public key pair.
+    #[serde(default)]
     pub inject_ic_crypto: bool,
+    #[serde(default)]
     pub inject_ic_state: bool,
     /// Initial registry state.
     /// Must be a directory with contents matching the internal representation of the ic_registry_local_store.
     /// When given, this provides the initial state of the registry.
     /// If not given, the node will fetch (initial) registry state from the NNS.
+    #[serde(default)]
     pub inject_ic_registry_local_store: bool,
     pub guestos_dev_settings: GuestOSDevSettings,
 }
@@ -226,11 +242,14 @@ pub struct GuestOSDevSettings {
     pub dogecoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
-    // An optional hostname to override the deterministically generated hostname
+    /// An optional hostname to override the deterministically generated hostname
     pub hostname: Option<String>,
-    // Generate and inject a self-signed TLS certificate and key for ic-boundary
-    // for the given domain name. To be used in system tests only.
+    /// Generate and inject a self-signed TLS certificate and key for ic-boundary
+    /// for the given domain name. To be used in system tests only.
     pub generate_ic_boundary_tls_cert: Option<String>,
+    /// PEM-encoded NNS public key.
+    /// Overrides the hardcoded NNS public key on the rootfs.
+    pub nns_pub_key_override: Option<String>,
 }
 
 /// GuestOS recovery configuration used in the event of a manual recovery.
@@ -342,7 +361,7 @@ mod tests {
                 "mgmt_mac": "00:00:00:00:00:00",
                 "deployment_environment": "testnet",
                 "nns_urls": [],
-                "use_node_operator_private_key": false,
+                "node_operator_private_key": null,
                 "use_ssh_authorized_keys": false,
                 "icos_dev_settings": {}
             },

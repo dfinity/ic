@@ -519,15 +519,15 @@ fn test_known_neuron_to_self_describing() {
     assert_eq!(
         value,
         SelfDescribingValue::Map(hashmap! {
-            "neuron_id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123u64)),
+            "neuron_id".to_string() => SelfDescribingValue::from(123_u64),
             "known_neuron_data".to_string() => SelfDescribingValue::Map(hashmap! {
-                "name".to_string() => SelfDescribingValue::Text("Test Neuron".to_string()),
-                "description".to_string() => SelfDescribingValue::Text("Description".to_string()),
+                "name".to_string() => SelfDescribingValue::from("Test Neuron"),
+                "description".to_string() => SelfDescribingValue::from("Description"),
                 "links".to_string() => SelfDescribingValue::Array(vec![
-                    SelfDescribingValue::Text("https://test.com".to_string())
+                    SelfDescribingValue::from("https://test.com")
                 ]),
                 "committed_topics".to_string() => SelfDescribingValue::Array(vec![
-                    SelfDescribingValue::Text("Governance".to_string())
+                    SelfDescribingValue::from("Governance")
                 ]),
             }),
         })
@@ -552,9 +552,9 @@ fn test_known_neuron_to_self_describing_empty_fields() {
     assert_eq!(
         value,
         SelfDescribingValue::Map(hashmap! {
-            "neuron_id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123u64)),
+            "neuron_id".to_string() => SelfDescribingValue::from(123_u64),
             "known_neuron_data".to_string() => SelfDescribingValue::Map(hashmap! {
-                "name".to_string() => SelfDescribingValue::Text("Test Neuron".to_string()),
+                "name".to_string() => SelfDescribingValue::from("Test Neuron"),
                 "description".to_string() => SelfDescribingValue::Null,
                 "links".to_string() => SelfDescribingValue::Array(vec![]),
                 "committed_topics".to_string() => SelfDescribingValue::Array(vec![]),

@@ -45,8 +45,7 @@ pub struct SubnetRecord {
     pub features: ::core::option::Option<SubnetFeatures>,
     /// The maximum number of canisters that may be present on the subnet at any given time.
     ///
-    /// A value of 0 is equivalent to setting no limit. This also provides an easy way
-    /// to maintain compatibility of different versions of replica and registry.
+    /// A value of 0 means that the replica's default value will be used.
     #[prost(uint64, tag = "24")]
     pub max_number_of_canisters: u64,
     /// The list of public keys whose owners have "readonly" SSH access to all replicas on this subnet,
@@ -74,6 +73,9 @@ pub struct SubnetRecord {
     /// means to behave according to the `subnet_type` field.
     #[prost(enumeration = "CanisterCyclesCostSchedule", tag = "30")]
     pub canister_cycles_cost_schedule: i32,
+    /// List of principals that have admin privileges on the subnet.
+    #[prost(message, repeated, tag = "31")]
+    pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {

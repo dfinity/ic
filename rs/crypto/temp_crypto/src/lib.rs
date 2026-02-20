@@ -28,7 +28,7 @@ impl<T: Rng + CryptoRng + 'static + Send + Sync> CryptoComponentRng for T {}
 pub mod internal {
     use super::*;
     use ic_base_types::PrincipalId;
-    use ic_config::crypto::{CryptoConfig, CspVaultType};
+    use ic_config::crypto::CryptoConfig;
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
     use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
     use ic_crypto_internal_csp::LocalCspVault;
@@ -141,13 +141,19 @@ pub mod internal {
         }
     }
 
+    enum VaultType {
+        InReplica,
+        Remote,
+        Override(Arc<dyn CspVault>),
+    }
+
     pub struct TempCryptoBuilder<R: CryptoComponentRng> {
         node_keys_to_generate: Option<NodeKeysToGenerate>,
         registry_client: Option<Arc<dyn RegistryClient>>,
         registry_data: Option<Arc<ProtoRegistryDataProvider>>,
         registry_version: Option<RegistryVersion>,
         node_id: Option<NodeId>,
-        start_remote_vault: bool,
+        vault_type: VaultType,
         vault_client_runtime_handle: Option<tokio::runtime::Handle>,
         temp_dir_source: Option<PathBuf>,
         logger: Option<ReplicaLogger>,
@@ -214,7 +220,12 @@ pub mod internal {
         }
 
         pub fn with_remote_vault(mut self) -> Self {
-            self.start_remote_vault = true;
+            self.vault_type = VaultType::Remote;
+            self
+        }
+
+        pub fn with_override_vault(mut self, vault: Arc<dyn CspVault>) -> Self {
+            self.vault_type = VaultType::Override(vault);
             self
         }
 
@@ -243,7 +254,7 @@ pub mod internal {
                 registry_data: self.registry_data,
                 registry_version: self.registry_version,
                 node_id: self.node_id,
-                start_remote_vault: self.start_remote_vault,
+                vault_type: self.vault_type,
                 vault_client_runtime_handle: self.vault_client_runtime_handle,
                 temp_dir_source: self.temp_dir_source,
                 logger: self.logger,
@@ -263,45 +274,52 @@ pub mod internal {
                 .time_source
                 .unwrap_or_else(|| Arc::new(SysTimeSource::new()));
 
-            let (mut config, temp_dir) = CryptoConfig::new_in_temp_dir();
+            let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
             if let Some(source) = self.temp_dir_source {
                 copy_crypto_root(&source, temp_dir.path());
             }
-            let local_vault = Arc::new(
-                ProdLocalCspVault::builder_in_dir(
-                    &config.crypto_root,
-                    Arc::clone(&metrics),
-                    new_logger!(logger),
-                )
-                .with_rng(self.rng)
-                .with_time_source(Arc::clone(&time_source))
-                .build(),
-            );
-            let opt_remote_vault_environment = self.start_remote_vault.then(|| {
-                let vault_server =
-                    TempCspVaultServer::start_with_local_csp_vault(Arc::clone(&local_vault));
-                config.csp_vault_type = CspVaultType::UnixSocket {
-                    logic: vault_server.vault_socket_path(),
-                    metrics: None,
-                };
-                RemoteVaultEnvironment {
-                    vault_server,
-                    vault_client_runtime: TokioRuntimeOrHandle::new(
-                        self.vault_client_runtime_handle,
-                    ),
+            let (vault, opt_remote_vault_environment) = match self.vault_type {
+                VaultType::InReplica => {
+                    let vault = ProdLocalCspVault::builder_in_dir(
+                        &config.crypto_root,
+                        Arc::clone(&metrics),
+                        new_logger!(logger),
+                    )
+                    .with_rng(self.rng)
+                    .with_time_source(Arc::clone(&time_source))
+                    .build();
+                    (Arc::new(vault) as Arc<dyn CspVault>, None)
                 }
-            });
-            let vault: Arc<dyn CspVault> = if let Some(env) = &opt_remote_vault_environment {
-                let remote_vault = env
-                    .new_vault_client_builder()
-                    .with_logger(new_logger!(logger))
-                    .with_metrics(Arc::clone(&metrics))
-                    .build()
-                    .expect("Failed to build a vault client");
-                Arc::new(remote_vault)
-            } else {
-                local_vault
+                VaultType::Remote => {
+                    let vault = Arc::new(
+                        ProdLocalCspVault::builder_in_dir(
+                            &config.crypto_root,
+                            Arc::clone(&metrics),
+                            new_logger!(logger),
+                        )
+                        .with_rng(self.rng)
+                        .with_time_source(Arc::clone(&time_source))
+                        .build(),
+                    );
+                    let vault_server =
+                        TempCspVaultServer::start_with_local_csp_vault(Arc::clone(&vault));
+                    let vault_env = RemoteVaultEnvironment {
+                        vault_server,
+                        vault_client_runtime: TokioRuntimeOrHandle::new(
+                            self.vault_client_runtime_handle,
+                        ),
+                    };
+                    let vault_client = vault_env
+                        .new_vault_client_builder()
+                        .with_logger(new_logger!(logger))
+                        .with_metrics(Arc::clone(&metrics))
+                        .build()
+                        .expect("Failed to build a vault client");
+                    (Arc::new(vault_client) as Arc<dyn CspVault>, Some(vault_env))
+                }
+                VaultType::Override(vault) => (vault, None),
             };
+
             let csp = Csp::new_from_vault(
                 Arc::clone(&vault),
                 new_logger!(logger),
@@ -445,7 +463,7 @@ pub mod internal {
         pub fn builder() -> TempCryptoBuilder<OsRng> {
             TempCryptoBuilder {
                 node_id: None,
-                start_remote_vault: false,
+                vault_type: VaultType::InReplica,
                 vault_client_runtime_handle: None,
                 registry_client: None,
                 registry_data: None,
@@ -478,6 +496,12 @@ pub mod internal {
             self.remote_vault_environment
                 .as_ref()
                 .map(|env| env.vault_client_runtime.handle())
+        }
+
+        pub fn remote_vault_client(&self) -> Option<Arc<dyn CspVault>> {
+            self.remote_vault_environment
+                .as_ref()
+                .map(|env| env.new_vault_client())
         }
 
         pub fn copy_crypto_root_to(&self, target: &Path) {
@@ -1111,6 +1135,7 @@ impl EcdsaSubnetConfig {
                     max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
             },
         }
     }

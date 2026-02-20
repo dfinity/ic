@@ -8,8 +8,9 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPriceArg, MinterInfo, RetrieveEthStatus, WithdrawalArg,
-    WithdrawalDetail, WithdrawalSearchParameter,
+    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, Eip1559TransactionPriceArg,
+    MemoType, MinterInfo, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
@@ -83,6 +84,8 @@ pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH: &str =
 
 pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE: u64 = 2_145_241_036_770_000_u64;
 pub const USDC_ERC20_CONTRACT_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+pub const USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE: &str =
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 pub const MINTER_ADDRESS: &str = "0xfd644a761079369962386f8e4259217c2a10b8d0";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
@@ -142,8 +145,8 @@ impl CkEthSetup {
             .unwrap(),
         )
         .unwrap();
-        let minter_id = install_minter(&env, ledger_id, minter_id, evm_rpc_id);
         install_evm_rpc(&env, evm_rpc_id);
+        let minter_id = install_minter(&env, ledger_id, minter_id, evm_rpc_id);
 
         let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
         let cketh = Self {
@@ -669,6 +672,45 @@ impl CkEthSetup {
             2_000_000,
         ]
     }
+
+    pub fn decode_ledger_memo(
+        &self,
+        memo_type: MemoType,
+        encoded_memo: Vec<u8>,
+    ) -> DecodeLedgerMemoResult {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "decode_ledger_memo",
+                        Encode!(&DecodeLedgerMemoArgs {
+                            memo_type,
+                            encoded_memo
+                        })
+                        .unwrap()
+                    )
+                    .expect("failed to call decode_ledger_memo")
+            ),
+            DecodeLedgerMemoResult
+        )
+        .unwrap()
+    }
+
+    pub fn minter_canister_logs(&self) -> Vec<CanisterLog> {
+        let log = self.env.canister_log(self.minter_id);
+
+        let mut records = log.records().iter().collect::<Vec<_>>();
+        records.sort_by(|a, b| a.idx.cmp(&b.idx));
+        records
+            .into_iter()
+            .map(|log| CanisterLog {
+                timestamp_nanos: log.timestamp_nanos,
+                idx: log.idx,
+                content: String::from_utf8_lossy(&log.content).to_string(),
+            })
+            .collect()
+    }
 }
 
 pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
@@ -754,4 +796,11 @@ pub struct LedgerBalance {
     pub ledger_id: Principal,
     pub account: Account,
     pub balance: Nat,
+}
+
+#[derive(Debug)]
+pub struct CanisterLog {
+    pub timestamp_nanos: u64,
+    pub idx: u64,
+    pub content: String,
 }

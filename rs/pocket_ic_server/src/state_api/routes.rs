@@ -1585,6 +1585,7 @@ pub async fn create_instance(
                     initial_time,
                     auto_progress_enabled,
                     gateway_port,
+                    instance_config.mainnet_nns_subnet_id.unwrap_or_default(),
                 )
             },
             auto_progress,

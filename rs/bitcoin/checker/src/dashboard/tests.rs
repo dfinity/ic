@@ -228,7 +228,9 @@ mod assertions {
         pub fn has_latest_entry_time(&self, timestamp: Timestamp) -> &Self {
             self.has_string_value(
                 "#latest-entry-time > td > code",
-                &filters::timestamp_to_datetime(timestamp).unwrap(),
+                &filters::timestamp_to_datetime::default()
+                    .execute(timestamp, &())
+                    .unwrap(),
                 "wrong latest entry time",
             )
         }
@@ -236,7 +238,9 @@ mod assertions {
         pub fn has_oldest_entry_time(&self, timestamp: Timestamp) -> &Self {
             self.has_string_value(
                 "#oldest-entry-time > td > code",
-                &filters::timestamp_to_datetime(timestamp).unwrap(),
+                &filters::timestamp_to_datetime::default()
+                    .execute(timestamp, &())
+                    .unwrap(),
                 "wrong oldest entry time",
             )
         }
@@ -255,7 +259,9 @@ mod assertions {
             expected_status: &Status,
         ) -> &Self {
             let txid_str = expected_txid.to_string();
-            let time_str = filters::timestamp_to_datetime(expected_timestamp).unwrap();
+            let time_str = filters::timestamp_to_datetime::default()
+                .execute(expected_timestamp, &())
+                .unwrap();
             let status_str = expected_status.to_string();
             let mut expected_values: Vec<&str> = vec![&txid_str, &time_str, &status_str];
             if let Some(error) = expected_status.error() {

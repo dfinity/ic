@@ -136,8 +136,8 @@ fn apply_query_stats_to_canister(
     // the number of machines in the subnet might have changed throughout an epoch.
     // Given that subnet topology changes are an infrequent event, we tolerate this occasional inaccuracy here.
     let num_nodes = num_nodes as u128;
-    if let Some(canister_state) = state.canister_state_mut(&canister_id) {
-        let canister_query_stats = &mut canister_state.scheduler_state.total_query_stats;
+    if let Some(canister_state) = state.canister_state_make_mut(&canister_id) {
+        let canister_query_stats = &mut canister_state.system_state.total_query_stats;
         canister_query_stats.num_calls += aggregated_stats.num_calls as u128 * num_nodes;
         canister_query_stats.num_instructions +=
             aggregated_stats.num_instructions as u128 * num_nodes;
@@ -584,6 +584,6 @@ mod tests {
     ) -> Option<TotalQueryStats> {
         state
             .canister_state(canister_id)
-            .map(|canister_state| canister_state.scheduler_state.total_query_stats.clone())
+            .map(|canister_state| canister_state.system_state.total_query_stats.clone())
     }
 }

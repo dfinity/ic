@@ -73,6 +73,8 @@ setup_temp_mounts() {
     mkdir -p /config /data
     mount -t tmpfs tmpfs /config
     mount -t tmpfs tmpfs /data
+    # Mount over existing script dir and use the shipped scripts instead of the ones already deployed on the node
+    mount --bind "$SCRIPT_DIR" /opt/ic/bin
 }
 
 install_new_hostos() {
@@ -82,7 +84,7 @@ install_new_hostos() {
     fi
 
     echo "Invoking HostOS upgrade..."
-    /opt/ic/bin/manageboot.sh hostos upgrade-install "$HOSTOS_UPGRADE_IMG_TAR_PATH"
+    /opt/ic/bin/manageboot.sh --nocheck hostos upgrade-install "$HOSTOS_UPGRADE_IMG_TAR_PATH"
 }
 
 install_new_guestos() {
@@ -121,9 +123,6 @@ setup_config() {
 
     echo "Setting up configuration environment..."
 
-    # Mount over existing script dir and use the shipped scripts instead of the ones already deployed on the node
-    mount --bind "$SCRIPT_DIR" /opt/ic/bin
-
     # Create directories/mounts expected by the SetupOS tools
     mkdir -p /var/ic
     mount -t tmpfs tmpfs /var/ic
@@ -146,21 +145,17 @@ setup_config() {
 commit_and_reboot() {
     local boot_args="$1"
 
-    echo "Committing HostOS upgrade..."
-    /opt/ic/bin/manageboot.sh hostos upgrade-commit --no-reboot
-
     if command -v kexec >/dev/null 2>&1; then
-        echo "Preparing kexec reboot..."
+        echo "Preparing kexec for fast reboot..."
         kexec -l "$TARGET_BOOT_PARTITION_MOUNT/vmlinuz" \
             --initrd="$TARGET_BOOT_PARTITION_MOUNT/initrd.img" \
             --command-line="$boot_args"
-
-        echo "Scheduling reboot via kexec..."
-        nohup bash -c 'sleep 2; systemctl start kexec.target' >/dev/null 2>&1 &
     else
-        echo "kexec not available, performing regular reboot..."
-        nohup bash -c 'sleep 2; reboot' >/dev/null 2>&1 &
+        echo "kexec not available, will perform slow reboot..."
     fi
+
+    echo "Committing HostOS upgrade..."
+    /opt/ic/bin/manageboot.sh --nocheck hostos upgrade-commit
 }
 
 SETUPOS_CONFIG_IMG_SRC=""

@@ -16,6 +16,7 @@ path = "bin/principal_to_hex.rs"
 
 [dependencies]
 askama = { workspace = true }
+canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
 evm_rpc_client = { workspace = true }
@@ -34,13 +35,11 @@ ic-metrics-encoder = "1"
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-sha3 = { workspace = true }
 ic-stable-structures = { workspace = true }
-ic-types = { path = "../../../types/types" }
 ic-utils-ensure = { path = "../../../utils/ensure" }
 icrc-cbor = { path = "../../../../packages/icrc-cbor", features = ["u256"] }
 icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 minicbor = { workspace = true }
-minicbor-derive = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 phantom_newtype = { path = "../../../phantom_newtype" }
@@ -76,4 +75,5 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [features]
+canbench-rs = ["dep:canbench-rs"]
 debug_checks = []

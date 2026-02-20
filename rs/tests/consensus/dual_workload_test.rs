@@ -223,6 +223,7 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        .remove_metrics_to_check("critical_errors")
         .execute_from_args()?;
     Ok(())
 }

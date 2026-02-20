@@ -35,6 +35,7 @@ cycles-minting-canister = { path = "../../nns/cmc" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-sns-governance = { path = "../governance" }
 ic-sns-governance-api = { path = "../governance/api" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }

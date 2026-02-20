@@ -1,12 +1,7 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
-
-II_DEV_CANISTER_RUNTIME_DEPS = [
-    # Keep sorted.
-    "@ii_dev_canister//file",
-]
 
 DEPENDENCIES = [
     "//packages/ic-ed25519",
@@ -44,23 +39,20 @@ DEPENDENCIES = [
 
 system_test(
     name = "canister_sig_verification_cache_test",
-    env = {
-        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
+        "II_WASM_PATH": "@ii_dev_canister//file",
     },
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS + II_DEV_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
 
 system_test(
     name = "request_signature_test",
-    env = UNIVERSAL_CANISTER_ENV,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
 
 system_test(
     name = "rpc_csp_vault_reconnection_test",
-    env = MESSAGE_CANISTER_ENV,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
@@ -87,7 +79,12 @@ system_test(
 
 system_test(
     name = "ingress_verification_test",
-    env = UNIVERSAL_CANISTER_ENV,
+    tags = ["long_test"],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES,
+)
+
+system_test(
+    name = "ic_crypto_csp_start_order_test",
     deps = DEPENDENCIES,
 )

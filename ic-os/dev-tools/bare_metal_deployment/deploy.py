@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import configparser
 import functools
 import os
 import re
 import site
+import subprocess
 import sys
 import tempfile
 import time
 from dataclasses import dataclass
 from ipaddress import IPv6Address
-from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -29,7 +30,7 @@ NEWER_IDRAC_VERSION_THRESHOLD = 6000000
 
 DEFAULT_SETUPOS_WAIT_TIME_MINS = 20
 
-BMC_INFO_ENV_VAR = "BMC_INFO_CSV_FILENAME"
+BMC_INFO_ENV_VAR = "BMC_INFO_INI_FILENAME"
 
 DISABLE_PROGRESS_BAR = True
 
@@ -51,9 +52,12 @@ class Args:
     # SetupOS image filename on the remote file share to be mounted. Must have extension '.img'. E.g. setupos.img.
     file_share_image_filename: str = field(alias="-i")
 
-    csv_filename: Optional[str] = field(alias="-c")
+    # Path to the deterministic-ips binary.
+    deterministic_ips_tool: str
+
+    ini_filename: Optional[str] = field(alias="-c")
     """
-    CSV file with each row containing 'bmc_ip_address,bmc_username,bmc_password[,guestos_ipv6_address]'. If not supplied, the environment variable "BMC_INFO_CSV_FILENAME" will be checked. If neither are found, error. If guestos_ipv6_address is present, the guestos endpoint will be checked for connectivity to determine deployment success. Otherwise deployment will be considered successful after the timeout.
+    INI file containing BMC connection info with keys: ipmi_addr, username, password, mgmt_mac, addr_prefix. If not supplied, the environment variable "BMC_INFO_INI_FILENAME" will be checked. If neither are found, error.
     """
 
     # Username for SSH/SCP access to file share. Defaults to the current username
@@ -117,6 +121,9 @@ class Args:
     # Disable progress bars if True
     ci_mode: bool = flag(default=False)
 
+    # Start deployment and exit immediately without waiting for connectivity or ejecting media
+    skip_checks: bool = flag(default=False)
+
     # Run benchmarks if True
     benchmark: bool = flag(default=False)
 
@@ -142,11 +149,11 @@ class Args:
             ".tar.zst"
         ), "`upload_img` must be a zstd compressed tar file. Use the build artifact."
 
-        csv_filename_env_var = os.environ.get(BMC_INFO_ENV_VAR)
+        ini_filename_env_var = os.environ.get(BMC_INFO_ENV_VAR)
         assert (
-            csv_filename_env_var or self.csv_filename
-        ), f"csv file must be specified via CLI or environment variable {BMC_INFO_ENV_VAR}"
-        self.csv_filename = self.csv_filename or csv_filename_env_var
+            ini_filename_env_var or self.ini_filename
+        ), f"ini file must be specified via CLI or environment variable {BMC_INFO_ENV_VAR}"
+        self.ini_filename = self.ini_filename or ini_filename_env_var
 
         assert (self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway) or not (
             self.inject_image_ipv6_prefix or self.inject_image_ipv6_gateway
@@ -171,6 +178,8 @@ class BMCInfo:
     username: str
     password: str
     network_image_url: str
+    mgmt_mac: str
+    addr_prefix: str
     guestos_ipv6_address: IPv6Address
     hostos_ipv6_address: IPv6Address
 
@@ -181,10 +190,12 @@ class BMCInfo:
         assert_not_empty("Username", self.username)
         assert_not_empty("Password", self.password)
         assert_not_empty("Network image url", self.network_image_url)
+        assert_not_empty("Management MAC", self.mgmt_mac)
+        assert_not_empty("Address prefix", self.addr_prefix)
 
     # Don't print secrets
     def __str__(self):
-        return f"BMCInfo(ip_address={self.ip_address}, username={self.username}, password=<redacted>, network_image_url={self.network_image_url}, hostos_ipv6_address={self.hostos_ipv6_address}, guestos_ipv6_address={self.guestos_ipv6_address})"
+        return f"BMCInfo(ip_address={self.ip_address}, username={self.username}, password=<redacted>, network_image_url={self.network_image_url}, mgmt_mac={self.mgmt_mac}, addr_prefix={self.addr_prefix}, hostos_ipv6_address={self.hostos_ipv6_address}, guestos_ipv6_address={self.guestos_ipv6_address})"
 
     def __repr__(self):
         return self.__str__()
@@ -208,27 +219,53 @@ class Ipv4Args:
     domain: str
 
 
-def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
-    if len(row) == 4:
-        ip_address, username, password, guestos_ipv6_address = row
-        hostos_ipv6_address = guestos_ipv6_address.replace("6801", "6800", 1)
+def calculate_ip(mgmt_mac: str, addr_prefix: str, node_type: str, deterministic_ips_tool: str) -> IPv6Address:
+    cmd = [
+        deterministic_ips_tool,
+        "--mac",
+        mgmt_mac,
+        "--prefix",
+        addr_prefix,
+        "--deployment-environment",
+        "Testnet",
+        "--node-type",
+        node_type,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.strip()
+    return IPv6Address(result)
 
-        return BMCInfo(
-            ip_address,
-            username,
-            password,
-            network_image_url,
-            IPv6Address(guestos_ipv6_address),
-            IPv6Address(hostos_ipv6_address),
-        )
 
-    assert False, f"Invalid csv row found. Must be 4 items: {row}"
+def parse_from_ini_file(ini_filename: str, network_image_url: str, deterministic_ips_tool: str) -> BMCInfo:
+    config = configparser.ConfigParser()
+    config.read(ini_filename)
 
+    if "host" not in config:
+        raise ValueError("No [host] section found in INI file")
 
-def parse_from_csv_file(csv_filename: str, network_image_url: str) -> List["BMCInfo"]:
-    with open(csv_filename, "r") as csv_file:
-        rows = [line.strip().split(",") for line in csv_file]
-        return [parse_from_row(row, network_image_url) for row in rows]
+    host_section = config["host"]
+
+    ip_address = host_section.get("ipmi_addr")
+    username = host_section.get("username")
+    password = host_section.get("password")
+    mgmt_mac = host_section.get("mgmt_mac")
+    addr_prefix = host_section.get("addr_prefix")
+
+    if not all([ip_address, username, password, mgmt_mac, addr_prefix]):
+        raise ValueError("INI file [host] section must contain: ipmi_addr, username, password, mgmt_mac, addr_prefix")
+
+    guestos_ipv6 = calculate_ip(mgmt_mac, addr_prefix, "GuestOS", deterministic_ips_tool)
+    hostos_ipv6 = calculate_ip(mgmt_mac, addr_prefix, "HostOS", deterministic_ips_tool)
+
+    return BMCInfo(
+        ip_address=ip_address,
+        username=username,
+        password=password,
+        network_image_url=network_image_url,
+        mgmt_mac=mgmt_mac,
+        addr_prefix=addr_prefix,
+        guestos_ipv6_address=guestos_ipv6,
+        hostos_ipv6_address=hostos_ipv6,
+    )
 
 
 def assert_ssh_connectivity(target_url: str, ssh_key_file: Optional[Path]):
@@ -297,10 +334,18 @@ def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) 
     # Ping target with count of 1, STRICT timeout of `timeout_secs`.
     # This will break if latency is > `timeout_secs`.
     result = invoke.run(f"ping6 -c1 -w{timeout_secs} {ip_address}", warn=True, hide=True)
-    if not result or not result.ok:
+
+    if result.failed:
+        # Check if the error is because ping6 is missing (Exit code 127)
+        if result.exited == 127:
+            log.error("Execution failed: 'ping6' command not found on this system.")
+        else:
+            # Log the actual stderr from the ping command (e.g., Network unreachable)
+            log.warning(f"Ping failed for {ip_address}. Error: {result.stderr.strip()}")
+
         return False
 
-    log.info("Ping success.")
+    log.info(f"Ping success for {ip_address}.")
     return True
 
 
@@ -419,6 +464,7 @@ def deploy_server(
     idrac_script_dir: Path,
     file_share_ssh_key: Optional[str] = None,
     check_hsm: bool = False,
+    skip_checks: bool = False,
 ):
     # Partially applied function for brevity
     run_func = functools.partial(run_script, idrac_script_dir, bmc_info)
@@ -468,6 +514,11 @@ def deploy_server(
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
 
+        if skip_checks:
+            log.info("*** Skip-checks mode: Deployment started, exiting without waiting for connectivity.")
+            log.info("*** Virtual media remains attached.")
+            return OperationResult(bmc_info, success=True)
+
         timeout_secs = 5
 
         def check_connectivity_func() -> bool:
@@ -502,7 +553,7 @@ def deploy_server(
         return OperationResult(bmc_info, success=False, error_msg=f"{e}")
 
     finally:
-        if network_image_attached:
+        if network_image_attached and not skip_checks:
             try:
                 log.info("Ejecting the attached image so the next machine can boot from it")
                 run_func(
@@ -513,33 +564,24 @@ def deploy_server(
                 return e.args[0]
 
 
-def boot_images(
-    bmc_infos: List[BMCInfo],
-    parallelism: int,
+def boot_image(
+    bmc_info: BMCInfo,
     wait_time_mins: int,
     idrac_script_dir: Path,
     file_share_ssh_key: Optional[str] = None,
     check_hsm: bool = False,
+    skip_checks: bool = False,
 ):
-    results: List[OperationResult] = []
-
-    arg_tuples = ((bmc_info, wait_time_mins, idrac_script_dir, file_share_ssh_key, check_hsm) for bmc_info in bmc_infos)
-
-    with Pool(parallelism) as p:
-        results = p.starmap(deploy_server, arg_tuples)
+    result = deploy_server(bmc_info, wait_time_mins, idrac_script_dir, file_share_ssh_key, check_hsm, skip_checks)
 
     log.info("Deployment summary:")
-    deployment_failure = False
-    for res in results:
-        log.info(res)
-        if not res.success:
-            deployment_failure = True
+    log.info(result)
 
-    if deployment_failure:
-        log.error("One or more node deployments failed")
+    if not result.success:
+        log.error("Node deployment failed")
         return False
     else:
-        log.info("All deployments completed successfully.")
+        log.info("Deployment completed successfully.")
         return True
 
 
@@ -565,35 +607,24 @@ def benchmark_node(
 
 
 def benchmark_nodes(
-    bmc_infos: List[BMCInfo],
-    parallelism: int,
+    bmc_info: BMCInfo,
     benchmark_driver_script: str,
     benchmark_runner_script: str,
     benchmark_tools: List[str],
     file_share_ssh_key: Optional[str] = None,
 ):
-    results: List[OperationResult] = []
-
-    arg_tuples = (
-        (bmc_info, benchmark_driver_script, benchmark_runner_script, benchmark_tools, file_share_ssh_key)
-        for bmc_info in bmc_infos
+    result = benchmark_node(
+        bmc_info, benchmark_driver_script, benchmark_runner_script, benchmark_tools, file_share_ssh_key
     )
 
-    with Pool(parallelism) as p:
-        results = p.starmap(benchmark_node, arg_tuples)
-
     log.info("Benchmark summary:")
-    benchmark_failure = False
-    for res in results:
-        log.info(res)
-        if not res.success:
-            benchmark_failure = True
+    log.info(result)
 
-    if benchmark_failure:
-        log.error("One or more node benchmarks failed")
+    if not result.success:
+        log.error("Node benchmark failed")
         return False
     else:
-        log.info("All benchmarks completed successfully.")
+        log.info("Benchmark completed successfully.")
         return True
 
 
@@ -617,26 +648,18 @@ def check_node_hostos_metrics(bmc_info: BMCInfo):
 
 
 def check_nodes_hostos_metrics(
-    bmc_infos: List[BMCInfo],
-    parallelism: int,
+    bmc_info: BMCInfo,
 ):
-    results: List[OperationResult] = []
-
-    with Pool(parallelism) as p:
-        results = p.map(check_node_hostos_metrics, bmc_infos)
+    result = check_node_hostos_metrics(bmc_info)
 
     log.info("HostOS metrics check summary:")
-    metrics_check_failure = False
-    for res in results:
-        log.info(res)
-        if not res.success:
-            metrics_check_failure = True
+    log.info(result)
 
-    if metrics_check_failure:
-        log.error("The metrics check failed on one or more nodes.")
+    if not result.success:
+        log.error("The metrics check failed.")
         return False
     else:
-        log.info("All nodes correctly export the hostOS metrics.")
+        log.info("Node correctly exports the hostOS metrics.")
         return True
 
 
@@ -763,8 +786,8 @@ def main():
     idrac_script_dir = Path(args.idrac_script).parent if args.idrac_script else Path(DEFAULT_IDRAC_SCRIPT_DIR)
     log.info(f"Using idrac script dir: {idrac_script_dir}")
 
-    csv_filename: str = args.csv_filename
-    bmc_infos = parse_from_csv_file(csv_filename, network_image_url)
+    ini_filename: str = args.ini_filename
+    bmc_info = parse_from_ini_file(ini_filename, network_image_url, args.deterministic_ips_tool)
 
     ipv4_args = None
     if args.inject_image_ipv4_address:
@@ -779,11 +802,10 @@ def main():
         log.error("Cannot run both benchmark and check_hostos_metrics at the same time. Please choose one.")
         sys.exit(1)
 
-    # Benchmark the nodes (no deployment)
+    # Benchmark the node (no deployment)
     if args.benchmark:
         success = benchmark_nodes(
-            bmc_infos=bmc_infos,
-            parallelism=args.parallel,
+            bmc_info=bmc_info,
             benchmark_driver_script=args.benchmark_driver_script,
             benchmark_runner_script=args.benchmark_runner_script,
             benchmark_tools=args.benchmark_tools,
@@ -798,8 +820,7 @@ def main():
     # Check that all important hostos metrics are available (no deployment)
     if args.check_hostos_metrics:
         success = check_nodes_hostos_metrics(
-            bmc_infos=bmc_infos,
-            parallelism=args.parallel,
+            bmc_info=bmc_info,
         )
 
         if not success:
@@ -844,14 +865,13 @@ def main():
             )
 
     wait_time_mins = args.wait_time
-    parallelism = args.parallel
-    success = boot_images(
-        bmc_infos=bmc_infos,
-        parallelism=parallelism,
+    success = boot_image(
+        bmc_info=bmc_info,
         wait_time_mins=wait_time_mins,
         idrac_script_dir=idrac_script_dir,
         file_share_ssh_key=args.file_share_ssh_key,
         check_hsm=args.hsm,
+        skip_checks=args.skip_checks,
     )
 
     if not success:

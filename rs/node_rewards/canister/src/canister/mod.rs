@@ -28,7 +28,9 @@ use ic_stable_structures::StableCell;
 use ic_types::{RegistryVersion, Time};
 use rewards_calculation::AlgorithmVersion;
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
-use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
+use rewards_calculation::performance_based_algorithm::{
+    v1::RewardsCalculationV1, v2::RewardsCalculationV2,
+};
 use rewards_calculation::types::{NodeMetricsDailyRaw, RewardableNode};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -173,6 +175,10 @@ impl NodeRewardsCanister {
         match rewards_calculator_version.version {
             RewardsCalculationV1::VERSION => {
                 RewardsCalculationV1::calculate_rewards(start_day, end_day, self)
+                    .map_err(|e| format!("Could not calculate rewards: {e:?}"))
+            }
+            RewardsCalculationV2::VERSION => {
+                RewardsCalculationV2::calculate_rewards(start_day, end_day, self)
                     .map_err(|e| format!("Could not calculate rewards: {e:?}"))
             }
             _ => Err(format!(

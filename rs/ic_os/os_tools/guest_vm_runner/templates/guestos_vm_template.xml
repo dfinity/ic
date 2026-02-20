@@ -36,7 +36,7 @@
     <partition>/machine</partition>
   </resource>
   <os type='efi'>
-    <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
+    <type arch='x86_64' machine='pc-q35-10.2'>hvm</type>
     <boot dev='hd'/>
 
     {#- We must only use the SEV firmware if SEV is enabled, otherwise we must use the non-SEV firmware shipped with
@@ -72,7 +72,7 @@
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='{{disk_device.display()}}' index='1'/>
@@ -207,3 +207,4 @@
     <imagelabel>+64055:+108</imagelabel>
   </seclabel>
 </domain>
+

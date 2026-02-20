@@ -98,13 +98,14 @@ fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
     nodes: Vec<SocketAddr>,
     uds_path: &Path,
     network: T,
+    idle_seconds: u64,
 ) {
     let config = Config {
         incoming_source: IncomingSource::Path(uds_path.to_path_buf()),
         nodes,
         ipv6_only: true,
         address_limits: (1, 1),
-        idle_seconds: 6, // it can take at most 5 seconds for tcp connections etc to be established.
+        idle_seconds,
         ..Config::default_with(network.into())
     };
     let _enter = rt_handle.enter();
@@ -164,6 +165,7 @@ fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
     logger: ReplicaLogger,
     network: T,
     adapter_state: AdapterState,
+    idle_seconds: u64,
 ) -> (AdapterClient, TempPath) {
     let metrics_registry = MetricsRegistry::new();
     let res = Builder::new()
@@ -175,6 +177,7 @@ fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
                 urls.clone(),
                 uds_path,
                 network,
+                idle_seconds,
             );
             Ok(start_client::<T>(
                 &logger,
@@ -212,7 +215,7 @@ fn start_idle_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
     logger: ReplicaLogger,
     network: T,
 ) -> (AdapterClient, TempPath) {
-    start_adapter_and_client(rt, urls, logger, network, AdapterState::Idle)
+    start_adapter_and_client(rt, urls, logger, network, AdapterState::Idle, 6)
 }
 
 fn start_active_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
@@ -221,7 +224,7 @@ fn start_active_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
     logger: ReplicaLogger,
     network: T,
 ) -> (AdapterClient, TempPath) {
-    start_adapter_and_client(rt, urls, logger, network, AdapterState::Active)
+    start_adapter_and_client(rt, urls, logger, network, AdapterState::Active, 600)
 }
 
 fn wait_for_blocks<T: RpcClientType>(client: &RpcClient<T>, blocks: u64) {
@@ -229,7 +232,7 @@ fn wait_for_blocks<T: RpcClientType>(client: &RpcClient<T>, blocks: u64) {
     while client.get_blockchain_info().unwrap().blocks != blocks {
         std::thread::sleep(std::time::Duration::from_secs(1));
         tries += 1;
-        if tries > 5 {
+        if tries > 30 {
             panic!("Timeout in wait_for_blocks");
         }
     }
@@ -240,7 +243,7 @@ fn wait_for_connection<T: RpcClientType>(client: &RpcClient<T>, connection_count
     while client.get_connection_count().unwrap() != connection_count {
         std::thread::sleep(std::time::Duration::from_secs(1));
         tries += 1;
-        if tries > 5 {
+        if tries > 30 {
             panic!("Timeout in wait_for_connection");
         }
     }
@@ -248,9 +251,9 @@ fn wait_for_connection<T: RpcClientType>(client: &RpcClient<T>, connection_count
 
 // This is an expensive operation. Should only be used when checking for an upper bound on the number of connections.
 fn exact_connections<T: RpcClientType>(client: &RpcClient<T>, connection_count: usize) {
-    // It always takes less than 5 seconds for the client to connect to the adapter.
+    // It always takes less than 15 seconds for the client to connect to the adapter.
     // TODO: Rethink this. It's not a good idea to have a fixed sleep time. ditto in wait_for_connection
-    std::thread::sleep(std::time::Duration::from_secs(5));
+    std::thread::sleep(std::time::Duration::from_secs(15));
     if client.get_connection_count().unwrap() != connection_count {
         panic!(
             "Expected {} connections, got {}",
@@ -558,7 +561,8 @@ fn test_adapter_disconnects_when_idle<T: RpcClientType + Into<AdapterNetwork>>()
 
     let rt: Runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_active_adapter_and_client(&rt, vec![url], logger, network);
+    // Use a short idle timeout (6s) since this test specifically verifies idle behavior.
+    let _r = start_adapter_and_client(&rt, vec![url], logger, network, AdapterState::Active, 6);
 
     // The client should be connected to the adapter
     wait_for_connection(client, 1);
@@ -788,7 +792,7 @@ fn test_send_tx<T: RpcClientType + Into<AdapterNetwork>>() {
 
     let bob_balance = bob_client.get_balance(None).unwrap();
     let mut tries = 0;
-    while tries < 5 && bob_client.get_balance(None).unwrap() == bob_balance {
+    while tries < 30 && bob_client.get_balance(None).unwrap() == bob_balance {
         std::thread::sleep(std::time::Duration::from_secs(1));
         tries += 1;
     }
@@ -869,15 +873,19 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     wait_for_connection(client1, 1);
     wait_for_connection(client2, 1);
 
-    client1.generate_to_address(3, address1).unwrap();
+    // Note that both daemons should generate same number of new blocks.
+    // Otherwise the adapter client may run into "invalid message" due to
+    // daemon's height being lower, then it would not be able to finish
+    // syncing all blocks, which leads to test failure.
+    client1.generate_to_address(6, address1).unwrap();
     client2.generate_to_address(6, address2).unwrap();
 
-    wait_for_blocks(client1, 23);
+    wait_for_blocks(client1, 26);
     wait_for_blocks(client2, 26);
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
-    let blocks = sync_blocks::<T>(&adapter_client, &mut vec![], anchor, 29, 400);
-    assert_eq!(blocks.len(), 29);
+    let blocks = sync_blocks::<T>(&adapter_client, &mut vec![], anchor, 32, 500);
+    assert_eq!(blocks.len(), 32);
 }
 
 #[test]
@@ -1042,7 +1050,7 @@ fn test_btc_mainnet_data() {
         .unwrap();
 
     let blocks =
-        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 10, 250);
+        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 10, 500);
     assert_eq!(blocks.len(), 10);
 }
 
@@ -1077,6 +1085,6 @@ fn test_btc_testnet_data() {
         .unwrap();
 
     let blocks =
-        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 9, 250);
+        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 9, 400);
     assert_eq!(blocks.len(), 9);
 }

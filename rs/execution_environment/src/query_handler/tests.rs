@@ -1,6 +1,8 @@
 use crate::InternalHttpQueryHandler;
 use ic_base_types::{CanisterId, NumSeconds};
-use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
+use ic_config::execution_environment::{
+    INSTRUCTION_OVERHEAD_PER_QUERY_CALL, LOG_MEMORY_STORE_FEATURE_ENABLED,
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
@@ -10,6 +12,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
+use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -63,7 +66,10 @@ fn query_metrics_are_reported() {
         1,
         query_handler.metrics.query.instructions.get_sample_count()
     );
-    assert!(0 < query_handler.metrics.query.instructions.get_sample_sum() as u64);
+    assert_lt!(
+        0,
+        query_handler.metrics.query.instructions.get_sample_sum() as u64
+    );
     assert_eq!(1, query_handler.metrics.query.messages.get_sample_count());
     // We expect four messages:
     // - canister_a.query()
@@ -81,8 +87,9 @@ fn query_metrics_are_reported() {
             .duration
             .get_sample_count()
     );
-    assert!(
-        0 < query_handler
+    assert_lt!(
+        0,
+        query_handler
             .metrics
             .query_initial_call
             .instructions
@@ -128,8 +135,9 @@ fn query_metrics_are_reported() {
             .instructions
             .get_sample_count()
     );
-    assert!(
-        0 < query_handler
+    assert_lt!(
+        0,
+        query_handler
             .metrics
             .query_spawned_calls
             .instructions
@@ -238,7 +246,8 @@ fn composite_query_callgraph_depth_is_enforced() {
         canisters: &[ic_types::CanisterId],
         canister_idx: usize,
     ) -> ic_universal_canister::PayloadBuilder {
-        assert!(canister_idx != 0 && canister_idx < canisters.len());
+        assert_ne!(canister_idx, 0);
+        assert_lt!(canister_idx, canisters.len());
         wasm().stable_grow(10).composite_query(
             canisters[canister_idx],
             call_args()
@@ -357,7 +366,7 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
         canisters: &[ic_types::CanisterId],
         canister_idx: usize,
     ) -> ic_universal_canister::PayloadBuilder {
-        assert!(canister_idx < canisters.len());
+        assert_lt!(canister_idx, canisters.len());
 
         let reply = if canister_idx <= 1 {
             wasm().stable_size().reply_int()
@@ -418,7 +427,10 @@ fn query_compiled_once() {
         assert_eq!(1, query_handler.hypervisor.compile_count());
     }
 
-    let canister = test.state_mut().canister_state_mut(&canister_id).unwrap();
+    let canister = test
+        .state_mut()
+        .canister_state_make_mut(&canister_id)
+        .unwrap();
     // Drop the embedder cache and compilation cache to force
     // compilation during query handling.
     canister
@@ -483,9 +495,14 @@ fn queries_to_frozen_canisters_are_rejected() {
     //
     // 300_000_002_460 cycles are needed as prepayment for max install_code instructions
     //       5_000_000 cycles are needed for update call execution
+    //       3_201_730 cycles are needed for log memory store
     //          41_070 cycles are needed to cover freeze_threshold_cycles
     //                 of the canister history memory usage (134 bytes)
-    let low_cycles = Cycles::new(300_005_633_530);
+    let low_cycles = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        Cycles::new(300_008_835_260)
+    } else {
+        Cycles::new(300_005_633_530)
+    };
     let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
         .unwrap();
@@ -602,7 +619,7 @@ fn composite_query_fails_in_replicated_mode() {
         "Composite query cannot be called in replicated mode"
     );
     // Verify that we consume some cycles.
-    assert!(balance_before > balance_after);
+    assert_gt!(balance_before, balance_after);
 }
 
 #[test]
@@ -1088,7 +1105,10 @@ fn query_stats_are_collected() {
         // Depending on whether we are looking at the root canister, or one of the child canisters,
         // instructions and payload sizes differ. All child canisters have the same cost though.
         if idx == 0 {
-            assert!(canister_query_stats.num_instructions > child_canister_num_instructions);
+            assert_gt!(
+                canister_query_stats.num_instructions,
+                child_canister_num_instructions
+            );
             assert_eq!(canister_query_stats.ingress_payload_size, 284);
             assert_eq!(canister_query_stats.egress_payload_size, 0);
         } else {
@@ -1163,9 +1183,9 @@ fn test_call_context_performance_counter_correctly_reported_on_query() {
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect::<Vec<_>>();
 
-    assert!(counters[0] < counters[1]);
-    assert!(counters[1] < counters[2]);
-    assert!(counters[2] < counters[3]);
+    assert_lt!(counters[0], counters[1]);
+    assert_lt!(counters[1], counters[2]);
+    assert_lt!(counters[2], counters[3]);
 }
 
 #[test]
@@ -1215,9 +1235,9 @@ fn test_call_context_performance_counter_correctly_reported_on_composite_query()
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect::<Vec<_>>();
 
-    assert!(counters[0] < counters[1]);
-    assert!(counters[1] < counters[2]);
-    assert!(counters[2] < counters[3]);
+    assert_lt!(counters[0], counters[1]);
+    assert_lt!(counters[1], counters[2]);
+    assert_lt!(counters[2], counters[3]);
 }
 
 #[test]

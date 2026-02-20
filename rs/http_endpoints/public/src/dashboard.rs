@@ -16,8 +16,20 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{Height, ReplicaVersion};
 
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+#[derive(Template)]
+#[template(path = "dashboard.html", escape = "html")]
+struct Dashboard<'a> {
+    subnet_type: ic_registry_subnet_type::SubnetType,
+    http_config: &'a ic_config::http_handler::Config,
+
+    height: Height,
+    replicated_state: &'a ic_replicated_state::replicated_state::ReplicatedState,
+    canisters: &'a Vec<(
+        &'a ic_replicated_state::CanisterState,
+        &'a ic_replicated_state::CanisterPriority,
+    )>,
+    replica_version: ic_types::ReplicaVersion,
+}
 
 #[derive(Clone)]
 pub(crate) struct DashboardService {
@@ -68,8 +80,14 @@ async fn dashboard(
         };
 
     // See https://github.com/djc/askama/issues/333
-    let canisters: Vec<&ic_replicated_state::CanisterState> =
-        labeled_state.get_ref().canisters_iter().collect();
+    let state = labeled_state.get_ref();
+    let canisters: Vec<(
+        &ic_replicated_state::CanisterState,
+        &ic_replicated_state::CanisterPriority,
+    )> = state
+        .canisters_iter()
+        .map(|canister| (canister, state.canister_priority(&canister.canister_id())))
+        .collect();
 
     let dashboard = Dashboard {
         subnet_type,

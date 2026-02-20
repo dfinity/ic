@@ -3,16 +3,18 @@ use crate::{
     governance::Environment,
     pb::v1::{
         ExecuteNnsFunction, GovernanceError, NnsFunction, SelfDescribingProposalAction,
-        SelfDescribingValue, Topic, governance_error::ErrorType,
+        SelfDescribingValue, SelfDescribingValueMap, Topic, governance_error::ErrorType,
+        self_describing_value::Value,
     },
     proposals::{
         decode_candid_args_to_self_describing_value::decode_candid_args_to_self_describing_value,
-        self_describing::ValueBuilder,
+        self_describing::{SelfDescribingProstEnum, ValueBuilder},
     },
 };
 
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
+use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nns_common::types::CallCanisterRequest;
 use ic_nns_constants::{
@@ -22,7 +24,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal};
 use ic_nns_governance_api::subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest};
-use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use std::sync::Arc;
 
 /// A partial Candid interface for the management canister (ic_00) that contains the necessary
@@ -67,6 +69,16 @@ impl ValidExecuteNnsFunction {
                 let request = get_request_for_bitcoin_set_config(&self.payload)?;
                 return Ok(SelfDescribingValue::from(request));
             }
+            ValidNnsFunction::SubnetRentalRequest => {
+                let subnet_rental_request =
+                    decode_subnet_rental_request(&self.payload).map_err(|e| e.error_message)?;
+                return Ok(SelfDescribingValue::from(subnet_rental_request));
+            }
+            ValidNnsFunction::AddSnsWasm => {
+                let add_wasm_request =
+                    decode_add_wasm_request(&self.payload).map_err(|e| e.error_message)?;
+                return Ok(SelfDescribingValue::from(add_wasm_request));
+            }
             _ => {}
         };
 
@@ -74,7 +86,17 @@ impl ValidExecuteNnsFunction {
         // it from the management canister and decode the payload in runtime.
         let candid_source = self.get_candid_source(env).await?;
         let (_, method_name) = self.nns_function.canister_and_function();
-        decode_candid_args_to_self_describing_value(&candid_source, method_name, &self.payload)
+        let self_describing_value = decode_candid_args_to_self_describing_value(
+            &candid_source,
+            method_name,
+            &self.payload,
+        )?;
+
+        // Certain blobs (e.g. WASM and sometimes args) are hashed to avoid them being too large.
+        let self_describing_value =
+            maybe_hash_large_blobs(self_describing_value, self.nns_function);
+
+        Ok(self_describing_value)
     }
 
     pub async fn to_self_describing_action(
@@ -142,39 +164,19 @@ impl ValidExecuteNnsFunction {
                 Ok(encoded_request)
             }
             ValidNnsFunction::SubnetRentalRequest => {
-                // Decode the payload to `SubnetRentalRequest`.
-                let decoded_payload =
-                    Decode!([decoder_config()]; &self.payload, SubnetRentalRequest).map_err(
-                        |_| {
-                            GovernanceError::new_with_message(
-                                ErrorType::InvalidProposal,
-                                "Unable to decode SubnetRentalRequest proposal: {e}",
-                            )
-                        },
-                    )?;
-
-                // Convert the payload to `SubnetRentalProposalPayload`.
-                let SubnetRentalRequest {
-                    user,
-                    rental_condition_id,
-                } = decoded_payload;
-                let proposal_creation_time_seconds = proposal_timestamp_seconds;
-                let encoded_payload = Encode!(&SubnetRentalProposalPayload {
-                    user,
-                    rental_condition_id,
+                let decoded_payload = decode_subnet_rental_request(&self.payload)?;
+                let encoded_payload = encode_subnet_rental_proposal_payload(
+                    decoded_payload,
                     proposal_id,
-                    proposal_creation_time_seconds,
-                })
-                .unwrap();
-
+                    proposal_timestamp_seconds,
+                )?;
                 Ok(encoded_payload)
             }
 
             ValidNnsFunction::AddSnsWasm => {
-                let transformed_payload =
-                    add_proposal_id_to_add_wasm_request(&self.payload, proposal_id)?;
-
-                Ok(transformed_payload)
+                let decoded_payload = decode_add_wasm_request(&self.payload)?;
+                let encoded_payload = encode_add_wasm_request(decoded_payload, proposal_id)?;
+                Ok(encoded_payload)
             }
 
             // Most NNS functions don't require any transformation of the payload, and for new NNS
@@ -203,35 +205,54 @@ fn get_request_for_bitcoin_set_config(payload: &[u8]) -> Result<CallCanisterRequ
     })
 }
 
-impl From<CallCanisterRequest> for SelfDescribingValue {
-    fn from(request: CallCanisterRequest) -> Self {
-        let CallCanisterRequest {
-            canister_id,
-            method_name,
-            payload,
-        } = request;
-        ValueBuilder::new()
-            .add_field("canister_id", canister_id)
-            .add_field("method_name", method_name)
-            .add_field("payload", payload)
-            .build()
-    }
+fn decode_subnet_rental_request(payload: &[u8]) -> Result<SubnetRentalRequest, GovernanceError> {
+    Decode!([decoder_config()]; payload, SubnetRentalRequest).map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to decode SubnetRentalRequest proposal: {e}",
+        )
+    })
 }
 
-fn add_proposal_id_to_add_wasm_request(
-    payload: &[u8],
+fn encode_subnet_rental_proposal_payload(
+    subnet_rental_request: SubnetRentalRequest,
+    proposal_id: u64,
+    proposal_creation_time_seconds: u64,
+) -> Result<Vec<u8>, GovernanceError> {
+    let SubnetRentalRequest {
+        user,
+        rental_condition_id,
+    } = subnet_rental_request;
+
+    let encoded_payload = Encode!(&SubnetRentalProposalPayload {
+        user,
+        rental_condition_id,
+        proposal_id,
+        proposal_creation_time_seconds,
+    })
+    .map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to encode SubnetRentalProposalPayload proposal: {e}",
+        )
+    })?;
+
+    Ok(encoded_payload)
+}
+
+fn decode_add_wasm_request(payload: &[u8]) -> Result<AddWasmRequest, GovernanceError> {
+    Decode!([decoder_config()]; payload, AddWasmRequest).map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to decode AddWasmRequest proposal: {e}",
+        )
+    })
+}
+
+fn encode_add_wasm_request(
+    add_wasm_request: AddWasmRequest,
     proposal_id: u64,
 ) -> Result<Vec<u8>, GovernanceError> {
-    let add_wasm_request = match Decode!([decoder_config()]; payload, AddWasmRequest) {
-        Ok(add_wasm_request) => add_wasm_request,
-        Err(e) => {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Payload must be a valid AddWasmRequest. Error: {e}"),
-            ));
-        }
-    };
-
     let wasm = add_wasm_request
         .wasm
         .ok_or(GovernanceError::new_with_message(
@@ -247,12 +268,150 @@ fn add_proposal_id_to_add_wasm_request(
         ..add_wasm_request
     };
 
-    let payload = Encode!(&add_wasm_request).unwrap();
-
-    Ok(payload)
+    Encode!(&add_wasm_request).map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to encode AddWasmRequest proposal: {e}",
+        )
+    })
 }
 
-#[derive(Debug, Clone, PartialEq)]
+fn maybe_hash_large_blobs(
+    self_describing_value: SelfDescribingValue,
+    nns_function: ValidNnsFunction,
+) -> SelfDescribingValue {
+    let field_names: &[&str] = match nns_function {
+        ValidNnsFunction::NnsCanisterInstall => &["wasm_module", "arg"],
+        ValidNnsFunction::HardResetNnsRootToVersion => &["wasm_module", "init_arg"],
+        _ => {
+            return self_describing_value;
+        }
+    };
+
+    // Use multiple-level match so that the original value can be returned without cloning if it
+    // doesn't match.
+    let SelfDescribingValue {
+        value: Some(Value::Map(SelfDescribingValueMap { values: values_map })),
+    } = self_describing_value
+    else {
+        return self_describing_value;
+    };
+
+    let values_map = values_map
+        .into_iter()
+        .map(|(key, value)| maybe_replace_large_blob_entry_with_hash(key, value, field_names))
+        .collect();
+    SelfDescribingValue {
+        value: Some(Value::Map(SelfDescribingValueMap { values: values_map })),
+    }
+}
+/// If the provided `key` is one of the `field_names`, and the associated `SelfDescribingValue` is a
+/// blob, replaces the value with its SHA-256 hash and modifies the key to be `<key>_hash`.
+/// Otherwise, leaves the entry unchanged.
+///
+/// # Example
+/// {
+///   "some_key": "some_value",
+///   "some_other_key": "some_other_value",
+/// }
+///
+/// becomes
+///
+/// {
+///   "some_key_hash": sha256("some_value"),
+///   "some_other_key": "some_other_value",
+/// }
+///
+/// if the `field_names` is `["some_key"]`.
+/// ```
+fn maybe_replace_large_blob_entry_with_hash(
+    key: String,
+    value: SelfDescribingValue,
+    field_names: &[&str],
+) -> (String, SelfDescribingValue) {
+    if !field_names.contains(&key.as_str()) {
+        return (key, value);
+    }
+
+    let Some(inner_value) = &value.value else {
+        return (key, value);
+    };
+    let Value::Blob(blob) = inner_value else {
+        return (key, value);
+    };
+
+    let key = format!("{key}_hash");
+    let hash = Sha256::hash(blob).to_vec();
+    let hashed_value = SelfDescribingValue {
+        value: Some(Value::Blob(hash)),
+    };
+
+    (key, hashed_value)
+}
+
+impl From<CallCanisterRequest> for SelfDescribingValue {
+    fn from(request: CallCanisterRequest) -> Self {
+        let CallCanisterRequest {
+            canister_id,
+            method_name,
+            payload,
+        } = request;
+        ValueBuilder::new()
+            .add_field("canister_id", canister_id)
+            .add_field("method_name", method_name)
+            .add_field("payload", payload)
+            .build()
+    }
+}
+
+impl From<SubnetRentalRequest> for SelfDescribingValue {
+    fn from(request: SubnetRentalRequest) -> Self {
+        let SubnetRentalRequest {
+            user,
+            rental_condition_id,
+        } = request;
+        ValueBuilder::new()
+            .add_field("user", user)
+            .add_field("rental_condition_id", format!("{:?}", rental_condition_id))
+            .build()
+    }
+}
+
+impl From<AddWasmRequest> for SelfDescribingValue {
+    fn from(payload: AddWasmRequest) -> Self {
+        let AddWasmRequest {
+            wasm,
+            hash,
+            skip_update_latest_version,
+        } = payload;
+
+        ValueBuilder::new()
+            .add_field("wasm", wasm)
+            .add_field("hash", hash)
+            .add_field("skip_update_latest_version", skip_update_latest_version)
+            .build()
+    }
+}
+
+impl From<SnsWasm> for SelfDescribingValue {
+    fn from(wasm: SnsWasm) -> Self {
+        let SnsWasm {
+            wasm,
+            canister_type,
+            proposal_id: _,
+        } = wasm;
+
+        let wasm_hash = Sha256::hash(&wasm).to_vec();
+        let canister_type = SelfDescribingProstEnum::<SnsCanisterType>::new(canister_type);
+
+        ValueBuilder::new()
+            .add_field("wasm_hash", wasm_hash)
+            .add_field("canister_type", canister_type)
+            .build()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ValidNnsFunction {
     CreateSubnet,
     AddNodeToSubnet,
@@ -563,10 +722,9 @@ impl ValidNnsFunction {
                 a simple update of the subnet record in the registry."
             }
             ValidNnsFunction::NnsCanisterInstall => {
-                "A proposal to add a new canister to be installed and executed in the \
-                NNS subnetwork. The root canister, which controls all Canisters on \
-                the NNS except for itself, handles this proposal type. The call also \
-                expects the Wasm module that shall be installed."
+                "Add a new canister to be installed and executed in the NNS subnetwork. The root \
+                canister, which controls all Canisters on the NNS except for itself, handles this \
+                proposal type. The call also expects the Wasm module that shall be installed."
             }
             ValidNnsFunction::RecoverSubnet => {
                 "Update a subnet's recovery CUP (used to recover subnets that have \
@@ -590,16 +748,15 @@ impl ValidNnsFunction {
                 remaining allowance is decreased."
             }
             ValidNnsFunction::DeployGuestosToAllSubnetNodes => {
-                "Deploy a GuestOS version to a given subnet. The proposal changes the \
-                GuestOS version that is used on the specified subnet.<br/><br/>The \
-                version must be contained in the list of elected GuestOS versions.\
-                <br/><br/>The upgrade is completed when the subnet creates the next \
-                regular CUP."
+                "Deploy a GuestOS version to a given subnet. The proposal changes the GuestOS \
+                version that is used on the specified subnet.\n\n\
+                The version must be contained in the list of elected GuestOS versions.\n\n\
+                The upgrade is completed when the subnet creates the next regular CUP."
             }
             ValidNnsFunction::ClearProvisionalWhitelist => {
-                "Clears the provisional whitelist, which allows the listed principals \
-                to create Canisters with cycles. The mechanism is only needed for \
-                bootstrap and testing and must be deactivated afterward."
+                "Clear the provisional whitelist, which allows the listed principals to create \
+                Canisters with cycles. The mechanism is only needed for bootstrap and testing and \
+                must be deactivated afterward."
             }
             ValidNnsFunction::RemoveNodesFromSubnet => {
                 "Remove a node from a subnet. It then becomes available for \
@@ -608,10 +765,9 @@ impl ValidNnsFunction {
                 update is a simple update of the subnet record in the registry."
             }
             ValidNnsFunction::SetAuthorizedSubnetworks => {
-                "Informs the cycles minting canister that a certain principal is \
-                authorized to use certain subnetworks (from a list). Can also be used \
-                to set the \"default\" list of subnetworks that principals without \
-                special authorization are allowed to use."
+                "Inform the cycles minting canister that a certain principal is authorized to use \
+                certain subnetworks (from a list). Can also be used to set the \"default\" list of \
+                subnetworks that principals without special authorization are allowed to use."
             }
             ValidNnsFunction::SetFirewallConfig => {
                 "Change the Firewall configuration in the registry (configures which \
@@ -628,10 +784,10 @@ impl ValidNnsFunction {
                 "Remove node operator records from the registry."
             }
             ValidNnsFunction::RerouteCanisterRanges => {
-                "In the routing table in the registry, remap canister ID ranges from \
-                one subnet to a different subnet.<br/><br/>The steps of canister \
-                migration are:<ol><li>Prepare Canister Migration</li><li>Reroute \
-                Canister Ranges</li><li>Complete Canister Migration</li></ol>"
+                "Reroute canister ID ranges from one subnet to a different subnet in the routing \
+                table in the registry.\n\n\
+                The steps of canister migration are: (1) Prepare Canister Migration, \
+                (2) Reroute Canister Ranges, (3) Complete Canister Migration."
             }
             ValidNnsFunction::AddFirewallRules => {
                 "Add firewall rules in the registry. Nodes use a firewall to protect \
@@ -646,18 +802,16 @@ impl ValidNnsFunction {
                 protect themselves from network attacks."
             }
             ValidNnsFunction::PrepareCanisterMigration => {
-                "Insert or update canister migrations entries. Such entries specify \
-                that a migration of canister ID ranges is currently ongoing.\
-                <br/><br/>The steps of canister migration are:<ol><li>Prepare \
-                Canister Migration</li><li>Reroute Canister Ranges</li>\
-                <li>Complete Canister Migration</li></ol>"
+                "Insert or update canister migrations entries. Such entries specify that a \
+                migration of canister ID ranges is currently ongoing.\n\n\
+                The steps of canister migration are: (1) Prepare Canister Migration, \
+                (2) Reroute Canister Ranges, (3) Complete Canister Migration."
             }
             ValidNnsFunction::CompleteCanisterMigration => {
-                "Remove canister migrations entries. Such entries specify that a \
-                migration of canister ID ranges is currently ongoing.<br/><br/>The \
-                steps of canister migration are:<ol><li>Prepare Canister Migration\
-                </li><li>Reroute Canister Ranges</li><li>Complete Canister Migration\
-                </li></ol>"
+                "Remove canister migrations entries. Such entries specify that a migration of \
+                canister ID ranges is currently ongoing.\n\n\
+                The steps of canister migration are: (1) Prepare Canister Migration, \
+                (2) Reroute Canister Ranges, (3) Complete Canister Migration."
             }
             ValidNnsFunction::AddSnsWasm => "Add a new SNS canister WASM.",
             ValidNnsFunction::ChangeSubnetMembership => {
@@ -695,77 +849,69 @@ impl ValidNnsFunction {
                 an SNS specified by its governance canister ID."
             }
             ValidNnsFunction::ReviseElectedGuestosVersions => {
-                "A proposal to change the set of elected GuestOS versions.<br/><br/>\
-                The version to elect (identified by the hash of the installation \
-                image) is added to the registry. Besides creating a record for that \
-                version, the proposal also appends that version to the list of \
-                elected versions that can be installed on nodes of a subnet.\
-                <br/><br/>Only elected GuestOS versions can be deployed."
+                "Change the set of elected GuestOS versions.\n\n\
+                The version to elect (identified by the hash of the installation image) is added \
+                to the registry. Besides creating a record for that version, the proposal also \
+                appends that version to the list of elected versions that can be installed on \
+                nodes of a subnet.\n\n\
+                Only elected GuestOS versions can be deployed."
             }
             ValidNnsFunction::BitcoinSetConfig => {
-                "A proposal to set the configuration of the underlying Bitcoin \
-                Canister that powers the Bitcoin API. The configuration includes \
-                whether or not the Bitcoin Canister should sync new blocks from the \
-                network, whether the API is enabled, the fees to charge, etc."
+                "Set the configuration of the underlying Bitcoin Canister that powers the Bitcoin \
+                API. The configuration includes whether or not the Bitcoin Canister should sync \
+                new blocks from the network, whether the API is enabled, the fees to charge, etc."
             }
             ValidNnsFunction::HardResetNnsRootToVersion => {
-                "A proposal to hard reset the NNS root canister to a specific \
-                version. This is an emergency recovery mechanism that should only be \
-                used when the NNS root canister is in an unrecoverable state."
+                "Hard reset the NNS root canister to a specific version. This is an emergency \
+                recovery mechanism that should only be used when the NNS root canister is in an \
+                unrecoverable state."
             }
             ValidNnsFunction::AddApiBoundaryNodes => {
-                "A proposal to add a set of new API Boundary Nodes using unassigned \
-                nodes."
+                "Add a set of new API Boundary Nodes using unassigned nodes."
             }
             ValidNnsFunction::RemoveApiBoundaryNodes => {
-                "A proposal to remove a set of API Boundary Nodes, which will \
-                designate them as unassigned nodes."
+                "Remove a set of API Boundary Nodes, which will designate them as unassigned nodes."
             }
             ValidNnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
-                "A proposal to update the version of a set of API Boundary Nodes."
+                "Update the version of a set of API Boundary Nodes."
             }
             ValidNnsFunction::DeployGuestosToAllUnassignedNodes => {
-                "A proposal to update the version of all unassigned nodes."
+                "Update the version of all unassigned nodes."
             }
             ValidNnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
-                "A proposal to update SSH readonly access for all unassigned nodes."
+                "Update SSH readonly access for all unassigned nodes."
             }
             ValidNnsFunction::ReviseElectedHostosVersions => {
-                "A proposal to change the set of currently elected HostOS versions, \
-                by electing a new version, and/or unelecting some priorly elected \
-                versions.<br/><br/>HostOS versions are identified by the hash of the \
-                installation image.<br/><br/>The version to elect is added to the \
-                Registry, and the versions to unelect are removed from the Registry, \
-                ensuring that HostOS cannot upgrade to these versions anymore.\
-                <br/><br/>This proposal does not actually perform the upgrade; for \
-                deployment of an elected version, please refer to \"Deploy HostOS To \
-                Some Nodes\"."
+                "Change the set of currently elected HostOS versions, by electing a new version, \
+                and/or unelecting some priorly elected versions.\n\n\
+                HostOS versions are identified by the hash of the installation image.\n\n\
+                The version to elect is added to the Registry, and the versions to unelect are \
+                removed from the Registry, ensuring that HostOS cannot upgrade to these versions \
+                anymore.\n\n\
+                This proposal does not actually perform the upgrade; for deployment of an elected \
+                version, please refer to \"Deploy HostOS To Some Nodes\"."
             }
             ValidNnsFunction::DeployHostosToSomeNodes => {
                 "Deploy a HostOS version to a given set of nodes. The proposal \
                 changes the HostOS version that is used on the specified nodes."
             }
             ValidNnsFunction::SubnetRentalRequest => {
-                "A proposal to rent a subnet on the Internet Computer.<br/><br/>The \
-                Subnet Rental Canister is called when this proposal is executed, and \
-                the rental request is stored there. The user specified in the \
-                proposal needs to make a sufficient upfront payment in ICP in order \
-                for the proposal to be valid, and the subnet must be available for \
-                rent. The available rental conditions can be checked by calling the \
-                Subnet Rental Canister."
+                "Rent a subnet on the Internet Computer.\n\n\
+                The Subnet Rental Canister is called when this proposal is executed, and the \
+                rental request is stored there. The user specified in the proposal needs to make \
+                a sufficient upfront payment in ICP in order for the proposal to be valid, and \
+                the subnet must be available for rent. The available rental conditions can be \
+                checked by calling the Subnet Rental Canister."
             }
             ValidNnsFunction::PauseCanisterMigrations => {
-                "A proposal to instruct the migration canister to not accept any more \
-                migration requests."
+                "Instruct the migration canister to not accept any more migration requests."
             }
             ValidNnsFunction::UnpauseCanisterMigrations => {
-                "A proposal to instruct the migration canister to accept migration \
-                requests again."
+                "Instruct the migration canister to accept migration requests again."
             }
             ValidNnsFunction::SetSubnetOperationalLevel => {
-                "A proposal to set the operational level of a subnet, which can be \
-                used to take a subnet offline or bring it back online as part of \
-                subnet recovery."
+                "Set the operational level of a subnet, which can be used to take a subnet offline \
+                or bring it back online as part of subnet recovery."
             }
         }
     }

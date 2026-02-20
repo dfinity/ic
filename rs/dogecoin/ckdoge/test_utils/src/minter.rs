@@ -190,11 +190,14 @@ impl MinterCanister {
             .expect("BUG: minter self-check failed")
     }
 
-    pub fn await_submitted_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
+    pub fn await_submitted_doge_transaction<P>(&self, ledger_burn_index: u64, predicate: P) -> Txid
+    where
+        P: Fn(&Txid) -> bool,
+    {
         self.env
             .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
         let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {
-            matches!(tx_status, RetrieveDogeStatus::Submitted { .. })
+            matches!(tx_status, RetrieveDogeStatus::Submitted { txid } if predicate(txid))
         });
         match status {
             RetrieveDogeStatus::Submitted { txid, .. } => txid,
@@ -221,7 +224,7 @@ impl MinterCanister {
         F: Fn(&RetrieveDogeStatus) -> bool,
     {
         let mut last_status = None;
-        let max_ticks = 10;
+        let max_ticks = 20;
         for _ in 0..max_ticks {
             let status = self.retrieve_doge_status(ledger_burn_index);
             if filter(&status) {

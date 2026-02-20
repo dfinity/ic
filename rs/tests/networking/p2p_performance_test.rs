@@ -12,7 +12,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path_from_env,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -38,7 +38,6 @@ const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 // Network topology
 const NETWORK_SIMULATION: Option<ProductionSubnetTopology> = Some(ProductionSubnetTopology::IO67);
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Duration of each request is placed into one of the two categories - below or above this threshold.
 const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(60);
@@ -59,7 +58,7 @@ pub fn setup(
 ) {
     let logger = env.logger();
 
-    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    let path = get_dependency_path_from_env("JAEGER_UVM_CONFIG_IMAGE_ZST");
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])
@@ -165,7 +164,10 @@ pub fn test(
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
     info!(
         &log,
         "Installation of counter canisters on both subnets has succeeded."

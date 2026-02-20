@@ -706,6 +706,7 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let r = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
     let rr = g1.batch_mul_array(&r);
 
+    // TODO(CRP-2550) This can run in parallel (n = # receivers)
     let cc = {
         let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
 
@@ -931,7 +932,7 @@ pub(crate) fn extend_tau(
 /// Extends tau using the random oracle, and computes the function f
 ///
 /// See the description of Deal in Section 7.1.
-pub fn ftau_extended(
+fn ftau_extended(
     cc: &[[G1Affine; NUM_CHUNKS]],
     rr: &[G1Affine],
     ss: &[G1Affine],

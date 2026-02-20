@@ -1,6 +1,7 @@
 mod secretkeybytes {
-    use crate::api::keypair_from_rng;
+    use crate::api::keypair_from_seed;
     use crate::types::SecretKeyBytes;
+    use ic_crypto_internal_seed::Seed;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
     #[test]
@@ -18,7 +19,8 @@ mod secretkeybytes {
 
     #[test]
     fn should_deserialize_from_serialized() {
-        let (sk, _pk) = keypair_from_rng(&mut reproducible_rng());
+        let seed = Seed::from_rng(&mut reproducible_rng());
+        let (sk, _pk) = keypair_from_seed(seed);
 
         let serialized = serde_cbor::to_vec(&sk).expect("failed to serialize SecretKeyBytes");
         println!("Serialized: {serialized:?}");

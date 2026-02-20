@@ -237,7 +237,7 @@ fn time_out_messages(
     queues: &mut CanisterQueues,
     current_time: Time,
     own_canister_id: &CanisterId,
-    local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
 ) -> (usize, RefundPool) {
     let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
@@ -255,7 +255,7 @@ fn time_out_messages(
 fn shed_largest_message(
     queues: &mut CanisterQueues,
     own_canister_id: &CanisterId,
-    local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
 ) -> (bool, RefundPool) {
     let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
@@ -753,7 +753,7 @@ fn test_shed_inbound_response() {
     assert_eq!(3, queues.input_queues_response_count());
 
     let this = canister_test_id(13);
-    const NO_LOCAL_CANISTERS: BTreeMap<CanisterId, CanisterState> = BTreeMap::new();
+    const NO_LOCAL_CANISTERS: BTreeMap<CanisterId, Arc<CanisterState>> = BTreeMap::new();
 
     // Shed the largest response (callback ID 3).
     let memory_usage3 = queues.best_effort_message_memory_usage();
@@ -1241,9 +1241,8 @@ fn test_split_input_schedules() {
     // After the split we only have `other_1` (and `this`) on the subnet.
     let system_state =
         SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
-    let scheduler_state = SchedulerState::new(UNIX_EPOCH);
     let local_canisters = btreemap! {
-        other_1 => CanisterState::new(system_state, None, scheduler_state)
+        other_1 => Arc::new(CanisterState::new(system_state, None, SchedulerState::default()))
     };
 
     // Act.
@@ -1563,6 +1562,9 @@ fn canister_queues_with_empty_queues_in_input_schedules() -> CanisterQueues {
     assert_eq!(Ok(()), fixture.queues.test_invariants());
     assert_eq!(Ok(()), fixture.schedules_ok());
 
+    // There are empty queue pairs.
+    assert!(fixture.queues.can_garbage_collect());
+
     let queues = fixture.queues;
     assert_eq!(
         Ok(()),
@@ -1612,6 +1614,9 @@ fn test_pop_input_with_empty_queue_in_input_schedule() {
             canister_test_id(3)
         ]))
     );
+
+    // `store` and `input_schedule` can be reset to default.
+    assert!(queues.can_garbage_collect());
 }
 
 #[test]
@@ -1634,6 +1639,9 @@ fn test_pop_input_with_gced_queue_in_input_schedule() {
 
     assert!(queues.store.is_empty());
     assert_eq!(Ok(()), queues.schedules_ok(&|_| RemoteSubnet));
+
+    // There are reserved slots in the remaining output queues.
+    assert!(!queues.can_garbage_collect());
 }
 
 #[test]
@@ -1650,6 +1658,9 @@ fn test_peek_input_with_empty_queue_in_input_schedule() {
     assert_eq!(None, queues.pop_input());
 
     assert!(queues.store.is_empty());
+
+    // 4 of the queue pairs are empty.
+    assert!(queues.can_garbage_collect());
 }
 
 #[test]
@@ -1671,6 +1682,9 @@ fn test_peek_input_with_gced_queue_in_input_schedule() {
     assert_eq!(None, queues.pop_input());
 
     assert!(queues.store.is_empty());
+
+    // There are reserved slots in the remaining output queues.
+    assert!(!queues.can_garbage_collect());
 }
 
 #[test]
@@ -1688,6 +1702,9 @@ fn test_skip_input_with_empty_queue_in_input_schedule() {
     assert_eq!(None, queues.pop_input());
 
     assert!(queues.store.is_empty());
+
+    // 4 of the queue pairs are empty.
+    assert!(queues.can_garbage_collect());
 }
 
 #[test]
@@ -1710,6 +1727,9 @@ fn test_skip_input_with_gced_queue_in_input_schedule() {
     assert_eq!(None, queues.pop_input());
 
     assert!(queues.store.is_empty());
+
+    // There are reserved slots in the remaining output queues.
+    assert!(!queues.can_garbage_collect());
 }
 
 #[test]
@@ -2870,6 +2890,7 @@ fn test_garbage_collect() {
     let mut queues = CanisterQueues::default();
     assert!(queues.canister_queues.is_empty());
     // No-op.
+    assert!(!queues.can_garbage_collect());
     queues.garbage_collect();
     assert_eq!(CanisterQueues::default(), queues);
 
@@ -2878,6 +2899,7 @@ fn test_garbage_collect() {
         .push_output_request(request.into(), UNIX_EPOCH)
         .unwrap();
     // No-op.
+    assert!(!queues.can_garbage_collect());
     queues.garbage_collect();
     assert!(queues.has_output());
     assert_eq!(1, queues.canister_queues.len());
@@ -2885,6 +2907,7 @@ fn test_garbage_collect() {
     // "Route" output request.
     queues.output_into_iter().next();
     // No-op.
+    assert!(!queues.can_garbage_collect());
     queues.garbage_collect();
     // No messages, but the queue pair is not GC-ed (due to the reserved slot).
     assert!(!queues.has_output());
@@ -2895,6 +2918,7 @@ fn test_garbage_collect() {
     // Before popping any input, `next_input_source` has default value.
     assert_eq!(InputSource::default(), queues.input_schedule.input_source());
     // No-op.
+    assert!(!queues.can_garbage_collect());
     queues.garbage_collect();
     // Still one queue pair.
     assert!(queues.has_input());
@@ -2909,11 +2933,14 @@ fn test_garbage_collect() {
     assert_eq!(1, queues.canister_queues.len());
 
     // Queue pair can finally be GC-ed.
+    assert!(queues.can_garbage_collect());
     queues.garbage_collect();
     // No canister queues left.
     assert!(queues.canister_queues.is_empty());
-    // And all fields have been reset to their default values.
+    // All fields have been reset to their default values.
     assert_eq!(CanisterQueues::default(), queues);
+    // Nothing left to garbage collect.
+    assert!(!queues.can_garbage_collect());
 }
 
 /// Tests that even when `garbage_collect()` would otherwise be a no-op, fields
@@ -2933,8 +2960,11 @@ fn test_garbage_collect_restores_defaults() {
     assert_ne!(CanisterQueues::default(), queues);
 
     // But `garbage_collect()` should restore the struct to its default value.
+    assert!(queues.can_garbage_collect());
     queues.garbage_collect();
     assert_eq!(0, pb_queues::CanisterQueues::from(&queues).encoded_len());
+    // Nothing left to garbage collect.
+    assert!(!queues.can_garbage_collect());
 }
 
 #[test]
@@ -2967,9 +2997,12 @@ fn test_reject_subnet_output_request() {
     );
 
     // And after popping it, there are no messages or reserved slots left.
+    assert!(queues.can_garbage_collect());
     queues.garbage_collect();
     assert!(queues.canister_queues.is_empty());
     assert!(queues.store.is_empty());
+    // Nothing left to garbage collect.
+    assert!(!queues.can_garbage_collect());
 }
 
 #[test]
@@ -3523,7 +3556,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
                 Cycles::new(1 << 36),
                 NumSeconds::from(100_000),
             );
-            CanisterState::new(system_state, None, scheduler_state)
+            Arc::new(CanisterState::new(system_state, None, scheduler_state))
         }
     };
 

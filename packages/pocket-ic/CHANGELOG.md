@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIcBuilder::with_mainnet_nns_subnet_id` to specify that the NNS subnet should be created with the mainnet NNS subnet ID.
+
+
+
+## 12.0.0 - 2026-01-23
+
+### Added
+- The types `TickConfigs` and `SubnetBlockmakers` used as argument of `PocketIc::tick_with_configs`
+  instead of the server REST API types `RawTickConfigs` and `RawSubnetBlockmakers`.
+
+
+
 ## 11.0.0 - 2025-12-05
 
 ### Added
@@ -17,8 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for Dogecoin support in PocketIC.
 - The function `PocketIc::canister_snapshot_download` to download a canister snapshot to a given snapshot directory.
 - The function `PocketIc::canister_snapshot_upload` to upload a canister snapshot from a given snapshot directory.
-- The types `TickConfigs` and `SubnetBlockmakers` used as argument of `PocketIc::tick_with_configs`
-  instead of the server REST API types `RawTickConfigs` and `RawSubnetBlockmakers`.
 
 ### Changed
 - Deprecated `PocketIcBuilder::with_initial_timestamp`, use `PocketIcBuilder::with_initial_time` instead.

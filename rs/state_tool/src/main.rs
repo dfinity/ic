@@ -22,6 +22,10 @@ enum Opt {
     /// Computes partial state hash that is used for certification.
     #[clap(name = "chash")]
     CHash {
+        /// State height of the checkpoint.
+        #[clap(long)]
+        height: u64,
+
         /// Path to a checkpoint.
         #[clap(long = "state")]
         path: PathBuf,
@@ -168,6 +172,19 @@ enum Opt {
         #[clap(long, required = true)]
         path: PathBuf,
     },
+
+    /// Extracts canister metrics from the replicated state and prints them in CSV format to the
+    /// specified file.
+    #[clap(name = "canister_metrics")]
+    CanisterMetrics {
+        /// Path to a checkpoint.
+        #[clap(long = "checkpoint")]
+        path: PathBuf,
+
+        /// Output path.
+        #[clap(long)]
+        output: PathBuf,
+    },
 }
 
 /// Command line arguments for the `copy` command with eith
@@ -227,7 +244,7 @@ pub(crate) fn main_inner(args: Vec<String>) {
     let opt = Parser::parse_from(args);
     let result = match opt {
         Opt::CDiff { path_a, path_b } => commands::cdiff::do_diff(path_a, path_b),
-        Opt::CHash { path } => commands::chash::do_hash(path),
+        Opt::CHash { height, path } => commands::chash::do_hash(path, Height::new(height)),
         Opt::ImportState {
             state,
             config,
@@ -278,8 +295,10 @@ pub(crate) fn main_inner(args: Vec<String>) {
             subnet_type,
             Time::from_nanos_since_unix_epoch(batch_time_nanos),
             migrated_ranges,
+            &mut std::io::stdout(),
         ),
         Opt::ParseOverlay { path } => commands::parse_overlay::do_parse_overlay(path),
+        Opt::CanisterMetrics { path, output } => commands::canister_metrics::get(path, &output),
     };
 
     if let Err(e) = result {

@@ -17,7 +17,6 @@ crc32fast = "1.2.0"
 hex = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-cbor = { path = "../icrc-cbor", version = "0.1.0" }
-itertools = { workspace = true }
 minicbor = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }

@@ -296,6 +296,7 @@ type canister_status_result = record {
         canister_history_size : nat;
         wasm_chunk_store_size : nat;
         snapshots_size : nat;
+        log_memory_store_size : nat;
     };
     controller : principal;
     freezing_threshold : nat;
@@ -343,7 +344,7 @@ type deposit_cycles_args = record {
 type http_request_args = record {
     url : text;
     max_response_bytes : opt nat64;
-    method : variant { get; head; post };
+    method : variant { get; head; post; put; delete };
     headers : vec http_header;
     body : opt blob;
     transform : opt record {
@@ -351,7 +352,7 @@ type http_request_args = record {
         context : blob;
     };
     is_replicated : opt bool;
-    pricing_version: opt nat32;
+    pricing_version : opt nat32;
 };
 
 type ecdsa_public_key_args = record {

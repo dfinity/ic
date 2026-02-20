@@ -17,8 +17,7 @@ use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{ReplicaLogger, debug, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    ReplicatedState,
-    metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
+    ReplicatedState, metadata_state::subnet_call_context_manager::SignWithThresholdContext,
 };
 use ic_types::{
     Height, NodeId,
@@ -261,10 +260,7 @@ impl ThresholdSignerImpl {
             {
                 self.metrics
                     .sign_errors_inc("duplicate_sig_shares_in_batch");
-                ret.push(IDkgChangeAction::HandleInvalid(
-                    msg.message_id(),
-                    format!("Duplicate share in unvalidated batch: {msg:?}"),
-                ));
+                ret.push(IDkgChangeAction::RemoveUnvalidated(msg.message_id()));
                 continue;
             }
             ret.push(action);
@@ -288,10 +284,7 @@ impl ThresholdSignerImpl {
         ) {
             // The node already sent a valid share for this request
             self.metrics.sign_errors_inc("duplicate_sig_share");
-            return Some(IDkgChangeAction::HandleInvalid(
-                id,
-                format!("Duplicate signature share: {share}"),
-            ));
+            return Some(IDkgChangeAction::RemoveUnvalidated(id));
         }
 
         let share_string = share.to_string();
@@ -595,47 +588,11 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .get_state()
             .signature_request_contexts()
             .iter()
-            .flat_map(|(callback_id, context)| match &context.args {
-                ThresholdArguments::Ecdsa(args) => {
-                    let matched_id = context.matched_pre_signature.map(|(id, _)| id);
-                    let matched_full = args.pre_signature.as_ref().map(|pre_sig| pre_sig.id);
-                    if matched_id != matched_full {
-                        warn!(
-                            every_n_seconds => 15,
-                            self.log,
-                            "ECDSA context {:?}, with different ID {:?} and full pre-sig {:?}",
-                            callback_id,
-                            matched_id,
-                            matched_full
-                        );
-                    }
-                    context.matched_pre_signature.map(|(_, height)| RequestId {
-                        callback_id: *callback_id,
-                        height,
-                    })
-                }
-                ThresholdArguments::Schnorr(args) => {
-                    let matched_id = context.matched_pre_signature.map(|(id, _)| id);
-                    let matched_full = args.pre_signature.as_ref().map(|pre_sig| pre_sig.id);
-                    if matched_id != matched_full {
-                        warn!(
-                            every_n_seconds => 15,
-                            self.log,
-                            "Schnorr context {:?}, with different ID {:?} and full pre-sig {:?}",
-                            callback_id,
-                            matched_id,
-                            matched_full
-                        );
-                    }
-                    context.matched_pre_signature.map(|(_, height)| RequestId {
-                        callback_id: *callback_id,
-                        height,
-                    })
-                }
-                ThresholdArguments::VetKd(args) => Some(RequestId {
+            .flat_map(|(callback_id, context)| {
+                context.height().map(|height| RequestId {
                     callback_id: *callback_id,
-                    height: args.height,
-                }),
+                    height,
+                })
             })
             .collect();
         idkg_pool
@@ -1681,11 +1638,7 @@ mod tests {
 
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(
-                    &change_set,
-                    &msg_id_2,
-                    "Duplicate signature share:"
-                ));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
             })
         })
     }
@@ -1749,17 +1702,9 @@ mod tests {
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 3);
                 let msg_1_valid = is_moved_to_validated(&change_set, &msg_id_1)
-                    && is_handle_invalid(
-                        &change_set,
-                        &msg_id_2,
-                        "Duplicate share in unvalidated batch",
-                    );
+                    && is_removed_from_unvalidated(&change_set, &msg_id_2);
                 let msg_2_valid = is_moved_to_validated(&change_set, &msg_id_2)
-                    && is_handle_invalid(
-                        &change_set,
-                        &msg_id_1,
-                        "Duplicate share in unvalidated batch",
-                    );
+                    && is_removed_from_unvalidated(&change_set, &msg_id_1);
 
                 // One is considered duplicate
                 assert!(msg_1_valid || msg_2_valid);

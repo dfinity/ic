@@ -2,7 +2,8 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId,
+    GetAccountIdentifierTransactionsResult, IndexArg, InitArg, SettledTransaction,
+    SettledTransactionWithId,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -99,6 +100,17 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
+fn test_ledger_wasm() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .parent()
+            .unwrap()
+            .join("test_utils/icp_test_ledger"),
+        "ic-icp-test-ledger",
+        &[],
+    )
+}
+
 fn default_archive_options() -> ArchiveOptions {
     ArchiveOptions {
         trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
@@ -131,9 +143,10 @@ fn install_ledger(
 }
 
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = ic_icp_index::InitArg {
+    let args = IndexArg::Init(InitArg {
         ledger_id: ledger_id.into(),
-    };
+        retrieve_blocks_from_ledger_interval_seconds: None,
+    });
     env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
 }
@@ -1693,10 +1706,347 @@ fn test_index_http_request_decoding_quota() {
     test_http_request_decoding_quota(env, index_id);
 }
 
+fn install_test_ledger(env: &StateMachine) -> CanisterId {
+    env.install_canister(test_ledger_wasm(), vec![], None)
+        .unwrap()
+}
+
+fn add_block_to_test_ledger(
+    env: &StateMachine,
+    test_ledger_id: CanisterId,
+    block: &icp_ledger::Block,
+) -> u64 {
+    // Convert Block to CandidBlock for the Candid interface
+    let candid_block = icp_ledger::CandidBlock::from(block.clone());
+    let req = Encode!(&candid_block).expect("Failed to encode block");
+    let res = env
+        .execute_ingress(test_ledger_id, "add_block", req)
+        .expect("Failed to call add_block")
+        .bytes();
+    let result: Result<Nat, String> =
+        Decode!(&res, Result<Nat, String>).expect("Failed to decode AddBlockResult");
+    result.expect("Failed to add block").0.to_u64().unwrap()
+}
+
+fn add_raw_block_to_test_ledger(
+    env: &StateMachine,
+    test_ledger_id: CanisterId,
+    encoded_block: &ic_ledger_core::block::EncodedBlock,
+) -> u64 {
+    let blob = serde_bytes::ByteBuf::from(encoded_block.as_slice().to_vec());
+    let req = Encode!(&blob).expect("Failed to encode blob");
+    let res = env
+        .execute_ingress(test_ledger_id, "add_raw_block", req)
+        .expect("Failed to call add_raw_block")
+        .bytes();
+    let result: Result<Nat, String> =
+        Decode!(&res, Result<Nat, String>).expect("Failed to decode AddBlockResult");
+    result.expect("Failed to add raw block").0.to_u64().unwrap()
+}
+
+#[test]
+fn test_index_sync_with_test_ledger_happy_path() {
+    let env = &StateMachine::new();
+    let test_ledger_id = install_test_ledger(env);
+    let account1 = AccountIdentifier::from(account(1, 0));
+    let account2 = AccountIdentifier::from(account(2, 0));
+
+    // Create initial mint block (block 0)
+    let mint_timestamp = TimeStamp::from_nanos_since_unix_epoch(1_000_000_000);
+    let mint_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Mint {
+                to: account1,
+                amount: Tokens::from_e8s(1_000_000_000_000),
+            },
+            memo: Memo(0),
+            icrc1_memo: None,
+            created_at_time: Some(mint_timestamp),
+        },
+        timestamp: mint_timestamp,
+    };
+    let mint_block_index = add_block_to_test_ledger(env, test_ledger_id, &mint_block);
+    assert_eq!(mint_block_index, 0);
+
+    // Create transfer block (block 1) with correct parent hash
+    let transfer_timestamp = TimeStamp::from_nanos_since_unix_epoch(2_000_000_000);
+    let mint_encoded = mint_block.encode();
+    let parent_hash = Some(icp_ledger::Block::block_hash(&mint_encoded));
+    let transfer_block = icp_ledger::Block {
+        parent_hash,
+        transaction: Transaction {
+            operation: Operation::Transfer {
+                from: account1,
+                to: account2,
+                amount: Tokens::from_e8s(100_000_000),
+                fee: Tokens::from_e8s(10_000),
+                spender: None,
+            },
+            memo: Memo(0),
+            icrc1_memo: None,
+            created_at_time: Some(transfer_timestamp),
+        },
+        timestamp: transfer_timestamp,
+    };
+    let transfer_block_index = add_block_to_test_ledger(env, test_ledger_id, &transfer_block);
+    assert_eq!(transfer_block_index, 1);
+
+    // Install index canister pointing to test ledger
+    let index_id = install_index(env, test_ledger_id);
+
+    // Wait for sync to complete
+    wait_until_sync_is_completed(env, index_id, test_ledger_id);
+
+    // Verify index has both blocks
+    let index_blocks = index_get_blocks(env, index_id);
+    assert_eq!(index_blocks.len(), 2);
+
+    // Verify the blocks match
+    assert_eq!(index_blocks[0].timestamp, mint_timestamp);
+    assert_eq!(index_blocks[1].timestamp, transfer_timestamp);
+    match &index_blocks[0].transaction.operation {
+        Operation::Mint { to, amount } => {
+            assert_eq!(*to, account1);
+            assert_eq!(amount.get_e8s(), 1_000_000_000_000);
+        }
+        _ => panic!("Expected Mint operation"),
+    }
+    match &index_blocks[1].transaction.operation {
+        Operation::Transfer {
+            from,
+            to,
+            amount,
+            fee,
+            ..
+        } => {
+            assert_eq!(*from, account1);
+            assert_eq!(*to, account2);
+            assert_eq!(amount.get_e8s(), 100_000_000);
+            assert_eq!(fee.get_e8s(), 10_000);
+        }
+        _ => panic!("Expected Transfer operation"),
+    }
+}
+
+#[test]
+fn test_index_sync_with_incorrect_parent_hash() {
+    let env = &StateMachine::new();
+    let test_ledger_id = install_test_ledger(env);
+    let account1 = AccountIdentifier::from(account(1, 0));
+    let account2 = AccountIdentifier::from(account(2, 0));
+
+    // Create initial mint block (block 0)
+    let mint_timestamp = TimeStamp::from_nanos_since_unix_epoch(1_000_000_000);
+    let mint_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Mint {
+                to: account1,
+                amount: Tokens::from_e8s(1_000_000_000_000),
+            },
+            memo: Memo(0),
+            icrc1_memo: None,
+            created_at_time: Some(mint_timestamp),
+        },
+        timestamp: mint_timestamp,
+    };
+    add_block_to_test_ledger(env, test_ledger_id, &mint_block);
+
+    // Create transfer block (block 1) with INCORRECT parent hash
+    let transfer_timestamp = TimeStamp::from_nanos_since_unix_epoch(2_000_000_000);
+    // Create an incorrect parent hash by hashing dummy data instead of the actual mint block
+    let dummy_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0u8; 100]);
+    let incorrect_parent_hash = Some(icp_ledger::Block::block_hash(&dummy_encoded));
+    let transfer_block = icp_ledger::Block {
+        parent_hash: incorrect_parent_hash,
+        transaction: Transaction {
+            operation: Operation::Transfer {
+                from: account1,
+                to: account2,
+                amount: Tokens::from_e8s(100_000_000),
+                fee: Tokens::from_e8s(10_000),
+                spender: None,
+            },
+            memo: Memo(0),
+            icrc1_memo: None,
+            created_at_time: Some(transfer_timestamp),
+        },
+        timestamp: transfer_timestamp,
+    };
+    add_block_to_test_ledger(env, test_ledger_id, &transfer_block);
+
+    // Install index canister pointing to test ledger
+    let index_id = install_index(env, test_ledger_id);
+
+    // The index should still sync the blocks (it doesn't validate parent hashes)
+    // It just processes whatever blocks it receives
+    wait_until_sync_is_completed(env, index_id, test_ledger_id);
+
+    // Verify index has both blocks (even though parent hash is incorrect)
+    let index_blocks = index_get_blocks(env, index_id);
+    assert_eq!(index_blocks.len(), 2);
+}
+
+#[test]
+fn test_index_sync_with_timestamp_violation() {
+    let env = &StateMachine::new();
+    let test_ledger_id = install_test_ledger(env);
+    let account1 = AccountIdentifier::from(account(1, 0));
+    let account2 = AccountIdentifier::from(account(2, 0));
+
+    // Create initial mint block (block 0) with timestamp T
+    let mint_timestamp = TimeStamp::from_nanos_since_unix_epoch(2_000_000_000);
+    let mint_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Mint {
+                to: account1,
+                amount: Tokens::from_e8s(1_000_000_000_000),
+            },
+            memo: Memo(0),
+            icrc1_memo: None,
+            created_at_time: Some(mint_timestamp),
+        },
+        timestamp: mint_timestamp,
+    };
+    add_block_to_test_ledger(env, test_ledger_id, &mint_block);
+
+    // Create transfer block (block 1) with timestamp < T (violation)
+    let transfer_timestamp = TimeStamp::from_nanos_since_unix_epoch(1_000_000_000); // Earlier than mint
+    let mint_encoded = mint_block.encode();
+    let parent_hash = Some(icp_ledger::Block::block_hash(&mint_encoded));
+    let transfer_block = icp_ledger::Block {
+        parent_hash,
+        transaction: Transaction {
+            operation: Operation::Transfer {
+                from: account1,
+                to: account2,
+                amount: Tokens::from_e8s(100_000_000),
+                fee: Tokens::from_e8s(10_000),
+                spender: None,
+            },
+            memo: Memo(0),
+            icrc1_memo: None,
+            created_at_time: Some(transfer_timestamp),
+        },
+        timestamp: transfer_timestamp,
+    };
+    add_block_to_test_ledger(env, test_ledger_id, &transfer_block);
+
+    // Install index canister pointing to test ledger
+    let index_id = install_index(env, test_ledger_id);
+
+    // The index should still sync the blocks (it doesn't validate timestamp ordering)
+    wait_until_sync_is_completed(env, index_id, test_ledger_id);
+
+    // Verify index has both blocks (even though timestamp is out of order)
+    let index_blocks = index_get_blocks(env, index_id);
+    assert_eq!(index_blocks.len(), 2);
+    // The blocks will be in the order they were added, not sorted by timestamp
+    assert_eq!(index_blocks[0].timestamp, mint_timestamp);
+    assert_eq!(index_blocks[1].timestamp, transfer_timestamp);
+}
+
+#[test]
+#[should_panic(expected = "invalid tag value")]
+fn test_index_sync_with_invalid_block() {
+    let env = &StateMachine::new();
+    let test_ledger_id = install_test_ledger(env);
+    let account1 = AccountIdentifier::from(account(1, 0));
+
+    // Create initial mint block (block 0)
+    let mint_timestamp = TimeStamp::from_nanos_since_unix_epoch(1_000_000_000);
+    let mint_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Mint {
+                to: account1,
+                amount: Tokens::from_e8s(1_000_000_000_000),
+            },
+            memo: Memo(0),
+            icrc1_memo: None,
+            created_at_time: Some(mint_timestamp),
+        },
+        timestamp: mint_timestamp,
+    };
+    add_block_to_test_ledger(env, test_ledger_id, &mint_block);
+
+    // Add invalid block via add_raw_block with all zero bytes
+    let invalid_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0u8; 100]);
+    add_raw_block_to_test_ledger(env, test_ledger_id, &invalid_encoded);
+
+    // Add a second mint block (block 2) after the invalid block
+    let second_mint_timestamp = TimeStamp::from_nanos_since_unix_epoch(1_000_100_000);
+    let second_mint_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Mint {
+                to: account1,
+                amount: Tokens::from_e8s(2_000_000_000_000),
+            },
+            memo: Memo(0),
+            icrc1_memo: None,
+            created_at_time: Some(second_mint_timestamp),
+        },
+        timestamp: second_mint_timestamp,
+    };
+    add_block_to_test_ledger(env, test_ledger_id, &second_mint_block);
+
+    // Install index canister pointing to test ledger
+    let index_id = install_index(env, test_ledger_id);
+
+    // Give the index some time to try syncing - wait for multiple sync attempts. The index will
+    // successfully sync the first, valid block. For the second block, it will append it to the
+    // blockchain, but fail to decode it, and return an error. Since decoding failed, the timer
+    // will be cleared. However, since the block was already appended to the blockchain, if someone
+    // tries to query the invalid block, the index will panic due to invalid decoding.
+    for _ in 0..20 {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
+
+    let index_get_block = |block_index: u64| {
+        let req = Encode!(&GetBlocksRequest {
+            start: block_index.into(),
+            length: 1u64.into(),
+        })
+        .expect("Failed to encode GetBlocksRequest");
+        let res = env
+            .query(index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes();
+        let blocks = Decode!(&res, ic_icp_index::GetBlocksResponse)
+            .expect("Failed to decode ic_icp_index::GetBlocksResponse")
+            .blocks
+            .into_iter()
+            .map(icp_ledger::Block::decode)
+            .collect::<Result<Vec<icp_ledger::Block>, String>>()
+            .unwrap();
+        match blocks.len() {
+            0 => None,
+            1 => Some(blocks[0].to_owned()),
+            _ => panic!("More than one block returned for index {}", block_index),
+        }
+    };
+
+    let block0 = index_get_block(0).expect("Block 0 should be present");
+    assert_eq!(block0, mint_block);
+    // The second mint block at index 2 is retrievable, since the index timer was restarted by the
+    // failure guard and the index could sync past the invalid block.
+    let block2 = index_get_block(2);
+    assert_eq!(
+        block2, None,
+        "Block 2 should not be present, since the timer was canceled"
+    );
+    // This panics due to invalid block decoding, but the index shouldn't insert this encoded bad block in the first place.
+    index_get_block(1);
+}
+
 mod metrics {
     use crate::index_wasm;
     use candid::Principal;
-    use ic_icp_index::InitArg;
+    use ic_icp_index::{IndexArg, InitArg};
 
     #[test]
     fn should_export_heap_memory_usage_bytes_metrics() {
@@ -1706,7 +2056,10 @@ mod metrics {
         );
     }
 
-    fn encode_init_args(ledger_id: Principal) -> InitArg {
-        InitArg { ledger_id }
+    fn encode_init_args(ledger_id: Principal) -> IndexArg {
+        IndexArg::Init(InitArg {
+            ledger_id,
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        })
     }
 }

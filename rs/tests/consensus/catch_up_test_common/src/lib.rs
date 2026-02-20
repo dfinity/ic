@@ -78,7 +78,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
         Height::from(slow_node_shut_down_height),
         log.clone(),
     );
-    block_on(async { malicious_node.vm().await.kill().await });
+    malicious_node.vm().kill();
     info!(log, "Killed the slow node");
 
     info!(log, "Wait another DKG interval, then restart the slow node");
@@ -94,7 +94,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
                 log.clone(),
             )
         });
-    block_on(async { malicious_node.vm().await.start().await });
+    malicious_node.vm().start();
     info!(log, "Restarted slow node");
 
     // Wait until the node is available again

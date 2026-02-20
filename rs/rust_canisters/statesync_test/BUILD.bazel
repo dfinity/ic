@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:rand",
     "@crate_index//:serde",
-    "@crate_index//:serde_json",
 ]
 
 DEV_DEPENDENCIES = [

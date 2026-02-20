@@ -1,24 +1,21 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load(
     "//rs/tests:common.bzl",
+    "CANISTER_SANDBOX_RUNTIME_DEPS",
     "IC_GATEWAY_RUNTIME_DEPS",
-    "IMPERSONATE_UPSTREAMS_ENV",
     "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS",
     "MAINNET_ENV",
-    "MESSAGE_CANISTER_ENV",
     "MESSAGE_CANISTER_RUNTIME_DEPS",
 )
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-ENV = MAINNET_ENV | IMPERSONATE_UPSTREAMS_ENV | MESSAGE_CANISTER_ENV | {
-    "RECOVERY_GUESTOS_IMG_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:update-img.tar.zst)",
-}
+ENV = MAINNET_ENV
 
-RUNTIME_DEPS = IC_GATEWAY_RUNTIME_DEPS + IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + [
-    "//ic-os/guestos/envs/recovery-dev:update-img.tar.zst",
-]
+RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | IC_GATEWAY_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS | IMPERSONATE_UPSTREAMS_RUNTIME_DEPS | {
+    "RECOVERY_GUESTOS_IMG_PATH": "//ic-os/guestos/envs/recovery-dev:update-img.tar.zst",
+}
 
 rust_library(
     name = "common",
@@ -36,6 +33,7 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
@@ -46,12 +44,10 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS + [
-        "//rs/tests:recovery/binaries",
-    ],
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -66,15 +62,12 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = [
-        "manual",
         "system_test_large",
     ],
     test_timeout = "eternal",
-    uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS + [
-        "//rs/tests:recovery/binaries",
-    ],
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -88,9 +81,9 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -105,12 +98,10 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS + [
-        "//rs/tests:recovery/binaries",
-    ],
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -124,12 +115,10 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS + [
-        "//rs/tests:recovery/binaries",
-    ],
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",

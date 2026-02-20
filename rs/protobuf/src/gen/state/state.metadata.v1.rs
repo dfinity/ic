@@ -216,6 +216,19 @@ pub struct CanisterHttpRequestContext {
     pub replication: ::core::option::Option<Replication>,
     #[prost(message, optional, tag = "12")]
     pub pricing_version: ::core::option::Option<PricingVersion>,
+    #[prost(message, optional, tag = "13")]
+    pub refund_status: ::core::option::Option<RefundStatus>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RefundStatus {
+    #[prost(message, optional, tag = "1")]
+    pub refundable_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "2")]
+    pub per_replica_allowance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "3")]
+    pub refunded_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "4")]
+    pub refunding_nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct PricingVersion {
@@ -574,6 +587,8 @@ pub enum HttpMethod {
     Get = 1,
     Post = 2,
     Head = 3,
+    Put = 4,
+    Delete = 5,
 }
 impl HttpMethod {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -586,6 +601,8 @@ impl HttpMethod {
             Self::Get => "HTTP_METHOD_GET",
             Self::Post => "HTTP_METHOD_POST",
             Self::Head => "HTTP_METHOD_HEAD",
+            Self::Put => "HTTP_METHOD_PUT",
+            Self::Delete => "HTTP_METHOD_DELETE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -595,6 +612,8 @@ impl HttpMethod {
             "HTTP_METHOD_GET" => Some(Self::Get),
             "HTTP_METHOD_POST" => Some(Self::Post),
             "HTTP_METHOD_HEAD" => Some(Self::Head),
+            "HTTP_METHOD_PUT" => Some(Self::Put),
+            "HTTP_METHOD_DELETE" => Some(Self::Delete),
             _ => None,
         }
     }

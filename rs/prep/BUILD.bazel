@@ -29,7 +29,6 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:base64",
     "@crate_index//:clap",
     "@crate_index//:fs_extra",
     "@crate_index//:json5",
