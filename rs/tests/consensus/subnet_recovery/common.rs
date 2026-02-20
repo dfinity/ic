@@ -29,8 +29,8 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    AdminAndUserKeys, Cursor, assert_subnet_is_broken, break_nodes,
-    get_admin_keys_and_generate_readonly_keys, get_node_certification_share_height, halt_subnet,
+    Cursor, READONLY_USERNAME, RECOVERY_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes,
+    get_node_certification_share_height, get_ssh_keys_for_user, halt_subnet,
     local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
     remote_recovery, unhalt_subnet,
 };
@@ -276,6 +276,21 @@ struct TestConfig {
     chain_key: bool,
     corrupt_cup: CupCorruption,
     local_recovery: bool,
+    provision_write_access: bool,
+}
+
+pub fn test_provisioning_write_access(env: TestEnv) {
+    app_subnet_recovery_test(
+        env,
+        TestConfig {
+            subnet_size: APP_NODES,
+            upgrade: true,
+            chain_key: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
+            local_recovery: false,
+            provision_write_access: true,
+        },
+    );
 }
 
 pub fn test_with_chain_keys(env: TestEnv) {
@@ -287,6 +302,7 @@ pub fn test_with_chain_keys(env: TestEnv) {
             chain_key: true,
             corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
+            provision_write_access: false,
         },
     );
 }
@@ -307,6 +323,7 @@ pub fn test_without_chain_keys(env: TestEnv) {
             chain_key: false,
             corrupt_cup,
             local_recovery: false,
+            provision_write_access: false,
         },
     );
 }
@@ -329,6 +346,7 @@ pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
             chain_key: true,
             corrupt_cup,
             local_recovery: false,
+            provision_write_access: false,
         },
     );
 }
@@ -342,6 +360,7 @@ pub fn test_large_with_chain_keys(env: TestEnv) {
             chain_key: true,
             corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
+            provision_write_access: false,
         },
     );
 }
@@ -355,6 +374,7 @@ pub fn test_no_upgrade_without_chain_keys(env: TestEnv) {
             chain_key: false,
             corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
+            provision_write_access: false,
         },
     );
 }
@@ -368,6 +388,7 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
             chain_key: false,
             corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: true,
+            provision_write_access: false,
         },
     );
 }
@@ -375,13 +396,21 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
-    let AdminAndUserKeys {
-        ssh_admin_priv_key_path,
-        admin_auth,
-        ssh_user_priv_key_path: ssh_readonly_priv_key_path,
-        ssh_user_pub_key: ssh_readonly_pub_key,
-        ..
-    } = get_admin_keys_and_generate_readonly_keys(&env);
+    let SshKeys {
+        ssh_priv_key_path: ssh_admin_priv_key_path,
+        auth: admin_auth,
+        ssh_pub_key: _,
+    } = get_ssh_keys_for_user(&env, SSH_USERNAME);
+    let SshKeys {
+        ssh_priv_key_path: ssh_readonly_priv_key_path,
+        auth: _,
+        ssh_pub_key: ssh_readonly_pub_key,
+    } = get_ssh_keys_for_user(&env, READONLY_USERNAME);
+    let SshKeys {
+        ssh_priv_key_path: ssh_recovery_priv_key_path,
+        auth: _,
+        ssh_pub_key: ssh_recovery_pub_key,
+    } = get_ssh_keys_for_user(&env, RECOVERY_USERNAME);
     // We can deploy the read-only key only if the CUP is not corrupted in a way that prevents
     // nodes from determining their subnet ID.
     let ssh_readonly_pub_key_deployed = cfg
@@ -583,7 +612,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         .next()
         .unwrap_or_else(|| download_state_node.clone());
 
-    let (download_pool_node, replay_height, admin_nodes) = if ssh_readonly_pub_key_deployed
+    let (download_pool_node, replay_height, mut admin_nodes) = if ssh_readonly_pub_key_deployed
         .is_some()
     {
         // If we can deploy read-only access to the subnet, then we can download the consensus
@@ -630,6 +659,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
         (download_pool_node, node_cert_share, admins)
     };
+    // If we provision write access to a node, there are no admin nodes in the subnet
+    if cfg.provision_write_access {
+        admin_nodes = vec![];
+    }
 
     if cfg.corrupt_cup.is_corrupted() {
         info!(logger, "Corrupting the latest CUP on all nodes");
@@ -700,6 +733,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         replay_until_height: Some(replay_height),
         readonly_pub_key: ssh_readonly_pub_key_deployed,
         readonly_key_file: Some(ssh_readonly_priv_key_path),
+        write_node_id_and_pub_key: cfg
+            .provision_write_access
+            .then_some((upload_node.node_id, ssh_recovery_pub_key)),
+        recovery_key_file: Some(ssh_recovery_priv_key_path),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         download_state_method: Some(DataLocation::Remote(download_state_node.get_ip_addr())),
         keep_downloaded_state: Some(cfg.chain_key),
