@@ -70,8 +70,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::level_filters::LevelFilter;
 use tracing::{debug, error, trace};
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::reload;
 
 // The maximum wait time for a computation to finish synchronously.
@@ -195,12 +195,15 @@ pub struct ApiState {
     port: Option<u16>,
     // HTTP gateway infos (`None` = stopped)
     http_gateways: Arc<RwLock<Vec<Option<HttpGateway>>>>,
+    // Local file path for custom domain provider passed to the HTTP gateway
+    domain_custom_provider_local_file: Option<PathBuf>,
 }
 
 #[derive(Default)]
 pub struct PocketIcApiStateBuilder {
     initial_instances: Vec<PocketIc>,
     port: Option<u16>,
+    domain_custom_provider_local_file: Option<PathBuf>,
 }
 
 impl PocketIcApiStateBuilder {
@@ -211,6 +214,16 @@ impl PocketIcApiStateBuilder {
     pub fn with_port(self, port: u16) -> Self {
         Self {
             port: Some(port),
+            ..self
+        }
+    }
+
+    pub fn with_domain_custom_provider_local_file(
+        self,
+        domain_custom_provider_local_file: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            domain_custom_provider_local_file,
             ..self
         }
     }
@@ -240,6 +253,7 @@ impl PocketIcApiStateBuilder {
             seed: AtomicU64::new(0),
             port: self.port,
             http_gateways: Arc::new(RwLock::new(Vec::new())),
+            domain_custom_provider_local_file: self.domain_custom_provider_local_file,
         })
     }
 }
@@ -786,6 +800,7 @@ impl ApiState {
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
+        let domain_custom_provider_local_file = self.domain_custom_provider_local_file.clone();
         let domains: Vec<_> = http_gateway_config
             .domains
             .clone()
@@ -806,6 +821,11 @@ impl ApiState {
                 }
                 args.push("--domain-canister-id-from-query-params".to_string());
                 args.push("--domain-canister-id-from-referer".to_string());
+                args.push("--domain-skip-authority-validation".to_string());
+                if let Some(ref path) = domain_custom_provider_local_file {
+                    args.push("--domain-custom-provider-local-file".to_string());
+                    args.push(path.to_string_lossy().to_string());
+                }
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
@@ -829,7 +849,7 @@ impl ApiState {
 
                 let mut tasks = ic_gateway::ic_bn_lib::tasks::TaskManager::new();
 
-                let (_, reload_handle) = reload::Layer::new(LevelFilter::WARN);
+                let (_, reload_handle) = reload::Layer::new(EnvFilter::new("warn"));
                 let health_manager = Arc::new(HealthManager::default());
                 let ic_gateway_router = setup_router(
                     &cli,
