@@ -2827,6 +2827,7 @@ fn with_http_gateway_config_but_no_auto_progress() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
@@ -2900,6 +2901,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_server_url(server_url.clone())
@@ -2980,6 +2982,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let auto_progress_config = AutoProgressConfig {
         artificial_delay_ms: None,
@@ -3024,6 +3027,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_server_url(server_url.clone())
@@ -3146,6 +3150,7 @@ fn canister_not_found() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()

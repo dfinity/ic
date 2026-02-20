@@ -195,15 +195,12 @@ pub struct ApiState {
     port: Option<u16>,
     // HTTP gateway infos (`None` = stopped)
     http_gateways: Arc<RwLock<Vec<Option<HttpGateway>>>>,
-    // Local file path for custom domain provider passed to the HTTP gateway
-    domain_custom_provider_local_file: Option<PathBuf>,
 }
 
 #[derive(Default)]
 pub struct PocketIcApiStateBuilder {
     initial_instances: Vec<PocketIc>,
     port: Option<u16>,
-    domain_custom_provider_local_file: Option<PathBuf>,
 }
 
 impl PocketIcApiStateBuilder {
@@ -214,16 +211,6 @@ impl PocketIcApiStateBuilder {
     pub fn with_port(self, port: u16) -> Self {
         Self {
             port: Some(port),
-            ..self
-        }
-    }
-
-    pub fn with_domain_custom_provider_local_file(
-        self,
-        domain_custom_provider_local_file: Option<PathBuf>,
-    ) -> Self {
-        Self {
-            domain_custom_provider_local_file,
             ..self
         }
     }
@@ -253,7 +240,6 @@ impl PocketIcApiStateBuilder {
             seed: AtomicU64::new(0),
             port: self.port,
             http_gateways: Arc::new(RwLock::new(Vec::new())),
-            domain_custom_provider_local_file: self.domain_custom_provider_local_file,
         })
     }
 }
@@ -661,6 +647,8 @@ impl ApiState {
                     forward_to: HttpGatewayBackend::PocketIcInstance(instance_id),
                     domains: instance_http_gateway_config.domains,
                     https_config: instance_http_gateway_config.https_config,
+                    domain_custom_provider_local_file: instance_http_gateway_config
+                        .domain_custom_provider_local_file,
                 };
                 let res = self
                     .create_http_gateway(http_gateway_config, listener.unwrap())
@@ -800,7 +788,9 @@ impl ApiState {
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
-        let domain_custom_provider_local_file = self.domain_custom_provider_local_file.clone();
+        let domain_custom_provider_local_file = http_gateway_config
+            .domain_custom_provider_local_file
+            .clone();
         let domains: Vec<_> = http_gateway_config
             .domains
             .clone()
@@ -824,7 +814,7 @@ impl ApiState {
                 args.push("--domain-skip-authority-validation".to_string());
                 if let Some(ref path) = domain_custom_provider_local_file {
                     args.push("--domain-custom-provider-local-file".to_string());
-                    args.push(path.to_string_lossy().to_string());
+                    args.push(path.clone());
                 }
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);

@@ -410,6 +410,7 @@ fn test_unresponsive_gateway_backend() {
         forward_to: HttpGatewayBackend::Replica(backend_instance_url.to_string()),
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let res = client
         .post(create_gateway_endpoint)
@@ -478,6 +479,7 @@ fn test_gateway_invalid_forward_to() {
             forward_to,
             domains: None,
             https_config: None,
+            domain_custom_provider_local_file: None,
         };
         let client = Client::builder()
             .timeout(Duration::from_secs(300)) // same as bazel test timeout for this test
@@ -516,6 +518,7 @@ fn create_gateway(
         forward_to,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let res = reqwest::blocking::Client::new()
         .post(endpoint)
