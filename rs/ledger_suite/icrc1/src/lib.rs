@@ -10,12 +10,12 @@ use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyE
 use ic_ledger_core::{
     approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
-    block::{BlockType, EncodedBlock, FeeCollector},
+    block::{BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::{icrc1::account::Account, icrc107::schema::BTYPE_107};
 use icrc_ledger_types::{icrc1::transfer::Memo, icrc3::transactions::TRANSACTION_FEE_COLLECTOR};
 use serde::{Deserialize, Serialize};
 
@@ -379,7 +379,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
     where
         C: LedgerContext<AccountId = Self::AccountId, Tokens = Tokens>,
     {
-        let fee_collector = context.fee_collector().map(|fc| fc.fee_collector);
+        let fee_collector = context.fee_collector();
         let fee_collector = fee_collector.as_ref();
         match &self.operation {
             Operation::Transfer {
@@ -460,9 +460,11 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 expires_at,
                 fee,
             } => {
-                context
-                    .balances_mut()
-                    .burn(from, fee.clone().unwrap_or(effective_fee.clone()))?;
+                let fee_amount = fee.clone().unwrap_or(effective_fee.clone());
+                context.balances_mut().burn(from, fee_amount.clone())?;
+                if let Some(fee_collector) = fee_collector {
+                    context.balances_mut().mint(fee_collector, fee_amount)?;
+                }
                 let result = context
                     .approvals_mut()
                     .approve(
@@ -482,8 +484,12 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     return Err(e);
                 }
             }
-            Operation::FeeCollector { .. } => {
-                panic!("FeeCollector107 not implemented")
+            Operation::FeeCollector {
+                fee_collector,
+                caller: _,
+                mthd: _,
+            } => {
+                context.set_fee_collector(*fee_collector);
             }
         }
         Ok(())
@@ -667,32 +673,28 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         transaction: Self::Transaction,
         timestamp: TimeStamp,
         effective_fee: Tokens,
-        fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self {
         let effective_fee = match &transaction.operation {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
-            Operation::FeeCollector { .. } => {
-                panic!("FeeCollector107 not implemented")
-            }
             _ => None,
         };
-        let (fee_collector, fee_collector_block_index) = match fee_collector {
-            Some(FeeCollector {
-                fee_collector,
-                block_index: None,
-            }) => (Some(fee_collector), None),
-            Some(FeeCollector { block_index, .. }) => (None, block_index),
-            None => (None, None),
+        let btype = match &transaction.operation {
+            Operation::FeeCollector {
+                fee_collector: _,
+                caller: _,
+                mthd: _,
+            } => Some(BTYPE_107.to_string()),
+            _ => None,
         };
         Self {
             parent_hash,
             transaction,
             effective_fee,
             timestamp: timestamp.as_nanos_since_unix_epoch(),
-            fee_collector,
-            fee_collector_block_index,
-            btype: None,
+            fee_collector: None,
+            fee_collector_block_index: None,
+            btype,
         }
     }
 }
