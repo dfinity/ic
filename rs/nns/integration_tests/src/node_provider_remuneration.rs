@@ -1051,10 +1051,10 @@ fn wait_for_rewards_minting(
 ) -> MonthlyNodeProviderRewards {
     for i in 0..500 {
         state_machine.tick();
-        if let Some(rewards) = nns_get_most_recent_monthly_node_provider_rewards(state_machine) {
-            if rewards.timestamp != previous_timestamp {
-                return rewards;
-            }
+        if let Some(rewards) = nns_get_most_recent_monthly_node_provider_rewards(state_machine)
+            && rewards.timestamp != previous_timestamp
+        {
+            return rewards;
         }
         assert!(
             i < 499,
