@@ -17,7 +17,7 @@ Runbook::
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
