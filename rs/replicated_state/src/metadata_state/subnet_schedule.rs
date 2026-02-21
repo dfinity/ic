@@ -51,6 +51,9 @@ impl Default for CanisterPriority {
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetSchedule {
     priorities: BTreeMap<CanisterId, CanisterPriority>,
+
+    #[cfg(debug_assertions)]
+    pub fully_executed_canisters: std::collections::BTreeSet<CanisterId>,
 }
 
 /// Two schedules are equal if they have the same canister priorities (modulo
@@ -76,7 +79,10 @@ impl ValidateEq for SubnetSchedule {
 
 impl SubnetSchedule {
     pub fn new(priorities: BTreeMap<CanisterId, CanisterPriority>) -> Self {
-        Self { priorities }
+        Self {
+            priorities,
+            ..Default::default()
+        }
     }
 
     /// Returns the priority for the given canister, or the default priority if not

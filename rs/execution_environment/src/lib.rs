@@ -11,7 +11,7 @@ mod ic00_permissions;
 mod ingress_filter;
 mod metrics;
 mod query_handler;
-mod scheduler;
+pub mod scheduler;
 mod types;
 pub mod units;
 pub mod util;
