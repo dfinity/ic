@@ -1788,32 +1788,35 @@ impl CanisterManager {
             )?;
 
         // Check that the canister is not frozen due to its new memory usage.
-        let threshold = self.cycles_account_manager.freeze_threshold_cycles(
-            canister.system_state.freeze_threshold,
-            canister.memory_allocation(),
-            new_memory_usage,
-            canister.message_memory_usage(),
-            canister.compute_allocation(),
-            subnet_size,
-            cost_schedule,
-            canister.system_state.reserved_balance(),
-        );
-        if canister.system_state.balance() < threshold {
+        let reveal_top_up = canister.controllers().contains(&sender);
+        if let Err(err) = self
+            .cycles_account_manager
+            .can_withdraw_cycles_with_threshold(
+                &canister.system_state,
+                Cycles::zero(),
+                new_memory_usage,
+                canister.message_memory_usage(),
+                canister.system_state.reserved_balance(),
+                subnet_size,
+                cost_schedule,
+                reveal_top_up,
+            )
+        {
             return Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
                 bytes: allocated_bytes,
-                available: canister.system_state.balance(),
-                required: threshold,
+                available: err.available,
+                required: err.threshold,
             });
         }
 
         // Check that cycles for instructions can be withdrawn (in particular, the canister is not frozen afterwards).
-        let reveal_top_up = canister.controllers().contains(&sender);
         self.cycles_account_manager
-            .can_withdraw_cycles(
+            .can_withdraw_cycles_with_threshold(
                 &canister.system_state,
                 cycles_for_instructions,
                 new_memory_usage,
                 canister.message_memory_usage(),
+                canister.system_state.reserved_balance(),
                 subnet_size,
                 cost_schedule,
                 reveal_top_up,
