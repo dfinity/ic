@@ -126,4 +126,12 @@ USER $CI_USER
 CMD ["/bin/bash"]
 
 FROM base as build
+
 FROM base as dev
+
+# Install additional packages for development but not needed on CI:
+ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
+COPY ${PACKAGE_DEV_FILE} /tmp/
+RUN apt -yq update && \
+    apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
+    rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
