@@ -6,7 +6,9 @@ use ic_embedders::{
     WasmtimeEmbedder,
     wasm_utils::{
         Complexity, WasmImportsDetails, WasmValidationDetails, validate_and_instrument_for_testing,
-        validation::{RESERVED_SYMBOLS, extract_custom_section_name},
+        validation::{
+            MAX_WASM_FUNCTION_NAME_LENGTH, RESERVED_SYMBOLS, extract_custom_section_name,
+        },
     },
 };
 use ic_interfaces::execution_environment::HypervisorError;
@@ -1451,5 +1453,27 @@ fn can_validate_table_section_with_mixed_tables() {
     assert_matches!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Err(WasmValidationError::InvalidTableSection(_))
+    );
+}
+
+#[test]
+fn wasm_with_long_func_name_is_invalid() {
+    let wat = format!(
+        r#"
+        (module
+            (type (;0;) (func))
+            (func ${} (type 0))
+        )"#,
+        "A".repeat(MAX_WASM_FUNCTION_NAME_LENGTH + 10)
+    );
+
+    let wasm = wat2wasm(&wat).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::FunctionNameTooLarge {
+            index: 0,
+            size: MAX_WASM_FUNCTION_NAME_LENGTH + 10,
+            allowed: MAX_WASM_FUNCTION_NAME_LENGTH
+        })
     );
 }

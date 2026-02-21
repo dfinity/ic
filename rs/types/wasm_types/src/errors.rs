@@ -133,6 +133,12 @@ pub enum WasmValidationError {
         size: usize,
         allowed: usize,
     },
+    /// A function name was too large.
+    FunctionNameTooLarge {
+        index: usize,
+        size: usize,
+        allowed: usize,
+    },
     /// The code section is too large.
     CodeSectionTooLarge {
         size: u32,
@@ -246,6 +252,15 @@ impl std::fmt::Display for WasmValidationError {
                 "Wasm module contains a function at index {index} \
                     of size {size} that exceeds the maximum allowed size of {allowed}.",
             ),
+            Self::FunctionNameTooLarge {
+                index,
+                size,
+                allowed,
+            } => write!(
+                f,
+                "Wasm module contains a function at index {index} \
+                    of name of size {size} that exceeds the maximum allowed size of {allowed}.",
+            ),
             Self::CodeSectionTooLarge { size, allowed } => write!(
                 f,
                 "Wasm module code section size of {size} \
@@ -281,7 +296,8 @@ impl AsErrorHelp for WasmValidationError {
             | WasmValidationError::InvalidCustomSection(_)
             | WasmValidationError::InvalidGlobalSection(_)
             | WasmValidationError::UnsupportedWasmInstruction { .. }
-            | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
+            | WasmValidationError::TooManyCustomSections { .. }
+            | WasmValidationError::FunctionNameTooLarge { .. } => ErrorHelp::ToolchainError,
             WasmValidationError::DuplicateExport { name } => ErrorHelp::UserError {
                 suggestion: format!(
                     "Try defining different versions of the function for each \
