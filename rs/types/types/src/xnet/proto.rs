@@ -41,6 +41,7 @@ impl From<Certification> for pb::Certification {
     fn from(value: Certification) -> Self {
         Self {
             height: value.height.get(),
+            height_witness: Some(value.height_witness.into()),
             content: Some(value.signed.content.into()),
             signature: Some(value.signed.signature.into()),
         }
@@ -52,6 +53,10 @@ impl TryFrom<pb::Certification> for Certification {
     fn try_from(value: pb::Certification) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::new(value.height),
+            height_witness: try_from_option_field(
+                value.height_witness,
+                "Certification::height_witness",
+            )?,
             signed: Signed {
                 content: try_from_option_field(value.content, "Certification::content")?,
                 signature: try_from_option_field(value.signature, "Certification::signature")?,
@@ -64,6 +69,7 @@ impl From<CertificationShare> for pb::CertificationShare {
     fn from(share: CertificationShare) -> Self {
         Self {
             height: share.height.get(),
+            height_witness: Some(share.height_witness.into()),
             content: Some(share.signed.content.into()),
             signature: Some(share.signed.signature.into()),
         }
@@ -75,6 +81,10 @@ impl TryFrom<pb::CertificationShare> for CertificationShare {
     fn try_from(value: pb::CertificationShare) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::new(value.height),
+            height_witness: try_from_option_field(
+                value.height_witness,
+                "Certification::height_witness",
+            )?,
             signed: Signed {
                 content: try_from_option_field(value.content, "CertificationShare::content")?,
                 signature: try_from_option_field(value.signature, "CertificationShare::signature")?,

@@ -1,10 +1,12 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
 use ic_canonical_state::encoding::encode_subnet_canister_ranges;
+use ic_canonical_state::lazy_tree_conversion::state_height_as_tree;
+use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize;
 use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
     Label, LabeledTree, LookupStatus, MatchPattern, MixedHashTree, Path as LabelPath, flatmap,
-    sparse_labeled_tree_from_paths,
+    recompute_digest, sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
@@ -9157,5 +9159,23 @@ fn flush_with_optimization() {
         // delta has been flushed
         sm.flush_tip_channel();
         assert_eq!(flush_unflushed_delta_count(metrics), 1);
+    });
+}
+
+#[test]
+fn valid_witness_in_list_state_hashes_to_certify() {
+    state_manager_test(|_metrics, sm| {
+        let state = sm.take_tip().1;
+        let height = Height::new(1);
+        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+
+        let state_hashes = sm.list_state_hashes_to_certify();
+        assert_eq!(state_hashes.len(), 1);
+        let expected_digest = state_hashes[0].hash.clone().get().0;
+        let witness = state_hashes[0].height_witness.clone();
+
+        let labeled_tree = materialize(&state_height_as_tree(&height), None);
+        let actual_digest = recompute_digest(&labeled_tree, &witness).unwrap().to_vec();
+        assert_eq!(actual_digest, expected_digest);
     });
 }
