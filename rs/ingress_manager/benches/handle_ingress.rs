@@ -33,10 +33,7 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CanisterQueues, RefundPool, ReplicatedState, SystemMetadata,
-    canister_snapshots::CanisterSnapshots,
-};
+use ic_replicated_state::{CanisterQueues, RefundPool, ReplicatedState, SystemMetadata};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
@@ -194,7 +191,6 @@ where
                         CanisterQueues::default(),
                         RefundPool::default(),
                         RawQueryStats::default(),
-                        CanisterSnapshots::default(),
                     )),
                 )
             });

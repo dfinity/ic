@@ -2,7 +2,7 @@ use crossbeam_channel::{Sender, unbounded};
 use ic_base_types::{CanisterId, SnapshotId, subnet_id_try_from_protobuf};
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_snapshots::{
+use ic_replicated_state::canister_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
 use ic_replicated_state::canister_state::system_state::LoadMetrics;
@@ -64,7 +64,7 @@ pub(crate) fn make_unvalidated_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["flush_page_map_deltas_preprocessing"])
             .start_timer();
-        flush_canister_snapshots_and_page_maps(&mut state, height, tip_channel);
+        flush_page_maps(&mut state, height, tip_channel);
     }
     {
         let _timer = metrics
@@ -79,10 +79,9 @@ pub(crate) fn make_unvalidated_checkpoint(
             height,
             canister_ids: state.canister_states().keys().copied().collect(),
             snapshot_ids: state
-                .canister_snapshots
-                .iter()
-                .map(|(k, _v)| k)
-                .copied()
+                .canister_states()
+                .values()
+                .flat_map(|canister| canister.canister_snapshots.iter().map(|x| *x.0))
                 .collect(),
         })
         .unwrap();
@@ -193,7 +192,7 @@ pub(crate) enum PageMapType {
 
 impl PageMapType {
     /// List all PageMaps contained in `state`, ignoring PageMaps that are in snapshots.
-    fn list_all_without_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
+    pub(crate) fn list_all(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
         for (id, canister) in state.canister_states() {
             result.push(Self::WasmChunkStore(id.to_owned()));
@@ -204,18 +203,11 @@ impl PageMapType {
                 result.push(Self::WasmMemory(id.to_owned()));
                 result.push(Self::StableMemory(id.to_owned()));
             }
-        }
-
-        result
-    }
-
-    /// List all PageMaps contained in `state`, including those in snapshots.
-    pub(crate) fn list_all_including_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
-        let mut result = Self::list_all_without_snapshots(state);
-        for (id, _snapshot) in state.canister_snapshots.iter() {
-            result.push(Self::SnapshotWasmMemory(id.to_owned()));
-            result.push(Self::SnapshotStableMemory(id.to_owned()));
-            result.push(Self::SnapshotWasmChunkStore(id.to_owned()));
+            for (id, _snapshot) in canister.canister_snapshots.iter() {
+                result.push(Self::SnapshotWasmMemory(id.to_owned()));
+                result.push(Self::SnapshotStableMemory(id.to_owned()));
+                result.push(Self::SnapshotWasmChunkStore(id.to_owned()));
+            }
         }
 
         result
@@ -259,18 +251,27 @@ impl PageMapType {
             PageMapType::LogMemoryStore(id) => state
                 .canister_state(id)
                 .and_then(|can| can.system_state.log_memory_store.maybe_page_map()),
-            PageMapType::SnapshotWasmMemory(id) => state
-                .canister_snapshots
-                .get(*id)
-                .map(|snap| &snap.execution_snapshot().wasm_memory.page_map),
-            PageMapType::SnapshotStableMemory(id) => state
-                .canister_snapshots
-                .get(*id)
-                .map(|snap| &snap.execution_snapshot().stable_memory.page_map),
-            PageMapType::SnapshotWasmChunkStore(id) => state
-                .canister_snapshots
-                .get(*id)
-                .map(|snap| snap.chunk_store().page_map()),
+            PageMapType::SnapshotWasmMemory(id) => {
+                state.canister_state(&id.get_canister_id()).and_then(|can| {
+                    can.canister_snapshots
+                        .get(*id)
+                        .map(|snap| &snap.execution_snapshot().wasm_memory.page_map)
+                })
+            }
+            PageMapType::SnapshotStableMemory(id) => {
+                state.canister_state(&id.get_canister_id()).and_then(|can| {
+                    can.canister_snapshots
+                        .get(*id)
+                        .map(|snap| &snap.execution_snapshot().stable_memory.page_map)
+                })
+            }
+            PageMapType::SnapshotWasmChunkStore(id) => {
+                state.canister_state(&id.get_canister_id()).and_then(|can| {
+                    can.canister_snapshots
+                        .get(*id)
+                        .map(|snap| snap.chunk_store().page_map())
+                })
+            }
         }
     }
 }
@@ -304,24 +305,23 @@ fn strip_page_map_deltas(
                 .page_map
                 .strip_all_deltas(Arc::clone(&fd_factory));
         }
-    }
-
-    for (_id, canister_snapshot) in state.canister_snapshots.iter_mut() {
-        let new_snapshot = Arc::make_mut(canister_snapshot);
-        new_snapshot
-            .chunk_store_mut()
-            .page_map_mut()
-            .strip_all_deltas(Arc::clone(&fd_factory));
-        new_snapshot
-            .execution_snapshot_mut()
-            .wasm_memory
-            .page_map
-            .strip_all_deltas(Arc::clone(&fd_factory));
-        new_snapshot
-            .execution_snapshot_mut()
-            .stable_memory
-            .page_map
-            .strip_all_deltas(Arc::clone(&fd_factory));
+        for (_id, canister_snapshot) in canister.canister_snapshots.iter_mut() {
+            let new_snapshot = Arc::make_mut(canister_snapshot);
+            new_snapshot
+                .chunk_store_mut()
+                .page_map_mut()
+                .strip_all_deltas(Arc::clone(&fd_factory));
+            new_snapshot
+                .execution_snapshot_mut()
+                .wasm_memory
+                .page_map
+                .strip_all_deltas(Arc::clone(&fd_factory));
+            new_snapshot
+                .execution_snapshot_mut()
+                .stable_memory
+                .page_map
+                .strip_all_deltas(Arc::clone(&fd_factory));
+        }
     }
 
     // Reset the sandbox state to force full synchronization on the next execution
@@ -340,7 +340,7 @@ fn strip_page_map_deltas(
 
 /// Flushes to disk all the canister heap deltas accumulated in memory
 /// during execution from the last flush.
-pub(crate) fn flush_canister_snapshots_and_page_maps(
+pub(crate) fn flush_page_maps(
     tip_state: &mut ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
@@ -395,23 +395,22 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
                 &mut execution_state.stable_memory.page_map,
             );
         }
-    }
+        for (snapshot_id, canister_snapshot) in canister.canister_snapshots.iter_mut() {
+            let new_snapshot = Arc::make_mut(canister_snapshot);
 
-    for (snapshot_id, canister_snapshot) in tip_state.canister_snapshots.iter_mut() {
-        let new_snapshot = Arc::make_mut(canister_snapshot);
-
-        add_to_pagemaps_and_strip(
-            PageMapType::SnapshotWasmChunkStore(*snapshot_id),
-            new_snapshot.chunk_store_mut().page_map_mut(),
-        );
-        add_to_pagemaps_and_strip(
-            PageMapType::SnapshotWasmMemory(*snapshot_id),
-            &mut new_snapshot.execution_snapshot_mut().wasm_memory.page_map,
-        );
-        add_to_pagemaps_and_strip(
-            PageMapType::SnapshotStableMemory(*snapshot_id),
-            &mut new_snapshot.execution_snapshot_mut().stable_memory.page_map,
-        );
+            add_to_pagemaps_and_strip(
+                PageMapType::SnapshotWasmChunkStore(*snapshot_id),
+                new_snapshot.chunk_store_mut().page_map_mut(),
+            );
+            add_to_pagemaps_and_strip(
+                PageMapType::SnapshotWasmMemory(*snapshot_id),
+                &mut new_snapshot.execution_snapshot_mut().wasm_memory.page_map,
+            );
+            add_to_pagemaps_and_strip(
+                PageMapType::SnapshotStableMemory(*snapshot_id),
+                &mut new_snapshot.execution_snapshot_mut().stable_memory.page_map,
+            );
+        }
     }
 
     // Take all snapshot operations that happened since the last flush and clear the list stored in `tip_state`.
@@ -537,10 +536,22 @@ impl CheckpointLoader {
         let mut canister_states = BTreeMap::new();
         let mut priorities = BTreeMap::new();
         let canister_ids = self.checkpoint_layout.canister_ids()?;
+        let snapshot_ids = self.checkpoint_layout.snapshot_ids()?;
+        let mut snapshot_ids_per_canister: BTreeMap<CanisterId, Vec<SnapshotId>> = BTreeMap::new();
+        for snapshot_id in snapshot_ids {
+            snapshot_ids_per_canister
+                .entry(snapshot_id.get_canister_id())
+                .or_default()
+                .push(snapshot_id);
+        }
         let results = maybe_parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
             load_canister_state_from_checkpoint(
                 &self.checkpoint_layout,
                 canister_id,
+                snapshot_ids_per_canister
+                    .get(canister_id)
+                    .cloned()
+                    .unwrap_or_default(),
                 Arc::clone(&self.fd_factory),
                 &self.metrics,
             )
@@ -554,7 +565,9 @@ impl CheckpointLoader {
             durations.apply(&self.metrics);
         }
 
-        Ok((canister_states, SubnetSchedule::new(priorities)))
+        let subnet_schedule = SubnetSchedule::new(priorities);
+
+        Ok((canister_states, subnet_schedule))
     }
 
     fn validate_eq_canister_states(
@@ -572,10 +585,24 @@ impl CheckpointLoader {
         if on_disk_canister_ids != ref_canister_ids {
             return Err("Canister IDs mismatch".to_string());
         }
+        let on_disk_snapshot_ids = self.checkpoint_layout.snapshot_ids().map_err(|err| {
+            format!("Snapshot validation: failed to load list of snapshot ids: {err}")
+        })?;
+        let mut snapshot_ids_per_canister: BTreeMap<CanisterId, Vec<SnapshotId>> = BTreeMap::new();
+        for snapshot_id in on_disk_snapshot_ids {
+            snapshot_ids_per_canister
+                .entry(snapshot_id.get_canister_id())
+                .or_default()
+                .push(snapshot_id);
+        }
         maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |&canister_id| {
             let (canister_state, canister_priority, _) = load_canister_state_from_checkpoint(
                 &self.checkpoint_layout,
                 canister_id,
+                snapshot_ids_per_canister
+                    .get(canister_id)
+                    .cloned()
+                    .unwrap_or_default(),
                 Arc::clone(&self.fd_factory),
                 &self.metrics,
             )
@@ -595,71 +622,23 @@ impl CheckpointLoader {
         .collect()
     }
 
-    fn load_canister_snapshots(
-        &self,
-        thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<CanisterSnapshots, CheckpointError> {
-        let _timer = self
-            .metrics
-            .load_checkpoint_step_duration
-            .with_label_values(&["canister_snapshots"])
-            .start_timer();
-
-        let mut canister_snapshots = BTreeMap::new();
-        let snapshot_ids = self.checkpoint_layout.snapshot_ids()?;
-        let results = maybe_parallel_map(thread_pool, snapshot_ids.iter(), |snapshot_id| {
-            (
-                **snapshot_id,
-                load_snapshot_from_checkpoint(
-                    &self.checkpoint_layout,
-                    snapshot_id,
-                    Arc::clone(&self.fd_factory),
-                ),
-            )
-        });
-
-        for (snapshot_id, canister_snapshot) in results.into_iter() {
-            let (canister_snapshot, durations) = canister_snapshot?;
-            canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
-
-            durations.apply(&self.metrics);
-        }
-
-        Ok(CanisterSnapshots::new(canister_snapshots))
-    }
-
     fn validate_eq_canister_snapshots(
         &self,
-        thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-        ref_canister_snapshots: &CanisterSnapshots,
+        ref_canister_snapshots: BTreeMap<CanisterId, &CanisterSnapshots>,
     ) -> Result<(), String> {
         let mut on_disk_snapshot_ids = self.checkpoint_layout.snapshot_ids().map_err(|err| {
             format!("Snapshot validation: failed to load list of snapshot ids: {err}")
         })?;
-        let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots.iter().map(|x| *x.0).collect();
+        let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots
+            .iter()
+            .flat_map(|(_, x)| x.iter().map(|x| *x.0))
+            .collect();
         on_disk_snapshot_ids.sort();
         ref_snapshot_ids.sort();
         if on_disk_snapshot_ids != ref_snapshot_ids {
             return Err("Snapshot ids mismatch".to_string());
         }
-        maybe_parallel_map(thread_pool, ref_snapshot_ids.iter(), |snapshot_id| {
-            load_snapshot_from_checkpoint(
-                &self.checkpoint_layout,
-                snapshot_id,
-                Arc::clone(&self.fd_factory),
-            )
-            .map_err(|err| {
-                format!("Failed to load canister snapshot {snapshot_id} for validation: {err}")
-            })?
-            .0
-            .validate_eq(
-                ref_canister_snapshots
-                    .get(**snapshot_id)
-                    .expect("Failed to lookup snapshot in ref state"),
-            )
-        })
-        .into_iter()
-        .try_for_each(identity)
+        Ok(())
     }
 }
 
@@ -686,7 +665,6 @@ pub fn load_checkpoint(
         checkpoint_loader.load_subnet_queues()?,
         checkpoint_loader.load_refunds()?,
         checkpoint_loader.load_epoch_query_stats()?,
-        checkpoint_loader.load_canister_snapshots(&mut thread_pool)?,
     ))
 }
 
@@ -725,15 +703,8 @@ fn validate_eq_checkpoint_internal(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
     metrics: &CheckpointMetrics, // Make optional in the loader & don't provide?
 ) -> Result<(), String> {
-    let (
-        canister_states,
-        metadata,
-        subnet_queues,
-        refunds,
-        consensus_queue,
-        epoch_query_stats,
-        canister_snapshots,
-    ) = reference_state.component_refs();
+    let (canister_states, metadata, subnet_queues, refunds, consensus_queue, epoch_query_stats) =
+        reference_state.component_refs();
 
     let checkpoint_loader = CheckpointLoader {
         checkpoint_layout: checkpoint_layout.clone(),
@@ -764,7 +735,12 @@ fn validate_eq_checkpoint_internal(
     if !consensus_queue.is_empty() {
         return Err("consensus_queue is not empty".to_string());
     }
-    checkpoint_loader.validate_eq_canister_snapshots(thread_pool, canister_snapshots)
+    let canister_snapshots = reference_state
+        .canister_states()
+        .iter()
+        .map(|(canister_id, canister)| (*canister_id, &canister.canister_snapshots))
+        .collect();
+    checkpoint_loader.validate_eq_canister_snapshots(canister_snapshots)
 }
 
 #[derive(Default)]
@@ -786,6 +762,7 @@ impl LoadCanisterMetrics {
 pub fn load_canister_state(
     canister_layout: &CanisterLayout<ReadOnly>,
     canister_id: &CanisterId,
+    canister_snapshots: CanisterSnapshots,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &dyn CheckpointLoadingMetrics,
@@ -962,6 +939,7 @@ pub fn load_canister_state(
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
         },
+        canister_snapshots,
     };
     let priority = CanisterPriority {
         accumulated_priority: canister_state_bits.accumulated_priority,
@@ -978,13 +956,26 @@ pub fn load_canister_state(
 fn load_canister_state_from_checkpoint(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     canister_id: &CanisterId,
+    snapshot_ids: Vec<SnapshotId>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &CheckpointMetrics,
 ) -> Result<(CanisterState, CanisterPriority, LoadCanisterMetrics), CheckpointError> {
     let canister_layout = checkpoint_layout.canister(canister_id)?;
+    let mut canister_snapshots = CanisterSnapshots::default();
+    for snapshot_id in snapshot_ids {
+        let (canister_snapshot, durations) = load_snapshot_from_checkpoint(
+            checkpoint_layout,
+            &snapshot_id,
+            Arc::clone(&fd_factory),
+        )?;
+        canister_snapshots.push(snapshot_id, Arc::new(canister_snapshot));
+
+        durations.apply(metrics);
+    }
     load_canister_state(
         &canister_layout,
         canister_id,
+        canister_snapshots,
         checkpoint_layout.height(),
         Arc::clone(&fd_factory),
         metrics,

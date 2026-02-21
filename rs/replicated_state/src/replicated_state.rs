@@ -1,4 +1,3 @@
-use crate::canister_snapshots::{CanisterSnapshot, CanisterSnapshots};
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
@@ -12,7 +11,7 @@ use crate::metadata_state::{IngressHistoryState, Stream, StreamMap, SystemMetada
 use crate::{
     CanisterPriority, CanisterQueues, CanisterState, DroppedMessageMetrics, SubnetSchedule,
 };
-use ic_base_types::{PrincipalId, SnapshotId};
+use ic_base_types::PrincipalId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::messaging::{
@@ -451,10 +450,6 @@ pub struct ReplicatedState {
     /// Temporary query stats received during the current epoch.
     /// Reset during the start of each epoch.
     pub epoch_query_stats: RawQueryStats,
-
-    /// Manages the canister snapshots.
-    #[validate_eq(CompareWithValidateEq)]
-    pub canister_snapshots: CanisterSnapshots,
 }
 
 impl ReplicatedState {
@@ -467,7 +462,6 @@ impl ReplicatedState {
             refunds: RefundPool::default(),
             consensus_queue: Vec::new(),
             epoch_query_stats: RawQueryStats::default(),
-            canister_snapshots: CanisterSnapshots::default(),
         }
     }
 
@@ -478,7 +472,6 @@ impl ReplicatedState {
         subnet_queues: CanisterQueues,
         refunds: RefundPool,
         epoch_query_stats: RawQueryStats,
-        canister_snapshots: CanisterSnapshots,
     ) -> Self {
         Self {
             canister_states,
@@ -487,7 +480,6 @@ impl ReplicatedState {
             refunds,
             consensus_queue: Vec::new(),
             epoch_query_stats,
-            canister_snapshots,
         }
     }
 
@@ -502,7 +494,6 @@ impl ReplicatedState {
         &RefundPool,
         &Vec<ConsensusResponse>,
         &RawQueryStats,
-        &CanisterSnapshots,
     ) {
         let ReplicatedState {
             canister_states,
@@ -511,7 +502,6 @@ impl ReplicatedState {
             refunds,
             consensus_queue,
             epoch_query_stats,
-            canister_snapshots,
         } = self;
         (
             canister_states,
@@ -520,7 +510,6 @@ impl ReplicatedState {
             refunds,
             consensus_queue,
             epoch_query_stats,
-            canister_snapshots,
         )
     }
 
@@ -1360,30 +1349,6 @@ impl ReplicatedState {
         }
     }
 
-    /// Adds a new snapshot to the list of snapshots.
-    ///
-    /// This function is used by the management canister's TakeSnapshot function to change the state.
-    /// Note that the rest of the logic, e.g. constructing the `snapshot` is done in the calling code.
-    pub fn take_snapshot(
-        &mut self,
-        snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
-    ) -> SnapshotId {
-        self.metadata
-            .unflushed_checkpoint_ops
-            .take_snapshot(snapshot.canister_id(), snapshot_id);
-        self.canister_snapshots.push(snapshot_id, snapshot)
-    }
-
-    /// Adds a new snapshot to the list of snapshots.
-    pub fn create_snapshot_from_metadata(
-        &mut self,
-        snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
-    ) {
-        self.canister_snapshots.push(snapshot_id, snapshot);
-    }
-
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
     /// only the canisters of `subnet_id` (as determined by the provided routing
     /// table).
@@ -1425,7 +1390,6 @@ impl ReplicatedState {
             mut refunds,
             consensus_queue,
             epoch_query_stats: _,
-            mut canister_snapshots,
         } = self;
 
         // Consensus queue is always empty at the end of the round.
@@ -1466,9 +1430,6 @@ impl ReplicatedState {
         // setting the split marker).
         let metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
 
-        // Retain only the canister snapshots belonging to the local canisters.
-        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
-
         Ok(Self {
             canister_states,
             metadata,
@@ -1476,7 +1437,6 @@ impl ReplicatedState {
             refunds,
             consensus_queue,
             epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
-            canister_snapshots,
         })
     }
 
@@ -1500,7 +1460,6 @@ impl ReplicatedState {
             consensus_queue: _,
             refunds: _,
             epoch_query_stats,
-            canister_snapshots: _,
         } = self;
 
         metadata
@@ -1581,7 +1540,6 @@ impl ReplicatedState {
             mut refunds,
             consensus_queue,
             epoch_query_stats: _,
-            mut canister_snapshots,
         } = self;
 
         // Consensus queue is always empty in-between rounds.
@@ -1622,9 +1580,6 @@ impl ReplicatedState {
             }
             canister_states.insert(*canister_id, canister_state);
         }
-
-        // Retain only the canister snapshots of hosted canisters.
-        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
 
         // On *subnet B*:
         if subnet_id != metadata.own_subnet_id {
@@ -1668,7 +1623,6 @@ impl ReplicatedState {
             refunds,
             consensus_queue,
             epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
-            canister_snapshots,
         })
     }
 
@@ -1873,8 +1827,6 @@ pub mod testing {
             refunds: Default::default(),
             consensus_queue: Default::default(),
             epoch_query_stats: Default::default(),
-            // TODO(EXC-1527): Handle canister snapshots during a subnet split.
-            canister_snapshots: CanisterSnapshots::default(),
         };
     }
 }
