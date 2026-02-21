@@ -439,6 +439,7 @@ fn payload_too_large() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
