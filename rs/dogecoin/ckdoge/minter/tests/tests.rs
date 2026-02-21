@@ -205,9 +205,10 @@ mod deposit {
 }
 
 mod withdrawal {
+    use ic_ckdoge_minter::lifecycle::upgrade::UpgradeArgs;
     use ic_ckdoge_minter::{
-        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
-        WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
+        InvalidTransactionError, UTXOS_COUNT_THRESHOLD, WithdrawalReimbursementReason,
+        candid_api::RetrieveDogeWithApprovalError,
     };
     use ic_ckdoge_minter_test_utils::{
         DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup,
@@ -414,24 +415,32 @@ mod withdrawal {
     fn should_cancel_and_reimburse_large_withdrawal() {
         let setup = Setup::default().with_doge_balance();
 
+        // Reduce max_num_inputs_in_transaction via upgrade to speed up the test.
+        // Note: the init arg max_num_inputs_in_transaction is not respected
+        // during initial canister install, only during upgrades.
+        const MAX_INPUTS: usize = 100;
+        setup.minter().upgrade(Some(UpgradeArgs {
+            max_num_inputs_in_transaction: Some(MAX_INPUTS as u64),
+            ..Default::default()
+        }));
+
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
         };
-        // Step 1: deposit a lot of small UTXOs
-        // < 2_000 to avoid ledger spawning an archive.
-        const NUM_UXTOS: usize = 1_900;
+        // Step 1: deposit small UTXOs exceeding the max input limit.
+        const NUM_UTXOS: usize = 120;
         let deposit_value = RETRIEVE_DOGE_MIN_AMOUNT;
         setup
             .deposit_flow()
             .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_send_transaction([deposit_value; NUM_UXTOS])
+            .dogecoin_send_transaction([deposit_value; NUM_UTXOS])
             .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_update_balance()
             .expect_mint();
 
-        let too_large_num_inputs = 1_800;
-        let withdrawal_amount = too_large_num_inputs * deposit_value;
+        let too_large_num_inputs = MAX_INPUTS + 1;
+        let withdrawal_amount = too_large_num_inputs as u64 * deposit_value;
 
         setup
             .withdrawal_flow()
@@ -443,8 +452,8 @@ mod withdrawal {
             .expect_withdrawal_request_accepted()
             .minter_await_withdrawal_reimbursed(WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
-                    num_inputs: too_large_num_inputs as usize,
-                    max_num_inputs: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+                    num_inputs: too_large_num_inputs,
+                    max_num_inputs: MAX_INPUTS,
                 },
             ));
     }

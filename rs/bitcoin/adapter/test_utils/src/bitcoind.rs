@@ -339,6 +339,9 @@ impl<'a> Default for Conf<'a> {
 impl<T: RpcClientType> Daemon<T> {
     /// Create a new daemon by running the executable at the given path, network and
     /// configration.
+    ///
+    /// Retries up to 3 times on startup failure (e.g. port conflicts from
+    /// concurrent test processes).
     pub fn new(daemon_path: &str, network: T, conf: Conf) -> Daemon<T> {
         let work_dir = match conf.work_dir {
             Some(dir) => {
@@ -358,83 +361,123 @@ impl<T: RpcClientType> Daemon<T> {
             Some(auth) => auth,
         };
         fs::write(conf_path.clone(), "").unwrap();
-        let (rpc_listener, rpc_port) = get_available_port().unwrap();
-        let rpc_socket = net::SocketAddrV4::new(LOCAL_IP, rpc_port);
-        let rpc_url = format!("http://{rpc_socket}");
-        let (p2p_listener, p2p_args, p2p_socket) = if conf.p2p {
-            let (listener, p2p_port) = get_available_port().unwrap();
-            let p2p_socket = net::SocketAddrV4::new(LOCAL_IP, p2p_port);
-            let p2p_arg = format!("-port={p2p_port}");
-            let args = vec![p2p_arg];
-            (Some(listener), args, Some(p2p_socket))
-        } else {
-            (None, vec!["-listen=0".to_string()], None)
-        };
 
-        let mut cmd = process::Command::new(daemon_path);
-        cmd.arg("-printtoconsole")
-            .arg(format!("-conf={}", conf_path.display()))
-            .arg(format!("-datadir={}", work_dir.path().display()))
-            .arg(format!("-rpcport={rpc_port}"))
-            .args(&p2p_args)
-            .args(&conf.args)
-            // Always pipe stdout so we can watch for "Done loading"
-            .stdout(process::Stdio::piped());
+        let view_stdout = conf.view_stdout;
+        let p2p_enabled = conf.p2p;
+        let daemon_args: Vec<String> = conf.args.iter().map(|s| s.to_string()).collect();
 
-        println!("Spawning daemon: {cmd:?}");
+        const MAX_ATTEMPTS: u32 = 3;
 
-        let mut process = cmd.spawn().unwrap();
+        for attempt in 1..=MAX_ATTEMPTS {
+            let (rpc_listener, rpc_port) = get_available_port().unwrap();
+            let rpc_socket = net::SocketAddrV4::new(LOCAL_IP, rpc_port);
+            let rpc_url = format!("http://{rpc_socket}");
+            let (p2p_listener, p2p_args, p2p_socket) = if p2p_enabled {
+                let (listener, p2p_port) = get_available_port().unwrap();
+                let p2p_socket = net::SocketAddrV4::new(LOCAL_IP, p2p_port);
+                let p2p_arg = format!("-port={p2p_port}");
+                let args = vec![p2p_arg];
+                (Some(listener), args, Some(p2p_socket))
+            } else {
+                (None, vec!["-listen=0".to_string()], None)
+            };
 
-        drop(rpc_listener);
-        drop(p2p_listener);
+            let mut cmd = process::Command::new(daemon_path);
+            cmd.arg("-printtoconsole")
+                .arg(format!("-conf={}", conf_path.display()))
+                .arg(format!("-datadir={}", work_dir.path().display()))
+                .arg(format!("-rpcport={rpc_port}"))
+                .args(&p2p_args)
+                .args(&daemon_args)
+                // Always pipe stdout so we can watch for "Done loading"
+                .stdout(process::Stdio::piped());
 
-        if let Some(status) = process.try_wait().unwrap() {
-            panic!("early exit with: {status:?}");
-        }
-        assert!(process.stderr.is_none());
+            println!("Spawning daemon (attempt {attempt}/{MAX_ATTEMPTS}): {cmd:?}");
 
-        // Read child's stdout and wait for "Done loading"
-        let stdout = process.stdout.take().expect("child stdout must be piped");
-        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let mut reader = BufReader::new(stdout);
-            let mut line = String::new();
-            let mut notified = false;
-            let mut out = std::io::stdout();
-            loop {
-                line.clear();
-                match reader.read_line(&mut line) {
-                    Ok(0) => break, // EOF
-                    Ok(_) => {
-                        if conf.view_stdout {
-                            let _ = out.write_all(line.as_bytes());
-                            let _ = out.flush();
-                        }
-                        if !notified && line.contains("Done loading") {
-                            let _ = ready_tx.send(());
-                            notified = true; // keep mirroring until EOF
-                        }
+            let mut process = cmd.spawn().unwrap();
+
+            drop(rpc_listener);
+            drop(p2p_listener);
+
+            if let Some(status) = process.try_wait().unwrap() {
+                if attempt < MAX_ATTEMPTS {
+                    eprintln!(
+                        "Daemon exited early with {status:?} \
+                         (attempt {attempt}/{MAX_ATTEMPTS}), retrying..."
+                    );
+                    let network_dir = work_dir.path().join(network.to_string());
+                    if network_dir.exists() {
+                        let _ = fs::remove_dir_all(&network_dir);
                     }
-                    Err(_) => break,
+                    continue;
+                }
+                panic!("early exit with: {status:?}");
+            }
+            assert!(process.stderr.is_none());
+
+            // Read child's stdout and wait for "Done loading"
+            let stdout = process.stdout.take().expect("child stdout must be piped");
+            let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stdout);
+                let mut line = String::new();
+                let mut notified = false;
+                let mut out = std::io::stdout();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => break, // EOF
+                        Ok(_) => {
+                            if view_stdout {
+                                let _ = out.write_all(line.as_bytes());
+                                let _ = out.flush();
+                            }
+                            if !notified && line.contains("Done loading") {
+                                let _ = ready_tx.send(());
+                                notified = true; // keep mirroring until EOF
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+
+            let timeout = Duration::from_secs(60);
+
+            match ready_rx.recv_timeout(timeout) {
+                Ok(()) => {
+                    let rpc_client = RpcClient::new(network, &rpc_url, auth.clone()).unwrap();
+                    let rpc_client = rpc_client.ensure_wallet().unwrap();
+
+                    return Self {
+                        _work_dir: work_dir,
+                        p2p_socket,
+                        rpc_client,
+                        process,
+                    };
+                }
+                Err(_) => {
+                    let _ = process.kill();
+                    let _ = process.wait();
+                    if attempt < MAX_ATTEMPTS {
+                        eprintln!(
+                            "Daemon failed to start \
+                             (attempt {attempt}/{MAX_ATTEMPTS}), retrying..."
+                        );
+                        let network_dir = work_dir.path().join(network.to_string());
+                        if network_dir.exists() {
+                            let _ = fs::remove_dir_all(&network_dir);
+                        }
+                        continue;
+                    }
+                    panic!(
+                        "expected {daemon_path} to be done loading after \
+                         {MAX_ATTEMPTS} attempts (timeout {timeout:?} each)"
+                    );
                 }
             }
-        });
-
-        let timeout = Duration::from_secs(60);
-
-        ready_rx
-            .recv_timeout(timeout)
-            .unwrap_or_else(|_| panic!("expected {cmd:?} to be done loading within {timeout:?}"));
-
-        let rpc_client = RpcClient::new(network, &rpc_url, auth.clone()).unwrap();
-        let rpc_client = rpc_client.ensure_wallet().unwrap();
-
-        Self {
-            _work_dir: work_dir,
-            p2p_socket,
-            rpc_client,
-            process,
         }
+        unreachable!()
     }
 
     /// Stop the daemon process and return its [ExitStatus].
