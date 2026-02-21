@@ -1001,15 +1001,10 @@ impl Validator {
                 }
                 continue;
             }
-            if !proposal.check_integrity() {
+            if let Err(err) = proposal.check_integrity() {
                 change_set.push(ChangeAction::HandleInvalid(
-                    proposal.clone().into_message(),
-                    format!(
-                        "Proposal integrity check failed: {:?} {:?} {:?}",
-                        proposal.content.get_hash(),
-                        proposal.as_ref().payload.get_hash(),
-                        proposal.as_ref().payload.as_ref()
-                    ),
+                    proposal.into_message(),
+                    format!("Proposal integrity check failed: {err}",),
                 ));
                 continue;
             }
@@ -1575,10 +1570,10 @@ impl Validator {
             .filter_map(|catch_up_package| {
                 // Such heights should not make it into this loop.
                 debug_assert!(catch_up_package.height() > catch_up_height);
-                if !catch_up_package.check_integrity() {
+                if let Err(err) = catch_up_package.check_integrity() {
                     return Some(ChangeAction::HandleInvalid(
                         catch_up_package.into_message(),
-                        "CatchUpPackage integrity check failed".to_string(),
+                        format!("CatchUpPackage integrity check failed: {err}"),
                     ));
                 }
                 let verification = self
@@ -1619,10 +1614,10 @@ impl Validator {
         shares
             .filter_map(|share| {
                 debug_assert!(share.height() > catch_up_height);
-                if !share.check_integrity() {
+                if let Err(err) = share.check_integrity() {
                     return Some(ChangeAction::HandleInvalid(
                         share.into_message(),
-                        "CatchUpPackageShare integrity check failed".to_string(),
+                        format!("CatchUpPackageShare integrity check failed: {err}"),
                     ));
                 }
                 match self.validate_catch_up_share_content(pool_reader, &share.content) {

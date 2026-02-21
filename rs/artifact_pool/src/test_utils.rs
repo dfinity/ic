@@ -316,7 +316,11 @@ where
             let mut pool = T::new_consensus_pool(config, log);
             pool.mutate(insert_ops);
             let proposals = pool.block_proposal().get_all().collect::<Vec<_>>();
-            assert!(proposals.iter().all(|proposal| proposal.check_integrity()));
+            assert!(
+                proposals
+                    .iter()
+                    .all(|proposal| proposal.check_integrity().is_ok())
+            );
             assert_eq!(
                 payloads,
                 proposals

@@ -1036,7 +1036,7 @@ mod tests {
         println!("Number of CUP content variants: {}", set.len());
 
         for (i, cup) in set.into_iter().enumerate() {
-            assert!(cup.check_integrity(), "Integrity check failed");
+            assert_eq!(cup.check_integrity(), Ok(()), "Integrity check failed");
             let bytes = pb::CatchUpContent::from(cup).encode_to_vec();
             let file_path = directory.join(format!("{i}.pb"));
             fs::write(file_path, bytes).expect("Failed to write bytes");
@@ -1059,9 +1059,9 @@ mod tests {
                     pb::CatchUpContent::decode(bytes.as_slice()).expect("Failed to decode bytes");
                 let cup =
                     CatchUpContent::try_from(proto_cup).expect("Failed to deserialize CUP content");
-                if !cup.check_integrity() {
+                if let Err(err) = cup.check_integrity() {
                     panic!(
-                        "Integrity check of file {path:?} failed. Payload: {:?}",
+                        "Integrity check of file {path:?} failed: {err}. Payload: {:?}",
                         cup.block.as_ref().payload.as_ref()
                     );
                 }
@@ -1074,13 +1074,13 @@ mod tests {
         let set = CatchUpPackage::exhaustive_set(&mut reproducible_rng());
         println!("Number of CUP content variants: {}", set.len());
         for cup in &set {
-            assert!(cup.check_integrity());
+            assert_eq!(cup.check_integrity(), Ok(()));
             // serialize -> deserialize round-trip
             let bytes = pb::CatchUpPackage::from(cup.clone()).encode_to_vec();
             let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
             let new_cup = CatchUpPackage::try_from(&proto_cup).unwrap();
 
-            assert!(new_cup.check_integrity());
+            assert_eq!(new_cup.check_integrity(), Ok(()));
             assert_eq!(
                 cup, &new_cup,
                 "deserialized block is different from original"
