@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* A `create_neuron` method to create neurons through staking ICPs using the ICRC2 standard.
+
 ## Changed
 
 * Lowered the maximum page size of list_neurons to 50. The vast majority (> 95%)
