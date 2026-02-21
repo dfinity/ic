@@ -18,7 +18,8 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the actions of Node Providers sequentially, i.e. one after another, instead of all in parallel.
+. This test variant performs the recovery on an NNS subnet where all nodes are broken, not just `f+1`.
+. It also performs the actions of Node Providers sequentially, i.e. one after another, instead of all in parallel.
 
 end::catalog[] */
 
@@ -43,7 +44,8 @@ fn main() -> Result<()> {
         })
         .add_test(systest!(test; TestConfig {
             local_recovery: false,
-            break_dfinity_owned_node: false,
+            break_dfinity_owned_node: true,
+            num_broken_nodes: SUBNET_SIZE,
             add_and_bless_upgrade_version: true,
             fix_dfinity_owned_node_like_np: false,
             sequential_np_actions: true,
