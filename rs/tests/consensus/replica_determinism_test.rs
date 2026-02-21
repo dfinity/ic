@@ -134,9 +134,36 @@ fn test(env: TestEnv) {
                 .await
                 .expect("Node didn't report healthy");
 
+            // After the node reports healthy, it may still need time to catch up
+            // to the latest state (e.g. the canister's wasm module may not yet be
+            // available). Retry the first update call to allow for this.
+            let canister_id = canister.canister_id();
+            ic_system_test_driver::retry_with_msg_async!(
+                "First update after node restart",
+                &log,
+                Duration::from_secs(120),
+                Duration::from_secs(5),
+                || async {
+                    agent
+                        .update(&canister_id, "update")
+                        .with_arg(wasm().set_global_data(&[0_u8]).reply())
+                        .call_and_wait()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("failed to update: {e}"))
+                }
+            )
+            .await
+            .expect("failed to update after retries");
+            let response = canister
+                .query(wasm().get_global_data().append_and_reply())
+                .await
+                .expect("failed to query");
+            assert_eq!(response, vec![0_u8]);
+
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
-            for n in 0..(DKG_INTERVAL + 1) {
+            // Start from 1 since we already did the first iteration above.
+            for n in 1..(DKG_INTERVAL + 1) {
                 agent
                     .update(&canister.canister_id(), "update")
                     .with_arg(wasm().set_global_data(&[n as u8]).reply())
