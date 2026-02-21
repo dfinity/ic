@@ -3071,7 +3071,7 @@ pub struct ListProposalInfoResponse {
 /// Paging is available if the result set is larger than `MAX_LIST_NEURONS_RESULTS`,
 /// which is currently 500 neurons.  If you are unsure of the number of results in a set,
 /// you can use the `total_pages_available` field in the response to determine how many
-/// additional pages need to be queried.  It will be based on your `page_size` parameter.  
+/// additional pages need to be queried.  It will be based on your `page_size` parameter.
 /// When paging through results, it is good to keep in mind that newly inserted neurons
 /// could be missed if they are inserted between calls to pages, and this could result in missing
 /// a neuron in the combined responses.
@@ -4106,6 +4106,8 @@ pub enum NnsFunction {
     /// UpdateConfigOfSubnet can be used instead. But otherwise, this is the
     /// state of the art (as of Oct 2025) way of doing subnet recovery.
     SetSubnetOperationalLevel = 55,
+    /// The proposal requests to split a subnet.
+    SplitSubnet = 56,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4189,6 +4191,7 @@ impl NnsFunction {
             NnsFunction::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
             NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
+            NnsFunction::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4269,6 +4272,7 @@ impl NnsFunction {
             "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
+            "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             _ => None,
         }
     }

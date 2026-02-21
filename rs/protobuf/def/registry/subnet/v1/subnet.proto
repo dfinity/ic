@@ -131,6 +131,32 @@ message CatchUpPackageContents {
 
   /// The initial IDkg dealings for boot strapping target chain key subnets.
   repeated ChainKeyInitialization chain_key_initializations = 8;
+
+  /// The purpose of the CUP.
+  oneof cup_type {
+    /// Initial CUP used to bootstrap a subnet.
+    GenesisArgs genesis = 9;
+    /// A CUP used to recover a subnet during a disaster.
+    RecoveryArgs recovery = 10;
+    /// A CUP used to split a subnet into two.
+    SubnetSplittingArgs subnet_splitting = 11;
+  }
+}
+
+message GenesisArgs {}
+
+message RecoveryArgs {
+  // The blockchain height that the CUP should have
+  uint64 height = 1;
+  // Block time for the CUP's block
+  uint64 time = 2;
+  // The hash of the state that the subnet should use
+  bytes state_hash = 3;
+}
+
+message SubnetSplittingArgs {
+  /// The ID of the subnet created by the split.
+  types.v1.SubnetId destination_subnet_id = 1;
 }
 
 message RegistryStoreUri {

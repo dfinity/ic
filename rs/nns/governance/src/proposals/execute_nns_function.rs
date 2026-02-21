@@ -456,6 +456,7 @@ pub enum ValidNnsFunction {
     PauseCanisterMigrations,
     UnpauseCanisterMigrations,
     SetSubnetOperationalLevel,
+    SplitSubnet,
 }
 
 impl ValidNnsFunction {
@@ -584,6 +585,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::SetSubnetOperationalLevel => {
                 (REGISTRY_CANISTER_ID, "set_subnet_operational_level")
             }
+            ValidNnsFunction::SplitSubnet => (REGISTRY_CANISTER_ID, "split_subnet"),
         }
     }
 
@@ -612,7 +614,8 @@ impl ValidNnsFunction {
             | ValidNnsFunction::UpdateSubnetType
             | ValidNnsFunction::ChangeSubnetTypeAssignment
             | ValidNnsFunction::UpdateSnsWasmSnsSubnetIds
-            | ValidNnsFunction::SetSubnetOperationalLevel => Topic::SubnetManagement,
+            | ValidNnsFunction::SetSubnetOperationalLevel
+            | ValidNnsFunction::SplitSubnet => Topic::SubnetManagement,
 
             ValidNnsFunction::ReviseElectedGuestosVersions
             | ValidNnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
@@ -700,6 +703,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::PauseCanisterMigrations => "Pause Canister Migrations",
             ValidNnsFunction::UnpauseCanisterMigrations => "Unpause Canister Migrations",
             ValidNnsFunction::SetSubnetOperationalLevel => "Set Subnet Operational Level",
+            ValidNnsFunction::SplitSubnet => "Split subnet",
         }
     }
 
@@ -913,6 +917,13 @@ impl ValidNnsFunction {
                 "Set the operational level of a subnet, which can be used to take a subnet offline \
                 or bring it back online as part of subnet recovery."
             }
+            ValidNnsFunction::SplitSubnet => {
+                "Split a subnet (both the replicas forming the subnet and the canisters hosted \
+                on the subnet) into two. A new subnet will be created and \
+                the nodes specified in the proposal will be moved to the newly created subnet. \
+                Additionally in the routing table some canister ID ranges will be remapped \
+                from the original subnet to the newly created one."
+            }
         }
     }
 }
@@ -1001,6 +1012,7 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
             NnsFunction::SetSubnetOperationalLevel => {
                 Ok(ValidNnsFunction::SetSubnetOperationalLevel)
             }
+            NnsFunction::SplitSubnet => Ok(ValidNnsFunction::SplitSubnet),
 
             // Obsolete functions - based on check_obsolete
             NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {
