@@ -2,18 +2,30 @@ use anyhow::Result;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use std::time::Duration;
-use xnet_slo_test_lib::Config;
+use xnet_slo_test_lib::{Config, ERROR_PERCENTAGE_THRESHOLD, TARGETED_LATENCY_SECONDS};
 
 const SUBNETS: usize = 120;
 const NODES_PER_SUBNET: usize = 1;
 const RUNTIME: Duration = Duration::from_secs(600);
 const REQUEST_RATE: usize = 10;
+// Use a lower send rate threshold than the default 0.3 because with 120 subnets
+// there is a higher probability that at least one subnet's send rate falls
+// marginally below the threshold due to natural variance.
+const SEND_RATE_THRESHOLD: f64 = 0.27;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(800);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(1400);
 
 fn main() -> Result<()> {
-    let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE);
+    let config = Config::new_with_custom_thresholds(
+        SUBNETS,
+        NODES_PER_SUBNET,
+        RUNTIME,
+        REQUEST_RATE,
+        SEND_RATE_THRESHOLD,
+        ERROR_PERCENTAGE_THRESHOLD,
+        TARGETED_LATENCY_SECONDS,
+    );
     let test = config.clone().test();
     SystemTestGroup::new()
         .with_setup(config.build())

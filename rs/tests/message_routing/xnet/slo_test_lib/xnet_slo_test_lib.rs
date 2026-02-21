@@ -50,8 +50,8 @@ const PAYLOAD_SIZE_BYTES: u64 = 1024;
 /// `queue_capacity / 10 /* max_rounds roundtrip */`
 const MAX_CANISTER_TO_CANISTER_RATE: usize = 5;
 const SEND_RATE_THRESHOLD: f64 = 0.3;
-const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
-const TARGETED_LATENCY_SECONDS: u64 = 20;
+pub const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
+pub const TARGETED_LATENCY_SECONDS: u64 = 20;
 
 #[derive(Clone, Debug)]
 pub struct Config {
