@@ -2,7 +2,7 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
     process_manager::{Process, ProcessManager},
-    registry_helper::RegistryHelper,
+    registry_helper::{RegistryError, RegistryHelper},
 };
 use ic_config::crypto::CryptoConfig;
 use ic_logger::{ReplicaLogger, info, warn};
@@ -131,7 +131,7 @@ impl BoundaryNodeManager {
                 }
             }
             // BN should not be active
-            Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)) => {
+            Err(RegistryError::ApiBoundaryNodeMissing(_, _)) => {
                 if let Err(err) = self.ensure_boundary_node_stopped() {
                     warn!(self.logger, "Failed to stop Boundary Node: {}", err);
                 }
@@ -163,7 +163,7 @@ impl BoundaryNodeManager {
         let domain_name = self
             .domain_name
             .as_ref()
-            .ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id))?;
+            .ok_or(OrchestratorError::DomainNameMissing(self.node_id))?;
 
         let env = env_file_reader::read_file("/opt/ic/share/ic-boundary.env").map_err(|e| {
             OrchestratorError::IoError("unable to read ic-boundary environment variables".into(), e)

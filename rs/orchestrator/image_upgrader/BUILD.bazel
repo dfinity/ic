@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/http_utils",
     "//rs/monitoring/logger",
+    "//rs/types/types",
     "@crate_index//:slog",
     "@crate_index//:tokio",
 ]
