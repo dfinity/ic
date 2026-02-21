@@ -252,7 +252,6 @@ async fn try_fetch_delegation_from_nns(
         }
     };
 
-    // TODO(CON-1487): request the /canister_ranges/{subnet_id} subtree as well
     let envelope = HttpRequestEnvelope {
         content: HttpReadStateContent::ReadState {
             read_state: HttpReadState {
