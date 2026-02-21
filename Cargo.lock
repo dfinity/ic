@@ -1503,6 +1503,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "blob-store"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "candid",
+ "candid_parser",
+ "hex",
+ "ic-cdk",
+ "ic-stable-structures 0.6.8",
+ "pocket-ic",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
