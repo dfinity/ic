@@ -8,7 +8,9 @@ use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
 use ic_base_types::PrincipalId;
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
-use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self, RecurrencyMode};
+use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{
+    self, GetBlocksMode, RecurrencyMode,
+};
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::InitArgsBuilder;
 use ic_icrc1_ledger::Tokens;
@@ -140,7 +142,7 @@ proptest! {
                 current_balances.insert(account,Nat(BigUint::zero()));
             }
 
-            blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10,Arc::new(AsyncMutex::new(vec![])), RecurrencyMode::OneShot, Box::new(|| {})).await.unwrap();
+            blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10,Arc::new(AsyncMutex::new(vec![])), RecurrencyMode::OneShot, Box::new(|| {}), GetBlocksMode::Legacy).await.unwrap();
             storage_client.update_account_balances().await.unwrap();
 
             let mut block_indices_iter = block_indices.into_iter().collect::<Vec<u64>>();
@@ -199,6 +201,7 @@ fn test_self_transfer() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
+            GetBlocksMode::Legacy,
         )
         .await
         .unwrap();
@@ -235,6 +238,7 @@ fn test_self_transfer() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
+            GetBlocksMode::Legacy,
         )
         .await
         .unwrap();
@@ -320,6 +324,7 @@ fn test_burn_and_mint_fee() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
+            GetBlocksMode::Legacy,
         )
         .await
         .unwrap();
@@ -366,6 +371,7 @@ fn test_burn_and_mint_fee() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
+            GetBlocksMode::Legacy,
         )
         .await
         .unwrap();
