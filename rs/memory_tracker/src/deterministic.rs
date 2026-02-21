@@ -58,7 +58,7 @@
 
 use std::cell::RefCell;
 use std::ops::Range;
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex, atomic::Ordering};
 
 use bit_vec::BitVec;
 use ic_logger::{ReplicaLogger, debug};
@@ -344,10 +344,12 @@ pub(crate) struct DeterministicMemoryTracker {
     checksum: RefCell<checksum::SigsegChecksum>,
     pub metrics: MemoryTrackerMetrics,
     state: RefCell<DeterministicState>,
+    decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
 }
 
 impl DeterministicMemoryTracker {
     /// Marks a Wasm page as accessed and adds its OS pages to the accessed_pages list.
+    /// Charges 1 instruction per OS page accessed.
     fn mark_wasm_page_accessed(
         &self,
         state: &mut DeterministicState,
@@ -356,10 +358,30 @@ impl DeterministicMemoryTracker {
         state.mark_wasm_page_accessed(wasm_page_idx);
 
         // Add the corresponding OS pages to the accessed_pages vector
+        // and charge 1 instruction per OS page accessed.
         let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
         let mut accessed_pages = self.accessed_pages.borrow_mut();
+        let num_os_pages = os_page_range.end.get() - os_page_range.start.get();
         for os_page_idx in os_page_range.start.get()..os_page_range.end.get() {
             accessed_pages.push(PageIndex::new(os_page_idx));
+        }
+
+        // Charge 1 instruction per OS page accessed.
+        if let Ok(mut counter) = self.decrement_instruction_counter.lock() {
+            counter(num_os_pages);
+        }
+    }
+
+    /// Marks a Wasm page as dirty.
+    /// Charges 1 instruction per OS page dirtied.
+    fn mark_wasm_page_dirty(&self, state: &mut DeterministicState, wasm_page_idx: WasmPageIndex) {
+        state.mark_wasm_page_dirty(wasm_page_idx);
+
+        // Charge 1 instruction per OS page dirtied.
+        let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
+        let num_os_pages = os_page_range.end.get() - os_page_range.start.get();
+        if let Ok(mut counter) = self.decrement_instruction_counter.lock() {
+            counter(num_os_pages);
         }
     }
 
@@ -418,7 +440,7 @@ impl DeterministicMemoryTracker {
             (Some(AccessKind::Write), DirtyPageTracking::Track) => {
                 if state.try_write_protect_wasm_page(&self.memory_area, faulting_wasm_page_idx) {
                     state.non_deterministic_metrics.protect_write += 1;
-                    state.mark_wasm_page_dirty(faulting_wasm_page_idx);
+                    self.mark_wasm_page_dirty(state, faulting_wasm_page_idx);
                 } else {
                     state.map_wasm_page_as(
                         &self.page_map,
@@ -429,13 +451,13 @@ impl DeterministicMemoryTracker {
                     );
                     state.non_deterministic_metrics.map_read_write += 1;
                     self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
-                    state.mark_wasm_page_dirty(faulting_wasm_page_idx);
+                    self.mark_wasm_page_dirty(state, faulting_wasm_page_idx);
                 }
             }
             (None, DirtyPageTracking::Track) => {
                 if state.try_write_protect_wasm_page(&self.memory_area, faulting_wasm_page_idx) {
                     state.non_deterministic_metrics.protect_write += 1;
-                    state.mark_wasm_page_dirty(faulting_wasm_page_idx);
+                    self.mark_wasm_page_dirty(state, faulting_wasm_page_idx);
                 } else {
                     state.map_wasm_page_as(
                         &self.page_map,
@@ -469,6 +491,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         memory_limits: MemoryLimits,
+        decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized,
@@ -477,7 +500,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
         let num_pages = NumOsPages::new(size.get() / PAGE_SIZE as u64);
         debug!(
             log,
-            "PrefetchingMemoryTracker::new: start={:?}, size={}, num_pages={}",
+            "DeterministicMemoryTracker::new: start={:?}, size={}, num_pages={}",
             start,
             size,
             num_pages
@@ -501,6 +524,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
             checksum: RefCell::new(checksum::SigsegChecksum::default()),
             metrics: MemoryTrackerMetrics::default(),
             state: RefCell::new(state),
+            decrement_instruction_counter,
         };
 
         let mut instructions = tracker.page_map.get_base_memory_instructions();

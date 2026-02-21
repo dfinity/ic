@@ -6,7 +6,11 @@ use ic_replicated_state::{PageIndex, PageMap};
 use ic_sys::{PAGE_SIZE, PageBytes};
 use ic_types::{NumBytes, NumOsPages};
 use nix::sys::mman::{ProtFlags, mprotect};
-use std::{cell::RefCell, ops::Range, sync::atomic::Ordering};
+use std::{
+    cell::RefCell,
+    ops::Range,
+    sync::{Arc, Mutex, atomic::Ordering},
+};
 
 use crate::{
     AccessKind, DirtyPageTracking, MemoryArea, MemoryLimits, MemoryTracker, MemoryTrackerMetrics,
@@ -56,6 +60,7 @@ impl MemoryTracker for PrefetchingMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         _memory_limits: MemoryLimits,
+        _decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized,

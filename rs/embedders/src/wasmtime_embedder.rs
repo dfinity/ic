@@ -203,6 +203,31 @@ struct WasmMemoryInfo {
     dirty_page_tracking: DirtyPageTracking,
 }
 
+/// A wrapper around a raw pointer to the Store.
+/// This type is Send + Sync so that we can store it in a closure owned by a signal handler.
+///
+/// # Safety
+///
+/// The pointer is only valid as long as the WasmtimeInstance is alive.
+/// This construction is only safe because we store it in a closure which gets
+/// dropped along with the associated WasmtimeInstance.
+#[derive(Copy, Clone)]
+struct StorePtr(*mut wasmtime::Store<StoreData>);
+
+unsafe impl Send for StorePtr {}
+unsafe impl Sync for StorePtr {}
+
+impl StorePtr {
+    /// # Safety
+    ///
+    /// This method can only be called if the WasmtimeInstance is alive and we
+    /// have exclusive access to the store.
+    #[allow(unsafe_op_in_unsafe_fn)]
+    unsafe fn get(&mut self) -> &mut wasmtime::Store<StoreData> {
+        &mut *self.0
+    }
+}
+
 pub struct WasmtimeEmbedder {
     log: ReplicaLogger,
     config: EmbeddersConfig,
@@ -557,11 +582,41 @@ impl WasmtimeEmbedder {
             }
         }
 
+        // Create a closure to decrement the instruction counter.
+        // SAFETY: We store a raw pointer to the Store and a copy of the Global.
+        // These remain valid for the lifetime of the WasmtimeInstance because:
+        // 1. The Store is owned by WasmtimeInstance
+        // 2. The Global is a lightweight handle that references data in the Store
+        // 3. The memory tracker (which holds this closure) is also owned by WasmtimeInstance
+        // 4. All are dropped together when WasmtimeInstance is dropped
+        let decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>> = {
+            if let Some(global) = store.data().num_instructions_global {
+                // Store a wrapped pointer to the Store and a copy of the Global
+                let mut store_ptr = StorePtr(&mut store as *mut wasmtime::Store<StoreData>);
+                let global_copy = global;
+
+                Arc::new(Mutex::new(move |instructions_to_subtract: u64| {
+                    // SAFETY: Accessing the Store and Global from the signal handler.
+                    // Both pointers are guaranteed valid by the lifetime relationship described above.
+                    unsafe {
+                        let store_ref = store_ptr.get();
+                        if let Val::I64(current) = global_copy.get(&mut *store_ref) {
+                            let new_value = current.saturating_sub(instructions_to_subtract as i64);
+                            let _ = global_copy.set(store_ref, Val::I64(new_value));
+                        }
+                    }
+                }))
+            } else {
+                Arc::new(Mutex::new(|_| {}))
+            }
+        };
+
         let memory_trackers = sigsegv_memory_tracker(
             memories,
             &mut store,
             self.log.clone(),
             self.config.feature_flags.deterministic_memory_tracker,
+            decrement_instruction_counter,
         );
 
         let signal_stack = WasmtimeSignalStack::new();
@@ -723,6 +778,7 @@ fn sigsegv_memory_tracker<S>(
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
     deterministic_memory_tracker: FlagStatus,
+    decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
 ) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
     let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
         FlagStatus::Enabled => Some(MissingPageHandlerKind::Deterministic),
@@ -767,6 +823,7 @@ fn sigsegv_memory_tracker<S>(
                     page_map,
                     maybe_missing_page_handler_kind,
                     memory_limits,
+                    decrement_instruction_counter.clone(),
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))

@@ -1666,7 +1666,7 @@ fn wasm_heap_oob_access() {
         err,
         HypervisorError::Trapped {
             trap_code: TrapCode::HeapOutOfBounds,
-            backtrace: None
+            backtrace: None,
         }
     );
 }
@@ -3244,14 +3244,14 @@ fn large_wasm64_stable_read_write_test() {
             (i64.store (i64.const 4294967314) (i64.const 108))
             (i64.store (i64.const 4294967315) (i64.const 108))
             (i64.store (i64.const 4294967316) (i64.const 111))
-
+ 
             (drop (call $stable_grow (i64.const 10)))
 
             ;; Write to stable memory from large heap offset.
             (call $ic0_stable64_write (i64.const 0) (i64.const 4294967312) (i64.const 5))
             ;; Read from stable memory at a different heap offset.
             (call $ic0_stable64_read (i64.const 4294967320) (i64.const 0) (i64.const 5))
-
+ 
             ;; Return the result of the read operation.
             (call $msg_reply_data_append (i64.const 4294967320) (i64.const 5))
             (call $msg_reply)
@@ -3435,7 +3435,7 @@ fn test_environment_variable_system_api() {
             (i32.const 0)          ;; offset
             (local.get $name_size) ;; (name) size
         )
-
+        
         ;; Assert that the first name exists:
         (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
           (then
@@ -3819,5 +3819,270 @@ fn wasm_accessed_os_pages_count_deterministic_tracker() {
         true,
         2 * OS_PAGES_PER_WASM_PAGE,
         2,
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn run_wasm_and_get_instructions_used(
+    wat: &str,
+    use_deterministic_tracker: bool,
+) -> NumInstructions {
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(use_deterministic_tracker)
+        .with_wat(wat)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+        ))
+        .build();
+
+    let instruction_limit = DEFAULT_NUM_INSTRUCTIONS;
+    instance.set_instruction_counter(instruction_limit.get() as i64);
+
+    instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    let remaining = instance.instruction_counter() as u64;
+    NumInstructions::from(instruction_limit.get() - remaining)
+}
+
+#[cfg(target_os = "linux")]
+fn assert_deterministic_charges_extra(
+    wat: &str,
+    expected_extra_instructions: u64,
+    description: &str,
+) {
+    let prefetching_instructions = run_wasm_and_get_instructions_used(wat, false);
+    let deterministic_instructions = run_wasm_and_get_instructions_used(wat, true);
+
+    assert_eq!(
+        deterministic_instructions.get() - prefetching_instructions.get(),
+        expected_extra_instructions,
+        "{}",
+        description
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn make_memory_access_wat(body: &str) -> String {
+    format!(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 8)
+            (func (export "canister_update test")
+                {}
+                (call $msg_reply)
+            )
+        )"#,
+        body
+    )
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_accessed_pages() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Single read - charges for 1 Wasm page accessed (16 OS pages)
+    let wat = make_memory_access_wat("(drop (i32.load (i32.const 0)))");
+    assert_deterministic_charges_extra(
+        &wat,
+        OS_PAGES_PER_WASM_PAGE as u64,
+        &format!(
+            "Expected {} extra instructions for accessing 1 Wasm page",
+            OS_PAGES_PER_WASM_PAGE
+        ),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_dirty_pages() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Single write - charges for access (16) + dirty (16) = 32 OS pages
+    let wat = make_memory_access_wat("(i32.store (i32.const 100) (i32.const 42))");
+    assert_deterministic_charges_extra(
+        &wat,
+        2 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 32 extra instructions (16 for access + 16 for dirty)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_multiple_pages() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // 2 reads + 1 write across 3 different Wasm pages
+    let body = format!(
+        r#"
+                (drop (i32.load (i32.const 0)))
+                (drop (i32.load (i32.const {})))
+                (i32.store (i32.const {}) (i32.const 42))
+        "#,
+        WASM_PAGE_SIZE_IN_BYTES,
+        2 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    // Charges: 3 pages accessed (48) + 1 page dirty (16) = 64 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        4 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 64 extra instructions (3 accesses + 1 dirty)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_no_extra_charge_for_same_page() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Multiple accesses to the same Wasm page - should only charge once
+    let wat = make_memory_access_wat(
+        r#"
+                (drop (i32.load (i32.const 100)))
+                (drop (i32.load (i32.const 200)))
+                (drop (i32.load (i32.const 300)))
+        "#,
+    );
+
+    // Only charges once for accessing the same Wasm page (16 instructions)
+    assert_deterministic_charges_extra(
+        &wat,
+        OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 16 extra instructions for accessing same page multiple times",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_read_then_write_same_page() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Read then write to the same Wasm page
+    let wat = make_memory_access_wat(
+        r#"
+                (drop (i32.load (i32.const 100)))
+                (i32.store (i32.const 200) (i32.const 42))
+        "#,
+    );
+
+    // Charges: 1 page accessed (16) + 1 page dirty (16) = 32 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        2 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 32 extra instructions (read then write same page)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_multiple_writes_same_page() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Multiple writes to the same Wasm page - access once, dirty once
+    let wat = make_memory_access_wat(
+        r#"
+                (i32.store (i32.const 100) (i32.const 1))
+                (i32.store (i32.const 200) (i32.const 2))
+                (i32.store (i32.const 300) (i32.const 3))
+        "#,
+    );
+
+    // Charges: 1 page accessed (16) + 1 page dirty (16) = 32 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        2 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 32 extra instructions (multiple writes to same page)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_sparse_page_access() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Access pages 0, 2, 4, 6 (sparse pattern)
+    let body = format!(
+        r#"
+                (drop (i32.load (i32.const 0)))
+                (drop (i32.load (i32.const {})))
+                (drop (i32.load (i32.const {})))
+                (drop (i32.load (i32.const {})))
+        "#,
+        2 * WASM_PAGE_SIZE_IN_BYTES,
+        4 * WASM_PAGE_SIZE_IN_BYTES,
+        6 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    // Charges: 4 pages accessed = 64 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        4 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 64 extra instructions (4 sparse page accesses)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_sequential_writes() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Write to 5 sequential Wasm pages
+    let body = format!(
+        r#"
+                (i32.store (i32.const 0) (i32.const 1))
+                (i32.store (i32.const {}) (i32.const 2))
+                (i32.store (i32.const {}) (i32.const 3))
+                (i32.store (i32.const {}) (i32.const 4))
+                (i32.store (i32.const {}) (i32.const 5))
+        "#,
+        WASM_PAGE_SIZE_IN_BYTES,
+        2 * WASM_PAGE_SIZE_IN_BYTES,
+        3 * WASM_PAGE_SIZE_IN_BYTES,
+        4 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    // Charges: 5 pages accessed (80) + 5 pages dirty (80) = 160 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        10 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 160 extra instructions (5 pages accessed + 5 pages dirty)",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deterministic_tracker_charges_for_mixed_read_write_pattern() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Mixed pattern: read page 0, write page 1, read page 2, write page 3
+    let body = format!(
+        r#"
+                (drop (i32.load (i32.const 0)))
+                (i32.store (i32.const {}) (i32.const 1))
+                (drop (i32.load (i32.const {})))
+                (i32.store (i32.const {}) (i32.const 2))
+        "#,
+        WASM_PAGE_SIZE_IN_BYTES,
+        2 * WASM_PAGE_SIZE_IN_BYTES,
+        3 * WASM_PAGE_SIZE_IN_BYTES
+    );
+    let wat = make_memory_access_wat(&body);
+
+    // Charges: 4 pages accessed (64) + 2 pages dirty (32) = 96 instructions
+    assert_deterministic_charges_extra(
+        &wat,
+        6 * OS_PAGES_PER_WASM_PAGE as u64,
+        "Expected 96 extra instructions (4 accesses + 2 dirty)",
     );
 }
