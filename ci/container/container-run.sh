@@ -130,13 +130,41 @@ if [ "$DEVENV" = true ]; then
 fi
 
 WORKDIR="/ic"
-USER=$(whoami)
 
+HOST_USER=$(whoami)
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+SUBUID_START=100000
+SUBGID_START=100000
+SUB_RANGE=65536
+
+# Ensure host has an entry for subgid
+if ! grep -q "^$HOST_USER:" /etc/subuid; then
+    echo "$HOST_USER:${SUBUID_START}:${SUB_RANGE}" | sudo tee -a /etc/subuid
+fi
+
+if ! grep -q "^$HOST_USER:" /etc/subgid; then
+    echo "$HOST_USER:${SUBGID_START}:${SUB_RANGE}" | sudo tee -a /etc/subgid
+fi
+
+grep "^$HOST_USER:" /etc/subuid
+grep "^$HOST_USER:" /etc/subgid
+
+# Set up user namespace mappings so that uid 1000 in the container
+# maps to the invoking user's uid on the host.
 PODMAN_RUN_ARGS=(
-    -w "$WORKDIR"
+    --user 1000:1000
+    --uidmap 0:${SUBUID_START}:1000
+    --uidmap 1000:${HOST_UID}:1
+    --uidmap $((1000 + 1)):$((SUBUID_START + 1000 + 1)):$((SUB_RANGE - 1000 - 1))
+    --gidmap 0:${SUBGID_START}:1000
+    --gidmap 1000:${HOST_GID}:1
+    --gidmap $((1000 + 1)):$((SUBGID_START + 1000 + 1)):$((SUB_RANGE - 1000 - 1))
+)
 
-    -u "ubuntu:ubuntu"
-    -e HOSTUSER="$USER"
+PODMAN_RUN_ARGS+=(
+    -w "$WORKDIR"
+    -e HOSTUSER="$HOST_USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     -e TERM
@@ -149,9 +177,7 @@ PODMAN_RUN_ARGS=(
     --pull=missing
 )
 
-PODMAN_RUN_ARGS+=(--hostuser="$USER")
-
-if [ "$(id -u)" = "1000" ]; then
+if [ "${HOST_UID}" = "1000" ]; then
     CTR_HOME="/home/ubuntu"
 else
     CTR_HOME="/ic"
@@ -175,30 +201,31 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
-    --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
+    --mount type=tmpfs,target="${CTR_HOME}/.local/share/containers"
 )
 
-if [ "$(id -u)" = "1000" ]; then
+# Todo: remove if condition in another PR
+if [ "${HOST_UID}" = "1000" ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
+            --mount type=bind,source="${HOME}/.gitconfig",target="${CTR_HOME}/.gitconfig"
         )
     fi
 
     if [ -e "${HOME}/.bash_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
+            --mount type=bind,source="${HOME}/.bash_history",target="${CTR_HOME}/.bash_history"
         )
 
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
+            --mount type=bind,source="${HOME}/.local/share/fish",target="${CTR_HOME}/.local/share/fish"
         )
     fi
     if [ -e "${HOME}/.zsh_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
+            --mount type=bind,source="${HOME}/.zsh_history",target="${CTR_HOME}/.zsh_history"
         )
     fi
 
