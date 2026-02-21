@@ -1,0 +1,60 @@
+#!/bin/sh
+
+# Allocate huge pages during early boot
+
+set -e
+
+prereqs() {
+    echo ""
+}
+
+case $1 in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+. /scripts/functions
+
+HUGEPAGE_ALLOCATION_GB=475 # The virtual machine uses 475GB, configured in guest_vm_runner/guest_vm_config.rs
+HUGEPAGE_SIZE_KB=2048  # 2MB hugepages
+BYTES_PER_GB=$((1024 * 1024 * 1024))
+KB_PER_GB=$((1024 * 1024))
+
+echo "Setting up huge pages" > /dev/kmsg
+
+# Get total memory in KB from /proc/meminfo
+TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+TOTAL_MEM_GB=$((TOTAL_MEM_KB / KB_PER_GB))
+
+echo "Total system memory: ${TOTAL_MEM_GB} GB" > /dev/kmsg
+
+if [ "$TOTAL_MEM_GB" -lt "$HUGEPAGE_ALLOCATION_GB" ]; then
+    echo "Skipping hugepage setup: insufficient RAM (${TOTAL_MEM_GB} GB < ${HUGEPAGE_ALLOCATION_GB} GB)" > /dev/kmsg
+    exit 0
+fi
+
+echo "RAM requirement satisfied: ${TOTAL_MEM_GB} GB >= ${HUGEPAGE_ALLOCATION_GB} GB" > /dev/kmsg
+
+HUGEPAGES_NEEDED=$((HUGEPAGE_ALLOCATION_GB * KB_PER_GB / HUGEPAGE_SIZE_KB))
+
+echo "Allocating ${HUGEPAGE_ALLOCATION_GB} GB as huge pages (${HUGEPAGES_NEEDED} pages of ${HUGEPAGE_SIZE_KB} KB)" > /dev/kmsg
+
+# Allocate hugepages
+echo "$HUGEPAGES_NEEDED" > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+
+# Verify allocation
+ALLOCATED_HUGEPAGES=$(cat /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages)
+
+if [ "$ALLOCATED_HUGEPAGES" -ne "$HUGEPAGES_NEEDED" ]; then
+    echo "Allocation failed (${ALLOCATED_HUGEPAGES} pages allocated, ${HUGEPAGES_NEEDED} pages requested)" > /dev/kmsg
+    echo "Resetting hugepages to 0" > /dev/kmsg
+    echo "0" > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+    exit 0
+fi
+
+echo "Successfully allocated ${ALLOCATED_HUGEPAGES} huge pages (${HUGEPAGE_ALLOCATION_GB} GB)" > /dev/kmsg
+
+exit 0
+
