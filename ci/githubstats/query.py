@@ -333,7 +333,7 @@ def download_and_process_logs(
 
     execute_download_tasks(download_tasks, test_target, output_dir, download_console_logs, download_ic_logs, df)
 
-    write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp)
+    write_log_dir_readme(output_dir / "README.md", test_target, df, timestamp, download_console_logs, download_ic_logs)
 
 
 def get_all_log_urls_from_buildbuddy(
@@ -922,7 +922,14 @@ LAST_COLUMNS = [
 # fmt: on
 
 
-def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, timestamp: datetime.timestamp):
+def write_log_dir_readme(
+    readme_path: Path,
+    test_target: str,
+    df: pd.DataFrame,
+    timestamp: datetime.timestamp,
+    download_console_logs: bool,
+    download_ic_logs: bool,
+):
     """
     Write a nice README.md in the log output directory describing the //ci/githubstats:query invocation
     that was used to generate the log output directory. This is useful when the invocation has to be redone or tweaked later.
@@ -944,6 +951,27 @@ def write_log_dir_readme(readme_path: Path, test_target: str, df: pd.DataFrame, 
     columns, headers, alignments = zip(*colalignments)
     kwargs = {} if df.empty else {"colalign": ["decimal"] + list(alignments)}
     table_md = tabulate(df[list(columns)], headers=list(headers), tablefmt="github", **kwargs)
+    ic_logs_desc = (
+        """
+* an `ic_logs` directory containing the systemd-journald logs of IC nodes that were deployed as part of the test.
+  Each IC node will have its own log file named `<node_id>.log` and there will be a symlink pointing to it with the IPv6 of the node: `<node_IPv6>.log` -> `<node_id>.log`."""
+        if download_ic_logs
+        else ""
+    )
+    console_logs_desc = (
+        """
+* a `console_logs` directory containing a `<vm_name>.log` file for each VM deployed as part of the test containing the `virsh console` output of that VM. Often `<vm_name>` equals `<node_id>`."""
+        if download_console_logs
+        else ""
+    )
+    system_test_desc = (
+        f"""
+
+The attempt directory will also contain:{ic_logs_desc}{console_logs_desc}
+"""
+        if test_target.startswith("//rs/tests/") and (download_ic_logs or download_console_logs)
+        else ""
+    )
     readme = f"""Logs of `{test_target}`
 ===
 Generated at {timestamp} using:
@@ -951,7 +979,13 @@ Generated at {timestamp} using:
 {cmd}
 ```
 {table_md}
-"""
+
+This directory contains an "invocation" directory, named like `<bazel_invocation_timestamp>_<bazel_invocation_id>`,
+per bazel invocation that ran the test `{test_target}`.
+
+The invocation directory will have a directory per attempt of the test, named like `1`, `2`, `3`, etc.
+
+Each attempt directory will either contain a `FAILED.log` or `PASSED.log` file with the log of the test if the attempt failed or passed, respectively.{system_test_desc}"""
     readme_path.write_text(readme)
 
 
