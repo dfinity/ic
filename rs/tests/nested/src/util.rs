@@ -43,8 +43,12 @@ use slog::{Logger, info, warn};
 use std::net::Ipv6Addr;
 use std::time::Duration;
 
-pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
+/// The timeout for waiting for a single registry version bump during node registration.
+/// This is intentionally shorter than NODE_REGISTRATION_TIMEOUT so the outer retry
+/// loop can handle errors and try again.
+pub const NODE_REGISTRATION_VERSION_BACKOFF: Duration = Duration::from_secs(60);
 
 pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_UPGRADE_BACKOFF: Duration = Duration::from_secs(5);

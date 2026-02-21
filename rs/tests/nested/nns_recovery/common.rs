@@ -3,9 +3,9 @@ use std::path::Path;
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
     AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
-    get_admin_keys_and_generate_backup_keys,
+    get_admin_keys_and_generate_backup_keys, get_node_certification_share_height,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
-    node_with_highest_certification_share_height, remote_recovery,
+    remote_recovery,
 };
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
@@ -33,7 +33,7 @@ use ic_system_test_driver::{
         test_env_api::*,
     },
     nns::change_subnet_membership,
-    retry_with_msg_async,
+    retry_with_msg, retry_with_msg_async,
     util::block_on,
 };
 use ic_types::ReplicaVersion;
@@ -289,9 +289,23 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &logger,
     );
 
-    // Download pool from the node with the highest certification share height
-    let (download_pool_node, highest_cert_share) =
-        node_with_highest_certification_share_height(&nns_subnet, &logger);
+    // Download pool from the node with the highest certification share height.
+    // Retry because metrics endpoints may not be immediately available after
+    // the subnet membership change.
+    let (download_pool_node, highest_cert_share) = retry_with_msg!(
+        "find node with highest certification share height",
+        logger.clone(),
+        secs(120),
+        secs(10),
+        || {
+            nns_subnet
+                .nodes()
+                .filter_map(|n| get_node_certification_share_height(&n, &logger).map(|h| (n, h)))
+                .max_by_key(|&(_, cert_height)| cert_height)
+                .ok_or_else(|| anyhow::anyhow!("No healthy node found"))
+        }
+    )
+    .expect("Failed to find a healthy node with certification share height");
     info!(
         logger,
         "Selected node {} ({:?}) as download pool with certification share height {}",
