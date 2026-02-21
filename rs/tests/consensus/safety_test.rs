@@ -61,6 +61,11 @@ fn main() -> Result<()> {
         // There is a malicious node which proposes invalid blocks, so it's expected that the metric
         // is increased.
         .remove_metrics_to_check("consensus_invalidated_artifacts")
+        // The malicious node (with `maliciously_finalize_all` enabled) can panic during startup
+        // when the honest finalizer code tries to finalize a height before any notarized block
+        // exists, hitting an `unreachable!` in `pick_block_to_finality_sign`. This causes the
+        // replica to restart, which is expected in the presence of malicious behavior.
+        .without_assert_no_replica_restarts()
         .execute_from_args()?;
     Ok(())
 }
