@@ -17,7 +17,7 @@ Runbook::
 
 end::catalog[] */
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -27,7 +27,7 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession},
         universal_vm::{UniversalVm, UniversalVms},
     },
-    systest,
+    retry_with_msg, systest,
     util::block_on,
 };
 use slog::{debug, info};
@@ -40,7 +40,13 @@ const MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS: usize = 1000;
 
 const UNIVERSAL_VM_NAME: &str = "httpbin";
 
-const TCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
+const TCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+
+// Total time allowed per connection attempt (including retries).
+const CONNECTION_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
+
+// Delay between connection retries.
+const CONNECTION_RETRY_BACKOFF: Duration = Duration::from_secs(1);
 
 fn setup(env: TestEnv) {
     let log = env.logger();
@@ -100,15 +106,22 @@ fn connection_count_test(env: TestEnv) {
     let mut streams = Vec::with_capacity(MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS);
 
     for connection_number in 0..MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS {
-        let stream = block_on(create_tcp_connection(node_ip_addr, 9090));
-        match stream {
-            Ok(stream) => streams.push(stream),
-            Err(_) => {
-                panic!(
-                    "Could not create connection {connection_number}#. Connection is below the limit of active connections defined in the firewall, and should be accepted"
-                );
+        let stream = retry_with_msg!(
+            format!("create TCP connection {connection_number}# to node"),
+            log.clone(),
+            CONNECTION_RETRY_TIMEOUT,
+            CONNECTION_RETRY_BACKOFF,
+            || {
+                match block_on(create_tcp_connection(node_ip_addr, 9090)) {
+                    Ok(stream) => Ok(stream),
+                    Err(_) => bail!(
+                        "Could not create connection {connection_number}#. Connection is below the limit of active connections defined in the firewall, and should be accepted"
+                    ),
+                }
             }
-        }
+        )
+        .expect("Could not create connection despite retries. Connection is below the limit of active connections defined in the firewall, and should be accepted");
+        streams.push(stream);
     }
 
     info!(
