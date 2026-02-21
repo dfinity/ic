@@ -376,6 +376,8 @@ fn add_subnet_local_registry_records(
     ni_dkg_transcript: NiDkgTranscript,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     registry_version: RegistryVersion,
+    cost_schedule: CanisterCyclesCostSchedule,
+    subnet_admins: Vec<PrincipalId>,
 ) {
     for node in nodes {
         let node_record = NodeRecord {
@@ -486,6 +488,8 @@ fn add_subnet_local_registry_records(
             max_parallel_pre_signature_transcripts_in_creation: None,
         })
         .with_features(features)
+        .with_cost_schedule(cost_schedule)
+        .with_subnet_admins(subnet_admins)
         .build();
 
     // Insert initial DKG transcripts
@@ -1197,6 +1201,7 @@ pub struct StateMachineBuilder {
     /// Otherwise, no new registry records are created.
     create_at_registry_version: Option<RegistryVersion>,
     cost_schedule: CanisterCyclesCostSchedule,
+    subnet_admins: Vec<PrincipalId>,
 }
 
 impl StateMachineBuilder {
@@ -1237,6 +1242,7 @@ impl StateMachineBuilder {
             remove_old_states: true,
             create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_admins: vec![],
         }
     }
 
@@ -1469,6 +1475,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_subnet_admins(self, subnet_admins: Vec<PrincipalId>) -> Self {
+        Self {
+            subnet_admins,
+            ..self
+        }
+    }
+
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
     /// Otherwise, no new registry records are created.
@@ -1513,6 +1526,7 @@ impl StateMachineBuilder {
             self.remove_old_states,
             self.create_at_registry_version,
             self.cost_schedule,
+            self.subnet_admins,
         )
     }
 
@@ -1851,6 +1865,7 @@ impl StateMachine {
         remove_old_states: bool,
         create_at_registry_version: Option<RegistryVersion>,
         cost_schedule: CanisterCyclesCostSchedule,
+        subnet_admins: Vec<PrincipalId>,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
@@ -1926,6 +1941,8 @@ impl StateMachine {
                 ni_dkg_transcript,
                 registry_data_provider.clone(),
                 create_registry_version,
+                cost_schedule,
+                subnet_admins,
             );
         }
 
@@ -3402,6 +3419,8 @@ impl StateMachine {
             .collect();
 
         let chain_keys_enabled_status = Default::default();
+        let cost_schedule = CanisterCyclesCostSchedule::Normal;
+        let subnet_admins = vec![];
 
         add_subnet_local_registry_records(
             subnet_id,
@@ -3413,6 +3432,8 @@ impl StateMachine {
             ni_dkg_transcript,
             self.registry_data_provider.clone(),
             next_version,
+            cost_schedule,
+            subnet_admins,
         );
     }
 
