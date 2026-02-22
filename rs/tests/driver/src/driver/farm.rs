@@ -219,6 +219,8 @@ impl Farm {
         Ok(())
     }
 
+    // TODO: add inject_vm function to inject state into the VM
+
     pub fn destroy_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{group_name}/vm/{vm_name}/destroy");
         let rb = self.put(&path);

@@ -284,6 +284,7 @@ pub fn setup_and_start_vms(
                         "usb-storage",
                         vec![image_spec],
                     )?;
+                    // TODO: add inject_vm call to update the VM image (either before or after the start_vm call)
                     t_farm.start_vm(&group_name, &vm_name)?;
                 }
             }
