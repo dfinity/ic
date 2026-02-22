@@ -283,12 +283,14 @@ upload_artifacts(
             "//publish/binaries:bundle-legacy",  # avoid overwriting legacy artifacts
             "//publish/canisters:bundle",
             "//ic-os/guestos/envs/prod:bundle-update",
+            "//ic-os/guestos/envs/test:bundle-update",
             "//ic-os/guestos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/hostos/envs/prod:bundle-update",
             "//ic-os/hostos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/setupos/envs/prod:bundle",
             "//ic-os/setupos/envs/dev:bundle",  # used by nested tests
             "//ic-os/guestos/envs/recovery:bundle-update",  # used for manual recovery
+            "//ic-os/setupos/envs/test:bundle",
         ],
     }),
     visibility = ["//visibility:public"],
