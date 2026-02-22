@@ -7593,6 +7593,23 @@ impl Governance {
     pub async fn get_monthly_node_provider_rewards(
         &self,
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
+        use std::cell::RefCell;
+        thread_local! {
+            static PREVIOUS_CALL_COUNT: RefCell<u64> = const { RefCell::new(0) };
+        }
+        let previous_call_count = PREVIOUS_CALL_COUNT.with(|previous_call_count| {
+            let mut previous_call_count = previous_call_count.borrow_mut();
+            let result = *previous_call_count;
+            *previous_call_count += 1;
+            result
+        });
+        if previous_call_count < 5 {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("DO NOT MERGE"),
+            ));
+        }
+
         let mut rewards = vec![];
 
         // Maps node providers to their rewards in XDR
