@@ -355,9 +355,84 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
-    sanity_check::fetch_and_check_metrics_after_advancing_time(&state_machine, metrics_before);
+    // Here, we are trying to repro a failure that seems to result from the
+    // golden state containing a proposal to upgrade the node rewards canister.
+    // Ideally, we would have obtained a copy of the golden state that was used
+    // by failing test runs, but we did not think of that before it was too
+    // late. This (attempts to) achieve a similar effect.
+    let proposal_id = propose_to_upgrade_node_rewards_canister_but_do_not_adopt_immediately(
+        &state_machine,
+        neuron_controller,
+        neuron_id,
+    );
+
+    sanity_check::fetch_and_check_metrics_after_advancing_time(&state_machine, metrics_before, proposal_id);
 
     check_canisters_are_all_protocol_canisters(&state_machine);
+}
+
+/// This assumes that the super powerful neuron has between 3% and 50% of the
+/// voting power. That way, if it makes a proposal, it will pass, but not
+/// immediately; only after the 4 day voting period.
+fn propose_to_upgrade_node_rewards_canister_but_do_not_adopt_immediately(
+    state_machine: &StateMachine,
+    super_powerful_neuron_controller: PrincipalId,
+    super_powerful_neuron_id: NeuronId,
+) -> ic_nns_common::pb::v1::ProposalId {
+    use ic_nns_test_utils::state_test_helpers::nns_governance_get_proposal_info_as_anonymous;
+    use ic_nns_governance_api::{ProposalInfo, ProposalStatus};
+
+    let NnsCanisterUpgrade {
+        canister_id,
+        wasm_content,
+        module_arg,
+        ..
+    } = NnsCanisterUpgrade::new("node-rewards");
+
+    let proposal_id = nns_propose_upgrade_nns_canister(
+        &state_machine,
+        super_powerful_neuron_controller,
+        super_powerful_neuron_id,
+        canister_id,
+        wasm_content,
+        module_arg,
+    );
+
+    for _i in 0..25 {
+        state_machine.advance_time(std::time::Duration::from_secs(128));
+        state_machine.tick();
+
+        let proposal_info = nns_governance_get_proposal_info_as_anonymous(
+            &state_machine,
+            proposal_id.id,
+        );
+
+        let ProposalInfo {
+            status,
+            latest_tally,
+            decided_timestamp_seconds,
+            ..
+        } = &proposal_info;
+
+        assert_eq!(*status, ProposalStatus::Open as i32, "{proposal_info:#?}");
+        assert_eq!(*decided_timestamp_seconds, 0, "{proposal_info:#?}");
+
+        let latest_tally = latest_tally.clone().unwrap();
+        assert_eq!(latest_tally.no, 0, "{proposal_info:#?}");
+        // Assert that the proposal has enough voting power that it will pass by
+        // the time the standard voting period has passed.
+        assert!(latest_tally.yes as f64 / latest_tally.total as f64 > 0.0301, "{proposal_info:#?}");
+        // Assert that the proposal does NOT have enough voting power to pass right away.
+        assert!(2.01 * (latest_tally.yes as f64) < (latest_tally.total as f64), "{proposal_info:#?}");
+    }
+
+    println!(
+        "\n\n Proposal {proposal_id:?} to upgrade Node Rewards canister is Open.\n\
+         Furthermore, has > 3% voting power in favor (and 0 voting power against),\n\
+         so it is SUPPOSED to pass in 4 days (the standard voting period). \n\n"
+    );
+
+    proposal_id
 }
 
 // Check that all canisters in the NNS subnet (except for exempted ones) are protocol canisters. If
@@ -410,10 +485,34 @@ mod sanity_check {
     pub fn fetch_and_check_metrics_after_advancing_time(
         state_machine: &StateMachine,
         before: Metrics,
+        starved_node_rewards_canister_proposal_id: ic_nns_common::pb::v1::ProposalId,
     ) {
         advance_time_to_allow_for_voting_and_node_rewards(state_machine);
         let after = fetch_metrics(state_machine);
         MetricsBeforeAndAfter { before, after }.check_all();
+
+        use ic_nns_test_utils::state_test_helpers::nns_governance_get_proposal_info_as_anonymous;
+        use ic_nns_governance_api::{ProposalInfo, ProposalStatus};
+        let proposal_info = nns_governance_get_proposal_info_as_anonymous(
+            &state_machine,
+            starved_node_rewards_canister_proposal_id.id,
+        );
+        let ProposalInfo {
+            status,
+            decided_timestamp_seconds,
+            executed_timestamp_seconds,
+            failed_timestamp_seconds,
+            failure_reason,
+            ..
+        } = &proposal_info;
+
+        assert_eq!(*status, ProposalStatus::Executed as i32, "{proposal_info:#?}");
+        assert_eq!(*failed_timestamp_seconds, 0, "{proposal_info:#?}");
+        assert_eq!(*failure_reason, None, "{proposal_info:#?}");
+
+        let now = state_machine.get_time().as_secs_since_unix_epoch();
+        assert!(now.checked_sub( *executed_timestamp_seconds ).map(|seconds_ago| seconds_ago < 60).is_some(), "{now}: {proposal_info:#?}");
+        assert!(now.checked_sub( *decided_timestamp_seconds  ).map(|seconds_ago| seconds_ago < 60).is_some(), "{now}: {proposal_info:#?}");
     }
 
     fn advance_time_to_allow_for_voting_and_node_rewards(state_machine: &StateMachine) {
