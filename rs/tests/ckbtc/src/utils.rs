@@ -399,27 +399,46 @@ pub async fn get_btc_address(
     address.parse::<Address<_>>().unwrap().assume_checked()
 }
 
+/// Send BTC to the given address idempotently.
+///
+/// The transaction is created and signed once, then only the broadcast
+/// is retried.  Re-broadcasting the same raw transaction is safe because
+/// bitcoind will return the same txid or reject it as a duplicate.
 pub async fn send_to_btc_address<T: RpcClientType>(
     btc_rpc: &RpcClient<T>,
     logger: &Logger,
     dst: &T::Address,
     amount: u64,
 ) {
+    // Create and sign the transaction once, outside the retry loop.
+    let from_address = btc_rpc.get_address().expect("No default address");
+    let signed_tx = btc_rpc
+        .create_signed_transaction(
+            from_address,
+            dst,
+            Amount::from_sat(amount),
+            Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
+        )
+        .expect("Failed to create signed transaction");
+
+    // Retry only the broadcast, which is idempotent.
     ic_system_test_driver::retry_with_msg!(
-        "send btc to address",
+        "broadcast signed btc tx",
         logger.clone(),
         Duration::from_secs(30),
         Duration::from_secs(2),
         || {
-            let txid = btc_rpc
-                .send_to(
-                    dst,
-                    Amount::from_sat(amount),
-                    Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
-                )
-                .map_err(|e| anyhow::anyhow!("{e:?}"))?;
-            debug!(&logger, "txid: {:?}", txid);
-            Ok(())
+            match btc_rpc.send_raw_transaction::<&[u8]>(signed_tx.hex.as_ref()) {
+                Ok(txid) => {
+                    debug!(&logger, "txid: {:?}", txid);
+                    Ok(())
+                }
+                Err(e) if e.is_duplicate_transaction() => {
+                    debug!(&logger, "transaction already known, treating as success");
+                    Ok(())
+                }
+                Err(e) => Err(anyhow::anyhow!("{e:?}")),
+            }
         }
     )
     .expect("Failed to send btc");
