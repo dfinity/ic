@@ -321,6 +321,9 @@ impl<T: RpcClientType> RpcClient<T> {
     }
 
     /// Send bitcoin from the given [from_address].
+    ///
+    /// Selects only the minimum number of UTXOs needed to cover the amount + fee,
+    /// to avoid creating oversized transactions that exceed the minimum relay fee.
     pub fn send(
         &self,
         from_address: &T::Address,
@@ -329,21 +332,28 @@ impl<T: RpcClientType> RpcClient<T> {
         fee: Amount,
     ) -> Result<Txid> {
         let unspent = self.list_unspent(Some(0), Some(&[from_address]))?;
-        let total: Amount = unspent.iter().map(|x| x.amount).sum();
-        let inputs = unspent
-            .iter()
-            .map(|x| CreateRawTransactionInput {
-                txid: x.txid,
-                vout: x.vout,
+        // Select only enough UTXOs to cover amount + fee, to keep the
+        // transaction small and avoid exceeding the minimum relay fee.
+        let target = amount + fee;
+        let mut selected = Vec::new();
+        let mut selected_total = Amount::ZERO;
+        for utxo in &unspent {
+            if selected_total >= target {
+                break;
+            }
+            selected.push(CreateRawTransactionInput {
+                txid: utxo.txid,
+                vout: utxo.vout,
                 sequence: None,
-            })
-            .collect::<Vec<_>>();
+            });
+            selected_total += utxo.amount;
+        }
         let mut outputs = HashMap::new();
         outputs.insert(to_address.to_string(), amount);
-        if total > amount + fee {
-            outputs.insert(from_address.to_string(), total - amount - fee);
+        if selected_total > target {
+            outputs.insert(from_address.to_string(), selected_total - target);
         }
-        let raw_tx = self.create_raw_transaction(&inputs, &outputs)?;
+        let raw_tx = self.create_raw_transaction(&selected, &outputs)?;
         let tx = self.sign_raw_transaction(&raw_tx, None)?;
         self.send_raw_transaction::<&[u8]>(tx.hex.as_ref())
     }

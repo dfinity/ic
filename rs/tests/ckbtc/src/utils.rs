@@ -74,19 +74,40 @@ pub async fn start_canister(canister: &Canister<'_>) {
 }
 
 /// Mint some blocks to the given address.
+/// Retries on transient RPC errors.
 pub fn generate_blocks<T: RpcClientType>(
     rpc_client: &RpcClient<T>,
     logger: &Logger,
     nb_blocks: u64,
     address: &T::Address,
 ) {
-    let generated_blocks = rpc_client.generate_to_address(nb_blocks, address).unwrap();
-    info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
-    assert_eq!(
-        generated_blocks.len() as u64,
-        nb_blocks,
-        "Expected {nb_blocks} blocks."
-    );
+    let max_retries = 5;
+    for attempt in 1..=max_retries {
+        match rpc_client.generate_to_address(nb_blocks, address) {
+            Ok(generated_blocks) => {
+                info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
+                assert_eq!(
+                    generated_blocks.len() as u64,
+                    nb_blocks,
+                    "Expected {nb_blocks} blocks."
+                );
+                return;
+            }
+            Err(e) if attempt < max_retries => {
+                info!(
+                    &logger,
+                    "Attempt {}/{} to generate blocks failed: {:?}, retrying...",
+                    attempt,
+                    max_retries,
+                    e
+                );
+                std::thread::sleep(Duration::from_secs(2));
+            }
+            Err(e) => {
+                panic!("Failed to generate {nb_blocks} blocks after {max_retries} attempts: {e:?}");
+            }
+        }
+    }
 }
 
 /// Wait for the expected balance to be available at the given btc address.
@@ -394,16 +415,27 @@ pub async fn send_to_btc_address<T: RpcClientType>(
     dst: &T::Address,
     amount: u64,
 ) {
-    match btc_rpc.send_to(
-        dst,
-        Amount::from_sat(amount),
-        Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
-    ) {
-        Ok(txid) => {
-            debug!(&logger, "txid: {:?}", txid);
-        }
-        Err(e) => {
-            panic!("bug: could not send btc to btc client : {e:?}");
+    let max_retries = 5;
+    for attempt in 1..=max_retries {
+        match btc_rpc.send_to(
+            dst,
+            Amount::from_sat(amount),
+            Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
+        ) {
+            Ok(txid) => {
+                debug!(&logger, "txid: {:?}", txid);
+                return;
+            }
+            Err(e) if attempt < max_retries => {
+                info!(
+                    &logger,
+                    "Attempt {}/{} to send btc failed: {:?}, retrying...", attempt, max_retries, e
+                );
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            Err(e) => {
+                panic!("bug: could not send btc to btc client after {max_retries} attempts: {e:?}");
+            }
         }
     }
 }
