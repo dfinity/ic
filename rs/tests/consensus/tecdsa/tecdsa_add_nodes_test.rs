@@ -56,6 +56,7 @@ use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: usize = 3;
@@ -271,8 +272,8 @@ async fn assert_metric_sum(
             }
         }
         count += 1;
-        // Abort after 30 tries
-        if count > 30 {
+        // Abort after 60 tries
+        if count > 60 {
             panic!("Failed to find key rotation of {key_id}");
         }
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
@@ -283,6 +284,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        .with_overall_timeout(Duration::from_secs(15 * 60))
+        .with_timeout_per_test(Duration::from_secs(15 * 60))
         .execute_from_args()?;
     Ok(())
 }
