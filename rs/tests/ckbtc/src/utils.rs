@@ -73,31 +73,59 @@ pub async fn start_canister(canister: &Canister<'_>) {
     assert!(result.is_ok(), "Error while starting the ledger canister");
 }
 
-/// Mint some blocks to the given address.
-/// Retries on transient RPC errors.
+/// Mint some blocks to the given address idempotently.
+///
+/// Records the blockchain height before the first attempt and uses it
+/// as a target.  On each retry the current height is re-checked so that
+/// blocks mined by a prior attempt whose RPC response was lost are not
+/// duplicated.  Only the remaining blocks (if any) are generated.
+///
+/// This is safe in regtest mode where no external miner exists, so
+/// height changes are exclusively from our `generate_to_address` calls.
 pub fn generate_blocks<T: RpcClientType>(
     rpc_client: &RpcClient<T>,
     logger: &Logger,
     nb_blocks: u64,
     address: &T::Address,
 ) {
-    let generated_blocks = ic_system_test_driver::retry_with_msg!(
-        format!("Mint {nb_blocks} btc blocks to address {address} ..."),
+    let start_height = ic_system_test_driver::retry_with_msg!(
+        format!("Get blockchain info before generating {nb_blocks} blocks"),
         logger.clone(),
         Duration::from_secs(30),
         Duration::from_secs(2),
         || {
             rpc_client
-                .generate_to_address(nb_blocks, address)
+                .get_blockchain_info()
+                .map(|info| info.blocks)
+                .map_err(|e| anyhow::anyhow!("{e:?}"))
+        }
+    )
+    .expect("Failed to get blockchain info");
+    let target_height = start_height + nb_blocks;
+
+    ic_system_test_driver::retry_with_msg!(
+        format!("Generate {nb_blocks} blocks to {address} (target height: {target_height})"),
+        logger.clone(),
+        Duration::from_secs(30),
+        Duration::from_secs(2),
+        || {
+            let current_height = rpc_client
+                .get_blockchain_info()
+                .map_err(|e| anyhow::anyhow!("{e:?}"))?
+                .blocks;
+            if current_height >= target_height {
+                // Blocks were already mined by a prior attempt whose
+                // RPC response was lost.  Nothing more to do.
+                return Ok(());
+            }
+            let remaining = target_height - current_height;
+            rpc_client
+                .generate_to_address(remaining, address)
+                .map(|_| ())
                 .map_err(|e| anyhow::anyhow!("{e:?}"))
         }
     )
     .expect("Failed to generate btc blocks");
-    assert_eq!(
-        generated_blocks.len() as u64,
-        nb_blocks,
-        "Expected {nb_blocks} blocks."
-    );
 }
 
 /// Wait for the expected balance to be available at the given btc address.
