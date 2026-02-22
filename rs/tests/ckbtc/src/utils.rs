@@ -81,33 +81,23 @@ pub fn generate_blocks<T: RpcClientType>(
     nb_blocks: u64,
     address: &T::Address,
 ) {
-    let max_retries = 5;
-    for attempt in 1..=max_retries {
-        match rpc_client.generate_to_address(nb_blocks, address) {
-            Ok(generated_blocks) => {
-                info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
-                assert_eq!(
-                    generated_blocks.len() as u64,
-                    nb_blocks,
-                    "Expected {nb_blocks} blocks."
-                );
-                return;
-            }
-            Err(e) if attempt < max_retries => {
-                info!(
-                    &logger,
-                    "Attempt {}/{} to generate blocks failed: {:?}, retrying...",
-                    attempt,
-                    max_retries,
-                    e
-                );
-                std::thread::sleep(Duration::from_secs(2));
-            }
-            Err(e) => {
-                panic!("Failed to generate {nb_blocks} blocks after {max_retries} attempts: {e:?}");
-            }
+    let generated_blocks = ic_system_test_driver::retry_with_msg!(
+        format!("Mint {nb_blocks} btc blocks to address {address} ..."),
+        logger.clone(),
+        Duration::from_secs(30),
+        Duration::from_secs(2),
+        || {
+            rpc_client
+                .generate_to_address(nb_blocks, address)
+                .map_err(|e| anyhow::anyhow!("{e:?}"))
         }
-    }
+    )
+    .expect("Failed to generate btc blocks");
+    assert_eq!(
+        generated_blocks.len() as u64,
+        nb_blocks,
+        "Expected {nb_blocks} blocks."
+    );
 }
 
 /// Wait for the expected balance to be available at the given btc address.
@@ -415,29 +405,24 @@ pub async fn send_to_btc_address<T: RpcClientType>(
     dst: &T::Address,
     amount: u64,
 ) {
-    let max_retries = 5;
-    for attempt in 1..=max_retries {
-        match btc_rpc.send_to(
-            dst,
-            Amount::from_sat(amount),
-            Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
-        ) {
-            Ok(txid) => {
-                debug!(&logger, "txid: {:?}", txid);
-                return;
-            }
-            Err(e) if attempt < max_retries => {
-                info!(
-                    &logger,
-                    "Attempt {}/{} to send btc failed: {:?}, retrying...", attempt, max_retries, e
-                );
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
-            Err(e) => {
-                panic!("bug: could not send btc to btc client after {max_retries} attempts: {e:?}");
-            }
+    ic_system_test_driver::retry_with_msg!(
+        "send btc to address",
+        logger.clone(),
+        Duration::from_secs(30),
+        Duration::from_secs(2),
+        || {
+            let txid = btc_rpc
+                .send_to(
+                    dst,
+                    Amount::from_sat(amount),
+                    Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
+                )
+                .map_err(|e| anyhow::anyhow!("{e:?}"))?;
+            debug!(&logger, "txid: {:?}", txid);
+            Ok(())
         }
-    }
+    )
+    .expect("Failed to send btc");
 }
 
 /// Create a client for bitcoind or dogecoind.
