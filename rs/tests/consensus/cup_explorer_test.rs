@@ -81,19 +81,41 @@ fn test(env: TestEnv) {
     let tmp_file = NamedTempFile::new().unwrap();
     let cup_path = tmp_file.path();
 
-    info!(log, "Downloading initial CUP...");
-    block_on(explore(
-        nns_node.get_public_url(),
-        app_subnet.subnet_id,
-        Some(cup_path.into()),
-    ));
-    info!(log, "Verifying that subnet is running according to CUP");
-    let status = verify(
-        nns_node.get_public_url(),
-        Some(nns_public_key.clone()),
-        cup_path,
+    // The initial CUP of an app subnet is a genesis CUP with a Remote DKG target,
+    // which cannot be verified by the CUP explorer. We need to wait until the
+    // subnet produces a CUP with a Local DKG target (after a couple of DKG intervals).
+    info!(
+        log,
+        "Downloading and verifying initial CUP (retrying until a Local DKG target CUP is available)..."
     );
-    assert_eq!(status, SubnetStatus::Running);
+    retry_with_msg!(
+        "download and verify initial CUP with Local DKG target",
+        log.clone(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            block_on(explore(
+                nns_node.get_public_url(),
+                app_subnet.subnet_id,
+                Some(cup_path.into()),
+            ));
+            let status = verify(
+                nns_node.get_public_url(),
+                Some(nns_public_key.clone()),
+                cup_path,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            if status == SubnetStatus::Running {
+                Ok(())
+            } else {
+                bail!(
+                    "Subnet not yet running with Local DKG target CUP, status: {:?}",
+                    status
+                )
+            }
+        }
+    )
+    .expect("The subnet never produced a verifiable CUP with Local DKG target");
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
@@ -127,7 +149,8 @@ fn test(env: TestEnv) {
                 nns_node.get_public_url(),
                 Some(nns_public_key.clone()),
                 cup_path,
-            );
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
             if status == SubnetStatus::Halted {
                 Ok(())
             } else {
@@ -183,7 +206,8 @@ fn test(env: TestEnv) {
         nns_node.get_public_url(),
         Some(nns_public_key.clone()),
         cup_path,
-    );
+    )
+    .expect("Failed to verify CUP after recovery");
     assert_eq!(status, SubnetStatus::Recovered);
 }
 
