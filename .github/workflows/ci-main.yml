@@ -272,7 +272,11 @@ jobs:
     # Run on protected branches, but only on public repo
     if: github.repository == 'dfinity/ic'
     steps:
-      - *checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # on macOS we don't need any git history
+          ref: ${{ inputs.commit-sha }}
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
@@ -349,7 +353,10 @@ jobs:
           echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
           echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
           echo "Current GitHub API rate limits:"
-          curl -s --netrc https://api.github.com/rate_limit | jq '.resources.core'
+
+          # Show how close we are to the limits
+          curl -s --netrc https://api.github.com/rate_limit | \
+            jq -r '.resources.core | "Rate limit remaining: \(.remaining)/\(.limit) (resets at \(.reset | strftime("%Y-%m-%d %H:%M:%S %Z")))"'
 
           mkdir -p /tmp/zig-cache
 
