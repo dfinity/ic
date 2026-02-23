@@ -53,7 +53,7 @@ common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --st
 #
 # (NOTE: for convenience, applied to 'common' instead of just 'test' so that it doesn't
 # fail on 'bazel build')
-common:flaky_retry --flaky_test_attempts=default --flaky_test_attempts=.*,-//pre-commit:.*@3
+common:flaky_retry --flaky_test_attempts=.*,-//pre-commit:.*@3
 
 # Exclude fuzz tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
