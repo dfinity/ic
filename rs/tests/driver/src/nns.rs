@@ -735,6 +735,7 @@ pub async fn submit_create_application_subnet_proposal(
         ssh_backup_access: vec![],
         chain_key_config: None,
         canister_cycles_cost_schedule: cost_schedule,
+        subnet_admins: None,
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),

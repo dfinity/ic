@@ -56,7 +56,7 @@ use ic_interfaces_state_manager::{
     StateManager, StateReader,
 };
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::replica_logger::no_op_logger;
+use ic_logger::replica_logger::test_logger;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
@@ -191,11 +191,9 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
     fmt,
-    io::{self, stderr},
     net::Ipv6Addr,
     ops::Deref,
     path::{Path, PathBuf},
-    str::FromStr,
     string::ToString,
     sync::{Arc, Mutex, RwLock, atomic::AtomicU64},
     time::{Duration, Instant, SystemTime},
@@ -460,6 +458,7 @@ fn add_subnet_local_registry_records(
     let max_ingress_bytes_per_message = match subnet_type {
         SubnetType::Application => 2 * 1024 * 1024,
         SubnetType::VerifiedApplication => 2 * 1024 * 1024,
+        SubnetType::CloudEngine => 2 * 1024 * 1024,
         SubnetType::System => 3 * 1024 * 1024 + 512 * 1024,
     };
     let max_ingress_messages_per_block = 1000;
@@ -550,30 +549,6 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
     ser.self_describe().expect("Could not write magic tag.");
     r.serialize(&mut ser).expect("Serialization failed.");
     ser.into_inner()
-}
-
-fn replica_logger(log_level: Option<Level>) -> ReplicaLogger {
-    use slog::Drain;
-    if let Some(log_level) = std::env::var("RUST_LOG")
-        .ok()
-        .and_then(|level| Level::from_str(&level).ok())
-        .or(log_level)
-    {
-        let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
-            Box::new(stderr())
-        } else {
-            Box::new(slog_term::TestStdoutWriter)
-        };
-        let decorator = slog_term::PlainSyncDecorator::new(writer);
-        let drain = slog_term::FullFormat::new(decorator)
-            .build()
-            .filter_level(log_level)
-            .fuse();
-        let logger = slog::Logger::root(drain, slog::o!());
-        logger.into()
-    } else {
-        no_op_logger()
-    }
 }
 
 /// Bundles the configuration of a `StateMachine`.
@@ -1879,10 +1854,12 @@ impl StateMachine {
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
-            SubnetType::Application | SubnetType::VerifiedApplication => 499,
+            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
+                499
+            }
             SubnetType::System => 199,
         });
-        let replica_logger = replica_logger(log_level);
+        let replica_logger = test_logger(log_level);
 
         let metrics_registry = MetricsRegistry::new();
 
@@ -4741,7 +4718,7 @@ impl StateMachine {
     pub fn set_stable_memory(&self, canister_id: CanisterId, data: &[u8]) {
         let (_height, mut replicated_state) = self.state_manager.take_tip();
         let canister_state = replicated_state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
         let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
@@ -4777,7 +4754,7 @@ impl StateMachine {
     ) {
         let (_h, mut state) = self.state_manager.take_tip();
         state
-            .canister_state_mut(canister_id)
+            .canister_state_make_mut(canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .system_state
             .total_query_stats = total_query_stats;
@@ -4809,7 +4786,7 @@ impl StateMachine {
     pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
         let (_height, mut state) = self.state_manager.take_tip();
         let canister_state = state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
         canister_state
             .system_state
