@@ -48,8 +48,7 @@ fn setup(env: TestEnv) {
         .enable_swapping_feature_for_subnet(subnet.subnet_id)
         .whitelist_swapping_feature_caller(caller);
 
-    install_registry_canister_with_testnet_topology(&env, Some(customizations))
-        .expect("Failed to install registry canister");
+    install_registry_canister_with_testnet_topology(&env, Some(customizations));
 }
 
 fn test(env: TestEnv) {
