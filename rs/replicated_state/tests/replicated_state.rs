@@ -14,7 +14,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionTask, IngressHistoryState, InputSource, ReplicatedState,
     SchedulerState, StateError, SystemState,
-    canister_snapshots::CanisterSnapshot,
+    canister_state::canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::{
         subnet_call_context_manager::{
@@ -147,6 +147,7 @@ impl ReplicatedStateFixture {
                 system_state,
                 Some(execution_state),
                 scheduler_state,
+                CanisterSnapshots::default(),
             ));
         }
         ReplicatedStateFixture { state }
@@ -1324,9 +1325,7 @@ fn online_split() {
         let snapshot = CanisterSnapshot::from_canister(canister, UNIX_EPOCH).unwrap();
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        fixture
-            .state
-            .create_snapshot_from_metadata(snapshot_id, snapshot.into());
+        canister.create_snapshot_from_metadata(snapshot_id, snapshot.into());
         snapshot_id
     };
     let canister_1_snapshot_id = take_shapshot(CANISTER_1);
@@ -1361,13 +1360,16 @@ fn online_split() {
     // Only `CANISTER_1` should be left.
     expected.remove_canister(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
-    let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
-    Arc::make_mut(&mut canister_state)
+    let mut canister_state_arc = expected.take_canister_state(&CANISTER_1).unwrap();
+    let canister_state = Arc::make_mut(&mut canister_state_arc);
+    canister_state
         .system_state
         .split_input_schedules(&CANISTER_1, expected.canister_states());
-    expected.put_canister_state(canister_state);
     // The snapshot of `CANISTER_2` should have been deleted.
-    expected.canister_snapshots.remove(canister_2_snapshot_id);
+    canister_state
+        .canister_snapshots
+        .remove(canister_2_snapshot_id);
+    expected.put_canister_state(canister_state_arc);
 
     // And the split marker should be set.
     expected.metadata.subnet_split_from = Some(SUBNET_A);
@@ -1391,15 +1393,18 @@ fn online_split() {
     // Only `CANISTER_2` should be hosted.
     expected.remove_canister(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
-    let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
-    Arc::make_mut(&mut canister_state)
+    let mut canister_state_arc = expected.take_canister_state(&CANISTER_2).unwrap();
+    let canister_state = Arc::make_mut(&mut canister_state_arc);
+    canister_state
         .system_state
         .split_input_schedules(&CANISTER_2, expected.canister_states());
     // The in-progress `install_code` task should have been silently dropped.
-    Arc::make_mut(&mut canister_state).system_state.task_queue = Default::default();
-    expected.put_canister_state(canister_state);
+    canister_state.system_state.task_queue = Default::default();
     // The snapshot of `CANISTER_1` should have been deleted.
-    expected.canister_snapshots.remove(canister_1_snapshot_id);
+    canister_state
+        .canister_snapshots
+        .remove(canister_1_snapshot_id);
+    expected.put_canister_state(canister_state_arc);
 
     // Streams, subnet queues and refunds should be empty.
     expected.take_streams();

@@ -2618,7 +2618,6 @@ impl ExecutionEnvironment {
             origin,
             &resource_saturation,
             &self.metrics.long_execution_already_in_progress,
-            &self.metrics.snapshot_exists_without_associated_canister,
         );
 
         let result = match result {
@@ -2798,7 +2797,6 @@ impl ExecutionEnvironment {
             sender,
             snapshot_id,
             canister,
-            state,
             round_limits,
         ) {
             Ok((response, instructions)) => (Ok(Encode!(&response).unwrap()), instructions),

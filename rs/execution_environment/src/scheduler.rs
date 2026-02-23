@@ -912,6 +912,9 @@ impl SchedulerImpl {
                 canister.system_state.clear_canister_history();
                 // Burn the remaining balance of the canister.
                 canister.system_state.burn_remaining_balance_for_uninstall();
+                canister
+                    .canister_snapshots
+                    .delete_snapshots(canister.canister_id());
 
                 info!(
                     self.log,
@@ -920,12 +923,6 @@ impl SchedulerImpl {
                 );
                 self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
-        }
-
-        // Delete any snapshots associated with the canister
-        // that ran out of cycles.
-        for canister_id in uninstalled_canisters {
-            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1908,6 +1905,8 @@ fn observe_replicated_state_metrics(
     let mut total_canister_reserved_balance = Cycles::zero();
     let mut total_canister_history_memory_usage = NumBytes::new(0);
     let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
+    let mut total_canister_snapshots_memory_taken = NumBytes::new(0);
+    let mut total_canister_snapshots_count = 0;
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
@@ -1994,6 +1993,9 @@ fn observe_replicated_state_metrics(
                 canisters_with_old_open_call_contexts += 1;
             }
         }
+
+        total_canister_snapshots_memory_taken += canister.canister_snapshots.memory_taken();
+        total_canister_snapshots_count += canister.canister_snapshots.count();
     });
     metrics
         .old_open_call_contexts
@@ -2134,10 +2136,10 @@ fn observe_replicated_state_metrics(
 
     metrics
         .canister_snapshots_memory_usage
-        .set(state.canister_snapshots.memory_taken().get() as i64);
+        .set(total_canister_snapshots_memory_taken.get() as i64);
     metrics
         .num_canister_snapshots
-        .set(state.canister_snapshots.count() as i64);
+        .set(total_canister_snapshots_count as i64);
 
     for canister in state.canisters_iter() {
         metrics

@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     CheckpointMetrics, ManifestMetrics, NUMBER_OF_CHECKPOINT_THREADS, StateManagerMetrics,
     checkpoint::make_unvalidated_checkpoint,
-    flush_canister_snapshots_and_page_maps,
+    flush_page_maps,
     manifest::RehashManifest,
     state_sync::types::{FileInfo, Manifest},
     tip::{flush_tip_channel, spawn_tip_thread},
@@ -17,8 +17,8 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, ReplicatedState, SubnetSchedule, SystemMetadata,
-    canister_snapshots::CanisterSnapshot, page_map::TestPageAllocatorFileDescriptorImpl,
-    testing::ReplicatedStateTesting,
+    canister_state::canister_snapshots::CanisterSnapshot,
+    page_map::TestPageAllocatorFileDescriptorImpl, testing::ReplicatedStateTesting,
 };
 use ic_state_layout::{
     CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, INGRESS_HISTORY_FILE, ProtoFileWith,
@@ -391,7 +391,8 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     let snapshot =
         CanisterSnapshot::from_canister(state.canister_state(&CANISTER_1).unwrap(), state.time())
             .unwrap();
-    state.take_snapshot(snapshot_id, Arc::new(snapshot));
+    let canister = state.canister_state_make_mut(&CANISTER_1).unwrap();
+    canister.take_snapshot(snapshot_id, Arc::new(snapshot));
 
     // Make subnet_queues non-empty
     state
@@ -404,7 +405,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         )
         .unwrap();
 
-    flush_canister_snapshots_and_page_maps(&mut state, HEIGHT, &tip_channel);
+    flush_page_maps(&mut state, HEIGHT, &tip_channel);
 
     let mut thread_pool = thread_pool();
     let (state, cp_layout) = make_unvalidated_checkpoint(

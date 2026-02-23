@@ -85,13 +85,7 @@ impl CanisterSnapshots {
     }
 
     /// Adds new snapshot in the collection and assigns a `SnapshotId`.
-    ///
-    /// External callers should call `ReplicatedState::take_snapshot` instead.
-    pub(crate) fn push(
-        &mut self,
-        snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
-    ) -> SnapshotId {
+    pub fn push(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) -> SnapshotId {
         let canister_id = snapshot.canister_id();
         self.memory_usage += snapshot.size();
         self.snapshots.insert(snapshot_id, snapshot);
@@ -213,47 +207,6 @@ impl CanisterSnapshots {
     /// Returns true if snapshot ID can be found in the collection.
     pub fn contains(&self, snapshot_id: &SnapshotId) -> bool {
         self.snapshots.contains_key(snapshot_id)
-    }
-
-    /// Splits the `CanisterSnapshots` as part of subnet splitting phase 1.
-    ///
-    /// A subnet split starts with a subnet A and results in two subnets, A' and B.
-    /// For the sake of clarity, comments refer to the two resulting subnets as
-    /// *subnet A'* and *subnet B*. And to the original subnet as *subnet A*.
-    ///
-    /// Splitting the canister snapshot is decided based on the new canister list
-    /// hosted by the *subnet A'* or *subnet B*.
-    /// A snapshot associated with a canister not hosted by the local subnet
-    /// will be discarded.
-    ///
-    /// Returns the list of deleted snapshots.
-    pub(crate) fn split<F>(&mut self, is_local_canister: F) -> Vec<SnapshotId>
-    where
-        F: Fn(CanisterId) -> bool,
-    {
-        let mut result = Vec::default();
-        let old_snapshot_ids = self.snapshots.keys().cloned().collect::<Vec<_>>();
-        for snapshot_id in old_snapshot_ids {
-            // Unwrapping is safe here because `snapshot_id` is part of the keys collection.
-            let snapshot = self.snapshots.get(&snapshot_id).unwrap();
-            let canister_id = snapshot.canister_id;
-            if !is_local_canister(canister_id) {
-                let removed = self.remove(snapshot_id);
-                if removed.is_some() {
-                    result.push(snapshot_id)
-                }
-            }
-        }
-
-        // Destructure `self`, in order for the compiler to enforce explicit
-        // decisions whenever new fields are added.
-        let CanisterSnapshots {
-            snapshots: _,
-            snapshot_ids: _,
-            memory_usage: _,
-        } = self;
-
-        result
     }
 
     /// Returns the amount of memory taken by all canister snapshots on
