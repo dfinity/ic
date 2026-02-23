@@ -76,6 +76,8 @@ rust_test(
 
 rust_ic_test(
     name = "integration_test",
+    # the test can run for over a minute
+    size = "medium",
     srcs = glob(["tests/**"]),
     data = [
         "//rs/rust_canisters/proxy_canister",
