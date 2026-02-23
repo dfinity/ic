@@ -1286,13 +1286,11 @@ mod mainnet_compatibility_tests {
             // so it was not bumping `next_callback_id`. Temporarily reset it to 0.
             //
             // TODO(DSM-95): Drop in next release.
-            match &mut canister_state_bits.status {
-                CanisterStatus::Running {
-                    call_context_manager,
-                } => {
-                    call_context_manager.set_next_callback_id(0);
-                }
-                _ => {}
+            if let CanisterStatus::Running {
+                call_context_manager,
+            } = &mut canister_state_bits.status
+            {
+                call_context_manager.set_next_callback_id(0);
             }
 
             let proto_state_bits: pb_canister_state_bits::CanisterStateBits =
@@ -1331,13 +1329,11 @@ mod mainnet_compatibility_tests {
             // so it was not bumping `next_callback_id`. Explicitly set it to 3.
             //
             // TODO(DSM-95): Drop in the release after the next.
-            match &mut status {
-                CanisterStatus::Running {
-                    call_context_manager,
-                } => {
-                    call_context_manager.set_next_callback_id(3);
-                }
-                _ => {}
+            if let CanisterStatus::Running {
+                call_context_manager,
+            } = &mut status
+            {
+                call_context_manager.set_next_callback_id(3);
             }
 
             assert_eq!(expected_task_queue, task_queue);
