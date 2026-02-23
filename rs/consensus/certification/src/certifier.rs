@@ -110,22 +110,23 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
 /// For creating a signature for a state, every replica follows the
 /// following algorithm:
 ///
-/// 1. Request a set of (height, hash) tuples from its local StateManager, where
+/// 1. Request a set of (height, witness, hash) tuples from its local StateManager, where
+///    `witness` is a witness for the height and
 ///    `hash` is the hash of the replicated state after processing the batch at the
 ///    specified height. The StateManager is responsible for selecting which parts
 ///    of the replicated state are included in the computation of the hash.
 ///
-/// 2. Sign the hash-height tuple, resulting in a CertificationShare, and place
+/// 2. Sign the hash-witness-height tuple, resulting in a CertificationShare, and place
 ///    the CertificationShare in the certification pool, to be gossiped to other
 ///    replicas.
 ///
 /// 3. On every invocation of `on_state_change`, if sufficiently many
-///    CertificationShares for the same (height, hash) pair were received, combine
+///    CertificationShares for the same (height, witness, hash) tuple were received, combine
 ///    them into a full Certification and put it into the certification pool. At
 ///    that point, the CertificationShares are not required anymore and can be
 ///    purged.
 ///
-/// 4. For every (height, hash) pair with a full Certification, submit
+/// 4. For every (height, witness, hash) tuple with a full Certification, submit
 ///    the pair (height, Certification) to the StateManager.
 ///
 /// 5. Whenever the catch-up package height increases, remove all certification
