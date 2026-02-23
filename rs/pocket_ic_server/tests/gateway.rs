@@ -573,7 +573,10 @@ async fn test_gateway_custom_domain_provider_file() {
         .unwrap();
 
     // Test with canister ID in the query parameters.
-    let url = format!("http://{}:{}/?canisterId={}", custom_domain, port, canister_id);
+    let url = format!(
+        "http://{}:{}/?canisterId={}",
+        custom_domain, port, canister_id
+    );
     let res = client.get(&url).send().await.unwrap();
     let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
     assert!(page.contains("<title>Internet Identity</title>"));
