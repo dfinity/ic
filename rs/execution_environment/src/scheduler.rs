@@ -1546,7 +1546,7 @@ impl Scheduler for SchedulerImpl {
                     &round_log,
                     &current_round,
                     &state,
-                    &round_schedule.round_scheduled_canisters(),
+                    round_schedule.round_scheduled_canisters(),
                 );
 
                 // NOTE: The logic for deleting canisters assumes that transitioning
