@@ -430,8 +430,8 @@ impl CertifierImpl {
         certification_pool: &dyn CertificationPool,
         heights: &[Height],
     ) -> Mutations {
-        // Iterate over all state hashes, obtain list of corresponding unvalidated
-        // artifacts by the height and try to verify their signatures.
+        // Iterate over all state heights, obtain list of corresponding unvalidated
+        // artifacts by the height and try to verify their signatures and height witnesses.
 
         heights
             .iter()
