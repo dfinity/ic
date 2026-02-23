@@ -274,7 +274,7 @@ pub fn wait_for_progress(
             Duration::from_secs(RESPONSES_RETRY_TIMEOUT_SEC),
             Duration::from_secs(POLL_INTERVAL_SEC),
             || async {
-                let metrics = collect_metrics(&canisters);
+                let metrics = collect_metrics(canisters);
                 if all_canisters_made_progress(&metrics, baseline) {
                     Ok(metrics)
                 } else {
