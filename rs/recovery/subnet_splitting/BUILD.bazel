@@ -79,6 +79,7 @@ rust_ic_test(
     # the test can run for over a minute
     size = "medium",
     srcs = glob(["tests/**"]),
+    args = ["--nocapture"],
     data = [
         "//rs/rust_canisters/proxy_canister",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
