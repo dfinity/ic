@@ -1,14 +1,13 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsCustomizations,
-    get_dependency_path_from_env,
+    HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, get_dependency_path_from_env,
+    install_registry_canister_with_testnet_topology,
 };
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::util::block_on;
@@ -43,16 +42,14 @@ fn setup(env: TestEnv) {
     let snapshot = env.topology_snapshot();
     let subnet = snapshot.root_subnet();
 
-    let customizations = NnsCustomizations {
-        registry_canister_init_payload: RegistryCanisterInitPayloadBuilder::new()
-            .enable_swapping_feature_globally()
-            .enable_swapping_feature_for_subnet(subnet.subnet_id)
-            .whitelist_swapping_feature_caller(caller)
-            .build(),
-        ..Default::default()
-    };
+    let mut customizations = RegistryCanisterInitPayloadBuilder::new();
+    customizations
+        .enable_swapping_feature_globally()
+        .enable_swapping_feature_for_subnet(subnet.subnet_id)
+        .whitelist_swapping_feature_caller(caller);
 
-    install_nns_with_customizations_and_check_progress(env.topology_snapshot(), customizations);
+    install_registry_canister_with_testnet_topology(&env, Some(customizations))
+        .expect("Failed to install registry canister");
 }
 
 fn test(env: TestEnv) {
