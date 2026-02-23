@@ -226,7 +226,7 @@ pub fn create_summary_payload(
             "Start to create Chain keys {:?} on subnet {} at height {}", key_ids, subnet_id, height
         );
 
-        return Ok(make_bootstrap_summary(subnet_id, key_ids.clone(), height));
+        return Ok(make_bootstrap_summary(subnet_id, key_ids, height));
     };
 
     let block_reader = block_chain_reader(

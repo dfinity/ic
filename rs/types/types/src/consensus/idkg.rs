@@ -1263,7 +1263,7 @@ impl IDkgArtifactId {
 impl From<IDkgArtifactId> for pb::IDkgArtifactId {
     fn from(value: IDkgArtifactId) -> Self {
         use pb::i_dkg_artifact_id::Kind;
-        let kind = match value.clone() {
+        let kind = match value {
             IDkgArtifactId::Dealing(p, d) => Kind::Dealing(pb::PrefixPairIDkg {
                 prefix: Some((&p.get()).into()),
                 id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
@@ -1305,7 +1305,6 @@ impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
         use pb::i_dkg_artifact_id::Kind;
         let kind = value
             .kind
-            .clone()
             .ok_or_else(|| ProxyDecodeError::MissingField("IDkgArtifactId::kind"))?;
 
         Ok(match kind {
