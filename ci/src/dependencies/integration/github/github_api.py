@@ -97,4 +97,8 @@ class GithubApi:
         logging.debug(f"Submitting request to {url} with payload: {req.to_json()}")
         resp = requests.post(url, headers={"Authorization": f"Bearer {GITHUB_TOKEN}"}, json=req.to_json())
         if resp.status_code != 201:
-            raise RuntimeError(f"Dependency submission failed with status code {resp.status_code}")
+            error = f"Dependency submission failed with status code {resp.status_code}"
+            body = resp.text
+            if body is not None and len(body) > 0:
+                error += f" and body:\n\n{body}"
+            raise RuntimeError(error)
