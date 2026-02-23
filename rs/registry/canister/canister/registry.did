@@ -513,6 +513,12 @@ type NodeSshAccess = record {
   public_keys : opt vec text;
 };
 
+type SplitSubnetPayload = record {
+  source_subnet_id: principal;
+  destination_canister_ranges: vec CanisterIdRange;
+  destination_node_ids: vec principal;
+};
+
 service : {
   add_api_boundary_nodes : (AddApiBoundaryNodesPayload) -> ();
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
@@ -573,4 +579,5 @@ service : {
   update_subnet : (UpdateSubnetPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
   swap_node_in_subnet_directly : (SwapNodeInSubnetDirectlyPayload) -> ();
+  split_subnet : (SplitSubnetPayload) -> ();
 };

@@ -253,6 +253,18 @@ pub fn routing_table_insert_subnet(
     routing_table.insert(canister_id_range, subnet_id)
 }
 
+/// A helper function to help insert a new subnet to the routing table
+pub fn routing_table_insert_subnet_and_reroute(
+    subnet_id: SubnetId,
+    routing_table: &mut RoutingTable,
+    migrated_canister_id_ranges: CanisterIdRanges,
+) -> Result<(), WellFormedError> {
+    routing_table_insert_subnet(routing_table, subnet_id)?;
+    routing_table.assign_ranges(migrated_canister_id_ranges, subnet_id)?;
+    routing_table.optimize();
+    Ok(())
+}
+
 /// Stores an ordered map mapping `CanisterId` ranges to `SubnetIds`. The ranges
 /// tracked are inclusive of start and end, i.e. can be denoted as `[a, b]`.
 ///

@@ -51,6 +51,7 @@ use registry_canister::{
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_set_subnet_operational_level::SetSubnetOperationalLevelPayload,
+        do_split_subnet::SplitSubnetPayload,
         do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
         do_update_api_boundary_nodes_version::{
             DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
@@ -1000,6 +1001,26 @@ fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
                 "{LOG_PREFIX} Reroute canister ranges failed: {error_message}"
             ))
         });
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update split_subnet")]
+fn split_subnet() {
+    check_caller_is_governance_and_log("split_subnet");
+    over_async(candid_one, split_subnet_);
+}
+
+#[candid_method(update, rename = "split_subnet")]
+async fn split_subnet_(payload: SplitSubnetPayload) -> () {
+    registry_mut()
+        .split_subnet(payload)
+        .await
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "Failed to trigger the subnet splitting: {error_message}"
+            ))
+        });
+
     recertify_registry();
 }
 
