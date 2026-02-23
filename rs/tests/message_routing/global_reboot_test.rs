@@ -55,9 +55,7 @@ const CANISTER_TO_SUBNET_RATE: u64 = 10;
 const PAYLOAD_SIZE_BYTES: u64 = 1024;
 const MSG_EXEC_TIME_SEC: u64 = 15;
 const POLL_INTERVAL_SEC: u64 = 5;
-const RESPONSES_TIMEOUT_SEC: u64 = 120;
-// Account for the initial MSG_EXEC_TIME_SEC sleep before the retry loop starts.
-const RESPONSES_RETRY_TIMEOUT_SEC: u64 = RESPONSES_TIMEOUT_SEC - MSG_EXEC_TIME_SEC;
+const RESPONSES_RETRY_TIMEOUT_SEC: u64 = 120;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -114,17 +112,6 @@ pub fn test_on_subnets(env: TestEnv, subnets: Vec<SubnetSnapshot>) {
     info!(log, "Calling start() on all canisters ...");
     start_all_canisters(&canisters, PAYLOAD_SIZE_BYTES, CANISTER_TO_SUBNET_RATE);
     // Step 3: Wait for canisters to exchange messages and receive responses.
-    // Poll metrics until all canisters have received at least one response,
-    // or until a timeout is reached. A fixed sleep is insufficient because
-    // cross-subnet (xnet) message round-trip times can vary significantly
-    // depending on CI machine load.
-    info!(
-        log,
-        "Waiting up to {} secs for all canisters to receive xnet responses ...",
-        RESPONSES_TIMEOUT_SEC
-    );
-    // Always wait at least MSG_EXEC_TIME_SEC before the first poll.
-    block_on(async { sleep(Duration::from_secs(MSG_EXEC_TIME_SEC)).await });
     let metrics_pre_reboot = block_on(async {
         ic_system_test_driver::retry_with_msg_async!(
             "check_all_canisters_have_responses",
