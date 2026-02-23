@@ -173,6 +173,7 @@ rust_ic_bench(
         "//rs/config",
         "//rs/consensus/utils",
         "//rs/crypto/temp_crypto",
+        "//rs/crypto/tree_hash",
         "//rs/execution_environment",
         "//rs/https_outcalls/consensus",
         "//rs/ingress_manager",

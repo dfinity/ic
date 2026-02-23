@@ -122,6 +122,7 @@ mod crypto_hash_stability {
     };
     use ic_base_types::PrincipalId;
     use ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing;
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_protobuf::types::v1 as pb;
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -434,6 +435,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let data = Certification {
             height: Height::from(42),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {
@@ -445,7 +447,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "a8833f9cda71c9b857ff4c1a6d83e6a187982fc9187fa184733248c1723163c3",
+            "9fb205560b04ba770f600ebd986b6f398666c726e01168416b1bdc002dc6e494",
             "Hash of Certification changed"
         );
     }
@@ -457,6 +459,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let data = CertificationShare {
             height: Height::from(42),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content,
                 signature: ThresholdSignatureShare {
@@ -468,7 +471,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "c860ffa9b824e46ae0fd68f8f7db2568f754c6ce119509c7b1a22db47780f71a",
+            "53da5b1d79ac888f4016ca7a6c97715e97411752268893dfc0f6ade437d88325",
             "Hash of CertificationShare changed"
         );
     }
@@ -618,6 +621,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let cert = Certification {
             height: Height::from(42),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {
@@ -630,7 +634,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "e9407ce84f50ba618d3fc6ebd05477e949958619605c5dbebeba3f946debabd5",
+            "af481a7d7ec38af0ed137ce9d12ee787823a9a9707a6c218053d556d864caea4",
             "Hash of CertificationMessage changed"
         );
     }
