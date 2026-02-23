@@ -279,118 +279,99 @@ struct TestConfig {
     provision_write_access: bool,
 }
 
-pub fn test_provisioning_write_access(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
+impl TestConfig {
+    fn new() -> Self {
+        Self {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: false,
             corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
-            provision_write_access: true,
-        },
-    );
+            provision_write_access: false,
+        }
+    }
+
+    fn with_subnet_size(mut self, subnet_size: usize) -> Self {
+        self.subnet_size = subnet_size;
+        self
+    }
+
+    fn with_no_upgrade(mut self) -> Self {
+        self.upgrade = false;
+        self
+    }
+
+    fn with_chain_key(mut self) -> Self {
+        self.chain_key = true;
+        self
+    }
+
+    fn with_corrupt_cup(mut self, corrupt_cup: CupCorruption) -> Self {
+        self.corrupt_cup = corrupt_cup;
+        self
+    }
+
+    fn with_local_recovery(mut self) -> Self {
+        self.local_recovery = true;
+        self
+    }
+
+    fn with_provision_write_access(mut self) -> Self {
+        self.provision_write_access = true;
+        self
+    }
 }
 
 pub fn test_with_chain_keys(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: true,
-            chain_key: true,
-            corrupt_cup: CupCorruption::NotCorrupted,
-            local_recovery: false,
-            provision_write_access: false,
-        },
-    );
+    let config = TestConfig::new().with_chain_key();
+    app_subnet_recovery_test(env, config);
 }
 
 pub fn test_without_chain_keys(env: TestEnv) {
+    let mut config = TestConfig::new();
+
     // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
     // not be able to see the recovery CUP in the registry
-    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
-        CupCorruption::CorruptedIncludingInvalidNiDkgId
-    } else {
-        CupCorruption::NotCorrupted
-    };
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: true,
-            chain_key: false,
-            corrupt_cup,
-            local_recovery: false,
-            provision_write_access: false,
-        },
-    );
+    if env.topology_snapshot().unassigned_nodes().count() > 0 {
+        config = config.with_corrupt_cup(CupCorruption::CorruptedIncludingInvalidNiDkgId);
+    }
+    app_subnet_recovery_test(env, config);
 }
 
 pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
+    let mut config = TestConfig::new().with_no_upgrade().with_chain_key();
+
     // Test the recoverable corrupt CUP case only when recovering an app subnet with chain keys
     // without upgrade
-    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
+    if env.topology_snapshot().unassigned_nodes().count() > 0 {
         // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
         // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
-        CupCorruption::CorruptedWithValidNiDkgId
-    } else {
-        CupCorruption::NotCorrupted
-    };
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: false,
-            chain_key: true,
-            corrupt_cup,
-            local_recovery: false,
-            provision_write_access: false,
-        },
-    );
+        config = config.with_corrupt_cup(CupCorruption::CorruptedWithValidNiDkgId);
+    }
+    app_subnet_recovery_test(env, config);
 }
 
-pub fn test_large_with_chain_keys(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES_LARGE,
-            upgrade: false,
-            chain_key: true,
-            corrupt_cup: CupCorruption::NotCorrupted,
-            local_recovery: false,
-            provision_write_access: false,
-        },
-    );
+pub fn test_large_no_upgrade_with_chain_keys(env: TestEnv) {
+    let config = TestConfig::new()
+        .with_subnet_size(APP_NODES_LARGE)
+        .with_no_upgrade()
+        .with_chain_key();
+    app_subnet_recovery_test(env, config);
 }
 
 pub fn test_no_upgrade_without_chain_keys(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: false,
-            chain_key: false,
-            corrupt_cup: CupCorruption::NotCorrupted,
-            local_recovery: false,
-            provision_write_access: false,
-        },
-    );
+    let config = TestConfig::new().with_no_upgrade();
+    app_subnet_recovery_test(env, config);
 }
 
 pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: false,
-            chain_key: false,
-            corrupt_cup: CupCorruption::NotCorrupted,
-            local_recovery: true,
-            provision_write_access: false,
-        },
-    );
+    let config = TestConfig::new().with_no_upgrade().with_local_recovery();
+    app_subnet_recovery_test(env, config);
+}
+
+pub fn test_provisioning_write_access(env: TestEnv) {
+    let config = TestConfig::new().with_provision_write_access();
+    app_subnet_recovery_test(env, config);
 }
 
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
