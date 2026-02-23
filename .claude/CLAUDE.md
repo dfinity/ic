@@ -39,8 +39,9 @@ After changing Rust code (`*.rs`) follow these steps in order:
    ```
    TESTS="$(bazel query 'kind(".*_test|test_suite", kind(rule, rdeps(//..., set(<MODIFIED_FILES>), 2)))' --keep_going 2>/dev/null)"
    if [ -n "$TESTS" ]; then
-       bazel test $TESTS
+       bazel test --test_output=errors $TESTS
    fi
    ```
    (Use a depth of 2 in `rdeps` because tests usually depend on source files indirectly through a `rust_library` for example).
    Fix all test failures.
+g
