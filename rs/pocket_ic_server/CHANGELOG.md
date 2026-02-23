@@ -20,9 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - All subnets with mainnet canister ranges but the NNS subnet are always created with mainnet subnet IDs.
-- The HTTP gateway now always skips authority validation (`--domain-skip-authority-validation`), allowing requests from any domain
-  (including domains not listed in the `domains` field of the HTTP gateway configuration) to be served as long as the canister ID
-  can be resolved from the request (e.g., via a subdomain or the `canisterId` query parameter).
+- The HTTP gateway skips authority validation (`--domain-skip-authority-validation`) when the `domains` field of the HTTP gateway
+  configuration is not set (i.e., `null`/`None`), allowing requests from any domain to be served as long as the canister ID can be
+  resolved from the request (e.g., via a subdomain or the `canisterId` query parameter). When `domains` is explicitly provided,
+  authority validation is enforced and only requests matching the configured domains are accepted.
 
 
 
