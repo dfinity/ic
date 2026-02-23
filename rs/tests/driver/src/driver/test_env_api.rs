@@ -2136,9 +2136,14 @@ pub fn install_registry_canister_with_testnet_topology(
 
     block_on(async {
         let mut canister = runtime
-            .create_canister_at_id_max_cycles_with_retries(REGISTRY_CANISTER_ID.get())
+            .create_canister_max_cycles_with_retries()
             .await
             .expect("Failed to create registry canister");
+        assert_eq!(
+            canister.canister_id(),
+            REGISTRY_CANISTER_ID,
+            "Failed to create registry canister at expected ID 0. Call this method before creating any other canisters."
+        );
         itest_helpers::install_registry_canister(&mut canister, registry_init_payload).await;
     });
 }
