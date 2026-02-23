@@ -1486,13 +1486,10 @@ impl ExecutionTest {
                     // and thus `message_instructions_used` are capped
                     // at the message instruction limit
                     let capped_slice_instructions_used = std::cmp::min(
-                        slice_instructions_used.get() as u64,
-                        self.install_code_instruction_limits.message().get(),
+                        NumInstructions::from(slice_instructions_used.get() as u64),
+                        self.install_code_instruction_limits.message(),
                     );
-                    assert_eq!(
-                        message_instructions_used.get(),
-                        capped_slice_instructions_used
-                    );
+                    assert_eq!(message_instructions_used, capped_slice_instructions_used);
                     self.update_execution_stats(
                         canister_id,
                         message_instructions_used,
