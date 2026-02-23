@@ -43,6 +43,7 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 7. Create a new git branch named like `ai/deflake-<test_name>`, replacing `<test_name>` with the name of the test
    and commit your fix to that branch.
 
-8. Submit a draft PR with the fix.
+8. Submit a draft PR using `gh` with the fix.
    Name it: `fix: deflake <label>`.
-   Include the root cause analysis in the PR description and link to this `SKILL.md` file.
+   Include the root cause analysis in the PR description
+   and mention the PR was created following the steps in `.claude/skills/fix-flaky-tests/SKILL.md`.
