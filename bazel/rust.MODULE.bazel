@@ -453,7 +453,7 @@ crate.spec(
 )
 crate.spec(
     package = "evm_rpc_client",
-    version = "^0.3.0",
+    version = "^0.4.0",
 )
 crate.spec(
     package = "evm_rpc_types",
@@ -634,7 +634,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-canister-runtime",
-    version = "^0.1.0",
+    version = "^0.2.0",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
@@ -1644,7 +1644,7 @@ crate.spec(
 )
 crate.spec(
     package = "thiserror",
-    version = "^2.0.3",
+    version = "^2.0.18",
 )
 crate.spec(
     package = "thousands",
