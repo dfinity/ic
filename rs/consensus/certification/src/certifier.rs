@@ -383,7 +383,7 @@ impl CertifierImpl {
         // A struct defined to morph `Certification` into a format that can be
         // accepted by `utils::aggregate`.
         #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-        struct CertificationTuple(Height, CertificationContent);
+        struct CertificationTuple(Height, Witness, CertificationContent);
 
         impl HasHeight for CertificationTuple {
             fn height(&self) -> Height {
@@ -397,18 +397,8 @@ impl CertifierImpl {
             }
         }
 
-        let shares: Vec<_> = certification_pool.shares_at_height(height).collect();
-        let height_witness = if let Some(share) = shares.first() {
-            share.height_witness.clone()
-        } else {
-            debug!(
-                self.log,
-                "CertifierImpl::aggregate called on an empty collection of shares @{}", height
-            );
-            return vec![];
-        };
-        let signatures = shares.into_iter().map(|s| Signed {
-            content: CertificationTuple(s.height, s.signed.content),
+        let shares = certification_pool.shares_at_height(height).map(|s| Signed {
+            content: CertificationTuple(s.height, s.height_witness, s.signed.content),
             signature: s.signed.signature,
         });
         aggregate(
@@ -418,15 +408,15 @@ impl CertifierImpl {
             Box::new(|cert: &CertificationTuple| {
                 active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), cert.height())
             }),
-            signatures,
+            shares,
         )
         .into_iter()
         .map(|signed_cert_tuple| {
             CertificationMessage::Certification(Certification {
                 height: signed_cert_tuple.content.0,
-                height_witness: Some(height_witness.clone()),
+                height_witness: Some(signed_cert_tuple.content.1),
                 signed: Signed {
-                    content: signed_cert_tuple.content.1,
+                    content: signed_cert_tuple.content.2,
                     signature: signed_cert_tuple.signature,
                 },
             })

@@ -238,7 +238,7 @@ where
     }
 }
 /// The computed hash of the data in a `Leaf`; or of a [`LabeledTree`].
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Digest(pub [u8; Sha256::DIGEST_LEN]);
 ic_crypto_internal_types::derive_serde!(Digest, Sha256::DIGEST_LEN);
 
@@ -1105,7 +1105,7 @@ pub enum TreeHashError {
 ///
 /// A witness can also be used to update a [`HashTree`] when part of the
 /// original data is updated.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub enum Witness {
     /// Represents a [`HashTree::Fork`].
     Fork {
