@@ -318,7 +318,7 @@ pub(crate) mod test {
             merkle_proof,
             certification: Certification {
                 height: Height::from(height),
-                height_witness: Witness::new_for_testing(Digest([0; 32])),
+                height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
                 signed: Signed {
                     signature: ThresholdSignature::fake(),
                     content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(

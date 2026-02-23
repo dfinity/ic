@@ -435,7 +435,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let data = Certification {
             height: Height::from(42),
-            height_witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {
@@ -621,7 +621,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let cert = Certification {
             height: Height::from(42),
-            height_witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {

@@ -120,7 +120,7 @@ fn certified_stream_slice_for_test() -> CertifiedStreamSlice {
 fn certification_for_test() -> Certification {
     Certification {
         height: Height::new(14),
-        height_witness: Witness::new_for_testing(Digest([0; 32])),
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: certification_content_for_test(),
             signature: threshold_signature_for_test(),

@@ -424,7 +424,7 @@ impl CertifierImpl {
         .map(|signed_cert_tuple| {
             CertificationMessage::Certification(Certification {
                 height: signed_cert_tuple.content.0,
-                height_witness: height_witness.clone(),
+                height_witness: Some(height_witness.clone()),
                 signed: Signed {
                     content: signed_cert_tuple.content.1,
                     signature: signed_cert_tuple.signature,
@@ -538,8 +538,11 @@ impl CertifierImpl {
 
         // If the share has an invalid content or does not belong to the
         // committee
-        if let Err(e) = validate_height_witness(share.height, &share.height_witness, &content.hash)
-        {
+        if let Err(e) = validate_height_witness(
+            share.height,
+            &Some(share.height_witness.clone()),
+            &content.hash,
+        ) {
             return Some(ChangeAction::HandleInvalid(msg, e));
         }
 
@@ -602,9 +605,12 @@ impl CertifierImpl {
 
 fn validate_height_witness(
     height: Height,
-    height_witness: &Witness,
+    height_witness: &Option<Witness>,
     hash: &CryptoHashOfPartialState,
 ) -> Result<(), String> {
+    let Some(height_witness) = height_witness else {
+        return Err(format!("Missing height witness @{}", height));
+    };
     let labeled_tree = materialize(&state_height_as_tree(&height), None);
     let height_witness_digest = match recompute_digest(&labeled_tree, height_witness) {
         Ok(digest) => CryptoHashOfPartialState::from(CryptoHash(digest.to_vec())),
@@ -705,7 +711,7 @@ mod tests {
         signature.signer = dkg_id;
         to_unvalidated(CertificationMessage::Certification(Certification {
             height,
-            height_witness: Witness::new_for_testing_with_height(),
+            height_witness: Some(Witness::new_for_testing_with_height()),
             signed: Signed { content, signature },
         }))
     }
@@ -1330,8 +1336,9 @@ mod tests {
 
             // a height witness consisting only of the (correct) root hash,
             // i.e., pruned too aggressively
-            cert.height_witness =
-                Witness::new_for_testing(Digest(height_witness_hash.get().0.try_into().unwrap()));
+            cert.height_witness = Some(Witness::new_for_testing(Digest(
+                height_witness_hash.get().0.try_into().unwrap(),
+            )));
 
             assert_eq!(
                 certifier.validate_certification(cert),
@@ -1356,7 +1363,7 @@ mod tests {
             // i.e., not pruned enough
             let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
             let (height_witness, hash) = unpruned_height_witness(&state, height);
-            cert.height_witness = height_witness;
+            cert.height_witness = Some(height_witness);
             cert.signed.content.hash = hash;
 
             assert_eq!(
@@ -1529,7 +1536,7 @@ mod tests {
                         .validated
                         .insert(CertificationMessage::Certification(Certification {
                             height: Height::from(height),
-                            height_witness: Witness::new_for_testing_with_height(),
+                            height_witness: Some(Witness::new_for_testing_with_height()),
                             signed: Signed {
                                 content: gen_content(Height::from(height)),
                                 signature: ThresholdSignature::fake(),
