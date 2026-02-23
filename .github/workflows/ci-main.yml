@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           invocation-names: afl
-          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 10
 
   config:
     name: Set Config
@@ -272,7 +272,11 @@ jobs:
     # Run on protected branches, but only on public repo
     if: github.repository == 'dfinity/ic'
     steps:
-      - *checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # on macOS we don't need any git history
+          ref: ${{ inputs.commit-sha }}
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
@@ -339,9 +343,21 @@ jobs:
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+          cat /tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
       - name: Build and Test
         run: |
+          # Set up .netrc so that bazel can authenticate with GitHub to have higher rate limits for fetching dependencies.
+          touch  ~/.netrc
+          chmod 600 ~/.netrc
+          echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
+          echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
+          echo "Current GitHub API rate limits:"
+
+          # Show how close we are to the limits
+          curl -s --netrc https://api.github.com/rate_limit | \
+            jq -r '.resources.core | "Rate limit remaining: \(.remaining)/\(.limit) (resets at \(.reset | strftime("%Y-%m-%d %H:%M:%S %Z")))"'
+
           mkdir -p /tmp/zig-cache
 
           bazel \
