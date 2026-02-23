@@ -6364,7 +6364,7 @@ fn inner_round_first_execution_is_not_a_full_execution() {
 }
 
 #[test]
-fn inner_round_long_execution_is_a_full_execution() {
+fn inner_round_long_execution_is_not_a_full_execution() {
     let scheduler_cores = 2;
     let slice = 20;
     let mut test = SchedulerTestBuilder::new()
@@ -6386,18 +6386,16 @@ fn inner_round_long_execution_is_a_full_execution() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     // Create `scheduler_cores` canisters, so target canister is not scheduled first.
-    let canister_id = test.create_canister();
-    test.send_ingress(canister_id, ingress(slice));
-
+    let mut canister_ids = vec![];
+    for _ in 0..scheduler_cores {
+        let canister_id = test.create_canister();
+        test.send_ingress(canister_id, ingress(slice));
+        canister_ids.push(canister_id);
+    }
     // Create a target canister with two long executions.
     let target_id = test.create_canister();
     test.send_ingress(target_id, ingress(slice * 2 + 1));
     test.send_ingress(target_id, ingress(slice * 2 + 1));
-
-    for _ in 0..scheduler_cores - 1 {
-        let canister_id = test.create_canister();
-        test.send_ingress(canister_id, ingress(slice));
-    }
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
@@ -6406,14 +6404,15 @@ fn inner_round_long_execution_is_a_full_execution() {
         // All canisters should be executed.
         assert_eq!(system_state.canister_metrics().executed(), 1);
         if canister.canister_id() == target_id {
-            // The target canister was not executed first, and still have messages.
+            // The target canister was not executed first, and still has messages.
             assert_eq!(system_state.queues().ingress_queue_size(), 1);
+            // It also isn't marked as fully executed.
+            assert!(!test.was_fully_executed(canister.canister_id()));
         } else {
+            // All other canisters were fully executed.
             assert_eq!(system_state.queues().ingress_queue_size(), 0);
+            assert!(test.was_fully_executed(canister.canister_id()));
         }
-        // All canisters should be marked as fully executed. The target canister,
-        // despite still having messages, executed a full slice of instructions.
-        assert!(test.was_fully_executed(canister.canister_id()));
     }
     let mut total_accumulated_priority = 0;
     let mut total_priority_credit = 0;

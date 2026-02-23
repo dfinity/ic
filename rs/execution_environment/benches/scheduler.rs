@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 fn main() {
     let mut canisters = BTreeMap::new();
-    let mut canisters_with_completed_messages = BTreeSet::new();
+    let mut executed_canisters = BTreeSet::new();
     for i in 0..100_000 {
         let canister_id = canister_test_id(i);
         let scheduler_state = SchedulerState::default();
@@ -39,7 +39,7 @@ fn main() {
                     InputQueueType::RemoteSubnet,
                 )
                 .unwrap();
-            canisters_with_completed_messages.insert(canister_id);
+            executed_canisters.insert(canister_id);
         }
         canisters.insert(canister_id, Arc::new(canister_state));
     }
@@ -67,7 +67,7 @@ fn main() {
     group.bench_function("iteration", |bench| {
         bench.iter(|| {
             round_schedule.start_iteration(&mut state, &metrics, &log);
-            round_schedule.end_iteration(&mut state, &canisters_with_completed_messages);
+            round_schedule.end_iteration(&mut state, &executed_canisters, &executed_canisters);
         });
     });
 

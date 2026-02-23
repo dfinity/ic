@@ -516,6 +516,7 @@ impl SchedulerImpl {
             let instructions_before = round_limits.instructions;
             let (
                 active_canisters,
+                executed_canisters,
                 canisters_with_completed_messages,
                 mut loop_ingress_execution_results,
                 heap_delta,
@@ -550,7 +551,11 @@ impl SchedulerImpl {
 
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
-            round_schedule.end_iteration(&mut state, &canisters_with_completed_messages);
+            round_schedule.end_iteration(
+                &mut state,
+                &executed_canisters,
+                &canisters_with_completed_messages,
+            );
 
             round_limits.instructions -= as_round_instructions(
                 self.config
@@ -592,14 +597,15 @@ impl SchedulerImpl {
             // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canisters {
+                let Some(canister) = state.canister_state_make_mut(canister_id) else {
+                    continue;
+                };
                 // It's OK to indiscriminately `make_mut()` here because we've already mutated
                 // this canister state this round.
-                if let Some(canister) = state.canister_state_make_mut(canister_id) {
-                    canister
-                        .system_state
-                        .task_queue
-                        .remove_heartbeat_and_global_timer();
-                }
+                canister
+                    .system_state
+                    .task_queue
+                    .remove_heartbeat_and_global_timer();
             }
         }
 
@@ -650,10 +656,9 @@ impl SchedulerImpl {
         self.metrics
             .executable_canisters_per_round
             .observe(round_schedule.round_scheduled_canisters().len() as f64);
-        // FIXME
         self.metrics
             .executed_canisters_per_round
-            .observe(round_schedule.canisters_with_completed_messages().len() as f64);
+            .observe(round_schedule.executed_canisters().len() as f64);
 
         self.metrics
             .heap_delta_rate_limited_canisters_per_round
@@ -668,9 +673,9 @@ impl SchedulerImpl {
     /// The given `canisters_by_thread` defines the priority of canisters.
     /// Returns:
     /// - the new states of the canisters,
-    /// - the actually executed canister ids,
+    /// - actually executed canisters,
+    /// - canisters that completed at least one message execution,
     /// - the ingress results,
-    /// - the maximum number of instructions executed on a thread,
     /// - the total heap delta.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn execute_canisters_in_inner_round(
@@ -686,6 +691,7 @@ impl SchedulerImpl {
     ) -> (
         Vec<Arc<CanisterState>>,
         BTreeSet<CanisterId>,
+        BTreeSet<CanisterId>,
         Vec<(MessageId, IngressStatus)>,
         NumBytes,
     ) {
@@ -697,6 +703,7 @@ impl SchedulerImpl {
         if round_limits.instructions_reached() {
             return (
                 canisters_by_thread.into_iter().flatten().collect(),
+                BTreeSet::new(),
                 BTreeSet::new(),
                 vec![],
                 NumBytes::from(0),
@@ -749,6 +756,7 @@ impl SchedulerImpl {
         // At this point all threads completed and stored their results.
         // Aggregate `results_by_thread` to get the result of this function.
         let mut canisters = Vec::new();
+        let mut executed_canisters = BTreeSet::new();
         let mut canisters_with_completed_messages = BTreeSet::new();
         let mut ingress_results = Vec::new();
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
@@ -756,6 +764,7 @@ impl SchedulerImpl {
         let mut callbacks_created = 0;
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
+            executed_canisters.extend(result.executed_canisters);
             canisters_with_completed_messages.extend(result.canisters_with_completed_messages);
             ingress_results.append(&mut result.ingress_results);
             let instructions_executed = as_num_instructions(
@@ -794,6 +803,7 @@ impl SchedulerImpl {
 
         (
             canisters,
+            executed_canisters,
             canisters_with_completed_messages,
             ingress_results,
             heap_delta,
@@ -1624,8 +1634,10 @@ fn observe_instructions_consumed_per_message(
 #[derive(Default)]
 struct ExecutionThreadResult {
     canisters: Vec<Arc<CanisterState>>,
-    // Canisters that completed at least one message execution (advancing a long
-    // execution does not count).
+    /// Canisters that advanced or completed a message execution.
+    executed_canisters: BTreeSet<CanisterId>,
+    /// Canisters that completed at least one message execution (advancing a long
+    /// execution does not count).
     canisters_with_completed_messages: BTreeSet<CanisterId>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
     slices_executed: NumSlices,
@@ -1662,6 +1674,7 @@ fn execute_canisters_on_thread(
         MeasurementScope::root(&metrics.round_inner_iteration_thread).dont_record_zeros();
     // These variables accumulate the results and will be returned at the end.
     let mut canisters = vec![];
+    let mut executed_canisters = BTreeSet::new();
     let mut canisters_with_completed_messages = BTreeSet::new();
     let mut ingress_results = vec![];
     let mut total_slices_executed = NumSlices::from(0);
@@ -1741,6 +1754,7 @@ fn execute_canisters_on_thread(
                         // Message actually executed.
                         messages = NumMessages::from(1);
                         total_slices_executed.inc_assign();
+                        executed_canisters.insert(new_canister.canister_id());
                         canisters_with_completed_messages.insert(new_canister.canister_id());
                         total_instructions_used += instructions;
                     }
@@ -1756,6 +1770,7 @@ fn execute_canisters_on_thread(
                 // Paused execution.
                 None => {
                     total_slices_executed.inc_assign();
+                    executed_canisters.insert(new_canister.canister_id());
                 }
             }
             measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
@@ -1808,6 +1823,7 @@ fn execute_canisters_on_thread(
 
     ExecutionThreadResult {
         canisters,
+        executed_canisters,
         canisters_with_completed_messages,
         ingress_results,
         slices_executed: total_slices_executed,

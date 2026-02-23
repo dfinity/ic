@@ -112,7 +112,7 @@ struct SchedulingOrder<P, N, R> {
     opportunistic_long_canisters: R,
 }
 
-/// Represents the current round schedule. It is updated on every inner loop
+/// Represents the current round schedule. It is updated on every iteration
 /// based on the canisters' current "next executions".
 #[derive(Debug)]
 pub struct RoundSchedule {
@@ -134,12 +134,15 @@ pub struct RoundSchedule {
     round_scheduled_canisters: BTreeSet<CanisterId>,
     /// Full round: canisters that had a long execution at round start.
     round_long_execution_canisters: BTreeSet<CanisterId>,
+    /// Full round: canisters that advanced or completed a message execution.
+    executed_canisters: BTreeSet<CanisterId>,
     /// Full round: canisters that completed message executions.
     canisters_with_completed_messages: BTreeSet<CanisterId>,
     /// Full round: canisters that got a "full execution" (scheduled first or
-    /// consumed all its inputs).
+    /// consumed all inputs).
     fully_executed_canisters: BTreeSet<CanisterId>,
-    /// Full round: canisters that were heap delta rate-limited.
+    /// Full round: canisters that were heap delta rate-limited in at least one
+    /// iteration.
     rate_limited_canisters: BTreeSet<CanisterId>,
 }
 
@@ -158,6 +161,7 @@ impl RoundSchedule {
             long_executions_count: 0,
             long_executions_compute_allocation: ZERO,
             round_scheduled_canisters: BTreeSet::new(),
+            executed_canisters: BTreeSet::new(),
             round_long_execution_canisters: BTreeSet::new(),
             canisters_with_completed_messages: BTreeSet::new(),
             fully_executed_canisters: BTreeSet::new(),
@@ -304,6 +308,10 @@ impl RoundSchedule {
         );
 
         if is_first_iteration {
+            // TODO(DSM-103): We should not consider an aborted long execution (e.g. due to
+            // exceeding the paused execution limit) as fully executed, even if the canister
+            // was scheduled first.
+
             // First iteration: mark the first canisters on each core as fully executed.
             self.schedule
                 .iter_mut()
@@ -391,25 +399,28 @@ impl RoundSchedule {
     pub fn end_iteration(
         &mut self,
         state: &mut ReplicatedState,
+        executed_canisters: &BTreeSet<CanisterId>,
         canisters_with_completed_messages: &BTreeSet<CanisterId>,
     ) {
+        self.executed_canisters.extend(executed_canisters);
+        self.canisters_with_completed_messages
+            .extend(canisters_with_completed_messages);
+
         for canister_id in canisters_with_completed_messages {
-            self.canisters_with_completed_messages.insert(*canister_id);
             // If a canister has completed a long execution, reset its long execution mode.
             state
                 .metadata
                 .subnet_schedule
                 .get_mut(*canister_id)
                 .long_execution_mode = LongExecutionMode::Opportunistic;
-        }
-        for canister in self.schedule.iter() {
+
             match state
-                .canister_state(&canister.canister_id)
+                .canister_state(canister_id)
                 .map(|canister| canister.next_execution())
                 .unwrap_or(NextExecution::None)
             {
                 NextExecution::None => {
-                    self.fully_executed_canisters.insert(canister.canister_id);
+                    self.fully_executed_canisters.insert(*canister_id);
                 }
                 NextExecution::StartNew | NextExecution::ContinueLong => {}
                 NextExecution::ContinueInstallCode => {
@@ -589,22 +600,34 @@ impl RoundSchedule {
         canister_priority.long_execution_mode = LongExecutionMode::default();
     }
 
-    pub fn round_scheduled_canisters(&self) -> &BTreeSet<CanisterId> {
-        &self.round_scheduled_canisters
-    }
-
     pub fn schedule_length(&self) -> usize {
         self.schedule.len()
     }
 
+    /// Full round: canisters that were scheduled.
+    pub fn round_scheduled_canisters(&self) -> &BTreeSet<CanisterId> {
+        &self.round_scheduled_canisters
+    }
+
+    /// Full round: canisters that advanced or completed a message execution.
+    pub(super) fn executed_canisters(&self) -> &BTreeSet<CanisterId> {
+        &self.executed_canisters
+    }
+
+    /// Full round: canisters that got a "full execution" (scheduled first or
+    /// consumed all inputs).
     pub fn canisters_with_completed_messages(&self) -> &BTreeSet<CanisterId> {
         &self.canisters_with_completed_messages
     }
 
+    /// Full round: canisters that got a "full execution" (scheduled first or
+    /// consumed all inputs).
     pub fn fully_executed_canisters(&self) -> &BTreeSet<CanisterId> {
         &self.fully_executed_canisters
     }
 
+    /// Full round: canisters that were heap delta rate-limited in at least one
+    /// iteration.
     pub fn rate_limited_canisters(&self) -> &BTreeSet<CanisterId> {
         &self.rate_limited_canisters
     }
