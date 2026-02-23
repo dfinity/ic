@@ -59,7 +59,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_enable_chain_keys_test",
-    flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -111,7 +110,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_enable_chain_keys_test",
-    flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -129,7 +127,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_with_chain_keys_test",
-    flaky = True,  # flakiness rate of 3.33% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -198,7 +195,6 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_with_chain_keys_test",
-    flaky = True,  # flakiness rate of over 6% over the month from 2025-02-11 till 2025-03-11 (only for //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_chain_keys_test_head_nns_colocate).
     guestos_update = "test",
     tags = [
         "colocate",
@@ -217,7 +213,6 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_large_with_chain_keys_test",
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
-    flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
     tags = [
         "colocate",

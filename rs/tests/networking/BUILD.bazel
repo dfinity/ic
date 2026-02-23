@@ -279,7 +279,6 @@ system_test_nns(
 
 system_test_nns(
     name = "firewall_max_connections_test",
-    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",
     ],
@@ -307,7 +306,6 @@ system_test_nns(
 
 system_test_nns(
     name = "http_endpoints_public_spec_test",
-    flaky = False,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
         "@crate_index//:futures",
@@ -320,7 +318,6 @@ system_test_nns(
 system_test_nns(
     name = "network_large_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "system_test_large",
     ],
@@ -337,7 +334,6 @@ system_test_nns(
 system_test_nns(
     name = "network_reliability_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
         "system_test_large",
@@ -377,7 +373,6 @@ system_test_nns(
     },
     enable_head_nns_variant = False,
     enable_metrics = True,
-    flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
@@ -427,7 +422,6 @@ system_test_nns(
     },
     enable_head_nns_variant = False,
     enable_metrics = True,
-    flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
