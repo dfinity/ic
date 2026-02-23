@@ -2702,6 +2702,7 @@ impl ExecutionTestBuilder {
             SubnetType::VerifiedApplication => {
                 SchedulerConfig::verified_application_subnet().dirty_page_overhead
             }
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine().dirty_page_overhead,
         };
 
         let dirty_heap_page_overhead = match self.execution_config.embedders_config.metering_type {
