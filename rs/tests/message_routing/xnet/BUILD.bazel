@@ -7,6 +7,7 @@ system_test_nns(
     name = "xnet_slo_120_subnets_staging_test",
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     tags = [
+        "colocate",
         "system_test_large",
     ],
     test_timeout = "eternal",
@@ -22,6 +23,7 @@ system_test_nns(
     name = "xnet_slo_3_subnets_hotfix_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
+        "colocate",
         "system_test_large",
     ],
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
@@ -36,6 +38,7 @@ system_test_nns(
     name = "xnet_slo_3_subnets_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
+        "colocate",
         "system_test_large",
     ],
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
@@ -50,6 +53,7 @@ system_test_nns(
     name = "xnet_slo_29_subnets_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
+        "colocate",
         "system_test_large",
     ],
     test_timeout = "eternal",
