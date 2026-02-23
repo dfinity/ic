@@ -45,7 +45,7 @@ pub struct SubnetRecord {
     /// Note that this value can be larger than \[`Self::max_block_payload_size`\].
     /// A value of 0 means that the default value \[`ic_limits::MAX_INGRESS_BYTES_PER_BLOCK`\] will be
     /// used.
-    #[prost(uint64, tag = "31")]
+    #[prost(uint64, tag = "32")]
     pub max_ingress_bytes_per_block: u64,
     /// Maximum size, in bytes, a \[`BatchPayload`\] can have *when sent over wire*.
     /// Setting this value too hight could result in longer delivery times of blocks to peers, which
