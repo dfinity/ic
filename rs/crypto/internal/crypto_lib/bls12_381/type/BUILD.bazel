@@ -55,7 +55,7 @@ rust_library(
     crate_name = "ic_crypto_internal_bls12_381_type",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES + RAYON_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
 rust_bench(
