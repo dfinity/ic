@@ -14,14 +14,22 @@ const NNS_KEY_DEFAULT_PATH: &str = "opt/ic/share/nns_public_key.pem";
 const NNS_KEY_PATH: &str = "run/config/nns_public_key.pem";
 const NODE_OPERATOR_KEY_PATH: &str = "data/node_operator_private_key.pem";
 
+pub fn populate_nns_public_key(
+    #[cfg(feature = "dev")] guestos_config: &GuestOSConfig,
+) -> Result<()> {
+    populate_nns_public_key_impl(
+        Path::new("/"),
+        #[cfg(feature = "dev")]
+        guestos_config,
+    )
+}
+
 /// Populates the NNS root key where `ic-replica` expects it.
 /// In a dev environment it will take the overriden key from the GuestOS config
 /// if it's provided there.
-#[allow(unused_variables)]
-fn populate_nns_public_key(
+fn populate_nns_public_key_impl(
     root: &Path,
-    bootstrap_dir: &Path,
-    guestos_config: &GuestOSConfig,
+    #[cfg(feature = "dev")] guestos_config: &GuestOSConfig,
 ) -> Result<()> {
     let nns_key_dst = root.join(NNS_KEY_PATH);
 
@@ -91,9 +99,6 @@ fn bootstrap_ic_node_impl(
         println!("Bootstrap completed already");
         return Ok(());
     }
-
-    populate_nns_public_key(root, bootstrap_dir, &guestos_config)
-        .context("unable to populate NNS public key")?;
 
     println!("Processing bootstrap data from {}", bootstrap_dir.display());
     process_bootstrap(
@@ -244,7 +249,7 @@ mod tests {
             let temp_dir = TempDir::new().unwrap();
             fs::create_dir_all(temp_dir.path().join(CONFIG_ROOT_PATH)).unwrap();
             fs::create_dir_all(temp_dir.path().join(STATE_ROOT_PATH)).unwrap();
-            fs::create_dir_all(temp_dir.path().join("run")).unwrap();
+            fs::create_dir_all(temp_dir.path().join("run/config")).unwrap();
 
             Self { temp_dir }
         }
@@ -379,7 +384,6 @@ mod tests {
                 .exists()
         );
         assert!(state_root.join(NODE_OPERATOR_KEY_PATH).exists());
-        assert!(test_root.path(NNS_KEY_PATH).exists());
 
         // Verify file contents
         assert_eq!(
@@ -391,39 +395,17 @@ mod tests {
             "test_state_data"
         );
 
-        // Make sure that with dev feature we get the overriden key
-        #[cfg(feature = "dev")]
-        {
-            assert_eq!(
-                fs::read_to_string(test_root.path(NNS_KEY_PATH)).unwrap(),
-                "test_nns_key_override"
-            );
-        }
-
-        // Make sure that w/o dev feature we get the default key
-        #[cfg(not(feature = "dev"))]
-        {
-            assert_eq!(
-                fs::read_to_string(test_root.path(NNS_KEY_PATH)).unwrap(),
-                "default_nns_key"
-            );
-        }
         assert_eq!(
             fs::read_to_string(state_root.join(NODE_OPERATOR_KEY_PATH)).unwrap(),
             "test_node_operator_key"
         );
-
-        let perms = fs::metadata(test_root.path(NNS_KEY_PATH))
-            .unwrap()
-            .permissions();
-        assert_eq!(perms.mode() & 0o777, 0o444);
 
         // Verify CONFIGURED marker was created
         assert!(config_root.join("CONFIGURED").exists());
     }
 
     #[test]
-    fn test_process_bootstrap_default_nns_key_and_no_operator_key() {
+    fn test_process_bootstrap_no_operator_key() {
         let test_root = TestRoot::new();
         test_root.create_rootfs_nns_key("default_nns_key");
         let bootstrap_dir = create_test_bootstrap_dir();
@@ -457,7 +439,6 @@ mod tests {
                 .exists()
         );
         assert!(!state_root.join(NODE_OPERATOR_KEY_PATH).exists());
-        assert!(test_root.path(NNS_KEY_PATH).exists());
 
         // Verify file contents
         assert_eq!(
@@ -467,10 +448,6 @@ mod tests {
         assert_eq!(
             fs::read_to_string(state_root.join("data/ic_state").join("state.dat")).unwrap(),
             "test_state_data"
-        );
-        assert_eq!(
-            fs::read_to_string(test_root.path(NNS_KEY_PATH)).unwrap(),
-            "default_nns_key"
         );
 
         // Verify CONFIGURED marker was created
@@ -668,5 +645,58 @@ mod tests {
                 .join("registry.dat")
                 .exists()
         );
+    }
+
+    #[test]
+    fn test_populate_nns_public_key_default() {
+        let test_root = TestRoot::new();
+        test_root.create_rootfs_nns_key("default_nns_key");
+
+        populate_nns_public_key_impl(
+            test_root.root_path(),
+            #[cfg(feature = "dev")]
+            &GuestOSConfig::default(),
+        )
+        .unwrap();
+
+        // Verify NNS public key was copied with default content
+        let nns_key_dst = test_root.path("run/config/nns_public_key.pem");
+        assert!(nns_key_dst.exists());
+        assert_eq!(fs::read_to_string(&nns_key_dst).unwrap(), "default_nns_key");
+
+        let perms = fs::metadata(&nns_key_dst).unwrap().permissions();
+        assert_eq!(perms.mode() & 0o777, 0o444);
+    }
+
+    #[test]
+    fn test_populate_nns_public_key_with_override() {
+        let test_root = TestRoot::new();
+        test_root.create_rootfs_nns_key("default_nns_key");
+
+        let mut guest_config = GuestOSConfig::default();
+        guest_config
+            .guestos_settings
+            .guestos_dev_settings
+            .nns_pub_key_override = Some("abc".to_string());
+
+        populate_nns_public_key_impl(
+            test_root.root_path(),
+            #[cfg(feature = "dev")]
+            &guest_config,
+        )
+        .unwrap();
+
+        // Verify NNS public key was copied with override content
+        let nns_key_dst = test_root.path("run/config/nns_public_key.pem");
+        assert!(nns_key_dst.exists());
+
+        #[cfg(feature = "dev")]
+        assert_eq!(fs::read_to_string(&nns_key_dst).unwrap(), "abc");
+        #[cfg(not(feature = "dev"))]
+        assert_eq!(fs::read_to_string(&nns_key_dst).unwrap(), "default_nns_key");
+
+        // Verify permissions are set to 0o444 (read-only)
+        let perms = fs::metadata(&nns_key_dst).unwrap().permissions();
+        assert_eq!(perms.mode() & 0o777, 0o444);
     }
 }

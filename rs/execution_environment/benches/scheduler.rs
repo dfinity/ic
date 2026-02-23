@@ -10,8 +10,8 @@ use ic_replicated_state::{
     CanisterState, InputQueueType, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::{Cycles, ExecutionRound, NumBytes, PrincipalId, SubnetId};
-use ic_types_test_utils::ids::{canister_test_id, user_test_id};
+use ic_types::{Cycles, ExecutionRound, NumBytes};
+use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -43,10 +43,7 @@ fn main() {
         }
         canisters.insert(canister_id, Arc::new(canister_state));
     }
-    let mut state = ReplicatedState::new(
-        SubnetId::new(PrincipalId::new_subnet_test_id(0)),
-        SubnetType::Application,
-    );
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     state.put_canister_states(canisters);
 
     let scheduler_cores = 4;
