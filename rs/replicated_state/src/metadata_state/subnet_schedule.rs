@@ -81,7 +81,8 @@ impl SubnetSchedule {
     pub fn new(priorities: BTreeMap<CanisterId, CanisterPriority>) -> Self {
         Self {
             priorities,
-            ..Default::default()
+            #[cfg(debug_assertions)]
+            fully_executed_canisters: std::collections::BTreeSet::new(),
         }
     }
 
