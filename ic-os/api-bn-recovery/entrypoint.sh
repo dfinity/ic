@@ -53,9 +53,8 @@ cleanup() {
     [ -n "$REPLICATOR_PID" ] && kill "$REPLICATOR_PID" 2>/dev/null || true
     wait
     echo "Shutdown complete."
-    exit 0
 }
-trap cleanup SIGTERM SIGINT
+trap 'cleanup; exit 0' SIGTERM SIGINT
 
 # ─── Start registry replicator ───
 echo "[1/3] Starting registry replicator..."
@@ -147,3 +146,4 @@ EXIT_CODE=$?
 
 echo "A process exited with code ${EXIT_CODE}. Shutting down..."
 cleanup
+exit "$EXIT_CODE"
