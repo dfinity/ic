@@ -2,8 +2,8 @@
 
 The NNS is accessed through API boundary nodes, which are themselves managed by the NNS 
 -- a circular dependency. If an outage renders the API boundary nodes unusable, we need a 
-way to spin up at least one non-NNS-managed API boundary node so that the NNS can be 
-accessed to vote on recovery proposals.
+way to spin up at least one API boundary node that is not NNS-managed such that the community 
+can access the NNS and vote on the proposals that should recover the access through the API boundary nodes.
 
 This directory contains a Docker setup that packages `ic-boundary` and `ic-registry-replicator` 
 into a single container that can be deployed independently of the production boundary node infrastructure.
