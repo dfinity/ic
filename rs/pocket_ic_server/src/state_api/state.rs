@@ -802,16 +802,19 @@ impl ApiState {
                     .map(|s| s.to_string())
             })
             .transpose()?;
-        let domains: Vec<_> = http_gateway_config
-            .domains
-            .clone()
-            .unwrap_or(vec!["localhost".to_string()])
-            .iter()
-            .map(|d| fqdn!(d))
-            .collect();
+        let raw_domains = http_gateway_config.domains.clone();
         spawn(async move {
             let router = {
                 let mut args = vec!["".to_string()];
+                if raw_domains.is_none() {
+                    args.push("--domain-skip-authority-validation".to_string());
+                }
+                let domains: Vec<_> = raw_domains
+                    .clone()
+                    .unwrap_or(vec!["localhost".to_string()])
+                    .iter()
+                    .map(|d| fqdn!(d))
+                    .collect();
                 for d in &domains {
                     args.push("--domain".to_string());
                     args.push(d.to_string());
@@ -822,7 +825,6 @@ impl ApiState {
                 }
                 args.push("--domain-canister-id-from-query-params".to_string());
                 args.push("--domain-canister-id-from-referer".to_string());
-                args.push("--domain-skip-authority-validation".to_string());
                 if let Some(ref path) = domain_custom_provider_local_file {
                     args.push("--domain-custom-provider-local-file".to_string());
                     args.push(path.clone());
