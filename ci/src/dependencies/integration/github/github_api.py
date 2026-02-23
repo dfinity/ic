@@ -2,9 +2,8 @@ import logging
 import os
 import traceback
 import typing
-from time import sleep
-
 from parser.bazel_toml_parser import parse_bazel_toml_to_gh_manifest
+from time import sleep
 
 import requests
 from github import Github
