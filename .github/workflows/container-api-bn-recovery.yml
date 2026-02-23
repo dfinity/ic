@@ -38,11 +38,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build binaries with Bazel
-        run: |
-          set -euo pipefail
-          bazel build \
-            //rs/boundary_node/ic_boundary:ic-boundary \
-            //rs/orchestrator/registry_replicator:ic-registry-replicator
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel build \
+              //rs/boundary_node/ic_boundary:ic-boundary \
+              //rs/orchestrator/registry_replicator:ic-registry-replicator
 
       - name: Prepare build context
         run: |

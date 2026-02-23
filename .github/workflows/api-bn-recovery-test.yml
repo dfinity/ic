@@ -37,4 +37,6 @@ jobs:
           echo "$HOME/.local/share/dfx/bin" >> "$GITHUB_PATH"
 
       - name: Run smoke test
-        run: ./ic-os/api-bn-recovery/test.sh
+        uses: ./.github/actions/bazel
+        with:
+          run: ./ic-os/api-bn-recovery/test.sh
