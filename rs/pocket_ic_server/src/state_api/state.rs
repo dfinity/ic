@@ -790,7 +790,18 @@ impl ApiState {
         let axum_handle = handle.clone();
         let domain_custom_provider_local_file = http_gateway_config
             .domain_custom_provider_local_file
-            .clone();
+            .as_deref()
+            .map(|path| {
+                path.to_str()
+                    .ok_or_else(|| {
+                        format!(
+                            "domain_custom_provider_local_file path is not valid UTF-8: {:?}",
+                            path
+                        )
+                    })
+                    .map(|s| s.to_string())
+            })
+            .transpose()?;
         let domains: Vec<_> = http_gateway_config
             .domains
             .clone()
@@ -814,7 +825,7 @@ impl ApiState {
                 args.push("--domain-skip-authority-validation".to_string());
                 if let Some(ref path) = domain_custom_provider_local_file {
                     args.push("--domain-custom-provider-local-file".to_string());
-                    args.push(path.to_string_lossy().to_string());
+                    args.push(path.clone());
                 }
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
