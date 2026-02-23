@@ -591,7 +591,7 @@ async fn test_gateway_custom_domain_provider_file() {
 }
 
 // Test that the HTTP gateway's authority validation is skipped (--domain-skip-authority-validation
-// is always enabled in PocketIC). Requests from a domain NOT in the configured `domains` list
+// is enabled in PocketIC if `domains` is `None`). Requests from any domain
 // should still succeed when the canister ID is resolvable from the URL.
 
 #[tokio::test]
