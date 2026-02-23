@@ -210,6 +210,7 @@ impl LedgerSuiteConfig {
                 self.burns_without_spender.clone(),
                 None,
                 AllowancesRecentlyPurged::No,
+                None,
             ));
         }
         // Check if the ledger supports ICRC-106, and if so, if the index principal is set.
@@ -219,6 +220,13 @@ impl LedgerSuiteConfig {
         // Upgrade to the new canister versions
         self.upgrade_to_master(state_machine);
         if self.extended_testing {
+            let index_sync_retry_wasm = if cfg!(feature = "u256-tokens")
+                && self.index_id == "s3zol-vqaaa-aaaar-qacpa-cai"
+            {
+                Some(self.master_wasms.index_wasm.clone())
+            } else {
+                None
+            };
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
                 state_machine,
                 ledger_canister_id,
@@ -226,6 +234,7 @@ impl LedgerSuiteConfig {
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
                 AllowancesRecentlyPurged::Yes,
+                index_sync_retry_wasm.as_ref(),
             ));
         }
         // Verify that the index principal was set in the ledger
@@ -247,6 +256,7 @@ impl LedgerSuiteConfig {
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
                 AllowancesRecentlyPurged::Yes,
+                None,
             );
         }
     }
@@ -524,6 +534,7 @@ impl LedgerState {
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
         previous_ledger_state: Option<LedgerState>,
         allowances_recently_purged: AllowancesRecentlyPurged,
+        index_sync_retry_wasm: Option<&canister_test::Wasm>,
     ) -> Self {
         let num_blocks_to_fetch = previous_ledger_state
             .as_ref()
@@ -552,6 +563,7 @@ impl LedgerState {
             ledger_and_archive_blocks,
             ledger_id,
             index_id,
+            index_sync_retry_wasm,
         );
         // Verify the reconstructed ledger state matches the previous state
         if let Some(previous_ledger_state) = &previous_ledger_state {
@@ -578,6 +590,7 @@ impl LedgerState {
             ledger_and_archive_blocks,
             ledger_id,
             index_id,
+            None,
         );
         ledger_state
     }
@@ -1017,8 +1030,9 @@ fn top_up_canisters(
 
 mod index {
     use super::*;
-    use candid::Decode;
-    use ic_icrc1_index_ng::Status;
+    use candid::{Decode, Encode};
+    use canister_test::Wasm;
+    use ic_icrc1_index_ng::{IndexArg, Status, UpgradeArg as IndexUpgradeArg};
     use ic_state_machine_tests::WasmResult;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
     use std::time::{Duration, Instant};
@@ -1060,6 +1074,7 @@ mod index {
         ledger_and_archive_blocks: FetchedBlocks,
         ledger_id: CanisterId,
         index_id: CanisterId,
+        index_sync_retry_wasm: Option<&Wasm>,
     ) {
         if ledger_and_archive_blocks.blocks.is_empty() {
             println!("No blocks to retrieve from index");
@@ -1071,7 +1086,12 @@ mod index {
                 ledger_and_archive_blocks.start_index
             );
         }
-        wait_until_index_sync_is_completed(state_machine, index_id, ledger_id);
+        wait_until_index_sync_is_completed(
+            state_machine,
+            index_id,
+            ledger_id,
+            index_sync_retry_wasm,
+        );
         let start = Instant::now();
         let index_blocks = get_all_index_blocks(
             state_machine,
@@ -1095,11 +1115,22 @@ mod index {
         );
     }
 
-    pub fn wait_until_index_sync_is_completed(
+    fn reinstall_index(env: &StateMachine, index_id: CanisterId, wasm: &Wasm) {
+        let index_upgrade_arg = IndexArg::Upgrade(IndexUpgradeArg {
+            ledger_id: None,
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        });
+        let args = Encode!(&index_upgrade_arg).unwrap();
+        env.upgrade_canister(index_id, wasm.clone().bytes(), args)
+            .expect("should successfully reinstall index canister");
+        println!("Reinstalled index canister {index_id}");
+    }
+
+    fn try_wait_until_index_sync(
         env: &StateMachine,
         index_id: CanisterId,
         ledger_id: CanisterId,
-    ) {
+    ) -> Result<(), (u64, u64)> {
         const MAX_ATTEMPTS: u8 = 100;
         const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
 
@@ -1112,12 +1143,37 @@ mod index {
                 .expect("num_blocks_synced should fit in u64");
             chain_length = get_index_blocks(env, ledger_id, 0u64, 0u64).chain_length;
             if num_blocks_synced == chain_length {
-                return;
+                return Ok(());
             }
         }
-        panic!(
-            "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
-        );
+        Err((num_blocks_synced, chain_length))
+    }
+
+    pub fn wait_until_index_sync_is_completed(
+        env: &StateMachine,
+        index_id: CanisterId,
+        ledger_id: CanisterId,
+        index_sync_retry_wasm: Option<&Wasm>,
+    ) {
+        let (num_blocks_synced, chain_length) =
+            match try_wait_until_index_sync(env, index_id, ledger_id) {
+                Ok(()) => return,
+                Err(stats) => stats,
+            };
+        if let Some(wasm) = index_sync_retry_wasm {
+            reinstall_index(env, index_id, wasm);
+            if let Err((num_blocks_synced_2, chain_length_2)) =
+                try_wait_until_index_sync(env, index_id, ledger_id)
+            {
+                panic!(
+                    "The index canister was unable to sync all the blocks with the ledger after reinstall. Number of blocks synced {num_blocks_synced_2} but the Ledger chain length is {chain_length_2}"
+                );
+            }
+        } else {
+            panic!(
+                "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
+            );
+        }
     }
 
     fn get_index_blocks<I>(
