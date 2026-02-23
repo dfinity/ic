@@ -458,6 +458,7 @@ fn add_subnet_local_registry_records(
     let max_ingress_bytes_per_message = match subnet_type {
         SubnetType::Application => 2 * 1024 * 1024,
         SubnetType::VerifiedApplication => 2 * 1024 * 1024,
+        SubnetType::CloudEngine => 2 * 1024 * 1024,
         SubnetType::System => 3 * 1024 * 1024 + 512 * 1024,
     };
     let max_ingress_messages_per_block = 1000;
@@ -1853,7 +1854,9 @@ impl StateMachine {
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
-            SubnetType::Application | SubnetType::VerifiedApplication => 499,
+            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
+                499
+            }
             SubnetType::System => 199,
         });
         let replica_logger = test_logger(log_level);
@@ -4715,7 +4718,7 @@ impl StateMachine {
     pub fn set_stable_memory(&self, canister_id: CanisterId, data: &[u8]) {
         let (_height, mut replicated_state) = self.state_manager.take_tip();
         let canister_state = replicated_state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
         let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
@@ -4751,7 +4754,7 @@ impl StateMachine {
     ) {
         let (_h, mut state) = self.state_manager.take_tip();
         state
-            .canister_state_mut(canister_id)
+            .canister_state_make_mut(canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .system_state
             .total_query_stats = total_query_stats;
@@ -4783,7 +4786,7 @@ impl StateMachine {
     pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
         let (_height, mut state) = self.state_manager.take_tip();
         let canister_state = state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
         canister_state
             .system_state

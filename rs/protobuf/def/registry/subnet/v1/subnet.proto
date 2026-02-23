@@ -274,6 +274,9 @@ enum SubnetType {
   // A subnet type that is like application subnets but can have some
   // additional features.
   SUBNET_TYPE_VERIFIED_APPLICATION = 4;
+  // A subnet type for cloud engines, which are configurable, application-specific
+  // private subnets under the auspices of the NNS and its rules for safety.
+  SUBNET_TYPE_CLOUD_ENGINE = 5;
 }
 
 message SubnetFeatures {

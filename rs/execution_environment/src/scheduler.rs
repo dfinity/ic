@@ -9,6 +9,7 @@ use crate::{
     util::process_responses,
 };
 use ic_config::embedders::Config as HypervisorConfig;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -155,6 +156,7 @@ pub(crate) struct SchedulerImpl {
     exec_env: Arc<ExecutionEnvironment>,
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics: Arc<SchedulerMetrics>,
+    state_metrics: ReplicatedStateMetrics,
     log: ReplicaLogger,
     thread_pool: RefCell<scoped_threadpool::Pool>,
     rate_limiting_of_heap_delta: FlagStatus,
@@ -187,6 +189,7 @@ impl SchedulerImpl {
             exec_env,
             cycles_account_manager,
             metrics: Arc::new(SchedulerMetrics::new(metrics_registry)),
+            state_metrics: ReplicatedStateMetrics::new(metrics_registry),
             log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
@@ -260,9 +263,8 @@ impl SchedulerImpl {
     ) -> ReplicatedState {
         let ongoing_long_install_code =
             state
-                .canister_states()
-                .iter()
-                .any(|(_canister_id, canister)| match canister.next_execution() {
+                .canisters_iter()
+                .any(|canister| match canister.next_execution() {
                     NextExecution::None | NextExecution::StartNew | NextExecution::ContinueLong => {
                         false
                     }
@@ -335,7 +337,7 @@ impl SchedulerImpl {
         measurement_scope: &MeasurementScope,
         chain_key_data: &ChainKeyData,
     ) -> (ReplicatedState, Option<NumInstructions>) {
-        let instruction_limits = get_instructions_limits_for_subnet_message(&self.config, &msg);
+        let instruction_limits = get_instruction_limits_for_subnet_message(&self.config, &msg);
 
         let instructions_before = round_limits.instructions;
         let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
@@ -614,7 +616,7 @@ impl SchedulerImpl {
             // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canisters {
-                let canister = state.canister_state_mut(canister_id).unwrap();
+                let canister = state.canister_state_make_mut(canister_id).unwrap();
                 canister
                     .system_state
                     .task_queue
@@ -851,34 +853,6 @@ impl SchedulerImpl {
         }
     }
 
-    // Observe different Canister metrics
-    fn observe_canister_metrics(&self, canister: &CanisterState) {
-        self.metrics
-            .canister_balance
-            .observe(canister.system_state.balance().get() as f64);
-        if let Some(es) = &canister.execution_state {
-            self.metrics
-                .canister_binary_size
-                .observe(es.wasm_binary.binary.len() as f64);
-            self.metrics.canister_wasm_memory_usage.observe(
-                ic_replicated_state::num_bytes_try_from(es.wasm_memory.size)
-                    .unwrap()
-                    .get() as f64,
-            );
-            self.metrics.canister_stable_memory_usage.observe(
-                ic_replicated_state::num_bytes_try_from(es.stable_memory.size)
-                    .unwrap()
-                    .get() as f64,
-            );
-        }
-        self.metrics
-            .canister_memory_allocation
-            .observe(canister.memory_allocation().pre_allocated_bytes().get() as f64);
-        self.metrics
-            .canister_compute_allocation
-            .observe(canister.compute_allocation().as_percent() as f64 / 100.0);
-    }
-
     /// Charge canisters for their resource allocation and usage. Canisters
     /// that did not manage to pay are uninstalled.
     /// This function is expected to be called at the end of a round.
@@ -911,7 +885,6 @@ impl SchedulerImpl {
             }
 
             let canister = Arc::make_mut(canister);
-            self.observe_canister_metrics(canister);
             let duration_since_last_charge =
                 canister.duration_since_last_allocation_charge(state_time);
             canister.system_state.time_of_last_allocation_charge = state_time;
@@ -985,10 +958,9 @@ impl SchedulerImpl {
         // This is because we cannot hold an immutable reference to the map
         // while trying to simultaneously mutate it.
         let canisters_with_outputs: Vec<CanisterId> = state
-            .canister_states()
-            .iter()
-            .filter(|(_, canister)| canister.has_output())
-            .map(|(canister_id, _)| *canister_id)
+            .canisters_iter()
+            .filter(|canister| canister.has_output())
+            .map(|canister| canister.canister_id())
             .collect();
 
         let mut inducted_messages_to_self = 0;
@@ -1031,7 +1003,7 @@ impl SchedulerImpl {
                 .system_state
                 .output_queues_for_each(|canister_id, msg| {
                     let own_subnet_type = state.metadata.own_subnet_type;
-                    match state.canister_state_mut(canister_id) {
+                    match state.canister_state_make_mut(canister_id) {
                         Some(dest_canister) => dest_canister
                             .push_input(
                                 (*msg).clone(),
@@ -1059,6 +1031,7 @@ impl SchedulerImpl {
                 messages_before_induction.saturating_sub(messages_after_induction);
             state.put_canister_state(source_canister_arc);
         }
+
         self.metrics
             .inducted_messages
             .with_label_values(&["self"])
@@ -1110,26 +1083,19 @@ impl SchedulerImpl {
             .filter_map(|canister| {
                 if canister.has_paused_execution() {
                     let canister_priority = state.canister_priority(&canister.canister_id());
-                    Some(CanisterRoundState {
-                        canister_id: canister.canister_id(),
-                        accumulated_priority: canister_priority.accumulated_priority,
-                        compute_allocation: Default::default(), // not used
-                        long_execution_mode: canister_priority.long_execution_mode,
-                        has_aborted_or_paused_execution: true,
-                    })
+                    Some(CanisterRoundState::new(canister, canister_priority))
                 } else {
                     None
                 }
             })
             .collect::<Vec<_>>();
-
-        RoundSchedule::order_canister_round_states(&mut paused_round_states);
+        paused_round_states.sort();
 
         paused_round_states
             .iter()
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
-                let canister = state.canister_state_mut_arc(&rs.canister_id).unwrap();
+                let canister = state.canister_state_mut_arc(&rs.canister_id()).unwrap();
                 self.exec_env.abort_canister(canister, &self.log);
             });
     }
@@ -1138,7 +1104,13 @@ impl SchedulerImpl {
     ///
     /// NOTE: This is also called by `checkpoint_round_with_no_execution()`, so it
     /// must be safe to call even when no execution has taken place.
-    fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
+    fn finish_round(
+        &self,
+        state: &mut ReplicatedState,
+        current_round: ExecutionRound,
+        current_round_type: ExecutionRoundType,
+        logger: &ReplicaLogger,
+    ) {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
                 state.metadata.heap_delta_estimate = NumBytes::from(0);
@@ -1154,6 +1126,16 @@ impl SchedulerImpl {
                 self.abort_paused_executions_above_limit(state);
             }
         }
+
+        observe_replicated_state_metrics(
+            self.own_subnet_id,
+            state,
+            current_round,
+            self.exec_env.subnet_memory_capacity(),
+            &self.state_metrics,
+            logger,
+        );
+
         self.check_dts_invariants(state, current_round_type);
     }
 
@@ -1164,15 +1146,14 @@ impl SchedulerImpl {
         current_round_type: ExecutionRoundType,
     ) {
         let canisters_with_tasks = state
-            .canister_states()
-            .iter()
-            .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
+            .canisters_iter()
+            .filter(|canister| !canister.system_state.task_queue.is_empty());
 
-        for (id, canister) in canisters_with_tasks {
+        for canister in canisters_with_tasks {
             canister
                 .system_state
                 .task_queue
-                .check_dts_invariants(current_round_type, id);
+                .check_dts_invariants(current_round_type, &canister.canister_id());
         }
     }
 }
@@ -1217,13 +1198,6 @@ impl Scheduler for SchedulerImpl {
                 state.metadata.heap_delta_estimate,
             );
             self.metrics.execute_round_called.inc();
-            observe_replicated_state_metrics(
-                self.own_subnet_id,
-                &state,
-                current_round,
-                &self.metrics,
-                &round_log,
-            );
 
             long_running_canister_ids = state
                 .canister_states()
@@ -1374,7 +1348,7 @@ impl Scheduler for SchedulerImpl {
                     scheduled_heap_delta_limit,
                     self.config.subnet_heap_delta_capacity,
                 );
-                self.finish_round(&mut state, current_round_type);
+                self.finish_round(&mut state, current_round, current_round_type, &round_log);
                 self.metrics
                     .round_skipped_due_to_current_heap_delta_above_limit
                     .inc();
@@ -1502,15 +1476,8 @@ impl Scheduler for SchedulerImpl {
 
             let mut final_state;
             {
-                let mut total_canister_balance = Cycles::zero();
-                let mut total_canister_reserved_balance = Cycles::zero();
-                let mut total_canister_history_memory_usage = NumBytes::new(0);
-                let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
                 for canister in state.canisters_iter_mut() {
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
-                    self.metrics
-                        .canister_heap_delta_debits
-                        .observe(heap_delta_debit as f64);
                     if heap_delta_debit > 0 {
                         let canister = Arc::make_mut(canister);
                         canister.scheduler_state.heap_delta_debit =
@@ -1524,9 +1491,6 @@ impl Scheduler for SchedulerImpl {
                     }
 
                     let install_code_debit = canister.scheduler_state.install_code_debit.get();
-                    self.metrics
-                        .canister_install_code_debits
-                        .observe(install_code_debit as f64);
                     if install_code_debit > 0 {
                         let canister = Arc::make_mut(canister);
                         canister.scheduler_state.install_code_debit =
@@ -1539,47 +1503,35 @@ impl Scheduler for SchedulerImpl {
                             };
                     }
 
-                    let log_memory_usage = canister.system_state.canister_log.bytes_used();
-                    self.metrics
-                        .canister_log_memory_usage_v2
-                        .observe(log_memory_usage as f64);
-                    self.metrics
-                        .canister_log_memory_usage_v3
-                        .observe(log_memory_usage as f64);
-
-                    if canister.system_state.canister_log.has_delta_log_sizes() {
+                    let new_log = &canister.system_state.log_memory_store;
+                    let old_log = &canister.system_state.canister_log;
+                    let delta_log_sizes = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                        new_log.delta_log_sizes()
+                    } else {
+                        old_log.delta_log_sizes()
+                    };
+                    if new_log.has_delta_log_sizes() || old_log.has_delta_log_sizes() {
+                        // Only clone state if delta log sizes are not empty.
                         let canister = Arc::make_mut(canister);
-                        let delta_log_sizes = canister.system_state.canister_log.delta_log_sizes();
-                        // IMPORTANT: clear_delta_log_sizes() must be called to make sure
-                        // that the delta log sizes are always empty at the end of the round.
-                        canister.system_state.canister_log.clear_delta_log_sizes();
-                        for size in delta_log_sizes {
-                            self.metrics
-                                .canister_log_delta_memory_usage
-                                .observe(size as f64);
-                        }
+                        let new_log = &mut canister.system_state.log_memory_store;
+                        let old_log = &mut canister.system_state.canister_log;
+                        // IMPORTANT: Ensure `clear_delta_log_sizes()` is called
+                        // so the delta log sizes are empty at the end of the round.
+                        // This guarantees states remain consistent before and after a checkpoint.
+                        new_log.clear_delta_log_sizes();
+                        old_log.clear_delta_log_sizes();
                     }
-
-                    total_canister_history_memory_usage += canister.canister_history_memory_usage();
-                    total_canister_memory_allocated_bytes += canister
-                        .memory_allocation()
-                        .allocated_bytes(canister.memory_usage());
-                    total_canister_balance += canister.system_state.balance();
-                    total_canister_reserved_balance += canister.system_state.reserved_balance();
+                    for size in delta_log_sizes {
+                        self.metrics
+                            .canister_log_delta_memory_usage
+                            .observe(size as f64);
+                    }
 
                     // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
                     // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
                 }
                 // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
                 // cycles_out_sum += total_canister_balance;
-
-                self.metrics
-                    .total_canister_balance
-                    .set(total_canister_balance.get() as f64);
-
-                self.metrics
-                    .total_canister_reserved_balance
-                    .set(total_canister_reserved_balance.get() as f64);
 
                 // TODO(EXC-1124): Re-enable the check below once it's fixed.
                 //
@@ -1595,25 +1547,6 @@ impl Scheduler for SchedulerImpl {
                 //         cycles_out_sum,
                 //     );
                 // }
-
-                // Check replicated state invariants still hold after the round execution.
-                // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
-                // by `total_canister_history_memory_usage` because the canister history
-                // memory usage is not tracked during a round in `SubnetAvailableMemory`.
-                if total_canister_memory_allocated_bytes
-                    > self.exec_env.subnet_memory_capacity() + total_canister_history_memory_usage
-                {
-                    self.metrics.subnet_memory_usage_invariant.inc();
-                    warn!(
-                        round_log,
-                        "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Total canister memory allocated bytes {} exceeded subnet memory capacity {}",
-                        SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
-                        current_round,
-                        state.time(),
-                        total_canister_memory_allocated_bytes,
-                        self.exec_env.subnet_memory_capacity()
-                    );
-                }
 
                 // Check if the invariants are still valid after the execution for active canisters.
                 self.check_canister_invariants(
@@ -1642,16 +1575,14 @@ impl Scheduler for SchedulerImpl {
                         registry_settings.subnet_size,
                     );
                 }
-
-                self.metrics
-                    .canister_snapshots_memory_usage
-                    .set(final_state.canister_snapshots.memory_taken().get() as i64);
-                self.metrics
-                    .num_canister_snapshots
-                    .set(final_state.canister_snapshots.count() as i64);
             }
             round_schedule.finish_round(&mut final_state, fully_executed_canister_ids);
-            self.finish_round(&mut final_state, current_round_type);
+            self.finish_round(
+                &mut final_state,
+                current_round,
+                current_round_type,
+                &round_log,
+            );
             final_state
                 .metadata
                 .subnet_metrics
@@ -1663,7 +1594,16 @@ impl Scheduler for SchedulerImpl {
     }
 
     fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
-        self.finish_round(state, ExecutionRoundType::CheckpointRound);
+        self.finish_round(
+            state,
+            // TODO(DSM-106) This is a workaround to avoid having to temporarily change the
+            // `Scheduler` trait. The round number is only used to decide whether to log
+            // warnings about long open call contexts. When `ReplicatedState`
+            // instrumentation moves to MessageRouting, this argument will be dropped.
+            ExecutionRound::from(0),
+            ExecutionRoundType::CheckpointRound,
+            &self.log,
+        );
     }
 }
 
@@ -1700,11 +1640,11 @@ impl FilteredCanisters {
 }
 
 fn observe_instructions_consumed_per_message(
-    logger: &ReplicaLogger,
-    metrics: &SchedulerMetrics,
     canister: &CanisterState,
     consumed_instructions: NumInstructions,
     instruction_limit_per_message: NumInstructions,
+    metrics: &SchedulerMetrics,
+    logger: &ReplicaLogger,
 ) {
     metrics
         .instructions_consumed_per_message
@@ -1855,11 +1795,11 @@ fn execute_canisters_on_thread(
                     }
 
                     observe_instructions_consumed_per_message(
-                        &logger,
-                        &metrics,
                         &new_canister,
                         instructions,
                         instruction_limits.message(),
+                        &metrics,
+                        &logger,
                     );
                 }
                 // Paused execution.
@@ -1940,7 +1880,8 @@ fn observe_replicated_state_metrics(
     own_subnet_id: SubnetId,
     state: &ReplicatedState,
     current_round: ExecutionRound,
-    metrics: &SchedulerMetrics,
+    subnet_memory_capacity: NumBytes,
+    metrics: &ReplicatedStateMetrics,
     logger: &ReplicaLogger,
 ) {
     // Observe the number of registered canisters keyed by their status.
@@ -1970,6 +1911,11 @@ fn observe_replicated_state_metrics(
     let mut num_stop_canister_calls_without_call_id = 0;
     let mut in_flight_signature_request_contexts_by_key_id =
         BTreeMap::<MasterPublicKeyId, u32>::new();
+
+    let mut total_canister_balance = Cycles::zero();
+    let mut total_canister_reserved_balance = Cycles::zero();
+    let mut total_canister_history_memory_usage = NumBytes::new(0);
+    let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
@@ -2023,6 +1969,14 @@ fn observe_replicated_state_metrics(
         if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
         }
+
+        total_canister_history_memory_usage += canister.canister_history_memory_usage();
+        total_canister_memory_allocated_bytes += canister
+            .memory_allocation()
+            .allocated_bytes(canister.memory_usage());
+        total_canister_balance += canister.system_state.balance();
+        total_canister_reserved_balance += canister.system_state.reserved_balance();
+
         if let Some(manager) = canister.system_state.call_context_manager() {
             // Log all old call contexts, but not (nearly) every round.
             let maybe_log_old_call_contexts = |origin: &CallOrigin, origin_time: Time| {
@@ -2158,6 +2112,95 @@ fn observe_replicated_state_metrics(
     metrics
         .stop_canister_calls_without_call_id
         .set(num_stop_canister_calls_without_call_id as i64);
+
+    metrics
+        .total_canister_balance
+        .set(total_canister_balance.get() as f64);
+
+    metrics
+        .total_canister_reserved_balance
+        .set(total_canister_reserved_balance.get() as f64);
+
+    // Check replicated state invariants still hold after the round execution.
+    // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
+    // by `total_canister_history_memory_usage` because the canister history
+    // memory usage is not tracked during a round in `SubnetAvailableMemory`.
+    if total_canister_memory_allocated_bytes
+        > subnet_memory_capacity + total_canister_history_memory_usage
+    {
+        metrics.subnet_memory_usage_invariant.inc();
+        warn!(
+            logger,
+            "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Total canister memory allocated bytes {} exceeded subnet memory capacity {}",
+            SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
+            current_round,
+            state.time(),
+            total_canister_memory_allocated_bytes,
+            subnet_memory_capacity
+        );
+    }
+
+    metrics
+        .canister_snapshots_memory_usage
+        .set(state.canister_snapshots.memory_taken().get() as i64);
+    metrics
+        .num_canister_snapshots
+        .set(state.canister_snapshots.count() as i64);
+
+    for canister in state.canisters_iter() {
+        metrics
+            .canister_heap_delta_debits
+            .observe(canister.scheduler_state.heap_delta_debit.get() as f64);
+
+        metrics
+            .canister_install_code_debits
+            .observe(canister.scheduler_state.install_code_debit.get() as f64);
+
+        let log_memory_usage = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister.system_state.log_memory_store.memory_usage()
+        } else {
+            canister.system_state.canister_log.bytes_used()
+        };
+        metrics
+            .canister_log_memory_usage_v2
+            .observe(log_memory_usage as f64);
+        metrics
+            .canister_log_memory_usage_v3
+            .observe(log_memory_usage as f64);
+    }
+
+    // TODO: Consider only doing this every Nth round.
+    for canister in state.canisters_iter() {
+        observe_canister_metrics(metrics, canister);
+    }
+}
+
+/// Instruments canister balance, memory sizes and memory and compute allocation.
+fn observe_canister_metrics(metrics: &ReplicatedStateMetrics, canister: &CanisterState) {
+    metrics
+        .canister_balance
+        .observe(canister.system_state.balance().get() as f64);
+    if let Some(es) = &canister.execution_state {
+        metrics
+            .canister_binary_size
+            .observe(es.wasm_binary.binary.len() as f64);
+        metrics.canister_wasm_memory_usage.observe(
+            ic_replicated_state::num_bytes_try_from(es.wasm_memory.size)
+                .unwrap()
+                .get() as f64,
+        );
+        metrics.canister_stable_memory_usage.observe(
+            ic_replicated_state::num_bytes_try_from(es.stable_memory.size)
+                .unwrap()
+                .get() as f64,
+        );
+    }
+    metrics
+        .canister_memory_allocation
+        .observe(canister.memory_allocation().pre_allocated_bytes().get() as f64);
+    metrics
+        .canister_compute_allocation
+        .observe(canister.compute_allocation().as_percent() as f64 / 100.0);
 }
 
 fn join_consumed_cycles_by_use_case(
@@ -2234,7 +2277,7 @@ fn can_execute_subnet_msg(
 ///
 /// This is primarily done because upgrading a canister might need to
 /// (de)-serialize a large state and thus consume a lot of instructions.
-fn get_instructions_limits_for_subnet_message(
+fn get_instruction_limits_for_subnet_message(
     config: &SchedulerConfig,
     msg: &SubnetMessage,
 ) -> InstructionLimits {
