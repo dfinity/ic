@@ -62,7 +62,11 @@ impl LogMemoryStore {
     fn new_inner(feature_flag: FlagStatus, maybe_page_map: Option<PageMap>) -> Self {
         Self {
             feature_flag,
-            maybe_page_map,
+            maybe_page_map: if feature_flag == FlagStatus::Enabled {
+                maybe_page_map
+            } else {
+                None
+            },
             header_cache: OnceLock::new(),
             delta_log_sizes: VecDeque::new(),
         }

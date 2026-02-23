@@ -980,5 +980,6 @@ fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
         SubnetType::Application => "application",
         SubnetType::System => "system",
         SubnetType::VerifiedApplication => "verified_application",
+        SubnetType::CloudEngine => "cloud_engine",
     }
 }
