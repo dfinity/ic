@@ -131,7 +131,6 @@ rust_ic_test(
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256)",
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
     },
-    flaky = True,
     # Because dogecoind binary package is not available on darwin or arm64.
     target_compatible_with = [
         "@platforms//cpu:x86_64",
