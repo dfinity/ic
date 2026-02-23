@@ -112,24 +112,7 @@ pub fn test_on_subnets(env: TestEnv, subnets: Vec<SubnetSnapshot>) {
     info!(log, "Calling start() on all canisters ...");
     start_all_canisters(&canisters, PAYLOAD_SIZE_BYTES, CANISTER_TO_SUBNET_RATE);
     // Step 3: Wait for canisters to exchange messages and receive responses.
-    let metrics_pre_reboot = block_on(async {
-        ic_system_test_driver::retry_with_msg_async!(
-            "check_all_canisters_have_responses",
-            &log,
-            Duration::from_secs(RESPONSES_RETRY_TIMEOUT_SEC),
-            Duration::from_secs(POLL_INTERVAL_SEC),
-            || async {
-                let metrics = collect_metrics(&canisters);
-                if all_canisters_have_responses(&metrics) {
-                    Ok(metrics)
-                } else {
-                    bail!("Not all canisters have received xnet responses yet")
-                }
-            }
-        )
-        .await
-        .expect("Not all canisters received xnet responses within the timeout")
-    });
+    let metrics_pre_reboot = collect_metrics_with_responses(&log, &canisters);
     // Step 5: Reboot all nodes and wait till they become reachable again.
     info!(log, "Rebooting all nodes ...");
     for n in all_nodes.iter().cloned() {
@@ -149,7 +132,7 @@ pub fn test_on_subnets(env: TestEnv, subnets: Vec<SubnetSnapshot>) {
     });
     // Step 7: Collect metrics from all canisters again.
     info!(log, "Collecting metrics from all canisters ...");
-    let metrics_post_reboot = collect_metrics(&canisters);
+    let metrics_post_reboot = collect_metrics_with_responses(&log, &canisters);
     // Step 8: Assert that metrics have progressed after reboot and no errors in calls are observed.
     assert_metrics_progress_without_errors(&log, &metrics_pre_reboot, &metrics_post_reboot);
     // Step 9: Stop all canisters (via update `stop_canister` call).
@@ -258,6 +241,30 @@ pub fn assert_metrics_progress_without_errors(
             post_reboot
         );
     }
+}
+
+pub fn collect_metrics_with_responses(
+    log: &Logger,
+    canisters: &[Vec<Canister>],
+) -> Vec<Vec<Metrics>> {
+    block_on(async {
+        ic_system_test_driver::retry_with_msg_async!(
+            "check_all_canisters_have_responses",
+            log,
+            Duration::from_secs(RESPONSES_RETRY_TIMEOUT_SEC),
+            Duration::from_secs(POLL_INTERVAL_SEC),
+            || async {
+                let metrics = collect_metrics(canisters);
+                if all_canisters_have_responses(&metrics) {
+                    Ok(metrics)
+                } else {
+                    bail!("Not all canisters have received xnet responses yet")
+                }
+            }
+        )
+        .await
+        .expect("Not all canisters received xnet responses within the timeout")
+    })
 }
 
 pub fn collect_metrics(canisters: &[Vec<Canister>]) -> Vec<Vec<Metrics>> {
