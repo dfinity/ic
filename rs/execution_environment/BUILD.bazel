@@ -336,6 +336,7 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//rs/config",
+        "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/types/base_types",
         "//rs/types/types",
