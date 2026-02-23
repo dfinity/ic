@@ -64,7 +64,6 @@ fn example_block() -> Block {
         transaction,
         TimeStamp::new(1, 1),
         DEFAULT_TRANSFER_FEE,
-        None,
     )
 }
 

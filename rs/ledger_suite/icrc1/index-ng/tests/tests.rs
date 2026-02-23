@@ -1,21 +1,22 @@
 use crate::common::{
-    ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
-    index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
-    ledger_get_all_blocks, ledger_wasm, parse_index_logs, wait_until_sync_is_completed,
-    wait_until_sync_is_completed_or_error,
+    ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, approve,
+    default_archive_options, get_fee_collectors_ranges, icrc1_balance_of, icrc1_transfer,
+    icrc2_approve, icrc2_transfer_from, index_init_arg_without_interval, index_ng_wasm,
+    install_icrc3_test_ledger, install_index_ng, install_ledger, ledger_get_all_blocks,
+    parse_index_logs, transfer, wait_until_sync_is_completed,
 };
-use candid::{Decode, Encode, Nat, Principal};
+#[cfg(not(feature = "icrc3_disabled"))]
+use candid::Principal;
+use candid::{Decode, Encode, Nat};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::blocks::generic_block_to_encoded_block;
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
-    DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
-    GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
-    InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
+    GetAccountTransactionsResult, GetBlocksResponse, IndexArg, ListSubaccountsArgs,
+    TransactionWithId,
 };
-use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
-use ic_icrc1_test_utils::icrc3::account_to_icrc3_value;
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
     valid_transactions_strategy,
@@ -28,18 +29,14 @@ use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
-use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
 use std::collections::HashSet;
-use std::fmt::Debug;
-use std::hash::Hash;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -57,47 +54,6 @@ fn index_wasm() -> Vec<u8> {
         "ic-icrc1-index-ng",
         &[],
     )
-}
-
-fn upgrade_ledger(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    fee_collector_account: Option<Account>,
-) {
-    let change_fee_collector =
-        Some(fee_collector_account.map_or(ChangeFeeCollector::Unset, ChangeFeeCollector::SetTo));
-    let args = LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
-        metadata: None,
-        token_name: None,
-        token_symbol: None,
-        transfer_fee: None,
-        change_fee_collector,
-        max_memo_length: None,
-        feature_flags: None,
-        change_archive_options: None,
-        index_principal: None,
-    }));
-    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
-        .unwrap()
-}
-
-fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
-    IndexInitArg {
-        ledger_id: Principal::from(ledger_id),
-        retrieve_blocks_from_ledger_interval_seconds: None,
-    }
-}
-
-fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
-    let res = env
-        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
-        .expect("Failed to send icrc1_balance_of")
-        .bytes();
-    Decode!(&res, Nat)
-        .expect("Failed to decode icrc1_balance_of response")
-        .0
-        .to_u64()
-        .expect("Balance must be a u64!")
 }
 
 fn index_get_blocks(
@@ -142,58 +98,6 @@ fn index_get_all_blocks(
     res
 }
 
-fn icrc1_transfer(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    caller: PrincipalId,
-    arg: TransferArg,
-) -> BlockIndex {
-    let req = Encode!(&arg).expect("Failed to encode TransferArg");
-    let res = env
-        .execute_ingress_as(caller, ledger_id, "icrc1_transfer", req)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-        .bytes();
-    Decode!(&res, Result<BlockIndex, TransferError>)
-        .expect("Failed to decode Result<BlockIndex, TransferError>")
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-}
-
-fn icrc2_transfer_from(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    caller: PrincipalId,
-    arg: TransferFromArgs,
-) -> BlockIndex {
-    let req = Encode!(&arg).expect("Failed to encode TransferFromArgs");
-    let res = env
-        .execute_ingress_as(caller, ledger_id, "icrc2_transfer_from", req)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-        .bytes();
-    Decode!(&res, Result<BlockIndex, TransferFromError>)
-        .expect("Failed to decode Result<BlockIndex, TransferFromError>")
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-}
-
 fn apply_arg_with_caller(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -219,74 +123,6 @@ fn apply_arg_with_caller(
             transfer_from_arg,
         ),
     }
-}
-
-fn transfer(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    from: Account,
-    to: Account,
-    amount: u64,
-) -> BlockIndex {
-    let Account { owner, subaccount } = from;
-    let req = TransferArg {
-        from_subaccount: subaccount,
-        to,
-        amount: amount.into(),
-        created_at_time: None,
-        fee: None,
-        memo: None,
-    };
-    icrc1_transfer(env, ledger_id, owner.into(), req)
-}
-
-fn icrc2_approve(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    caller: PrincipalId,
-    arg: ApproveArgs,
-) -> BlockIndex {
-    let req = Encode!(&arg).expect("Failed to encode ApproveArgs");
-    let res = env
-        .execute_ingress_as(caller, ledger_id, "icrc2_approve", req)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to approve tokens. caller:{} arg:{:?} error:{}",
-                caller, arg, e
-            )
-        })
-        .bytes();
-    Decode!(&res, Result<BlockIndex, ApproveError>)
-        .expect("Failed to decode Result<BlockIndex, ApproveError>")
-        .unwrap_or_else(|e| {
-            panic!(
-                "Failed to approve. caller:{} arg:{:?} error:{:?}",
-                caller, arg, e
-            )
-        })
-}
-
-fn approve(
-    env: &StateMachine,
-    ledger: CanisterId,
-    from: Account,
-    spender: Account,
-    amount: u64,
-) -> u64 {
-    let req = ApproveArgs {
-        from_subaccount: from.subaccount,
-        spender,
-        amount: Nat::from(amount),
-        expected_allowance: None,
-        expires_at: None,
-        fee: None,
-        memo: None,
-        created_at_time: None,
-    };
-    icrc2_approve(env, ledger, PrincipalId(from.owner), req)
-        .0
-        .to_u64()
-        .unwrap()
 }
 
 fn get_account_transactions(
@@ -333,16 +169,6 @@ fn list_subaccounts(
         Vec<Subaccount>
     )
     .expect("failed to decode list_subaccounts response")
-}
-
-fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollectorRanges {
-    Decode!(
-        &env.execute_ingress(index, "get_fee_collectors_ranges", Encode!(&()).unwrap())
-            .expect("failed to get_fee_collectors_ranges")
-            .bytes(),
-        FeeCollectorRanges
-    )
-    .expect("failed to decode get_fee_collectors_ranges response")
 }
 
 // Assert that the index canister contains the same blocks as the ledger.
@@ -1222,350 +1048,6 @@ fn test_oldest_tx_id() {
 
     // There should be no fee collector.
     assert_eq!(get_fee_collectors_ranges(env, index_id).ranges, vec![]);
-}
-
-#[track_caller]
-fn assert_contain_same_elements<T: Debug + Eq + Hash>(vl: Vec<T>, vr: Vec<T>) {
-    assert_eq!(
-        vl.iter().collect::<HashSet<_>>(),
-        vr.iter().collect::<HashSet<_>>(),
-    )
-}
-
-#[test]
-fn test_fee_collector() {
-    let env = &StateMachine::new();
-    let fee_collector = account(42, 0);
-    let minter = minter_identity().sender().unwrap();
-    let ledger_id = install_ledger(
-        env,
-        vec![(account(1, 0), 10_000_000)], // txid: 0
-        default_archive_options(),
-        Some(fee_collector),
-        minter,
-    );
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-
-    assert_eq!(
-        icrc1_balance_of(env, ledger_id, fee_collector),
-        icrc1_balance_of(env, index_id, fee_collector)
-    );
-
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000); // txid: 1
-    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 2
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000); // txid: 3
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    assert_eq!(
-        icrc1_balance_of(env, ledger_id, fee_collector),
-        icrc1_balance_of(env, index_id, fee_collector)
-    );
-
-    assert_contain_same_elements(
-        get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
-    );
-
-    // Remove the fee collector to burn some transactions fees.
-    upgrade_ledger(env, ledger_id, None);
-
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 4
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000); // txid: 5
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    assert_eq!(
-        icrc1_balance_of(env, ledger_id, fee_collector),
-        icrc1_balance_of(env, index_id, fee_collector)
-    );
-
-    assert_contain_same_elements(
-        get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
-    );
-
-    // Add a new fee collector different from the first one.
-    let new_fee_collector = account(42, 42);
-    upgrade_ledger(env, ledger_id, Some(new_fee_collector));
-
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 6
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    for fee_collector in &[fee_collector, new_fee_collector] {
-        assert_eq!(
-            icrc1_balance_of(env, ledger_id, *fee_collector),
-            icrc1_balance_of(env, index_id, *fee_collector)
-        );
-    }
-
-    assert_contain_same_elements(
-        get_fee_collectors_ranges(env, index_id).ranges,
-        vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
-            (fee_collector, vec![(0u8.into(), 4u8.into())]),
-        ],
-    );
-
-    // Add back the original fee_collector and make a couple of transactions again.
-    upgrade_ledger(env, ledger_id, Some(fee_collector));
-
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 7
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 8
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    for fee_collector in &[fee_collector, new_fee_collector] {
-        assert_eq!(
-            icrc1_balance_of(env, ledger_id, *fee_collector),
-            icrc1_balance_of(env, index_id, *fee_collector)
-        );
-    }
-
-    assert_contain_same_elements(
-        get_fee_collectors_ranges(env, index_id).ranges,
-        vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
-            (
-                fee_collector,
-                vec![(0u8.into(), 4u8.into()), (7u8.into(), 9u8.into())],
-            ),
-        ],
-    );
-}
-
-#[test]
-fn test_fee_collector_107() {
-    let env = &StateMachine::new();
-    let ledger_id = install_icrc3_test_ledger(env);
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-    let feecol_legacy = account(101, 0);
-    let feecol_107 = account(102, 0);
-    let regular_account = account(1, 0);
-
-    let mut block_id = 0;
-
-    let add_mint_block = |block_id: u64, fc: Option<Account>, fc_id: Option<u64>| {
-        let mint = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
-        let mint = match fc {
-            Some(fc) => mint.with_fee_collector(fc),
-            None => mint,
-        };
-        let mint = match fc_id {
-            Some(fc_id) => mint.with_fee_collector_block(fc_id),
-            None => mint,
-        };
-        let mint = mint.mint(regular_account, Tokens::from(1000u64)).build();
-
-        assert_eq!(
-            Nat::from(block_id),
-            add_block(env, ledger_id, &mint)
-                .expect("error adding mint block to ICRC-3 test ledger")
-        );
-        wait_until_sync_is_completed(env, index_id, ledger_id);
-        block_id + 1
-    };
-
-    let add_approve_block = |block_id: u64, fc: Option<Account>| {
-        let approve = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
-        let approve = match fc {
-            Some(fc) => approve.with_fee_collector(fc),
-            None => approve,
-        };
-        let approve = approve
-            .approve(regular_account, regular_account, Tokens::from(1u64))
-            .build();
-
-        assert_eq!(
-            Nat::from(block_id),
-            add_block(env, ledger_id, &approve)
-                .expect("error adding approve block to ICRC-3 test ledger")
-        );
-        wait_until_sync_is_completed(env, index_id, ledger_id);
-        block_id + 1
-    };
-
-    let add_fee_collector_107_block = |block_id: u64, fc: Option<Account>, mthd: Option<String>| {
-        let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
-            .with_btype(BTYPE_107.to_string())
-            .fee_collector(fc, None, None, mthd)
-            .build();
-
-        assert_eq!(
-            Nat::from(block_id),
-            add_block(env, ledger_id, &fee_collector)
-                .expect("error adding fee collector block to ICRC-3 test ledger")
-        );
-        wait_until_sync_is_completed(env, index_id, ledger_id);
-        block_id + 1
-    };
-
-    // Legacy fee collector collects the fees
-    block_id = add_mint_block(block_id, Some(feecol_legacy), None);
-    assert_eq!(1, icrc1_balance_of(env, index_id, feecol_legacy));
-    block_id = add_mint_block(block_id, None, Some(0));
-    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
-
-    // Legacy fee collector does not collect approve fees
-    block_id = add_approve_block(block_id, Some(feecol_legacy));
-    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
-
-    // Set 107 fee collector to burn
-    block_id = add_fee_collector_107_block(block_id, None, Some(SET_FEE_COL_107.to_string()));
-
-    // No fees collected
-    block_id = add_mint_block(block_id, None, None);
-    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
-    assert_eq!(0, icrc1_balance_of(env, index_id, feecol_107));
-
-    // No fees collected with the legacy fee collector
-    block_id = add_mint_block(block_id, Some(feecol_legacy), None);
-    block_id = add_mint_block(block_id, None, Some(block_id - 1));
-    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
-    assert_eq!(0, icrc1_balance_of(env, index_id, feecol_107));
-
-    // Set 107 fee collector to fee_collector_2
-    block_id = add_fee_collector_107_block(block_id, Some(feecol_107), None);
-
-    // New fee collector receives the fees
-    block_id = add_mint_block(block_id, None, None);
-    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
-    assert_eq!(1, icrc1_balance_of(env, index_id, feecol_107));
-
-    // Legacy fee collector has no effect, new fee collector receives the fees
-    block_id = add_mint_block(block_id, Some(feecol_legacy), None);
-    block_id = add_mint_block(block_id, None, Some(block_id - 1));
-    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
-    assert_eq!(3, icrc1_balance_of(env, index_id, feecol_107));
-
-    // 107 fee collector is credited the approve fee
-    block_id = add_approve_block(block_id, None);
-    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
-    assert_eq!(4, icrc1_balance_of(env, index_id, feecol_107));
-
-    // Set 107 fee collector to burn
-    block_id = add_fee_collector_107_block(block_id, None, Some("107ledger_set".to_string()));
-
-    // No fees collected
-    add_mint_block(block_id, None, None);
-    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
-    assert_eq!(4, icrc1_balance_of(env, index_id, feecol_107));
-}
-
-fn add_custom_block(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    block_id: u64,
-    btype: Option<&str>,
-    tx_fields: Vec<(&str, ICRC3Value)>,
-) {
-    let mut block_builder = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
-    if let Some(btype) = btype {
-        block_builder = block_builder.with_btype(String::from(btype));
-    }
-    let mut custom_tx_builder = block_builder.custom_transaction();
-    for tx_field in tx_fields {
-        custom_tx_builder = custom_tx_builder.add_field(tx_field.0, tx_field.1);
-    }
-    let block = custom_tx_builder.build();
-
-    assert_eq!(
-        Nat::from(block_id),
-        add_block(env, ledger_id, &block).expect("error adding mint block to ICRC-3 test ledger")
-    );
-}
-
-#[test]
-fn test_fee_collector_107_irregular_mthd() {
-    const UNRECOGNIZED_MTHD_NAME: &str = "non_standard_fee_col_setter_endpoint_method_name";
-
-    let env = &StateMachine::new();
-    let ledger_id = install_icrc3_test_ledger(env);
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-    let feecol_107 = account(102, 0);
-
-    let tx_fields = vec![
-        ("mthd", ICRC3Value::Text(UNRECOGNIZED_MTHD_NAME.to_string())),
-        ("fee_collector", account_to_icrc3_value(&feecol_107)),
-        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
-    ];
-
-    add_custom_block(env, ledger_id, 0, Some(BTYPE_107), tx_fields);
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-}
-
-#[test]
-fn test_fee_collector_107_op_instead_of_mthd() {
-    let env = &StateMachine::new();
-    let ledger_id = install_icrc3_test_ledger(env);
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-    let feecol_107 = account(102, 0);
-
-    let tx_fields = vec![
-        ("op", ICRC3Value::Text(SET_FEE_COL_107.to_string())),
-        ("fee_collector", account_to_icrc3_value(&feecol_107)),
-        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
-    ];
-
-    add_custom_block(env, ledger_id, 0, Some(BTYPE_107), tx_fields);
-    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err(
-            "unrecognized block with '107feecol' but tx.op instead of tx.mthd parsed successfully by index",
-        );
-    let expected_log_msg = "unknown fields";
-    assert!(
-        index_err_logs.contains(expected_log_msg),
-        "index logs did not contain expected string '{}': {}",
-        expected_log_msg,
-        index_err_logs
-    );
-}
-
-#[test]
-fn test_block_with_no_btype_but_with_mthd() {
-    let env = &StateMachine::new();
-    let ledger_id = install_icrc3_test_ledger(env);
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-
-    let tx_fields = vec![
-        ("mthd", ICRC3Value::Text("107set_fee_collector".to_string())),
-        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
-    ];
-
-    add_custom_block(env, ledger_id, 0, None, tx_fields);
-    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err(
-            "unrecognized block with tx.mthd 'non_standard_mthd_name' parsed successfully by index",
-        );
-    let expected_log_msg =
-        "Failed to deserialize transaction: No operation specified and/or unknown btype None";
-    assert!(
-        index_err_logs.contains(expected_log_msg),
-        "index logs did not contain expected string '{}': {}",
-        expected_log_msg,
-        index_err_logs
-    );
-}
-
-#[test]
-fn test_block_with_no_btype_and_no_mthd() {
-    let env = &StateMachine::new();
-    let ledger_id = install_icrc3_test_ledger(env);
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-
-    let tx_fields = vec![("ts", ICRC3Value::Nat(Nat::from(0u64)))];
-
-    add_custom_block(env, ledger_id, 0, None, tx_fields);
-    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err("unrecognized block with no btype and no tx.mthd parsed successfully by index");
-    let expected_log_msg = "No operation specified and/or unknown btype";
-    assert!(
-        index_err_logs.contains(expected_log_msg),
-        "index logs did not contain expected string '{}': {}",
-        expected_log_msg,
-        index_err_logs
-    );
 }
 
 #[test]

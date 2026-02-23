@@ -27,6 +27,10 @@
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
     "sha256": "25071c2c55ad4571293e00d8e277f442aec7aed88109743ac52df3125209ff45"
   },
+  "ck_btc_ledger_v5": {
+    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
+    "sha256": "71c27c5dc10034a1175296892b37827df0265d0ae072f5c59e99b8a1f6c45c76"
+  },
   "ck_eth_archive": {
     "rev": "512cf412f33d430b79f42330518166d14fc6884e",
     "sha256": "3fafdd895c44886e38199882afcf06efb8e6e0b73af51eca327dcba4da7a0106"
@@ -46,6 +50,10 @@
   "ck_eth_ledger_v3": {
     "rev": "2190613d3b5bcd9b74c382b22d151580b8ac271a",
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
+  },
+  "ck_eth_ledger_v5": {
+    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
+    "sha256": "15ec452faf00c40135b96a3ba0951ea13050e6e95e38cff249305462f81db62d"
   },
   "cycles-minting": {
     "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",

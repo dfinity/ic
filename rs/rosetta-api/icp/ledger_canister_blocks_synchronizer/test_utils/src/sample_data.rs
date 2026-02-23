@@ -111,13 +111,8 @@ impl Scribe {
         let parent_hash = self.blockchain.back().map(|hb| hb.hash);
         let index = self.next_index();
 
-        let block = Block::from_transaction(
-            parent_hash,
-            transaction,
-            self.time().into(),
-            effective_fee,
-            None,
-        );
+        let block =
+            Block::from_transaction(parent_hash, transaction, self.time().into(), effective_fee);
 
         let timestamp = block.timestamp;
 

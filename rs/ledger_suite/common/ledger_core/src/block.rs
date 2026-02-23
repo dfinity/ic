@@ -74,7 +74,6 @@ pub trait BlockType: Sized + Clone {
         tx: Self::Transaction,
         block_timestamp: TimeStamp,
         effective_fee: Self::Tokens,
-        fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self;
 
     /// Encodes this block into a binary representation.

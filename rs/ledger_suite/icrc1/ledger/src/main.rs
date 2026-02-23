@@ -16,8 +16,8 @@ use ic_icrc1::{
     endpoints::{StandardRecord, convert_transfer_error},
 };
 use ic_icrc1_ledger::{
-    InitArgs, LEDGER_VERSION, Ledger, LedgerArgument, UPGRADES_MEMORY, balances_len,
-    get_allowances, read_first_balance, wasm_token_type,
+    GetFeeCollectorError, InitArgs, LEDGER_VERSION, Ledger, LedgerArgument, UPGRADES_MEMORY,
+    balances_len, get_allowances, read_first_balance, wasm_token_type,
 };
 use ic_ledger_canister_core::ledger::{
     LedgerAccess, LedgerContext, LedgerData, TransferError as CoreTransferError, apply_transaction,
@@ -29,8 +29,6 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
@@ -66,6 +64,11 @@ use icrc_ledger_types::{
     icrc1::transfer::{TransferArg, TransferError},
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
+use icrc_ledger_types::{
+    icrc2::approve::{ApproveArgs, ApproveError},
+    icrc107::set_fee_collector::{SetFeeCollectorArgs, SetFeeCollectorError},
+};
+use icrc_ledger_types::{icrc3::blocks::DataCertificate, icrc107::schema::SET_FEE_COL_107};
 use num_traits::{ToPrimitive, bounds::Bounded};
 use serde_bytes::ByteBuf;
 use std::{
@@ -233,23 +236,36 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         upgrade_from_version
     });
 
-    if let Some(args) = args {
+    let fee_collector_changed_with_args = if let Some(args) = args {
         match args {
             LedgerArgument::Init(_) => panic!(
                 "Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."
             ),
             LedgerArgument::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
-                    Access::with_ledger_mut(|ledger| ledger.upgrade(&LOG, upgrade_args));
+                    Access::with_ledger_mut(|ledger| ledger.upgrade(&LOG, upgrade_args.clone()));
+                    upgrade_args.change_fee_collector.is_some()
+                } else {
+                    false
                 }
             }
         }
-    }
+    } else {
+        false
+    };
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
     initialize_total_volume();
 
+    // Migrate the legacy fee collector, only do it if wasn't already set by upgrade args
+    if upgrade_from_version < 4 && !fee_collector_changed_with_args {
+        Access::with_ledger_mut(|ledger| {
+            if ledger.legacy_fee_collector().is_some() {
+                ledger.ledger_set_107_fee_collector(ledger.legacy_fee_collector());
+            }
+        });
+    }
     if upgrade_from_version < 3 {
         let msg = "Migration to stable structures not supported, please upgrade first to git revision e446c64d99a97e38166be23ff2bfade997d15ff7 https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-10-27";
         log_message(msg);
@@ -1018,6 +1034,68 @@ fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllow
         max_results,
         ic_cdk::api::time(),
     ))
+}
+
+#[update]
+async fn icrc107_set_fee_collector(arg: SetFeeCollectorArgs) -> Result<Nat, SetFeeCollectorError> {
+    let caller = ic_cdk::api::caller();
+
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(SetFeeCollectorError::AccessDenied(
+            "The `icrc107_set_fee_collector` endpoint can only be called by the canister controller".to_string(),
+        ));
+    }
+
+    let minting_account = Access::with_ledger(|ledger| *ledger.minting_account());
+    if arg.fee_collector == Some(minting_account) {
+        return Err(SetFeeCollectorError::InvalidAccount(
+            "The fee collector cannot be set to minting account".to_string(),
+        ));
+    }
+
+    if let Some(fee_collector) = arg.fee_collector
+        && fee_collector.owner == Principal::anonymous()
+    {
+        return Err(SetFeeCollectorError::InvalidAccount(
+            "The fee collector cannot be set to an anonymous account".to_string(),
+        ));
+    }
+
+    let tx = Transaction {
+        operation: Operation::FeeCollector {
+            fee_collector: arg.fee_collector,
+            caller: Some(caller),
+            mthd: Some(SET_FEE_COL_107.to_string()),
+        },
+        created_at_time: Some(arg.created_at_time),
+        memo: None,
+    };
+
+    let (block_idx, _) = Access::with_ledger_mut(|ledger| {
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        apply_transaction(ledger, tx, now, Tokens::ZERO)
+            .map_err(convert_transfer_error)
+            .map_err(|err| match err.0 {
+                CoreTransferError::TxDuplicate { duplicate_of } => {
+                    SetFeeCollectorError::Duplicate {
+                        duplicate_of: Nat::from(duplicate_of),
+                    }
+                }
+                _ => ic_cdk::trap("unable to convert error"),
+            })
+    })?;
+
+    // NB. we need to set the certified data before the first async call to make sure that the
+    // blockchain state agrees with the certificate while archiving is in progress.
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+#[query]
+fn icrc107_get_fee_collector() -> Result<Option<Account>, GetFeeCollectorError> {
+    Ok(Access::with_ledger(|ledger| ledger.fee_collector()))
 }
 
 candid::export_service!();

@@ -94,6 +94,7 @@ rust_test(
         name = "index_ng_test" + conf["test_suffix"],
         timeout = "long",
         srcs = [
+            "tests/fee_collector.rs",
             "tests/retrieve_blocks_from_ledger_interval.rs",
             "tests/tests.rs",
         ],
@@ -102,6 +103,7 @@ rust_test(
             conf["index_wasm"],
             conf["ledger_wasm"],
             "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz",
+            conf["ledger_wasm_v5"],
         ],
         env = {
             "RUST_TEST_THREADS": "4",
@@ -109,6 +111,7 @@ rust_test(
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath " + conf["index_wasm"] + ")",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
             "IC_ICRC3_TEST_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz)",
+            "IC_ICRC1_LEDGER_V5_VERSION_WASM_PATH": "$(rootpath " + conf["ledger_wasm_v5"] + ")",
         },
         extra_srcs = ["tests/common/mod.rs"],
         tags = ["cpu:4"],
@@ -151,12 +154,14 @@ rust_test(
             "crate_features": [],
             "index_wasm": ":index_ng_canister.wasm.gz",
             "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
+            "ledger_wasm_v5": "@mainnet_canisters//:ck_btc_ledger_v5.wasm.gz",
             "test_suffix": "",
         },
         {
             "crate_features": ["u256-tokens"],
             "index_wasm": ":index_ng_canister_u256.wasm.gz",
             "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+            "ledger_wasm_v5": "@mainnet_canisters//:ck_eth_ledger_v5.wasm.gz",
             "test_suffix": "_u256",
         },
         # - Ledger with ICRC-3 and without get-blocks
@@ -164,6 +169,7 @@ rust_test(
             "crate_features": ["get_blocks_disabled"],
             "index_wasm": ":index_ng_canister.wasm.gz",
             "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_getblocksdisabled.wasm.gz",
+            "ledger_wasm_v5": "@mainnet_canisters//:ck_btc_ledger_v5.wasm.gz",
             "test_suffix": "_wo_getblocks",
         },
         {
@@ -173,6 +179,7 @@ rust_test(
             ],
             "index_wasm": ":index_ng_canister_u256.wasm.gz",
             "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz",
+            "ledger_wasm_v5": "@mainnet_canisters//:ck_eth_ledger_v5.wasm.gz",
             "test_suffix": "_u256_wo_getblocks",
         },
         # - Ledger without ICRC-3 and with get-blocks
@@ -180,6 +187,7 @@ rust_test(
             "crate_features": ["icrc3_disabled"],
             "index_wasm": ":index_ng_canister.wasm.gz",
             "ledger_wasm": "@ic-icrc1-ledger-wo-icrc-3.wasm.gz//file",
+            "ledger_wasm_v5": "@mainnet_canisters//:ck_btc_ledger_v5.wasm.gz",
             "test_suffix": "_wo_icrc3",
         },
         {
@@ -189,6 +197,7 @@ rust_test(
             ],
             "index_wasm": ":index_ng_canister_u256.wasm.gz",
             "ledger_wasm": "@ic-icrc1-ledger-wo-icrc-3-u256.wasm.gz//file",
+            "ledger_wasm_v5": "@mainnet_canisters//:ck_eth_ledger_v5.wasm.gz",
             "test_suffix": "_wo_icrc3_u256",
         },
     ]

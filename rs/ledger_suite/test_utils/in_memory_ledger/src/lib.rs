@@ -89,6 +89,7 @@ pub trait InMemoryLedgerState {
         amount: &Self::Tokens,
         fee: &Option<Self::Tokens>,
     );
+    fn process_fee_collector_107(&mut self, fee_collector: &Option<Self::AccountId>);
     fn validate_invariants(&self);
 }
 
@@ -103,6 +104,7 @@ where
     burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
     transactions: u64,
     latest_block_timestamp: Option<u64>,
+    fee_collector_107: Option<Option<AccountId>>,
 }
 
 impl<AccountId, Tokens: std::fmt::Debug> PartialEq for InMemoryLedger<AccountId, Tokens>
@@ -138,6 +140,13 @@ where
             println!(
                 "Mismatch in fee collector: {:?} vs {:?}",
                 self.fee_collector, other.fee_collector
+            );
+            return false;
+        }
+        if self.fee_collector_107 != other.fee_collector_107 {
+            println!(
+                "Mismatch in fee collector 107: {:?} vs {:?}",
+                self.fee_collector_107, other.fee_collector_107
             );
             return false;
         }
@@ -223,7 +232,8 @@ where
         fee: &Option<Self::Tokens>,
         now: TimeStamp,
     ) {
-        self.burn_fee(from, fee);
+        let fee_collector = &self.fee_collector_107.clone().unwrap_or(None);
+        self.collect_fee(from, fee, fee_collector);
         self.set_allowance(from, spender, amount, expected_allowance, expires_at, now);
         self.transactions += 1;
     }
@@ -271,7 +281,11 @@ where
         fee: &Option<Self::Tokens>,
     ) {
         self.decrease_balance(from, amount);
-        self.collect_fee(from, fee);
+        let fee_collector = &self
+            .fee_collector_107
+            .clone()
+            .unwrap_or(self.fee_collector.clone());
+        self.collect_fee(from, fee, fee_collector);
         if let Some(fee) = fee
             && let Some(spender) = spender
             && from != spender
@@ -293,6 +307,11 @@ where
             assert_ne!(&allowance.amount, &Tokens::zero());
         }
     }
+
+    fn process_fee_collector_107(&mut self, fee_collector: &Option<Self::AccountId>) {
+        self.fee_collector_107 = Some(fee_collector.clone());
+        self.transactions += 1;
+    }
 }
 
 impl<AccountId, Tokens> Default for InMemoryLedger<AccountId, Tokens>
@@ -309,6 +328,7 @@ where
             burns_without_spender: None,
             transactions: 0,
             latest_block_timestamp: None,
+            fee_collector_107: None,
         }
     }
 }
@@ -449,21 +469,19 @@ where
             .unwrap_or_else(|| panic!("Total supply overflow"));
     }
 
-    fn collect_fee(&mut self, from: &AccountId, amount: &Option<Tokens>) {
+    fn collect_fee(
+        &mut self,
+        from: &AccountId,
+        amount: &Option<Tokens>,
+        fee_collector: &Option<AccountId>,
+    ) {
         if let Some(amount) = amount {
             self.decrease_balance(from, amount);
-            if let Some(fee_collector) = &self.fee_collector {
-                self.increase_balance(&fee_collector.clone(), amount);
+            if let Some(fee_collector) = fee_collector {
+                self.increase_balance(fee_collector, amount);
             } else {
                 self.decrease_total_supply(amount);
             }
-        }
-    }
-
-    fn burn_fee(&mut self, from: &AccountId, amount: &Option<Tokens>) {
-        if let Some(amount) = amount {
-            self.decrease_balance(from, amount);
-            self.decrease_total_supply(amount);
         }
     }
 
@@ -538,8 +556,8 @@ where
                     &fee.clone().or(block.effective_fee.clone()),
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
-                Operation::FeeCollector { .. } => {
-                    panic!("FeeCollector107 not implemented")
+                Operation::FeeCollector { fee_collector, .. } => {
+                    self.process_fee_collector_107(fee_collector)
                 }
             }
         }
@@ -695,6 +713,16 @@ where
                 )
             }
         }
+        self.latest_block_timestamp = Some(timestamp.as_nanos_since_unix_epoch());
+        self.validate_invariants();
+    }
+
+    pub fn set_fee_collector_107(
+        &mut self,
+        timestamp: TimeStamp,
+        fee_collector: &Option<AccountId>,
+    ) {
+        self.process_fee_collector_107(fee_collector);
         self.latest_block_timestamp = Some(timestamp.as_nanos_since_unix_epoch());
         self.validate_invariants();
     }
