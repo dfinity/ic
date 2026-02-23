@@ -2119,6 +2119,7 @@ message Governance {
     map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
     uint64 spawning_neurons_count = 42;
+    uint64 total_maturity_disbursements_in_progress_e8s_equivalent = 43;
 
     // Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
     optional uint64 total_voting_power_non_self_authenticating_controller = 36;

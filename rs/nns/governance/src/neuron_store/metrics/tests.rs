@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{KnownNeuronData, NeuronType},
+    pb::v1::{KnownNeuronData, MaturityDisbursement, NeuronType},
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
@@ -43,6 +43,11 @@ fn test_compute_metrics() {
             .with_joined_community_fund_timestamp_seconds(Some(1))
             .with_maturity_e8s_equivalent(450_988_012)
             .with_neuron_type(Some(NeuronType::Ect as i32))
+            .with_maturity_disbursements_in_progress(vec![MaturityDisbursement {
+                amount_e8s: 100_000_000,
+                finalize_disbursement_timestamp_seconds: 1,
+                ..Default::default()
+            }])
             .build(),
         )
         .unwrap();
@@ -82,6 +87,18 @@ fn test_compute_metrics() {
                 },
             )
             .with_cached_neuron_stake_e8s(6_087_000_000)
+            .with_maturity_disbursements_in_progress(vec![
+                MaturityDisbursement {
+                    amount_e8s: 250_000_000,
+                    finalize_disbursement_timestamp_seconds: 2,
+                    ..Default::default()
+                },
+                MaturityDisbursement {
+                    amount_e8s: 150_000_000,
+                    finalize_disbursement_timestamp_seconds: 3,
+                    ..Default::default()
+                },
+            ])
             .build(),
         )
         .unwrap();
@@ -296,6 +313,8 @@ fn test_compute_metrics() {
         not_dissolving_neurons_e8s_buckets_seed: hashmap! { 0 => 100000000.0 },
         not_dissolving_neurons_e8s_buckets_ect: hashmap! { 2 => 234000000.0 },
         spawning_neurons_count: 1,
+        // Neuron 2 has 100_000_000 and neuron 5 has 250_000_000 + 150_000_000 = 400_000_000
+        total_maturity_disbursements_in_progress_e8s_equivalent: 500_000_000,
         // Some garbage values, because this test was written before this feature.
         non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(),
         public_neuron_subset_metrics: NeuronSubsetMetrics::default(),

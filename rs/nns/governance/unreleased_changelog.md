@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Add a `total_maturity_disbursements_in_progress_e8s_equivalent` metric (calculated daily).
+
 ## Changed
 
 * Lowered the maximum page size of list_neurons to 50. The vast majority (> 95%)
