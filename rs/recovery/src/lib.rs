@@ -392,12 +392,21 @@ impl Recovery {
     /// /var/lib/ic/data) with rsync.
     /// One of them is the latest checkpoint, which is looked up remotely via ssh if an `ssh_helper`
     /// is given, or locally on disk otherwise.
+    ///
+    /// If there are no checkpoints, this function returns an empty list and does not consider it
+    /// an error, as the subnet could have stalled in its first DKG interval before producing any
+    /// checkpoint.
     pub fn get_ic_state_includes(ssh_helper: Option<&SshHelper>) -> RecoveryResult<Vec<PathBuf>> {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
-        let latest_checkpoint_name = if let Some(ssh_helper) = ssh_helper {
-            Self::get_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
+        let maybe_latest_checkpoint_name = if let Some(ssh_helper) = ssh_helper {
+            Self::get_maybe_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
         } else {
-            Self::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?.0
+            Self::get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
+                .map(|(name, _height)| name)
+        };
+
+        let Some(latest_checkpoint_name) = maybe_latest_checkpoint_name else {
+            return Ok(vec![]);
         };
 
         Ok(
@@ -601,37 +610,39 @@ impl Recovery {
         Ok(res)
     }
 
-    /// Get the name of the latest checkpoint currently on the remote node
-    pub fn get_latest_checkpoint_name_remotely(
+    /// Get the name of the latest checkpoint currently on the remote node, if any.
+    pub fn get_maybe_latest_checkpoint_name_remotely(
         ssh_helper: &SshHelper,
         checkpoints_path: &Path,
-    ) -> RecoveryResult<String> {
-        ssh_helper
-            .ssh(format!(
-                "ls -1 {} | sort | tail -n 1",
-                checkpoints_path.display()
-            ))
-            .and_then(|output| {
-                output
-                    .map(|output| output.trim().to_string())
-                    .ok_or_else(|| {
-                        RecoveryError::invalid_output_error("No checkpoints found on remote node")
-                    })
-            })
+    ) -> RecoveryResult<Option<String>> {
+        let maybe_output = ssh_helper.ssh(format!(
+            "ls -1 {} | sort | tail -n 1",
+            checkpoints_path.display()
+        ))?;
+
+        Ok(maybe_output.map(|output| output.trim().to_string()))
+    }
+
+    /// Get the name and the height of the latest checkpoint currently on disk, if any.
+    pub fn get_maybe_latest_checkpoint_name_and_height(
+        checkpoints_path: &Path,
+    ) -> RecoveryResult<Option<(String, Height)>> {
+        let checkpoints = Self::get_checkpoint_names(checkpoints_path)?
+            .into_iter()
+            .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
+            .collect::<RecoveryResult<Vec<_>>>()?;
+
+        Ok(checkpoints
+            .into_iter()
+            .max_by_key(|(_name, height)| *height))
     }
 
     /// Get the name and the height of the latest checkpoint currently on disk
-    ///
     /// Returns an error when there are no checkpoints.
     pub fn get_latest_checkpoint_name_and_height(
         checkpoints_path: &Path,
     ) -> RecoveryResult<(String, Height)> {
-        Self::get_checkpoint_names(checkpoints_path)?
-            .into_iter()
-            .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
-            .collect::<RecoveryResult<Vec<_>>>()?
-            .into_iter()
-            .max_by_key(|(_name, height)| *height)
+        Self::get_maybe_latest_checkpoint_name_and_height(checkpoints_path)?
             .ok_or_else(|| RecoveryError::invalid_output_error("No checkpoints"))
     }
 
@@ -1267,7 +1278,7 @@ mod tests {
     }
 
     #[test]
-    fn get_latest_checkpoint_name_and_height_returns_error_on_invalid_checkpoint_name() {
+    fn get_maybe_latest_checkpoint_name_and_height_returns_error_on_invalid_checkpoint_name() {
         let checkpoints_dir = tmpdir("checkpoints");
         create_fake_checkpoint_dirs(
             checkpoints_dir.path(),
@@ -1278,13 +1289,20 @@ mod tests {
             ],
         );
 
-        assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
+        assert!(
+            Recovery::get_maybe_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err()
+        );
     }
 
     #[test]
     fn get_latest_checkpoint_name_and_height_returns_error_when_no_checkpoints() {
         let checkpoints_dir = tmpdir("checkpoints");
 
+        assert!(
+            Recovery::get_maybe_latest_checkpoint_name_and_height(checkpoints_dir.path())
+                .expect_graceful("Failed getting the latest checkpoint name and height")
+                .is_none()
+        );
         assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
     }
 
