@@ -3,7 +3,9 @@
 //! of malicious nodes.
 use crate::consensus::{ConsensusImpl, add_all_to_validated, block_maker};
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
+use ic_interfaces::consensus_pool::{
+    ChangeAction, HeightRange, Mutations, ValidatedConsensusArtifact,
+};
 use ic_logger::{info, trace};
 use ic_protobuf::log::malicious_behavior_log_entry::v1::{
     MaliciousBehavior, MaliciousBehaviorLogEntry,
@@ -307,7 +309,10 @@ impl ConsensusImpl {
                 changeset.retain(|change_action| {
                     !matches!(
                         change_action,
-                        ChangeAction::AddToValidated(x) if matches!(x.msg ,ConsensusMessage::BlockProposal(_))
+                        ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                            msg: ConsensusMessage::BlockProposal(_),
+                            timestamp: _
+                        }),
                     )
                 });
             }
@@ -326,7 +331,10 @@ impl ConsensusImpl {
             changeset.retain(|change_action| {
                 !matches!(
                     change_action,
-                    ChangeAction::AddToValidated(x) if matches!(x.msg, ConsensusMessage::NotarizationShare(_))
+                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                        msg: ConsensusMessage::NotarizationShare(_),
+                        timestamp: _
+                    }),
                 )
             });
 
@@ -343,7 +351,10 @@ impl ConsensusImpl {
             changeset.retain(|change_action| {
                 !matches!(
                     change_action,
-                    ChangeAction::AddToValidated(x) if matches!(x.msg, ConsensusMessage::FinalizationShare(_))
+                    ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+                        msg: ConsensusMessage::FinalizationShare(_),
+                        timestamp: _
+                    }),
                 )
             });
 
