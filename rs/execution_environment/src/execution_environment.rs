@@ -164,6 +164,13 @@ enum ExecuteSubnetMessageResult {
     Finished {
         response: Result<(Vec<u8>, Option<CanisterId>), UserError>,
         refund: Cycles,
+        /// The number of instructions used while executing the subnet message.
+        /// They consist of WASM instructions (for executing canister methods
+        /// during code installation) and instructions charged (based on ad-hoc benchmarks)
+        /// for expensive work (e.g., downloading and uploading canister snapshots).
+        /// For most endpoints, the number of instructions used is equal to zero
+        /// because those endpoints are "cheap" and we do not charge any instructions
+        /// for their execution.
         instructions: NumInstructions,
     },
 }
