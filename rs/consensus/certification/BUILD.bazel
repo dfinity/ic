@@ -4,7 +4,10 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/canonical_state",
+    "//rs/canonical_state/tree_hash",
     "//rs/consensus/utils",
+    "//rs/crypto/tree_hash",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
@@ -22,6 +25,7 @@ DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
     "//rs/crypto/test_utils/crypto_returning_ok",
+    "//rs/registry/subnet_type",
     "//rs/test_utilities",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/logger",

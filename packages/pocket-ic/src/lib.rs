@@ -2035,12 +2035,20 @@ pub struct StartServerParams {
     /// Reuse an existing PocketIC server spawned by this process.
     pub reuse: bool,
     /// TTL for the PocketIC server.
-    /// The server stops if no request has been received during its TTL
-    /// and if there are no more pending requests.
+    /// The server stops gracefully if no request has been received for the duration of its TTL
+    /// after the last request finished and if there are no more pending requests.
     /// A default value of TTL is used if no `ttl` is specified here.
-    /// Note: The TTL might not be overriden if the same process sets `reuse` to `true`
+    /// Note: The TTL might not be overriden if the same test process sets `reuse` to `true`
     /// and passes different values of `ttl`.
     pub ttl: Option<Duration>,
+    /// Hard TTL for the PocketIC server.
+    /// The server stops with a hard exit after the duration of its hard TTL
+    /// since its launch.
+    /// If no `hard_ttl` is specified here, then the PocketIC server
+    /// does not use any default hard TTL.
+    /// Note: The hard TTL might not be overriden if the same test process sets `reuse` to `true`
+    /// and passes different values of `hard_ttl`.
+    pub hard_ttl: Option<Duration>,
 }
 
 /// Attempt to start a new PocketIC server.
@@ -2129,6 +2137,9 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
     let mut cmd = pocket_ic_server_cmd(&bin_path);
     if let Some(ttl) = params.ttl {
         cmd.arg("--ttl").arg(ttl.as_secs().to_string());
+    }
+    if let Some(hard_ttl) = params.hard_ttl {
+        cmd.arg("--hard-ttl").arg(hard_ttl.as_secs().to_string());
     }
     cmd.arg("--port-file");
     #[cfg(windows)]
