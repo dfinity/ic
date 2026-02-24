@@ -8943,8 +8943,8 @@ fn commit_and_certify_optimization_conditions() {
             if !height.is_multiple_of(10) {
                 expected_no_state_clone_count += 1;
             }
+            assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
         }
-        assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
 
         // height of 21 is not less than `fast_forward_height` => optimization does not trigger
         assert_eq!(sm.fast_forward_height(), 21);
