@@ -26,7 +26,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ─── Pre-check: stop anything already on port 8080 ───
+# ─── Pre-check: fail if anything is already listening on port 8080 ───
 if curl -sf http://localhost:8080/api/v2/status -o /dev/null 2>/dev/null; then
     echo "ERROR: Something is already listening on port 8080."
     echo "Stop any existing api-bn containers first: docker rm -f api-bn"
@@ -42,10 +42,10 @@ echo "=== Starting container ==="
 $CONTAINER_CMD run -d --name "$CONTAINER_NAME" --network host "${IMAGE_NAME}:${IMAGE_TAG}"
 
 # ─── Wait for readiness ───
-echo "=== Waiting for boundary node to become ready (up to ${MAX_WAIT}s) ==="
+echo "=== Waiting for API boundary node to become ready (up to ${MAX_WAIT}s) ==="
 WAITED=0
 while true; do
-    # Check container is still running
+    # Check if the container is still running
     if ! $CONTAINER_CMD inspect --format='{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q true; then
         echo "FAIL: Container exited unexpectedly."
         $CONTAINER_CMD logs "$CONTAINER_NAME" 2>&1 | tail -30

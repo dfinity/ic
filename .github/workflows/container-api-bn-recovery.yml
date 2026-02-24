@@ -2,7 +2,7 @@ name: Container API BN Recovery Image
 
 on:
   schedule:
-    - cron: "0 8 * * 4"
+    - cron: "0 8 * * 4" # weekly on Thursday at 04:00 UTC
   workflow_dispatch:
   pull_request:
     paths:

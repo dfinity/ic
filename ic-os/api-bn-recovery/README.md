@@ -8,7 +8,7 @@ can access the NNS and vote on the proposals that should recover the access thro
 This directory contains a Docker setup that packages `ic-boundary` and `ic-registry-replicator` 
 into a single container that can be deployed independently of the production boundary node infrastructure.
 
-Follow the API Boundary Node Disaster Recovery Runbook doc to compete a production recovery.
+Follow the API Boundary Node Disaster Recovery Runbook doc to complete a production recovery.
 
 ## Prerequisites
 
