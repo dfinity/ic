@@ -77,7 +77,7 @@ jobs:
         with:
           context: ${{ matrix.CONTEXT }}
           file: ${{ matrix.CONTEXT }}/Dockerfile.base
-          push: true
+          push: ${{ github.ref_name == 'master' }}
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.IMAGE }}:${{ env.DATE }}
           build-args: ${{ matrix.BUILD_ARGS }}
 
@@ -102,6 +102,7 @@ jobs:
     timeout-minutes: 10
     environment: CREATE_PR
     needs: [build-base-image]
+    if: ${{ github.ref_name == 'master' }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
