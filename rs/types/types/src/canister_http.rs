@@ -1313,6 +1313,23 @@ mod tests {
     }
 
     #[test]
+    fn rejects_empty_node_ids() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::new();
+        let request = dummy_request();
+        let args = dummy_args(HttpMethod::GET, None);
+
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)
+        );
+    }
+
+    #[test]
     fn flexible_rejects_invalid_transform_principal() {
         let rng = &mut ReproducibleRng::new();
         let node_ids = BTreeSet::from([node_test_id(1)]);
