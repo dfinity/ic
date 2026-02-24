@@ -443,7 +443,7 @@ mod withdrawal {
             .expect_withdrawal_request_accepted()
             .minter_await_withdrawal_reimbursed(WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
-                    num_inputs: too_large_num_inputs as usize,
+                    num_inputs: too_large_num_inputs,
                     max_num_inputs: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
                 },
             ));
