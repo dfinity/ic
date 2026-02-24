@@ -67,7 +67,6 @@ impl Registry {
         let (mut source_subnet_record, ranges_to_migrate) = self
             .validate_subnet_splitting_payload(&payload, pre_call_registry_version)
             .map_err(|err| format!("Failed to validate the payload: {err}"))?;
-        let mut destination_subnet_record = source_subnet_record.clone();
         let source_nodes: Vec<NodeId> = source_subnet_record
             .membership
             .iter()
@@ -77,13 +76,38 @@ impl Registry {
             .filter(|node_id| !payload.destination_node_ids.contains(node_id))
             .collect();
 
+        // Remove some nodes from the source subnet
         source_subnet_record.membership =
             source_nodes.iter().map(|id| id.get().into_vec()).collect();
-        destination_subnet_record.membership = payload
-            .destination_node_ids
-            .iter()
-            .map(|id| id.get().into_vec())
-            .collect();
+        let destination_subnet_record = SubnetRecord {
+            membership: payload
+                .destination_node_ids
+                .iter()
+                .map(|id| id.get().into_vec())
+                .collect(),
+            max_ingress_bytes_per_message: source_subnet_record.max_ingress_bytes_per_message,
+            unit_delay_millis: source_subnet_record.unit_delay_millis,
+            initial_notary_delay_millis: source_subnet_record.initial_notary_delay_millis,
+            replica_version_id: source_subnet_record.replica_version_id.clone(),
+            dkg_interval_length: source_subnet_record.dkg_interval_length,
+            start_as_nns: false,
+            subnet_type: source_subnet_record.subnet_type,
+            dkg_dealings_per_block: source_subnet_record.dkg_dealings_per_block,
+            is_halted: false,
+            max_ingress_messages_per_block: source_subnet_record.max_ingress_messages_per_block,
+            max_block_payload_size: source_subnet_record.max_block_payload_size,
+            features: source_subnet_record.features,
+            max_number_of_canisters: source_subnet_record.max_number_of_canisters,
+            ssh_readonly_access: source_subnet_record.ssh_readonly_access.clone(),
+            ssh_backup_access: source_subnet_record.ssh_backup_access.clone(),
+            halt_at_cup_height: false,
+            // We don't support splitting signing subnets (yet). If we are here then we know that
+            // the source subnet being split is not signing (see the
+            // `validate_subnet_splitting_payload`) method.
+            chain_key_config: None,
+            canister_cycles_cost_schedule: source_subnet_record.canister_cycles_cost_schedule,
+            subnet_admins: source_subnet_record.subnet_admins.clone(),
+        };
 
         let create_cup_contents = |nodes| async {
             let request =
