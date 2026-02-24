@@ -182,9 +182,9 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
 
             *res_clone.borrow_mut() = match player.replay(extra) {
                 Ok(state_params) => {
-                    if let Some(SubCommand::OverwriteRegistryLocalStore) = subcmd {
+                    if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
                         player
-                            .overwrite_registry_local_store()
+                            .extend_registry_local_store_and_check_prefix()
                             .map(|_| player.get_latest_state_params(None, Vec::new()))
                     } else {
                         Ok(state_params)

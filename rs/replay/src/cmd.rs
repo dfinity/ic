@@ -57,7 +57,7 @@ pub enum SubCommand {
     AddRegistryContent(AddRegistryContentCmd),
 
     /// Update registry local store with data from the registry canister.
-    OverwriteRegistryLocalStore,
+    UpdateRegistryLocalStore,
 
     /// Remove all nodes from the subnet record that this node belongs to.
     /// Note that this does not remove individual node records.

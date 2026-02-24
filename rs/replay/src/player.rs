@@ -724,12 +724,13 @@ impl Player {
         }
     }
 
-    /// Fetch registry records from the given `nns_url`, and extend the local
-    /// registry store with the new records.
+    /// Fetch registry records from the given `nns_url`, and extend the local registry store with
+    /// the new records.
     pub fn extend_registry_local_store(&self) {
         println!("RegistryLocalStore path: {:?}", &self.local_store_path);
         let latest_version = self.registry.get_latest_version();
         println!("RegistryLocalStore latest version: {latest_version}");
+
         let records = self
             .get_changes_since(
                 latest_version.get(),
@@ -738,25 +739,28 @@ impl Player {
             .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {err}"));
 
         let local_store = LocalStoreImpl::new(&self.local_store_path);
+
         write_records_to_local_store(&local_store, latest_version, records)
     }
 
-    /// Fetch registry records from the given `nns_url`, and overwrite the local registry store
-    /// with the new records. Before overwriting, it checks that the current local store is a
-    /// prefix of the new one, i.e. that all records in the current local store are present and
-    /// identical in the new one. If this is not the case, it returns an error and does not modify
-    /// the local store.
+    /// Fetch registry records from the given `nns_url`, and extend the local registry store with
+    /// the new records. Before doing so, it checks that the current local store is a prefix of the
+    /// new one, i.e. that all records in the current local store are present and identical in the
+    /// new one. If this is not the case, it returns an error and does not modify the local store.
     /// This check is useful to make sure that the initial local store was not dishonest, which can
     /// happen in NNS Recovery on Same Nodes.
-    pub fn overwrite_registry_local_store(&self) -> Result<(), ReplayError> {
+    pub fn extend_registry_local_store_and_check_prefix(&self) -> Result<(), ReplayError> {
         println!("RegistryLocalStore path: {:?}", &self.local_store_path);
         let zero_version = RegistryVersion::new(0);
+        let latest_version = self.registry.get_latest_version();
+        println!("RegistryLocalStore latest version: {latest_version}");
+
         let all_new_records = self
             .get_changes_since(zero_version.get(), current_time() + Duration::from_secs(60))
             .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {err}"));
 
-        let current_local_store = LocalStoreImpl::new(&self.local_store_path);
-        let all_current_records = current_local_store
+        let local_store = LocalStoreImpl::new(&self.local_store_path);
+        let all_current_records = local_store
             .get_updates_since(zero_version)
             .unwrap_or_else(|err| panic!("Error in get_updates_since: {err}"));
 
@@ -785,10 +789,14 @@ impl Player {
             }
         }
 
-        current_local_store
-            .clear()
-            .expect("Clearing the local store failed");
-        write_records_to_local_store(&current_local_store, zero_version, all_new_records);
+        write_records_to_local_store(
+            &local_store,
+            latest_version,
+            all_new_records
+                .into_iter()
+                .filter(|record| record.version > latest_version)
+                .collect(),
+        );
 
         Ok(())
     }
