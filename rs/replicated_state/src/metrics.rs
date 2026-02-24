@@ -12,18 +12,15 @@ use ic_metrics::buckets::{
 };
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes,
-    NumInstructions, Time,
+    Cycles, Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumInstructions, Time,
 };
-use prometheus::{Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec};
+use prometheus::{Gauge, GaugeVec, Histogram, HistogramVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
 const LABEL_MESSAGE_KIND: &str = "kind";
 const MESSAGE_KIND_INGRESS: &str = "ingress";
 const MESSAGE_KIND_CANISTER: &str = "canister";
-
-const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str = "scheduler_subnet_memory_usage_invariant_broken";
 
 /// Alert for call contexts older than this cutoff (one day).
 const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
@@ -59,7 +56,6 @@ pub struct ReplicatedStateMetrics {
     canister_install_code_debits: Histogram,
     old_open_call_contexts: IntGaugeVec,
     canisters_with_old_open_call_contexts: IntGaugeVec,
-    subnet_memory_usage_invariant: IntCounter,
     total_canister_balance: Gauge,
     total_canister_reserved_balance: Gauge,
     canister_paused_execution: Histogram,
@@ -211,7 +207,6 @@ impl ReplicatedStateMetrics {
                 "Number of canisters with call contexts that have been open for more than the given age.",
                 &["age"]
             ),
-            subnet_memory_usage_invariant: metrics_registry.error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",
                 "Total canister balance in Cycles.",
@@ -337,7 +332,6 @@ impl ReplicatedStateMetrics {
         own_subnet_id: SubnetId,
         state: &ReplicatedState,
         height: Height,
-        subnet_memory_capacity: NumBytes,
         logger: &ReplicaLogger,
     ) {
         // Observe the number of registered canisters keyed by their status.
@@ -370,8 +364,6 @@ impl ReplicatedStateMetrics {
 
         let mut total_canister_balance = Cycles::zero();
         let mut total_canister_reserved_balance = Cycles::zero();
-        let mut total_canister_history_memory_usage = NumBytes::new(0);
-        let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
 
         let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
         state.canisters_iter().for_each(|canister| {
@@ -427,10 +419,6 @@ impl ReplicatedStateMetrics {
                 canisters_not_in_routing_table += 1;
             }
 
-            total_canister_history_memory_usage += canister.canister_history_memory_usage();
-            total_canister_memory_allocated_bytes += canister
-                .memory_allocation()
-                .allocated_bytes(canister.memory_usage());
             total_canister_balance += canister.system_state.balance();
             total_canister_reserved_balance += canister.system_state.reserved_balance();
 
@@ -561,25 +549,6 @@ impl ReplicatedStateMetrics {
 
         self.total_canister_reserved_balance
             .set(total_canister_reserved_balance.get() as f64);
-
-        // Check replicated state invariants still hold after the round execution.
-        // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
-        // by `total_canister_history_memory_usage` because the canister history
-        // memory usage is not tracked during a round in `SubnetAvailableMemory`.
-        if total_canister_memory_allocated_bytes
-            > subnet_memory_capacity + total_canister_history_memory_usage
-        {
-            self.subnet_memory_usage_invariant.inc();
-            warn!(
-                logger,
-                "{}: At height {} @ time {}, the resulted state after execution does not hold the invariants. Total canister memory allocated bytes {} exceeded subnet memory capacity {}",
-                SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
-                height,
-                state.time(),
-                total_canister_memory_allocated_bytes,
-                subnet_memory_capacity
-            );
-        }
 
         self.canister_snapshots_memory_usage
             .set(state.canister_snapshots.memory_taken().get() as i64);

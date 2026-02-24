@@ -11,6 +11,8 @@ use ic_replicated_state::metrics::{
 use prometheus::{Gauge, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec};
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
+pub(crate) const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str =
+    "scheduler_subnet_memory_usage_invariant_broken";
 pub(crate) const SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN: &str =
     "scheduler_compute_allocation_invariant_broken";
 pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invariant_broken";
@@ -55,6 +57,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_finalization_charge: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
     pub(super) canister_invariants: IntCounter,
+    pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
     pub(super) scheduler_cores_invariant_broken: IntCounter,
     pub(super) scheduler_accumulated_priority_deviation: Gauge,
@@ -300,6 +303,7 @@ impl SchedulerMetrics {
                 decimal_buckets_with_zero(0, 3),
             ),
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
+            subnet_memory_usage_invariant: metrics_registry.error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
             scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
             scheduler_cores_invariant_broken: metrics_registry.error_counter(SCHEDULER_CORES_INVARIANT_BROKEN),
             scheduler_accumulated_priority_deviation: metrics_registry.gauge(

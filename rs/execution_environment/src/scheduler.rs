@@ -1110,18 +1110,19 @@ impl SchedulerImpl {
             self.own_subnet_id,
             state,
             current_round.get().into(),
-            self.exec_env.subnet_memory_capacity(),
             logger,
         );
 
-        self.check_dts_invariants(state, current_round_type);
+        self.check_invariants(state, current_round_type, current_round, logger);
     }
 
-    /// Checks the deterministic time slicing invariant after round execution.
-    fn check_dts_invariants(
+    /// Checks the DTS and subnet memory usage invariants at the end of the round.
+    fn check_invariants(
         &self,
         state: &ReplicatedState,
         current_round_type: ExecutionRoundType,
+        current_round: ExecutionRound,
+        logger: &ReplicaLogger,
     ) {
         let canisters_with_tasks = state
             .canisters_iter()
@@ -1132,6 +1133,35 @@ impl SchedulerImpl {
                 .system_state
                 .task_queue
                 .check_dts_invariants(current_round_type, &canister.canister_id());
+        }
+
+        let mut total_canister_history_memory_usage = NumBytes::new(0);
+        let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
+        for canister in state.canisters_iter() {
+            total_canister_history_memory_usage += canister.canister_history_memory_usage();
+            total_canister_memory_allocated_bytes += canister
+                .memory_allocation()
+                .allocated_bytes(canister.memory_usage());
+        }
+        let subnet_memory_capacity = self.exec_env.subnet_memory_capacity();
+
+        // Check that subnet memory usage invariant still holds after the round execution.
+        // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
+        // by `total_canister_history_memory_usage` because the canister history
+        // memory usage is not tracked during a round in `SubnetAvailableMemory`.
+        if total_canister_memory_allocated_bytes
+            > subnet_memory_capacity + total_canister_history_memory_usage
+        {
+            self.metrics.subnet_memory_usage_invariant.inc();
+            warn!(
+                logger,
+                "{}: In round {} @ time {}, total canister memory allocated bytes {} exceeded subnet memory capacity {}",
+                SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
+                current_round,
+                state.time(),
+                total_canister_memory_allocated_bytes,
+                subnet_memory_capacity
+            );
         }
     }
 }

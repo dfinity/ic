@@ -3251,13 +3251,7 @@ fn replicated_state_metrics_nothing_exported() {
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
 
-    state_metrics.observe(
-        subnet_test_id(1),
-        &state,
-        0.into(),
-        default_subnet_memory_capacity(),
-        &no_op_logger(),
-    );
+    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
 
     // No canisters in the state. There should be nothing exported.
     assert_eq!(
@@ -3520,13 +3514,7 @@ fn replicated_state_metrics_running_canister() {
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
 
-    state_metrics.observe(
-        subnet_test_id(1),
-        &state,
-        0.into(),
-        default_subnet_memory_capacity(),
-        &no_op_logger(),
-    );
+    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
 
     assert_eq!(
         fetch_int_gauge_vec(&registry, "replicated_state_registered_canisters"),
@@ -3550,13 +3538,7 @@ fn replicated_state_metrics_different_canister_statuses() {
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
 
-    state_metrics.observe(
-        subnet_test_id(1),
-        &state,
-        0.into(),
-        default_subnet_memory_capacity(),
-        &no_op_logger(),
-    );
+    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
 
     assert_eq!(
         fetch_int_gauge_vec(&registry, "replicated_state_registered_canisters"),
@@ -3591,13 +3573,7 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
 
-    state_metrics.observe(
-        subnet_test_id(1),
-        &state,
-        0.into(),
-        default_subnet_memory_capacity(),
-        &no_op_logger(),
-    );
+    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
 
     assert_eq!(
         fetch_int_gauge(&registry, "replicated_state_canisters_not_in_routing_table"),
@@ -3629,13 +3605,7 @@ fn replicated_state_metrics_stop_contexts_with_missing_call_ids() {
 
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
-    state_metrics.observe(
-        subnet_test_id(1),
-        &state,
-        0.into(),
-        default_subnet_memory_capacity(),
-        &no_op_logger(),
-    );
+    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
 
     assert_eq!(state_metrics.stop_canister_calls_without_call_id(), 1);
 }
@@ -3663,13 +3633,7 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
 
-    state_metrics.observe(
-        subnet_test_id(1),
-        &state,
-        0.into(),
-        default_subnet_memory_capacity(),
-        &no_op_logger(),
-    );
+    state_metrics.observe(subnet_test_id(1), &state, 0.into(), &no_op_logger());
 
     assert_eq!(
         fetch_int_gauge(&registry, "replicated_state_canisters_not_in_routing_table"),
@@ -3795,7 +3759,6 @@ fn threshold_signature_agreements_metric_is_updated() {
         test.scheduler().own_subnet_id,
         test.state(),
         1.into(),
-        test.scheduler().exec_env.subnet_memory_capacity(),
         &no_op_logger(),
     );
 
@@ -3960,7 +3923,6 @@ fn threshold_signature_agreements_metric_is_updated() {
         test.scheduler().own_subnet_id,
         test.state(),
         2.into(),
-        test.scheduler().exec_env.subnet_memory_capacity(),
         &no_op_logger(),
     );
 
@@ -4016,7 +3978,6 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        test.scheduler().exec_env.subnet_memory_capacity(),
         &no_op_logger(),
     );
 
@@ -4054,7 +4015,6 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        test.scheduler().exec_env.subnet_memory_capacity(),
         &no_op_logger(),
     );
     let consumed_cycles_after = NominalCycles::from(
@@ -4090,7 +4050,6 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        test.scheduler().exec_env.subnet_memory_capacity(),
         &no_op_logger(),
     );
 
@@ -4157,7 +4116,6 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        test.scheduler().exec_env.subnet_memory_capacity(),
         &no_op_logger(),
     );
     let consumed_cycles_after = NominalCycles::from(
@@ -4270,7 +4228,6 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        test.scheduler().exec_env.subnet_memory_capacity(),
         &no_op_logger(),
     );
 
@@ -4314,7 +4271,6 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         test.scheduler().own_subnet_id,
         test.state(),
         0.into(),
-        test.scheduler().exec_env.subnet_memory_capacity(),
         &no_op_logger(),
     );
 
@@ -6718,8 +6674,4 @@ fn zero_instruction_messages(metrics_registry: &MetricsRegistry) -> u64 {
     .unwrap();
 
     *instructions_consumed_per_message.get("0").unwrap()
-}
-
-fn default_subnet_memory_capacity() -> NumBytes {
-    ic_config::execution_environment::Config::default().subnet_memory_capacity
 }
