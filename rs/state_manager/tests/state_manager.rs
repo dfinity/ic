@@ -8930,7 +8930,7 @@ fn commit_and_certify_optimization_conditions() {
         sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Full, None);
         assert_eq!(no_state_clone_count(metrics), 1);
 
-        // heights of 10 and 20 are divisible by 10 => optimization does not trigger at those heights,
+        // heights of 10 and 20 are divisible by 10 => optimization does not trigger at those heights
         let mut expected_no_state_clone_count = 1;
         for height in 3..21 {
             let state = sm.take_tip().1;
