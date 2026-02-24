@@ -110,22 +110,23 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
 /// For creating a signature for a state, every replica follows the
 /// following algorithm:
 ///
-/// 1. Request a set of (height, hash) tuples from its local StateManager, where
+/// 1. Request a set of (height, witness, hash) tuples from its local StateManager, where
+///    `witness` is a witness for the height and
 ///    `hash` is the hash of the replicated state after processing the batch at the
 ///    specified height. The StateManager is responsible for selecting which parts
 ///    of the replicated state are included in the computation of the hash.
 ///
-/// 2. Sign the hash-height tuple, resulting in a CertificationShare, and place
+/// 2. Sign the hash-witness-height tuple, resulting in a CertificationShare, and place
 ///    the CertificationShare in the certification pool, to be gossiped to other
 ///    replicas.
 ///
 /// 3. On every invocation of `on_state_change`, if sufficiently many
-///    CertificationShares for the same (height, hash) pair were received, combine
+///    CertificationShares for the same (height, witness, hash) tuple were received, combine
 ///    them into a full Certification and put it into the certification pool. At
 ///    that point, the CertificationShares are not required anymore and can be
 ///    purged.
 ///
-/// 4. For every (height, hash) pair with a full Certification, submit
+/// 4. For every (height, witness, hash) tuple with a full Certification, submit
 ///    the pair (height, Certification) to the StateManager.
 ///
 /// 5. Whenever the catch-up package height increases, remove all certification
@@ -389,7 +390,7 @@ impl CertifierImpl {
         // A struct defined to morph `Certification` into a format that can be
         // accepted by `utils::aggregate`.
         #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-        struct CertificationTuple(Height, CertificationContent);
+        struct CertificationTuple(Height, Witness, CertificationContent);
 
         impl HasHeight for CertificationTuple {
             fn height(&self) -> Height {
@@ -403,18 +404,8 @@ impl CertifierImpl {
             }
         }
 
-        let shares: Vec<_> = certification_pool.shares_at_height(height).collect();
-        let height_witness = if let Some(share) = shares.first() {
-            share.height_witness.clone()
-        } else {
-            debug!(
-                self.log,
-                "CertifierImpl::aggregate called on an empty collection of shares @{}", height
-            );
-            return vec![];
-        };
-        let signatures = shares.into_iter().map(|s| Signed {
-            content: CertificationTuple(s.height, s.signed.content),
+        let shares = certification_pool.shares_at_height(height).map(|s| Signed {
+            content: CertificationTuple(s.height, s.height_witness, s.signed.content),
             signature: s.signed.signature,
         });
         aggregate(
@@ -424,15 +415,15 @@ impl CertifierImpl {
             Box::new(|cert: &CertificationTuple| {
                 active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), cert.height())
             }),
-            signatures,
+            shares,
         )
         .into_iter()
         .map(|signed_cert_tuple| {
             CertificationMessage::Certification(Certification {
                 height: signed_cert_tuple.content.0,
-                height_witness: height_witness.clone(),
+                height_witness: Some(signed_cert_tuple.content.1),
                 signed: Signed {
-                    content: signed_cert_tuple.content.1,
+                    content: signed_cert_tuple.content.2,
                     signature: signed_cert_tuple.signature,
                 },
             })
@@ -446,8 +437,8 @@ impl CertifierImpl {
         certification_pool: &dyn CertificationPool,
         heights: Box<dyn Iterator<Item = Height>>,
     ) -> Mutations {
-        // Iterate over all state hashes, obtain list of corresponding unvalidated
-        // artifacts by the height and try to verify their signatures.
+        // Iterate over all state heights, obtain list of corresponding unvalidated
+        // artifacts by the height and try to verify their signatures and height witnesses.
 
         heights
             .flat_map(|height| -> Box<dyn Iterator<Item = ChangeAction>> {
@@ -542,8 +533,11 @@ impl CertifierImpl {
 
         // If the share has an invalid content or does not belong to the
         // committee
-        if let Err(e) = validate_height_witness(share.height, &share.height_witness, &content.hash)
-        {
+        if let Err(e) = validate_height_witness(
+            share.height,
+            &Some(share.height_witness.clone()),
+            &content.hash,
+        ) {
             return Some(ChangeAction::HandleInvalid(msg, e));
         }
 
@@ -606,9 +600,12 @@ impl CertifierImpl {
 
 fn validate_height_witness(
     height: Height,
-    height_witness: &Witness,
+    height_witness: &Option<Witness>,
     hash: &CryptoHashOfPartialState,
 ) -> Result<(), String> {
+    let Some(height_witness) = height_witness else {
+        return Err(format!("Missing height witness @{}", height));
+    };
     let labeled_tree = materialize(&state_height_as_tree(&height), None);
     let height_witness_digest = match recompute_digest(&labeled_tree, height_witness) {
         Ok(digest) => CryptoHashOfPartialState::from(CryptoHash(digest.to_vec())),
@@ -709,7 +706,7 @@ mod tests {
         signature.signer = dkg_id;
         to_unvalidated(CertificationMessage::Certification(Certification {
             height,
-            height_witness: Witness::new_for_testing_with_height(),
+            height_witness: Some(Witness::new_for_testing_with_height()),
             signed: Signed { content, signature },
         }))
     }
@@ -1339,8 +1336,9 @@ mod tests {
 
             // a height witness consisting only of the (correct) root hash,
             // i.e., pruned too aggressively
-            cert.height_witness =
-                Witness::new_for_testing(Digest(height_witness_hash.get().0.try_into().unwrap()));
+            cert.height_witness = Some(Witness::new_for_testing(Digest(
+                height_witness_hash.get().0.try_into().unwrap(),
+            )));
 
             assert_eq!(
                 certifier.validate_certification(cert),
@@ -1365,7 +1363,7 @@ mod tests {
             // i.e., not pruned enough
             let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
             let (height_witness, hash) = unpruned_height_witness(&state, height);
-            cert.height_witness = height_witness;
+            cert.height_witness = Some(height_witness);
             cert.signed.content.hash = hash;
 
             assert_eq!(
@@ -1540,7 +1538,7 @@ mod tests {
                         .validated
                         .insert(CertificationMessage::Certification(Certification {
                             height: Height::from(height),
-                            height_witness: Witness::new_for_testing_with_height(),
+                            height_witness: Some(Witness::new_for_testing_with_height()),
                             signed: Signed {
                                 content: gen_content(Height::from(height)),
                                 signature: ThresholdSignature::fake(),
@@ -1675,7 +1673,7 @@ mod tests {
                         .validated
                         .insert(CertificationMessage::Certification(Certification {
                             height: Height::from(height),
-                            height_witness: Witness::new_for_testing_with_height(),
+                            height_witness: Some(Witness::new_for_testing_with_height()),
                             signed: Signed {
                                 content: gen_content(Height::from(height)),
                                 signature: ThresholdSignature::fake(),

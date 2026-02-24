@@ -161,6 +161,8 @@ pub trait StateManager: StateReader {
     ///   ```text
     ///   ∀ metadata ∈ state_manager.list_state_hashes_to_certify(): digest(/"metadata"/"height"/<metadata.height>, W) = metadata.hash.
     ///   ```
+    ///
+    /// * The returned witness is minimal (pruned) and deterministic.
     fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
 
     /// Returns a list of heights for which the state manager optimistically requests

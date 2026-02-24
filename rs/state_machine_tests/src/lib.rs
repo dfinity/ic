@@ -458,6 +458,7 @@ fn add_subnet_local_registry_records(
     let max_ingress_bytes_per_message = match subnet_type {
         SubnetType::Application => 2 * 1024 * 1024,
         SubnetType::VerifiedApplication => 2 * 1024 * 1024,
+        SubnetType::CloudEngine => 2 * 1024 * 1024,
         SubnetType::System => 3 * 1024 * 1024 + 512 * 1024,
     };
     let max_ingress_messages_per_block = 1000;
@@ -1857,7 +1858,9 @@ impl StateMachine {
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
-            SubnetType::Application | SubnetType::VerifiedApplication => 499,
+            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
+                499
+            }
             SubnetType::System => 199,
         });
         let replica_logger = test_logger(log_level);
@@ -5060,7 +5063,7 @@ fn certify_hash(
         CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
     Certification {
         height: *height,
-        height_witness: Witness::new_for_testing(Digest([0; 32])),
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent { hash: hash.clone() },
             signature: ThresholdSignature {

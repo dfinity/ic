@@ -543,7 +543,7 @@ mod tests {
         let signature = ThresholdSignature::fake();
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
-            height_witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed { content, signature },
         })
     }

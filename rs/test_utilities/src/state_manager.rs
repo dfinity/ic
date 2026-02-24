@@ -657,7 +657,7 @@ pub fn encode_certified_stream_slice(
         merkle_proof: vec![],
         certification: Certification {
             height: state_height,
-            height_witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 signature: ThresholdSignature {
                     signer: NiDkgId {
