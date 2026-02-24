@@ -164,13 +164,14 @@ enum ExecuteSubnetMessageResult {
     Finished {
         response: Result<(Vec<u8>, Option<CanisterId>), UserError>,
         refund: Cycles,
+        instructions: NumInstructions,
     },
 }
 
 pub enum ExecuteSubnetMessageResultType {
     Paused,
     Processing,
-    Finished,
+    Finished(NumInstructions),
 }
 
 /// Contains counters needed to keep track of unexpected errors.
@@ -519,7 +520,10 @@ impl ExecutionEnvironment {
                     .subnet_call_context_manager
                     .retrieve_context(response.originator_reply_callback, &self.log);
                 return match context {
-                    None => (state, ExecuteSubnetMessageResultType::Finished),
+                    None => (
+                        state,
+                        ExecuteSubnetMessageResultType::Finished(NumInstructions::new(0)),
+                    ),
                     Some(context) => {
                         let time_elapsed =
                             state.time().saturating_duration_since(context.get_time());
@@ -598,7 +602,10 @@ impl ExecutionEnvironment {
                             .into(),
                         );
 
-                        (state, ExecuteSubnetMessageResultType::Finished)
+                        (
+                            state,
+                            ExecuteSubnetMessageResultType::Finished(NumInstructions::new(0)),
+                        )
                     }
                 };
             }
@@ -621,6 +628,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
                     refund,
+                    instructions: NumInstructions::new(0),
                 },
                 since,
             );
@@ -677,13 +685,17 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
-                        return (state, ExecuteSubnetMessageResultType::Finished);
+                        return (
+                            state,
+                            ExecuteSubnetMessageResultType::Finished(NumInstructions::new(0)),
+                        );
                     }
 
                     match SignWithECDSAArgs::decode(payload) {
                         Err(err) => ExecuteSubnetMessageResult::Finished {
                             response: Err(err),
                             refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
                         },
                         Ok(args) => {
                             let key_id = MasterPublicKeyId::Ecdsa(args.key_id.clone());
@@ -695,6 +707,7 @@ impl ExecutionEnvironment {
                                 Err(err) => ExecuteSubnetMessageResult::Finished {
                                     response: Err(err),
                                     refund: msg.take_cycles(),
+                                    instructions: NumInstructions::new(0),
                                 },
                                 Ok(_) => match self.sign_with_threshold(
                                     (**request).clone(),
@@ -716,6 +729,7 @@ impl ExecutionEnvironment {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err),
                                         refund: msg.take_cycles(),
+                                        instructions: NumInstructions::new(0),
                                     },
                                     Ok(()) => {
                                         self.metrics.observe_message_with_label(
@@ -747,6 +761,7 @@ impl ExecutionEnvironment {
                             Err(err) => ExecuteSubnetMessageResult::Finished {
                                 response: Err(err),
                                 refund: cycles,
+                                instructions: NumInstructions::new(0),
                             },
                             Ok(args) => {
                                 // Start logging execution time for `create_canister`.
@@ -759,6 +774,7 @@ impl ExecutionEnvironment {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err.into()),
                                         refund: cycles,
+                                        instructions: NumInstructions::new(0),
                                     },
                                     Ok(settings) => self.create_canister(
                                         msg.canister_change_origin(sender_canister_version),
@@ -799,6 +815,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -873,6 +890,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -891,6 +909,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -907,6 +926,7 @@ impl ExecutionEnvironment {
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     }
                 }
                 CanisterCall::Ingress(_) => {
@@ -928,6 +948,7 @@ impl ExecutionEnvironment {
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     }
                 }
                 CanisterCall::Ingress(_) => {
@@ -943,6 +964,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -950,6 +972,7 @@ impl ExecutionEnvironment {
                 Err(err) => ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 },
                 Ok(args) => self.stop_canister(args.get_canister_id(), &msg, &mut state),
             },
@@ -977,6 +1000,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -994,6 +1018,7 @@ impl ExecutionEnvironment {
                     ExecuteSubnetMessageResult::Finished {
                         response: res.map(|res| (res, None)),
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     }
                 }
             },
@@ -1002,6 +1027,7 @@ impl ExecutionEnvironment {
                 Err(err) => ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 },
                 Ok(args) => self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state),
             },
@@ -1012,6 +1038,7 @@ impl ExecutionEnvironment {
                         Err(err) => ExecuteSubnetMessageResult::Finished {
                             response: Err(err),
                             refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
                         },
                         Ok(_) => ExecuteSubnetMessageResult::Finished {
                             response: Err(UserError::new(
@@ -1019,6 +1046,7 @@ impl ExecutionEnvironment {
                                 "FlexibleHttpRequest is not yet implemented".to_string(),
                             )),
                             refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
                         },
                     }
                 }
@@ -1034,6 +1062,7 @@ impl ExecutionEnvironment {
                             Err(err) => ExecuteSubnetMessageResult::Finished {
                                 response: Err(err),
                                 refund: msg.take_cycles(),
+                                instructions: NumInstructions::new(0),
                             },
                             Ok(args) => {
                                 if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE) {
@@ -1043,6 +1072,7 @@ impl ExecutionEnvironment {
                                             "PUT and DELETE are not supported yet".to_string(),
                                         )),
                                         refund: msg.take_cycles(),
+                                        instructions: NumInstructions::new(0),
                                     }
                                 } else {
                                     match CanisterHttpRequestContext::generate_from_args(
@@ -1056,6 +1086,7 @@ impl ExecutionEnvironment {
                                         Err(err) => ExecuteSubnetMessageResult::Finished {
                                             response: Err(err.into()),
                                             refund: msg.take_cycles(),
+                                            instructions: NumInstructions::new(0),
                                         },
                                         Ok(canister_http_request_context) => match self
                                             .try_add_http_context_to_replicated_state(
@@ -1068,6 +1099,7 @@ impl ExecutionEnvironment {
                                             Err(err) => ExecuteSubnetMessageResult::Finished {
                                                 response: Err(err),
                                                 refund: msg.take_cycles(),
+                                                instructions: NumInstructions::new(0),
                                             },
                                             Ok(()) => ExecuteSubnetMessageResult::Processing,
                                         },
@@ -1089,6 +1121,7 @@ impl ExecutionEnvironment {
                     ExecuteSubnetMessageResult::Finished {
                         response: err,
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     }
                 }
             },
@@ -1100,6 +1133,7 @@ impl ExecutionEnvironment {
                         |err| ExecuteSubnetMessageResult::Finished {
                             response: Err(err),
                             refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
                         },
                         |()| ExecuteSubnetMessageResult::Processing,
                     ),
@@ -1146,6 +1180,7 @@ impl ExecutionEnvironment {
                         ExecuteSubnetMessageResult::Finished {
                             response: res,
                             refund: cycles,
+                            instructions: NumInstructions::new(0),
                         }
                     }
                     CanisterCall::Ingress(_) => {
@@ -1192,6 +1227,7 @@ impl ExecutionEnvironment {
                         ExecuteSubnetMessageResult::Finished {
                             response: res,
                             refund: cycles,
+                            instructions: NumInstructions::new(0),
                         }
                     }
                     CanisterCall::Ingress(_) => {
@@ -1220,13 +1256,17 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
-                        return (state, ExecuteSubnetMessageResultType::Finished);
+                        return (
+                            state,
+                            ExecuteSubnetMessageResultType::Finished(NumInstructions::new(0)),
+                        );
                     }
 
                     match SignWithSchnorrArgs::decode(payload) {
                         Err(err) => ExecuteSubnetMessageResult::Finished {
                             response: Err(err),
                             refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
                         },
                         Ok(args) => {
                             let key_id = MasterPublicKeyId::Schnorr(args.key_id.clone());
@@ -1238,6 +1278,7 @@ impl ExecutionEnvironment {
                                 Err(err) => ExecuteSubnetMessageResult::Finished {
                                     response: Err(err),
                                     refund: msg.take_cycles(),
+                                    instructions: NumInstructions::new(0),
                                 },
                                 Ok(_) => match self.sign_with_threshold(
                                     (**request).clone(),
@@ -1264,6 +1305,7 @@ impl ExecutionEnvironment {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err),
                                         refund: msg.take_cycles(),
+                                        instructions: NumInstructions::new(0),
                                     },
                                     Ok(()) => {
                                         self.metrics.observe_message_with_label(
@@ -1311,6 +1353,7 @@ impl ExecutionEnvironment {
                         ExecuteSubnetMessageResult::Finished {
                             response: res,
                             refund: cycles,
+                            instructions: NumInstructions::new(0),
                         }
                     }
                     CanisterCall::Ingress(_) => {
@@ -1327,6 +1370,7 @@ impl ExecutionEnvironment {
                             |err| ExecuteSubnetMessageResult::Finished {
                                 response: Err(err),
                                 refund: cycles,
+                                instructions: NumInstructions::new(0),
                             },
                             |()| ExecuteSubnetMessageResult::Processing,
                         ),
@@ -1355,7 +1399,10 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
-                        return (state, ExecuteSubnetMessageResultType::Finished);
+                        return (
+                            state,
+                            ExecuteSubnetMessageResultType::Finished(NumInstructions::new(0)),
+                        );
                     }
 
                     match self.vetkd_derive_key(
@@ -1370,6 +1417,7 @@ impl ExecutionEnvironment {
                         Err(err) => ExecuteSubnetMessageResult::Finished {
                             response: Err(err),
                             refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
                         },
                         Ok(()) => {
                             self.metrics.observe_message_with_label(
@@ -1423,6 +1471,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -1441,6 +1490,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -1455,6 +1505,7 @@ impl ExecutionEnvironment {
                         Err(err) => ExecuteSubnetMessageResult::Finished {
                             response: Err(err),
                             refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
                         },
                     }
                 }
@@ -1473,11 +1524,13 @@ impl ExecutionEnvironment {
                         Ok(Some(payload)) => ExecuteSubnetMessageResult::Finished {
                             response: Ok((payload, None)),
                             refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
                         },
                         Ok(None) => ExecuteSubnetMessageResult::Processing,
                         Err(err) => ExecuteSubnetMessageResult::Finished {
                             response: Err(err),
                             refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
                         },
                     }
                 }
@@ -1499,6 +1552,7 @@ impl ExecutionEnvironment {
                         "No bitcoin canisters available.",
                     )),
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -1520,6 +1574,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -1541,6 +1596,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -1553,6 +1609,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -1566,6 +1623,7 @@ impl ExecutionEnvironment {
                     ExecuteSubnetMessageResult::Finished {
                         response: res.map(|res| (res, None)),
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     }
                 }
             },
@@ -1579,6 +1637,7 @@ impl ExecutionEnvironment {
                     ExecuteSubnetMessageResult::Finished {
                         response: res.map(|res| (res, None)),
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     }
                 }
             },
@@ -1594,6 +1653,7 @@ impl ExecutionEnvironment {
                             ),
                         )),
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     },
                     FlagStatus::Enabled => {
                         let sender = *msg.sender();
@@ -1645,6 +1705,7 @@ impl ExecutionEnvironment {
                                 ExecuteSubnetMessageResult::Finished {
                                     response,
                                     refund: msg.take_cycles(),
+                                    instructions: NumInstructions::new(0),
                                 }
                             }
                             CanisterCall::Ingress(_) => {
@@ -1660,22 +1721,22 @@ impl ExecutionEnvironment {
                 Err(err) => ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 },
                 Ok(args) => {
                     let canister_id = args.get_canister_id();
-                    let result = self.take_canister_snapshot(
+                    let (result, instructions_used) = self.take_canister_snapshot(
                         msg.canister_change_origin(args.get_sender_canister_version()),
                         &mut state,
                         args,
                         registry_settings.subnet_size,
                         round_limits,
                     );
-                    let msg_result = ExecuteSubnetMessageResult::Finished {
+                    ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
                         refund: msg.take_cycles(),
-                    };
-
-                    return self.finish_subnet_message_execution(state, msg, msg_result, since);
+                        instructions: instructions_used,
+                    }
                 }
             },
 
@@ -1684,11 +1745,12 @@ impl ExecutionEnvironment {
                 Err(err) => ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 },
                 Ok(args) => {
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
                     let canister_id = args.get_canister_id();
-                    let result = self.load_canister_snapshot(
+                    let (result, instructions_used) = self.load_canister_snapshot(
                         registry_settings.subnet_size,
                         *msg.sender(),
                         &mut state,
@@ -1696,12 +1758,11 @@ impl ExecutionEnvironment {
                         round_limits,
                         origin,
                     );
-                    let msg_result = ExecuteSubnetMessageResult::Finished {
+                    ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
                         refund: msg.take_cycles(),
-                    };
-
-                    return self.finish_subnet_message_execution(state, msg, msg_result, since);
+                        instructions: instructions_used,
+                    }
                 }
             },
 
@@ -1714,6 +1775,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -1735,6 +1797,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -1742,23 +1805,23 @@ impl ExecutionEnvironment {
                 match ReadCanisterSnapshotMetadataArgs::decode(payload) {
                     Ok(args) => {
                         let canister_id = args.get_canister_id();
-                        let res = self
-                            .read_canister_snapshot_metadata(
-                                *msg.sender(),
-                                &state,
-                                args,
-                                round_limits,
-                            )
-                            .map(|x| (x, Some(canister_id)));
-                        let msg_result = ExecuteSubnetMessageResult::Finished {
+                        let (res, instructions_used) = self.read_canister_snapshot_metadata(
+                            *msg.sender(),
+                            &state,
+                            args,
+                            round_limits,
+                        );
+                        let res = res.map(|x| (x, Some(canister_id)));
+                        ExecuteSubnetMessageResult::Finished {
                             response: res,
                             refund: msg.take_cycles(),
-                        };
-                        return self.finish_subnet_message_execution(state, msg, msg_result, since);
+                            instructions: instructions_used,
+                        }
                     }
                     Err(e) => ExecuteSubnetMessageResult::Finished {
                         response: Err(e),
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     },
                 }
             }
@@ -1768,23 +1831,23 @@ impl ExecutionEnvironment {
                     Err(e) => ExecuteSubnetMessageResult::Finished {
                         response: Err(e),
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     },
                     Ok(args) => {
                         let canister_id = args.get_canister_id();
-                        let result = self
-                            .read_snapshot_data(
-                                *msg.sender(),
-                                &mut state,
-                                args,
-                                registry_settings.subnet_size,
-                                round_limits,
-                            )
-                            .map(|res| (res, Some(canister_id)));
-                        let msg_result = ExecuteSubnetMessageResult::Finished {
+                        let (result, instructions_used) = self.read_snapshot_data(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                            round_limits,
+                        );
+                        let result = result.map(|res| (res, Some(canister_id)));
+                        ExecuteSubnetMessageResult::Finished {
                             response: result,
                             refund: msg.take_cycles(),
-                        };
-                        return self.finish_subnet_message_execution(state, msg, msg_result, since);
+                            instructions: instructions_used,
+                        }
                     }
                 }
             }
@@ -1794,23 +1857,22 @@ impl ExecutionEnvironment {
                     Err(err) => ExecuteSubnetMessageResult::Finished {
                         response: Err(err),
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     },
                     Ok(args) => {
                         let canister_id = args.get_canister_id();
-                        let result = self
-                            .create_snapshot_from_metadata(
-                                *msg.sender(),
-                                &mut state,
-                                args,
-                                registry_settings.subnet_size,
-                                round_limits,
-                            )
-                            .map(|res| (res, Some(canister_id)));
-                        let msg_result = ExecuteSubnetMessageResult::Finished {
-                            response: result,
+                        let (result, instructions_used) = self.create_snapshot_from_metadata(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                            round_limits,
+                        );
+                        ExecuteSubnetMessageResult::Finished {
+                            response: result.map(|res| (res, Some(canister_id))),
                             refund: msg.take_cycles(),
-                        };
-                        return self.finish_subnet_message_execution(state, msg, msg_result, since);
+                            instructions: instructions_used,
+                        }
                     }
                 }
             }
@@ -1820,23 +1882,22 @@ impl ExecutionEnvironment {
                     Err(err) => ExecuteSubnetMessageResult::Finished {
                         response: Err(err),
                         refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
                     },
                     Ok(args) => {
                         let canister_id = args.get_canister_id();
-                        let result = self
-                            .write_snapshot_data(
-                                *msg.sender(),
-                                &mut state,
-                                args,
-                                registry_settings.subnet_size,
-                                round_limits,
-                            )
-                            .map(|res| (res, Some(canister_id)));
-                        let msg_result = ExecuteSubnetMessageResult::Finished {
-                            response: result,
+                        let (result, instructions_used) = self.write_snapshot_data(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                            round_limits,
+                        );
+                        ExecuteSubnetMessageResult::Finished {
+                            response: result.map(|res| (res, Some(canister_id))),
                             refund: msg.take_cycles(),
-                        };
-                        return self.finish_subnet_message_execution(state, msg, msg_result, since);
+                            instructions: instructions_used,
+                        }
                     }
                 }
             }
@@ -1851,6 +1912,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
 
@@ -1862,6 +1924,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
+                    instructions: NumInstructions::new(0),
                 }
             }
         };
@@ -1869,11 +1932,9 @@ impl ExecutionEnvironment {
         // Note that some branches above have early returns:
         //   - `InstallCode`
         //   - `InstallChunkedCode`
-        //   - `TakeCanisterSnapshot`
-        //   - `LoadCanisterSnapshot`
-        //   - `ReadCanisterSnapshotData`
-        //   - `ReadCanisterSnapshotMetadata`
         //   - `SignWithECDSA`
+        //   - `SignWithSchnorr`
+        //   - `VetKdDeriveKey`
         // If you modify code below, please also update
         // these cases.
         self.finish_subnet_message_execution(state, msg, result, since)
@@ -2248,11 +2309,13 @@ impl ExecutionEnvironment {
                         })
                         .map_err(|err| err.into()),
                     refund: cycles,
+                    instructions: NumInstructions::new(0),
                 }
             }
             Err(err) => ExecuteSubnetMessageResult::Finished {
                 response: Err(err),
                 refund: cycles,
+                instructions: NumInstructions::new(0),
             },
         }
     }
@@ -2317,6 +2380,7 @@ impl ExecutionEnvironment {
                     format!("Canister {} not found.", &canister_id),
                 )),
                 refund: msg.take_cycles(),
+                instructions: NumInstructions::new(0),
             },
 
             Some(canister_state) => {
@@ -2336,6 +2400,7 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Finished {
                     response: Ok((EmptyBlob.encode(), Some(canister_id))),
                     refund: Cycles::zero(),
+                    instructions: NumInstructions::new(0),
                 }
             }
         }
@@ -2429,11 +2494,13 @@ impl ExecutionEnvironment {
             } => ExecuteSubnetMessageResult::Finished {
                 response: Err(error.into()),
                 refund: cycles_to_return,
+                instructions: NumInstructions::new(0),
             },
             StopCanisterResult::AlreadyStopped { cycles_to_return } => {
                 ExecuteSubnetMessageResult::Finished {
                     response: Ok((EmptyBlob.encode(), Some(canister_id))),
                     refund: cycles_to_return,
+                    instructions: NumInstructions::new(0),
                 }
             }
         }
@@ -2532,15 +2599,18 @@ impl ExecutionEnvironment {
         args: TakeCanisterSnapshotArgs,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut canister = match state.take_canister_state(&canister_id) {
             None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                );
             }
             Some(canister) => canister,
         };
@@ -2563,7 +2633,7 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok((response, rejects)) => {
+            Ok((response, rejects, instructions_used)) => {
                 crate::util::process_responses(
                     rejects,
                     state,
@@ -2571,9 +2641,9 @@ impl ExecutionEnvironment {
                     self.log.clone(),
                     self.canister_not_found_error(),
                 );
-                Ok(response.encode())
+                (Ok(response.encode()), instructions_used)
             }
-            Err(err) => Err(err.into()),
+            Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }
 
@@ -2586,15 +2656,18 @@ impl ExecutionEnvironment {
         args: LoadCanisterSnapshotArgs,
         round_limits: &mut RoundLimits,
         origin: CanisterChangeOrigin,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut old_canister = match state.take_canister_state(&canister_id) {
             None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                );
             }
             Some(canister) => canister,
         };
@@ -2602,7 +2675,7 @@ impl ExecutionEnvironment {
         let snapshot_id = args.snapshot_id();
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
-        let result = self.canister_manager.load_canister_snapshot(
+        let (result, instructions_used) = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
             Arc::make_mut(&mut old_canister),
@@ -2615,7 +2688,7 @@ impl ExecutionEnvironment {
             &self.metrics.snapshot_exists_without_associated_canister,
         );
 
-        match result {
+        let result = match result {
             Ok(new_canister) => {
                 state.put_canister_state(new_canister);
                 Ok(EmptyBlob.encode())
@@ -2625,7 +2698,9 @@ impl ExecutionEnvironment {
                 state.put_canister_state(old_canister);
                 Err(err.into())
             }
-        }
+        };
+
+        (result, instructions_used)
     }
 
     /// Lists the snapshots belonging to the specified canister.
@@ -2693,15 +2768,18 @@ impl ExecutionEnvironment {
         args: ReadCanisterSnapshotDataArgs,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut canister = match state.take_canister_state(&canister_id) {
             None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                );
             }
             Some(canister) => canister,
         };
@@ -2715,8 +2793,8 @@ impl ExecutionEnvironment {
             subnet_size,
             round_limits,
         ) {
-            Ok(result) => Ok(Encode!(&result).unwrap()),
-            Err(err) => Err(UserError::from(err)),
+            Ok((result, num_instructions)) => (Ok(Encode!(&result).unwrap()), num_instructions),
+            Err(err) => (Err(UserError::from(err)), NumInstructions::new(0)),
         };
 
         // Put canister back.
@@ -2777,8 +2855,11 @@ impl ExecutionEnvironment {
         state: &ReplicatedState,
         args: ReadCanisterSnapshotMetadataArgs,
         round_limits: &mut RoundLimits,
-    ) -> Result<Vec<u8>, UserError> {
-        let canister = get_canister(args.get_canister_id(), state)?;
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+        let canister = match get_canister(args.get_canister_id(), state) {
+            Ok(canister) => canister,
+            Err(e) => return (Err(e), NumInstructions::new(0)),
+        };
         let snapshot_id = args.get_snapshot_id();
         match self.canister_manager.read_snapshot_metadata(
             sender,
@@ -2787,8 +2868,8 @@ impl ExecutionEnvironment {
             state,
             round_limits,
         ) {
-            Ok(response) => Ok(Encode!(&response).unwrap()),
-            Err(e) => Err(UserError::from(e)),
+            Ok((response, instructions)) => (Ok(Encode!(&response).unwrap()), instructions),
+            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
         }
     }
 
@@ -2799,15 +2880,18 @@ impl ExecutionEnvironment {
         args: UploadCanisterSnapshotMetadataArgs,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut canister = match state.take_canister_state(&canister_id) {
             None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                );
             }
             Some(canister) => canister,
         };
@@ -2826,10 +2910,11 @@ impl ExecutionEnvironment {
         // Put canister back.
         state.put_canister_state(canister);
         match result {
-            Ok(snapshot_id) => {
-                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap())
-            }
-            Err(e) => Err(e),
+            Ok((snapshot_id, instructions_used)) => (
+                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap()),
+                instructions_used,
+            ),
+            Err(e) => (Err(e), NumInstructions::new(0)),
         }
     }
 
@@ -2840,15 +2925,18 @@ impl ExecutionEnvironment {
         args: UploadCanisterSnapshotDataArgs,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut canister = match state.take_canister_state(&canister_id) {
             None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                );
             }
             Some(canister) => canister,
         };
@@ -2867,8 +2955,8 @@ impl ExecutionEnvironment {
         // Put canister back.
         state.put_canister_state(canister);
         match result {
-            Ok(()) => Ok(Encode!(&()).unwrap()),
-            Err(e) => Err(UserError::from(e)),
+            (Ok(()), instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
+            (Err(e), instructions_used) => (Err(UserError::from(e)), instructions_used),
         }
     }
 
@@ -3123,7 +3211,11 @@ impl ExecutionEnvironment {
                 ExecuteSubnetMessageResult::Processing => {
                     (state, ExecuteSubnetMessageResultType::Processing)
                 }
-                ExecuteSubnetMessageResult::Finished { response, refund } => {
+                ExecuteSubnetMessageResult::Finished {
+                    response,
+                    refund,
+                    instructions,
+                } => {
                     let payload = match response {
                         Ok((payload, ..)) => Payload::Data(payload),
                         Err(err) => Payload::Reject(err.into()),
@@ -3140,7 +3232,10 @@ impl ExecutionEnvironment {
                     };
 
                     state.push_subnet_output_response(response.into());
-                    (state, ExecuteSubnetMessageResultType::Finished)
+                    (
+                        state,
+                        ExecuteSubnetMessageResultType::Finished(instructions),
+                    )
                 }
             },
             CanisterCall::Ingress(ingress) => match result {
@@ -3158,7 +3253,11 @@ impl ExecutionEnvironment {
                     );
                     (state, ExecuteSubnetMessageResultType::Processing)
                 }
-                ExecuteSubnetMessageResult::Finished { response, refund } => {
+                ExecuteSubnetMessageResult::Finished {
+                    response,
+                    refund,
+                    instructions,
+                } => {
                     debug_assert!(refund.is_zero());
                     if !refund.is_zero() {
                         self.metrics.ingress_with_cycles_error.inc();
@@ -3190,7 +3289,10 @@ impl ExecutionEnvironment {
                         ingress.message_id.clone(),
                         status,
                     );
-                    (state, ExecuteSubnetMessageResultType::Finished)
+                    (
+                        state,
+                        ExecuteSubnetMessageResultType::Finished(instructions),
+                    )
                 }
             },
         }
@@ -3661,6 +3763,7 @@ impl ExecutionEnvironment {
                         ExecuteSubnetMessageResult::Finished {
                             response: Err(err),
                             refund,
+                            instructions: NumInstructions::new(0),
                         },
                         since,
                     );
@@ -3833,6 +3936,7 @@ impl ExecutionEnvironment {
                     ExecuteSubnetMessageResult::Finished {
                         response: result,
                         refund,
+                        instructions: instructions_used,
                     },
                     since,
                 )
@@ -4305,6 +4409,7 @@ impl ExecutionEnvironment {
                 format!("{method} cannot be called by a user."),
             )),
             refund: Cycles::zero(),
+            instructions: NumInstructions::new(0),
         }
     }
 

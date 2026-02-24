@@ -1479,8 +1479,7 @@ impl ExecutionTest {
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             match execute_subnet_message_result_type {
-                ExecuteSubnetMessageResultType::Finished => {
-                    let message_instructions_used = NumInstructions::new(0); // TODO
+                ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
                     // cycles charging proceeds by prepaying for the message instruction limit
                     // and subsequently refunding based on `message_instructions_used`
                     // and thus `message_instructions_used` are capped
@@ -1635,8 +1634,7 @@ impl ExecutionTest {
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
                 match execute_subnet_message_result_type {
-                    ExecuteSubnetMessageResultType::Finished => {
-                        let message_instructions_used = NumInstructions::new(0); // TODO
+                    ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
                         let instructions_used_before = self
                             .paused_subnet_message_instructions
                             .remove(&canister_id)
