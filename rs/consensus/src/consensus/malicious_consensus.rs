@@ -330,7 +330,7 @@ impl ConsensusImpl {
                 )
             });
 
-            // Notarize all valid block proposals
+            // Notarize all (both validated and not yet validated) block proposals
             changeset.append(&mut add_all_to_validated(
                 timestamp,
                 self.maliciously_notarize_all(pool),
@@ -347,7 +347,7 @@ impl ConsensusImpl {
                 )
             });
 
-            // Finalize all block proposals
+            // Finalize all (both validated and not yet validated) block proposals
             changeset.append(&mut add_all_to_validated(
                 timestamp,
                 self.maliciously_finalize_all(pool),
