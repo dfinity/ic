@@ -1600,6 +1600,37 @@ mod tests {
     }
 
     #[test]
+    fn flexible_permits_zero_max_responses() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2)]);
+        let request = dummy_request();
+
+        for total_requests in 1..=node_ids.len() {
+            let args = dummy_flexible_args(Some(ReplicationCounts {
+                total_requests: total_requests as u32,
+                min_responses: 0,
+                max_responses: 0,
+            }));
+            let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
+                UNIX_EPOCH, &request, args, &node_ids, rng,
+            );
+            assert_matches!(
+                ctx,
+                Ok(CanisterHttpRequestContext {
+                    replication: Replication::Flexible {
+                        min_responses,
+                        max_responses,
+                        committee,
+                    },
+                    ..
+                }) if min_responses == 0 && max_responses == 0
+                     && committee.len() == total_requests
+                     && committee.is_subset(&node_ids)
+            );
+        }
+    }
+
+    #[test]
     fn flexible_permits_all_equal_replication_values() {
         let rng = &mut ReproducibleRng::new();
         let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
