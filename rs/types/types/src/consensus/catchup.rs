@@ -85,43 +85,17 @@ impl CatchUpContent {
     }
 
     /// Check the integrity of block, block payload and random beacon in this CUP content.
-    pub fn check_integrity(&self) -> Result<(), String> {
+    pub fn check_integrity(&self) -> bool {
         let block_hash = self.block.get_hash();
         let block = self.block.as_ref();
         let random_beacon_hash = self.random_beacon.get_hash();
         let random_beacon = self.random_beacon.as_ref();
         let payload_hash = block.payload.get_hash();
         let block_payload = block.payload.as_ref();
-
-        if block.payload.is_summary() != block_payload.is_summary() {
-            return Err(String::from("Payload type mismatch"));
-        }
-
-        if crypto_hash(random_beacon) != *random_beacon_hash {
-            return Err(format!(
-                "Random beacon hash mismatch: {:?} vs {:?}",
-                random_beacon_hash,
-                crypto_hash(random_beacon),
-            ));
-        }
-
-        if crypto_hash(block) != *block_hash {
-            return Err(format!(
-                "Block hash mismatch: {:?} vs {:?}",
-                block_hash,
-                crypto_hash(block),
-            ));
-        }
-
-        if crypto_hash(block_payload) != *payload_hash {
-            return Err(format!(
-                "Payload hash mismatch: {:?} vs {:?}",
-                payload_hash,
-                crypto_hash(block_payload),
-            ));
-        }
-
-        Ok(())
+        block.payload.is_summary() == block_payload.is_summary()
+            && &crypto_hash(random_beacon) == random_beacon_hash
+            && &crypto_hash(block) == block_hash
+            && &crypto_hash(block_payload) == payload_hash
     }
 }
 
@@ -255,11 +229,12 @@ impl TryFrom<&pb::CatchUpPackage> for CatchUpPackage {
                 signer: try_from_option_field(cup.signer.clone(), "CatchUpPackage::signer")?,
             },
         };
-        match ret.check_integrity() {
-            Ok(()) => Ok(ret),
-            Err(err) => Err(ProxyDecodeError::Other(format!(
-                "CatchUpPackage validity check failed: {err}"
-            ))),
+        if ret.check_integrity() {
+            Ok(ret)
+        } else {
+            Err(ProxyDecodeError::Other(
+                "CatchUpPackage validity check failed".to_string(),
+            ))
         }
     }
 }

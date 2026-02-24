@@ -1438,11 +1438,11 @@ pub trait ConsensusMessageHashable: Clone {
     fn assert(msg: &ConsensusMessage) -> Option<&Self>;
     fn into_message(self) -> ConsensusMessage;
 
-    /// Check integrity of a message. Default is an error.
+    /// Check integrity of a message. Default is false.
     /// This should be implemented for those that have `Hashed<H, V>`.
     /// Note that if lazy loading is also used, it will force evaluation.
-    fn check_integrity(&self) -> Result<(), String> {
-        Err(String::from("Unimplemented"))
+    fn check_integrity(&self) -> bool {
+        false
     }
 }
 
@@ -1620,32 +1620,14 @@ impl ConsensusMessageHashable for BlockProposal {
         ConsensusMessage::BlockProposal(self)
     }
 
-    fn check_integrity(&self) -> Result<(), String> {
+    fn check_integrity(&self) -> bool {
         let block_hash = self.content.get_hash();
         let block = self.as_ref();
         let payload_hash = block.payload.get_hash();
         let block_payload = block.payload.as_ref();
-
-        if block.payload.is_summary() != block_payload.is_summary() {
-            return Err(String::from("Payload type mismatch"));
-        }
-
-        if crypto_hash(block_payload) != *payload_hash {
-            return Err(format!(
-                "Payload hash mismatch: {:?} vs {:?}",
-                crypto_hash(block_payload),
-                payload_hash
-            ));
-        }
-
-        if crypto_hash(block) != *block_hash {
-            return Err(format!(
-                "Block hash mismatch: {:?} vs {:?}",
-                crypto_hash(block),
-                block_hash
-            ));
-        }
-        Ok(())
+        block.payload.is_summary() == block_payload.is_summary()
+            && &crypto_hash(block_payload) == payload_hash
+            && &crypto_hash(block) == block_hash
     }
 }
 
@@ -1723,7 +1705,7 @@ impl ConsensusMessageHashable for CatchUpPackage {
         ConsensusMessage::CatchUpPackage(self)
     }
 
-    fn check_integrity(&self) -> Result<(), String> {
+    fn check_integrity(&self) -> bool {
         self.content.check_integrity()
     }
 }
@@ -1752,18 +1734,10 @@ impl ConsensusMessageHashable for CatchUpPackageShare {
         ConsensusMessage::CatchUpPackageShare(self)
     }
 
-    fn check_integrity(&self) -> Result<(), String> {
+    fn check_integrity(&self) -> bool {
         let content = &self.content;
         let random_beacon_hash = content.random_beacon.get_hash();
-        if crypto_hash(content.random_beacon.as_ref()) != *random_beacon_hash {
-            return Err(format!(
-                "Random beacon hash mismatch: {:?} vs {:?}",
-                content.random_beacon.as_ref(),
-                random_beacon_hash,
-            ));
-        }
-
-        Ok(())
+        &crypto_hash(content.random_beacon.as_ref()) == random_beacon_hash
     }
 }
 
@@ -1825,7 +1799,7 @@ impl ConsensusMessageHashable for ConsensusMessage {
         self
     }
 
-    fn check_integrity(&self) -> Result<(), String> {
+    fn check_integrity(&self) -> bool {
         match self {
             ConsensusMessage::RandomBeacon(value) => value.check_integrity(),
             ConsensusMessage::Finalization(value) => value.check_integrity(),

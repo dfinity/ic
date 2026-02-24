@@ -162,9 +162,9 @@ pub fn verify(nns_url: Url, nns_pem: Option<PathBuf>, cup_path: &Path) -> Subnet
     let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).expect("Failed to decode bytes");
     let cup = CatchUpPackage::try_from(&proto_cup).expect("Failed to deserialize CUP content");
 
-    if let Err(err) = cup.content.check_integrity() {
+    if !cup.content.check_integrity() {
         panic!(
-            "Integrity check of file {cup_path:?} failed: {err}. Payload: {:?}",
+            "Integrity check of file {cup_path:?} failed. Payload: {:?}",
             cup.content.block.as_ref().payload.as_ref()
         );
     } else {
