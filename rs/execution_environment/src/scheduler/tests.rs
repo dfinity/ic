@@ -2808,8 +2808,12 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.canister_age.get_sample_sum() as i64, 0);
     assert_eq!(metrics.round_preparation_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
-    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
-    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
+    // Once for `apply_scheduling_strategy()`, once for `finish_round()`.
+    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 2);
+    assert_eq!(
+        metrics.round_inner_iteration_scheduling.get_sample_count(),
+        1
+    );
     assert_ge!(metrics.round_inner_iteration_prep.get_sample_count(), 1);
     assert_ge!(metrics.round_inner_iteration_exe.get_sample_count(), 1);
     assert_ge!(metrics.round_inner_iteration_fin.get_sample_count(), 1);
@@ -5147,11 +5151,8 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
 
     // Create one canister with many long messages
     let long_canister_id = test.create_canister();
-    let mut long_message_ids = vec![];
     for _ in 0..num_long_messages {
-        let long_message_id =
-            test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
-        long_message_ids.push(long_message_id);
+        test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
     }
 
     // Create many canisters with 4 short messages each
@@ -6493,7 +6494,7 @@ fn inner_round_first_execution_is_not_a_full_execution() {
 }
 
 #[test]
-fn inner_round_long_execution_is_a_full_execution() {
+fn inner_round_long_execution_is_not_a_full_execution() {
     let scheduler_cores = 2;
     let slice = 20;
     let mut test = SchedulerTestBuilder::new()
@@ -6534,14 +6535,15 @@ fn inner_round_long_execution_is_a_full_execution() {
         // All canisters should be executed.
         assert_eq!(system_state.canister_metrics().executed(), 1);
         if canister.canister_id() == target_id {
-            // The target canister was not executed first, and still have messages.
+            // The target canister was not executed first, and still has messages.
             assert_eq!(system_state.queues().ingress_queue_size(), 1);
+            // It also isn't marked as fully executed.
+            assert_eq!(priority.last_full_execution_round, 0.into());
         } else {
+            // All other canisters were fully executed.
             assert_eq!(system_state.queues().ingress_queue_size(), 0);
+            assert_eq!(priority.last_full_execution_round, test.last_round());
         }
-        // All canisters should be marked as fully executed. The target canister,
-        // despite still having messages, executed a full slice of instructions.
-        assert_eq!(priority.last_full_execution_round, test.last_round());
     }
     let mut total_accumulated_priority = 0;
     let mut total_priority_credit = 0;
@@ -6683,7 +6685,6 @@ fn charge_idle_canisters_for_full_execution_round() {
         }
     }
 
-    let multiplier = scheduler_cores * test.state().canister_states().len();
     for round in 0..num_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
@@ -6705,8 +6706,8 @@ fn charge_idle_canisters_for_full_execution_round() {
             // Assert there is no divergency in accumulated priorities.
             let priority =
                 canister_priority.accumulated_priority - canister_priority.priority_credit;
-            assert_le!(priority.get(), 100 * multiplier as i64);
-            assert_ge!(priority.get(), -100 * multiplier as i64);
+            assert_le!(priority.get(), 100 * MULTIPLIER);
+            assert_ge!(priority.get(), -100 * MULTIPLIER);
 
             total_accumulated_priority += canister_priority.accumulated_priority.get();
             total_priority_credit += canister_priority.priority_credit.get();
