@@ -620,7 +620,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 58
+/// Next ID: 64
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -640,6 +640,18 @@ pub struct CanisterStateBits {
     /// In how many rounds a canister is executed.
     #[prost(uint64, tag = "18")]
     pub executed: u64,
+    #[prost(uint64, tag = "58")]
+    pub ingress_messages_executed: u64,
+    #[prost(uint64, tag = "59")]
+    pub remote_subnet_messages_executed: u64,
+    #[prost(uint64, tag = "60")]
+    pub local_subnet_messages_executed: u64,
+    #[prost(uint64, tag = "61")]
+    pub http_outcalls_executed: u64,
+    #[prost(uint64, tag = "62")]
+    pub heartbeats_and_global_timers_executed: u64,
+    #[prost(uint64, tag = "63")]
+    pub instructions_executed: u64,
     #[prost(bytes = "vec", tag = "20")]
     pub certified_data: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "21")]

@@ -208,6 +208,8 @@ impl CanisterHttpPoolManagerImpl {
             SubnetType::Application | SubnetType::VerifiedApplication => self
                 .registry_client
                 .get_app_api_boundary_node_ids(latest_registry_version),
+            // Cloud engines are not allowed to use the SOCKS proxy of the API BNs
+            SubnetType::CloudEngine => Ok(Vec::new()),
         };
 
         allowed_boundary_nodes
@@ -525,6 +527,8 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         }
                     }
+                    // TODO(flexible-http-outcalls): implement proper Flexible validation
+                    Replication::Flexible { .. } => {}
                 }
 
                 let node_is_in_committee = self

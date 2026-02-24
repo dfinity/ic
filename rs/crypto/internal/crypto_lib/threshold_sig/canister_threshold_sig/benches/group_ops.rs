@@ -50,7 +50,7 @@ fn point_multiexp_vartime_total(c: &mut Criterion) {
                     b.iter_batched_ref(
                         || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| {
-                            EccPoint::mul_2_points(
+                            EccPoint::mul_2_points_vartime(
                                 &terms[0].0,
                                 &terms[0].1,
                                 &terms[1].0,
@@ -123,7 +123,7 @@ fn point_multiexp_vartime_online(c: &mut Criterion) {
                     b.iter_batched_ref(
                         || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| {
-                            EccPoint::mul_2_points(
+                            EccPoint::mul_2_points_vartime(
                                 &terms[0].0,
                                 &terms[0].1,
                                 &terms[1].0,
@@ -199,7 +199,7 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
                     b.iter_batched_ref(
                         || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| {
-                            EccPoint::mul_2_points(
+                            EccPoint::mul_2_points_vartime(
                                 &terms[0].0,
                                 &terms[0].1,
                                 &terms[1].0,

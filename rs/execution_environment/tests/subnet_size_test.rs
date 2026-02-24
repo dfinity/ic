@@ -753,42 +753,44 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             fetch_canister_logs_base_fee: Cycles::new(0),
             fetch_canister_logs_per_byte_fee: Cycles::new(0),
         },
-        SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
-            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(500_000_000_000),
-            compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
+        SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
+            CyclesAccountManagerConfig {
+                reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
+                canister_creation_fee: Cycles::new(500_000_000_000),
+                compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
-            // The following fields are set based on a thought experiment where
-            // we estimated how many resources a representative benchmark on a
-            // verified subnet is using.
-            update_message_execution_fee: Cycles::new(5_000_000),
-            ten_update_instructions_execution_fee: Cycles::new(
-                ten_update_instructions_execution_fee_in_cycles,
-            ),
-            ten_update_instructions_execution_fee_wasm64: Cycles::new(
-                WASM64_INSTRUCTION_COST_MULTIPLIER
-                    * ten_update_instructions_execution_fee_in_cycles,
-            ),
-            xnet_call_fee: Cycles::new(260_000),
-            xnet_byte_transmission_fee: Cycles::new(1_000),
-            ingress_message_reception_fee: Cycles::new(1_200_000),
-            ingress_byte_reception_fee: Cycles::new(2_000),
-            // 4 SDR per GiB per year => 4e12 Cycles per year
-            gib_storage_per_second_fee: Cycles::new(127_000),
-            duration_between_allocation_charges: Duration::from_secs(10),
-            ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
-            schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
-            vetkd_fee: VETKD_FEE,
-            http_request_linear_baseline_fee: Cycles::new(3_000_000),
-            http_request_quadratic_baseline_fee: Cycles::new(60_000),
-            http_request_per_byte_fee: Cycles::new(400),
-            http_response_per_byte_fee: Cycles::new(800),
-            max_storage_reservation_period: Duration::from_secs(0),
-            default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
-                .default_reserved_balance_limit,
-            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
-            fetch_canister_logs_per_byte_fee: Cycles::new(800),
-        },
+                // The following fields are set based on a thought experiment where
+                // we estimated how many resources a representative benchmark on a
+                // verified subnet is using.
+                update_message_execution_fee: Cycles::new(5_000_000),
+                ten_update_instructions_execution_fee: Cycles::new(
+                    ten_update_instructions_execution_fee_in_cycles,
+                ),
+                ten_update_instructions_execution_fee_wasm64: Cycles::new(
+                    WASM64_INSTRUCTION_COST_MULTIPLIER
+                        * ten_update_instructions_execution_fee_in_cycles,
+                ),
+                xnet_call_fee: Cycles::new(260_000),
+                xnet_byte_transmission_fee: Cycles::new(1_000),
+                ingress_message_reception_fee: Cycles::new(1_200_000),
+                ingress_byte_reception_fee: Cycles::new(2_000),
+                // 4 SDR per GiB per year => 4e12 Cycles per year
+                gib_storage_per_second_fee: Cycles::new(127_000),
+                duration_between_allocation_charges: Duration::from_secs(10),
+                ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+                schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
+                vetkd_fee: VETKD_FEE,
+                http_request_linear_baseline_fee: Cycles::new(3_000_000),
+                http_request_quadratic_baseline_fee: Cycles::new(60_000),
+                http_request_per_byte_fee: Cycles::new(400),
+                http_response_per_byte_fee: Cycles::new(800),
+                max_storage_reservation_period: Duration::from_secs(0),
+                default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
+                    .default_reserved_balance_limit,
+                fetch_canister_logs_base_fee: Cycles::new(1_000_000),
+                fetch_canister_logs_per_byte_fee: Cycles::new(800),
+            }
+        }
     }
 }
 

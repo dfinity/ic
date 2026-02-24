@@ -506,6 +506,7 @@ fn test_automated_node_provider_remuneration() {
         NodeRewardType::Type1.to_string() => 2,
         NodeRewardType::Type3.to_string() => 2,
         NodeRewardType::Type3dot1.to_string() => 3,
+        NodeRewardType::Type4.to_string() => 2,
     };
     add_node_operator(
         &state_machine,
@@ -559,6 +560,18 @@ fn test_automated_node_provider_remuneration() {
             node_info_3.operator_id,
             15,
             NodeRewardType::Type3dot1,
+        ),
+        add_node(
+            &state_machine,
+            node_info_3.operator_id,
+            16,
+            NodeRewardType::Type4,
+        ),
+        add_node(
+            &state_machine,
+            node_info_3.operator_id,
+            17,
+            NodeRewardType::Type4,
         ),
     ];
     nodes
@@ -685,7 +698,7 @@ fn test_automated_node_provider_remuneration() {
     // Rewards Table:
     // EU: Type 1: 24,000 XDR/month, Type 3: 35,000 XDR/month
     // North America, Canada: Type 1: 68,000 XDR/month, Type 3: 11,000 XDR/month
-    // North America, US, CA: Type 1: 234,000 XDR/month, Type 3: 907,000 XDR/month, Type 3.1: 103,000 XDR/month
+    // North America, US, CA: Type 1: 234,000 XDR/month, Type 3: 907,000 XDR/month, Type 3.1: 103,000 XDR/month, Type 4: 150,000 XDR/month
 
     // This node provider owns more than 1 Type3* node
     // Average reward rate will be applied for Type3* nodes
@@ -699,8 +712,12 @@ fn test_automated_node_provider_remuneration() {
         + 0.8 * 0.8 * 0.8 * 0.8 * 103_000.0)
         / 5.0;
 
+    // Type4 rewards: 2 nodes * 150,000 XDR/month (flat, no reduction)
+    let type4_rewards = 2.0 * 150_000.0;
+
     let expected_daily_rewards_xdrp_3 =
-        (((2.0 * 234_000.0) + (5.0 * average_type3_reduced_rewards)) / REWARDS_TABLE_DAYS) as u64;
+        (((2.0 * 234_000.0) + (5.0 * average_type3_reduced_rewards) + type4_rewards)
+            / REWARDS_TABLE_DAYS) as u64;
     let expected_rewards_e8s_3 =
         expected_daily_rewards_xdrp_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
             / 155_000;
@@ -1323,6 +1340,10 @@ fn add_node_rewards_table(state_machine: &StateMachine) {
                 },
                 "type3.1".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 103_000,
+                    reward_coefficient_percent: None,
+                },
+                "type4".to_string() => NodeRewardRate {
+                    xdr_permyriad_per_node_per_month: 150_000,
                     reward_coefficient_percent: None,
                 },
             }

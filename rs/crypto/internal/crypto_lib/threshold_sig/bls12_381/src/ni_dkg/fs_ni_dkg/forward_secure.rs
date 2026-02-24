@@ -706,6 +706,7 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let r = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
     let rr = g1.batch_mul_array(&r);
 
+    // TODO(CRP-2550) This can run in parallel (n = # receivers)
     let cc = {
         let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
 

@@ -1,5 +1,6 @@
 use crate::consensus::payload_builder::test::make_test_payload_impl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
 use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -125,6 +126,7 @@ fn make_xnet_slice(size: usize) -> CertifiedStreamSlice {
         merkle_proof: vec![],
         certification: Certification {
             height: Height::from(0),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 signature: ThresholdSignature::fake(),
                 content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(

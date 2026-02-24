@@ -1,5 +1,5 @@
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -203,6 +203,9 @@ impl StateManager for FakeStateManager {
             .map(|s| StateHashMetadata {
                 height: s.height,
                 hash: s.partial_hash.clone(),
+                height_witness: Witness::new_for_testing(
+                    s.partial_hash.clone().get().0.to_vec().try_into().unwrap(),
+                ),
             })
             .collect()
     }
@@ -650,6 +653,7 @@ pub fn encode_certified_stream_slice(
         merkle_proof: vec![],
         certification: Certification {
             height: state_height,
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 signature: ThresholdSignature {
                     signer: NiDkgId {

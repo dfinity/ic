@@ -35,18 +35,20 @@ pub const NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 16;
 pub const MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 17;
 
 // Canisters belonging to the II subnet, whose ID begins with zur34.
-pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x2100001;
-pub const CYCLES_LEDGER_CANISTER_INDEX: u64 = 0x2100002;
-pub const CYCLES_LEDGER_INDEX_CANISTER_INDEX: u64 = 0x2100003;
+pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x_0210_0001;
+pub const CYCLES_LEDGER_CANISTER_INDEX: u64 = 0x_0210_0002;
+pub const CYCLES_LEDGER_INDEX_CANISTER_INDEX: u64 = 0x_0210_0003;
 
 // Canisters belonging to the Bitcoin subnet, whose ID begins with w4rem.
-pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x1a00001;
-pub const BITCOIN_MAINNET_CANISTER_INDEX: u64 = 0x1a00004;
+pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x_01A0_0001;
+pub const BITCOIN_MAINNET_CANISTER_INDEX: u64 = 0x_01A0_0004;
+pub const BITCOIN_WATCHDOG_CANISTER_INDEX: u64 = 0x_01A0_0005;
 // Dogecoin.
-pub const DOGECOIN_CANISTER_INDEX: u64 = 0x1a00007;
+pub const DOGECOIN_CANISTER_INDEX: u64 = 0x_01A0_0007;
+pub const DOGECOIN_WATCHDOG_CANISTER_INDEX: u64 = 0x_01A0_0009;
 
 // SNS Aggregator canister is deployed to the `x33ed` (SNS) subnet.
-pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
+pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x_0200_0010;
 
 /// WARNING: This list is incomplete. In particular, this does NOT include
 /// ledger archive, nor ledger index.
@@ -134,24 +136,30 @@ pub const NODE_REWARDS_CANISTER_ID: CanisterId =
 /// 17: sbzkb-zqaaa-aaaaa-aaaiq-cai
 pub const MIGRATION_CANISTER_ID: CanisterId =
     CanisterId::from_u64(MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET);
-/// 0x2_100_001 (34_603_009): uf6dk-hyaaa-aaaaq-qaaaq-cai
+/// 0x_0210_0001 (34_603_009): uf6dk-hyaaa-aaaaq-qaaaq-cai
 pub const EXCHANGE_RATE_CANISTER_ID: CanisterId =
     CanisterId::from_u64(EXCHANGE_RATE_CANISTER_INDEX);
-/// 0x2_100_002 (34_603_010): um5iw-rqaaa-aaaaq-qaaba-cai
+/// 0x_0210_0002 (34_603_010): um5iw-rqaaa-aaaaq-qaaba-cai
 pub const CYCLES_LEDGER_CANISTER_ID: CanisterId =
     CanisterId::from_u64(CYCLES_LEDGER_CANISTER_INDEX);
-/// 0x2_100_003 (34_603_011): ul4oc-4iaaa-aaaaq-qaabq-cai
+/// 0x_0210_0003 (34_603_011): ul4oc-4iaaa-aaaaq-qaabq-cai
 pub const CYCLES_LEDGER_INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(CYCLES_LEDGER_INDEX_CANISTER_INDEX);
 
-/// 0x1_a00_001 (27_262_977): g4xu7-jiaaa-aaaan-aaaaq-cai
+/// 0x_01A0_0001 (27_262_977): g4xu7-jiaaa-aaaan-aaaaq-cai
 pub const BITCOIN_TESTNET_CANISTER_ID: CanisterId =
     CanisterId::from_u64(BITCOIN_TESTNET_CANISTER_INDEX);
-/// 0x1_a00_004 (27_262_980): ghsi2-tqaaa-aaaan-aaaca-cai
+/// 0x_01A0_0004 (27_262_980): ghsi2-tqaaa-aaaan-aaaca-cai
 pub const BITCOIN_MAINNET_CANISTER_ID: CanisterId =
     CanisterId::from_u64(BITCOIN_MAINNET_CANISTER_INDEX);
-// 0x1_a00_007 (27262983) : gordg-fyaaa-aaaan-aaadq-cai
+/// 0x_01A0_0005 (27_262_981): gatoo-6iaaa-aaaan-aaacq-cai
+pub const BITCOIN_WATCHDOG_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(BITCOIN_WATCHDOG_CANISTER_INDEX);
+/// 0x_01A0_0007 (27262983) : gordg-fyaaa-aaaan-aaadq-cai
 pub const DOGECOIN_CANISTER_ID: CanisterId = CanisterId::from_u64(DOGECOIN_CANISTER_INDEX);
+/// 0x_01A0_0009 (27_262_985) : he6b4-hiaaa-aaaan-aaaeq-cai
+pub const DOGECOIN_WATCHDOG_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(DOGECOIN_WATCHDOG_CANISTER_INDEX);
 
 /// 0x2_000_010 (33_554_448): 3r4gx-wqaaa-aaaaq-aaaia-cai
 pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
@@ -183,7 +191,7 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
     &MIGRATION_CANISTER_ID,
 ];
 
-pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 21] = [
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 23] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -205,6 +213,8 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 21] = [
     &CYCLES_LEDGER_INDEX_CANISTER_ID,
     &MIGRATION_CANISTER_ID,
     &DOGECOIN_CANISTER_ID,
+    &BITCOIN_WATCHDOG_CANISTER_ID,
+    &DOGECOIN_WATCHDOG_CANISTER_ID,
 ];
 
 /// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.

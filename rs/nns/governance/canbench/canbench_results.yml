@@ -72,15 +72,15 @@ benches:
   list_neurons:
     total:
       calls: 1
-      instructions: 64271699
-      heap_increase: 9
+      instructions: 34040000
+      heap_increase: 4
       stable_memory_increase: 0
     scopes: {}
   list_neurons_by_subaccount:
     total:
       calls: 1
-      instructions: 63351196
-      heap_increase: 5
+      instructions: 32780000
+      heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   list_proposals:

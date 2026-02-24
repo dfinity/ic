@@ -1,7 +1,7 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, InternetIdentityInit,
-    NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig, SnsAggregatorConfig,
-    StaticCaptchaTrigger,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, DogecoinCanisterArg,
+    InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig,
+    SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -2339,11 +2339,12 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, DOGECOIN_CANISTER_ID);
 
             // Install the Dogecoin mainnet canister configured for the regtest network.
-            let args = DogecoinInitConfig {
+            let init_config = DogecoinInitConfig {
                 network: Some(DogecoinNetwork::Regtest),
                 fees: Some(DogecoinFees::mainnet()),
                 ..Default::default()
             };
+            let args = DogecoinCanisterArg::Init(init_config);
             btc_subnet
                 .state_machine
                 .install_wasm_in_mode(

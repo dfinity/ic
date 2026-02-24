@@ -915,7 +915,7 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
             }
 
             // Application subnets respect the `ingress_history_max_messages` limit.
-            SubnetType::Application | SubnetType::VerifiedApplication => {
+            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
                 // 3 messages should have been inducted.
                 assert_eq!(ingress_queue_size(&state, canister_id), 3);
                 // But all 4 should have a state in the ingress history.

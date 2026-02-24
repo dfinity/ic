@@ -296,6 +296,7 @@ type canister_status_result = record {
         canister_history_size : nat;
         wasm_chunk_store_size : nat;
         snapshots_size : nat;
+        log_memory_store_size : nat;
     };
     controller : principal;
     freezing_threshold : nat;

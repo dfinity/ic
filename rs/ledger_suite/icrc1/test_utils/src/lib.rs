@@ -1597,11 +1597,11 @@ impl KeyPairGenerator<Arc<BasicIdentity>> for Arc<BasicIdentity> {
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
         let secret_key = Ed25519SecretKey::generate_using_rng(&mut rng);
         Arc::new(
-            BasicIdentity::from_pem(std::io::Cursor::new(
+            BasicIdentity::from_pem(
                 secret_key
                     .serialize_pkcs8_pem(PrivateKeyFormat::Pkcs8v2)
                     .into_bytes(),
-            ))
+            )
             .unwrap(),
         )
     }

@@ -23,6 +23,7 @@ use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
+use ic_management_canister_types::{CanisterId, TakeCanisterSnapshotArgs};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::{LogStream, create_agent};
@@ -175,7 +176,13 @@ pub fn upgrade(
             .await
             .expect("Failed to create agent");
         let mgr = ManagementCanister::create(&agent);
-        mgr.take_canister_snapshot(&can_id, None).await.unwrap();
+        let snapshot_args = TakeCanisterSnapshotArgs {
+            canister_id: CanisterId::from(can_id),
+            replace_snapshot: None,
+        };
+        mgr.take_canister_snapshot(&can_id, &snapshot_args)
+            .await
+            .unwrap();
     });
 
     info!(logger, "Stopping faulty node {} ...", faulty_node.node_id);

@@ -1,12 +1,14 @@
 //! IDKG related public interfaces.
 
+use std::collections::BTreeMap;
+
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
     EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats, SchnorrSigShare, SigShare,
     SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealingSupport, IDkgTranscriptId, SignedIDkgDealing,
+    IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId, SignedIDkgDealing,
 };
 
 #[derive(Debug)]
@@ -16,6 +18,8 @@ pub enum IDkgChangeAction {
     RemoveValidated(IDkgMessageId),
     RemoveUnvalidated(IDkgMessageId),
     HandleInvalid(IDkgMessageId, String),
+    AddTranscript(IDkgTranscript),
+    RemoveTranscript(IDkgTranscriptId),
 }
 
 pub type IDkgChangeSet = Vec<IDkgChangeAction>;
@@ -152,6 +156,9 @@ pub trait IDkgPool: Send + Sync {
 
     /// Return a reference to the unvalidated PoolSection.
     fn unvalidated(&self) -> &dyn IDkgPoolSection;
+
+    /// Returns a reference to the transcripts map.
+    fn transcripts(&self) -> &BTreeMap<IDkgTranscriptId, IDkgTranscript>;
 
     /// Returns reference to the stats. The stats are not persisted.
     fn stats(&self) -> &dyn IDkgStats;

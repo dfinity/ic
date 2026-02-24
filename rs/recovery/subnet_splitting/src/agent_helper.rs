@@ -119,18 +119,21 @@ impl AgentHelper {
     }
 
     /// Reads the state tree and prunes it to contain only the following paths:
-    /// * /subnet_id/$subnet_id/public_key
-    /// * /subnet_id/$subnet_id/canister_ranges
+    /// * /subnet/$subnet_id/public_key
+    /// * /canister_ranges/$subnet_id
     ///
     /// See: https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-subnet
     /// for more information
     pub(crate) fn read_subnet_data(&self, subnet_id: SubnetId) -> RecoveryResult<StateTree> {
-        let certificate = block_on(self.agent.read_state_raw(
+        let certificate = block_on(self.agent.read_subnet_state_raw(
             vec![
                 create_path(subnet_id, PUBLIC_KEY_LABEL),
-                create_path(subnet_id, CANISTER_RANGES_LABEL),
+                vec![
+                    CANISTER_RANGES_LABEL.into(),
+                    subnet_id.get().as_slice().into(),
+                ],
             ],
-            self.nns_registry,
+            subnet_id.get().into(),
         ))
         .map_err(|err| agent_error("Failed to read the state tree", err))?;
 

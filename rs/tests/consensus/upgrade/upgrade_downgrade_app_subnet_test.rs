@@ -174,6 +174,9 @@ fn main() -> Result<()> {
         .with_timeout_per_test(UP_DOWNGRADE_PER_TEST_TIMEOUT)
         .with_setup(setup)
         .add_test(systest!(upgrade_downgrade_app_subnet))
+        // TODO(CON-1644): remove once the mainnet version no longer handles
+        // duplicate artifacts as invalid.
+        .remove_metrics_to_check("idkg_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }

@@ -23,8 +23,6 @@ DEPENDENCIES = [
     "@crate_index//:slog",
 ]
 
-MACRO_DEPENDENCIES = []
-
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
@@ -32,7 +30,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/temp_crypto",
     "//rs/interfaces/mocks",
     "//rs/interfaces/state_manager/mocks",
-    "//rs/registry/client",
+    "//rs/registry/fake",
     "//rs/registry/keys",
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",
@@ -42,48 +40,37 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
-    "@crate_index//:proptest",
     "@crate_index//:rand",
     "@crate_index//:rstest",
-    "@crate_index//:tokio",
 ]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
-DATA = [
-    "//rs/rust_canisters/stable_structures:stable_structures_canister",
-]
-
-ENV = {
-    "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
-}
 
 rust_library(
     name = "ingress_manager",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_ingress_manager",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "ingress_manager_test",
-    aliases = ALIASES,
     crate = ":ingress_manager",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "ingress_manager_prop_test",
+    # the tests can run for over a minute
+    size = "medium",
+    crate = ":ingress_manager",
+    crate_features = ["proptest"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + ["@crate_index//:proptest"],
 )
 
 rust_ic_bench(
     name = "build_payload_bench",
     testonly = True,
     srcs = ["benches/build_payload.rs"],
-    data = DATA,
-    env = ENV,
     deps = [
         # Keep sorted.
         ":ingress_manager",
@@ -97,7 +84,7 @@ rust_ic_bench(
         "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
-        "//rs/registry/client",
+        "//rs/registry/fake",
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
@@ -112,7 +99,6 @@ rust_ic_bench(
         "@crate_index//:criterion",
         "@crate_index//:pprof",
         "@crate_index//:rand",
-        "@crate_index//:tokio",
     ],
 )
 
@@ -120,8 +106,6 @@ rust_ic_bench(
     name = "handle_ingress_bench",
     testonly = True,
     srcs = ["benches/handle_ingress.rs"],
-    data = DATA,
-    env = ENV,
     deps = [
         # Keep sorted.
         ":ingress_manager",
@@ -136,7 +120,7 @@ rust_ic_bench(
         "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
-        "//rs/registry/client",
+        "//rs/registry/fake",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
         "//rs/registry/subnet_type",
@@ -151,6 +135,5 @@ rust_ic_bench(
         "@crate_index//:criterion",
         "@crate_index//:pprof",
         "@crate_index//:rand",
-        "@crate_index//:tokio",
     ],
 )

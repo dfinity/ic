@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize, Serializer, ser::SerializeSeq};
 use serde_bytes::Bytes;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::iter::FromIterator;
 use std::ops::Deref;
 use std::ops::DerefMut;
@@ -154,6 +155,12 @@ impl PartialOrd for Label {
     }
 }
 
+impl Hash for Label {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_bytes().hash(state)
+    }
+}
+
 impl Label {
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
@@ -231,7 +238,7 @@ where
     }
 }
 /// The computed hash of the data in a `Leaf`; or of a [`LabeledTree`].
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Digest(pub [u8; Sha256::DIGEST_LEN]);
 ic_crypto_internal_types::derive_serde!(Digest, Sha256::DIGEST_LEN);
 
@@ -1098,7 +1105,7 @@ pub enum TreeHashError {
 ///
 /// A witness can also be used to update a [`HashTree`] when part of the
 /// original data is updated.
-#[derive(Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub enum Witness {
     /// Represents a [`HashTree::Fork`].
     Fork {
@@ -1119,6 +1126,23 @@ pub enum Witness {
     /// A marker for data (leaf or a subtree) to be explicitly provided
     /// by the caller for verification or for re-computation of a digest.
     Known(),
+}
+
+impl Witness {
+    pub fn new_for_testing(digest: Digest) -> Self {
+        Self::Pruned { digest }
+    }
+
+    pub fn new_for_testing_with_height() -> Self {
+        let height_witness = Self::Node {
+            label: "height".into(),
+            sub_witness: Box::new(Self::Known()),
+        };
+        Self::Node {
+            label: "metadata".into(),
+            sub_witness: Box::new(height_witness),
+        }
+    }
 }
 
 fn write_witness(witness: &Witness, level: u8, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -79,9 +79,14 @@ struct Args {
     /// The file to which the PocketIC server port should be written
     #[clap(long)]
     port_file: Option<PathBuf>,
-    /// The time-to-live of the PocketIC server in seconds
+    /// The time-to-live of the PocketIC server in seconds since the last finished operation
+    /// after which a graceful shutdown follows
     #[clap(long, default_value_t = TTL_SEC)]
     ttl: u64,
+    /// The time-to-live of the PocketIC server in seconds since its launch
+    /// after which a hard exit follows
+    #[clap(long)]
+    hard_ttl: Option<u64>,
     /// A json file storing the mainnet routing table.
     #[clap(long)]
     mainnet_routing_table: Option<PathBuf>,
@@ -318,6 +323,29 @@ async fn start(runtime: Arc<Runtime>) {
     let port_file_path = args.port_file.clone();
     let app_state_clone = app_state.clone();
     // This is a safeguard against orphaning this child process.
+    if let Some(hard_ttl) = args.hard_ttl {
+        tokio::spawn(async move {
+            let started = SystemTime::now();
+            loop {
+                let elapsed = SystemTime::now()
+                    .duration_since(started)
+                    .unwrap_or_default();
+                if elapsed > Duration::from_secs(hard_ttl) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+
+            if let Some(port_file_path) = port_file_path {
+                // Clean up port file.
+                let _ = std::fs::remove_file(port_file_path);
+            }
+
+            std::process::exit(124); // timeout error code
+        });
+    }
+    let port_file_path = args.port_file.clone();
+    // This performs a graceful shutdown after exceeding TTL.
     tokio::spawn(async move {
         loop {
             let pending_requests = app_state.pending_requests.load(Ordering::SeqCst);

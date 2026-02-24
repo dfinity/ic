@@ -65,6 +65,14 @@ fn scalar_math(c: &mut Criterion) {
             )
         });
 
+        group.bench_function("hash_to_scalar", |b| {
+            b.iter_batched_ref(
+                || rng.r#gen::<[u8; 32]>(),
+                |s| EccScalar::hash_to_scalar(curve_type, s, b"hash-to-scalar-bench"),
+                BatchSize::SmallInput,
+            )
+        });
+
         for n in [2, 4, 16, 32] {
             group.bench_function(format!("batch_invert_vartime_{}", n), |b| {
                 b.iter_batched_ref(

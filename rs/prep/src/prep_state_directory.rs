@@ -114,6 +114,7 @@ mod tests {
                 subnet_nodes,
                 ReplicaVersion::default(),
                 None,
+                /*max_ingress_bytes_per_block=*/ None,
                 None,
                 None,
                 None,

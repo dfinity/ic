@@ -7,15 +7,13 @@ Runbook::
 0. Setup: 2 single-node Application subnets.
 1. Build and install 3 Xnet canisters on each subnet.
 2. Start all canisters (via update `start` call).
-3. Wait 15 secs for canisters to exchange messages.
-4. Collect metrics from all canisters (via query `metrics` call).
-5. Reboot all nodes and wait till they become reachable again.
-6. Wait another 15 secs for canisters to exchange messages.
-7. Collect metrics from all canisters again.
-8. Assert that metrics have progressed after reboot and no errors in calls are observed.
-9. Stop all canisters (via update `stop_canister` call).
-10. Delete all canisters (via update `delete_canister` call).
-11. Assert all subnets can make progress (via installing universal canisters and storing a message).
+3. Wait for canisters to exchange messages, polling until all have received at least `RESPONSES_FOR_PROGRESS` responses (up to 120 secs). Collect "pre" metrics.
+4. Reboot all nodes and wait until they become reachable again.
+5. Wait for canisters to exchange messages, polling until all have received at least `RESPONSES_FOR_PROGRESS` more responses than recorded in the "pre" metrics (up to 120 secs). Collect "post" metrics.
+6. Assert that no errors were observed in "post" metrics (implies no errors in "pre" metrics).
+7. Stop all canisters (via update `stop_canister` call).
+8. Delete all canisters (via update `delete_canister` call).
+9. Assert that all subnets can make progress (via installing universal canisters and storing a message).
 
 Success::
 1. Xnet canisters are successfully installed and started on each subnet.
@@ -25,7 +23,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use candid::Principal;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
@@ -46,14 +44,16 @@ use ic_system_test_driver::util::{
 use itertools::Itertools;
 use slog::{Logger, info};
 use std::time::Duration;
-use tokio::time::sleep;
 use xnet_test::{Metrics, StartArgs};
 
 const SUBNETS_COUNT: usize = 2;
 const CANISTERS_PER_SUBNET: usize = 3;
 const CANISTER_TO_SUBNET_RATE: u64 = 10;
+/// 10 rounds worth of responses.
+const RESPONSES_FOR_PROGRESS: usize = 10 * CANISTER_TO_SUBNET_RATE as usize;
 const PAYLOAD_SIZE_BYTES: u64 = 1024;
-const MSG_EXEC_TIME_SEC: u64 = 15;
+const POLL_INTERVAL_SEC: u64 = 5;
+const RESPONSES_RETRY_TIMEOUT_SEC: u64 = 120;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -109,15 +109,11 @@ pub fn test_on_subnets(env: TestEnv, subnets: Vec<SubnetSnapshot>) {
     // Step 2: Start all canisters (via update `start` call).
     info!(log, "Calling start() on all canisters ...");
     start_all_canisters(&canisters, PAYLOAD_SIZE_BYTES, CANISTER_TO_SUBNET_RATE);
-    // Step 3:  Wait 15 secs for canisters to exchange messages.
-    info!(log, "Sending messages for {} secs ...", MSG_EXEC_TIME_SEC);
-    block_on(async {
-        sleep(Duration::from_secs(MSG_EXEC_TIME_SEC)).await;
-    });
-    // Step 4: Collect metrics from all canisters (via query `metrics` call).
-    info!(log, "Collecting metrics from all canisters ...");
-    let metrics_pre_reboot = collect_metrics(&canisters);
-    // Step 5: Reboot all nodes and wait till they become reachable again.
+    // Step 3: Wait for all canisters to exchange messages and receive responses.
+    info!(log, "Waiting for all canisters to receive responses ...");
+    let all_zero_metrics = vec![vec![Metrics::default(); CANISTERS_PER_SUBNET]; SUBNETS_COUNT];
+    let metrics_pre_reboot = wait_for_progress(&canisters, &all_zero_metrics, &log);
+    // Step 4: Reboot all nodes and wait until they become reachable again.
     info!(log, "Rebooting all nodes ...");
     for n in all_nodes.iter().cloned() {
         n.vm().reboot();
@@ -129,31 +125,27 @@ pub fn test_on_subnets(env: TestEnv, subnets: Vec<SubnetSnapshot>) {
         all_nodes.as_slice(),
         EndpointsStatus::AllHealthy,
     );
-    // Step 6: Wait another 15 secs for canisters to exchange messages.
-    info!(log, "Sending messages for {} secs ...", MSG_EXEC_TIME_SEC);
-    block_on(async {
-        sleep(Duration::from_secs(MSG_EXEC_TIME_SEC)).await;
-    });
-    // Step 7: Collect metrics from all canisters again.
-    info!(log, "Collecting metrics from all canisters ...");
-    let metrics_post_reboot = collect_metrics(&canisters);
-    // Step 8: Assert that metrics have progressed after reboot and no errors in calls are observed.
-    assert_metrics_progress_without_errors(&log, &metrics_pre_reboot, &metrics_post_reboot);
-    // Step 9: Stop all canisters (via update `stop_canister` call).
+    // Step 5: Wait for all canisters to exchange messages and receive responses.
+    info!(log, "Waiting for all canisters to receive responses ...");
+    let metrics_post_reboot = wait_for_progress(&canisters, &metrics_pre_reboot, &log);
+    // Step 6: Assert that no errors were observed.
+    assert_no_errors(&metrics_post_reboot, &log);
+    // Step 7: Stop all canisters (via update `stop_canister` call).
     info!(log, "Stopping all canisters ...");
     block_on(async {
         for canister in canisters.iter().flatten() {
             canister.stop().await.expect("Stopping canister failed.");
         }
     });
-    // Step 10: Delete all canisters (via update `delete_canister` call).
+    // Step 8: Delete all canisters (via update `delete_canister` call).
     info!(log, "Deleting all canisters ...");
     block_on(async {
         for canister in canisters.iter().flatten() {
             canister.delete().await.expect("Deleting canister failed.");
         }
     });
-    // Step 11: Assert all subnets can make progress (via installing universal canisters and storing a message).
+    // Step 9: Assert that all subnets can make progress (via installing universal
+    // canisters and storing a message).
     info!(log, "Asserting all subnets can still make progress ...");
     let update_message = b"This beautiful prose should be persisted for future generations";
     block_on(async {
@@ -203,41 +195,24 @@ pub fn start_all_canisters(
     });
 }
 
-pub fn assert_metrics_progress_without_errors(
-    log: &Logger,
-    metrics_pre_reboot: &[Vec<Metrics>],
-    metrics_post_reboot: &[Vec<Metrics>],
-) {
-    for (subnet_idx, canister_idx) in metrics_pre_reboot
-        .iter()
-        .enumerate()
-        .flat_map(|(s_idx, v)| (0..v.len()).map(move |c_idx| (s_idx, c_idx)))
-    {
-        let pre_reboot = &metrics_pre_reboot[subnet_idx][canister_idx];
-        let post_reboot = &metrics_post_reboot[subnet_idx][canister_idx];
+/// Asserts that no call errors, sequence errors or reject responses were
+/// observed. There should be none, as even though replicas were rebooted, this
+/// should not have affected the subnets' behavior.
+pub fn assert_no_errors(metrics: &[Vec<Metrics>], log: &Logger) {
+    for (subnet_idx, subnet) in metrics.iter().enumerate() {
+        for (canister_idx, metrics) in subnet.iter().enumerate() {
+            assert!(
+                metrics.seq_errors == 0
+                    && metrics.call_errors == 0
+                    && metrics.reject_responses == 0,
+                "Metrics for subnet_idx={subnet_idx}, canister_idx={canister_idx}:\n{metrics:?}"
+            );
 
-        assert_eq!(pre_reboot.seq_errors, 0);
-        assert_eq!(post_reboot.seq_errors, 0);
-        assert!(pre_reboot.requests_sent() > 0);
-        // Assert positive dynamics after reboot.
-        assert!(post_reboot.requests_sent() > pre_reboot.requests_sent());
-
-        let responses_pre_reboot = pre_reboot.latency_distribution.buckets().last().unwrap().1
-            + pre_reboot.reject_responses;
-        let responses_post_reboot = post_reboot.latency_distribution.buckets().last().unwrap().1
-            + post_reboot.reject_responses;
-        assert!(responses_pre_reboot > 0);
-        // Assert positive dynamics after reboot.
-        assert!(responses_post_reboot > responses_pre_reboot);
-
-        info!(
-            log,
-            "Metrics for subnet_idx={}, canister_idx={}, before reboot:\n{:?}\nafter reboot:\n{:?}",
-            subnet_idx,
-            canister_idx,
-            pre_reboot,
-            post_reboot
-        );
+            info!(
+                log,
+                "Metrics for subnet_idx={subnet_idx}, canister_idx={canister_idx}:\n{metrics:?}"
+            );
+        }
     }
 }
 
@@ -264,6 +239,52 @@ pub fn collect_metrics(canisters: &[Vec<Canister>]) -> Vec<Vec<Metrics>> {
         }
     });
     metrics
+}
+
+/// Returns the total number of responses (successful + rejected) recorded in
+/// the metrics.
+fn responses_count(m: &Metrics) -> usize {
+    m.latency_distribution.buckets().last().unwrap().1 + m.reject_responses
+}
+
+/// Returns `true` if every canister has received at least
+/// `RESPONSES_FOR_PROGRESS` more responses than recorded in the baseline
+/// metrics.
+fn all_canisters_made_progress(metrics: &[Vec<Metrics>], baseline: &[Vec<Metrics>]) -> bool {
+    metrics.iter().zip(baseline.iter()).all(|(m, b)| {
+        m.iter()
+            .zip(b.iter())
+            .all(|(m, b)| responses_count(m) >= responses_count(b) + RESPONSES_FOR_PROGRESS)
+    })
+}
+
+/// Waits for all canisters to receive new XNet responses relative to the ones
+/// recorded in the baseline metrics.
+///
+/// Returns the new metrics on success. Panics if the timeout is reached.
+pub fn wait_for_progress(
+    canisters: &[Vec<Canister>],
+    baseline: &[Vec<Metrics>],
+    log: &Logger,
+) -> Vec<Vec<Metrics>> {
+    block_on(async {
+        ic_system_test_driver::retry_with_msg_async!(
+            "check_all_canisters_have_new_responses",
+            &log,
+            Duration::from_secs(RESPONSES_RETRY_TIMEOUT_SEC),
+            Duration::from_secs(POLL_INTERVAL_SEC),
+            || async {
+                let metrics = collect_metrics(canisters);
+                if all_canisters_made_progress(&metrics, baseline) {
+                    Ok(metrics)
+                } else {
+                    bail!("Not all canisters have received new Xnet responses yet")
+                }
+            }
+        )
+        .await
+        .expect("Not all canisters received new Xnet responses within the timeout")
+    })
 }
 
 pub fn install_canisters(

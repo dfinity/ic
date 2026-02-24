@@ -406,6 +406,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
         max_ingress_bytes_per_message: 60 * 1024 * 1024,
+        max_ingress_bytes_per_block: None,
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
@@ -422,6 +423,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         ssh_backup_access: vec![],
         chain_key_config: None,
         canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+        subnet_admins: Some(vec![]),
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),

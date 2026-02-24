@@ -122,6 +122,7 @@ mod crypto_hash_stability {
     };
     use ic_base_types::PrincipalId;
     use ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing;
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_protobuf::types::v1 as pb;
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -434,6 +435,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let data = Certification {
             height: Height::from(42),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {
@@ -445,7 +447,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "a8833f9cda71c9b857ff4c1a6d83e6a187982fc9187fa184733248c1723163c3",
+            "9fb205560b04ba770f600ebd986b6f398666c726e01168416b1bdc002dc6e494",
             "Hash of Certification changed"
         );
     }
@@ -457,6 +459,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let data = CertificationShare {
             height: Height::from(42),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content,
                 signature: ThresholdSignatureShare {
@@ -468,7 +471,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "c860ffa9b824e46ae0fd68f8f7db2568f754c6ce119509c7b1a22db47780f71a",
+            "53da5b1d79ac888f4016ca7a6c97715e97411752268893dfc0f6ade437d88325",
             "Hash of CertificationShare changed"
         );
     }
@@ -497,7 +500,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "5c698f370c0f6bf8d53f71c65309a50aefc5114091e34d40cb027e2340581413",
+            "764535296841f3db421a928cfadff3460be406d0182da64034eee623a9a97e99",
             "Hash of CatchUpContent changed"
         );
     }
@@ -515,7 +518,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "ae57d4db84330cb8ab8f0040e894b0b4a9b7ce22f107be0c3c86c841b580fe7d",
+            "7f183aaeb495159567a340b5bf61233cf3226141268febaee47de3e4c69cbc4b",
             "Hash of CatchUpShareContent changed"
         );
     }
@@ -563,7 +566,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "998dcb7e71838ac32c2615f61ddd986676f9a3f9d6a8ab3f5db42a4f80dd49a9",
+            "31f744bc26627fadbf1d73c66cb54603319a87966a488b6f41c4f0cfc1a30c89",
             "Hash of CatchUpPackage changed"
         );
     }
@@ -593,7 +596,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "44335947edd911fd04952bc699a411889801764e6e2e814bb77cc3fafc58b4f9",
+            "bff423705e4cb96b7a391c4cccba8ed1ce441dabf2693ed5b9545a2b57d946bd",
             "Hash of CatchUpPackageShare changed"
         );
     }
@@ -618,6 +621,7 @@ mod crypto_hash_stability {
         let content = CertificationContent::new(state_hash);
         let cert = Certification {
             height: Height::from(42),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content,
                 signature: ThresholdSignature {
@@ -630,7 +634,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "e9407ce84f50ba618d3fc6ebd05477e949958619605c5dbebeba3f946debabd5",
+            "af481a7d7ec38af0ed137ce9d12ee787823a9a9707a6c218053d556d864caea4",
             "Hash of CertificationMessage changed"
         );
     }
@@ -934,7 +938,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "0043108046ad04abcc970730f1e7e1cd4b3918725362adc620fe391a3239d6b4",
+            "b040378bc7d9d2b7c2e9067215eae6380a65316922369a1bc6d8376f31fe5d0a",
             "Hash of Block changed"
         );
     }
@@ -976,7 +980,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "ead07112fa9ef8117f3d4171cf66c3d49bfd9d39b6a3c2d44b5c0ce3ecf4c903",
+            "d591d695f67c644ddcc5315d96c25f00dede77c725859408ab7f113a18a0bf9a",
             "Hash of BlockProposal changed"
         );
     }
@@ -1013,7 +1017,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "e6030b101e9c9d92eb352d6ada01bd6dc64e1f358d30a3c113411f4f8201b369",
+            "c94d927dd7300814fef610a7560ba5a7775a859bb3511796cf23cfb59c038a4f",
             "Hash of BlockPayload changed"
         );
     }

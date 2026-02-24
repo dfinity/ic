@@ -1,11 +1,10 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
+use prometheus::{Encoder, IntGaugeVec, Opts, Registry, TextEncoder};
 
 use std::fs::File;
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, BufWriter, Write};
 use std::path::{Path, PathBuf};
-
-use ic_metrics_tool::{Metric, MetricsWriter};
 
 const INTERRUPT_FILTER: &str = "TLB shootdowns";
 const INTERRUPT_SOURCE: &str = "/proc/interrupts";
@@ -25,7 +24,7 @@ struct MetricToolArgs {
     metrics_filename: PathBuf,
 }
 
-fn get_sum_tlb_shootdowns() -> Result<u64> {
+fn get_sum_tlb_shootdowns() -> Result<i64> {
     let path = Path::new(INTERRUPT_SOURCE);
     let file = File::open(path)?;
     let reader = io::BufReader::new(file);
@@ -36,7 +35,7 @@ fn get_sum_tlb_shootdowns() -> Result<u64> {
         let line = line?;
         if line.contains(INTERRUPT_FILTER) {
             for part in line.split_whitespace().skip(1) {
-                if let Ok(value) = part.parse::<u64>() {
+                if let Ok(value) = part.parse::<i64>() {
                     total_tlb_shootdowns += value;
                 }
             }
@@ -50,12 +49,32 @@ pub fn main() -> Result<()> {
     let opts = MetricToolArgs::parse();
     let tlb_shootdowns = get_sum_tlb_shootdowns()?;
 
-    let metrics = vec![
-        Metric::new(TLB_SHOOTDOWN_METRIC_NAME, tlb_shootdowns as f64)
-            .add_annotation(TLB_SHOOTDOWN_METRIC_ANNOTATION),
-    ];
-    let writer = MetricsWriter::new(opts.metrics_filename);
-    writer.write_metrics(&metrics)?;
+    let registry = Registry::new();
+    let gauge = IntGaugeVec::new(
+        Opts::new(TLB_SHOOTDOWN_METRIC_NAME, TLB_SHOOTDOWN_METRIC_ANNOTATION),
+        &[],
+    )
+    .context("Failed to create gauge")?;
+
+    registry
+        .register(Box::new(gauge.clone()))
+        .context("Failed to register gauge")?;
+
+    // Set the metric value
+    gauge.with_label_values::<&str>(&[]).set(tlb_shootdowns);
+
+    // Write metrics to file
+    let mut file = BufWriter::new(File::create(&opts.metrics_filename).with_context(|| {
+        format!(
+            "Failed to create metrics file: {}",
+            opts.metrics_filename.display()
+        )
+    })?);
+    TextEncoder::new()
+        .encode(&registry.gather(), &mut file)
+        .context("Failed to encode metrics")?;
+
+    file.flush().context("Failed to flush metrics file")?;
 
     Ok(())
 }

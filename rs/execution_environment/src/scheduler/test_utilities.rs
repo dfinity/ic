@@ -157,7 +157,9 @@ impl SchedulerTest {
     }
 
     pub fn canister_state_mut(&mut self, canister_id: CanisterId) -> &mut CanisterState {
-        self.state_mut().canister_state_mut(&canister_id).unwrap()
+        self.state_mut()
+            .canister_state_make_mut(&canister_id)
+            .unwrap()
     }
 
     pub fn ingress_queue_size(&self, canister_id: CanisterId) -> usize {
@@ -299,7 +301,7 @@ impl SchedulerTest {
     pub fn send_ingress(&mut self, canister_id: CanisterId, message: TestMessage) -> MessageId {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let message_id = wasm_executor.push_ingress(
             canister_id,
             canister,
@@ -318,7 +320,7 @@ impl SchedulerTest {
     ) -> MessageId {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let message_id = wasm_executor.push_ingress(canister_id, canister, message, expiry_time);
         self.state = Some(state);
         message_id

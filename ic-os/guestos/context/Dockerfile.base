@@ -62,8 +62,10 @@ COPY packages.* /tmp/
 RUN apt-get -y update && \
     apt-get -y upgrade && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) \
-        ${_KERNEL_PACKAGE} \
-        linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
+        # TODO(NODE-1852): Temporarily pin the kernel here.
+        # ${_KERNEL_PACKAGE} \
+        # linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
+        linux-image-6.14.0-37-generic linux-modules-extra-6.14.0-37-generic && \
     rm /tmp/packages.*
 
 # Install node_exporter

@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
@@ -8,6 +6,7 @@ use ic_management_canister_types_private::{
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::PrincipalId;
+use std::collections::VecDeque;
 
 pub(crate) fn fetch_canister_logs(
     sender: PrincipalId,
@@ -26,10 +25,10 @@ pub(crate) fn fetch_canister_logs(
     // Check if the sender has permission to access logs
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
 
-    let records = canister.system_state.canister_log.records();
+    let s = &canister.system_state;
     let canister_log_records = match log_memory_store_feature {
-        FlagStatus::Disabled => records.iter().cloned().collect(),
-        FlagStatus::Enabled => filter_records(&args, records)?,
+        FlagStatus::Disabled => filter_records(&args, s.canister_log.records())?,
+        FlagStatus::Enabled => s.log_memory_store.records(args.filter),
     };
 
     Ok(FetchCanisterLogsResponse {

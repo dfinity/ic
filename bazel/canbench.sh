@@ -44,7 +44,7 @@ if [ -n "${CANBENCH_INIT_ARGS_HEX:-}" ]; then
 fi
 
 if [ -s "${CANBENCH_STABLE_MEMORY_FILE:-}" ]; then
-    TMP_MEMORY_FILE=$(mktemp -p . XXXXXXX.mem)
+    TMP_MEMORY_FILE=$(mktemp -p . mem.XXXXXXX)
     if [[ "${CANBENCH_STABLE_MEMORY_FILE}" =~ [.]gz$ ]]; then
         gunzip -c "${CANBENCH_STABLE_MEMORY_FILE}" >"$TMP_MEMORY_FILE"
     else

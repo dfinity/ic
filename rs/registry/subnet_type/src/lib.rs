@@ -36,6 +36,11 @@ pub enum SubnetType {
     #[strum(serialize = "verified_application")]
     #[serde(rename = "verified_application")]
     VerifiedApplication,
+    /// Cloud engines are configurable, application-specific private subnets
+    /// under the auspices of the NNS and its rules for safety.
+    #[strum(serialize = "cloud_engine")]
+    #[serde(rename = "cloud_engine")]
+    CloudEngine,
 }
 
 impl From<SubnetType> for i32 {
@@ -44,6 +49,7 @@ impl From<SubnetType> for i32 {
             SubnetType::Application => 1,
             SubnetType::System => 2,
             SubnetType::VerifiedApplication => 4,
+            SubnetType::CloudEngine => 5,
         }
     }
 }
@@ -58,11 +64,13 @@ impl TryFrom<i32> for SubnetType {
             Ok(SubnetType::System)
         } else if input == 4 {
             Ok(SubnetType::VerifiedApplication)
+        } else if input == 5 {
+            Ok(SubnetType::CloudEngine)
         } else {
             Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "SubnetType",
                 err: format!(
-                    "Expected 1 (application), 2 (system), or 4 (VerifiedApplication), got {input}"
+                    "Expected 1 (application), 2 (system), 4 (VerifiedApplication), or 5 (CloudEngine), got {input}"
                 ),
             })
         }
@@ -75,6 +83,7 @@ impl From<SubnetType> for pb::SubnetType {
             SubnetType::Application => Self::Application,
             SubnetType::System => Self::System,
             SubnetType::VerifiedApplication => Self::VerifiedApplication,
+            SubnetType::CloudEngine => Self::CloudEngine,
         }
     }
 }
@@ -91,6 +100,7 @@ impl TryFrom<pb::SubnetType> for SubnetType {
             pb::SubnetType::Application => Ok(SubnetType::Application),
             pb::SubnetType::System => Ok(SubnetType::System),
             pb::SubnetType::VerifiedApplication => Ok(SubnetType::VerifiedApplication),
+            pb::SubnetType::CloudEngine => Ok(SubnetType::CloudEngine),
         }
     }
 }

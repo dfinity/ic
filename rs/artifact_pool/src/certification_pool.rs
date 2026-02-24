@@ -503,6 +503,7 @@ impl HasLabel for CertificationMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_interfaces::certification::CertificationPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
@@ -529,6 +530,7 @@ mod tests {
         let content = gen_content();
         CertificationMessage::CertificationShare(CertificationShare {
             height: Height::from(height),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 signature: ThresholdSignatureShare::fake(node_test_id(node)),
                 content,
@@ -541,6 +543,7 @@ mod tests {
         let signature = ThresholdSignature::fake();
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed { content, signature },
         })
     }
