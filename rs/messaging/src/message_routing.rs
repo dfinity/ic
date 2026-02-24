@@ -1094,20 +1094,19 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             // to avoid any potential errors in using an incorrect list.
             if !(subnet_type == SubnetType::Application
                 && cost_schedule == CanisterCyclesCostSchedule::Free)
+                && !subnet_admins.is_empty()
             {
-                if !subnet_admins.is_empty() {
-                    self.metrics
-                        .critical_error_illegal_non_empty_subnet_admins
-                        .inc();
-                    warn!(
-                        self.log,
-                        "{}: subnet {} is a non-rental subnet, but has a non-empty list of subnet admins {:?}.",
-                        CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS,
-                        subnet_id,
-                        subnet_admins,
-                    );
-                    subnet_admins = BTreeSet::new();
-                }
+                self.metrics
+                    .critical_error_illegal_non_empty_subnet_admins
+                    .inc();
+                warn!(
+                    self.log,
+                    "{}: subnet {} is a non-rental subnet, but has a non-empty list of subnet admins {:?}.",
+                    CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS,
+                    subnet_id,
+                    subnet_admins,
+                );
+                subnet_admins = BTreeSet::new();
             }
             subnets.insert(
                 *subnet_id,
