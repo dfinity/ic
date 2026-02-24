@@ -217,6 +217,7 @@ pub fn test_subnet_record() -> SubnetRecord {
     SubnetRecord {
         membership: vec![],
         max_ingress_bytes_per_message: 2 * 1024 * 1024,
+        max_ingress_bytes_per_block: 0,
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,

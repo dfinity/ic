@@ -48,7 +48,7 @@ def build_image(image_tag: str, dockerfile: str, context_dir: str, build_args: L
     build_arg_strings_joined = " ".join(build_arg_strings)
 
     log.info("Building image...")
-    cmd = f"podman build --squash-all --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
+    cmd = f"podman build --squash-all --no-cache --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
     invoke.run(cmd)
     log.info("Image built successfully")
 
@@ -57,6 +57,7 @@ def save_image(image_tag: str, output_file: str):
     log.info("Saving image to tar file")
     cmd = f"podman image save --output {output_file} {image_tag}"
     invoke.run(cmd)
+    invoke.run("sync")  # For determinism (?)
 
     output_path = Path(output_file)
     assert output_path.exists()
@@ -82,9 +83,10 @@ def main():
 
     log.info(f"Using args: {args}")
 
-    # NOTE: /usr/bin/newuidmap is required to be on $PATH for podman. bazel
-    # strips this out - add it back manually.
-    os.environ["PATH"] = "/usr/bin:" + os.environ.get("PATH", "")
+    # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
+    # podman (no longer in latest version). bazel strips this out - add it back
+    # manually, for now.
+    os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
 
     def cleanup():
         invoke.run(f"podman rm -f {image_tag}")
