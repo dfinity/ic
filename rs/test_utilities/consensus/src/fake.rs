@@ -75,7 +75,7 @@ impl Fake for Certification {
     fn fake() -> Self {
         Certification {
             height: Height::new(0),
-            height_witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
                     vec![],

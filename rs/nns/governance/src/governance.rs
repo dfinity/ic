@@ -240,7 +240,7 @@ pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 20;
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
 /// The maximum number of neurons returned by `list_neurons`
-pub const MAX_LIST_NEURONS_RESULTS: usize = 500;
+pub const MAX_LIST_NEURONS_RESULTS: usize = 50;
 
 const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 

@@ -8920,7 +8920,7 @@ fn fake_certification_for_height(height: Height) -> Certification {
 fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> Certification {
     Certification {
         height,
-        height_witness: Witness::new_for_testing_with_height(),
+        height_witness: Some(Witness::new_for_testing_with_height()),
         signed: Signed {
             content: CertificationContent::new(CryptoHashOfPartialState::from(hash)),
             signature: ThresholdSignature::fake(),

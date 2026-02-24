@@ -161,7 +161,10 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
-use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{self, NnsCanisters},
+};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
@@ -2098,6 +2101,51 @@ impl NnsInstallationBuilder {
         });
         Ok(())
     }
+}
+
+/// Installs the registry canister on the NNS subnet, initializing it with the testnet's topology.
+///
+/// An optional `customizations` builder allows configuring additional registry init parameters.
+pub fn install_registry_canister_with_testnet_topology(
+    env: &TestEnv,
+    customizations: Option<RegistryCanisterInitPayloadBuilder>,
+) {
+    let node = env.get_first_healthy_nns_node_snapshot();
+    let url = node.get_public_url();
+    let prep_dir = env
+        .prep_dir(&node.ic_name())
+        .expect("Prep Dir does not exist");
+
+    let registry_local_store = prep_dir.registry_local_store_path();
+    let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
+
+    let mut builder = customizations.unwrap_or_else(RegistryCanisterInitPayloadBuilder::new);
+    for mutation in initial_mutations {
+        builder.push_init_mutate_request(mutation);
+    }
+    let registry_init_payload = builder.build();
+
+    let agent = InternalAgent::new(
+        url,
+        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+    );
+    let runtime = Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: REGISTRY_CANISTER_ID.into(),
+    });
+
+    block_on(async {
+        let mut canister = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Failed to create registry canister");
+        assert_eq!(
+            canister.canister_id(),
+            REGISTRY_CANISTER_ID,
+            "Failed to create registry canister at expected ID 0. Call this method before creating any other canisters."
+        );
+        itest_helpers::install_registry_canister(&mut canister, registry_init_payload).await;
+    });
 }
 
 pub trait HasRegistryVersion {

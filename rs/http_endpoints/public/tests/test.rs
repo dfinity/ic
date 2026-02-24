@@ -767,7 +767,7 @@ fn can_retrieve_subnet_metrics(
         let state: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
         let certification = Certification {
             height: Height::from(1),
-            height_witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 signature: ThresholdSignature {
                     signer: NiDkgId {
@@ -1194,7 +1194,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
 
                     let certification = Certification {
                         height: Height::from(1),
-                        height_witness: Witness::new_for_testing(Digest([0; 32])),
+                        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
                         signed: Signed {
                             signature: ThresholdSignature {
                                 signer: NiDkgId {

@@ -126,7 +126,7 @@ fn make_xnet_slice(size: usize) -> CertifiedStreamSlice {
         merkle_proof: vec![],
         certification: Certification {
             height: Height::from(0),
-            height_witness: Witness::new_for_testing(Digest([0; 32])),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 signature: ThresholdSignature::fake(),
                 content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
