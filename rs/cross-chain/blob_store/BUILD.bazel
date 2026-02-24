@@ -1,0 +1,79 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPS = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:sha2",
+]
+
+rust_library(
+    name = "lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/main.rs",
+        ],
+    ),
+    crate_name = "blob_store_lib",
+    deps = DEPS,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":lib",
+    deps = DEPS,
+)
+
+rust_canister(
+    name = "canister",
+    srcs = ["src/main.rs"],
+    service_file = ":blob_store.did",
+    deps = DEPS + [":lib"],
+)
+
+rust_test(
+    name = "canister_unit_tests",
+    crate = ":_wasm_canister",
+    data = [":blob_store.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/cross-chain/blob_store",
+    },
+    deps = DEPS + [
+        # Keep sorted.
+        ":lib",
+        "@crate_index//:candid_parser",
+    ],
+)
+
+rust_ic_test(
+    name = "integration_tests",
+    srcs = ["tests/tests.rs"],
+    data = [
+        ":canister",
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "BLOB_STORE_CANISTER_WASM_PATH": "$(rootpath :canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    deps = [
+        # Keep sorted.
+        ":lib",
+        "//packages/pocket-ic",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:sha2",
+    ],
+)

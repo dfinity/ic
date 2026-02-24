@@ -1,0 +1,32 @@
+[package]
+name = "blob-store"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "blob-store"
+path = "src/main.rs"
+
+[lib]
+name = "blob_store_lib"
+path = "src/lib.rs"
+
+[dependencies]
+candid = { workspace = true }
+hex = { workspace = true }
+ic-cdk = { workspace = true }
+ic-stable-structures = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+candid_parser = { workspace = true }
+hex = { workspace = true }
+pocket-ic = { path = "../../../packages/pocket-ic" }
+serde_bytes = { workspace = true }
+sha2 = { workspace = true }
