@@ -15,6 +15,7 @@ config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
 indoc = { workspace = true }
 network = { path = "../../networking/network" }
+nix = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

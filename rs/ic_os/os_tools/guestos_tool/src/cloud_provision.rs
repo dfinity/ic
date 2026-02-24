@@ -1,9 +1,13 @@
-use std::{path::PathBuf, time::Duration};
+use std::{
+    path::PathBuf,
+    process::{Child, Command, Stdio},
+    time::Duration,
+};
 
 use ::reqwest::Method;
-use anyhow::{Context, Error, Result, anyhow};
+use anyhow::{Context, Error, Result, anyhow, bail};
 use config_types::GuestOSConfig;
-use utils::get_command_stdout;
+use nix::{sys::signal::Signal::SIGTERM, unistd::Pid};
 
 use reqwest::header::{HeaderMap, HeaderValue};
 
@@ -96,10 +100,10 @@ impl CloudType {
 }
 
 /// Assigns IPv4 DHCP address to the interface and unassigns it when dropped
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct DHCPConfig {
-    systemd_network_dir: PathBuf,
-    interface: String,
+    config_path: PathBuf,
+    process: Child,
 }
 
 impl DHCPConfig {
@@ -120,31 +124,33 @@ impl DHCPConfig {
         );
 
         // Write the config
-        let path = systemd_network_dir.join(format!("10-{interface}.network"));
-        std::fs::write(path, intf_config).context("unable to write systemd network config")?;
+        let config_path = systemd_network_dir.join(format!("10-{interface}.network"));
+        std::fs::write(&config_path, intf_config)
+            .context("unable to write systemd network config")?;
 
-        // Signal networkd to reload it & bring up the interface
-        get_command_stdout("networkctl", &["reload"]).context("unable to reload networkctl")?;
-        get_command_stdout("networkctl", &["up", &interface])
-            .context("unable to start interface")?;
+        // Fire up systemd-networkd
+        let process = Command::new("/usr/lib/systemd/systemd-networkd")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("unable to execute systemd-networkd")?;
 
         Ok(Self {
-            interface,
-            systemd_network_dir,
+            config_path,
+            process,
         })
     }
 }
 
 impl Drop for DHCPConfig {
     fn drop(&mut self) {
-        let path = self
-            .systemd_network_dir
-            .join(format!("10-{}.network", self.interface));
+        // Tell systemd-networkd to shutdown & wait for it to happen
+        let _ = nix::sys::signal::kill(Pid::from_raw(self.process.id() as i32), SIGTERM);
+        let _ = self.process.wait();
 
-        let _ = get_command_stdout("networkctl", &["down", &self.interface]);
-        let _ = get_command_stdout("networkctl", &["reload"]);
-
-        let _ = std::fs::remove_file(path);
+        // Remove the config
+        let _ = std::fs::remove_file(&self.config_path);
     }
 }
 
@@ -169,10 +175,25 @@ fn discover_cloud_type(hdr: &HeaderMap) -> Result<CloudType, Error> {
 
 /// Tries to obtain the GuestOS config from the cloud's metadata service
 pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConfig, Error> {
-    // Find the network interface to work on
-    let intf = get_interface_name().context("unable to get the network interface")?;
+    // Find the network interface to work on, it might not be initialized yet so give it a few tries
+    let mut retries = 10;
 
-    // Configure it with a link-local address
+    let intf = loop {
+        match get_interface_name() {
+            Ok(v) => break v,
+            Err(e) => {
+                println!("unable to choose interface: {e:#}");
+                retries -= 1;
+                if retries == 0 {
+                    bail!("unable to choose interface: retries exhausted");
+                }
+
+                std::thread::sleep(Duration::from_secs(1));
+            }
+        }
+    };
+
+    // Configure it with a DHCP
     let _dhcp = DHCPConfig::new(intf.clone(), systemd_network_dir)
         .context("unable to configure IPv4 DHCP")?;
     println!("DHCP on the interace {intf} configured");

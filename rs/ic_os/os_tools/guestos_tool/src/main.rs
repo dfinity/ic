@@ -122,8 +122,10 @@ pub fn main() -> Result<()> {
             let config = obtain_guestos_config(systemd_network_dir)
                 .context("unable to obtain GuestOS config")?;
             let json = serde_json::to_vec_pretty(&config).context("unable to encode to JSON")?;
-            std::fs::write(config_path, &json).context("unable to write GuestOS config to disk")?;
+            std::fs::write(&config_path, &json)
+                .context("unable to write GuestOS config to disk")?;
 
+            println!("GuestOS config was written to {}", config_path.display());
             Ok(())
         }
 

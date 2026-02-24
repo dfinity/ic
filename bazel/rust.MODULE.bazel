@@ -986,6 +986,8 @@ crate.spec(
 crate.spec(
     features = [
         "ptrace",
+        "user",
+        "signal",
     ],
     package = "nix",
     version = "^0.24.3",
