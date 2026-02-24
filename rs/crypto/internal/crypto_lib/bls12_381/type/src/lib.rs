@@ -2393,6 +2393,22 @@ pub struct Gt {
 
 static GT_GENERATOR: LazyLock<Gt> = LazyLock::new(|| Gt::new(ic_bls12_381::Gt::generator()));
 
+static GT_MUL_U16_GENERATOR_TBL: LazyLock<Vec<Gt>> = LazyLock::new(|| {
+    let mut tbl = Vec::with_capacity(24);
+    let mut accum = Gt::new(ic_bls12_381::Gt::generator());
+    for _ in 0..8 {
+        let accum2 = accum.double();
+        let accum3 = accum.double() + &accum;
+
+        tbl.push(accum.clone());
+        tbl.push(accum2.clone());
+        tbl.push(accum3);
+
+        accum = accum2.double();
+    }
+    tbl
+});
+
 impl Gt {
     /// The size in bytes of this type
     pub const BYTES: usize = 576;
@@ -2421,15 +2437,6 @@ impl Gt {
         }
 
         Self::new(val)
-    }
-
-    pub(crate) fn conditional_select(a: &Self, b: &Self, choice: subtle::Choice) -> Self {
-        use subtle::ConditionallySelectable;
-        Self::new(ic_bls12_381::Gt::conditional_select(
-            a.inner(),
-            b.inner(),
-            choice,
-        ))
     }
 
     /// Return the identity element in the group
@@ -2530,16 +2537,12 @@ impl Gt {
     /// This function avoids leaking val through timing side channels,
     /// since it is used when decrypting NIDKG dealings.
     pub fn g_mul_u16(val: u16) -> Self {
-        let g = Gt::generator().clone();
         let mut r = Gt::identity();
 
-        for b in 0..16 {
-            if b > 0 {
-                r = r.double();
-            }
-
-            let choice = subtle::Choice::from(((val >> (15 - b)) as u8) & 1);
-            r = Self::conditional_select(&r, &(&r + &g), choice);
+        for i in 0..8 {
+            let w = (val >> 2*i) & 0b11;
+            let tbl_for_i = &GT_MUL_U16_GENERATOR_TBL[(i * 3)..(i * 3 + 3)];
+            r += Self::ct_select(&tbl_for_i, w as usize);
         }
 
         r
