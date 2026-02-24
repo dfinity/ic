@@ -110,6 +110,9 @@ fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
         fi
         VMNAME=$(echo "$virsh_list" | awk '{ if (NR==3) print $2 }')
 
+        # Give the VM a moment to start, in case this script runs too quickly after it turns on.
+        sleep 5
+
         # Shutdown the VM
         echo "Shutting down $VMNAME"
         for i in {1..300}; do
