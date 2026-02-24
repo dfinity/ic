@@ -9161,8 +9161,12 @@ fn take_tip_does_not_hash_with_optimization() {
         assert_eq!(tip_hash_count(metrics), 1);
 
         // optimization triggers
-        assert_eq!(opt_height, initial_height + Height::new(1));
-        sm.commit_and_certify(initial_state, CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height(
+            initial_state,
+            opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
         assert_eq!(no_state_clone_count(metrics), 1);
 
         // the state at height 1 is not hashed in `take_tip` since certification was delivered
@@ -9226,9 +9230,8 @@ fn remove_inmemory_states_below_prunes_certification() {
 
         // only certifications strictly below `latest_state_height` are pruned =>
         // optimization does not trigger in this test to make `latest_state_height` move
-        let (height, state) = sm.take_tip();
-        assert_eq!(cert_height, height + Height::new(1));
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, cert_height, CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // certification at height 1 is not pruned yet since `latest_state_height` is also 1
@@ -9239,9 +9242,8 @@ fn remove_inmemory_states_below_prunes_certification() {
         );
 
         // we commit a strictly larger height 2 without optimization
-        let (height, state) = sm.take_tip();
-        assert_eq!(Height::new(2), height + Height::new(1));
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // certification at height 1 is pruned now that `latest_state_height` advanced to 2
@@ -9387,23 +9389,23 @@ fn list_state_heights_to_certify() {
     state_manager_test(|_metrics, sm| {
         // commit a state at height 1
         // (optimization does not trigger, but it does not matter here)
-        let (height, state) = sm.take_tip();
-        assert_eq!(Height::new(1), height + Height::new(1));
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        let state = sm.take_tip().1;
+        let no_opt_height = Height::new(1);
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
 
         // `fast_forward_height` is less than `tip_height`
         // and thus `list_state_heights_to_certify` does not return any height
         assert!(sm.list_state_heights_to_certify().is_empty());
 
-        // advance `fast_forward_height` to 13
-        sm.update_fast_forward_height(Height::new(13));
-        assert_eq!(sm.fast_forward_height(), 13);
+        // advance `fast_forward_height` to 3
+        sm.update_fast_forward_height(Height::new(3));
+        assert_eq!(sm.fast_forward_height(), 3);
 
         // now `list_state_heights_to_certify` returns all heights starting at `tip_height`
         // and up until `fast_forward_height`
         assert_eq!(
             sm.list_state_heights_to_certify(),
-            (1..13).map(Height::new).collect::<Vec<_>>()
+            (1..3).map(Height::new).collect::<Vec<_>>()
         );
 
         // advance `fast_forward_height` further to 42
@@ -9415,7 +9417,7 @@ fn list_state_heights_to_certify() {
         assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
 
         // deliver a certification for a future height after the tip height
-        let certification_height = Height::new(12);
+        let certification_height = Height::new(2);
         let certification = fake_certification_for_height(certification_height);
         sm.deliver_state_certification(certification);
 
@@ -9439,9 +9441,8 @@ fn commit_and_certify_reuses_certification() {
         sm.deliver_state_certification(certification);
 
         // optimization does not trigger
-        let (height, state) = sm.take_tip();
-        assert_eq!(no_opt_height, height + Height::new(1));
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // `commit_and_certify` reused certification from `states.certifications`
@@ -9471,9 +9472,8 @@ fn commit_and_certify_panic_on_delivered_fake_certification() {
         sm.deliver_state_certification(certification);
 
         // optimization does not trigger
-        let (height, state) = sm.take_tip();
-        assert_eq!(no_opt_height, height + Height::new(1));
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 0);
     });
 }
