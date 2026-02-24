@@ -109,6 +109,7 @@ rust_bench(
         ":bls12_381",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/seed",
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
     ],
 )
