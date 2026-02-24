@@ -1,0 +1,8 @@
+file_share_url: 10.12.7.240
+file_share_dir: /srv/images
+file_share_image_filename: setupos.bmd.img
+inject_image_node_reward_type: type3.1
+inject_image_ipv6_prefix: 2602:fb2b:100:14
+inject_image_ipv6_gateway: 2602:fb2b:100:14::1
+inject_image_verbose: false
+inject_enable_trusted_execution_environment: false

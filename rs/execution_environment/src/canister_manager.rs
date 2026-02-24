@@ -556,8 +556,11 @@ impl CanisterManager {
         if let Some(log_visibility) = settings.log_visibility() {
             canister.system_state.log_visibility = log_visibility.clone();
         }
-        if let Some(_log_memory_limit) = settings.log_memory_limit() {
-            // TODO: populate log_memory_store with the new limit.
+        if let Some(log_memory_limit) = settings.log_memory_limit() {
+            canister
+                .system_state
+                .log_memory_store
+                .resize(log_memory_limit.get() as usize, self.fd_factory.clone());
         }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
@@ -620,7 +623,7 @@ impl CanisterManager {
                 .saturating_sub(old_compute_allocation - new_compute_allocation);
         }
 
-        let new_usage = old_usage;
+        let new_usage = canister.memory_usage();
         let new_mem = canister.memory_allocation().allocated_bytes(new_usage);
         if new_mem >= old_mem {
             // Settings were validated before so this should always succeed.
@@ -955,7 +958,7 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let rejects = uninstall_canister(
             &self.log,
             canister,
@@ -1021,7 +1024,7 @@ impl CanisterManager {
             };
         }
 
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let result = match canister.system_state.begin_stopping(stop_context) {
             Some(mut stop_context) => StopCanisterResult::AlreadyStopped {
                 cycles_to_return: stop_context.take_cycles(),
@@ -1089,13 +1092,14 @@ impl CanisterManager {
         let canister_history_memory_usage = canister.canister_history_memory_usage();
         let canister_wasm_chunk_store_memory_usage = canister.wasm_chunk_store_memory_usage();
         let canister_snapshots_memory_usage = canister.snapshots_memory_usage();
+        let canister_log_memory_usage = canister.log_memory_store_memory_usage();
         let canister_message_memory_usage = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
         let memory_allocation = canister.memory_allocation();
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility.clone();
-        let log_memory_limit = canister.system_state.canister_log.byte_capacity();
+        let log_memory_limit = canister.log_memory_limit().get();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
 
@@ -1118,13 +1122,14 @@ impl CanisterManager {
             canister_history_memory_usage,
             canister_wasm_chunk_store_memory_usage,
             canister_snapshots_memory_usage,
+            canister_log_memory_usage,
             canister.system_state.balance().get(),
             compute_allocation.as_percent(),
             Some(memory_allocation.pre_allocated_bytes().get()),
             freeze_threshold.get(),
             reserved_cycles_limit.map(|x| x.get()),
             log_visibility,
-            log_memory_limit as u64,
+            log_memory_limit,
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
                     memory_allocation,
@@ -1973,7 +1978,9 @@ impl CanisterManager {
         }
 
         let uninstalled_canister_size = if uninstall_code {
-            canister.execution_memory_usage() + canister.wasm_chunk_store_memory_usage()
+            canister.execution_memory_usage()
+                + canister.wasm_chunk_store_memory_usage()
+                + canister.log_memory_store_memory_usage()
         } else {
             NumBytes::from(0)
         };
@@ -3204,8 +3211,8 @@ pub fn uninstall_canister(
     // Drop the canister's execution state.
     canister.execution_state = None;
 
-    // Clear log.
-    canister.clear_log();
+    // Remove canister log.
+    canister.remove_log();
 
     // Clear the Wasm chunk store.
     canister.system_state.wasm_chunk_store = WasmChunkStore::new(fd_factory);

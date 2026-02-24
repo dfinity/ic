@@ -19,7 +19,7 @@ use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
 };
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, MatchPatternPath, MixedHashTree, Path as LabeledTreePath,
+    Digest, Label, LabeledTree, MatchPatternPath, MixedHashTree, Path as LabeledTreePath, Witness,
     sparse_labeled_tree_from_paths,
 };
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
@@ -458,6 +458,7 @@ fn add_subnet_local_registry_records(
     let max_ingress_bytes_per_message = match subnet_type {
         SubnetType::Application => 2 * 1024 * 1024,
         SubnetType::VerifiedApplication => 2 * 1024 * 1024,
+        SubnetType::CloudEngine => 2 * 1024 * 1024,
         SubnetType::System => 3 * 1024 * 1024 + 512 * 1024,
     };
     let max_ingress_messages_per_block = 1000;
@@ -916,6 +917,10 @@ impl Deref for StateMachineStateManager {
 impl StateManager for StateMachineStateManager {
     fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.deref().list_state_hashes_to_certify()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        self.deref().list_state_heights_to_certify()
     }
 
     fn deliver_state_certification(&self, certification: Certification) {
@@ -1853,7 +1858,9 @@ impl StateMachine {
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
-            SubnetType::Application | SubnetType::VerifiedApplication => 499,
+            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
+                499
+            }
             SubnetType::System => 199,
         });
         let replica_logger = test_logger(log_level);
@@ -4715,7 +4722,7 @@ impl StateMachine {
     pub fn set_stable_memory(&self, canister_id: CanisterId, data: &[u8]) {
         let (_height, mut replicated_state) = self.state_manager.take_tip();
         let canister_state = replicated_state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
         let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
@@ -4751,7 +4758,7 @@ impl StateMachine {
     ) {
         let (_h, mut state) = self.state_manager.take_tip();
         state
-            .canister_state_mut(canister_id)
+            .canister_state_make_mut(canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .system_state
             .total_query_stats = total_query_stats;
@@ -4783,7 +4790,7 @@ impl StateMachine {
     pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
         let (_height, mut state) = self.state_manager.take_tip();
         let canister_state = state
-            .canister_state_mut(&canister_id)
+            .canister_state_make_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
         canister_state
             .system_state
@@ -5056,6 +5063,7 @@ fn certify_hash(
         CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
     Certification {
         height: *height,
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent { hash: hash.clone() },
             signature: ThresholdSignature {

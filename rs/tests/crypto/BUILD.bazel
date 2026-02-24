@@ -79,7 +79,11 @@ system_test(
 
 system_test(
     name = "ingress_verification_test",
-    tags = ["long_test"],
+    # TODO(CRP-2975): Remove `manual` tag once flakiness is resolved.
+    tags = [
+        "long_test",
+        "manual",
+    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,
 )
