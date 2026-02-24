@@ -123,7 +123,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
 
         # Get the file name and dd it to disk device
         CONFIG=$(mktemp)
-        trap "rm -f $CONFIG" INT TERM EXIT
+        trap "rm -f $CONFIG; sudo losetup -d ${LOOP_DEVICE} || true" INT TERM EXIT
         sudo virsh dumpxml $VMNAME > $CONFIG
         IMAGE="$(xmlstarlet sel -t -v "string(/domain/devices/disk[target[@dev='vda']]/source/@file)" "$CONFIG")"
         echo "Moving $VMNAME to /dev/hostlvm/guest"
@@ -139,10 +139,10 @@ fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
 
         # Clear any old partition and fs signatures
         sudo vgscan --mknodes
-        loop_device=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
-        if [ "${loop_device}" != "" ]; then
-            sudo wipefs --all --force "${loop_device}"*
-            sudo losetup -d "${loop_device}"
+        LOOP_DEVICE=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
+        if [ "${LOOP_DEVICE}" != "" ]; then
+            sudo wipefs --all --force "${LOOP_DEVICE}"*
+            sudo losetup -d "${LOOP_DEVICE}"
         fi
         sudo wipefs --all --force /dev/mapper/hostlvm-guestos
 
@@ -152,21 +152,21 @@ fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
 
         # NOTE: This is not needed if we can avoid starting the VM.
         # Reset to initial state
-        loop_device=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
-        if [ "${loop_device}" != "" ]; then
+        LOOP_DEVICE=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
+        if [ "${LOOP_DEVICE}" != "" ]; then
             # Clear var
-            sudo wipefs --all --force "${loop_device}"p6
+            sudo wipefs --all --force "${LOOP_DEVICE}"p6
             # Delete encrypted data
-            sudo sfdisk --force --no-reread --delete "${loop_device}" 10
+            if [ -e "${LOOP_DEVICE}"p10 ]; then
+                sudo sfdisk --force --no-reread --delete "${LOOP_DEVICE}" 10
+            fi
 
             # Reset config partition
             CONF_DIR=$(mktemp -d)
-            sudo mount "${loop_device}p3" "${CONF_DIR}"
-            sudo rm "${CONF_DIR}/CONFIGURED" "${CONF_DIR}/store.keyfile"
+            sudo mount "${LOOP_DEVICE}p3" "${CONF_DIR}"
+            sudo rm -f "${CONF_DIR}/CONFIGURED" "${CONF_DIR}/store.keyfile"
             sudo umount "${CONF_DIR}"
             sudo rm -rf "${CONF_DIR}"
-
-            sudo losetup -d "${loop_device}"
         fi
 
         sudo virsh create $CONFIG

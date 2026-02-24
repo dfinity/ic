@@ -15,6 +15,7 @@ use ic_consensus::consensus::batch_delivery::deliver_batches;
 use ic_consensus_certification::VerifierImpl;
 use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
@@ -862,6 +863,7 @@ impl Player {
         let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(vec![]));
         Certification {
             height: *height,
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content: CertificationContent { hash: hash.clone() },
                 signature: ThresholdSignature {
@@ -1648,6 +1650,7 @@ fn get_state_hash<T>(
 #[cfg(test)]
 mod tests {
     use ic_crypto_sha2::Sha256;
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_interfaces_state_manager::TransientStateHashError;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
@@ -1674,6 +1677,7 @@ mod tests {
     fn make_share(height: u64, hash: Vec<u8>, node_id: u64) -> CertificationMessage {
         CertificationMessage::CertificationShare(CertificationShare {
             height: Height::from(height),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),

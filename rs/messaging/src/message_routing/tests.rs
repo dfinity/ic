@@ -629,20 +629,18 @@ impl StateMachine for FakeStateMachine {
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.node_public_keys = node_public_keys;
         state.metadata.api_boundary_nodes = api_boundary_nodes;
-        let mut canister_states = BTreeMap::new();
-        canister_states.insert(
-            canister_test_id(1),
+        state.put_canister_state(
             CanisterStateBuilder::new()
+                .with_canister_id(canister_test_id(1))
                 .with_wasm(vec![2; 1024 * 1024]) // 1MiB wasm
                 .build(),
         );
-        canister_states.insert(
-            canister_test_id(2),
+        state.put_canister_state(
             CanisterStateBuilder::new()
+                .with_canister_id(canister_test_id(2))
                 .with_wasm(vec![5; 10 * 1024]) // 10 KiB wasm
                 .build(),
         );
-        state.put_canister_states(canister_states);
         *self.0.lock().unwrap() = registry_settings.clone();
         state
     }
@@ -1004,12 +1002,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // state corresponds to the registry records written above.
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(
-            state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         // Check `network_topology` and `subnet_features` are mapped into the new state correctly
         // by calling `BatchProcessorImpl::process_batch()` which will pass the `network_topology` and
@@ -1808,12 +1801,7 @@ fn process_batch_updates_subnet_metrics() {
             make_batch_processor(fixture.registry.clone(), log);
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(
-            state,
-            height.increment(),
-            CertificationScope::Metadata,
-            None,
-        );
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
@@ -1883,7 +1871,7 @@ fn process_batch_resets_split_marker() {
         state.metadata.own_subnet_id = own_subnet_id;
         state.metadata.subnet_split_from = Some(other_subnet_id);
         height.inc_assign();
-        state_manager.commit_and_certify(state, height, CertificationScope::Metadata, None);
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         batch_processor.process_batch(Batch {
             batch_number: height.increment(),
@@ -1967,7 +1955,7 @@ fn test_demux_delivers_certified_stream_slices() {
 
             // Commit state with modified streams.
             height.inc_assign();
-            src_state_manager.commit_and_certify(state, height, CertificationScope::Metadata, None);
+            src_state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
             // Encode slice.
             src_state_manager
