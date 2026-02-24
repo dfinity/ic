@@ -594,7 +594,7 @@ impl CanisterHttpRequestContext {
 
                 if total < 1 {
                     return Err(CanisterHttpRequestContextError::InvalidReplicationCounts(
-                        format!("total_requests ({total}) must be at least 1",),
+                        format!("total_requests ({total}) must be at least 1"),
                     ));
                 }
                 if total > n {
@@ -606,12 +606,12 @@ impl CanisterHttpRequestContext {
                 }
                 if min > max {
                     return Err(CanisterHttpRequestContextError::InvalidReplicationCounts(
-                        format!("min_responses ({min}) must not exceed max_responses ({max})",),
+                        format!("min_responses ({min}) must not exceed max_responses ({max})"),
                     ));
                 }
                 if max > total {
                     return Err(CanisterHttpRequestContextError::InvalidReplicationCounts(
-                        format!("max_responses ({max}) must not exceed total_requests ({total})",),
+                        format!("max_responses ({max}) must not exceed total_requests ({total})"),
                     ));
                 }
                 (total, min, max)
