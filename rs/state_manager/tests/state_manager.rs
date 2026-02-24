@@ -9134,15 +9134,18 @@ fn take_tip_hashes_with_optimization() {
 #[test]
 fn get_state_hash_at() {
     state_manager_test(|metrics, sm| {
+        // a checkpoint is characterized by `CertificationScope::Full`,
+        // the exact height is not relevant
+        let checkpoint_height = Height::new(100);
+
         // update `fast_forward_height` to enable optimization
-        sm.update_fast_forward_height(Height::new(500));
-        assert_eq!(sm.fast_forward_height(), 500);
+        sm.update_fast_forward_height(checkpoint_height);
+        assert_eq!(sm.fast_forward_height(), checkpoint_height.get());
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // future checkpoints yield transient error
-        let checkpoint_height = Height::new(500);
         assert_eq!(
             sm.get_state_hash_at(checkpoint_height),
             Err(StateHashError::Transient(
@@ -9152,7 +9155,7 @@ fn get_state_hash_at() {
 
         // optimization triggers every multiple of 10
         let mut expected_no_state_clone_count = 0;
-        for height in 1..500 {
+        for height in 1..checkpoint_height.get() {
             let state = sm.take_tip().1;
             sm.commit_and_certify_at_height(
                 state,
