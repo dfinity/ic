@@ -42,6 +42,7 @@ use ic_registry_canister_api::{IPv4Config, UpdateNodeIPv4ConfigDirectlyPayload};
 use registry_canister::mutations::node_management::do_remove_node_directly::RemoveNodeDirectlyPayload;
 
 use slog::info;
+use std::net::Ipv4Addr;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 
@@ -356,33 +357,36 @@ fn wait_for_expected_node_ipv4_config(
     // first, get the current IPv4 config on the provided node
     // check if the interface has any IPv4 config
     let actual_interface_config =
-        vm.block_on_bash_script(r#"ip -4 addr show enp1s0 | awk '/inet / {print $2}'"#)?;
+        vm.block_on_bash_script(r#"ifconfig enp1s0 | awk '/inet / {print $2":"$4}'"#)?;
     let actual_interface_config = actual_interface_config.trim();
 
     let actual_ipv4_config = if actual_interface_config.is_empty() {
         None
     } else {
         // extract the IPv4 address
-        let config_parts: Vec<&str> = actual_interface_config.split('/').collect();
+        let config_parts: Vec<&str> = actual_interface_config.split(':').collect();
         let actual_address = config_parts.first().map_or_else(
             || {
                 Err(anyhow!(
-                    "failed to extract the IPv4 address: {:?}",
+                    "failed to extract the IPv4 address{:?}",
                     actual_interface_config
                 ))
             },
             |&address| Ok(address.to_string()),
         )?;
 
-        let prefix_length_string = config_parts.get(1).ok_or_else(|| {
+        // get the prefix length by turning the subnet mask into its integer representation
+        // and counting the number of 1s
+        let subnet_mask_string = config_parts.get(1).ok_or_else(|| {
             anyhow!(
-                "failed to extract the prefix length: {:?}",
+                "failed to extract the IPv4 address: {:?}",
                 actual_interface_config
             )
         })?;
-        let actual_prefix_length: u32 = prefix_length_string
-            .parse()
-            .map_err(|_| anyhow!("invalid prefix length: '{:?}'", prefix_length_string))?;
+        let subnet_mask = Ipv4Addr::from_str(subnet_mask_string)
+            .map_err(|_| anyhow!("invalid IPv4 subnet mask: '{:?}'", subnet_mask_string))?;
+        let subnet_mask_u32 = u32::from(subnet_mask);
+        let actual_prefix_length = subnet_mask_u32.count_ones();
 
         // get the default gateway
         let default_gateway =
