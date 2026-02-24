@@ -420,7 +420,7 @@ mod withdrawal {
         };
         // Step 1: deposit a lot of small UTXOs
         // < 2_000 to avoid ledger spawning an archive.
-        const NUM_UXTOS: usize = 1_001;
+        const NUM_UXTOS: usize = 1_002;
         let deposit_value = RETRIEVE_DOGE_MIN_AMOUNT;
         setup
             .deposit_flow()
