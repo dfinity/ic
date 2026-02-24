@@ -544,9 +544,7 @@ async fn test_gateway_custom_domain_provider_file() {
         forward_to: HttpGatewayBackend::PocketIcInstance(pic.instance_id),
         domains: Some(vec![custom_domain.to_string()]),
         https_config: None,
-        domain_custom_provider_local_file: Some(
-            mapping_file_path.to_str().unwrap().to_string(),
-        ),
+        domain_custom_provider_local_file: Some(mapping_file_path.to_str().unwrap().to_string()),
     };
     let client = NonblockingClient::new();
     let res = client

@@ -788,8 +788,9 @@ impl ApiState {
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
-        let domain_custom_provider_local_file =
-            http_gateway_config.domain_custom_provider_local_file.clone();
+        let domain_custom_provider_local_file = http_gateway_config
+            .domain_custom_provider_local_file
+            .clone();
         let raw_domains = http_gateway_config.domains.clone();
         spawn(async move {
             let router = {
