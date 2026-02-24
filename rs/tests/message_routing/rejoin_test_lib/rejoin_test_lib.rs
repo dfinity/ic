@@ -533,21 +533,22 @@ pub fn rejoin_test_long_rounds(
         "No state clone count of the restarted node is unexpectedly low"
     );
 
-    // all nodes are expected to have a low tip hash count:
-    // - tip hash count metric does not increase for nodes that are not behind
-    //   because they hash their state before setting it as tip;
-    // - tip hash count metric increases for nodes that are behind only if
-    //   they could not derive the state hash from certifications produced by peers
-    //   that are not behind and the expectations is that they could do so.
-    for node in &nodes {
-        let count = tip_hash_count(node.clone(), &logger);
-        info!(logger, "Tip hash count of node {}: {}", node.node_id, count);
-        assert!(
-            count < 10,
-            "Tip hash count of node {} is too high",
-            node.node_id
-        );
-    }
+    // tip hash count metric increases for nodes that are behind only if
+    // they could not derive the state hash from certifications produced by peers
+    // and the expectations is that they can do so most of the time;
+    // a node that regularly falls behind and then catches up could still have
+    // a high tip hash count metric (because it is expected that the state hash
+    // cannot be derived from peer certifications immediately after a node falls behind);
+    // hence, we only assert that the tip hash count metric of the restarted node is low
+    let rejoin_node_tip_hash_count = tip_hash_count(rejoin_node, &logger);
+    info!(
+        logger,
+        "Tip hash count of the restarted node: {rejoin_node_tip_hash_count}"
+    );
+    assert!(
+        rejoin_node_tip_hash_count < 10,
+        "Tip hash count of the restarted node is too high",
+    );
 }
 
 pub async fn assert_state_sync_has_happened(
