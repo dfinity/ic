@@ -71,7 +71,7 @@ runs:
         echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
         echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
         echo "Current GitHub API rate limits:"
-        curl -s --netrc https://api.github.com/rate_limit | jq
+        curl -s --netrc https://api.github.com/rate_limit | jq '.resources.core'
 
         # Here we overwrite the PATH with our custom bazel wrapper to ensure
         # the specified commands are run with the CI-specific options included

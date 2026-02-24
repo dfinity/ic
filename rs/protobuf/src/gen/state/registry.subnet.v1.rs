@@ -37,7 +37,22 @@ pub struct SubnetRecord {
     /// Max number of ingress messages per block.
     #[prost(uint64, tag = "18")]
     pub max_ingress_messages_per_block: u64,
-    /// The maximum combined size of the ingress and xnet messages that fit into a block.
+    /// How big an ingress payload can be *when stored in memory*. Setting this value too high
+    /// could lead to large memory usage of replicas.
+    /// Note that with hashes-in-blocks feature enabled, increasing this value doesn't necessarily mean
+    /// that we would send more data to peers when transmitting a block, because ingress messages are
+    /// stripped before disseminating blocks.
+    /// Note that this value can be larger than \[`Self::max_block_payload_size`\].
+    /// A value of 0 means that the default value \[`ic_limits::MAX_INGRESS_BYTES_PER_BLOCK`\] will be
+    /// used.
+    #[prost(uint64, tag = "32")]
+    pub max_ingress_bytes_per_block: u64,
+    /// Maximum size, in bytes, a \[`BatchPayload`\] can have *when sent over wire*.
+    /// Setting this value too hight could result in longer delivery times of blocks to peers, which
+    /// could lead to forks as higher rank blocks could be proposed meanwhile.
+    /// Note that with hashes-in-blocks feature enabled, the blocks sent over wire are typically smaller
+    /// than their representation in memory, because we strip some of the data before broadcasting them
+    /// to peers.
     #[prost(uint64, tag = "19")]
     pub max_block_payload_size: u64,
     /// Information on whether a feature is supported by this subnet.
@@ -73,6 +88,9 @@ pub struct SubnetRecord {
     /// means to behave according to the `subnet_type` field.
     #[prost(enumeration = "CanisterCyclesCostSchedule", tag = "30")]
     pub canister_cycles_cost_schedule: i32,
+    /// List of principals that have admin privileges on the subnet.
+    #[prost(message, repeated, tag = "31")]
+    pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
@@ -386,6 +404,9 @@ pub enum SubnetType {
     /// A subnet type that is like application subnets but can have some
     /// additional features.
     VerifiedApplication = 4,
+    /// A subnet type for cloud engines, which are configurable, application-specific
+    /// private subnets under the auspices of the NNS and its rules for safety.
+    CloudEngine = 5,
 }
 impl SubnetType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -398,6 +419,7 @@ impl SubnetType {
             Self::Application => "SUBNET_TYPE_APPLICATION",
             Self::System => "SUBNET_TYPE_SYSTEM",
             Self::VerifiedApplication => "SUBNET_TYPE_VERIFIED_APPLICATION",
+            Self::CloudEngine => "SUBNET_TYPE_CLOUD_ENGINE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -407,6 +429,7 @@ impl SubnetType {
             "SUBNET_TYPE_APPLICATION" => Some(Self::Application),
             "SUBNET_TYPE_SYSTEM" => Some(Self::System),
             "SUBNET_TYPE_VERIFIED_APPLICATION" => Some(Self::VerifiedApplication),
+            "SUBNET_TYPE_CLOUD_ENGINE" => Some(Self::CloudEngine),
             _ => None,
         }
     }

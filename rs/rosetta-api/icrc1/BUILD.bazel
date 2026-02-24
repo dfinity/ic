@@ -112,6 +112,7 @@ rust_test(
     aliases = ALIASES,
     crate = ":ic-icrc-rosetta",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["long_test"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

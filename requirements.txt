@@ -12,13 +12,6 @@ ansible-core==2.20.1 \
     --hash=sha256:2a66825b4a53f130b62515e7e2a3d811d544b19b6e8a22d9ef88c55896384cb3 \
     --hash=sha256:a891e5f90cd46626778f0f3d545ec1115840c9b50e8adf25944c5e1748452106
     # via ansible
-antlr4-python3-runtime==4.9.3 \
-    --hash=sha256:f224469b4168294902bb1efa80a8bf7855f24c99aef99cbefc1bcd3cce77881b
-    # via ic-py
-anyio==4.9.0 \
-    --hash=sha256:673c0c244e15788651a4ff38710fea9675823028a6f08a5eda409e0c9840a028 \
-    --hash=sha256:9f76d541cad6e36af7beb62e978876f3b41e3e04f2c1fbf0884604c0a9c4d93c
-    # via httpx
 bcrypt==4.3.0 \
     --hash=sha256:0042b2e342e9ae3d2ed22727c1262f76cc4f345683b5c1715f0250cf4277294f \
     --hash=sha256:0142b2cb84a009f8452c8c5a33ace5e3dfec4159e7735f5afe9a4d50a8ea722d \
@@ -120,16 +113,11 @@ cbor2==5.8.0 \
     --hash=sha256:f935c87350cfcccfa3499413c90d62d0591c8220932c200c2a7108737d4c96c6 \
     --hash=sha256:f95fed480b2a0d843f294d2a1ef4cc0f6a83c7922927f9f558e1f5a8dc54b7ca \
     --hash=sha256:fddee9103a17d7bed5753f0c7fc6663faa506eb953e50d8287804eccf7b048e6
-    # via
-    #   -r requirements.in
-    #   ic-py
+    # via -r requirements.in
 certifi==2025.6.15 \
     --hash=sha256:2e0c7ce7cb5d8f8634ca55d2ba7e6ec2689a2fd6537d8dec1296a477a4910057 \
     --hash=sha256:d747aa5a8b9bbbb1bb8c22bb13e22bd1f18e9796defa16bab421f7f7a317323b
-    # via
-    #   httpcore
-    #   httpx
-    #   requests
+    # via requests
 cffi==2.0.0 \
     --hash=sha256:00bdf7acc5f795150faa6957054fbbca2439db2f775ce831222b66f192f03beb \
     --hash=sha256:07b271772c100085dd28b74fa0cd81c8fb1a3ba18b21e03d7c27f3436a10606b \
@@ -471,10 +459,6 @@ docstring-parser==0.16 \
     --hash=sha256:538beabd0af1e2db0146b6bd3caa526c35a34d61af9fd2887f3a8a27a739aa6e \
     --hash=sha256:bf0a1387354d3691d102edef7ec124f219ef639982d096e26e3b60aeffa90637
     # via simple-parsing
-ecdsa==0.19.1 \
-    --hash=sha256:30638e27cf77b7e15c4c4cc1973720149e1033827cfd00661ca5c8cc0cdb24c3 \
-    --hash=sha256:478cba7b62555866fcb3bb3fe985e06decbdb68ef55713c4e5ab98c57d508e61
-    # via ic-py
 fabric==3.2.2 \
     --hash=sha256:8783ca42e3b0076f08b26901aac6b9d9b1f19c410074e7accfab902c184ff4a3 \
     --hash=sha256:91c47c0be68b14936c88b34da8a1f55e5710fd28397dac5d4ff2e21558113a6f
@@ -487,28 +471,10 @@ gitpython==3.1.44 \
     --hash=sha256:9e0e10cda9bed1ee64bc9a6de50e7e38a9c9943241cd7f585f6df3ed28011110 \
     --hash=sha256:c87e30b26253bf5418b01b0660f818967f3c503193838337fe5e573331249269
     # via -r requirements.in
-h11==0.16.0 \
-    --hash=sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1 \
-    --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
-    # via httpcore
-httpcore==1.0.9 \
-    --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55 \
-    --hash=sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8
-    # via httpx
-httpx==0.28.1 \
-    --hash=sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc \
-    --hash=sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad
-    # via ic-py
-ic-py @ https://github.com/rocklabs-io/ic-py/archive/53c375a1d6c1d09e8d24588142dece550b801cef.zip \
-    --hash=sha256:a07b08e996d4be6749ba10934cc519daf08f20b8874551960274d8dc2c6260f4
-    # via -r requirements.in
 idna==3.10 \
     --hash=sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9 \
     --hash=sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3
-    # via
-    #   anyio
-    #   httpx
-    #   requests
+    # via requests
 idracredfishsupport==0.0.8 \
     --hash=sha256:964b17525f12db358fea93ce2ca491b7661fd8f7567365190da3e6729965bb19
     # via -r requirements.in
@@ -534,10 +500,6 @@ junit-xml==1.9 \
     --hash=sha256:de16a051990d4e25a3982b2dd9e89d671067548718866416faec14d9de56db9f \
     --hash=sha256:ec5ca1a55aefdd76d28fcc0b135251d156c7106fa979686a4b48d62b761b4732
     # via -r requirements.in
-leb128==1.0.8 \
-    --hash=sha256:3a52dca242f93f87a3d766380a93a3fad53ef4044f03018d21705d3b2d9021ee \
-    --hash=sha256:76cd271e75ea91aa2fbf7783d60cb7d667b62143d544bcee59159ff258bf4523
-    # via ic-py
 loguru==0.7.3 \
     --hash=sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6 \
     --hash=sha256:31a33c10c8e1e10422bfd431aeb5d351c7cf7fa671e3c4df004162264b28220c
@@ -605,10 +567,6 @@ markupsafe==3.0.2 \
     --hash=sha256:f8b3d067f2e40fe93e1ccdd6b2e1d16c43140e76f02fb1319a05cf2b79d99430 \
     --hash=sha256:fcabf5ff6eea076f859677f5f0b6b5c1a51e70a376b0579e0eadef8db48c6b50
     # via jinja2
-mnemonic==0.20 \
-    --hash=sha256:7c6fb5639d779388027a77944680aee4870f0fcd09b1e42a5525ee2ce4c625f6 \
-    --hash=sha256:acd2168872d0379e7a10873bb3e12bf6c91b35de758135c4fbd1015ef18fafc5
-    # via ic-py
 mypy==1.16.1 \
     --hash=sha256:051e1677689c9d9578b9c7f4d206d763f9bbd95723cd1416fad50db49d52f359 \
     --hash=sha256:08e850ea22adc4d8a4014651575567b0318ede51e8e9fe7a68f25391af699507 \
@@ -997,7 +955,6 @@ six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
     --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
     # via
-    #   ecdsa
     #   junit-xml
     #   nested-lookup
     #   python-dateutil
@@ -1005,10 +962,6 @@ smmap==5.0.2 \
     --hash=sha256:26ea65a03958fa0c8a1c7e8c7a58fdc77221b8910f6be2131affade476898ad5 \
     --hash=sha256:b30115f0def7d7531d22a0fb6502488d879e75b260a9db4d0819cfb25403af5e
     # via gitdb
-sniffio==1.3.1 \
-    --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
-    --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
-    # via anyio
 tabulate==0.9.0 \
     --hash=sha256:0095b12bf5966de529c0feb1fa08671671b3368eec77d7ef7ab114be2c068b3c \
     --hash=sha256:024ca478df22e9340661486f85298cff5f6dcdba14f3813e8830015b9ed1948f
@@ -1026,7 +979,6 @@ typing-extensions==4.14.0 \
     --hash=sha256:a1514509136dd0b477638fc68d6a91497af5076466ad0fa6c338e44e359944af
     # via
     #   -r requirements.in
-    #   anyio
     #   codeowners
     #   jira
     #   mypy
@@ -1047,10 +999,6 @@ urllib3==2.6.3 \
 uuid==1.30 \
     --hash=sha256:1f87cc004ac5120466f36c5beae48b4c48cc411968eed0eaecd3da82aa96193f
     # via -r requirements.in
-waiter==1.5 \
-    --hash=sha256:5828a6370aa1b4c7e35cd5c00d9463007b91c96b38ded76ec84e47e5e0bb0117 \
-    --hash=sha256:97767067a18af26bd344f75cffdcd6c5bcccdf1c7b5588278855a8339a4570ca
-    # via ic-py
 wrapt==1.17.2 \
     --hash=sha256:08e7ce672e35efa54c5024936e559469436f8b8096253404faeb54d2a878416f \
     --hash=sha256:0a6e821770cf99cc586d33833b2ff32faebdbe886bd6322395606cf55153246c \

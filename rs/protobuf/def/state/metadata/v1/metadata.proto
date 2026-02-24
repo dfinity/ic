@@ -132,6 +132,8 @@ enum HttpMethod {
   HTTP_METHOD_GET = 1;
   HTTP_METHOD_POST = 2;
   HTTP_METHOD_HEAD = 3;
+  HTTP_METHOD_PUT = 4;
+  HTTP_METHOD_DELETE = 5;
 }
 
 message HttpHeader {
@@ -173,7 +175,14 @@ message Replication {
   oneof replication_type {
     google.protobuf.Empty fully_replicated = 1;
     types.v1.NodeId non_replicated = 2;
+    FlexibleReplication flexible = 3;
   }
+}
+
+message FlexibleReplication {
+  repeated types.v1.NodeId committee = 1;
+  uint32 min_responses = 2;
+  uint32 max_responses = 3;
 }
 
 message CanisterHttpRequestContextTree {

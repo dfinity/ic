@@ -173,6 +173,13 @@ impl TaskQueue {
         }
     }
 
+    /// Returns true if the task queue has a `Heartbeat` or `GlobalTimer` task.
+    pub fn has_heartbeat_or_global_timer(&self) -> bool {
+        self.queue
+            .iter()
+            .any(|task| *task == ExecutionTask::Heartbeat || *task == ExecutionTask::GlobalTimer)
+    }
+
     /// Removes `Heartbeat` and `GlobalTimer` tasks.
     pub fn remove_heartbeat_and_global_timer(&mut self) {
         for task in self.queue.iter() {
@@ -182,7 +189,9 @@ impl TaskQueue {
             );
         }
 
-        self.queue.clear();
+        self.queue.retain(|task| {
+            *task != ExecutionTask::Heartbeat && *task != ExecutionTask::GlobalTimer
+        });
     }
 
     /// Returns `PausedExecution` or `PausedInstallCode` task.

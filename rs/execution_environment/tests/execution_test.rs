@@ -1232,7 +1232,7 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
     // Reserve all cycles of canister B.
     {
         let mut state = env.get_latest_state().as_ref().clone();
-        let canister = state.canister_state_mut(&canister_b).unwrap();
+        let canister = state.canister_state_make_mut(&canister_b).unwrap();
         canister
             .system_state
             .reserve_cycles(canister.system_state.balance())
@@ -1302,7 +1302,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
     let reserved_cycles = Cycles::new(360 * B);
     {
         let mut state = env.get_latest_state().as_ref().clone();
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         canister
             .system_state
             .reserve_cycles(reserved_cycles)

@@ -310,6 +310,7 @@ system_test_nns(
     flaky = False,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",

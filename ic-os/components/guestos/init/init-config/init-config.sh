@@ -73,6 +73,11 @@ else
     exit 1
 fi
 
+# We populate the NNS public key early since it's used by the guest-upgrade-client which does not depend on
+# bootstrap-ic-node.
+# populate-nns-public-key reads /run/config/config.json
+/opt/ic/bin/config_tool populate-nns-public-key
+
 # Create file under /run/config/guest_vm_type, this can be used to add ConditionPathExists conditions to systemd units
 guest_vm_type="$(jq -r ".guest_vm_type" /run/config/config.json)"
 if [[ "$guest_vm_type" = null ]]; then

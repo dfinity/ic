@@ -36,6 +36,7 @@ WITH
       ROUND(("timeout" * 100.0) / "total", 1)  AS "timeout%",
       ROUND(("fail" * 100.0) / "total", 1)  AS "fail%",
       "non_success" * "duration_p90" AS "impact",
+      "total" * "duration_p90" AS "total_duration",
       "duration_p90"
 
     FROM

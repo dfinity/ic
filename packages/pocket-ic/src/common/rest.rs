@@ -958,6 +958,8 @@ pub enum CanisterHttpMethod {
     GET,
     POST,
     HEAD,
+    PUT,
+    DELETE,
 }
 
 #[derive(

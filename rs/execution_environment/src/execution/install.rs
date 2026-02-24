@@ -122,8 +122,8 @@ pub(crate) fn execute_install(
         round_limits,
         original.compilation_cost_handling,
     );
+    helper.charge_for_compilation(instructions_from_compilation);
     if let Err(err) = helper.replace_execution_state_and_allocations(
-        instructions_from_compilation,
         result,
         CanisterMemoryHandling {
             stable_memory_handling: MemoryHandling::Replace,

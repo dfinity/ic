@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-02-20: Proposal 140508
+
+http://dashboard.internetcomputer.org/proposal/140508
+
+## Changed
+
+* Do not wait forever when calling the Exchange Rate canister.
+
+
 # 2025-10-31: Proposal 139211
 
 http://dashboard.internetcomputer.org/proposal/139211

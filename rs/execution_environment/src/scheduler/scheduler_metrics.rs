@@ -33,15 +33,7 @@ pub(crate) const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str =
 pub(super) struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
     pub(super) canister_compute_allocation_violation: IntCounter,
-    pub(super) canister_balance: Histogram,
-    pub(super) canister_binary_size: Histogram,
-    pub(super) canister_log_memory_usage_v2: Histogram,
-    pub(super) canister_log_memory_usage_v3: Histogram,
     pub(super) canister_log_delta_memory_usage: Histogram,
-    pub(super) canister_wasm_memory_usage: Histogram,
-    pub(super) canister_stable_memory_usage: Histogram,
-    pub(super) canister_memory_allocation: Histogram,
-    pub(super) canister_compute_allocation: Histogram,
     pub(super) canister_ingress_queue_latencies: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
     pub(super) msg_execution_duration: Histogram,
@@ -49,27 +41,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) executable_canisters_per_round: Histogram,
     pub(super) executed_canisters_per_round: Histogram,
     pub(super) expired_ingress_messages_count: IntCounter,
-    pub(super) ingress_history_length: IntGauge,
-    pub(super) registered_canisters: IntGaugeVec,
-    pub(super) available_canister_ids: IntGauge,
-    /// Metric `consumed_cycles` is not monotonically increasing. Cycles
-    /// consumed are increasing the value of the metric while refunding
-    /// cycles are decreasing it.
-    ///
-    /// `f64` gauge because cycles values are `u128`: converting them
-    /// into `u64` would result in truncation when the value overflows
-    /// 64 bits (which would be indistinguishable from a huge refund);
-    /// whereas conversion to `f64` merely results in loss of precision
-    /// when dealing with values > 2^53.
-    pub(super) consumed_cycles: Gauge,
-    pub(super) consumed_cycles_by_use_case: GaugeVec,
-    pub(super) input_queue_messages: IntGaugeVec,
-    pub(super) input_queues_size_bytes: IntGaugeVec,
-    pub(super) queues_response_bytes: IntGauge,
-    pub(super) queues_memory_reservations: IntGauge,
-    pub(super) queues_oversized_requests_extra_bytes: IntGauge,
-    pub(super) queues_best_effort_message_bytes: IntGauge,
-    pub(super) current_heap_delta: IntGauge,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
     pub(super) execute_round_called: IntCounter,
     pub(super) inner_loop_consumed_non_zero_instructions_count: IntCounter,
@@ -88,6 +59,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
     pub(super) round_inner_iteration_prep: Histogram,
+    pub(super) round_inner_iteration_scheduling: Histogram,
     pub(super) round_inner_iteration_exe: Histogram,
     pub(super) round_inner_iteration_thread: ScopedMetrics,
     pub(super) round_inner_iteration_fin: Histogram,
@@ -96,36 +68,16 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_finalization_stop_canisters: Histogram,
     pub(super) round_finalization_ingress: Histogram,
     pub(super) round_finalization_charge: Histogram,
-    pub(super) canister_heap_delta_debits: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
-    pub(super) canisters_not_in_routing_table: IntGauge,
-    pub(super) canister_install_code_debits: Histogram,
-    pub(super) old_open_call_contexts: IntGaugeVec,
-    pub(super) canisters_with_old_open_call_contexts: IntGaugeVec,
     pub(super) canister_invariants: IntCounter,
     pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
     pub(super) scheduler_cores_invariant_broken: IntCounter,
-    pub(super) scheduler_accumulated_priority_invariant: IntGauge,
     pub(super) scheduler_accumulated_priority_deviation: Gauge,
-    pub(super) subnet_memory_usage_invariant: IntCounter,
-    pub(super) total_canister_balance: Gauge,
-    pub(super) total_canister_reserved_balance: Gauge,
-    pub(super) canister_paused_execution: Histogram,
-    pub(super) canister_aborted_execution: Histogram,
-    pub(super) canister_paused_install_code: Histogram,
-    pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
-    pub(super) threshold_signature_agreements: IntGaugeVec,
     pub(super) delivered_pre_signatures: HistogramVec,
     pub(super) exceeding_pre_signatures: IntCounterVec,
-    pub(super) in_flight_signature_request_contexts: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
-    pub(super) pre_signature_stash_size: IntGaugeVec,
     pub(super) threshold_signature_scheme_mismatch: IntCounter,
-    // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
-    pub(super) stop_canister_calls_without_call_id: IntGauge,
-    pub(super) canister_snapshots_memory_usage: IntGauge,
-    pub(super) num_canister_snapshots: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -149,67 +101,11 @@ impl SchedulerMetrics {
                 "scheduler_compute_allocation_violations",
                 "Total number of canister allocation violations.",
             ),
-            canister_balance: cycles_histogram(
-                "canister_balance_cycles",
-                "Canisters balance distribution in Cycles.",
-                metrics_registry,
-            ),
-            canister_binary_size: memory_histogram(
-                "canister_binary_size_bytes",
-                "Canisters Wasm binary size distribution in bytes.",
-                metrics_registry,
-            ),
-            canister_log_memory_usage_v2: metrics_registry.histogram(
-                "canister_log_memory_usage_bytes_v2",
-                "Canisters log memory usage distribution in bytes.",
-                unique_sorted_buckets(&[
-                    0,
-                    KIB,
-                    2 * KIB,
-                    5 * KIB,
-                    10 * KIB,
-                    20 * KIB,
-                    50 * KIB,
-                    100 * KIB,
-                    200 * KIB,
-                    500 * KIB,
-                    MIB,
-                    2 * MIB,
-                    5 * MIB,
-                    10 * MIB,
-                ])
-            ),
-            canister_log_memory_usage_v3: metrics_registry.histogram(
-                "canister_log_memory_usage_bytes_v3",
-                "Canisters log memory usage distribution in bytes.",
-                // 4 KiB (2^12) .. 8 GiB (2^33), plus zero — 23 total buckets (0 + 22 powers).
-                binary_buckets_with_zero(12, 33)
-            ),
             canister_log_delta_memory_usage: metrics_registry.histogram(
                 "canister_log_delta_memory_usage_bytes",
                 "Canisters log delta (per single execution) memory usage distribution in bytes.",
                 // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
                 binary_buckets_with_zero(10, 23)
-            ),
-            canister_wasm_memory_usage: memory_histogram(
-                "canister_wasm_memory_usage_bytes",
-                "Canisters Wasm memory usage distribution in bytes.",
-                metrics_registry,
-            ),
-            canister_stable_memory_usage: memory_histogram(
-                "canister_stable_memory_usage_bytes",
-                "Canisters stable memory usage distribution in bytes.",
-                metrics_registry,
-            ),
-            canister_memory_allocation: memory_histogram(
-                "canister_memory_allocation_bytes",
-                "Canisters memory allocation distribution in bytes.",
-                metrics_registry,
-            ),
-            canister_compute_allocation: metrics_registry.histogram(
-                "canister_compute_allocation_ratio",
-                "Canisters compute allocation distribution ratio (0-1).",
-                linear_buckets(0.0, 0.1, 11),
             ),
             canister_ingress_queue_latencies: metrics_registry.histogram(
                 "scheduler_canister_ingress_queue_latencies_seconds",
@@ -249,33 +145,6 @@ impl SchedulerMetrics {
                 "Total number of ingress messages that expired before \
                       reaching a terminal state.",
             ),
-            ingress_history_length: metrics_registry.int_gauge(
-                "replicated_state_ingress_history_length",
-                "Total number of entries kept in the ingress history.",
-            ),
-            registered_canisters: metrics_registry.int_gauge_vec(
-                "replicated_state_registered_canisters",
-                "Total number of canisters keyed by their current status.",
-                &["status"],
-            ),
-            available_canister_ids: metrics_registry.int_gauge(
-                "replicated_state_available_canister_ids",
-                "Number of allocated canister IDs that can still be generated.",
-            ),
-            consumed_cycles: metrics_registry.gauge(
-                "replicated_state_consumed_cycles_since_replica_started",
-                "Number of cycles consumed",
-            ),
-            consumed_cycles_by_use_case: metrics_registry.gauge_vec(
-                "replicated_state_consumed_cycles_from_replica_start",
-                "Number of cycles consumed by use cases.",
-                &["use_case"],
-            ),
-            threshold_signature_agreements: metrics_registry.int_gauge_vec(
-                "replicated_state_threshold_signature_agreements_total",
-                "Total number of threshold signature agreements created by key Id",
-                &["key_id"],
-            ),
             delivered_pre_signatures: metrics_registry.histogram_vec(
                 "execution_idkg_delivered_pre_signatures",
                 "Number of IDkg pre-signatures delivered to execution by key ID",
@@ -287,53 +156,12 @@ impl SchedulerMetrics {
                 "Number of IDkg pre-signatures delivered to execution that exceeded the maximum stash size",
                 &["key_id"],
             ),
-            in_flight_signature_request_contexts: metrics_registry.histogram_vec(
-                "execution_in_flight_signature_request_contexts",
-                "Number of in flight signature request contexts by key ID",
-                vec![1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0, 50.0],
-                &["key_id"],
-            ),
             completed_signature_request_contexts: metrics_registry.int_counter_vec(
                 "execution_completed_signature_request_contexts_total",
                 "Total number of completed signature request contexts by key ID",
                 &["key_id"],
             ),
-            pre_signature_stash_size: metrics_registry.int_gauge_vec(
-                "execution_pre_signature_stash_size",
-                "Number of pre-signatures currently stored in the pre-signature stash, by key ID.",
-                &["key_id"],
-            ),
             threshold_signature_scheme_mismatch: metrics_registry.error_counter(THRESHOLD_SIGNATURE_SCHEME_MISMATCH),
-            input_queue_messages: metrics_registry.int_gauge_vec(
-                "execution_input_queue_messages",
-                "Count of messages currently enqueued in input queues, by message kind.",
-                &[LABEL_MESSAGE_KIND],
-            ),
-            input_queues_size_bytes: metrics_registry.int_gauge_vec(
-                "execution_input_queue_size_bytes",
-                "Byte size of input queues, by message kind.",
-                &[LABEL_MESSAGE_KIND],
-            ),
-            queues_response_bytes: metrics_registry.int_gauge(
-                "execution_queues_response_size_bytes",
-                "Total byte size of all responses in input and output queues.",
-            ),
-            queues_memory_reservations: metrics_registry.int_gauge(
-                "execution_queues_reservations",
-                "Total number of memory reservations for guaranteed responses in input and output queues.",
-            ),
-            queues_oversized_requests_extra_bytes: metrics_registry.int_gauge(
-                "execution_queues_oversized_requests_extra_bytes",
-                "Total bytes above `MAX_RESPONSE_COUNT_BYTES` across oversized local-subnet requests.",
-            ),
-            queues_best_effort_message_bytes: metrics_registry.int_gauge(
-                "execution_queues_best_effort_message_bytes",
-                "Total byte size of all best-effort messages in canister queues.",
-            ),
-            current_heap_delta: metrics_registry.int_gauge(
-                "current_heap_delta",
-                "Estimate of the current size of the heap delta since the last checkpoint",
-            ),
             round_skipped_due_to_current_heap_delta_above_limit: metrics_registry.int_counter(
                 "round_skipped_due_to_current_heap_delta_above_limit",
                 "The number of rounds that were skipped because the current \
@@ -448,6 +276,7 @@ impl SchedulerMetrics {
                 ),
             },
             round_inner_iteration_prep: round_inner_phase_duration_histogram("preparation", metrics_registry),
+            round_inner_iteration_scheduling: round_inner_phase_duration_histogram("scheduling", metrics_registry),
             round_inner_iteration_exe: round_inner_phase_duration_histogram("execution", metrics_registry),
             round_inner_iteration_thread: ScopedMetrics {
                 duration: duration_histogram(
@@ -487,18 +316,185 @@ impl SchedulerMetrics {
             // Pruning of expired messages from the ingress history.
             round_finalization_ingress: round_finalization_phase_duration_histogram("prune ingress", metrics_registry),
             round_finalization_charge: round_finalization_phase_duration_histogram("charge canisters", metrics_registry),
-            canister_heap_delta_debits: metrics_registry.histogram(
-                "scheduler_canister_heap_delta_debits",
-                "The heap delta debit of a canister at the end of the round, before \
-                subtracting the rate limit allowed amount.",
-                // 1 MB, 2 MB, 5 MB, ..., 10 GB, 20 GB, 50 GB
-                decimal_buckets(6, 10),
-            ),
             heap_delta_rate_limited_canisters_per_round: metrics_registry.histogram(
                 "scheduler_heap_delta_rate_limited_canisters_per_round",
                 "Number of canisters that were heap delta rate limited in a given round.",
                 // 0, 1, 2, 5, …, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
+            ),
+            canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
+            scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
+            scheduler_cores_invariant_broken: metrics_registry.error_counter(SCHEDULER_CORES_INVARIANT_BROKEN),
+            scheduler_accumulated_priority_deviation: metrics_registry.gauge(
+                "scheduler_accumulated_priority_deviation",
+                "The standard deviation of accumulated priorities on the subnet."
+            ),
+            inducted_messages: metrics_registry.int_counter_vec(
+                "scheduler_inducted_messages_total",
+                "Number of messages inducted, by destination.",
+                &["destination"],
+            ),
+        }
+    }
+}
+
+pub(super) struct ReplicatedStateMetrics {
+    pub(super) canister_balance: Histogram,
+    pub(super) canister_binary_size: Histogram,
+    pub(super) canister_log_memory_usage_v2: Histogram,
+    pub(super) canister_log_memory_usage_v3: Histogram,
+    pub(super) canister_wasm_memory_usage: Histogram,
+    pub(super) canister_stable_memory_usage: Histogram,
+    pub(super) canister_memory_allocation: Histogram,
+    pub(super) canister_compute_allocation: Histogram,
+    pub(super) ingress_history_length: IntGauge,
+    pub(super) registered_canisters: IntGaugeVec,
+    pub(super) available_canister_ids: IntGauge,
+    pub(super) consumed_cycles: Gauge,
+    pub(super) consumed_cycles_by_use_case: GaugeVec,
+    pub(super) input_queue_messages: IntGaugeVec,
+    pub(super) input_queues_size_bytes: IntGaugeVec,
+    pub(super) queues_response_bytes: IntGauge,
+    pub(super) queues_memory_reservations: IntGauge,
+    pub(super) queues_oversized_requests_extra_bytes: IntGauge,
+    pub(super) queues_best_effort_message_bytes: IntGauge,
+    pub(super) current_heap_delta: IntGauge,
+    pub(super) canister_heap_delta_debits: Histogram,
+    pub(super) canisters_not_in_routing_table: IntGauge,
+    pub(super) canister_install_code_debits: Histogram,
+    pub(super) old_open_call_contexts: IntGaugeVec,
+    pub(super) canisters_with_old_open_call_contexts: IntGaugeVec,
+    pub(super) subnet_memory_usage_invariant: IntCounter,
+    pub(super) total_canister_balance: Gauge,
+    pub(super) total_canister_reserved_balance: Gauge,
+    pub(super) canister_paused_execution: Histogram,
+    pub(super) canister_aborted_execution: Histogram,
+    pub(super) canister_paused_install_code: Histogram,
+    pub(super) canister_aborted_install_code: Histogram,
+    pub(super) threshold_signature_agreements: IntGaugeVec,
+    pub(super) in_flight_signature_request_contexts: HistogramVec,
+    pub(super) pre_signature_stash_size: IntGaugeVec,
+    pub(super) stop_canister_calls_without_call_id: IntGauge,
+    pub(super) canister_snapshots_memory_usage: IntGauge,
+    pub(super) num_canister_snapshots: IntGauge,
+}
+
+impl ReplicatedStateMetrics {
+    pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            canister_balance: cycles_histogram(
+                "canister_balance_cycles",
+                "Canisters balance distribution in Cycles.",
+                metrics_registry,
+            ),
+            canister_binary_size: memory_histogram(
+                "canister_binary_size_bytes",
+                "Canisters Wasm binary size distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_log_memory_usage_v2: metrics_registry.histogram(
+                "canister_log_memory_usage_bytes_v2",
+                "Canisters log memory usage distribution in bytes.",
+                unique_sorted_buckets(&[
+                    0,
+                    KIB,
+                    2 * KIB,
+                    5 * KIB,
+                    10 * KIB,
+                    20 * KIB,
+                    50 * KIB,
+                    100 * KIB,
+                    200 * KIB,
+                    500 * KIB,
+                    MIB,
+                    2 * MIB,
+                    5 * MIB,
+                    10 * MIB,
+                ])
+            ),
+            canister_log_memory_usage_v3: metrics_registry.histogram(
+                "canister_log_memory_usage_bytes_v3",
+                "Canisters log memory usage distribution in bytes.",
+                // 4 KiB (2^12) .. 8 GiB (2^33), plus zero — 23 total buckets (0 + 22 powers).
+                binary_buckets_with_zero(12, 33)
+            ),
+            canister_wasm_memory_usage: memory_histogram(
+                "canister_wasm_memory_usage_bytes",
+                "Canisters Wasm memory usage distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_stable_memory_usage: memory_histogram(
+                "canister_stable_memory_usage_bytes",
+                "Canisters stable memory usage distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_memory_allocation: memory_histogram(
+                "canister_memory_allocation_bytes",
+                "Canisters memory allocation distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_compute_allocation: metrics_registry.histogram(
+                "canister_compute_allocation_ratio",
+                "Canisters compute allocation distribution ratio (0-1).",
+                linear_buckets(0.0, 0.1, 11),
+            ),
+            ingress_history_length: metrics_registry.int_gauge(
+                "replicated_state_ingress_history_length",
+                "Total number of entries kept in the ingress history.",
+            ),
+            registered_canisters: metrics_registry.int_gauge_vec(
+                "replicated_state_registered_canisters",
+                "Total number of canisters keyed by their current status.",
+                &["status"],
+            ),
+            available_canister_ids: metrics_registry.int_gauge(
+                "replicated_state_available_canister_ids",
+                "Number of allocated canister IDs that can still be generated.",
+            ),
+            consumed_cycles: metrics_registry.gauge(
+                "replicated_state_consumed_cycles_since_replica_started",
+                "Number of cycles consumed",
+            ),
+            consumed_cycles_by_use_case: metrics_registry.gauge_vec(
+                "replicated_state_consumed_cycles_from_replica_start",
+                "Number of cycles consumed by use cases.",
+                &["use_case"],
+            ),
+            input_queue_messages: metrics_registry.int_gauge_vec(
+                "execution_input_queue_messages",
+                "Count of messages currently enqueued in input queues, by message kind.",
+                &[LABEL_MESSAGE_KIND],
+            ),
+            input_queues_size_bytes: metrics_registry.int_gauge_vec(
+                "execution_input_queue_size_bytes",
+                "Byte size of input queues, by message kind.",
+                &[LABEL_MESSAGE_KIND],
+            ),
+            queues_response_bytes: metrics_registry.int_gauge(
+                "execution_queues_response_size_bytes",
+                "Total byte size of all responses in input and output queues.",
+            ),
+            queues_memory_reservations: metrics_registry.int_gauge(
+                "execution_queues_reservations",
+                "Total number of memory reservations for guaranteed responses in input and output queues.",
+            ),
+            queues_oversized_requests_extra_bytes: metrics_registry.int_gauge(
+                "execution_queues_oversized_requests_extra_bytes",
+                "Total bytes above `MAX_RESPONSE_COUNT_BYTES` across oversized local-subnet requests.",
+            ),
+            queues_best_effort_message_bytes: metrics_registry.int_gauge(
+                "execution_queues_best_effort_message_bytes",
+                "Total byte size of all best-effort messages in canister queues.",
+            ),
+            current_heap_delta: metrics_registry.int_gauge(
+                "current_heap_delta",
+                "Estimate of the current size of the heap delta since the last checkpoint",
+            ),
+            canister_heap_delta_debits: metrics_registry.histogram(
+                "scheduler_canister_heap_delta_debits",
+                "The heap delta debit of a canister at the end of the round, before \
+                subtracting the rate limit allowed amount.",
+                decimal_buckets(6, 10),
             ),
             canisters_not_in_routing_table: metrics_registry.int_gauge(
                 "replicated_state_canisters_not_in_routing_table",
@@ -519,17 +515,6 @@ impl SchedulerMetrics {
                 "scheduler_canisters_with_old_open_call_contexts",
                 "Number of canisters with call contexts that have been open for more than the given age.",
                 &["age"]
-            ),
-            canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
-            scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
-            scheduler_cores_invariant_broken: metrics_registry.error_counter(SCHEDULER_CORES_INVARIANT_BROKEN),
-            scheduler_accumulated_priority_invariant: metrics_registry.int_gauge(
-                "scheduler_accumulated_priority_invariant",
-                "The sum of all accumulated priorities on the subnet."
-            ),
-            scheduler_accumulated_priority_deviation: metrics_registry.gauge(
-                "scheduler_accumulated_priority_deviation",
-                "The standard deviation of accumulated priorities on the subnet."
             ),
             subnet_memory_usage_invariant: metrics_registry.error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
             total_canister_balance: metrics_registry.gauge(
@@ -560,12 +545,23 @@ impl SchedulerMetrics {
                 "Number of canisters that have an aborted install code.",
                 metrics_registry,
             ),
-            inducted_messages: metrics_registry.int_counter_vec(
-                "scheduler_inducted_messages_total",
-                "Number of messages inducted, by destination.",
-                &["destination"],
+            threshold_signature_agreements: metrics_registry.int_gauge_vec(
+                "replicated_state_threshold_signature_agreements_total",
+                "Total number of threshold signature agreements created by key Id",
+                &["key_id"],
             ),
-            stop_canister_calls_without_call_id:  metrics_registry.int_gauge(
+            in_flight_signature_request_contexts: metrics_registry.histogram_vec(
+                "execution_in_flight_signature_request_contexts",
+                "Number of in flight signature request contexts by key ID",
+                vec![1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 20.0, 50.0],
+                &["key_id"],
+            ),
+            pre_signature_stash_size: metrics_registry.int_gauge_vec(
+                "execution_pre_signature_stash_size",
+                "Number of pre-signatures currently stored in the pre-signature stash, by key ID.",
+                &["key_id"],
+            ),
+            stop_canister_calls_without_call_id: metrics_registry.int_gauge(
                 "scheduler_stop_canister_calls_without_call_id",
                 "Number of stop canister calls with missing call ID.",
             ),

@@ -21,6 +21,7 @@ use ic_agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
     },
+    agent_error::TransportError,
     export::Principal,
     identity::BasicIdentity,
 };
@@ -92,10 +93,8 @@ pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 pub const MAX_TCP_ERROR_RETRIES: usize = 5;
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
-    ic_agent::identity::BasicIdentity::from_pem(std::io::Cursor::new(
-        TEST_IDENTITY_KEYPAIR.to_pem(),
-    ))
-    .expect("Invalid secret key.")
+    ic_agent::identity::BasicIdentity::from_pem(TEST_IDENTITY_KEYPAIR.to_pem())
+        .expect("Invalid secret key.")
 }
 
 /// Initializes a testing [Runtime] from a node's url. You should really
@@ -686,6 +685,31 @@ impl<'a> MessageCanister<'a> {
             .unwrap()
     }
 
+    pub async fn new_with_cycles_with_retries<C: Into<u128>>(
+        agent: &'a Agent,
+        effective_canister_id: PrincipalId,
+        cycles: C,
+        log: &slog::Logger,
+    ) -> MessageCanister<'a> {
+        let c = cycles.into();
+        retry_with_msg_async!(
+            format!(
+                "install MessageCanister {}",
+                effective_canister_id.to_string()
+            ),
+            log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                Self::new_with_params(agent, effective_canister_id, None, Some(c))
+                    .await
+                    .map_err(|e| anyhow!(e))
+            }
+        )
+        .await
+        .expect("Could not create message canister with cycles.")
+    }
+
     pub fn canister_id(&self) -> Principal {
         self.canister_id
     }
@@ -930,7 +954,9 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder.build().map_err(AgentError::TransportError)?;
+    let client = builder
+        .build()
+        .map_err(|e| AgentError::TransportError(TransportError::Reqwest(e)))?;
     agent_with_client_identity(url, client, identity).await
 }
 

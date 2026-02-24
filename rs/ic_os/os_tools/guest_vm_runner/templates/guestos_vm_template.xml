@@ -18,10 +18,12 @@
     <topology sockets='2' cores='{{nr_of_vcpus / 4}}' threads='2'/>
     <feature policy='require' name='topoext'/>
   </cpu>
+  {%- if enable_sev %}
   <commandline xmlns="http://libvirt.org/schemas/domain/qemu/1.0">
     <arg value='-cpu'/>
     <arg value='EPYC-v4,topoext=on,l3-cache=off'/>
   </commandline>
+  {%- endif %}
   {% endif -%}
 
   {%- if enable_sev -%}
@@ -207,3 +209,4 @@
     <imagelabel>+64055:+108</imagelabel>
   </seclabel>
 </domain>
+

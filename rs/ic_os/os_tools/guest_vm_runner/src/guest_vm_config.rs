@@ -8,9 +8,6 @@ use deterministic_ips::calculate_deterministic_mac;
 use deterministic_ips::node_type::NodeType;
 use std::path::{Path, PathBuf};
 
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
-
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 
@@ -22,6 +19,22 @@ const DEFAULT_VM_MEMORY_GB: u32 = 480;
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_VCPUS: u32 = 64;
 const UPGRADE_VM_MEMORY_GB: u32 = 4;
+
+#[derive(Template)]
+#[template(path = "guestos_vm_template.xml", escape = "xml")]
+pub struct GuestOSTemplateProps {
+    pub domain_name: String,
+    pub domain_uuid: String,
+    pub cpu_domain: String,
+    pub console_log_path: String,
+    pub vm_memory: u32,
+    pub nr_of_vcpus: u32,
+    pub mac_address: macaddr::MacAddr6,
+    pub disk_device: PathBuf,
+    pub config_media_path: PathBuf,
+    pub enable_sev: bool,
+    pub direct_boot: Option<DirectBootConfig>,
+}
 
 #[derive(Debug)]
 pub struct DirectBootConfig {

@@ -355,11 +355,16 @@ impl SchedulerConfig {
         Self::application_subnet()
     }
 
+    pub fn cloud_engine() -> Self {
+        Self::application_subnet()
+    }
+
     pub fn default_for_subnet_type(subnet_type: SubnetType) -> Self {
         match subnet_type {
             SubnetType::Application => Self::application_subnet(),
             SubnetType::System => Self::system_subnet(),
             SubnetType::VerifiedApplication => Self::verified_application_subnet(),
+            SubnetType::CloudEngine => Self::cloud_engine(),
         }
     }
 }
@@ -555,6 +560,10 @@ impl CyclesAccountManagerConfig {
             fetch_canister_logs_per_byte_fee: Cycles::zero(),
         }
     }
+
+    pub fn cloud_engine() -> Self {
+        Self::application_subnet()
+    }
 }
 
 /// If a component has at least one static configuration that is different for
@@ -571,6 +580,7 @@ impl SubnetConfig {
             SubnetType::Application => Self::default_application_subnet(),
             SubnetType::System => Self::default_system_subnet(),
             SubnetType::VerifiedApplication => Self::default_verified_application_subnet(),
+            SubnetType::CloudEngine => Self::default_cloud_engine(),
         }
     }
 
@@ -597,6 +607,14 @@ impl SubnetConfig {
             scheduler_config: SchedulerConfig::verified_application_subnet(),
             cycles_account_manager_config: CyclesAccountManagerConfig::verified_application_subnet(
             ),
+        }
+    }
+
+    /// Returns the subnet configuration for a cloud engine subnet type.
+    fn default_cloud_engine() -> Self {
+        Self {
+            scheduler_config: SchedulerConfig::cloud_engine(),
+            cycles_account_manager_config: CyclesAccountManagerConfig::cloud_engine(),
         }
     }
 }

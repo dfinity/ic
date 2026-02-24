@@ -215,6 +215,7 @@ pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,
 
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_ingress_bytes_per_block: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
     pub unit_delay_millis: Option<u64>,
@@ -428,6 +429,7 @@ fn merge_subnet_record(
     let UpdateSubnetPayload {
         subnet_id: _subnet_id,
         max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block,
         max_ingress_messages_per_block,
         max_block_payload_size,
         unit_delay_millis,
@@ -460,6 +462,7 @@ fn merge_subnet_record(
     let features: Option<SubnetFeaturesPb> = features.map(|v| SubnetFeatures::from(v).into());
 
     maybe_set!(subnet_record, max_ingress_bytes_per_message);
+    maybe_set!(subnet_record, max_ingress_bytes_per_block);
     maybe_set!(subnet_record, max_ingress_messages_per_block);
     maybe_set!(subnet_record, max_block_payload_size);
     maybe_set!(subnet_record, unit_delay_millis);
@@ -521,6 +524,7 @@ mod tests {
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -555,6 +559,7 @@ mod tests {
         let subnet_record = SubnetRecordPb {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -572,6 +577,7 @@ mod tests {
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            subnet_admins: vec![],
         };
 
         let key_id = EcdsaKeyId {
@@ -598,6 +604,7 @@ mod tests {
             ),
             max_ingress_bytes_per_message: Some(256),
             max_ingress_messages_per_block: Some(256),
+            max_ingress_bytes_per_block: Some(257),
             max_block_payload_size: Some(200),
             unit_delay_millis: Some(300),
             initial_notary_delay_millis: Some(200),
@@ -639,6 +646,7 @@ mod tests {
                 membership: vec![],
                 max_ingress_bytes_per_message: 256,
                 max_ingress_messages_per_block: 256,
+                max_ingress_bytes_per_block: 257,
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
@@ -664,6 +672,7 @@ mod tests {
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
             }
         );
     }
@@ -673,6 +682,7 @@ mod tests {
         let subnet_record = SubnetRecordPb {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -690,6 +700,7 @@ mod tests {
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            subnet_admins: vec![],
         };
 
         let payload = UpdateSubnetPayload {
@@ -701,6 +712,7 @@ mod tests {
             ),
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
@@ -733,6 +745,7 @@ mod tests {
             SubnetRecordPb {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_bytes_per_block: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
@@ -750,6 +763,7 @@ mod tests {
                 ssh_backup_access: vec![],
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
             }
         );
     }

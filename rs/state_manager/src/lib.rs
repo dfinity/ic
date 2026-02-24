@@ -23,12 +23,14 @@ use crossbeam_channel::Sender;
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
+    lazy_tree::LazyTree,
     lazy_tree::materialize::materialize_partial,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{
     Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness, recompute_digest,
+    sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces_certified_stream_store::{
@@ -843,6 +845,9 @@ struct CertificationMetadata {
     /// Root hash of the tree above. It's stored even if the hash tree is
     /// dropped.
     certified_state_hash: CryptoHash,
+    /// Witness for the state height. It's stored even if the hash tree is
+    /// dropped.
+    height_witness: Witness,
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
@@ -1848,7 +1853,8 @@ impl StateManagerImpl {
         log: &ReplicaLogger,
     ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
-        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(state, height))?;
+        let lazy_tree = replicated_state_as_lazy_tree(state, height);
+        let hash_tree = hash_lazy_tree(&lazy_tree)?;
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
@@ -1860,9 +1866,12 @@ impl StateManagerImpl {
 
         let certified_state_hash = crypto_hash_of_tree(&hash_tree);
 
+        let height_witness = state_height_witness(&lazy_tree, &hash_tree, metrics);
+
         Ok(CertificationMetadata {
             hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certified_state_hash,
+            height_witness,
             certification: None,
         })
     }
@@ -2019,11 +2028,15 @@ impl StateManagerImpl {
             }
         }
 
-        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height))
+        let lazy_tree = replicated_state_as_lazy_tree(&state, height);
+        let hash_tree = hash_lazy_tree(&lazy_tree)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
         update_hash_tree_metrics(&hash_tree, &self.metrics);
+        let height_witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);
+        drop(lazy_tree);
         let certification_metadata = CertificationMetadata {
             certified_state_hash: crypto_hash_of_tree(&hash_tree),
+            height_witness,
             hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certification: None,
         };
@@ -2615,6 +2628,25 @@ fn crypto_hash_of_tree(t: &HashTree) -> CryptoHash {
     CryptoHash(t.root_hash().0.to_vec())
 }
 
+fn state_height_witness(
+    lazy_tree: &LazyTree,
+    hash_tree: &HashTree,
+    metrics: &StateManagerMetrics,
+) -> Witness {
+    let _timer = metrics
+        .checkpoint_op_duration
+        .with_label_values(&["state_height_witness"])
+        .start_timer();
+
+    let paths = vec![vec!["metadata".into(), "height".into()].into()];
+    let labeled_tree =
+        sparse_labeled_tree_from_paths(&paths).expect("Failed to compute labeled tree for height");
+    let partial_tree = materialize_partial(lazy_tree, &labeled_tree, None);
+    hash_tree
+        .witness::<Witness>(&partial_tree)
+        .expect("Failed to compute witness for state height")
+}
+
 fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
     let h = h.get();
     cached.fetch_max(h, Ordering::Relaxed).max(h)
@@ -2766,6 +2798,8 @@ impl StateManager for StateManagerImpl {
             .as_ref()
             .expect("Missing CheckpointLayout")
             .clone();
+
+        states.tip_height = target_snapshot.height;
         std::mem::drop(states);
 
         let mut new_tip = initialize_tip(
@@ -2981,6 +3015,7 @@ impl StateManager for StateManagerImpl {
             .map(|(height, metadata)| StateHashMetadata {
                 height: *height,
                 hash: CryptoHashOfPartialState::from(metadata.certified_state_hash.clone()),
+                height_witness: metadata.height_witness.clone(),
             })
             .collect()
     }
@@ -3213,7 +3248,6 @@ impl StateManager for StateManagerImpl {
     fn commit_and_certify(
         &self,
         mut state: Self::State,
-        height: Height,
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
@@ -3222,6 +3256,11 @@ impl StateManager for StateManagerImpl {
             .api_call_duration
             .with_label_values(&["commit_and_certify"])
             .start_timer();
+
+        let height = {
+            let states = self.states.read();
+            states.tip_height.increment()
+        };
 
         self.populate_extra_metadata(&mut state, height);
 

@@ -934,7 +934,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .set(subnet_record.max_block_payload_size as i64);
         self.metrics
             .canister_ranges_count
-            .set(network_topology.routing_table.ranges(own_subnet_id).len() as i64);
+            .set(network_topology.routing_table().ranges(own_subnet_id).len() as i64);
         // Please export any new features via the `subnet_features` metric below.
         let SubnetFeatures {
             canister_sandboxing,
@@ -1108,15 +1108,15 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
             .unwrap_or_default();
 
-        Ok(NetworkTopology {
+        Ok(NetworkTopology::new(
             subnets,
-            routing_table: Arc::new(routing_table),
+            Arc::new(routing_table),
+            Arc::new(canister_migrations),
             nns_subnet_id,
-            canister_migrations: Arc::new(canister_migrations),
             chain_key_enabled_subnets,
-            bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
-            bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
-        })
+            self.bitcoin_config.testnet_canister_id,
+            self.bitcoin_config.mainnet_canister_id,
+        ))
     }
 
     /// Tries to populate node public keys from the registry at a specific version.
@@ -1328,7 +1328,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
-        let commit_height = Height::from(batch.batch_number.get());
 
         let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
@@ -1397,7 +1396,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
 
         self.state_manager.commit_and_certify(
             state_after_round,
-            commit_height,
             certification_scope,
             batch_summary,
         );
@@ -1461,7 +1459,6 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         };
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
-        let commit_height = Height::from(batch.batch_number.get());
 
         let time = batch.time;
         state.metadata.batch_time = time;
@@ -1507,7 +1504,6 @@ impl BatchProcessor for FakeBatchProcessorImpl {
 
         self.state_manager.commit_and_certify(
             state_after_stream_builder,
-            commit_height,
             certification_scope,
             batch.batch_summary,
         );
