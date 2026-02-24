@@ -8914,38 +8914,43 @@ fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
 fn commit_and_certify_optimization_conditions() {
     state_manager_test(|metrics, sm| {
         // update `fast_forward_height` to enable optimization
-        sm.update_fast_forward_height(Height::new(11));
-        assert_eq!(sm.fast_forward_height(), 11);
+        sm.update_fast_forward_height(Height::new(21));
+        assert_eq!(sm.fast_forward_height(), 21);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // all conditions are satisfied => optimization triggers
-        let (height, state) = sm.take_tip();
-        assert_eq!(height, Height(0));
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, Height::new(1), CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 1);
 
         // `CertificationScope::Full` => optimization does not trigger
-        let (height, state) = sm.take_tip();
-        assert_eq!(height, Height(1));
-        sm.commit_and_certify(state, CertificationScope::Full, None);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Full, None);
         assert_eq!(no_state_clone_count(metrics), 1);
 
-        // height of 10 is divisible by 10 => optimization only triggers 8 times
-        for i in 2..10 {
-            let (height, state) = sm.take_tip();
-            assert_eq!(height, Height(i));
-            sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        // heights of 10 and 20 are divisible by 10 => optimization does not trigger at those heights
+        let mut expected_no_state_clone_count = 1;
+        for height in 3..21 {
+            let state = sm.take_tip().1;
+            sm.commit_and_certify_at_height(
+                state,
+                Height::new(height),
+                CertificationScope::Metadata,
+                None,
+            );
+            if !height.is_multiple_of(10) {
+                expected_no_state_clone_count += 1;
+            }
+            assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
         }
-        assert_eq!(no_state_clone_count(metrics), 8);
 
-        // height of 11 is not less than `fast_forward_height` => optimization does not trigger
-        assert_eq!(sm.fast_forward_height(), 11);
-        let (height, state) = sm.take_tip();
-        assert_eq!(height, Height(10));
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        assert_eq!(no_state_clone_count(metrics), 8);
+        // height of 21 is not less than `fast_forward_height` => optimization does not trigger
+        assert_eq!(sm.fast_forward_height(), 21);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify_at_height(state, Height::new(21), CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
     });
 }
 
@@ -8967,30 +8972,34 @@ fn commit_and_certify_optimization_semantics() {
         only_initial_state();
 
         // optimization triggers => no state snapshot and certifications metadata are stored => still just the initial state in `states`
+        let mut batch_time_opt = None;
+        let mut expected_no_state_clone_count = 0;
+        for opt_height in 1..10 {
+            let (height, mut state) = sm.take_tip();
+            assert_eq!(height, Height::new(opt_height - 1)); // tip height is set correctly if optimization triggers
+            if let Some(batch_time) = batch_time_opt {
+                assert_eq!(state.metadata.batch_time, batch_time); // tip is set correctly if optimization triggers
+            }
+            state.metadata.batch_time += Duration::from_secs(1);
+            batch_time_opt = Some(state.metadata.batch_time);
+            sm.commit_and_certify_at_height(
+                state,
+                Height::new(opt_height),
+                CertificationScope::Metadata,
+                None,
+            );
+            expected_no_state_clone_count += 1;
+            assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
+            only_initial_state();
+        }
+
+        // optimization does not trigger => state snapshot and certifications metadata with hash tree are stored
         let mut state = sm.take_tip().1;
         state.metadata.batch_time += Duration::from_secs(1);
-        let batch_time_opt = state.metadata.batch_time;
-        let opt_height = Height::new(1);
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        assert_eq!(no_state_clone_count(metrics), 1);
-        only_initial_state();
-
-        // optimization does not trigger at height 10 => state snapshot and certifications metadata with hash tree are stored
-        let (height, mut state) = sm.take_tip();
-        assert_eq!(height, opt_height); // tip height is set correctly if optimization triggers
-        assert_eq!(state.metadata.batch_time, batch_time_opt); // tip is set correctly if optimization triggers
-        state.metadata.batch_time += Duration::from_secs(1);
         let batch_time_no_opt = state.metadata.batch_time;
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
         let no_opt_height = Height::new(10);
-        // height was incremented in c&c, so it's now 2.
-        for _ in 2..no_opt_height.get() {
-            let (_height, state) = sm.take_tip();
-            sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        }
-        let (height, _state) = sm.take_tip();
-        assert_eq!(height, no_opt_height);
-        assert_eq!(no_state_clone_count(metrics), 9);
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
 
         assert_eq!(
             sm.state_snapshot_heights(),
@@ -9029,6 +9038,36 @@ fn fast_forward_height() {
 }
 
 #[test]
+#[should_panic(
+    expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
+)]
+fn commit_and_certify_tip_set_panic() {
+    state_manager_test(|_metrics, sm| {
+        // optimization does not trigger
+        let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+        let no_opt_height = Height::new(1);
+        sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
+    });
+}
+
+#[test]
+#[should_panic(
+    expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
+)]
+fn commit_and_certify_optimization_tip_set_panic() {
+    state_manager_test(|_metrics, sm| {
+        // update `fast_forward_height` to enable optimization
+        sm.update_fast_forward_height(Height::new(42));
+        assert_eq!(sm.fast_forward_height(), 42);
+
+        // optimization triggers
+        let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+        let opt_height = Height::new(1);
+        sm.commit_and_certify_at_height(state, opt_height, CertificationScope::Metadata, None);
+    });
+}
+
+#[test]
 fn take_tip_does_not_hash_without_optimization() {
     state_manager_test(|metrics, sm| {
         // optimization has not triggered yet
@@ -9042,7 +9081,12 @@ fn take_tip_does_not_hash_without_optimization() {
 
         // optimization does not trigger
         let no_opt_height = Height::new(1);
-        sm.commit_and_certify(initial_state, CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height(
+            initial_state,
+            no_opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // the state at height 1 is not hashed in `take_tip` since certification metadata are computed
@@ -9071,7 +9115,12 @@ fn take_tip_hashes_with_optimization() {
 
         // optimization triggers
         let opt_height = Height::new(1);
-        sm.commit_and_certify(initial_state, CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height(
+            initial_state,
+            opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
         assert_eq!(no_state_clone_count(metrics), 1);
 
         // the state at height 1 is hashed in `take_tip` since certification metadata are not computed
@@ -9085,15 +9134,18 @@ fn take_tip_hashes_with_optimization() {
 #[test]
 fn get_state_hash_at() {
     state_manager_test(|metrics, sm| {
+        // a checkpoint is characterized by `CertificationScope::Full`,
+        // the exact height is not relevant
+        let checkpoint_height = Height::new(100);
+
         // update `fast_forward_height` to enable optimization
-        sm.update_fast_forward_height(Height::new(100));
-        assert_eq!(sm.fast_forward_height(), 100);
+        sm.update_fast_forward_height(checkpoint_height);
+        assert_eq!(sm.fast_forward_height(), checkpoint_height.get());
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
 
         // future checkpoints yield transient error
-        let checkpoint_height = Height::new(100);
         assert_eq!(
             sm.get_state_hash_at(checkpoint_height),
             Err(StateHashError::Transient(
@@ -9102,29 +9154,31 @@ fn get_state_hash_at() {
         );
 
         // optimization triggers every multiple of 10
-        let no_opt_height = Height::new(80);
-        for _ in 0..no_opt_height.get() {
+        let mut expected_no_state_clone_count = 0;
+        for height in 1..checkpoint_height.get() {
             let state = sm.take_tip().1;
-            sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        }
-        assert_eq!(no_state_clone_count(metrics), 72); // 72 = 80 - 8, every 10th.
-        assert_eq!(
-            sm.get_state_hash_at(checkpoint_height),
-            Err(StateHashError::Transient(
-                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
-            ))
-        );
-
-        // optimization triggers every multiple of 10
-        for _ in no_opt_height.get()..99 {
-            let state = sm.take_tip().1;
-            sm.commit_and_certify(state, CertificationScope::Metadata, None);
+            sm.commit_and_certify_at_height(
+                state,
+                Height::new(height),
+                CertificationScope::Metadata,
+                None,
+            );
+            if !height.is_multiple_of(10) {
+                expected_no_state_clone_count += 1;
+            }
+            assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
+            assert_eq!(
+                sm.get_state_hash_at(checkpoint_height),
+                Err(StateHashError::Transient(
+                    TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+                ))
+            );
         }
 
         // optimization does not trigger on checkpoint height
         let state = sm.take_tip().1;
-        sm.commit_and_certify(state, CertificationScope::Full, None);
-        assert_eq!(no_state_clone_count(metrics), 90);
+        sm.commit_and_certify_at_height(state, checkpoint_height, CertificationScope::Full, None);
+        assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
 
         // finally hash for checkpoint height is available
         wait_for_checkpoint(&sm, checkpoint_height);
@@ -9153,7 +9207,12 @@ fn flush_with_optimization() {
                 + Height::new(NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY),
             current_interval_length: Height(500),
         };
-        sm.commit_and_certify(state, CertificationScope::Metadata, Some(batch_summary));
+        sm.commit_and_certify_at_height(
+            state,
+            opt_height,
+            CertificationScope::Metadata,
+            Some(batch_summary),
+        );
         assert_eq!(no_state_clone_count(metrics), 1);
 
         // delta has been flushed
@@ -9167,7 +9226,7 @@ fn valid_witness_in_list_state_hashes_to_certify() {
     state_manager_test(|_metrics, sm| {
         let state = sm.take_tip().1;
         let height = Height::new(1);
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height(state, height, CertificationScope::Metadata, None);
 
         let state_hashes = sm.list_state_hashes_to_certify();
         assert_eq!(state_hashes.len(), 1);
