@@ -328,6 +328,8 @@ impl ConsensusImpl {
         }
 
         if malicious_flags.maliciously_notarize_all {
+            // Remove any notarization shares that might have been output by the honest
+            // code, to avoid deduplication.
             changeset.retain(|change_action| {
                 !matches!(
                     change_action,
