@@ -42,6 +42,7 @@ use registry_canister::{
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::{CreateSubnetPayload, NewSubnet},
+        do_delete_subnet::DeleteSubnetPayload,
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_recover_subnet::RecoverSubnetPayload,
@@ -622,6 +623,22 @@ async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, Strin
     let new_subnet = registry_mut().do_create_subnet(payload).await;
     recertify_registry();
     Ok(new_subnet)
+}
+
+#[unsafe(export_name = "canister_update delete_subnet")]
+fn delete_subnet() {
+    // TODO: access control.
+    // check_caller_is_governance_and_log("delete_subnet");
+    over_async(candid_one, |payload: DeleteSubnetPayload| async move {
+        delete_subnet_(payload).await
+    });
+}
+
+#[candid_method(update, rename = "delete_subnet")]
+async fn delete_subnet_(payload: DeleteSubnetPayload) -> Result<(), String> {
+    registry_mut().do_delete_subnet(payload).await?;
+    recertify_registry();
+    Ok(())
 }
 
 #[unsafe(export_name = "canister_update add_nodes_to_subnet")]

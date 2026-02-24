@@ -112,12 +112,20 @@ pub fn test(env: TestEnv) {
         let Ok(GetSubnetForCanisterResponse { subnet_id }) =
             Decode!(&bytes, Result<GetSubnetForCanisterResponse, String>).unwrap()
         else {
-            panic!("Failed to decode registry result")
+            panic!("Expected Ok(_)");
         };
-        println!("{:?}", bytes);
-        println!("{}", subnet_id.unwrap().to_text());
-        println!("########################");
-        // TODO
+
+        let arg = DeleteSubnetPayload {
+            subnet_id: app_subnet_2.subnet_id.get().into(),
+        };
+        let bytes = registry_canister
+            .update("delete_subnet")
+            .bytes(Encode!(&arg).unwrap())
+            .await
+            .unwrap();
+        let Ok(()) = Decode!(&bytes, Result<(), String>).unwrap() else {
+            panic!("Expected Ok(())")
+        };
 
         // let new_topology_snapshot = topology_snapshot
         //     .block_for_min_registry_version(RegistryVersion::new(2))
@@ -150,4 +158,9 @@ struct GetSubnetForCanisterArgs {
 #[derive(CandidType, Deserialize)]
 struct GetSubnetForCanisterResponse {
     subnet_id: Option<Principal>,
+}
+
+#[derive(CandidType)]
+pub struct DeleteSubnetPayload {
+    subnet_id: Principal,
 }

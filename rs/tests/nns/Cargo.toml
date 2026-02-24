@@ -43,6 +43,7 @@ tokio = { workspace = true }
 cycles_minting = { path = "./cycles_minting" }
 cycles-minting-canister = { path = "../../nns/cmc" }
 wat = { workspace = true }
+serde = {workspace = true}
 serde_cbor = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 num-traits = { workspace = true }
