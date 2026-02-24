@@ -508,7 +508,7 @@ mod tests {
     use super::*;
     use crate::common::test_helpers::{
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
-        prepare_registry_with_nodes,
+        prepare_registry_with_nodes, prepare_registry_with_nodes_and_chip_id,
     };
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
@@ -979,7 +979,7 @@ mod tests {
     fn make_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();

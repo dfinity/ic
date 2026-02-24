@@ -4,7 +4,8 @@ use std::{
 };
 
 use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, get_subnet_ids_from_snapshot,
+    InvariantCheckError, RegistrySnapshot, get_node_record_from_snapshot,
+    get_subnet_ids_from_snapshot,
 };
 
 use ic_base_types::{NodeId, PrincipalId};
@@ -36,6 +37,7 @@ pub(crate) fn check_subnet_invariants(
                 panic!("Subnet {subnet_id:} is in subnet list but no record exists")
             });
 
+        // Each SSH key access list does not contain more than 50 keys
         if subnet_record.ssh_readonly_access.len() > MAX_NUM_SSH_KEYS
             || subnet_record.ssh_backup_access.len() > MAX_NUM_SSH_KEYS
         {
@@ -52,35 +54,35 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        let num_nodes = subnet_record.membership.len();
-        let mut subnet_members: HashSet<NodeId> = subnet_record
+        let subnet_members: HashSet<NodeId> = subnet_record
             .membership
             .iter()
             .map(|v| NodeId::from(PrincipalId::try_from(v).unwrap()))
             .collect();
 
         // Subnet membership must contain registered nodes only
-        subnet_members.retain(|&k| {
-            let node_key = make_node_record_key(k);
-            let node_exists = snapshot.contains_key(node_key.as_bytes());
-            if !node_exists {
-                panic!("Node {k} does not exist in Subnet {subnet_id}");
+        for &node_id in &subnet_members {
+            let node_key = make_node_record_key(node_id);
+            if !snapshot.contains_key(node_key.as_bytes()) {
+                panic!("Node {node_id} does not exist in Subnet {subnet_id}");
             }
-            node_exists
-        });
+        }
 
         // Each node appears at most once in a subnet membership
+        let num_nodes = subnet_record.membership.len();
         if num_nodes > subnet_members.len() {
             panic!("Repeated nodes in subnet {subnet_id:}");
         }
+
         // Each subnet contains at least one node
         if subnet_members.is_empty() {
             panic!("No node in subnet {subnet_id:}");
         }
+
+        // Each node appears at most once in at most one subnet membership
         let intersection = accumulated_nodes_in_subnets
             .intersection(&subnet_members)
             .collect::<HashSet<_>>();
-        // Each node appears at most once in at most one subnet membership
         if !intersection.is_empty() {
             return Err(InvariantCheckError {
                 msg: format!("Nodes in subnet {subnet_id:} also belong to other subnets"),
@@ -88,6 +90,7 @@ pub(crate) fn check_subnet_invariants(
             });
         }
         accumulated_nodes_in_subnets.extend(&subnet_members);
+
         // Count occurrence of system subnets
         if subnet_record.subnet_type == i32::from(SubnetType::System) {
             system_subnet_count += 1;
@@ -104,6 +107,26 @@ pub(crate) fn check_subnet_invariants(
                 ),
                 source: None,
             });
+        }
+
+        // SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
+        if let Some(features) = subnet_record.features.as_ref() {
+            if features.sev_enabled == Some(true) {
+                for &node_id in &subnet_members {
+                    // handle missing node record
+                    let node_record = get_node_record_from_snapshot(node_id, snapshot)?
+                        .ok_or_else(|| InvariantCheckError {
+                            msg: format!("Subnet {subnet_id} has node {node_id} in its membership but the node record does not exist"),
+                            source: None,
+                    })?;
+
+                    // handle missing chip_id
+                    node_record.chip_id.as_ref().ok_or_else(|| InvariantCheckError {
+                        msg: format!("Subnet {subnet_id} is SEV-enabled but at least one of its nodes is not: {node_id} does not have a chip ID in its node record"),
+                        source: None,
+                    })?;
+                }
+            }
         }
     }
 

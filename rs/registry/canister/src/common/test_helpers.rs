@@ -113,6 +113,28 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
     nodes: u64,
     node_operator_id: PrincipalId,
 ) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
+    prepare_registry_raw(start_mutation_id, nodes, node_operator_id, false)
+}
+
+/// Same as above, just with the possibility to have a chip_id.
+pub fn prepare_registry_with_nodes_and_chip_id(
+    start_mutation_id: u8,
+    nodes: u64,
+) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
+    prepare_registry_raw(
+        start_mutation_id,
+        nodes,
+        PrincipalId::new_user_test_id(999),
+        true,
+    )
+}
+
+pub fn prepare_registry_raw(
+    start_mutation_id: u8,
+    nodes: u64,
+    node_operator_id: PrincipalId,
+    with_chip_id: bool,
+) -> (RegistryAtomicMutateRequest, BTreeMap<NodeId, PublicKey>) {
     // Prepare a transaction to add the nodes to the registry
     let mut mutations = Vec::<RegistryMutation>::default();
     let node_ids_and_dkg_pks: BTreeMap<NodeId, PublicKey> = (0..nodes)
@@ -135,6 +157,11 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
                 // Preset this field to Some(), in order to allow seamless creation of ApiBoundaryNodeRecord if needed.
                 domain: Some(format!("node{effective_id}.example.com")),
                 node_reward_type: Some(NodeRewardType::Type1 as i32),
+                chip_id: if with_chip_id {
+                    Some(format!("chip-id-{effective_id}").into_bytes())
+                } else {
+                    None
+                },
                 ..Default::default()
             };
             mutations.append(&mut make_add_node_registry_mutations(
