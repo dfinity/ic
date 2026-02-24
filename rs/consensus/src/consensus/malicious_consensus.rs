@@ -107,14 +107,14 @@ impl ConsensusImpl {
                 proposals.push(proposal);
 
                 if maliciously_propose_empty_blocks {
-                    ic_logger::info!(
+                    info!(
                         self.log,
                         "[MALICIOUS] proposing empty blocks";
                         malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::ProposeEmptyBlocks as i32}
                     );
                 }
                 if maliciously_equivocation_blockmaker {
-                    ic_logger::info!(
+                    info!(
                         self.log,
                         "[MALICIOUS] proposing {} equivocation blocks",
                         proposals.len();
@@ -183,7 +183,7 @@ impl ConsensusImpl {
         }
 
         if !notarization_shares.is_empty() {
-            ic_logger::info!(
+            info!(
                 self.log,
                 "[MALICIOUS] maliciously notarizing all {} proposals",
                 notarization_shares.len();
@@ -262,7 +262,7 @@ impl ConsensusImpl {
                         min: min_height,
                         max: pool
                             .pool()
-                            .validated()
+                            .unvalidated()
                             .block_proposal()
                             .max_height()
                             .unwrap_or(min_height),
