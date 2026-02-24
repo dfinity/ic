@@ -1031,42 +1031,32 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                             },
                             Ok(args) => {
-                                if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE) {
-                                    ExecuteSubnetMessageResult::Finished {
-                                        response: Err(UserError::new(
-                                            ErrorCode::CanisterRejectedMessage,
-                                            "PUT and DELETE are not supported yet".to_string(),
-                                        )),
+                                match CanisterHttpRequestContext::generate_from_args(
+                                    state.time(),
+                                    request.as_ref(),
+                                    args,
+                                    &registry_settings.node_ids,
+                                    registry_settings.subnet_size,
+                                    rng,
+                                ) {
+                                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                                        response: Err(err.into()),
                                         refund: msg.take_cycles(),
-                                    }
-                                } else {
-                                    match CanisterHttpRequestContext::generate_from_args(
-                                        state.time(),
-                                        request.as_ref(),
-                                        args,
-                                        &registry_settings.node_ids,
-                                        registry_settings.subnet_size,
-                                        rng,
-                                    ) {
+                                    },
+                                    Ok(canister_http_request_context) => match self
+                                        .try_add_http_context_to_replicated_state(
+                                            canister_http_request_context,
+                                            &mut state,
+                                            request.as_ref(),
+                                            registry_settings,
+                                            since,
+                                        ) {
                                         Err(err) => ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err.into()),
+                                            response: Err(err),
                                             refund: msg.take_cycles(),
                                         },
-                                        Ok(canister_http_request_context) => match self
-                                            .try_add_http_context_to_replicated_state(
-                                                canister_http_request_context,
-                                                &mut state,
-                                                request.as_ref(),
-                                                registry_settings,
-                                                since,
-                                            ) {
-                                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                                response: Err(err),
-                                                refund: msg.take_cycles(),
-                                            },
-                                            Ok(()) => ExecuteSubnetMessageResult::Processing,
-                                        },
-                                    }
+                                        Ok(()) => ExecuteSubnetMessageResult::Processing,
+                                    },
                                 }
                             }
                         }
