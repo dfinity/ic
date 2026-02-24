@@ -516,7 +516,7 @@ pub fn rejoin_test_long_rounds(
         "Minimum no state clone count: {minimum_no_state_clone_count}"
     );
 
-    let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node, &logger);
+    let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node.clone(), &logger);
     info!(
         logger,
         "No state clone count of the restarted node: {rejoin_node_no_state_clone_count}"
