@@ -2643,7 +2643,6 @@ fn expected_cycle_cost(
             .build(),
         request.into(),
         &BTreeSet::new(),
-        0,
         &mut rand::thread_rng(),
     )
     .unwrap();
