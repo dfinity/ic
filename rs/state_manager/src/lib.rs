@@ -4164,6 +4164,15 @@ pub mod testing {
     }
 
     pub trait StateManagerTesting {
+        /// Testing only: Asserts that the given `height` matches the height used by `commit_and_certify`.
+        fn commit_and_certify_at_height(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        );
+
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
         fn purge_manifest(&mut self, height: Height) -> bool;
 
@@ -4196,6 +4205,26 @@ pub mod testing {
     }
 
     impl StateManagerTesting for StateManagerImpl {
+        fn commit_and_certify_at_height(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        ) {
+            let actual_height = {
+                let states = self.states.read();
+                states.tip_height.increment()
+            };
+            assert_eq!(
+                height, actual_height,
+                "`commit_and_certify` would use height {} which is different from provided height {}",
+                actual_height, height
+            );
+
+            self.commit_and_certify(state, scope, batch_summary);
+        }
+
         fn purge_manifest(&mut self, height: Height) -> bool {
             let mut guard = self.states.write();
             let purged = match guard.states_metadata.get_mut(&height) {
