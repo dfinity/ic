@@ -2540,7 +2540,7 @@ impl Gt {
         let mut r = Gt::identity();
 
         for i in 0..8 {
-            let w = (val >> 2*i) & 0b11;
+            let w = (val >> 2 * i) & 0b11;
             let tbl_for_i = &GT_MUL_U16_GENERATOR_TBL[(i * 3)..(i * 3 + 3)];
             r += Self::ct_select(&tbl_for_i, w as usize);
         }
