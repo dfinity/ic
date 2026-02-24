@@ -8,12 +8,15 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_management_canister_types_private::{
     MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
 };
-use ic_protobuf::registry::{
-    node::v1::NodeRecord,
-    subnet::v1::{
-        CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-        ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+use ic_protobuf::{
+    registry::{
+        node::v1::NodeRecord,
+        subnet::v1::{
+            CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
+            ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+        },
     },
+    types::v1::PrincipalId as PrincipalIdPb,
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
@@ -284,6 +287,8 @@ pub struct CreateSubnetPayload {
     /// preferred over None though, because explicit is better than implicit.
     pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
 
+    pub subnet_admins: Option<Vec<PrincipalId>>,
+
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub ingress_bytes_per_block_soft_cap: u64,
     pub gossip_max_artifact_streams_per_peer: u32,
@@ -551,6 +556,12 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .map(CanisterCyclesCostSchedulePb::from)
                 .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
                 as i32,
+            subnet_admins: val
+                .subnet_admins
+                .unwrap_or_default()
+                .into_iter()
+                .map(PrincipalIdPb::from)
+                .collect(),
         }
     }
 }

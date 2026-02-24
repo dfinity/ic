@@ -20,6 +20,7 @@ use ic_replicated_state::{
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
+        testing::NetworkTopologyTesting,
     },
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
@@ -143,8 +144,11 @@ impl ReplicatedStateBuilder {
             )
             .unwrap();
 
-        state.metadata.network_topology.routing_table = Arc::new(routing_table);
-        state.metadata.network_topology.subnets.insert(
+        state
+            .metadata
+            .network_topology
+            .set_routing_table(routing_table);
+        state.metadata.network_topology.subnets_mut().insert(
             self.subnet_id,
             SubnetTopology {
                 public_key: vec![],
@@ -757,7 +761,7 @@ pub fn get_initial_state_with_balance(
 
         state.put_canister_state(canister_state_builder.build());
     }
-    state.metadata.network_topology.routing_table = Arc::new({
+    state.metadata.network_topology.set_routing_table({
         let mut rt = ic_registry_routing_table::RoutingTable::new();
         rt.insert(
             ic_registry_routing_table::CanisterIdRange {
@@ -774,10 +778,7 @@ pub fn get_initial_state_with_balance(
 
 /// Returns the ordered IDs of the canisters contained within `state`.
 pub fn canister_ids(state: &ReplicatedState) -> Vec<CanisterId> {
-    state
-        .canisters_iter()
-        .map(|canister_state| canister_state.canister_id())
-        .collect()
+    state.canister_states().keys().cloned().collect()
 }
 
 pub fn new_canister_state(
@@ -1178,7 +1179,7 @@ fn new_replicated_state_with_output_queues(
             canister.system_state.put_queues(queues);
             total_requests += raw_requests.len();
             requests.push_back(raw_requests);
-            (canister_id, canister)
+            (canister_id, Arc::new(canister))
         })
         .collect();
 
@@ -1194,7 +1195,10 @@ fn new_replicated_state_with_output_queues(
             own_subnet_id,
         )
         .unwrap();
-    replicated_state.metadata.network_topology.routing_table = Arc::new(routing_table);
+    replicated_state
+        .metadata
+        .network_topology
+        .set_routing_table(routing_table);
 
     replicated_state.put_canister_states(canister_states);
     if let Some(subnet_queues) = subnet_queues {

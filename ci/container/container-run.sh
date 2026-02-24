@@ -165,9 +165,6 @@ mkdir -p "${ZIG_CACHE}"
 ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
-MISC_TMP_DIR="/tmp/misc"
-mkdir -p "${MISC_TMP_DIR}"
-
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
 
@@ -178,7 +175,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
-    --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
+    --mount type=tmpfs,target="/tmp/containers"
 )
 
 if [ "$(id -u)" = "1000" ]; then

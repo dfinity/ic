@@ -1,7 +1,7 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, InternetIdentityInit,
-    NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig, SnsAggregatorConfig,
-    StaticCaptchaTrigger,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, DogecoinCanisterArg,
+    InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig,
+    SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -170,7 +170,11 @@ use tower::{service_fn, util::ServiceExt};
 #[template(path = "dashboard.html", escape = "html")]
 struct Dashboard<'a> {
     height: Height,
-    canisters: &'a Vec<(&'a ic_replicated_state::CanisterState, SubnetId)>,
+    canisters: &'a Vec<(
+        &'a ic_replicated_state::CanisterState,
+        &'a ic_replicated_state::CanisterPriority,
+        SubnetId,
+    )>,
 }
 
 const MAINNET_NNS_SUBNET_ID: &str =
@@ -2335,11 +2339,12 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, DOGECOIN_CANISTER_ID);
 
             // Install the Dogecoin mainnet canister configured for the regtest network.
-            let args = DogecoinInitConfig {
+            let init_config = DogecoinInitConfig {
                 network: Some(DogecoinNetwork::Regtest),
                 fees: Some(DogecoinFees::mainnet()),
                 ..Default::default()
             };
+            let args = DogecoinCanisterArg::Init(init_config);
             btc_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -2824,7 +2829,7 @@ impl PocketIc {
                     let subnet_id = metadata.own_subnet_id;
                     let ranges: Vec<_> = metadata
                         .network_topology
-                        .routing_table
+                        .routing_table()
                         .ranges(subnet_id)
                         .iter()
                         .cloned()
@@ -3260,6 +3265,8 @@ fn http_method_from(
         ic_types::canister_http::CanisterHttpMethod::GET => CanisterHttpMethod::GET,
         ic_types::canister_http::CanisterHttpMethod::POST => CanisterHttpMethod::POST,
         ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
+        ic_types::canister_http::CanisterHttpMethod::PUT => CanisterHttpMethod::PUT,
+        ic_types::canister_http::CanisterHttpMethod::DELETE => CanisterHttpMethod::DELETE,
     }
 }
 
@@ -4296,7 +4303,13 @@ impl Operation for DashboardRequest {
                 state
                     .get_ref()
                     .canisters_iter()
-                    .map(|c| (c, *subnet_id))
+                    .map(|canister| {
+                        (
+                            canister,
+                            state.get_ref().canister_priority(&canister.canister_id()),
+                            *subnet_id,
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .concat();

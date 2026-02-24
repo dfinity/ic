@@ -24,7 +24,10 @@ struct Dashboard<'a> {
 
     height: Height,
     replicated_state: &'a ic_replicated_state::replicated_state::ReplicatedState,
-    canisters: &'a Vec<&'a ic_replicated_state::CanisterState>,
+    canisters: &'a Vec<(
+        &'a ic_replicated_state::CanisterState,
+        &'a ic_replicated_state::CanisterPriority,
+    )>,
     replica_version: ic_types::ReplicaVersion,
 }
 
@@ -77,8 +80,14 @@ async fn dashboard(
         };
 
     // See https://github.com/djc/askama/issues/333
-    let canisters: Vec<&ic_replicated_state::CanisterState> =
-        labeled_state.get_ref().canisters_iter().collect();
+    let state = labeled_state.get_ref();
+    let canisters: Vec<(
+        &ic_replicated_state::CanisterState,
+        &ic_replicated_state::CanisterPriority,
+    )> = state
+        .canisters_iter()
+        .map(|canister| (canister, state.canister_priority(&canister.canister_id())))
+        .collect();
 
     let dashboard = Dashboard {
         subnet_type,
