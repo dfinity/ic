@@ -2843,7 +2843,7 @@ pub mod test {
                 );
             })
         });
-    }    
+    }
 
     #[test]
     fn test_flexible_share_validation_logic() {
@@ -2856,7 +2856,7 @@ pub mod test {
                     state_manager,
                     registry,
                     ..
-                } = dependencies(pool_config.clone(), 5); 
+                } = dependencies(pool_config.clone(), 5);
 
                 let committee_member = replica_config.node_id;
                 let callback_id = CallbackId::from(0);
@@ -3060,9 +3060,9 @@ pub mod test {
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
-                    let oversized_len =
-                        (MAX_CANISTER_HTTP_RESPONSE_BYTES + CANDID_OVERHEAD_RESERVE_BYTES + 1)
-                            as usize;
+                    let oversized_len = (MAX_CANISTER_HTTP_RESPONSE_BYTES
+                        + CANDID_OVERHEAD_RESERVE_BYTES
+                        + 1) as usize;
                     let response = CanisterHttpResponse {
                         id: callback_id,
                         canister_id: ic_types::CanisterId::from(0),
@@ -3127,9 +3127,11 @@ pub mod test {
                         id: callback_id,
                         canister_id: ic_types::CanisterId::from(0),
                         timeout: Time::from_nanos_since_unix_epoch(0),
-                        content: CanisterHttpResponseContent::Success(
-                            vec![0; MAX_CANISTER_HTTP_RESPONSE_BYTES as usize],
-                        ),
+                        content: CanisterHttpResponseContent::Success(vec![
+                            0;
+                            MAX_CANISTER_HTTP_RESPONSE_BYTES
+                                as usize
+                        ]),
                     };
 
                     let response_metadata = CanisterHttpResponseMetadata {
