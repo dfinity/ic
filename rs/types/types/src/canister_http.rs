@@ -168,6 +168,13 @@ pub enum Replication {
     FullyReplicated,
     /// The request is not replicated, i.e. only the node with the given `NodeId` will attempt the http request.
     NonReplicated(NodeId),
+    /// The request is sent to a committee of nodes that all attempt the http request.
+    /// The canister receives between `min_responses` and `max_responses` (potentially differing) responses.
+    Flexible {
+        committee: BTreeSet<NodeId>,
+        min_responses: u32,
+        max_responses: u32,
+    },
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
@@ -179,15 +186,30 @@ pub enum PricingVersion {
 
 impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestContext {
     fn from(context: &CanisterHttpRequestContext) -> Self {
-        let replication_type = match context.replication {
+        let replication_type = match &context.replication {
             Replication::FullyReplicated => {
                 pb_metadata::replication::ReplicationType::FullyReplicated(())
             }
             Replication::NonReplicated(node_id) => {
                 pb_metadata::replication::ReplicationType::NonReplicated(node_id_into_protobuf(
-                    node_id,
+                    *node_id,
                 ))
             }
+            Replication::Flexible {
+                committee,
+                min_responses,
+                max_responses,
+            } => pb_metadata::replication::ReplicationType::Flexible(
+                pb_metadata::FlexibleReplication {
+                    committee: committee
+                        .iter()
+                        .copied()
+                        .map(node_id_into_protobuf)
+                        .collect(),
+                    min_responses: *min_responses,
+                    max_responses: *max_responses,
+                },
+            ),
         };
 
         let replication_message = pb_metadata::Replication {
@@ -268,6 +290,17 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 }
                 Some(pb_metadata::replication::ReplicationType::NonReplicated(node_id)) => {
                     Replication::NonReplicated(node_id_try_from_protobuf(node_id)?)
+                }
+                Some(pb_metadata::replication::ReplicationType::Flexible(flexible)) => {
+                    Replication::Flexible {
+                        committee: flexible
+                            .committee
+                            .into_iter()
+                            .map(node_id_try_from_protobuf)
+                            .collect::<Result<BTreeSet<NodeId>, ProxyDecodeError>>()?,
+                        min_responses: flexible.min_responses,
+                        max_responses: flexible.max_responses,
+                    }
                 }
                 None => Replication::FullyReplicated,
             },
@@ -1016,43 +1049,55 @@ mod tests {
 
     #[test]
     fn canister_http_request_context_proto_round_trip() {
-        let initial = CanisterHttpRequestContext {
-            url: "https://example.com".to_string(),
-            headers: vec![CanisterHttpHeader {
-                name: "Content-Type".to_string(),
-                value: "application/json".to_string(),
-            }],
-            body: Some(b"{\"hello\":\"world\"}".to_vec()),
-            max_response_bytes: Some(NumBytes::from(1234)),
-            http_method: CanisterHttpMethod::POST,
-            transform: Some(Transform {
-                method_name: "transform_response".to_string(),
-                context: vec![1, 2, 3],
-            }),
-            request: Request {
-                receiver: CanisterId::ic_00(),
-                sender: CanisterId::ic_00(),
-                sender_reply_callback: CallbackId::from(3),
-                payment: Cycles::new(10),
-                method_name: "transform".to_string(),
-                method_payload: Vec::new(),
-                metadata: Default::default(),
-                deadline: NO_DEADLINE,
+        let replications = [
+            Replication::FullyReplicated,
+            Replication::NonReplicated(node_test_id(42)),
+            Replication::Flexible {
+                committee: BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]),
+                min_responses: 2,
+                max_responses: 3,
             },
-            time: UNIX_EPOCH,
-            replication: Replication::NonReplicated(node_test_id(42)),
-            pricing_version: PricingVersion::PayAsYouGo,
-            refund_status: RefundStatus {
-                refundable_cycles: Cycles::new(13_000_000),
-                per_replica_allowance: Cycles::new(1_000_000),
-                refunded_cycles: Cycles::new(123),
-                refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
-            },
-        };
+        ];
 
-        let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
-        let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
-        assert_eq!(initial, round_trip);
+        for replication in replications {
+            let initial = CanisterHttpRequestContext {
+                url: "https://example.com".to_string(),
+                headers: vec![CanisterHttpHeader {
+                    name: "Content-Type".to_string(),
+                    value: "application/json".to_string(),
+                }],
+                body: Some(b"{\"hello\":\"world\"}".to_vec()),
+                max_response_bytes: Some(NumBytes::from(1234)),
+                http_method: CanisterHttpMethod::POST,
+                transform: Some(Transform {
+                    method_name: "transform_response".to_string(),
+                    context: vec![1, 2, 3],
+                }),
+                request: Request {
+                    receiver: CanisterId::ic_00(),
+                    sender: CanisterId::ic_00(),
+                    sender_reply_callback: CallbackId::from(3),
+                    payment: Cycles::new(10),
+                    method_name: "transform".to_string(),
+                    method_payload: Vec::new(),
+                    metadata: Default::default(),
+                    deadline: NO_DEADLINE,
+                },
+                time: UNIX_EPOCH,
+                replication,
+                pricing_version: PricingVersion::PayAsYouGo,
+                refund_status: RefundStatus {
+                    refundable_cycles: Cycles::new(13_000_000),
+                    per_replica_allowance: Cycles::new(1_000_000),
+                    refunded_cycles: Cycles::new(123),
+                    refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
+                },
+            };
+
+            let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
+            let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
+            assert_eq!(initial, round_trip);
+        }
     }
 
     #[test]

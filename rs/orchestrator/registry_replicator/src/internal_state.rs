@@ -586,6 +586,7 @@ mod test {
             membership: vec![],
             max_ingress_bytes_per_message: 2048,
             max_ingress_messages_per_block: 1000,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,

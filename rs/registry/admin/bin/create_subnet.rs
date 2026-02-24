@@ -45,7 +45,20 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     pub max_ingress_messages_per_block: Option<u64>,
 
     #[clap(long)]
-    /// Maximum size in bytes ingress and xnet messages can occupy in a block.
+    /// How big an ingress payload can be *when stored in memory*. Setting this value too large could lead to
+    /// large memory usage of replicas.
+    /// Note that with hashes-in-blocks feature enabled, increasing this value doesn't necessarily mean
+    /// that we would send more data to peers when transmitting a block, because ingress messages are
+    /// stripped before disseminating blocks.
+    pub max_ingress_bytes_per_block: Option<u64>,
+
+    #[clap(long)]
+    /// Maximum size, in bytes, a [`BatchPayload`] can have *when sent over wire*.
+    /// Setting this value too high could result in longer delivery times of blocks to peers, which
+    /// could lead to forks as higher rank blocks could be proposed meanwhile.
+    /// Note that with hashes-in-blocks feature enabled, the blocks sent over wire are typically smaller
+    /// than their representation in memory, because we strip some of the data before broadcasting them
+    /// to peers.
     pub max_block_payload_size: Option<u64>,
 
     // the default is from subnet_configuration.rs from ic-prep
@@ -286,6 +299,7 @@ impl ProposeToCreateSubnetCmd {
             subnet_id_override: self.subnet_id_override,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap_or_default(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap_or_default(),
+            max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
             max_block_payload_size: self.max_block_payload_size.unwrap_or_default(),
             replica_version_id: self
                 .replica_version_id
@@ -372,6 +386,7 @@ mod tests {
             subnet_id_override: None,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
