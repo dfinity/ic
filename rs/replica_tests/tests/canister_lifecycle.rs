@@ -1,7 +1,9 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use ic_config::Config;
-use ic_config::execution_environment::DEFAULT_WASM_MEMORY_LIMIT;
+use ic_config::execution_environment::{
+    DEFAULT_WASM_MEMORY_LIMIT, TEST_DEFAULT_LOG_MEMORY_LIMIT, TEST_DEFAULT_LOG_MEMORY_USAGE,
+};
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
@@ -22,7 +24,6 @@ use std::{collections::BTreeSet, mem::size_of, str::FromStr};
 const BALANCE_EPSILON: u64 = 1_000_000;
 const NUM_CYCLES: u128 = 1_000_000_000;
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
-const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4_096;
 
 #[test]
 fn can_create_canister_from_another_canister() {
@@ -709,7 +710,7 @@ fn can_get_canister_information() {
                 None,
                 canister_a.get(),
                 vec![canister_a.get()],
-                canister_history_size,
+                canister_history_size + NumBytes::from(TEST_DEFAULT_LOG_MEMORY_USAGE),
                 NumBytes::from(0),
                 NumBytes::from(0),
                 NumBytes::from(0),
@@ -718,6 +719,7 @@ fn can_get_canister_information() {
                 canister_history_size,
                 NumBytes::from(0),
                 NumBytes::from(0),
+                NumBytes::from(TEST_DEFAULT_LOG_MEMORY_USAGE),
                 num_cycles.get(),
                 ComputeAllocation::default().as_percent(),
                 None,
@@ -778,6 +780,7 @@ fn can_get_canister_information() {
                     vec![canister_a.get()],
                     // We don't assert a specific memory size since the universal canister's
                     // size changes between updates.
+                    NumBytes::from(0),
                     NumBytes::from(0),
                     NumBytes::from(0),
                     NumBytes::from(0),

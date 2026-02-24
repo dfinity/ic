@@ -12,6 +12,7 @@ candid = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-canister-client = { path = "../../../canister_client" }
+ic-management-canister-types = { workspace = true }
 ic-nns-common = { path = "../../../nns/common" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }

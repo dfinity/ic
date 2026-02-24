@@ -1,6 +1,6 @@
 use anyhow::{Context, Error, Result, bail};
 use clap::{Parser, Subcommand};
-use config_tool::guestos::bootstrap_ic_node::bootstrap_ic_node;
+use config_tool::guestos::bootstrap_ic_node::{bootstrap_ic_node, populate_nns_public_key};
 use config_tool::guestos::generate_ic_config;
 use config_tool::serialize_and_write_config;
 use config_tool::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
@@ -48,6 +48,22 @@ pub enum Commands {
         guestos_config_json_path: PathBuf,
         #[arg(long, default_value = config_tool::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
+    },
+    /// Updates the HostOS config by reading the node operator private key from
+    /// disk and injecting it into the config struct
+    UpdateConfig {
+        #[arg(long, default_value = config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        hostos_config_json_path: PathBuf,
+        #[arg(
+            long,
+            default_value = "/boot/config/node_operator_private_key.pem",
+            value_name = "node_operator_private_key.pem"
+        )]
+        node_operator_private_key_path: PathBuf,
+    },
+    PopulateNnsPublicKey {
+        #[arg(long, default_value = config_tool::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
+        guestos_config_json_path: PathBuf,
     },
     /// Dumps OS configuration
     DumpOSConfig {
@@ -217,6 +233,18 @@ pub fn main() -> Result<()> {
 
             bootstrap_ic_node(&bootstrap_dir, guestos_config)
         }
+        Some(Commands::PopulateNnsPublicKey {
+            #[allow(unused_variables)]
+            guestos_config_json_path,
+        }) => {
+            #[cfg(feature = "dev")]
+            let guestos_config: GuestOSConfig =
+                config_tool::deserialize_config(&guestos_config_json_path)?;
+            populate_nns_public_key(
+                #[cfg(feature = "dev")]
+                &guestos_config,
+            )
+        }
         Some(Commands::GenerateICConfig {
             guestos_config_json_path,
             output_path,
@@ -226,6 +254,47 @@ pub fn main() -> Result<()> {
                 config_tool::deserialize_config(&guestos_config_json_path)?;
 
             generate_ic_config::generate_ic_config(&guestos_config, &output_path)
+        }
+        Some(Commands::UpdateConfig {
+            hostos_config_json_path,
+            node_operator_private_key_path,
+        }) => {
+            println!("Updating HostOS configuration");
+
+            let mut hostos_config: HostOSConfig =
+                config_tool::deserialize_config(&hostos_config_json_path)?;
+
+            if !node_operator_private_key_path.exists() {
+                println!(
+                    "Node operator private key file not found at {}. Skipping update.",
+                    node_operator_private_key_path.display()
+                );
+                return Ok(());
+            }
+
+            if hostos_config
+                .icos_settings
+                .node_operator_private_key
+                .is_some()
+            {
+                println!("Node operator private key already present in config. Skipping update.");
+                return Ok(());
+            }
+
+            let node_operator_private_key = fs::read_to_string(&node_operator_private_key_path)
+                .context("unable to read node operator private key")?;
+
+            hostos_config.icos_settings.node_operator_private_key = Some(node_operator_private_key);
+            hostos_config.config_version = CONFIG_VERSION.to_string();
+
+            serialize_and_write_config(&hostos_config_json_path, &hostos_config)?;
+
+            println!(
+                "HostOS config updated with node operator private key and written to {}",
+                hostos_config_json_path.display()
+            );
+
+            Ok(())
         }
         Some(Commands::DumpOSConfig { os_type }) => {
             println!("Dumping OS configuration");

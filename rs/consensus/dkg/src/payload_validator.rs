@@ -193,6 +193,12 @@ fn validate_dealings_payload(
         crypto_validate_dealing(crypto, config, message)?;
     }
 
+    // If we have early transcripts, we compare them
+    if !dealings.transcripts_for_remote_subnets.is_empty() {
+        // For now payloads with early transcripts are rejected
+        return Err(InvalidDkgPayloadReason::InvalidEarlyNiDkgTranscripts.into());
+    }
+
     Ok(())
 }
 
@@ -203,7 +209,7 @@ mod tests {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-    use ic_crypto_test_utils_ni_dkg::dummy_dealing;
+    use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests};
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         dkg::ChangeAction,
@@ -226,6 +232,7 @@ mod tests {
             idkg,
         },
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        messages::CallbackId,
         time::UNIX_EPOCH,
     };
     use std::{
@@ -441,6 +448,101 @@ mod tests {
                 }
             ))
         );
+    }
+
+    #[test]
+    fn validate_dealings_payload_when_remote_transcripts_present_fails_test() {
+        // Data payloads with early/remote transcripts are rejected for now.
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let registry_version = 1;
+            let committee = [NODE_1, NODE_2, NODE_3];
+
+            let Dependencies {
+                crypto,
+                pool,
+                dkg_pool,
+                registry,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config.clone(),
+                SUBNET_1,
+                vec![(
+                    registry_version,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_dealings_per_block(1)
+                        .build(),
+                )],
+            );
+
+            let mut parent = Block::from(pool.make_next_block());
+            parent.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload::default(),
+                    dkg: DkgDataPayload::new(Height::from(0), vec![]),
+                    idkg: idkg::Payload::default(),
+                }),
+            );
+
+            let context = ValidationContext {
+                registry_version: RegistryVersion::from(registry_version),
+                certified_height: Height::from(0),
+                time: ic_types::time::UNIX_EPOCH,
+            };
+
+            let dkg_data_with_remote_transcripts = DkgDataPayload {
+                start_height: Height::from(0),
+                messages: vec![],
+                transcripts_for_remote_subnets: vec![
+                    (
+                        NiDkgId {
+                            start_block_height: Height::from(0),
+                            dealer_subnet: SUBNET_1,
+                            target_subnet: NiDkgTargetSubnet::Local,
+                            dkg_tag: NiDkgTag::HighThreshold,
+                        },
+                        CallbackId::from(0),
+                        Err("dummy".to_string()),
+                    ),
+                    (
+                        NiDkgId {
+                            start_block_height: Height::from(0),
+                            dealer_subnet: SUBNET_1,
+                            target_subnet: NiDkgTargetSubnet::Local,
+                            dkg_tag: NiDkgTag::LowThreshold,
+                        },
+                        CallbackId::from(1),
+                        Ok(dummy_transcript_for_tests()),
+                    ),
+                ],
+            };
+
+            let block_payload = BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dkg: dkg_data_with_remote_transcripts,
+                idkg: idkg::Payload::default(),
+            });
+
+            assert_eq!(
+                validate_payload(
+                    SUBNET_1,
+                    registry.as_ref(),
+                    crypto.as_ref(),
+                    &PoolReader::new(&pool),
+                    dkg_pool.read().unwrap().deref(),
+                    parent,
+                    &block_payload,
+                    state_manager.as_ref(),
+                    &context,
+                    &mock_metrics(),
+                    &no_op_logger(),
+                ),
+                Err(DkgPayloadValidationError::InvalidArtifact(
+                    InvalidDkgPayloadReason::InvalidEarlyNiDkgTranscripts
+                ))
+            );
+        })
     }
 
     /// Configures all the dependencies and calls [`validate_payload`] with

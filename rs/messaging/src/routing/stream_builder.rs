@@ -469,7 +469,7 @@ impl StreamBuilderImpl {
                         && is_at_limit(
                             &dst_stream_entry,
                             network_topology
-                                .subnets
+                                .subnets()
                                 .get(&dst_subnet_id)
                                 .map_or(SubnetType::Application, |topology| topology.subnet_type),
                         )
