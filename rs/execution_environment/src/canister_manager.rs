@@ -181,8 +181,8 @@ impl CanisterManager {
             )),
 
             // These methods are only valid if they are sent by the controller
-            // of the canister. We assume that the canister always wants to
-            // accept messages from its controller.
+            // of the canister or a subnet admin. We assume that the canister
+            // always wants to accept such messages.
             Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
@@ -204,6 +204,9 @@ impl CanisterManager {
                 }
             },
 
+            // These methods are only valid if they are sent by the controller
+            // of the canister. We assume that the canister always wants to
+            // accept messages from its controller.
             Ok(Ic00Method::UpdateSettings)
             | Ok(Ic00Method::InstallCode)
             | Ok(Ic00Method::InstallChunkedCode)
