@@ -120,9 +120,10 @@ impl LagrangeCoefficients {
             // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
             // other data points but `1` at `x_i`.
             let mut denom = Scalar::one();
-            let x_i = samples[i].clone();
-            for x_j in samples.iter().filter(|x_j| **x_j != x_i) {
-                denom *= x_j - &x_i;
+            for (j, x_j) in samples.iter().enumerate() {
+                if j != i {
+                    denom *= x_j - &samples[i];
+                }
             }
 
             denominator.push(denom);
@@ -150,6 +151,11 @@ impl LagrangeCoefficients {
     /// Return the Lagrange coefficients
     pub fn coefficients(&self) -> &[Scalar] {
         &self.coefficients
+    }
+
+    /// Return the Lagrange coefficients, consuming self
+    pub fn into_coefficients(self) -> Vec<Scalar> {
+        self.coefficients
     }
 
     /// Given a list of samples `(x, f(x) * g)` for a set of unique `x`, some

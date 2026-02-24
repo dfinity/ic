@@ -611,7 +611,7 @@ build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
 canbench-rs = "0.4.0"
-candid = { version = "0.10.20" }
+candid = { version = "0.10.22" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.42", default-features = false, features = [
     "alloc",
@@ -628,6 +628,7 @@ cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "8b01
 comparable = { version = "0.5", features = ["derive"] }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
+csv = "^1.1"
 curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
@@ -635,7 +636,7 @@ curve25519-dalek = { version = "4.1.3", features = [
 der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
-dfx-core = { version = "0.1.4" }
+dfx-core = { version = "0.3.0" }
 ed25519-dalek = { version = "2.2.0", features = [
     "std",
     "zeroize",
@@ -674,28 +675,27 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
-ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
-ic-bn-lib = { version = "0.1.7", features = ["acme-alpn"] }
-ic-bn-lib-common = "0.1"
+ic-agent = { version = "0.45.0", features = ["pem", "ring"] }
+ic-bn-lib = { version = "0.1.14", features = ["acme-alpn"] }
+ic-bn-lib-common = "0.1.4"
 ic-btc-interface = "0.2.3"
 ic-canister-runtime = "0.1.0"
 ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
 ic-cdk = "0.19.0"
 ic-cdk-timers = "1.0.0"
-ic-certificate-verification = "3"
+ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.1.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "92ee522a4514584ccf6de487ba40d92063effd9a", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4", default-features = false }
 ic-http-certification = "3.0.3"
-ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730" }
-ic-identity-hsm = "0.40.1"
+ic-identity-hsm = "0.45.0"
 ic-management-canister-types = "0.5.0"
-ic-response-verification = "3"
+ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
-ic-transport-types = { version = "0.40.1" }
-ic-utils = { version = "0.40.1", features = ["raw"] }
+ic-transport-types = { version = "0.45.0" }
+ic-utils = { version = "0.45.0", features = ["raw"] }
 ic-vetkeys = "0.6.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
@@ -774,7 +774,7 @@ proc-macro2 = "1.0.89"
 procfs = { version = "^0.17", default-features = false }
 prometheus = { version = "0.14.0", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
-proptest = "1.5.0"
+proptest = "=1.6.0"
 proptest-derive = "0.5.0"
 prost = "0.13.3"
 prost-build = "0.13.3"
@@ -820,6 +820,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
+securefmt = "0.1.5"
 semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"

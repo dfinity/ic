@@ -508,8 +508,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
     );
 
     let balance_before = state
-        .canister_states
-        .get(&canister_test_id(0))
+        .canister_state(&canister_test_id(0))
         .unwrap()
         .system_state
         .balance();
@@ -517,8 +516,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
     valid_set_rule.induct_messages(&mut state, vec![signed_ingress]);
 
     let balance_after = state
-        .canister_states
-        .get(&canister_test_id(0))
+        .canister_state(&canister_test_id(0))
         .unwrap()
         .system_state
         .balance();
@@ -554,8 +552,7 @@ fn canister_on_system_subnet_does_not_charge_for_ingress() {
     );
 
     let balance_before = state
-        .canister_states
-        .get(&canister_test_id(0))
+        .canister_state(&canister_test_id(0))
         .unwrap()
         .system_state
         .balance();
@@ -566,8 +563,7 @@ fn canister_on_system_subnet_does_not_charge_for_ingress() {
     valid_set_rule.induct_messages(&mut state, vec![msg]);
 
     let balance_after = state
-        .canister_states
-        .get(&canister_test_id(0))
+        .canister_state(&canister_test_id(0))
         .unwrap()
         .system_state
         .balance();
@@ -919,7 +915,7 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
             }
 
             // Application subnets respect the `ingress_history_max_messages` limit.
-            SubnetType::Application | SubnetType::VerifiedApplication => {
+            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
                 // 3 messages should have been inducted.
                 assert_eq!(ingress_queue_size(&state, canister_id), 3);
                 // But all 4 should have a state in the ingress history.

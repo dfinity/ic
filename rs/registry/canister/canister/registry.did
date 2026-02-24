@@ -104,6 +104,8 @@ type CreateSubnetPayload = record {
 
   canister_cycles_cost_schedule: opt CanisterCyclesCostSchedule;
 
+  subnet_admins: opt vec principal;
+
   // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
   ingress_bytes_per_block_soft_cap : nat64;
   gossip_max_artifact_streams_per_peer : nat32;
@@ -353,7 +355,7 @@ type SubnetFeatures = record {
   sev_enabled : opt bool;
 };
 
-type SubnetType = variant { application; verified_application; system };
+type SubnetType = variant { application; verified_application; system; cloud_engine };
 
 type UpdateApiBoundaryNodesVersionPayload = record {
   version : text;

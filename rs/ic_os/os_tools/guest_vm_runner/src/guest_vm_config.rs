@@ -8,9 +8,6 @@ use deterministic_ips::calculate_deterministic_mac;
 use deterministic_ips::node_type::NodeType;
 use std::path::{Path, PathBuf};
 
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
-
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 
@@ -22,6 +19,22 @@ const DEFAULT_VM_MEMORY_GB: u32 = 480;
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_VCPUS: u32 = 64;
 const UPGRADE_VM_MEMORY_GB: u32 = 4;
+
+#[derive(Template)]
+#[template(path = "guestos_vm_template.xml", escape = "xml")]
+pub struct GuestOSTemplateProps {
+    pub domain_name: String,
+    pub domain_uuid: String,
+    pub cpu_domain: String,
+    pub console_log_path: String,
+    pub vm_memory: u32,
+    pub nr_of_vcpus: u32,
+    pub mac_address: macaddr::MacAddr6,
+    pub disk_device: PathBuf,
+    pub config_media_path: PathBuf,
+    pub enable_sev: bool,
+    pub direct_boot: Option<DirectBootConfig>,
+}
 
 #[derive(Debug)]
 pub struct DirectBootConfig {
@@ -49,7 +62,6 @@ pub fn assemble_config_media(
     .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
-
     bootstrap_options.build_bootstrap_config_image(media_path)?;
 
     println!(
@@ -60,12 +72,14 @@ pub fn assemble_config_media(
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn make_bootstrap_options(
     hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
 ) -> Result<BootstrapOptions> {
+    #[allow(unused_mut)]
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(guestos_config),
+        guestos_config: Some(guestos_config.clone()),
         ..Default::default()
     };
 
@@ -75,16 +89,6 @@ fn make_bootstrap_options(
             bootstrap_options.accounts_ssh_authorized_keys =
                 Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
         }
-
-        let nns_key_override_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
-        if nns_key_override_path.exists() {
-            bootstrap_options.nns_public_key_override = Some(nns_key_override_path);
-        }
-    }
-
-    if hostos_config.icos_settings.use_node_operator_private_key {
-        bootstrap_options.node_operator_private_key =
-            Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
     Ok(bootstrap_options)
@@ -215,7 +219,6 @@ mod tests {
     fn test_make_bootstrap_options() {
         let mut config = create_test_hostos_config();
         config.icos_settings.use_ssh_authorized_keys = true;
-        config.icos_settings.use_node_operator_private_key = true;
 
         let guestos_config =
             generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
@@ -226,10 +229,29 @@ mod tests {
             options,
             BootstrapOptions {
                 guestos_config: Some(guestos_config),
-                nns_public_key_override: None,
-                node_operator_private_key: Some(PathBuf::from(
-                    "/boot/config/node_operator_private_key.pem"
+                #[cfg(feature = "dev")]
+                accounts_ssh_authorized_keys: Some(PathBuf::from(
+                    "/boot/config/ssh_authorized_keys"
                 )),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn test_make_bootstrap_options_operator_key_from_file() {
+        let mut config = create_test_hostos_config();
+        config.icos_settings.use_ssh_authorized_keys = true;
+
+        let guestos_config =
+            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
+
+        let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
+
+        assert_eq!(
+            options,
+            BootstrapOptions {
+                guestos_config: Some(guestos_config),
                 #[cfg(feature = "dev")]
                 accounts_ssh_authorized_keys: Some(PathBuf::from(
                     "/boot/config/ssh_authorized_keys"

@@ -124,6 +124,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_backup_access: vec![],
         chain_key_config: None,
         canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+        subnet_admins: vec![],
     }
 }
 
