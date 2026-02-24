@@ -808,7 +808,7 @@ impl Step for UpdateLocalStoreStep {
             self.work_dir.join("ic.json5"),
             None,
             self.work_dir.join("data"),
-            Some(SubCommand::UpdateRegistryLocalStore),
+            Some(SubCommand::OverwriteRegistryLocalStore),
             None,
             self.work_dir.join("update_local_store.txt"),
             self.skip_prompts,
