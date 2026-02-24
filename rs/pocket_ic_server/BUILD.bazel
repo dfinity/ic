@@ -383,7 +383,7 @@ rust_test(
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     tags = [
-        "test_all_platforms",
+        "test_all_platforms_slow",
     ],
     deps = TEST_DEPENDENCIES,
 )
