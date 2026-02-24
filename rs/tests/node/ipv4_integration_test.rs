@@ -386,8 +386,9 @@ fn wait_for_expected_node_ipv4_config(
             .map_err(|_| anyhow!("invalid prefix length: '{:?}'", prefix_length_string))?;
 
         // get the default gateway
-        let default_gateway =
-            vm.block_on_bash_script(r#"ip -4 -j route show default | jq -r '.[0].gateway // empty'"#)?;
+        let default_gateway = vm.block_on_bash_script(
+            r#"ip -4 -j route show default | jq -r '.[0].gateway // empty'"#,
+        )?;
         let actual_gateway_address = default_gateway.trim().to_string();
 
         Some(IPv4Config::try_new(
