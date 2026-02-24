@@ -67,6 +67,10 @@ path = "certified_registry_test.rs"
 name = "create_subnet_test"
 path = "create_subnet_test.rs"
 
+[[bin]]
+name = "delete_subnet_test"
+path = "delete_subnet_test.rs"
+
 # [[bin]]
 # name = "nns_canister_uninstall_test"
 # path = "nns_canister_uninstall_test.rs"
@@ -102,3 +106,4 @@ path = "rent_subnet_test.rs"
 [[bin]]
 name = "node_swap_test"
 path = "node_swap_test.rs"
+
