@@ -12,8 +12,8 @@ pub enum StateSource {
     Sns,
 }
 
-const STATE_SOURCE_USER: &str = "mathias";
-const STATE_SOURCE_HOST: &str = "zh1-spm22.zh1.dfinity.network";
+const STATE_SOURCE_USER: &str = "dev";
+const STATE_SOURCE_HOST: &str = "zh1-pyr07.zh1.dfinity.network";
 
 impl StateSource {
     pub fn state_dir_name(&self) -> &'static str {
@@ -26,7 +26,7 @@ impl StateSource {
 
     fn to_argument(self) -> String {
         format!(
-            "{}@{}:/home/mathias/{}.tar.zst",
+            "{}@{}:/home/dev/{}.tar.zst",
             STATE_SOURCE_USER,
             STATE_SOURCE_HOST,
             self.state_dir_name()
