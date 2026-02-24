@@ -35,6 +35,7 @@ const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
 const NO_STATE_CLONE_COUNT: &str = "state_manager_no_state_clone_count";
+const TIP_HASH_COUNT: &str = "state_manager_tip_hash_count";
 
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 
@@ -393,6 +394,11 @@ fn no_state_clone_count(node: IcNodeSnapshot, logger: &slog::Logger) -> u64 {
     count[NO_STATE_CLONE_COUNT][0]
 }
 
+fn tip_hash_count(node: IcNodeSnapshot, logger: &slog::Logger) -> u64 {
+    let count = block_on(fetch_metrics::<u64>(logger, node, vec![TIP_HASH_COUNT]));
+    count[TIP_HASH_COUNT][0]
+}
+
 pub fn rejoin_test_long_rounds(
     env: TestEnv,
     nodes: Vec<IcNodeSnapshot>,
@@ -499,8 +505,8 @@ pub fn rejoin_test_long_rounds(
 
     // finally check the metrics for "fast-forward" mode
     let mut no_state_clone_counts = vec![];
-    for node in nodes {
-        let count = no_state_clone_count(node, &logger);
+    for node in &nodes {
+        let count = no_state_clone_count(node.clone(), &logger);
         no_state_clone_counts.push(count);
     }
     no_state_clone_counts.sort();
@@ -526,6 +532,22 @@ pub fn rejoin_test_long_rounds(
         rejoin_node_no_state_clone_count > 100,
         "No state clone count of the restarted node is unexpectedly low"
     );
+
+    // all nodes are expected to have a low tip hash count:
+    // - tip hash count metric does not increase for nodes that are not behind
+    //   because they hash their state before setting it as tip;
+    // - tip hash count metric increases for nodes that are behind only if
+    //   they could not derive the state hash from certifications produced by peers
+    //   that are not behind and the expectations is that they could do so.
+    for node in &nodes {
+        let count = tip_hash_count(node.clone(), &logger);
+        info!(logger, "Tip hash count of node {}: {}", node.node_id, count);
+        assert!(
+            count < 10,
+            "Tip hash count of node {} is too high",
+            node.node_id
+        );
+    }
 }
 
 pub async fn assert_state_sync_has_happened(
