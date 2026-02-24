@@ -59,6 +59,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
     pub(super) round_inner_iteration_prep: Histogram,
+    pub(super) round_inner_iteration_scheduling: Histogram,
     pub(super) round_inner_iteration_exe: Histogram,
     pub(super) round_inner_iteration_thread: ScopedMetrics,
     pub(super) round_inner_iteration_fin: Histogram,
@@ -71,7 +72,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_invariants: IntCounter,
     pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
     pub(super) scheduler_cores_invariant_broken: IntCounter,
-    pub(super) scheduler_accumulated_priority_invariant: IntGauge,
     pub(super) scheduler_accumulated_priority_deviation: Gauge,
     pub(super) inducted_messages: IntCounterVec,
     pub(super) delivered_pre_signatures: HistogramVec,
@@ -276,6 +276,7 @@ impl SchedulerMetrics {
                 ),
             },
             round_inner_iteration_prep: round_inner_phase_duration_histogram("preparation", metrics_registry),
+            round_inner_iteration_scheduling: round_inner_phase_duration_histogram("scheduling", metrics_registry),
             round_inner_iteration_exe: round_inner_phase_duration_histogram("execution", metrics_registry),
             round_inner_iteration_thread: ScopedMetrics {
                 duration: duration_histogram(
@@ -324,10 +325,6 @@ impl SchedulerMetrics {
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
             scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
             scheduler_cores_invariant_broken: metrics_registry.error_counter(SCHEDULER_CORES_INVARIANT_BROKEN),
-            scheduler_accumulated_priority_invariant: metrics_registry.int_gauge(
-                "scheduler_accumulated_priority_invariant",
-                "The sum of all accumulated priorities on the subnet."
-            ),
             scheduler_accumulated_priority_deviation: metrics_registry.gauge(
                 "scheduler_accumulated_priority_deviation",
                 "The standard deviation of accumulated priorities on the subnet."

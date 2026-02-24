@@ -44,6 +44,15 @@ lazy_static::lazy_static! {
     };
 }
 
+fn clone(c: &mut Criterion) {
+    let env = STATE_MACHINE.lock().unwrap();
+    c.bench_function("clone", |bench| {
+        bench.iter(|| {
+            let _ = env.get_latest_state().as_ref().clone();
+        });
+    });
+}
+
 fn round(c: &mut Criterion) {
     let env = STATE_MACHINE.lock().unwrap();
     c.bench_function("round", |bench| {
@@ -75,6 +84,12 @@ fn checkpoint(c: &mut Criterion) {
 }
 
 criterion::criterion_group! {
+    name = bench_clone;
+    config = Criterion::default().sample_size(50);
+    targets = clone
+}
+
+criterion::criterion_group! {
     name = bench_round;
     config = Criterion::default().sample_size(50);
     targets = round
@@ -86,4 +101,4 @@ criterion::criterion_group! {
     targets = checkpoint
 }
 
-criterion::criterion_main!(bench_round, bench_checkpoint);
+criterion::criterion_main!(bench_clone, bench_round, bench_checkpoint);

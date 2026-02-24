@@ -1,5 +1,5 @@
 {
-  "checksum": "68839b0fa8ea717174b223cbda359ea367448b3c6a3163391dc65c5e773c11a3",
+  "checksum": "b3a75a547fddf310161d04d55c30503d0a2afc5796e91aee896cb01908775da7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -42554,14 +42554,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "keccak 0.1.4": {
+    "keccak 0.1.6": {
       "name": "keccak",
-      "version": "0.1.4",
+      "version": "0.1.6",
       "package_url": "https://github.com/RustCrypto/sponges/tree/master/keccak",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/keccak/0.1.4/download",
-          "sha256": "8f6d5ed8676d904364de097082f4e7d240b571b67989ced0240f08b7f966f940"
+          "url": "https://static.crates.io/crates/keccak/0.1.6/download",
+          "sha256": "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
         }
       },
       "targets": [
@@ -42595,7 +42595,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.1.4"
+        "version": "0.1.6"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -47932,7 +47932,7 @@
               "target": "byteorder"
             },
             {
-              "id": "keccak 0.1.4",
+              "id": "keccak 0.1.6",
               "target": "keccak"
             },
             {
@@ -73607,7 +73607,7 @@
               "target": "digest"
             },
             {
-              "id": "keccak 0.1.4",
+              "id": "keccak 0.1.6",
               "target": "keccak"
             }
           ],
