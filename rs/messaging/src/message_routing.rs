@@ -1092,6 +1092,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             // then it cannot have a non-empty subnet admins list. If that's the case, this indicates
             // a bug and a critical error is raised. The subnet admins is set to empty list in that case
             // to avoid any potential errors in using an incorrect list.
+            //
+            // Note that clippy believes another version of the condition below is "simpler", however humans agreed that
+            // the one used is actually better, so clippy is explicitly ignored.
+            #[allow(clippy::nonminimal_bool)]
             if !(subnet_type == SubnetType::Application
                 && cost_schedule == CanisterCyclesCostSchedule::Free)
                 && !subnet_admins.is_empty()
