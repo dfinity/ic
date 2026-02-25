@@ -527,6 +527,8 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         }
                     }
+                    // TODO(flexible-http-outcalls): implement proper Flexible validation
+                    Replication::Flexible { .. } => {}
                 }
 
                 let node_is_in_committee = self

@@ -2,7 +2,7 @@ use hex_literal::hex;
 use k256::elliptic_curve::{
     Group,
     group::{GroupEncoding, ff::PrimeField},
-    ops::{Invert, LinearCombination, MulByGenerator, Reduce},
+    ops::{Invert, LinearCombination, LinearCombinationExt, MulByGenerator, Reduce},
     scalar::IsHigh,
     sec1::FromEncodedPoint,
 };
@@ -329,8 +329,27 @@ impl Point {
     ///
     /// Equivalent to p1*s1 + p2*s2
     #[inline]
-    pub fn lincomb(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
+    pub fn lincomb_vartime(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
         Self::new(k256::ProjectivePoint::lincomb(&p1.p, &s1.s, &p2.p, &s2.s))
+    }
+
+    /// Perform multi-exponentiation
+    ///
+    /// Equivalent to p1*s1 + p2*s2 + p3*s3
+    #[inline]
+    pub fn lincomb3_vartime(
+        p1: &Point,
+        s1: &Scalar,
+        p2: &Point,
+        s2: &Scalar,
+        p3: &Point,
+        s3: &Scalar,
+    ) -> Self {
+        Self::new(k256::ProjectivePoint::lincomb_ext(&[
+            (p1.p, s1.s),
+            (p2.p, s2.s),
+            (p3.p, s3.s),
+        ]))
     }
 
     pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {

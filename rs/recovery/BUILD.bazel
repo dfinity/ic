@@ -40,6 +40,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/tree_hash",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/tmpdir",
     "//rs/test_utilities/types",

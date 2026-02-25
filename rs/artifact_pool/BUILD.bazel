@@ -8,6 +8,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/crypto/test_utils/ni-dkg",
+    "//rs/crypto/tree_hash",
     "//rs/limits",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",

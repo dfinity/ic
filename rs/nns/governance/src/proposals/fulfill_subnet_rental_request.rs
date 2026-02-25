@@ -252,6 +252,7 @@ impl ValidFulfillSubnetRentalRequest {
             // Sizes
             max_ingress_bytes_per_message: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
             max_ingress_messages_per_block: MAX_INGRESS_MESSAGES_PER_BLOCK,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: MAX_BLOCK_PAYLOAD_SIZE,
             unit_delay_millis,
             initial_notary_delay_millis,
