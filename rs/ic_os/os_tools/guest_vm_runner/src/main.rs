@@ -1,6 +1,6 @@
 use crate::guest_direct_boot::{DirectBoot, prepare_direct_boot};
 use crate::guest_vm_config::{
-    assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name, vm_resources,
+    assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
 use crate::hugepages::{read_available_hugepages_gib, reserve_hugepages};
 use crate::metrics::GuestVmMetrics;
