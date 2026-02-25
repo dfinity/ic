@@ -24,6 +24,8 @@ impl Registry {
                 subnet_id
             ));
         }
+        // TODO: only delete a subnet if its type is Engine.
+
         subnet_list.retain_mut(|s| s != subnet_id.as_slice());
         let new_subnet_list_record = SubnetListRecord {
             subnets: subnet_list,

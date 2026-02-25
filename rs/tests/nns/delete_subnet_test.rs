@@ -23,8 +23,7 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_types::{Height, RegistryVersion};
 use slog::info;
-use std::collections::HashSet;
-use std::iter::FromIterator;
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 const NUM_NNS_NODES: usize = 4;
@@ -77,6 +76,17 @@ pub fn test(env: TestEnv) {
     let app_subnet_1 = app_subnets[0].clone();
     let app_subnet_2 = app_subnets[1].clone();
     let app_subnet_2_nodes: Vec<IcNodeSnapshot> = app_subnet_2.nodes().collect();
+    assert_eq!(
+        app_subnet_2_nodes.first().unwrap().subnet_id(),
+        Some(app_subnet_2.subnet_id)
+    );
+    let app_subnet_2_node_ids = BTreeSet::from_iter(app_subnet_2_nodes.iter().map(|x| x.node_id));
+    assert!(
+        topology_snapshot
+            .unassigned_nodes()
+            .collect::<Vec<_>>()
+            .is_empty()
+    );
 
     let nns_endpoint = nns_subnet.nodes().next().unwrap();
 
@@ -127,28 +137,20 @@ pub fn test(env: TestEnv) {
             panic!("Expected Ok(())")
         };
 
-        // let new_topology_snapshot = topology_snapshot
-        //     .block_for_min_registry_version(RegistryVersion::new(2))
-        //     .await
-        //     .expect("Could not obtain updated registry.");
+        let new_topology_snapshot = topology_snapshot
+            .block_for_min_registry_version(RegistryVersion::new(2))
+            .await
+            .expect("Could not obtain updated registry.");
+        let unassigned_node_ids = new_topology_snapshot
+            .unassigned_nodes()
+            .map(|x| x.node_id)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(unassigned_node_ids, app_subnet_2_node_ids);
 
-        // Check that the registry indeed contains the data
         let final_subnets = get_subnet_list_from_registry(&client).await;
         info!(log, "final subnets: {:?}", final_subnets);
+        assert!(!final_subnets.contains(&app_subnet_2.subnet_id));
     });
-}
-
-pub fn install_nns_canisters(env: &TestEnv) {
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    NnsInstallationBuilder::new()
-        .install(&nns_node, env)
-        .expect("NNS canisters not installed");
-    info!(&env.logger(), "NNS canisters installed");
 }
 
 #[derive(CandidType)]
