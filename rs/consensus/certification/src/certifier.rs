@@ -252,7 +252,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
         let start = Instant::now();
         let change_set = self.validate(
             certification_pool,
-            Box::new(state_heights_to_aggregate_and_validate.into_iter()),
+            state_heights_to_aggregate_and_validate.into_iter(),
         );
         if change_set.is_empty() {
             trace!(
@@ -435,7 +435,7 @@ impl CertifierImpl {
     fn validate(
         &self,
         certification_pool: &dyn CertificationPool,
-        heights: Box<dyn Iterator<Item = Height>>,
+        heights: impl Iterator<Item = Height>,
     ) -> Mutations {
         // Iterate over all state heights, obtain list of corresponding unvalidated
         // artifacts by the height and try to verify their signatures and height witnesses.
@@ -834,7 +834,7 @@ mod tests {
                     .map(|state_hash_metadata| state_hash_metadata.height)
                     .collect();
                 let change_set =
-                    certifier.validate(&cert_pool, Box::new(state_heights_to_validate.into_iter()));
+                    certifier.validate(&cert_pool, state_heights_to_validate.into_iter());
                 cert_pool.apply(change_set);
 
                 let bouncer = bouncer_factory.new_bouncer(&cert_pool);
@@ -911,7 +911,7 @@ mod tests {
                     .map(|state_hash_metadata| state_hash_metadata.height)
                     .collect();
                 let change_set =
-                    certifier.validate(&cert_pool, Box::new(state_heights_to_validate.into_iter()));
+                    certifier.validate(&cert_pool, state_heights_to_validate.into_iter());
                 // expect 5 change actions: 3 full certifications moved to validated section + 2
                 // shares, where no certification is available (at height 3)
                 assert_eq!(change_set.len(), 5);
@@ -1045,7 +1045,7 @@ mod tests {
                     .map(|state_hash_metadata| state_hash_metadata.height)
                     .collect();
                 let change_set =
-                    certifier.validate(&cert_pool, Box::new(state_heights_to_validate.into_iter()));
+                    certifier.validate(&cert_pool, state_heights_to_validate.into_iter());
                 cert_pool.apply(change_set);
 
                 // emulates a call from inside on_state_change
@@ -1133,7 +1133,7 @@ mod tests {
                     .map(|state_hash_metadata| state_hash_metadata.height)
                     .collect();
                 let change_set =
-                    certifier.validate(&cert_pool, Box::new(state_heights_to_validate.into_iter()));
+                    certifier.validate(&cert_pool, state_heights_to_validate.into_iter());
                 cert_pool.apply(change_set);
 
                 assert_eq!(cert_pool.shares_at_height(Height::from(3)).count(), 6);
@@ -1295,7 +1295,7 @@ mod tests {
                     .map(|state_hash_metadata| state_hash_metadata.height)
                     .collect();
                 let change_set =
-                    certifier.validate(&cert_pool, Box::new(state_heights_to_validate.into_iter()));
+                    certifier.validate(&cert_pool, state_heights_to_validate.into_iter());
                 assert_eq!(change_set.len(), 1);
                 cert_pool.apply(change_set);
 
@@ -1454,7 +1454,7 @@ mod tests {
                     .map(|state_hash_metadata| state_hash_metadata.height)
                     .collect();
                 let change_set =
-                    certifier.validate(&cert_pool, Box::new(state_heights_to_validate.into_iter()));
+                    certifier.validate(&cert_pool, state_heights_to_validate.into_iter());
                 cert_pool.apply(change_set);
 
                 // Let's insert valid shares from the same signer again:
@@ -1468,7 +1468,7 @@ mod tests {
                     .map(|state_hash_metadata| state_hash_metadata.height)
                     .collect();
                 let change_set =
-                    certifier.validate(&cert_pool, Box::new(state_heights_to_validate.into_iter()));
+                    certifier.validate(&cert_pool, state_heights_to_validate.into_iter());
 
                 assert_eq!(change_set.len(), 2, "unexpected changeset: {change_set:?}");
 
