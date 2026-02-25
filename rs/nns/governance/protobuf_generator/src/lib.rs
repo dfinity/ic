@@ -155,6 +155,18 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "BlessAlternativeGuestOsVersion",
         "TakeCanisterSnapshot",
         "LoadCanisterSnapshot",
+        // ManageNeuron nested types
+        "ManageNeuron.IncreaseDissolveDelay",
+        "ManageNeuron.AddHotKey",
+        "ManageNeuron.RemoveHotKey",
+        "ManageNeuron.SetDissolveTimestamp",
+        "ManageNeuron.ChangeAutoStakeMaturity",
+        "ManageNeuron.Split",
+        "ManageNeuron.Spawn",
+        "ManageNeuron.StakeMaturity",
+        "ManageNeuron.DisburseToNeuron",
+        "ManageNeuron.Merge",
+        "ManageNeuron.DisburseMaturity",
     ];
     for type_name in self_describing_types {
         config.type_attribute(
@@ -162,6 +174,12 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
             "#[derive(ic_nns_governance_derive_self_describing::SelfDescribing)]",
         );
     }
+
+    // ManageNeuron oneof
+    config.type_attribute(
+        ".ic_nns_governance.pb.v1.ManageNeuron.neuron_id_or_subaccount",
+        "#[derive(ic_nns_governance_derive_self_describing::SelfDescribing)]",
+    );
 
     // Add serde_bytes for efficiently parsing blobs.
     let blob_fields = vec![
