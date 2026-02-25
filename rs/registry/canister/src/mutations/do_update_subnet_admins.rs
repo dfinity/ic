@@ -1,6 +1,7 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 use ic_base_types::{PrincipalId, SubnetId};
+use ic_nervous_system_time_helpers::now_system_time;
 use ic_protobuf::{
     registry::subnet::v1::CanisterCyclesCostSchedule, types::v1::PrincipalId as PrincipalIdPb,
 };
@@ -9,9 +10,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::upsert;
 use prost::Message;
 use serde::Serialize;
+
+use std::cell::RefCell;
 use std::collections::HashSet;
 
+mod rate_limits;
+use rate_limits::UpdateSubnetAdminsRateLimiter;
+
 const MAX_SUBNET_ADMINS: usize = 10;
+pub const MAX_SUSTAINED_SUBNET_ADMINS_PER_DAY: u64 = 10;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct EmptyRecord {}
@@ -38,6 +45,9 @@ pub enum UpdateSubnetAdminsError {
     },
     PrincipalListEmpty,
     UnknownOperationType,
+    SubnetRateLimited {
+        subnet_id: SubnetId,
+    },
 }
 
 impl std::fmt::Display for UpdateSubnetAdminsError {
@@ -60,8 +70,19 @@ impl std::fmt::Display for UpdateSubnetAdminsError {
                     "The operation type provided is unknown. Expected one of: Add, Remove, Clear."
                 )
             }
+            UpdateSubnetAdminsError::SubnetRateLimited { subnet_id } => {
+                write!(
+                    f,
+                    "Subnet {subnet_id} is being rate limited due to too many subnet admin updates in a \
+                    short period of time. Please try again later."
+                )
+            }
         }
     }
+}
+
+thread_local! {
+    static UPDATE_SUBNET_ADMINS_RATE_LIMITER: RefCell<UpdateSubnetAdminsRateLimiter> = RefCell::new(UpdateSubnetAdminsRateLimiter::new());
 }
 
 impl Registry {
@@ -69,6 +90,17 @@ impl Registry {
         println!("{}do_update_subnet_admins: {:?}", LOG_PREFIX, payload);
 
         let subnet_id = payload.subnet_id;
+        let now = now_system_time();
+        let reservation = match UPDATE_SUBNET_ADMINS_RATE_LIMITER
+            .with_borrow_mut(|limiter| limiter.try_reserve(subnet_id, now))
+        {
+            Ok(reservation) => reservation,
+            Err(err) => panic!(
+                "{}do_update_subnet_admins: Error while reserving capacity for subnet admin update of {subnet_id}: {err}",
+                LOG_PREFIX
+            ),
+        };
+
         let mut subnet_record = self.get_subnet_or_panic(subnet_id);
 
         // Check pre-conditions that a subnet is rented before allowing subnet admin updates.
@@ -101,6 +133,9 @@ impl Registry {
 
                         // Check invariants before applying mutations
                         self.maybe_apply_mutation_internal(mutations);
+
+                        UPDATE_SUBNET_ADMINS_RATE_LIMITER
+                            .with_borrow_mut(|limiter| limiter.commit(reservation, now));
 
                         Ok(())
                     }
