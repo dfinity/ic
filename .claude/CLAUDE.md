@@ -44,4 +44,3 @@ After changing Rust code (`*.rs`) follow these steps in order:
    ```
    (Use a depth of 2 in `rdeps` because tests usually depend on source files indirectly through a `rust_library` for example).
    Fix all test failures.
-g
