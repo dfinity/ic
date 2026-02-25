@@ -38,7 +38,8 @@ pub struct Config {
     /// will be rejected. For valid IC delegation certificates this is never the case since the size is always constant.
     pub max_delegation_certificate_size_bytes: u64,
 
-    /// Serving at most `max_read_state_concurrent_requests` requests concurrently for endpoint `/api/v2/read_state`.
+    /// Serving at most `max_read_state_concurrent_requests` requests concurrently for each endpoint:
+    /// `/api/v2/canister/read_state`, `/api/v2/subnet/read_state`, `/api/v3/canister/read_state`, `/api/v3/subnet/read_state`
     pub max_read_state_concurrent_requests: usize,
 
     /// Serving at most `max_status_concurrent_requests` requests concurrently for endpoint `/api/v2/status`.
@@ -53,13 +54,14 @@ pub struct Config {
     /// Serving at most `max_call_concurrent_requests` requests concurrently for endpoint `/api/v2/call`.
     pub max_call_concurrent_requests: usize,
 
-    /// Serving at most `max_call_concurrent_requests` requests concurrently for endpoint `/api/v2/query`.
+    /// Serving at most `max_call_concurrent_requests` requests concurrently for each endpoint:
+    /// `/api/v2/query`, `/api/v3/query`
     pub max_query_concurrent_requests: usize,
 
     /// Serving at most `max_pprof_concurrent_requests` requessts concurrently for all endpoints under `/_/pprof`.
     pub max_pprof_concurrent_requests: usize,
 
-    /// The maximum time the replica will wait for a message to be certified before timing out the requests and responding with `202`, for endpoint `/api/v3/call`.
+    /// The maximum time the replica will wait for a message to be certified before timing out the requests and responding with `202`, for endpoints `/api/v3/call` and `/api/v4/call`.
     pub ingress_message_certificate_timeout_seconds: u64,
 
     /// Serving at most `max_tracing_flamegraph_concurrent_requests` requests concurrently for all endpoints under `/_/tracing/flamegraph`.
