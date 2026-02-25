@@ -177,7 +177,6 @@ fn discover_cloud_type(hdr: &HeaderMap) -> Result<CloudType, Error> {
 pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConfig, Error> {
     // Find the network interface to work on, it might not be initialized yet so give it a few tries
     let mut retries = 10;
-
     let intf = loop {
         match get_interface_name() {
             Ok(v) => break v,
@@ -196,7 +195,7 @@ pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConf
     // Configure it with a DHCP
     let _dhcp = DHCPConfig::new(intf.clone(), systemd_network_dir)
         .context("unable to configure IPv4 DHCP")?;
-    println!("DHCP on the interace {intf} configured");
+    println!("DHCP on the interface {intf} configured");
 
     // Discover the cloud we're running in.
     let cloud_type = CloudType::discover().context("unable to discover cloud type")?;

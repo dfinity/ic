@@ -39,11 +39,11 @@ function mount_config_device() {
     done
 }
 
-# Try config disk first, then Cloud provisioning if that fails
+# Try config disk first, then run Cloud provisioning if that fails
 if ! mount_config_device; then
     echo "Config disk not found, trying cloud provisioning"
 
-    # Since root is still read-only - mount a tmpfs at /mnt/config to be able to write a config.json there
+    # Since root is read-only - mount a tmpfs at /mnt/config to be able to write a config.json there
     mount -t tmpfs config /mnt/config
 
     if ! /opt/ic/bin/guestos_tool cloud-provision; then
