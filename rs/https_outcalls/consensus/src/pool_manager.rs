@@ -282,18 +282,11 @@ impl CanisterHttpPoolManagerImpl {
         let socks_proxy_addrs = self.get_socks_proxy_addrs();
 
         for (id, context) in http_requests {
-            match &context.replication {
-                Replication::NonReplicated(delegated_node_id)
-                    if *delegated_node_id != self.replica_config.node_id =>
-                {
-                    continue;
-                }
-                Replication::Flexible { committee, .. }
-                    if !committee.contains(&self.replica_config.node_id) =>
-                {
-                    continue;
-                }
-                _ => {}
+            if !context
+                .replication
+                .is_authorized_signer(&self.replica_config.node_id)
+            {
+                continue;
             }
 
             if !request_ids_already_made.contains(id) {
