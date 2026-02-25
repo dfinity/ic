@@ -14,6 +14,8 @@ use serde::Serialize;
 use std::str::FromStr;
 
 const SUBNET_LIST_KEY: &str = "subnet_list";
+const DELETED_SUBNET_LIST_KEY: &str = "deleted_subnet_list";
+
 /// The subnet id of the NNS subnet.
 /// Remark: This subnet id actually points to the root subnet. In all cases, so
 /// far, the root subnet happens to host the NNS canisters and the registry in
@@ -81,6 +83,10 @@ pub fn get_master_public_key_id_from_signing_subnet_list_key(
 /// Returns the only key whose payload is the list of subnets.
 pub fn make_subnet_list_record_key() -> String {
     SUBNET_LIST_KEY.to_string()
+}
+
+pub fn make_deleted_subnet_list_record_key() -> String {
+    DELETED_SUBNET_LIST_KEY.to_string()
 }
 
 pub fn make_unassigned_nodes_config_record_key() -> String {
