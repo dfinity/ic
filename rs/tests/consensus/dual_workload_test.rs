@@ -46,8 +46,6 @@ enum PayloadType {
     XNet(usize),
 }
 
-/// The configuration that is used for the dual workload test.
-/// In this configuration, all sizes are set to 2MiB.
 fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
