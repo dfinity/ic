@@ -7730,6 +7730,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
+ "mockall",
  "prometheus",
  "slog",
  "tokio",

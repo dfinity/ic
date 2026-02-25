@@ -655,6 +655,7 @@ mod tests {
         signature::*,
         time::UNIX_EPOCH,
     };
+    use mockall::Sequence;
 
     fn to_unvalidated(message: CertificationMessage) -> UnvalidatedArtifact<CertificationMessage> {
         UnvalidatedArtifact::<CertificationMessage> {
@@ -1693,12 +1694,28 @@ mod tests {
                 );
 
                 // We expect deliver_state_certification() to be called 3 times for heights 1, 2, and 4.
+                let mut seq = Sequence::new();
                 state_manager
                     .get_mut()
                     .expect_deliver_state_certification()
-                    .times(3)
-                    .withf(|cert| matches!(cert.height.get(), 1 | 2 | 4))
-                    .return_const(());
+                    .once()
+                    .in_sequence(&mut seq)
+                    .withf(|cert| cert.height.get() == 1)
+                    .returning(|_| ());
+                state_manager
+                    .get_mut()
+                    .expect_deliver_state_certification()
+                    .once()
+                    .in_sequence(&mut seq)
+                    .withf(|cert| cert.height.get() == 2)
+                    .returning(|_| ());
+                state_manager
+                    .get_mut()
+                    .expect_deliver_state_certification()
+                    .once()
+                    .in_sequence(&mut seq)
+                    .withf(|cert| cert.height.get() == 4)
+                    .returning(|_| ());
 
                 let state_hashes = |heights: Vec<u64>| {
                     heights
