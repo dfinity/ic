@@ -15,10 +15,7 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 
 pub mod util;
-use util::{
-    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, NODE_REGISTRATION_VERSION_BACKOFF,
-    setup_ic_infrastructure,
-};
+use util::{NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
 
 use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnvAttribute};
 
@@ -113,10 +110,11 @@ pub fn registration(env: TestEnv) {
         || {
             new_topology = block_on(
                 new_topology.block_for_newer_registry_version_within_duration(
-                    NODE_REGISTRATION_VERSION_BACKOFF,
+                    NODE_REGISTRATION_TIMEOUT,
                     NODE_REGISTRATION_BACKOFF,
                 ),
-            )?;
+            )
+            .unwrap();
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
             if num_unassigned_nodes == n {
                 Ok(())
