@@ -77,8 +77,10 @@ fn only_sev_enabled_subnets_consist_of_sev_enabled_nodes() {
     check_subnet_invariants(&snapshot).unwrap();
 
     // a non SEV-enabled subnet with some nodes with and some without chip IDs is compliant
-    let mut test_node_record = NodeRecord::default();
-    test_node_record.chip_id = Some("a chip id".into());
+    let test_node_record = NodeRecord {
+        chip_id: Some("a chip id".into()),
+        ..Default::default()
+    };
     snapshot.insert(
         make_node_record_key(test_node_id).into_bytes(),
         test_node_record.encode_to_vec(),
@@ -94,8 +96,10 @@ fn only_sev_enabled_subnets_consist_of_sev_enabled_nodes() {
         make_subnet_record_key(test_subnet_id).into_bytes(),
         test_subnet_record.encode_to_vec(),
     );
-    let mut test_node_record = NodeRecord::default();
-    test_node_record.chip_id = None;
+    let test_node_record = NodeRecord {
+        chip_id: None,
+        ..Default::default()
+    };
     snapshot.insert(
         make_node_record_key(test_node_id).into_bytes(),
         test_node_record.encode_to_vec(),
@@ -129,8 +133,10 @@ fn only_sev_enabled_subnets_consist_of_sev_enabled_nodes() {
     check_subnet_invariants(&snapshot).unwrap();
 
     // an SEV-enabled subnet with some nodes with and some without chip ID is NOT compliant
-    let mut test_node_record = NodeRecord::default();
-    test_node_record.chip_id = None;
+    let test_node_record = NodeRecord {
+        chip_id: None,
+        ..Default::default()
+    };
     snapshot.insert(
         make_node_record_key(test_node_id).into_bytes(),
         test_node_record.encode_to_vec(),
@@ -200,7 +206,7 @@ fn setup_minimal_registry_snapshot_for_check_subnet_invariants(
         .collect();
 
     let test_subnet_record = SubnetRecord {
-        membership: membership,
+        membership,
         ..Default::default()
     };
     snapshot.insert(

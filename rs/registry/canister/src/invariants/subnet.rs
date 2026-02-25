@@ -110,22 +110,21 @@ pub(crate) fn check_subnet_invariants(
         }
 
         // SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
-        if let Some(features) = subnet_record.features.as_ref() {
-            if features.sev_enabled == Some(true) {
-                for &node_id in &subnet_members {
-                    // handle missing node record
-                    let node_record = get_node_record_from_snapshot(node_id, snapshot)?
-                        .ok_or_else(|| InvariantCheckError {
-                            msg: format!("Subnet {subnet_id} has node {node_id} in its membership but the node record does not exist"),
-                            source: None,
-                    })?;
-
-                    // handle missing chip_id
-                    node_record.chip_id.as_ref().ok_or_else(|| InvariantCheckError {
-                        msg: format!("Subnet {subnet_id} is SEV-enabled but at least one of its nodes is not: {node_id} does not have a chip ID in its node record"),
+        if let Some(features) = subnet_record.features.as_ref()
+            && features.sev_enabled == Some(true)
+        {
+            for &node_id in &subnet_members {
+                // handle missing node record
+                let node_record = get_node_record_from_snapshot(node_id, snapshot)?
+                    .ok_or_else(|| InvariantCheckError {
+                        msg: format!("Subnet {subnet_id} has node {node_id} in its membership but the node record does not exist"),
                         source: None,
-                    })?;
-                }
+                })?;
+                // handle missing chip_id
+                node_record.chip_id.as_ref().ok_or_else(|| InvariantCheckError {
+                    msg: format!("Subnet {subnet_id} is SEV-enabled but at least one of its nodes is not: {node_id} does not have a chip ID in its node record"),
+                    source: None,
+                })?;
             }
         }
     }
