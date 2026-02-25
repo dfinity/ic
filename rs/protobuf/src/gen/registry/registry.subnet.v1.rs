@@ -169,6 +169,12 @@ pub struct SubnetListRecord {
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub subnets: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct DeletedSubnetListRecord {
+    /// A list of subnet ids of all deleted subnets.
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub deleted_subnets: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
 /// Initial non-interactive DKG transcript record
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct InitialNiDkgTranscriptRecord {

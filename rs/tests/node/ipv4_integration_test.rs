@@ -355,8 +355,9 @@ fn wait_for_expected_node_ipv4_config(
 ) -> Result<(), Error> {
     // first, get the current IPv4 config on the provided node
     // check if the interface has any IPv4 config
-    let actual_interface_config =
-        vm.block_on_bash_script(r#"ip -4 addr show enp1s0 | awk '/inet / {print $2}'"#)?;
+    let actual_interface_config = vm.block_on_bash_script(
+        r#"ip -4 -j addr show enp1s0 | jq -r '.[].addr_info[] | "\(.local)/\(.prefixlen)"'"#,
+    )?;
     let actual_interface_config = actual_interface_config.trim();
 
     let actual_ipv4_config = if actual_interface_config.is_empty() {
@@ -385,8 +386,9 @@ fn wait_for_expected_node_ipv4_config(
             .map_err(|_| anyhow!("invalid prefix length: '{:?}'", prefix_length_string))?;
 
         // get the default gateway
-        let default_gateway =
-            vm.block_on_bash_script(r#"ip route | awk '/default/ {print $3}'"#)?;
+        let default_gateway = vm.block_on_bash_script(
+            r#"ip -4 -j route show default | jq -r '.[0].gateway // empty'"#,
+        )?;
         let actual_gateway_address = default_gateway.trim().to_string();
 
         Some(IPv4Config::try_new(

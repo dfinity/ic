@@ -51,7 +51,7 @@ const CONSOLE_TTY1_PATH: &str = "/dev/tty1";
 const CONSOLE_TTY_SERIAL_PATH: &str = "/dev/ttyS0";
 const GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
 
-const SEV_CERTIFICATE_CACHE_DIR: &str = "/var/ic/sev/certificates";
+const SEV_CERTIFICATE_CACHE_DIR: &str = "/boot/config/sev/certificates";
 
 /// If we cannot decide from the logs within this timeout whether the GuestOS boot succeeded or
 /// failed, we dump GuestOS logs on the console.

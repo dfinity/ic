@@ -385,7 +385,7 @@ impl ResponseHelper {
                 canister_id: self.canister.canister_id(),
                 available: old_balance,
                 requested,
-                threshold: original.freezing_threshold,
+                threshold: Cycles::zero(),
                 reveal_top_up,
             };
             info!(
@@ -671,7 +671,6 @@ struct OriginalContext {
     message_instruction_limit: NumInstructions,
     message: Arc<Response>,
     subnet_size: usize,
-    freezing_threshold: Cycles,
     canister_id: CanisterId,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
@@ -937,17 +936,6 @@ pub fn execute_response(
         }
     };
 
-    let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-        clean_canister.system_state.freeze_threshold,
-        clean_canister.system_state.memory_allocation,
-        clean_canister.memory_usage(),
-        clean_canister.message_memory_usage(),
-        clean_canister.compute_allocation(),
-        subnet_size,
-        round.cost_schedule,
-        clean_canister.system_state.reserved_balance(),
-    );
-
     let original = OriginalContext {
         callback,
         call_context_id,
@@ -959,7 +947,6 @@ pub fn execute_response(
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: Arc::clone(&response),
         subnet_size,
-        freezing_threshold,
         canister_id: clean_canister.canister_id(),
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,
