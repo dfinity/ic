@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 use virt::sys::{virDomainRunningReason, virDomainState};
 
 /// Facade trait for operations on a libvirt domain.
@@ -97,4 +98,83 @@ impl LibvirtConnect for VirtConnectImpl {
             .map(|d| Box::new(VirtDomainImpl(d)) as Box<dyn LibvirtDomain>)
             .map_err(anyhow::Error::from)
     }
+}
+
+/// Caching wrapper around a libvirt connection factory.
+///
+/// The connection is created lazily on first use and then reused for subsequent
+/// calls. If a call fails with [`virt::error::ErrorNumber::InvalidConn`] the
+/// cached connection is discarded, a fresh one is obtained from the factory,
+/// and the failing call is retried once with the new connection.
+pub struct LibvirtConnectionWithRetry {
+    factory: Arc<dyn Fn() -> Result<Arc<dyn LibvirtConnect>> + Send + Sync>,
+    connection: Mutex<Option<Arc<dyn LibvirtConnect>>>,
+}
+
+impl LibvirtConnectionWithRetry {
+    pub fn new(factory: Arc<dyn Fn() -> Result<Arc<dyn LibvirtConnect>> + Send + Sync>) -> Self {
+        Self {
+            factory,
+            connection: Mutex::new(None),
+        }
+    }
+
+    fn get_or_connect(&self) -> Result<Arc<dyn LibvirtConnect>> {
+        let mut guard = self.connection.lock().unwrap();
+        if let Some(conn) = guard.as_ref() {
+            return Ok(conn.clone());
+        }
+        let conn = (self.factory)()?;
+        *guard = Some(conn.clone());
+        Ok(conn)
+    }
+
+    /// Discards the cached connection so the next call will invoke the factory.
+    ///
+    /// Call this whenever an external event (e.g. a libvirtd restart) has made
+    /// the existing connection stale.
+    pub fn invalidate(&self) {
+        *self.connection.lock().unwrap() = None;
+    }
+
+    fn call_with_reconnect<T>(&self, f: impl Fn(&dyn LibvirtConnect) -> Result<T>) -> Result<T> {
+        let conn = self.get_or_connect()?;
+        let result = f(conn.as_ref());
+        match result {
+            Err(ref e) if is_invalid_conn_error(e) => {
+                eprintln!("Libvirt connection is invalid, recreating and retrying");
+                self.invalidate();
+                let new_conn = self.get_or_connect()?;
+                f(new_conn.as_ref())
+            }
+            other => other,
+        }
+    }
+}
+
+impl LibvirtConnect for LibvirtConnectionWithRetry {
+    fn create_domain_xml(&self, xml: &str, flags: u32) -> Result<Box<dyn LibvirtDomain>> {
+        self.call_with_reconnect(|conn| conn.create_domain_xml(xml, flags))
+    }
+
+    fn lookup_domain_by_name(&self, name: &str) -> Result<Box<dyn LibvirtDomain>> {
+        self.call_with_reconnect(|conn| conn.lookup_domain_by_name(name))
+    }
+
+    fn lookup_domain_by_id(&self, id: u32) -> Result<Box<dyn LibvirtDomain>> {
+        self.call_with_reconnect(|conn| conn.lookup_domain_by_id(id))
+    }
+}
+
+/// Returns `true` when `err` wraps a `VIR_ERR_INVALID_CONN` libvirt error.
+#[cfg(target_os = "linux")]
+fn is_invalid_conn_error(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<virt::error::Error>()
+        .map(|e| matches!(e.code(), virt::error::ErrorNumber::InvalidConn))
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn is_invalid_conn_error(_err: &anyhow::Error) -> bool {
+    false
 }
