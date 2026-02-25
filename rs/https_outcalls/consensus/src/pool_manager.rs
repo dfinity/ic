@@ -492,43 +492,7 @@ impl CanisterHttpPoolManagerImpl {
                 };
 
                 match &context.replication {
-                    Replication::NonReplicated(node_id) => {
-                        if *node_id != share.signature.signer {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "Share signed by node that is not the delegated node for the request".to_string(),
-                            ));
-                        }
-
-                        let Some(response) = &artifact.response else {
-                            // The request is not fully replicated, but the response is missing.
-                            return Some(CanisterHttpChangeAction::HandleInvalid(share.clone(),
-                                "Artifact should contain response".to_string()));
-                        };
-
-                        if share.content.content_hash != ic_types::crypto::crypto_hash(response) {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "Content hash does not match the response".to_string(),
-                            ));
-                        }
-
-                        //TODO(IC-1966): we should also check the response size when validating the block payload.
-
-                        // An honest replica enforces that response.content.count_bytes() does not exceed max_response_bytes
-                        // when the content is `Success`. However it doesn't enroce anything in the case of `Failure`.
-                        // As we still want to set a limit for failure, we enforce 1KB, which is reasonable for
-                        // an error message.
-
-                        if let Err(err) = validate_response_size(response, context.max_response_bytes) {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                format!("Http Response for request ID {} is too large: {}", response.id, err),
-                            ));
-                        }
-                    }
                     Replication::FullyReplicated => {
-                        // Fully replicated requests must not have a response attached.
                         if artifact.response.is_some() {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
@@ -536,11 +500,12 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         }
                     }
-                    Replication::Flexible { committee, .. } => {
-                        if !committee.contains(&share.signature.signer) {
+                    replication @ Replication::NonReplicated(_)
+                    | replication @ Replication::Flexible { .. } => {
+                        if !replication.is_authorized_signer(&share.signature.signer) {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
-                                "Share signed by node that is not a member of the flexible request committee".to_string(),
+                                "Share signed by non-authorized node".to_string(),
                             ));
                         }
 
@@ -558,11 +523,15 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         }
 
-                        debug_assert_eq!(context.max_response_bytes, None);
-                        if let Err(err) = validate_response_size(response, context.max_response_bytes) {
+                        // for flexible calls, max_response_bytes is always None
+                        if let Err(e) = validate_response_size(response, context.max_response_bytes)
+                        {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
-                                format!("Http Response for request ID {} is too large: {}", response.id, err),
+                                format!(
+                                    "Http Response for request ID {} is too large: {}",
+                                    response.id, e
+                                ),
                             ));
                         }
                     }
@@ -1355,7 +1324,7 @@ pub mod test {
                 assert_matches!(
                     &change_set[0],
                     CanisterHttpChangeAction::HandleInvalid(_, reason) => {
-                        assert_eq!(reason, "Share signed by node that is not the delegated node for the request");
+                        assert_eq!(reason, "Share signed by non-authorized node");
                     }
                 );
             })
@@ -2838,7 +2807,7 @@ pub mod test {
                 assert_matches!(
                     &change_set[0],
                     CanisterHttpChangeAction::HandleInvalid(_, reason) => {
-                        assert_eq!(reason, "Share signed by node that is not a member of the flexible request committee");
+                        assert_eq!(reason, "Share signed by non-authorized node");
                     }
                 );
             })
