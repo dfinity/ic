@@ -181,7 +181,7 @@ impl HostSevCertificateProviderImpl {
         const MAX_ATTEMPTS: usize = 5;
         for attempt in 1..=MAX_ATTEMPTS {
             println!("Fetching VCEK from AMD key server, attempt {attempt} / {MAX_ATTEMPTS}");
-            let result = self.load_vcek_from_amd_key_server(&chip_id, &status).await;
+            let result = self.load_vcek_from_amd_key_server(chip_id, status).await;
             if let Err(err) = result {
                 eprintln!("Failed to fetch VCEK from AMD key server, will retry: {err}");
                 tokio::time::sleep(Duration::from_secs(2 * attempt as u64)).await;
