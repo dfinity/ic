@@ -2,11 +2,12 @@ use crate::guest_direct_boot::{DirectBoot, prepare_direct_boot};
 use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
+use crate::hugepages::{read_available_hugepages_gib, reserve_hugepages};
 use crate::metrics::GuestVmMetrics;
 use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{Context, Error, Result, anyhow, bail};
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use command_runner::{AsyncCommandRunner, RealAsyncCommandRunner};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
@@ -38,6 +39,7 @@ use virt::sys::{
 mod boot_args;
 mod guest_direct_boot;
 mod guest_vm_config;
+mod hugepages;
 mod metrics;
 mod systemd_notifier;
 mod upgrade_device_mapper;
@@ -79,10 +81,23 @@ impl GuestVMType {
     }
 }
 
+#[derive(Subcommand)]
+enum Command {
+    /// Run the GuestOS virtual machine
+    Run {
+        #[arg(long = "type", default_value = "default", value_enum)]
+        vm_type: GuestVMType,
+    },
+    /// Reserve hugepages for the GuestOS virtual machine.
+    /// Only allocates hugepages when trusted execution environment (SEV-SNP) is disabled in
+    /// the config.
+    ReserveHugepages,
+}
+
 #[derive(Parser)]
 struct Args {
-    #[arg(long = "type", default_value = "default", value_enum)]
-    vm_type: GuestVMType,
+    #[command(subcommand)]
+    command: Command,
 }
 
 #[tokio::main]
@@ -94,7 +109,14 @@ pub async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    let startup_message = match args.vm_type {
+    match args.command {
+        Command::ReserveHugepages => reserve_hugepages(),
+        Command::Run { vm_type } => run(vm_type).await,
+    }
+}
+
+async fn run(vm_type: GuestVMType) -> Result<()> {
+    let startup_message = match vm_type {
         GuestVMType::Default => "Launching GuestOS Virtual Machine...",
         GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
     };
@@ -109,7 +131,7 @@ pub async fn main() -> Result<()> {
     let termination_token = CancellationToken::new();
     setup_signal_handler(termination_token.clone()).context("Failed to setup signal handler")?;
 
-    GuestVmService::create_and_run(args.vm_type, termination_token).await
+    GuestVmService::create_and_run(vm_type, termination_token).await
 }
 
 fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
@@ -575,6 +597,9 @@ impl GuestVmService {
         )
         .context("Failed to assemble config media")?;
 
+        let available_hugepages_gib = read_available_hugepages_gib();
+        println!("Available huge pages: {} GiB", available_hugepages_gib);
+
         let vm_config = generate_vm_config(
             &self.hostos_config,
             config_media.path(),
@@ -582,6 +607,8 @@ impl GuestVmService {
             &self.disk_device,
             &self.vm_serial_log_path,
             self.guest_vm_type,
+            available_hugepages_gib,
+            &self.metrics,
         )
         .context("Failed to generate GuestOS VM config")?;
 
@@ -1084,6 +1111,11 @@ mod tests {
                 "GuestOS virtual machine launched",
                 "2001:db8::6800:d8ff:fecb:f597",
             ])
+            .unwrap();
+
+        // No hugepages available in the test environment
+        service
+            .check_metrics_contains("hostos_guestos_hugepages_enabled{vm_type=\"default\"} 0")
             .unwrap();
 
         // Ensure that the config media and kernel exist
