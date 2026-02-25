@@ -40,7 +40,7 @@ use std::str::FromStr;
 use strum::{Display, EnumString};
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.12.0";
+pub const CONFIG_VERSION: &str = "1.12.1";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
@@ -156,11 +156,11 @@ pub struct ICOSSettings {
     /// wrapper from the `ic_sev` crate, as this cannot be faked by a malicious HostOS.
     #[serde(default)]
     pub enable_trusted_execution_environment: bool,
-    /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
+    /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`, `recovery`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`
     /// is transferred to `~admin/.ssh/authorized_keys` on the target system.
-    /// backup and readonly can only be modified via an NNS proposal
+    /// `backup`, `readonly` and `recovery` can only be modified via an NNS proposal
     /// and are in place for subnet recovery or issue debugging purposes.
     /// use_ssh_authorized_keys triggers the use of the ssh keys directory
     pub use_ssh_authorized_keys: bool,

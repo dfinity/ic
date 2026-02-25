@@ -35,6 +35,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
             let initial_subnet_record = SubnetRecord {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_bytes_per_block: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 500,
@@ -52,6 +53,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 ssh_backup_access: vec![],
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
             };
 
             let key = make_subnet_record_key(subnet_id);
@@ -77,6 +79,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 subnet_id,
                 max_ingress_bytes_per_message: Some(10 * 1024 * 1024),
                 max_ingress_messages_per_block: None,
+                max_ingress_bytes_per_block: None,
                 max_block_payload_size: None,
                 unit_delay_millis: None,
                 initial_notary_delay_millis: None,
@@ -153,6 +156,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 SubnetRecord {
                     membership: vec![],
                     max_ingress_bytes_per_message: 10 * 1024 * 1024,
+                    max_ingress_bytes_per_block: 4 * 1024 * 1024,
                     max_ingress_messages_per_block: 1000,
                     max_block_payload_size: 4 * 1024 * 1024,
                     unit_delay_millis: 500,
@@ -170,6 +174,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     ssh_backup_access: vec!["pub_key_1".to_string()],
                     chain_key_config: None,
                     canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                    subnet_admins: vec![],
                 }
             );
             Ok(())

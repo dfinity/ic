@@ -43,6 +43,7 @@ async fn nns_init(args: NnsInitArgs) {
         port: Some(args.ic_network_port),
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pocket_ic = PocketIcBuilder::new()
         .with_server_url(args.server_url)

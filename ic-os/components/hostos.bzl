@@ -45,6 +45,7 @@ component_files = {
     Label("hostos/misc/bash"): "/opt/ic/bin/rbash/bash",
     Label("hostos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("hostos/misc/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
+    Label("hostos/misc/reserve-hugepages/reserve-hugepages.service"): "/etc/systemd/system/reserve-hugepages.service",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-launcher.sh"): "/opt/ic/bin/guestos-recovery-launcher.sh",
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",

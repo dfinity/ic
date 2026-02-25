@@ -28,6 +28,7 @@ use canister_test::{Canister, Runtime};
 use dfn_candid::candid;
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResources};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -166,7 +167,8 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
-    let mut ic = InternetComputer::new();
+    let mut ic =
+        InternetComputer::new().with_required_host_features(vec![HostFeature::Performance]);
     if let Some(resources) = config.vm_resources {
         ic = ic.with_default_vm_resources(resources);
     }

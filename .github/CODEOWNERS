@@ -169,7 +169,7 @@ go.sum                    @dfinity/idx
 /rs/p2p/                                                @dfinity/consensus
 /rs/phantom_newtype/                                    @dfinity/ic-interface-owners
 /rs/pocket_ic_server/                                   @dfinity/team-dsm
-/rs/prep/                                               @dfinity/utopia
+/rs/prep/                                               @dfinity/idx
 /rs/protobuf/                                           @dfinity/ic-interface-owners
 /rs/protobuf/def/bitcoin/                               @dfinity/team-dsm
 /rs/protobuf/def/crypto/                                @dfinity/consensus
