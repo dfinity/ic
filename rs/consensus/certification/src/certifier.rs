@@ -1642,10 +1642,10 @@ mod tests {
     /// Test that the certifier delivers certification requested by the state manager
     /// via the function `StateManager::list_state_heights_to_certify`.
     /// Test scenario:
-    /// 1. Certifier receives certifications for heights 1, 2, 3. 4.
-    /// 2. State manager asks for height 1 using `StateManager::list_state_hashes_to_certify`
-    ///    and for heights 2, 4, 5 using `StateManager::list_state_heights_to_certify`.
-    /// 3. Certifier delivers certifications for heights 1, 2, 4.
+    /// 1. Certifier receives certifications for heights 2, 3, 4.
+    /// 2. State manager asks for height 1, 3 using `StateManager::list_state_hashes_to_certify`
+    ///    and for heights 1, 4 using `StateManager::list_state_heights_to_certify`.
+    /// 3. Certifier delivers certifications for heights 3, 4.
     #[test]
     fn test_list_state_heights_to_certify() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1669,7 +1669,7 @@ mod tests {
                     metrics_registry.clone(),
                 );
 
-                for height in 1..=4 {
+                for height in 2..=4 {
                     cert_pool
                         .validated
                         .insert(CertificationMessage::Certification(Certification {
@@ -1693,21 +1693,14 @@ mod tests {
                     max_certified_height_tx,
                 );
 
-                // We expect deliver_state_certification() to be called 3 times for heights 1, 2, and 4.
+                // We expect deliver_state_certification() to be called 2 times for heights 3 and 4.
                 let mut seq = Sequence::new();
                 state_manager
                     .get_mut()
                     .expect_deliver_state_certification()
                     .once()
                     .in_sequence(&mut seq)
-                    .withf(|cert| cert.height.get() == 1)
-                    .returning(|_| ());
-                state_manager
-                    .get_mut()
-                    .expect_deliver_state_certification()
-                    .once()
-                    .in_sequence(&mut seq)
-                    .withf(|cert| cert.height.get() == 2)
+                    .withf(|cert| cert.height.get() == 3)
                     .returning(|_| ());
                 state_manager
                     .get_mut()
@@ -1731,12 +1724,12 @@ mod tests {
                     .get_mut()
                     .expect_list_state_hashes_to_certify()
                     .times(1)
-                    .return_const(state_hashes(vec![1]));
+                    .return_const(state_hashes(vec![1, 3]));
                 state_manager
                     .get_mut()
                     .expect_list_state_heights_to_certify()
                     .times(1)
-                    .return_const(vec![Height::new(2), Height::new(4), Height::new(5)]);
+                    .return_const(vec![Height::new(1), Height::new(4)]);
 
                 certifier.on_state_change(&cert_pool);
             })
