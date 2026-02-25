@@ -531,11 +531,15 @@ where
     fn sync_blocks(&mut self, channel: &mut impl Channel<Network::Header, Network::Block>) {
         // Timeout requests so they may be retried again.
         let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
+        // Track which peer each timed-out block was previously sent to,
+        // so we can avoid retrying on the same peer (which likely doesn't have the block).
+        let mut timed_out_peers: HashMap<BlockHash, SocketAddr> = HashMap::new();
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
             match request.sent_at {
                 Some(sent_at) => {
                     if sent_at.elapsed() > self.request_timeout {
                         retry_queue.insert(*block_hash);
+                        timed_out_peers.insert(*block_hash, request.socket);
                     }
                 }
                 None => {
@@ -580,7 +584,7 @@ where
         self.round_robin_offset = (self.round_robin_offset + 1) % len;
 
         // For each peer, select a random subset of the inventory and send a "getdata" request for it.
-        for peer in peers {
+        for peer in &peers {
             // Calculate number of inventory that can be sent in 'getdata' request to the peer.
             let requests_sent_to_peer = requests_per_peer.get(&peer.socket).unwrap_or(&0);
             let num_requests_to_be_sent =
@@ -589,12 +593,19 @@ where
             // Randomly sample some inventory to be requested from the peer.
             let mut selected_inventory = vec![];
             for _ in 0..num_requests_to_be_sent {
-                match get_next_block_hash_to_sync(&mut retry_queue, &mut self.block_sync_queue) {
-                    Some(hash) => {
-                        selected_inventory.push(hash);
-                    }
-                    None => {
-                        break;
+                // First try new blocks from sync_queue (any peer is fine).
+                if let Some(hash) = self.block_sync_queue.pop_front() {
+                    selected_inventory.push(hash);
+                } else {
+                    // Then try retry blocks, but avoid peers that already timed out for that block.
+                    match pop_retry_block_for_peer(&mut retry_queue, &peer.socket, &timed_out_peers)
+                    {
+                        Some(hash) => {
+                            selected_inventory.push(hash);
+                        }
+                        None => {
+                            break;
+                        }
                     }
                 }
             }
@@ -631,6 +642,12 @@ where
                     },
                 );
             }
+        }
+
+        // Put any remaining retry blocks back into the sync queue so they aren't lost.
+        // This can happen when all peers have been tried for certain blocks.
+        for hash in retry_queue {
+            self.block_sync_queue.insert(hash);
         }
     }
 
@@ -763,19 +780,43 @@ where
     }
 }
 
-// Only returns a block if the cache is not full.
-// Prioritzes new blocks that are in the sync queue over the ones in the retry queue, as
-// blocks in the retry queue are most likely not part of the main chain. See more in CON-1464.
-fn get_next_block_hash_to_sync(
+/// Picks a block from the retry queue that was NOT previously sent to the given peer.
+/// This prevents the adapter from repeatedly sending `getdata` for a block to a peer
+/// that doesn't have it (e.g. a block from a fork that only exists on another peer).
+/// If all retry blocks have been tried on this peer, returns `None` so the block
+/// can be picked up by a different peer.
+fn pop_retry_block_for_peer(
     retry_queue: &mut LinkedHashSet<BlockHash>,
-    sync_queue: &mut LinkedHashSet<BlockHash>,
+    peer: &SocketAddr,
+    timed_out_peers: &HashMap<BlockHash, SocketAddr>,
 ) -> Option<BlockHash> {
-    sync_queue.pop_front().or_else(|| retry_queue.pop_front())
+    // Find the first block that wasn't previously tried on this peer.
+    let preferred = retry_queue
+        .iter()
+        .find(|hash| timed_out_peers.get(*hash) != Some(peer))
+        .copied();
+    if let Some(hash) = preferred {
+        retry_queue.remove(&hash);
+        return Some(hash);
+    }
+    // All remaining retry blocks were tried on this peer.
+    // Return None to let other peers try them.
+    None
 }
 
 #[cfg(test)]
 pub mod test {
     use super::*;
+
+    // Only returns a block if the cache is not full.
+    // Prioritzes new blocks that are in the sync queue over the ones in the retry queue, as
+    // blocks in the retry queue are most likely not part of the main chain. See more in CON-1464.
+    fn get_next_block_hash_to_sync(
+        retry_queue: &mut LinkedHashSet<BlockHash>,
+        sync_queue: &mut LinkedHashSet<BlockHash>,
+    ) -> Option<BlockHash> {
+        sync_queue.pop_front().or_else(|| retry_queue.pop_front())
+    }
     use crate::common::test_common::TestState;
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
