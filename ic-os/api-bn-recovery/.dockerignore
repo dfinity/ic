@@ -1,0 +1,4 @@
+build.sh
+test.sh
+.dockerignore
+*.md
