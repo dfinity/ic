@@ -69,7 +69,7 @@ pub fn assert_subnet_is_healthy(
     // Wait until all nodes answer with the new message
     for node in subnet {
         assert!(
-            can_read_msg_with_retries(logger, &node.get_public_url(), can_id, new_msg, 20),
+            can_read_msg_with_retries(logger, &node.get_public_url(), can_id, new_msg, 5),
             "Failed to read new message on {}",
             node.get_ip_addr()
         );
