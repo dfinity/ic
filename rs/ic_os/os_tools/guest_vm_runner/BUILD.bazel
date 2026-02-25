@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:gpt",
     "@crate_index//:macaddr",
     "@crate_index//:memchr",
+    "@crate_index//:mockall",
     "@crate_index//:nix",
     "@crate_index//:prometheus",
     "@crate_index//:regex",

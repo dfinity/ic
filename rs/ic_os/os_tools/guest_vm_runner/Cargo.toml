@@ -22,6 +22,7 @@ devicemapper = { workspace = true }
 gpt = { workspace = true }
 macaddr = { workspace = true }
 memchr = { workspace = true }
+mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 regex = { workspace = true }

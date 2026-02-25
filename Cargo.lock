@@ -5473,6 +5473,7 @@ dependencies = [
  "ic_device",
  "macaddr",
  "memchr",
+ "mockall",
  "nix 0.24.3",
  "prometheus",
  "regex",

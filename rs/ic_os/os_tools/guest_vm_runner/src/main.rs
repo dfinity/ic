@@ -2,6 +2,7 @@ use crate::guest_direct_boot::{DirectBoot, prepare_direct_boot};
 use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
+use crate::libvirt::{LibvirtConnect, LibvirtDomain, VirtConnectImpl};
 use crate::metrics::GuestVmMetrics;
 use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
@@ -23,15 +24,12 @@ use std::pin::pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use strum_macros::AsRefStr;
-use sysinfo::{ProcessRefreshKind, RefreshKind};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
-use virt::connect::Connect;
-use virt::domain::Domain;
 use virt::sys::{
     VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING,
     VIR_DOMAIN_SHUTDOWN,
@@ -40,6 +38,7 @@ use virt::sys::{
 mod boot_args;
 mod guest_direct_boot;
 mod guest_vm_config;
+mod libvirt;
 mod metrics;
 mod systemd_notifier;
 mod upgrade_device_mapper;
@@ -136,7 +135,7 @@ fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
 pub struct VirtualMachine {
     domain_id: u32,
     domain_name: String,
-    libvirt_connect: Connect,
+    libvirt_connect: Arc<dyn LibvirtConnect>,
     // These fields hold resources (files) that are used by the virtual machine and must be kept
     // alive until the virtual machine is destroyed.
     _config_media: NamedTempFile,
@@ -144,10 +143,10 @@ pub struct VirtualMachine {
 }
 
 impl VirtualMachine {
-    /// Creates a new virtual machine from the provided XML configuration
+    /// Creates a new virtual machine from the provided XML configuration.
     /// The `config_media` is moved into the struct and deleted when the struct goes out of scope.
     pub async fn new(
-        libvirt_connect: &Connect,
+        libvirt_connect: Arc<dyn LibvirtConnect>,
         xml_config: &str,
         config_media: NamedTempFile,
         direct_boot: Option<DirectBoot>,
@@ -155,7 +154,7 @@ impl VirtualMachine {
     ) -> Result<Self, GuestVmServiceError> {
         let mut retries = 3;
         let domain = loop {
-            let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
+            let domain_result = libvirt_connect.create_domain_xml(xml_config, VIR_DOMAIN_NONE);
             match domain_result {
                 Ok(domain) => {
                     eprintln!("Domain successfully created: {vm_domain_name}");
@@ -164,22 +163,26 @@ impl VirtualMachine {
                 Err(e) if retries > 0 => {
                     eprintln!("Domain creation failed, retrying: {e}");
                     // TODO: Monitor if this code path is ever triggered - remove if unused
-                    if Domain::lookup_by_name(libvirt_connect, vm_domain_name).is_ok() {
+                    if libvirt_connect
+                        .lookup_domain_by_name(vm_domain_name)
+                        .is_ok()
+                    {
                         eprintln!(
                             "VM domain '{}' exists even though create_xml failed, attempting to destroy it before retry",
                             vm_domain_name
                         );
-                        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).await?;
+                        Self::try_destroy_existing_vm(libvirt_connect.as_ref(), vm_domain_name)
+                            .await?;
                     }
                     retries -= 1;
                     continue;
                 }
-                err => err.context("Failed to create domain after retries")?,
+                Err(e) => Err(e).context("Failed to create domain after retries")?,
             };
         };
         Ok(Self {
             domain_id: domain.get_id().context("Domain does not have id")?,
-            libvirt_connect: libvirt_connect.clone(),
+            libvirt_connect,
             domain_name: vm_domain_name.to_string(),
             _config_media: config_media,
             _direct_boot: direct_boot,
@@ -187,10 +190,10 @@ impl VirtualMachine {
     }
 
     async fn try_destroy_existing_vm(
-        libvirt_connect: &Connect,
+        libvirt_connect: &dyn LibvirtConnect,
         vm_domain_name: &str,
     ) -> Result<(), GuestVmServiceError> {
-        let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) else {
+        let Ok(existing_domain) = libvirt_connect.lookup_domain_by_name(vm_domain_name) else {
             return Ok(());
         };
         let domain_active = match existing_domain.is_active() {
@@ -219,8 +222,9 @@ impl VirtualMachine {
         }
     }
 
-    fn get_domain(&self) -> Result<Domain> {
-        Domain::lookup_by_id(&self.libvirt_connect, self.domain_id)
+    fn get_domain(&self) -> Result<Box<dyn LibvirtDomain>> {
+        self.libvirt_connect
+            .lookup_domain_by_id(self.domain_id)
             .context("Domain no longer exists")
     }
 
@@ -314,7 +318,7 @@ impl Debug for GuestVmServiceError {
 /// Service responsible for managing the GuestOS virtual machine lifecycle
 pub struct GuestVmService {
     metrics: GuestVmMetrics,
-    libvirt_connection_factory: Box<dyn Fn() -> Result<Connect>>,
+    libvirt_connection_factory: Arc<dyn Fn() -> Result<Arc<dyn LibvirtConnect>> + Send + Sync>,
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_ttys: Vec<Mutex<Box<dyn Write + Send + Sync>>>,
@@ -339,8 +343,11 @@ impl GuestVmService {
     pub fn new(guest_vm_type: GuestVMType) -> Result<Self> {
         let metrics = GuestVmMetrics::new(PathBuf::from(Self::metrics_path(guest_vm_type)))
             .context("Failed to create metrics")?;
-        let libvirt_connection_factory =
-            Box::new(|| Connect::open(None).context("Failed to connect to libvirt"));
+        let libvirt_connection_factory = Arc::new(move || {
+            let connect =
+                virt::connect::Connect::open(None).context("Failed to connect to libvirt")?;
+            Ok(Arc::new(VirtConnectImpl(connect)) as Arc<dyn LibvirtConnect>)
+        });
         let hostos_config: HostOSConfig =
             config_tool::deserialize_config(config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
@@ -497,7 +504,7 @@ impl GuestVmService {
         let libvirt_connection = (self.libvirt_connection_factory)()?;
         // Try to destroy any existing VM, if this fails, don't even try to create the configuration
         VirtualMachine::try_destroy_existing_vm(
-            &libvirt_connection,
+            libvirt_connection.as_ref(),
             vm_domain_name(self.guest_vm_type),
         )
         .await?;
@@ -555,7 +562,7 @@ impl GuestVmService {
         println!("Creating GuestOS virtual machine");
 
         let virtual_machine = VirtualMachine::new(
-            &libvirt_connection,
+            libvirt_connection,
             &vm_config,
             config_media,
             direct_boot,
@@ -713,15 +720,10 @@ impl GuestVmService {
     }
 }
 
-// impl Drop for GuestVmService {
-//     fn drop(&mut self) {
-//         let _ignored = self.libvirt_connection.close();
-//     }
-// }
-
 #[cfg(all(test, feature = "integration_tests"))]
 mod tests {
     use super::*;
+    use crate::libvirt::{MockLibvirtConnect, MockLibvirtDomain};
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use anyhow::ensure;
     use command_runner::MockAsyncCommandRunner;
@@ -731,15 +733,20 @@ mod tests {
     };
     use ic_device::mount::GptPartitionProvider;
     use ic_device::mount::testing::ExtractingFilesystemMounter;
+    use mockall::mock;
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
     use sev_host::testing::mock_host_sev_certificate_provider;
+    use std::collections::VecDeque;
     use std::fs::File;
+    use std::os::unix::process::ExitStatusExt;
     use std::path::PathBuf;
     use std::sync::LazyLock;
     use std::time::Instant;
+    use tempfile::NamedTempFile;
     use tempfile::TempDir;
     use tokio::task::JoinHandle;
+    use virt::connect::Connect;
     use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
 
     static GUESTOS_IMAGE: LazyLock<NamedTempFile> = LazyLock::new(|| {
@@ -773,7 +780,7 @@ mod tests {
     struct TestServiceInstance {
         task: JoinHandle<Result<()>>,
         vm_domain_name: String,
-        libvirt_connection: Connect,
+        libvirt_connection_factory: Arc<dyn Fn() -> Arc<dyn LibvirtConnect> + Send + Sync>,
         console_file: NamedTempFile,
         metrics_file: NamedTempFile,
         systemd_notifier: Arc<MockSystemdNotifier>,
@@ -807,24 +814,31 @@ mod tests {
             }
         }
 
-        fn get_domain(&self) -> Domain {
-            Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name)
+        fn try_get_domain(&self) -> Result<Box<dyn LibvirtDomain>> {
+            (self.libvirt_connection_factory)().lookup_domain_by_name(&self.vm_domain_name)
+        }
+
+        fn get_domain(&self) -> Box<dyn LibvirtDomain> {
+            (self.libvirt_connection_factory)()
+                .lookup_domain_by_name(&self.vm_domain_name)
                 .expect("Failed to find VM domain")
         }
 
         fn check_vm_running(&self) -> Result<()> {
-            let domain = Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name)
-                .context("Failed to find VM domain")?;
+            let domain = self.try_get_domain()?;
             ensure!(
-                domain.get_state() == Ok((VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED as _)),
-                "VM is not running"
+                matches!(domain.get_state(), Ok((VIR_DOMAIN_RUNNING, reason)) if reason == VIR_DOMAIN_RUNNING_BOOTED as i32),
+                "VM is not running: {:?}",
+                domain.get_state()
             );
             Ok(())
         }
 
         fn check_vm_shutdown(&self) -> Result<()> {
             ensure!(
-                Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name).is_err(),
+                (self.libvirt_connection_factory)()
+                    .lookup_domain_by_name(&self.vm_domain_name)
+                    .is_err(),
                 "VM is still running"
             );
             Ok(())
@@ -832,7 +846,9 @@ mod tests {
 
         fn check_vm_not_exists(&self) -> Result<()> {
             ensure!(
-                Domain::lookup_by_name(&self.libvirt_connection, &self.vm_domain_name).is_err(),
+                (self.libvirt_connection_factory)()
+                    .lookup_domain_by_name(&self.vm_domain_name)
+                    .is_err(),
                 "Expected VM domain to not exist"
             );
             Ok(())
@@ -905,12 +921,10 @@ mod tests {
 
     /// Test fixture for setting up the test environment
     struct TestFixture {
-        libvirt_connection: Connect,
+        libvirt_connection_factory: Arc<dyn Fn() -> Arc<dyn LibvirtConnect> + Send + Sync>,
         hostos_config: HostOSConfig,
         guestos_device: PathBuf,
         mock_mounter: ExtractingFilesystemMounter,
-        /// Fake libvirt host definition that backs `libvirt_connection`.
-        _libvirt_definition: NamedTempFile,
         guestos_boot_timeout: Duration,
         guest_serial_log: NamedTempFile,
         command_runner: Arc<MockAsyncCommandRunner>,
@@ -922,18 +936,21 @@ mod tests {
                 NamedTempFile::new().expect("Failed to create libvirt connection");
             std::fs::write(&libvirt_definition, "<node/>").unwrap();
 
-            let libvirt_connection = Connect::open(Some(&format!(
-                "test://{}",
-                libvirt_definition.path().display()
-            )))
-            .unwrap();
+            let connection = Arc::new(VirtConnectImpl(
+                Connect::open(Some(&format!(
+                    "test://{}",
+                    libvirt_definition.path().display()
+                )))
+                .unwrap(),
+            ));
+            let libvirt_connection_factory =
+                Arc::new(move || connection.clone() as Arc<dyn LibvirtConnect>);
 
             TestFixture {
-                libvirt_connection,
+                libvirt_connection_factory,
                 hostos_config,
                 guestos_device: GUESTOS_IMAGE.path().to_path_buf(),
                 mock_mounter: ExtractingFilesystemMounter::default(),
-                _libvirt_definition: libvirt_definition,
                 guestos_boot_timeout: GUESTOS_BOOT_TIMEOUT,
                 guest_serial_log: NamedTempFile::new().unwrap(),
                 command_runner: Arc::new(MockAsyncCommandRunner::new()),
@@ -948,12 +965,14 @@ mod tests {
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
             let systemd_notifier = Arc::new(MockSystemdNotifier::new());
             let termination_token = CancellationToken::new();
+            let libvirt_connection_factory_c = self.libvirt_connection_factory.clone();
+            let libvirt_connection_factory = Arc::new(move || Ok(libvirt_connection_factory_c()));
             let (sev_certificate_provider, sev_certificate_cache_dir) =
                 mock_host_sev_certificate_provider()
                     .expect("Failed to create mock SEV cert provider");
             let mut service = GuestVmService {
                 metrics: GuestVmMetrics::new(metrics_file.path().to_path_buf()).unwrap(),
-                libvirt_connection_factory: Box::new(|| Ok(self.libvirt_connection.clone())),
+                libvirt_connection_factory,
                 hostos_config: self.hostos_config.clone(),
                 systemd_notifier: systemd_notifier.clone(),
                 console_ttys: vec![Mutex::new(Box::new(
@@ -985,7 +1004,7 @@ mod tests {
                 metrics_file,
                 systemd_notifier,
                 termination_token,
-                libvirt_connection: self.libvirt_connection.clone(),
+                libvirt_connection_factory: self.libvirt_connection_factory.clone(),
                 vm_domain_name: vm_domain_name(guest_vm_type).to_string(),
                 _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
@@ -1076,7 +1095,7 @@ mod tests {
         service.wait_for_systemd_ready().await;
 
         // Kill the VM
-        service.get_domain().destroy().unwrap();
+        service.get_domain().destroy_flags(0).unwrap();
 
         // Assert that the VM is running again after a short delay
         assert_with_retry(|| service.check_vm_running()).await;
@@ -1114,7 +1133,8 @@ mod tests {
         service2.wait_for_systemd_ready().await;
 
         // Assert that the first VM was stopped and the second VM is running
-        Domain::lookup_by_id(&fixture.libvirt_connection, domain_id1)
+        (fixture.libvirt_connection_factory)()
+            .lookup_domain_by_id(domain_id1)
             .expect_err("Expected domain to not exist");
 
         service2.check_vm_running().unwrap();
@@ -1181,5 +1201,47 @@ mod tests {
         writeln!(fixture.guest_serial_log, "foo bar").unwrap();
         sleep(Duration::from_millis(500)).await;
         assert_with_retry(|| service.check_console_contains(&["GuestOS boot timed out"])).await;
+    }
+
+    #[tokio::test]
+    async fn test_inactive_domain_triggers_libvirtd_restart() {
+        // First connection: domain exists but is inactive → NeedsLibvirtdRestart
+        let mut mock_connect_1 = MockLibvirtConnect::new();
+        mock_connect_1
+            .expect_lookup_domain_by_name()
+            .return_once(|name| {
+                assert_eq!(name, "guestos");
+                let mut domain = MockLibvirtDomain::new();
+                domain.expect_is_active().once().returning(|| Ok(false));
+                Ok(Box::new(domain))
+            });
+
+        let mut mock_command_runner = MockAsyncCommandRunner::new();
+        mock_command_runner.expect_status().once().returning(|cmd| {
+            assert_eq!(
+                format!("{:?}", cmd.as_std()),
+                r#""systemctl" "restart" "libvirtd" "virtlogd""#
+            );
+            Box::pin(async { Ok(std::process::ExitStatus::from_raw(0)) })
+        });
+
+        let mut fixture = TestFixture::new(valid_hostos_config());
+        let mut mock_connect =
+            Mutex::new(Some(Arc::new(mock_connect_1) as Arc<dyn LibvirtConnect>));
+        let mut original_connection_factory = fixture.libvirt_connection_factory.clone();
+        fixture.libvirt_connection_factory = Arc::new(move || {
+            // First return the mock connection factory to simulate the libvirt bug,
+            // then the original connection factory.
+            mock_connect
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or_else(|| original_connection_factory())
+        });
+
+        fixture.command_runner = Arc::new(mock_command_runner);
+
+        let mut service = fixture.start_service(GuestVMType::Default);
+        service.wait_for_systemd_ready().await;
     }
 }
