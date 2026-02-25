@@ -2393,18 +2393,34 @@ pub struct Gt {
 
 static GT_GENERATOR: LazyLock<Gt> = LazyLock::new(|| Gt::new(ic_bls12_381::Gt::generator()));
 
+// Lookup table used by Gt::g_mul_u16
 static GT_MUL_U16_GENERATOR_TBL: LazyLock<Vec<Gt>> = LazyLock::new(|| {
-    let mut tbl = Vec::with_capacity(24);
-    let mut accum = Gt::new(ic_bls12_381::Gt::generator());
-    for _ in 0..8 {
-        let accum2 = accum.double();
-        let accum3 = accum.double() + &accum;
+    const WINDOW_BITS: usize = 4;
+    const WINDOW_ELEMENTS: usize = (1 << WINDOW_BITS) - 1;
+    const WINDOWS: usize = (u16::BITS as usize) / WINDOW_BITS;
 
-        tbl.push(accum.clone());
-        tbl.push(accum2.clone());
-        tbl.push(accum3);
-
-        accum = accum2.double();
+    let mut tbl = Vec::with_capacity(WINDOWS * WINDOW_ELEMENTS);
+    let mut base = Gt::new(ic_bls12_381::Gt::generator());
+    for _ in 0..WINDOWS {
+        // Compute [base*1, base*2, ..., base*15]
+        let g1 = base;
+        let g2 = g1.double();
+        let g3 = &g2 + &g1;
+        let g4 = g2.double();
+        let g5 = &g4 + &g1;
+        let g6 = g3.double();
+        let g7 = &g6 + &g1;
+        let g8 = g4.double();
+        let g9 = &g8 + &g1;
+        let g10 = g5.double();
+        let g11 = &g10 + &g1;
+        let g12 = g6.double();
+        let g13 = &g12 + &g1;
+        let g14 = g7.double();
+        let g15 = &g14 + &g1;
+        // Next window starts at (2**4)*base = 2(8*base)
+        base = g8.double();
+        tbl.extend([g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g15]);
     }
     tbl
 });
@@ -2539,10 +2555,10 @@ impl Gt {
     pub fn g_mul_u16(val: u16) -> Self {
         let mut r = Gt::identity();
 
-        for i in 0..8 {
-            let w = (val >> 2 * i) & 0b11;
-            let tbl_for_i = &GT_MUL_U16_GENERATOR_TBL[(i * 3)..(i * 3 + 3)];
-            r += Self::ct_select(&tbl_for_i, w as usize);
+        for i in 0..4 {
+            let w = ((val >> (4 * i)) & 0b1111) as usize;
+            let tbl_for_i = &GT_MUL_U16_GENERATOR_TBL[(i * 15)..(i * 15 + 15)];
+            r += Self::ct_select(tbl_for_i, w);
         }
 
         r
