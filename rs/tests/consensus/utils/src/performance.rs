@@ -233,33 +233,33 @@ impl std::fmt::Display for TestMetrics {
         writeln!(f, "Block rate: {:.2} blocks/s", self.blocks_per_second)?;
         writeln!(
             f,
-            "Throughput: {:.1} MiB/s, {:.2} messages/s",
+            "Throughput: {:.2} MiB/s, {:.2} messages/s",
             self.throughput_bytes_per_second / (1024. * 1024.),
             self.throughput_messages_per_second
         )?;
         writeln!(
             f,
-            "Average time to receive a rank 0 block: {:.2}s",
+            "Average time to receive a rank 0 block: {:.3}s",
             self.average_time_to_receive_block
         )?;
-        write!(
+        writeln!(
             f,
             "Avarage E2E ingress message latency: {:.2}s",
             self.average_e2e_latency
         )?;
-        write!(
+        writeln!(
             f,
-            "Avarage time to create a block payload: {:.2}s",
+            "Avarage time to create a block payload: {:.3}s",
             self.average_payload_creation_duration_seconds
         )?;
-        write!(
+        writeln!(
             f,
-            "Avarage time to validate a block payload: {:.2}s",
+            "Avarage time to validate a block payload: {:.3}s",
             self.average_payload_validation_duration_seconds
         )?;
         write!(
             f,
-            "Avarage time to assemble a block proposal: {:.2}s",
+            "Avarage time to assemble a block proposal: {:.3}s",
             self.average_block_assembly_duration_seconds,
         )?;
         Ok(())
