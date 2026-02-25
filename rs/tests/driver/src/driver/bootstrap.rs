@@ -694,19 +694,16 @@ fn create_setupos_config_image(
         .filter(|s| !s.trim().is_empty())
         .map(PathBuf::from);
 
-    let vm_spec = nested_vm.get_vm_spec()?;
+    const DEFAULT_BARE_METAL_VCPUS: u64 = 64;
+    const DEFAULT_BARE_METAL_MEMORY_GIB: u64 = 470;
 
     let bare_metal = nested_vm.get_vm()?.bare_metal;
     let config = nested_vm.get_nested_vm_config()?;
-    let nr_of_cpus = if bare_metal {
-        vm_spec.v_cpus
+    let (nr_of_cpus, memory) = if bare_metal {
+        (DEFAULT_BARE_METAL_VCPUS, DEFAULT_BARE_METAL_MEMORY_GIB)
     } else {
-        vm_spec.v_cpus / 2
-    };
-    let memory = if bare_metal {
-        vm_spec.memory_ki_b / 1024 / 1024
-    } else {
-        vm_spec.memory_ki_b / 2 / 1024 / 1024
+        let vm_spec = nested_vm.get_vm_spec()?;
+        (vm_spec.v_cpus / 2, vm_spec.memory_ki_b / 2 / 1024 / 1024)
     };
     setupos_image_config::create_setupos_config(
         &config_dir,
