@@ -26,6 +26,7 @@ use strum_macros::AsRefStr;
 use sysinfo::{ProcessRefreshKind, RefreshKind};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -33,6 +34,7 @@ use virt::connect::Connect;
 use virt::domain::Domain;
 use virt::sys::{
     VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING,
+    VIR_DOMAIN_SHUTDOWN,
 };
 
 mod boot_args;
@@ -150,7 +152,6 @@ impl VirtualMachine {
         config_media: NamedTempFile,
         direct_boot: Option<DirectBoot>,
         vm_domain_name: &str,
-        command_runner: Arc<dyn AsyncCommandRunner>,
     ) -> Result<Self, GuestVmServiceError> {
         let mut retries = 3;
         let domain = loop {
@@ -168,12 +169,7 @@ impl VirtualMachine {
                             "VM domain '{}' exists even though create_xml failed, attempting to destroy it before retry",
                             vm_domain_name
                         );
-                        Self::try_destroy_existing_vm(
-                            libvirt_connect,
-                            vm_domain_name,
-                            command_runner.as_ref(),
-                        )
-                        .await?;
+                        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).await?;
                     }
                     retries -= 1;
                     continue;
@@ -193,99 +189,33 @@ impl VirtualMachine {
     async fn try_destroy_existing_vm(
         libvirt_connect: &Connect,
         vm_domain_name: &str,
-        command_runner: &dyn AsyncCommandRunner,
     ) -> Result<(), GuestVmServiceError> {
         let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) else {
-            eprintln!("No existing domain found to destroy");
             return Ok(());
         };
-
         let domain_active = match existing_domain.is_active() {
             Ok(true) => true,
-            Ok(false) => {
-                eprintln!(
-                    "Existing domain '{vm_domain_name}' is not active - this should never happen, \
-                    will monitor for a while, then reboot HostOS"
-                );
-                false
-            }
+            Ok(false) => false,
             Err(err) => {
                 eprintln!(
-                    "Failed to check if domain '{vm_domain_name}' is active: {err}. Assuming it's \
-                    inactive, will monitor for a while, then reboot HostOS"
+                    "Failed to check if domain '{vm_domain_name}' is active: {err}.\
+                        Assuming it's inactive."
                 );
                 false
             }
         };
-
         if domain_active {
             eprintln!("Existing domain '{vm_domain_name}' is active, attempting to destroy it");
             if let Err(err) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
                 eprintln!("destroy_flags failed: {err}");
             }
-            if let Err(err) = existing_domain.undefine() {
-                eprintln!("undefine failed: {err}");
-            }
             Ok(())
         } else {
-            Self::debug_inactive_domain(vm_domain_name, command_runner).await;
-            Err(GuestVmServiceError::UnrecoverableNeedsReboot)
-        }
-    }
-
-    /// In a small amount of cases, the QEMU process gets stuck after the VM shuts down.
-    /// We don't know why it's happening. This method attempts to gather information about the
-    /// QEMU process which helps with debugging.
-    async fn debug_inactive_domain(vm_domain_name: &str, command_runner: &dyn AsyncCommandRunner) {
-        let sysinfo = sysinfo::System::new_with_specifics(
-            RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
-        );
-        match std::fs::read_to_string(format!("/var/run/libvirt/qemu/{vm_domain_name}.pid")) {
-            Ok(pid) => {
-                eprintln!("Contents of /var/run/libvirt/qemu/{vm_domain_name}.pid: {pid}");
-            }
-            Err(e) => {
-                eprintln!("Failed to read /var/run/libvirt/qemu/{vm_domain_name}.pid: {e}");
-            }
-        }
-        let qemu_processes: Vec<_> = sysinfo
-            .processes()
-            .values()
-            .filter(|p| p.name().to_string_lossy().contains("qemu"))
-            .collect();
-        if qemu_processes.is_empty() {
-            eprintln!("No QEMU processes found");
-            return;
-        }
-
-        eprintln!("{} QEMU process(es) found", qemu_processes.len());
-        for qemu_process in &qemu_processes {
-            eprintln!("QEMU process: {qemu_process:?}");
-            eprintln!("Process status: {:?}", qemu_process.status());
-            eprintln!("Running lsof for QEMU process {}", qemu_process.pid());
-            let mut lsof_cmd = tokio::process::Command::new("lsof");
-            lsof_cmd.arg("-p").arg(qemu_process.pid().to_string());
-            if let Err(err) = command_runner.status(&mut lsof_cmd).await {
-                eprintln!("Failed to run lsof: {err:?}");
-            }
-
-            let stack_file = format!("/proc/{}/stack", qemu_process.pid());
-            match std::fs::read_to_string(&stack_file) {
-                Ok(stack) => eprintln!("Content of {stack_file}:\n{stack}"),
-                Err(err) => eprintln!("Failed to read {stack_file}: {err}"),
-            }
-        }
-
-        eprintln!("Will run strace for 60s");
-        let mut strace_cmd = tokio::process::Command::new("timeout");
-        strace_cmd
-            .arg("60")
-            .arg("strace")
-            .arg("-p")
-            // pass all QEMU PIDs
-            .args(qemu_processes.iter().map(|p| p.pid().to_string()));
-        if let Err(e) = command_runner.status(&mut strace_cmd).await {
-            eprintln!("Failed to run strace: {e}");
+            eprintln!(
+                "Existing domain '{vm_domain_name}' is not active - probably hit \
+                        https://gitlab.com/libvirt/libvirt/-/issues/853 will restart libvirtd"
+            );
+            Err(GuestVmServiceError::NeedsLibvirtdRestart)
         }
     }
 
@@ -311,6 +241,9 @@ impl VirtualMachine {
                 Ok((VIR_DOMAIN_CRASHED, reason)) => {
                     eprintln!("VM crashed, reason: {reason}");
                     break;
+                }
+                Ok((VIR_DOMAIN_SHUTDOWN, reason)) => {
+                    eprintln!("VM shutting down, reason: {reason}");
                 }
                 Ok((state, reason)) => {
                     eprintln!("VM is in state {state}, reason: {reason}");
@@ -348,6 +281,11 @@ pub enum GuestVmServiceError {
     /// This can happen because QEMU stopped/crashed or because the GuestOS requested reboot.
     #[error("Virtual machine stopped")]
     VirtualMachineStopped,
+    /// If the QEMU process takes longer than 40s to shut down, libvirtd puts the domain
+    /// into an inactive state. We can only recover by restarting libvirtd.
+    /// See https://gitlab.com/libvirt/libvirt/-/issues/853
+    #[error("Libvirtd needs restart")]
+    NeedsLibvirtdRestart,
     /// This can happen if the QEMU process gets stuck and the domain cannot be destroyed,
     /// removed and recreated.
     #[error("Unrecoverable error, HostOS needs reboot")]
@@ -366,6 +304,7 @@ impl Debug for GuestVmServiceError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::VirtualMachineStopped => write!(f, "VirtualMachineStopped"),
+            Self::NeedsLibvirtdRestart => write!(f, "NeedsLibvirtdRestart"),
             Self::UnrecoverableNeedsReboot => write!(f, "UnrecoverableNeedsReboot"),
             Self::Other(e) => e.fmt(f),
         }
@@ -375,7 +314,7 @@ impl Debug for GuestVmServiceError {
 /// Service responsible for managing the GuestOS virtual machine lifecycle
 pub struct GuestVmService {
     metrics: GuestVmMetrics,
-    libvirt_connection: Connect,
+    libvirt_connection_factory: Box<dyn Fn() -> Result<Connect>>,
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_ttys: Vec<Mutex<Box<dyn Write + Send + Sync>>>,
@@ -400,7 +339,8 @@ impl GuestVmService {
     pub fn new(guest_vm_type: GuestVMType) -> Result<Self> {
         let metrics = GuestVmMetrics::new(PathBuf::from(Self::metrics_path(guest_vm_type)))
             .context("Failed to create metrics")?;
-        let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
+        let libvirt_connection_factory =
+            Box::new(|| Connect::open(None).context("Failed to connect to libvirt"));
         let hostos_config: HostOSConfig =
             config_tool::deserialize_config(config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
@@ -438,7 +378,7 @@ impl GuestVmService {
 
         Ok(Self {
             metrics,
-            libvirt_connection,
+            libvirt_connection_factory,
             hostos_config,
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
@@ -469,23 +409,50 @@ impl GuestVmService {
     }
 
     pub async fn run(&mut self, termination_token: CancellationToken) -> Result<()> {
+        let mut libvirtd_restart_count = 0;
         loop {
             match self.run_once(termination_token.clone()).await {
                 Ok(()) => return Ok(()),
-                Err(GuestVmServiceError::VirtualMachineStopped) => match self.guest_vm_type {
-                    GuestVMType::Default => {
-                        println!("Guest VM stopped, restarting");
-                        continue;
+                Err(GuestVmServiceError::VirtualMachineStopped) => {
+                    libvirtd_restart_count = 0;
+                    match self.guest_vm_type {
+                        GuestVMType::Default => {
+                            println!("Guest VM stopped, restarting");
+                            continue;
+                        }
+                        GuestVMType::Upgrade => {
+                            println!("Upgrade VM stopped, exiting");
+                            return Ok(());
+                        }
                     }
-                    GuestVMType::Upgrade => {
-                        println!("Upgrade VM stopped, exiting");
-                        return Ok(());
+                }
+                Err(GuestVmServiceError::NeedsLibvirtdRestart) => {
+                    println!("Libvirtd needs restart");
+                    if libvirtd_restart_count > 3 {
+                        println!("Too many libvirtd restarts, issuing HostOS reboot");
+                        println!("Issuing HostOS reboot");
+                        // let mut cmd = tokio::process::Command::new("reboot");
+                        // self.command_runner.status(&mut cmd).await?;
+                        bail!("Too many libvirtd restarts, issued reboot");
                     }
-                },
+                    libvirtd_restart_count += 1;
+                    if let Err(err) = self
+                        .command_runner
+                        .status(
+                            &mut Command::new("systemctl")
+                                .arg("restart")
+                                .arg("libvirtd")
+                                .arg("virtlogd"),
+                        )
+                        .await
+                    {
+                        eprintln!("Failed to restart libvirtd: {err}");
+                    }
+                }
                 Err(GuestVmServiceError::UnrecoverableNeedsReboot) => {
                     println!("Issuing HostOS reboot");
-                    let mut cmd = tokio::process::Command::new("reboot");
-                    self.command_runner.status(&mut cmd).await?;
+                    // let mut cmd = tokio::process::Command::new("reboot");
+                    // self.command_runner.status(&mut cmd).await?;
                     bail!("Found unrecoverable error, issued reboot");
                 }
                 Err(GuestVmServiceError::Other(err)) => {
@@ -527,11 +494,11 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
+        let libvirt_connection = (self.libvirt_connection_factory)()?;
         // Try to destroy any existing VM, if this fails, don't even try to create the configuration
         VirtualMachine::try_destroy_existing_vm(
-            &self.libvirt_connection,
+            &libvirt_connection,
             vm_domain_name(self.guest_vm_type),
-            self.command_runner.as_ref(),
         )
         .await?;
 
@@ -588,12 +555,11 @@ impl GuestVmService {
         println!("Creating GuestOS virtual machine");
 
         let virtual_machine = VirtualMachine::new(
-            &self.libvirt_connection,
+            &libvirt_connection,
             &vm_config,
             config_media,
             direct_boot,
             vm_domain_name(self.guest_vm_type),
-            self.command_runner.clone(),
         )
         .await?;
 
@@ -747,11 +713,11 @@ impl GuestVmService {
     }
 }
 
-impl Drop for GuestVmService {
-    fn drop(&mut self) {
-        let _ignored = self.libvirt_connection.close();
-    }
-}
+// impl Drop for GuestVmService {
+//     fn drop(&mut self) {
+//         let _ignored = self.libvirt_connection.close();
+//     }
+// }
 
 #[cfg(all(test, feature = "integration_tests"))]
 mod tests {
@@ -987,7 +953,7 @@ mod tests {
                     .expect("Failed to create mock SEV cert provider");
             let mut service = GuestVmService {
                 metrics: GuestVmMetrics::new(metrics_file.path().to_path_buf()).unwrap(),
-                libvirt_connection: self.libvirt_connection.clone(),
+                libvirt_connection_factory: Box::new(|| Ok(self.libvirt_connection.clone())),
                 hostos_config: self.hostos_config.clone(),
                 systemd_notifier: systemd_notifier.clone(),
                 console_ttys: vec![Mutex::new(Box::new(
