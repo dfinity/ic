@@ -184,7 +184,7 @@ impl Replication {
         match self {
             Replication::FullyReplicated => true,
             Replication::NonReplicated(node_id) => node_id == signer,
-            Replication::Flexible { committee, .. } => committee.contains(&signer),
+            Replication::Flexible { committee, .. } => committee.contains(signer),
         }
     }
 }
