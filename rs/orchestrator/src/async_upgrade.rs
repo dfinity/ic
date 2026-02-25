@@ -33,6 +33,7 @@ pub(crate) struct AsyncUpgrader {
 }
 
 impl AsyncUpgrader {
+    #[allow(dead_code)]
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         guestos_version: ReplicaVersion,

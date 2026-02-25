@@ -315,18 +315,20 @@ impl Orchestrator {
             ),
         };
 
-        let async_upgrade = Some(
-            AsyncUpgrader::new(
-                Arc::clone(&registry),
-                replica_version.clone(),
-                node_id,
-                args.replica_binary_dir.clone(),
-                ic_binary_directory.clone(),
-                disk_encryption_key_exchange_agent.clone(),
-                logger.clone(),
-            )
-            .await,
-        );
+        // TODO: Enable once we are ready to start tracking quick upgrades.
+        // let async_upgrade = Some(
+        //     AsyncUpgrader::new(
+        //         Arc::clone(&registry),
+        //         replica_version.clone(),
+        //         node_id,
+        //         args.replica_binary_dir.clone(),
+        //         ic_binary_directory.clone(),
+        //         disk_encryption_key_exchange_agent.clone(),
+        //         logger.clone(),
+        //     )
+        //     .await,
+        // );
+        let async_upgrade = None;
 
         let boundary_node = BoundaryNodeManager::new(
             Arc::clone(&registry),
