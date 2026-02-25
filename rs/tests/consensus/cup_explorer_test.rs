@@ -108,7 +108,7 @@ fn test(env: TestEnv) {
             if status == SubnetStatus::Running {
                 Ok(())
             } else {
-                bail!(
+                panic!(
                     "Subnet not yet running with Local DKG target CUP, status: {:?}",
                     status
                 )
@@ -150,7 +150,7 @@ fn test(env: TestEnv) {
                 Some(nns_public_key.clone()),
                 cup_path,
             )
-            .map_err(|e| anyhow::anyhow!(e))?;
+            .expect("Failed to verify CUP of halted subnet");
             if status == SubnetStatus::Halted {
                 Ok(())
             } else {
