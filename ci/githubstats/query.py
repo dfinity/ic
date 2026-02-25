@@ -891,33 +891,34 @@ def process_elasticsearch_hits_from_queue(
 
 # fmt: off
 TOP_COLUMNS = [
-    # (column_name,     header,                  alignment)
-    ("label",           "label",                 "left"),
-    ("total",           "total",                 "decimal"),
-    ("non_success",     "non_success",           "decimal"),
-    ("flaky",           "flaky",                 "decimal"),
-    ("timeout",         "timeout",               "decimal"),
-    ("fail",            "fail",                  "decimal"),
-    ("non_success%",    "non_success%",          "decimal"),
-    ("flaky%",          "flaky%",                "decimal"),
-    ("timeout%",        "timeout%",              "decimal"),
-    ("fail%",           "fail%",                 "decimal"),
-    ("impact",          "impact",                "right"),
-    ("total_duration",  "total duration",        "right"),
-    ("duration_p90",    "duration_p90",          "right"),
-    ("owners",          "owners",                "left"),
+    # (column_name,         header,                  alignment)
+    ("label",               "label",                 "left"),
+    ("total",               "total",                 "decimal"),
+    ("last_non_success_at", "last non success at",   "right"),
+    ("non_success",         "non_success",           "decimal"),
+    ("flaky",               "flaky",                 "decimal"),
+    ("timeout",             "timeout",               "decimal"),
+    ("fail",                "fail",                  "decimal"),
+    ("non_success%",        "non_success%",          "decimal"),
+    ("flaky%",              "flaky%",                "decimal"),
+    ("timeout%",            "timeout%",              "decimal"),
+    ("fail%",               "fail%",                 "decimal"),
+    ("impact",              "impact",                "right"),
+    ("total_duration",      "total duration",        "right"),
+    ("duration_p90",        "duration_p90",          "right"),
+    ("owners",              "owners",                "left"),
 ]
 
 LAST_COLUMNS = [
-    # (column_name,      header,                  alignment)
-    ("last_started_at",  "last started at (UTC)", "right"),
-    ("duration",         "duration",              "right"),
-    ("status",           "status",                "left"),
-    ("branch",           "branch",                "left"),
-    ("PR",               "PR",                    "left"),
-    ("commit",           "commit",                "left"),
-    ("buildbuddy",       "buildbuddy",            "left"),
-    ("errors",           "errors per attempt",    "left")
+    # (column_name,         header,                  alignment)
+    ("last_started_at",     "last started at (UTC)", "right"),
+    ("duration",            "duration",              "right"),
+    ("status",              "status",                "left"),
+    ("branch",              "branch",                "left"),
+    ("PR",                  "PR",                    "left"),
+    ("commit",              "commit",                "left"),
+    ("buildbuddy",          "buildbuddy",            "left"),
+    ("errors",              "errors per attempt",    "left")
 ]
 # fmt: on
 
@@ -980,6 +981,11 @@ def top(args):
                 value = pd.Timedelta(value).to_pytimedelta()
             except ValueError as e:
                 die(f"Can't parse '{value}' to an interval because: {e}!")
+        elif args.order_by in ("last_non_success_at"):
+            try:
+                value = parse_datetime(value)
+            except ValueError as e:
+                die(f"Can't parse '{value}' to a timestamp because: {e}!")
         else:
             try:
                 value = float(value)
@@ -1012,6 +1018,9 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
+    df["last_non_success_at"] = df["last_non_success_at"].apply(
+        lambda t: t.strftime("%a %Y-%m-%d %X") if pd.notna(t) else ""
+    )
     df["impact"] = df["impact"].apply(normalize_duration)
     df["total_duration"] = df["total_duration"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
@@ -1219,6 +1228,7 @@ Examples:
         type=str,
         choices=[
             "total",
+            "last_non_success_at",
             "non_success",
             "flaky",
             "timeout",
@@ -1233,18 +1243,19 @@ Examples:
         ],
         help="""COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to.
 
-total:\t\tTotal runs in the specified period
-non_success:\tNumber of non-successful runs in the specified period
-flaky:\t\tNumber of flaky runs in the specified period
-timeout:\tNumber of timed-out runs in the specified period
-fail:\t\tNumber of failed runs in the specified period
-non_success%%:\tPercentage of non-successful runs in the specified period
-flaky%%:\t\tPercentage of flaky runs in the specified period
-timeout%%:\tPercentage of timed-out runs in the specified period
-fail%%:\t\tPercentage of failed runs in the specified period
-impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures in the specified period
-total_duration:\ttotal * duration_p90. A rough estimate on the total duration of all runs in the specified period
-duration_p90:\t90th percentile duration of all runs in the specified period""",
+total:\t\t\tTotal runs in the specified period
+last_non_success_at:\tTimestamp of the last non-successful run in the specified period
+non_success:\t\tNumber of non-successful runs in the specified period
+flaky:\t\t\tNumber of flaky runs in the specified period
+timeout:\t\tNumber of timed-out runs in the specified period
+fail:\t\t\tNumber of failed runs in the specified period
+non_success%%:\t\tPercentage of non-successful runs in the specified period
+flaky%%:\t\t\tPercentage of flaky runs in the specified period
+timeout%%:\t\tPercentage of timed-out runs in the specified period
+fail%%:\t\t\tPercentage of failed runs in the specified period
+impact:\t\t\tnon_success * duration_p90. A rough estimate on the impact of failures in the specified period
+total_duration:\t\ttotal * duration_p90. A rough estimate on the total duration of all runs in the specified period
+duration_p90:\t\t90th percentile duration of all runs in the specified period""",
     )
 
     condition_group = top_parser.add_mutually_exclusive_group()
