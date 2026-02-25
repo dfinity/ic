@@ -6401,6 +6401,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-crypto-returning-ok",
  "ic-crypto-test-utils-ni-dkg",
+ "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
@@ -7710,14 +7711,18 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-artifact-pool",
+ "ic-canonical-state",
+ "ic-canonical-state-tree-hash",
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-test-utils-crypto-returning-ok",
+ "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-metrics",
+ "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
@@ -9550,7 +9555,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=339c9b0c678407d05577350ad2b069a806bf9495#339c9b0c678407d05577350ad2b069a806bf9495"
+source = "git+https://github.com/dfinity/ic-gateway?rev=f33afac2aa47b8760090c93823b7fa7f5ba67dc4#f33afac2aa47b8760090c93823b7fa7f5ba67dc4"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -9580,7 +9585,7 @@ dependencies = [
  "ic-transport-types",
  "itertools 0.14.0",
  "lazy_static",
- "maxminddb 0.26.0",
+ "maxminddb 0.27.3",
  "moka",
  "prometheus",
  "rand 0.8.5",
@@ -10493,7 +10498,7 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
- "ic-registry-client",
+ "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
@@ -10513,7 +10518,6 @@ dependencies = [
  "rand 0.8.5",
  "rstest",
  "slog",
- "tokio",
 ]
 
 [[package]]
@@ -12642,6 +12646,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-sandbox-backend-lib",
  "ic-config",
+ "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cup-explorer",
  "ic-http-utils",
@@ -13080,6 +13085,7 @@ dependencies = [
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
  "ic-crypto-sha2",
+ "ic-crypto-tree-hash",
  "ic-error-types 0.2.0",
  "ic-execution-environment",
  "ic-interfaces",
@@ -16676,9 +16682,9 @@ dependencies = [
 
 [[package]]
 name = "keccak"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecc2af9a1119c51f12a14607e783cb977bde58bc069ff0c3da1095e635d70654"
+checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
 dependencies = [
  "cpufeatures",
 ]
@@ -17481,9 +17487,9 @@ dependencies = [
 
 [[package]]
 name = "maxminddb"
-version = "0.26.0"
+version = "0.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a197e44322788858682406c74b0b59bf8d9b4954fe1f224d9a25147f1880bba"
+checksum = "76371bd37ce742f8954daabd0fde7f1594ee43ac2200e20c003ba5c3d65e2192"
 dependencies = [
  "ipnetwork 0.21.1",
  "log",

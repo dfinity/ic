@@ -19,7 +19,7 @@ use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
 };
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, MatchPatternPath, MixedHashTree, Path as LabeledTreePath,
+    Digest, Label, LabeledTree, MatchPatternPath, MixedHashTree, Path as LabeledTreePath, Witness,
     sparse_labeled_tree_from_paths,
 };
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
@@ -917,6 +917,10 @@ impl Deref for StateMachineStateManager {
 impl StateManager for StateMachineStateManager {
     fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.deref().list_state_hashes_to_certify()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        self.deref().list_state_heights_to_certify()
     }
 
     fn deliver_state_certification(&self, certification: Certification) {
@@ -5059,6 +5063,7 @@ fn certify_hash(
         CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
     Certification {
         height: *height,
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent { hash: hash.clone() },
             signature: ThresholdSignature {
