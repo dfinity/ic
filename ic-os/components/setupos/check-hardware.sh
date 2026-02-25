@@ -305,7 +305,7 @@ main() {
     if check_cmdline_var ic.setupos.run_checks; then
         detect_hardware_generation
 
-        if [[ "${HARDWARE_GENERATION}" == "1" ]]; then
+        if [[ "${HARDWARE_GENERATION}" == "3" ]]; then
             echo "* Cloud Engine node detected, skipping checks."
         else
             verify_cpu
