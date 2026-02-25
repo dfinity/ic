@@ -516,6 +516,13 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         }
 
+                        //TODO(IC-1966): we should also check the response size when validating the block payload.
+
+                        // An honest replica enforces that response.content.count_bytes() does not exceed max_response_bytes
+                        // when the content is `Success`. However it doesn't enroce anything in the case of `Failure`.
+                        // As we still want to set a limit for failure, we enforce 1KB, which is reasonable for
+                        // an error message.
+
                         // for flexible calls, max_response_bytes is always None
                         if let Err(e) = validate_response_size(response, context.max_response_bytes)
                         {
