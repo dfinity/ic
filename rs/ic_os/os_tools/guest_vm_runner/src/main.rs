@@ -1205,17 +1205,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_inactive_domain_triggers_libvirtd_restart() {
-        // First connection: domain exists but is inactive → NeedsLibvirtdRestart
-        let mut mock_connect_1 = MockLibvirtConnect::new();
-        mock_connect_1
-            .expect_lookup_domain_by_name()
-            .return_once(|name| {
-                assert_eq!(name, "guestos");
-                let mut domain = MockLibvirtDomain::new();
-                domain.expect_is_active().once().returning(|| Ok(false));
-                Ok(Box::new(domain))
-            });
-
         let mut mock_command_runner = MockAsyncCommandRunner::new();
         mock_command_runner.expect_status().once().returning(|cmd| {
             assert_eq!(
@@ -1226,19 +1215,31 @@ mod tests {
         });
 
         let mut fixture = TestFixture::new(valid_hostos_config());
-        let mut mock_connect =
-            Mutex::new(Some(Arc::new(mock_connect_1) as Arc<dyn LibvirtConnect>));
-        let mut original_connection_factory = fixture.libvirt_connection_factory.clone();
+
+        // First connection: domain exists but is inactive → NeedsLibvirtdRestart
+        let mut mock_connect = MockLibvirtConnect::new();
+        mock_connect
+            .expect_lookup_domain_by_name()
+            .return_once(|name| {
+                assert_eq!(name, "guestos");
+                let mut domain = MockLibvirtDomain::new();
+                // Simulate libvirt bug where an existing domain gets stuck in an inactive state
+                domain.expect_is_active().once().returning(|| Ok(false));
+                Ok(Box::new(domain))
+            });
+        // On the first call, the factory returns the mock connection (simulating the libvirt bug
+        // where an existing domain gets stuck in an inactive state). On subsequent calls it uses
+        // the real test connection so the VM can be started normally after the restart.
+        let mock_first_connection_factory =
+            Mutex::new(Some(Arc::new(mock_connect) as Arc<dyn LibvirtConnect>));
+        let real_connection_factory = fixture.libvirt_connection_factory.clone();
         fixture.libvirt_connection_factory = Arc::new(move || {
-            // First return the mock connection factory to simulate the libvirt bug,
-            // then the original connection factory.
-            mock_connect
+            mock_first_connection_factory
                 .lock()
                 .unwrap()
                 .take()
-                .unwrap_or_else(|| original_connection_factory())
+                .unwrap_or_else(|| real_connection_factory())
         });
-
         fixture.command_runner = Arc::new(mock_command_runner);
 
         let mut service = fixture.start_service(GuestVMType::Default);
