@@ -61,7 +61,7 @@ pub struct Config {
     /// Serving at most `max_pprof_concurrent_requests` requessts concurrently for all endpoints under `/_/pprof`.
     pub max_pprof_concurrent_requests: usize,
 
-    /// The maximum time the replica will wait for a message to be certified before timing out the requests and responding with `202`, for endpoint `/api/v3/call`.
+    /// The maximum time the replica will wait for a message to be certified before timing out the requests and responding with `202`, for endpoints `/api/v3/call` and `/api/v4/call`.
     pub ingress_message_certificate_timeout_seconds: u64,
 
     /// Serving at most `max_tracing_flamegraph_concurrent_requests` requests concurrently for all endpoints under `/_/tracing/flamegraph`.
