@@ -2599,7 +2599,9 @@ fn test_burn_whole_balance() {
 
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
+    use ic_ledger_suite_state_machine_helpers::parse_metric;
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
+    use ic_ledger_suite_state_machine_tests_constants::NUM_BLOCKS_TO_ARCHIVE;
 
     #[test]
     fn should_export_num_archives_metrics() {
@@ -2632,6 +2634,93 @@ mod metrics {
             ledger_wasm(),
             encode_init_args,
             encode_upgrade_args,
+        );
+    }
+
+    #[test]
+    fn should_export_archiving_histogram_metrics_after_archiving() {
+        use ic_base_types::PrincipalId;
+        use ic_ledger_suite_state_machine_helpers::{retrieve_metrics, transfer};
+        use ic_ledger_suite_state_machine_tests::{MINTER, setup};
+        use ic_ledger_suite_state_machine_tests_constants::ARCHIVE_TRIGGER_THRESHOLD;
+
+        let (env, ledger_id) = setup(ledger_wasm(), encode_init_args, vec![]);
+
+        // First, verify that archiving histogram metrics are NOT present before any archiving
+        let metrics_before = retrieve_metrics(&env, ledger_id);
+        assert!(
+            !metrics_before
+                .iter()
+                .any(|line| line.contains("ledger_archiving_duration_seconds")),
+            "Archiving duration histogram should not be present before archiving"
+        );
+
+        // Make enough transactions to trigger archiving
+        let p1 = PrincipalId::new_user_test_id(1);
+        for i in 0..=ARCHIVE_TRIGGER_THRESHOLD {
+            transfer(&env, ledger_id, MINTER, p1.0, 10_000_000 + i).expect("mint failed");
+        }
+
+        // Now verify that archiving histogram metrics ARE present after archiving
+        let metrics_after = retrieve_metrics(&env, ledger_id);
+
+        // Check for ledger_archiving_duration_seconds histogram
+        assert!(
+            metrics_after
+                .iter()
+                .any(|line| line.contains("ledger_archiving_duration_seconds_bucket")),
+            "Expected ledger_archiving_duration_seconds_bucket metric after archiving"
+        );
+        assert!(
+            metrics_after
+                .iter()
+                .any(|line| line.contains("ledger_archiving_duration_seconds_sum")),
+            "Expected ledger_archiving_duration_seconds_sum metric after archiving"
+        );
+        assert!(
+            metrics_after
+                .iter()
+                .any(|line| line.contains("ledger_archiving_duration_seconds_count")),
+            "Expected ledger_archiving_duration_seconds_count metric after archiving"
+        );
+
+        // Check for ledger_archiving_chunk_duration_seconds histogram
+        assert!(
+            metrics_after
+                .iter()
+                .any(|line| line.contains("ledger_archiving_chunk_duration_seconds_bucket")),
+            "Expected ledger_archiving_chunk_duration_seconds_bucket metric after archiving"
+        );
+
+        // Check for ledger_archiving_chunks histogram
+        assert!(
+            metrics_after
+                .iter()
+                .any(|line| line.contains("ledger_archiving_chunks_bucket")),
+            "Expected ledger_archiving_chunks_bucket metric after archiving"
+        );
+
+        // Check for ledger_archiving_blocks histogram
+        assert!(
+            metrics_after
+                .iter()
+                .any(|line| line.contains("ledger_archiving_blocks_bucket")),
+            "Expected ledger_archiving_blocks_bucket metric after archiving"
+        );
+
+        // Verify that the count metrics show 1 observation
+        let count_value = parse_metric(&env, ledger_id, "ledger_archiving_duration_seconds_count");
+        assert_eq!(
+            count_value, 1,
+            "Expected 1 archiving operation, got {}",
+            count_value
+        );
+
+        let blocks_archived = parse_metric(&env, ledger_id, "ledger_archived_blocks");
+        assert_eq!(
+            blocks_archived, NUM_BLOCKS_TO_ARCHIVE,
+            "Expected {} blocks to be archived, got {}",
+            NUM_BLOCKS_TO_ARCHIVE, blocks_archived
         );
     }
 }

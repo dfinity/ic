@@ -11,6 +11,9 @@ pub trait Runtime {
     /// Prints a debug message.
     fn print(msg: impl AsRef<str>);
 
+    /// Returns the current time in nanoseconds since the Unix epoch.
+    fn time() -> u64;
+
     /// Invokes a Candid `method` on another canister identified by `id`.
     async fn call<In, Out>(
         id: CanisterId,
@@ -46,6 +49,10 @@ impl Runtime for CdkRuntime {
 
     fn print(msg: impl AsRef<str>) {
         ic_cdk::api::print(msg)
+    }
+
+    fn time() -> u64 {
+        ic_cdk::api::time()
     }
 
     async fn call<In, Out>(

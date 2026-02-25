@@ -90,7 +90,7 @@ fn mint_tokens<T: Into<Nat>>(minter: Principal, amount: T) -> Account {
 }
 
 pub fn emulate_archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone) {
-    use ic_ledger_canister_core::archive::ArchivingGuardError;
+    use ic_ledger_canister_core::archive::{ArchivingGuardError, ArchivingStats, ArchivingSuccess};
 
     let (archiving_guard, blocks_to_archive) = match blocks_to_archive::<LA>(&sink) {
         Ok((guard, blocks)) => (guard, blocks),
@@ -107,5 +107,13 @@ pub fn emulate_archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone) {
     }
 
     let num_blocks = blocks_to_archive.len();
-    remove_archived_blocks::<LA>(archiving_guard, num_blocks, &sink, Ok(num_blocks))
+    remove_archived_blocks::<LA>(
+        archiving_guard,
+        num_blocks,
+        &sink,
+        Ok(ArchivingSuccess {
+            blocks_archived: num_blocks,
+            stats: ArchivingStats::default(),
+        }),
+    )
 }

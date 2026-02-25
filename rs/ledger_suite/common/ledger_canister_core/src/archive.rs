@@ -12,6 +12,39 @@ use std::sync::{Arc, RwLock};
 use crate::ledger::{LedgerAccess, LedgerData};
 use ic_ledger_core::block::EncodedBlock;
 
+/// Statistics collected during an archiving operation.
+#[derive(Debug, Clone, Default)]
+pub struct ArchivingStats {
+    /// Total duration of the archiving operation in nanoseconds.
+    pub duration_nanos: u64,
+    /// Duration of each chunk (append_blocks call) in nanoseconds.
+    pub chunk_durations_nanos: Vec<u64>,
+    /// Number of chunks sent to the archive.
+    pub num_chunks: u32,
+    /// Number of blocks successfully archived.
+    pub blocks_archived: usize,
+}
+
+/// Result of a successful archiving operation.
+#[derive(Debug, Clone)]
+pub struct ArchivingSuccess {
+    /// Number of blocks successfully archived.
+    pub blocks_archived: usize,
+    /// Statistics collected during the archiving operation.
+    pub stats: ArchivingStats,
+}
+
+/// Error returned when archiving fails, including partial progress and statistics.
+#[derive(Debug, Clone)]
+pub struct ArchivingError {
+    /// Number of blocks successfully archived before the error occurred.
+    pub blocks_archived: usize,
+    /// Description of the error.
+    pub error: String,
+    /// Statistics collected during the archiving operation.
+    pub stats: ArchivingStats,
+}
+
 /// 10 trillion cycles.
 pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
 
@@ -220,15 +253,18 @@ fn inspect_archive<R, Rt: Runtime, Wasm: ArchiveCanisterWasm>(
 }
 
 /// Sends the blocks to an archive canister (creating new archive canister if necessary).
-/// On success, returns the number of blocks archived (equal to blocks.len()).
-/// On failure, returns the number of successfully archived blocks and a description of the error.
+/// Returns a result containing either success information with statistics, or error information
+/// including partial progress and statistics.
 pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     log_sink: impl Sink + Clone,
     archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
     mut blocks: VecDeque<EncodedBlock>,
     max_ledger_msg_size_bytes: u64,
-) -> Result<usize, (usize, FailedToArchiveBlocks)> {
+) -> Result<ArchivingSuccess, ArchivingError> {
     log!(log_sink, "[archive] send_blocks_to_archive(): start");
+
+    let start_time = Rt::time();
+    let mut stats = ArchivingStats::default();
 
     let max_chunk_size = inspect_archive(&archive, |archive| {
         archive
@@ -246,15 +282,35 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
 
         // Get the CanisterId and remaining capacity of the node that can
         // accept at least the first block.
-        let (node_canister_id, node_index, remaining_capacity) =
-            node_and_capacity(log_sink.clone(), &archive, blocks[0].size_bytes() as u64)
-                .await
-                .map_err(|e| (num_sent_blocks, e))?;
+        let (node_canister_id, node_index, remaining_capacity) = match node_and_capacity(
+            log_sink.clone(),
+            &archive,
+            blocks[0].size_bytes() as u64,
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                stats.duration_nanos = Rt::time().saturating_sub(start_time);
+                stats.blocks_archived = num_sent_blocks;
+                return Err(ArchivingError {
+                    blocks_archived: num_sent_blocks,
+                    error: e.0,
+                    stats,
+                });
+            }
+        };
 
         // Take as many blocks as can be sent and send those in
         let mut first_blocks: VecDeque<_> = take_prefix(&mut blocks, remaining_capacity).into();
         if first_blocks.is_empty() {
-            return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
+            stats.duration_nanos = Rt::time().saturating_sub(start_time);
+            stats.blocks_archived = num_sent_blocks;
+            return Err(ArchivingError {
+                blocks_archived: num_sent_blocks,
+                error: "empty chunk".into(),
+                stats,
+            });
         }
 
         log!(
@@ -270,16 +326,45 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
             let chunk = take_prefix(&mut first_blocks, max_chunk_size);
             let chunk_len = chunk.len() as u64;
             if chunk.is_empty() {
-                return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
+                stats.duration_nanos = Rt::time().saturating_sub(start_time);
+                stats.blocks_archived = num_sent_blocks;
+                return Err(ArchivingError {
+                    blocks_archived: num_sent_blocks,
+                    error: "empty chunk".into(),
+                    stats,
+                });
             }
             log!(
                 log_sink,
                 "[archive] calling append_blocks() with a chunk of size {}",
                 chunk_len
             );
+
+            let chunk_start_time = Rt::time();
             match Rt::call(node_canister_id, "append_blocks", 0, (chunk,)).await {
-                Ok(()) => num_sent_blocks += chunk_len as usize,
-                Err((_, msg)) => return Err((num_sent_blocks, FailedToArchiveBlocks(msg))),
+                Ok(()) => {
+                    let chunk_duration = Rt::time().saturating_sub(chunk_start_time);
+                    stats.chunk_durations_nanos.push(chunk_duration);
+                    stats.num_chunks += 1;
+                    num_sent_blocks += chunk_len as usize;
+                    log!(
+                        log_sink,
+                        "[archive] append_blocks() chunk completed in {} ms",
+                        chunk_duration / 1_000_000
+                    );
+                }
+                Err((_, msg)) => {
+                    let chunk_duration = Rt::time().saturating_sub(chunk_start_time);
+                    stats.chunk_durations_nanos.push(chunk_duration);
+                    stats.num_chunks += 1;
+                    stats.duration_nanos = Rt::time().saturating_sub(start_time);
+                    stats.blocks_archived = num_sent_blocks;
+                    return Err(ArchivingError {
+                        blocks_archived: num_sent_blocks,
+                        error: msg,
+                        stats,
+                    });
+                }
             };
 
             // Keep track of BlockIndices.
@@ -319,8 +404,21 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
         }
     }
 
-    log!(log_sink, "[archive] send_blocks_to_archive() done");
-    Ok(num_sent_blocks)
+    stats.duration_nanos = Rt::time().saturating_sub(start_time);
+    stats.blocks_archived = num_sent_blocks;
+
+    log!(
+        log_sink,
+        "[archive] send_blocks_to_archive() done: {} blocks in {} chunks, total duration {} ms",
+        stats.blocks_archived,
+        stats.num_chunks,
+        stats.duration_nanos / 1_000_000
+    );
+
+    Ok(ArchivingSuccess {
+        blocks_archived: num_sent_blocks,
+        stats,
+    })
 }
 
 // Helper function to create a canister and install the node Wasm bytecode.
