@@ -97,6 +97,6 @@ pub const DKG_DEALINGS_PER_BLOCK: usize = 1;
 /// The replica code should be designed in such a way that if we put a channel of size 1, the protocol should still work.
 pub const MAX_P2P_IO_CHANNEL_SIZE: usize = 100_000;
 
-/// The maximum number of pre-signatures that may be paired with signatures requests,
+/// The maximum number of pre-signatures that may be paired with signature requests,
 /// per key ID.
 pub const MAX_PAIRED_PRE_SIGNATURES: usize = 100;
