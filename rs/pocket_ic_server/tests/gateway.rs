@@ -508,11 +508,6 @@ fn test_gateway_invalid_forward_to() {
 // The file maps a custom domain directly to a specific canister ID.
 // A request to the custom domain itself (no canister ID in the URL) should serve the correct
 // canister via the file mapping.
-//
-// Note: the custom domain must NOT be listed in `domains` (the gateway's configured base
-// domains). If it were, `DomainResolver` would match it as a base domain with no canister ID
-// and never consult the custom-domain storage, causing requests to be redirected to the IC
-// dashboard instead of being routed to the canister.
 
 #[tokio::test]
 async fn test_gateway_custom_domain_provider_file() {
@@ -583,6 +578,13 @@ async fn test_gateway_custom_domain_provider_file() {
     // `my-custom-domain.test` directly to the canister ID, no canister ID in the URL needed.
     let url = format!("http://{}:{}", custom_domain, port);
     let res = client.get(&url).send().await.unwrap();
+    let canister_id_header = res
+        .headers()
+        .get("x-ic-canister-id")
+        .expect("x-ic-canister-id header missing")
+        .to_str()
+        .unwrap();
+    assert_eq!(canister_id_header, canister_id.to_string());
     let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
     assert!(page.contains("<title>Internet Identity</title>"));
 
