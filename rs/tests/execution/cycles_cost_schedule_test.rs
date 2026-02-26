@@ -4,7 +4,7 @@ use ic_nns_governance_api::ProposalStatus;
 use ic_nns_test_utils::governance::wait_for_final_state;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{Cycles, RegistryVersion};
+use ic_types::{Cycles, Height, RegistryVersion};
 use ic_universal_canister::{management, wasm};
 use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use std::{collections::HashSet, time::Duration};
@@ -39,7 +39,7 @@ fn main() -> Result<()> {
 
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System, 1))
+        .add_subnet(Subnet::fast(SubnetType::System, 1).with_dkg_interval_length(Height::from(29)))
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");

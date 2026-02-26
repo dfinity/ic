@@ -328,6 +328,12 @@ pub(crate) enum CanisterManagerError {
         controllers_expected: BTreeSet<PrincipalId>,
         controller_provided: PrincipalId,
     },
+    CanisterInvalidControllerOrSubnetAdmin {
+        canister_id: CanisterId,
+        controllers_expected: BTreeSet<PrincipalId>,
+        subnet_admins_expected: BTreeSet<PrincipalId>,
+        caller: PrincipalId,
+    },
     CallerNotAuthorized,
     CanisterAlreadyExists(CanisterId),
     CanisterIdAlreadyExists(CanisterId),
@@ -495,6 +501,11 @@ impl AsErrorHelp for CanisterManagerError {
                 add the current caller as a controller."
                     .to_string(),
                 doc_link: doc_ref("invalid-controller"),
+            },
+            CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a controller of the target canister or subnet admin \
+                            or add the current caller as a controller or subnet admin.".to_string(),
+                doc_link: doc_ref("invalid-controller-subnet-admin"),
             },
             CanisterManagerError::CanisterNotFound(_) => ErrorHelp::UserError {
                 suggestion: "Check the ICP dashboard to ensure the canister exists.".to_string(),
@@ -811,6 +822,32 @@ impl From<CanisterManagerError> for UserError {
                         "Only the controllers of the canister {canister_id} can control it.\n\
                         Canister's controllers: {controllers_expected}\n\
                         Sender's ID: {controller_provided}{additional_help}"
+                    ),
+                )
+            }
+            CanisterInvalidControllerOrSubnetAdmin {
+                canister_id,
+                controllers_expected,
+                subnet_admins_expected,
+                caller,
+            } => {
+                let controllers_expected = controllers_expected
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                let subnet_admins_expected = subnet_admins_expected
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                Self::new(
+                    ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
+                    format!(
+                        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions.\n\
+                        Canister's controllers: {controllers_expected}\n\
+                        Subnet admins: {subnet_admins_expected}\n\
+                        Sender's ID: {caller}{additional_help}"
                     ),
                 )
             }

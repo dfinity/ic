@@ -71,6 +71,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
+    "//rs/ic_os/sev/attestation/testing",
     "//rs/interfaces/registry",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/test_utils",

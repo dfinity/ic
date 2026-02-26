@@ -3,6 +3,7 @@ use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -10,19 +11,15 @@ use ic_nns_constants::{
     NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::{
-    MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
-};
+use ic_nns_governance_api::{MonthlyNodeProviderRewards, Vote};
 use ic_nns_test_utils::state_test_helpers::{
-    nns_get_most_recent_monthly_node_provider_rewards, nns_wait_for_proposal_execution,
-    scrape_metrics,
+    nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
     state_test_helpers::{
-        get_canister_status, manage_network_economics, nns_cast_vote,
-        nns_create_super_powerful_neuron, nns_propose_upgrade_nns_canister,
-        wait_for_canister_upgrade_to_succeed,
+        get_canister_status, nns_cast_vote, nns_create_super_powerful_neuron,
+        nns_propose_upgrade_nns_canister, wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
@@ -34,6 +31,7 @@ use std::{
     fmt::{Debug, Formatter},
     fs,
     str::FromStr,
+    time::Duration,
 };
 
 struct NnsCanisterUpgrade {
@@ -255,6 +253,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     // TODO: Use PocketIc instead of StateMachine.
     let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
+    state_machine.reject_remote_callbacks();
+
     // Step 1.2: Create a super powerful Neuron.
     println!("Creating super powerful Neuron.");
     let neuron_controller = PrincipalId::new_self_authenticating(&[1, 2, 3, 4]);
@@ -334,6 +334,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     *canister_id,
                     wasm_hash,
                     nns_canister_upgrade.controller_principal_id(),
+                    true,
                 );
                 println!(
                     "Attempt {repetition_number} to upgrade {nns_canister_name} was successful."
@@ -342,25 +343,6 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
             repetition_number += 1;
         };
-
-    // TODO[NNS1-3790]: Remove this once the mainnet NNS has initialized the
-    // TODO[NNS1-3790]: `neuron_minimum_dissolve_delay_to_vote_seconds` field.
-    let proposal_id = manage_network_economics(
-        &state_machine,
-        NetworkEconomics {
-            voting_power_economics: Some(VotingPowerEconomics {
-                neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-                    VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
-                ),
-                ..Default::default()
-            }),
-            ..Default::default()
-        },
-        neuron_controller,
-        neuron_id,
-    );
-    vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
-    nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
     let metrics_before = sanity_check::fetch_metrics(&state_machine);
 
@@ -402,7 +384,6 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
 
 mod sanity_check {
     use super::*;
-    use ic_nervous_system_common::ONE_MONTH_SECONDS;
     use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
     use ic_nns_governance_api::DateUtc;
 
@@ -430,37 +411,30 @@ mod sanity_check {
         state_machine: &StateMachine,
         before: Metrics,
     ) {
-        advance_time(
-            state_machine,
-            before
-                .governance_most_recent_monthly_node_provider_rewards
-                .timestamp,
-        );
+        advance_time_to_allow_for_voting_and_node_rewards(state_machine);
         let after = fetch_metrics(state_machine);
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
-    fn advance_time(state_machine: &StateMachine, before_timestamp: u64) {
-        // Advance time in the state machine to just before the next node provider
-        // rewards distribution time.
-        let seconds_to_node_provider_reward_distribution = before_timestamp
-            + NODE_PROVIDER_REWARD_PERIOD_SECONDS
-            - state_machine.get_time().as_secs_since_unix_epoch();
-        state_machine.advance_time(std::time::Duration::from_secs(
-            seconds_to_node_provider_reward_distribution - 1,
-        ));
-        for _ in 0..100 {
-            state_machine.advance_time(std::time::Duration::from_secs(1));
+    fn advance_time_to_allow_for_voting_and_node_rewards(state_machine: &StateMachine) {
+        assert_eq!(NODE_PROVIDER_REWARD_PERIOD_SECONDS, ONE_MONTH_SECONDS);
+        // This is also enough time to make sure that there are some voting rewards.
+        let total_seconds = NODE_PROVIDER_REWARD_PERIOD_SECONDS
+            // Extra time. Not really sure if this is actually helpful (at
+            // reducing flakes), but it doesn't really hurt either
+            + 3 * ONE_DAY_SECONDS;
+        let step_seconds = 6 * 60 * 60;
+        let iterations = total_seconds.div_ceil(step_seconds);
+        for _ in 0..iterations {
+            state_machine.advance_time(Duration::from_secs(step_seconds));
             state_machine.tick();
         }
 
-        // Advance time in the state machine by one month to ensure that voting rewards
-        // are also distributed.
-        state_machine.advance_time(std::time::Duration::from_secs(
-            ONE_MONTH_SECONDS - seconds_to_node_provider_reward_distribution,
-        ));
-        for _ in 0..100 {
-            state_machine.advance_time(std::time::Duration::from_secs(1));
+        // Extra time to give things a chance to settle down. Again, it's not
+        // clear whether this is actually helpful, but it also isn't super
+        // expensive.
+        for _ in 0..60 {
+            state_machine.advance_time(Duration::from_secs(1));
             state_machine.tick();
         }
     }
@@ -502,7 +476,7 @@ mod sanity_check {
                     )
                 },
                 |before, after| {
-                    assert_increased(before, after, "latest reward event timestamp");
+                    assert_increased(before, after, "latest voting reward event timestamp");
                 },
             );
             self.check_metric(
@@ -529,13 +503,13 @@ mod sanity_check {
                         before,
                         after,
                         "total minted node provider rewards",
-                        0.2,
+                        0.30,
                     );
                     assert_not_decreased_too_much(
                         before,
                         after,
                         "total minted node provider rewards",
-                        0.2,
+                        0.30,
                     );
                 },
             );
@@ -610,6 +584,7 @@ mod sanity_check {
         total_rewards * (xdr_permyriad_per_icp as f64) / 10_000f64
     }
 
+    #[track_caller]
     fn assert_not_increased_too_much(before: f64, after: f64, name: &str, diff: f64) {
         assert!(
             after < before * (1.0 + diff),
@@ -617,6 +592,7 @@ mod sanity_check {
         );
     }
 
+    #[track_caller]
     fn assert_not_decreased_too_much(before: f64, after: f64, name: &str, diff: f64) {
         assert!(
             after > before * (1.0 - diff),
@@ -624,6 +600,7 @@ mod sanity_check {
         );
     }
 
+    #[track_caller]
     fn assert_increased<T>(before: T, after: T, name: &str)
     where
         T: PartialOrd + std::fmt::Display,
