@@ -31,8 +31,8 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use slog::{debug, info};
-use std::net::IpAddr;
 use std::time::Duration;
+use std::{io, net::IpAddr};
 use tokio::net::TcpStream;
 
 // This value reflects the value `max_simultaneous_connections_per_ip_address` in the firewall config file.
@@ -114,8 +114,8 @@ fn connection_count_test(env: TestEnv) {
             || {
                 match block_on(create_tcp_connection(node_ip_addr, 9090)) {
                     Ok(stream) => Ok(stream),
-                    Err(_) => bail!(
-                        "Could not create connection {connection_number}#. Connection is below the limit of active connections defined in the firewall, and should be accepted"
+                    Err(err) => bail!(
+                        "Could not create connection {connection_number}#: {err}. Connection is below the limit of active connections defined in the firewall, and should be accepted"
                     ),
                 }
             }
@@ -180,13 +180,14 @@ fn connection_count_test(env: TestEnv) {
 
 /// Helper function to make a tcp connection where the server
 /// can drop incoming connections.
-async fn create_tcp_connection(ip_addr: IpAddr, port: u16) -> Result<TcpStream, ()> {
+async fn create_tcp_connection(ip_addr: IpAddr, port: u16) -> io::Result<TcpStream> {
     let tcp =
         tokio::time::timeout(TCP_HANDSHAKE_TIMEOUT, TcpStream::connect((ip_addr, port))).await;
 
     match tcp {
         Ok(Ok(stream)) => Ok(stream),
-        _ => Err(()),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(io::Error::new(io::ErrorKind::TimedOut, e)),
     }
 }
 
