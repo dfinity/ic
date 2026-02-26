@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:nix",
     "@crate_index//:prometheus",
+    "@crate_index//:rayon",
     "@crate_index//:regex",
     "@crate_index//:strum",
     "@crate_index//:sysinfo",
