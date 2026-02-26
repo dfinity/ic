@@ -67,7 +67,7 @@ impl Setup {
                 Some(Arc::new(Daemon::new(
                     &dogecoind_path,
                     DogeNetwork::Regtest,
-                    ic_btc_adapter_test_utils::bitcoind::Conf {
+                    &ic_btc_adapter_test_utils::bitcoind::Conf {
                         p2p: true,
                         ..Default::default()
                     },
