@@ -70,8 +70,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::level_filters::LevelFilter;
 use tracing::{debug, error, trace};
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::reload;
 
 // The maximum wait time for a computation to finish synchronously.
@@ -647,6 +647,8 @@ impl ApiState {
                     forward_to: HttpGatewayBackend::PocketIcInstance(instance_id),
                     domains: instance_http_gateway_config.domains,
                     https_config: instance_http_gateway_config.https_config,
+                    domain_custom_provider_local_file: instance_http_gateway_config
+                        .domain_custom_provider_local_file,
                 };
                 let res = self
                     .create_http_gateway(http_gateway_config, listener.unwrap())
@@ -786,16 +788,22 @@ impl ApiState {
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
-        let domains: Vec<_> = http_gateway_config
-            .domains
-            .clone()
-            .unwrap_or(vec!["localhost".to_string()])
-            .iter()
-            .map(|d| fqdn!(d))
-            .collect();
+        let domain_custom_provider_local_file = http_gateway_config
+            .domain_custom_provider_local_file
+            .clone();
+        let raw_domains = http_gateway_config.domains.clone();
         spawn(async move {
             let router = {
                 let mut args = vec!["".to_string()];
+                if raw_domains.is_none() {
+                    args.push("--domain-skip-authority-validation".to_string());
+                }
+                let domains: Vec<_> = raw_domains
+                    .clone()
+                    .unwrap_or(vec!["localhost".to_string()])
+                    .iter()
+                    .map(|d| fqdn!(d))
+                    .collect();
                 for d in &domains {
                     args.push("--domain".to_string());
                     args.push(d.to_string());
@@ -806,6 +814,10 @@ impl ApiState {
                 }
                 args.push("--domain-canister-id-from-query-params".to_string());
                 args.push("--domain-canister-id-from-referer".to_string());
+                if let Some(ref path) = domain_custom_provider_local_file {
+                    args.push("--domain-custom-provider-local-file".to_string());
+                    args.push(path.clone());
+                }
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
@@ -829,7 +841,7 @@ impl ApiState {
 
                 let mut tasks = ic_gateway::ic_bn_lib::tasks::TaskManager::new();
 
-                let (_, reload_handle) = reload::Layer::new(LevelFilter::WARN);
+                let (_, reload_handle) = reload::Layer::new(EnvFilter::new("warn"));
                 let health_manager = Arc::new(HealthManager::default());
                 let ic_gateway_router = setup_router(
                     &cli,

@@ -306,6 +306,10 @@ impl CanisterHttpPayloadBuilderImpl {
                                         .find(|share| share.signature.signer == *node_id)
                                         .map(|correct_share| (metadata, vec![*correct_share]))
                                 }
+                                Some(Replication::Flexible { .. }) => {
+                                    // TODO(flexible-http-outcalls): implement Flexible payload construction
+                                    None
+                                }
                                 None | Some(Replication::FullyReplicated) => {
                                     let signers: BTreeSet<_> =
                                         shares.iter().map(|share| share.signature.signer).collect();
@@ -529,6 +533,11 @@ impl CanisterHttpPayloadBuilderImpl {
                     ..
                 }) => (vec![*node_id], 1),
                 None
+                // TODO(flexible-http-outcalls): implement Flexible payload validation
+                | Some(&CanisterHttpRequestContext {
+                    replication: Replication::Flexible { .. },
+                    ..
+                })
                 | Some(&CanisterHttpRequestContext {
                     replication: Replication::FullyReplicated,
                     ..

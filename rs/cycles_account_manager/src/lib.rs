@@ -1015,12 +1015,17 @@ impl CyclesAccountManager {
     ///
     /// Returns a `CanisterOutOfCyclesError` if the requested amount cannot be
     /// withdrawn.
-    pub fn can_withdraw_cycles(
+    ///
+    /// Note: If a 0 cycles amount is requested, the check is equivalent to the
+    /// canister being frozen *currently*, otherwise it would become frozen if
+    /// the requested amount was witdrawn from its balance.
+    pub fn can_withdraw_cycles_with_threshold(
         &self,
         system_state: &SystemState,
         requested: Cycles,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
+        canister_reserved_balance: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         reveal_top_up: bool,
@@ -1033,7 +1038,7 @@ impl CyclesAccountManager {
             system_state.compute_allocation,
             subnet_size,
             cost_schedule,
-            system_state.reserved_balance(),
+            canister_reserved_balance,
         );
 
         if threshold + requested > system_state.balance() {

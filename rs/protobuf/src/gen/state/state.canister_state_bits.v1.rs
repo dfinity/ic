@@ -314,7 +314,7 @@ pub mod execution_task {
         #[prost(message, optional, tag = "4")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
-        #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 6, 3, 5")]
+        #[prost(oneof = "aborted_execution::Input", tags = "1, 6, 3, 5")]
         pub input: ::core::option::Option<aborted_execution::Input>,
     }
     /// Nested message and enum types in `AbortedExecution`.
@@ -330,9 +330,6 @@ pub mod execution_task {
         pub enum Input {
             #[prost(message, tag = "1")]
             Request(super::super::super::super::queues::v1::Request),
-            /// TODO(DSM-95): Remove after we have switched to `AbortedResponse`.
-            #[prost(message, tag = "2")]
-            Response(super::super::super::super::queues::v1::Response),
             #[prost(message, tag = "6")]
             AbortedResponse(AbortedResponse),
             #[prost(message, tag = "3")]

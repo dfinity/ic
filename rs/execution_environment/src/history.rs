@@ -397,6 +397,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterNotStopped => "Canister Not Stopped",
         CanisterStoppingCancelled => "Canister Stopping Cancelled",
         CanisterInvalidController => "Canister Invalid Controller",
+        CanisterInvalidControllerOrSubnetAdmin => "Canister Invalid Controller Or Subnet Admin",
         CanisterFunctionNotFound => "Canister Function Not Found",
         CanisterNonEmpty => "Canister Non-Empty",
         QueryCallGraphLoopDetected => "Loop in inter-canister query call graph",
