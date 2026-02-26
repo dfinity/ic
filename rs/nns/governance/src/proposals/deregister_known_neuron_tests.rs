@@ -1,8 +1,10 @@
-use crate::proposals::self_describing::LocallyDescribableProposalAction;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
-    pb::v1::{DeregisterKnownNeuron, KnownNeuronData, governance_error::ErrorType},
+    pb::v1::{
+        DeregisterKnownNeuron, KnownNeuronData, SelfDescribingValue as SelfDescribingValuePb,
+        governance_error::ErrorType,
+    },
 };
 use assert_matches::assert_matches;
 use ic_nns_common::pb::v1::NeuronId;
@@ -194,8 +196,7 @@ fn test_deregister_known_neuron_to_self_describing() {
         id: Some(NeuronId { id: 456 }),
     };
 
-    let action = deregister.to_self_describing_action();
-    let value = SelfDescribingValue::from(action.value.unwrap());
+    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(deregister));
 
     assert_eq!(
         value,

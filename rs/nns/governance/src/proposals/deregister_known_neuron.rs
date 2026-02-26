@@ -3,7 +3,7 @@ use crate::{
     pb::v1::{
         DeregisterKnownNeuron, GovernanceError, SelfDescribingValue, governance_error::ErrorType,
     },
-    proposals::self_describing::{LocallyDescribableProposalAction, ValueBuilder},
+    proposals::self_describing::ValueBuilder,
 };
 
 impl DeregisterKnownNeuron {
@@ -53,14 +53,10 @@ impl DeregisterKnownNeuron {
     }
 }
 
-impl LocallyDescribableProposalAction for DeregisterKnownNeuron {
-    const TYPE_NAME: &'static str = "Deregister Known Neuron";
-    const TYPE_DESCRIPTION: &'static str = "Deregister an existing neuron as a \"known neuron\" \
-        and remove it from the list of known neurons.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
+impl From<DeregisterKnownNeuron> for SelfDescribingValue {
+    fn from(value: DeregisterKnownNeuron) -> Self {
         ValueBuilder::new()
-            .add_field("neuron_id", self.id.map(|id| id.id))
+            .add_field("neuron_id", value.id.map(|id| id.id))
             .build()
     }
 }

@@ -6,9 +6,7 @@ use crate::{
     proposals::{
         call_canister::CallCanister,
         invalid_proposal_error,
-        self_describing::{
-            LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
-        },
+        self_describing::{SelfDescribingProstEnum, ValueBuilder},
         topic_to_manage_canister,
     },
 };
@@ -138,14 +136,11 @@ impl CallCanister for UpdateCanisterSettings {
     }
 }
 
-impl LocallyDescribableProposalAction for UpdateCanisterSettings {
-    const TYPE_NAME: &'static str = "Update Canister Settings";
-    const TYPE_DESCRIPTION: &'static str = "Update the settings of an NNS-controlled canister.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
+impl From<UpdateCanisterSettings> for SelfDescribingValue {
+    fn from(value: UpdateCanisterSettings) -> Self {
         ValueBuilder::new()
-            .add_field("canister_id", self.canister_id)
-            .add_field("settings", self.settings.clone())
+            .add_field("canister_id", value.canister_id)
+            .add_field("settings", value.settings)
             .build()
     }
 }
@@ -186,12 +181,10 @@ impl From<CanisterSettings> for SelfDescribingValue {
 mod tests {
     use super::*;
 
-    use crate::{
-        pb::v1::{
-            governance_error::ErrorType,
-            update_canister_settings::{CanisterSettings, Controllers},
-        },
-        proposals::self_describing::LocallyDescribableProposalAction,
+    use crate::pb::v1::{
+        SelfDescribingValue as SelfDescribingValuePb,
+        governance_error::ErrorType,
+        update_canister_settings::{CanisterSettings, Controllers},
     };
 
     use candid::Decode;
@@ -415,8 +408,8 @@ mod tests {
             }),
         };
 
-        let action = update_canister_settings.to_self_describing_action();
-        let value = SelfDescribingValue::from(action.value.unwrap());
+        let value =
+            SelfDescribingValue::from(SelfDescribingValuePb::from(update_canister_settings));
 
         assert_eq!(
             value,
@@ -448,8 +441,8 @@ mod tests {
             }),
         };
 
-        let action = update_canister_settings.to_self_describing_action();
-        let value = SelfDescribingValue::from(action.value.unwrap());
+        let value =
+            SelfDescribingValue::from(SelfDescribingValuePb::from(update_canister_settings));
 
         assert_eq!(
             value,
