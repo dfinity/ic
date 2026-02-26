@@ -383,10 +383,22 @@ impl ValidProposalAction {
                     SelfDescribingValue::from(load_canister_snapshot.clone()),
                 )
             }
-            _ => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Self describing proposal actions are not supported for this proposal action yet.",
-            )),
+            ValidProposalAction::RewardNodeProvider(reward_node_provider) => {
+                to_self_describing_action(
+                    "Reward Node Provider",
+                    "Reward a node provider an amount of ICP as compensation \
+                    for providing nodes to the IC.",
+                    SelfDescribingValue::from(reward_node_provider.clone()),
+                )
+            }
+            ValidProposalAction::RewardNodeProviders(reward_node_providers) => {
+                to_self_describing_action(
+                    "Reward Node Providers",
+                    "Reward multiple node providers an amount of ICP as \
+                    compensation for providing nodes to the IC.",
+                    SelfDescribingValue::from(reward_node_providers.clone()),
+                )
+            }
         }
     }
 }
