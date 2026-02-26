@@ -505,8 +505,14 @@ fn test_gateway_invalid_forward_to() {
 }
 
 // Test that the HTTP gateway accepts a `domain_custom_provider_local_file` configuration.
-// The file maps a custom domain to a specific canister ID.
-// Requests to that domain (via subdomain and query parameter) should serve the correct canister.
+// Three domain forms for the same canister are verified, all driven exclusively by entries
+// in the provider file (no canister ID appears in any URL — that is the whole point of
+// custom domains). None of the domains are added to `domains`; `DomainResolver` falls
+// through to `CustomDomainStorage` for an exact-match lookup in each case.
+//
+//   custom  →  test
+//   apex    →  domain.test
+//   subdomain → www.domain.test
 
 #[tokio::test]
 async fn test_gateway_custom_domain_provider_file() {
@@ -526,14 +532,21 @@ async fn test_gateway_custom_domain_provider_file() {
     // Enable auto progress for asset certification to work.
     pic.auto_progress().await;
 
-    // Define the custom domain and bind address.
-    let custom_domain = "my-custom-domain.test";
+    // Three domain forms, all mapping to the same canister — the canister ID is hidden in the file.
+    let custom_domain = "test";
+    let apex_domain = "domain.test";
+    let sub_domain = "www.domain.test";
     let bind_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
-    // Create a temporary file with the custom domain-to-canister-ID mapping.
     let (mut mapping_file, mapping_file_path) = NamedTempFile::new().unwrap().keep().unwrap();
     mapping_file
-        .write_all(format!("{}:{}", custom_domain, canister_id).as_bytes())
+        .write_all(
+            format!(
+                "{}:{}\n{}:{}\n{}:{}",
+                custom_domain, canister_id, apex_domain, canister_id, sub_domain, canister_id,
+            )
+            .as_bytes(),
+        )
         .unwrap();
 
     // Create an HTTP gateway with the custom domain provider file.
@@ -542,7 +555,7 @@ async fn test_gateway_custom_domain_provider_file() {
         ip_addr: Some(bind_address.to_string()),
         port: None,
         forward_to: HttpGatewayBackend::PocketIcInstance(pic.instance_id),
-        domains: Some(vec![custom_domain.to_string()]),
+        domains: Some(vec!["localhost".to_string()]),
         https_config: None,
         domain_custom_provider_local_file: Some(mapping_file_path.to_str().unwrap().to_string()),
     };
@@ -563,29 +576,34 @@ async fn test_gateway_custom_domain_provider_file() {
         }
     };
 
-    // Build a reqwest client that resolves the custom domain and its
-    // canister subdomain to the gateway's address.
-    let sub_custom_domain = format!("{canister_id}.{custom_domain}");
+    // Build a reqwest client that resolves both domains to the gateway's address.
     let client = NonblockingClient::builder()
         .resolve(custom_domain, SocketAddr::new(bind_address, port))
-        .resolve(&sub_custom_domain, SocketAddr::new(bind_address, port))
+        .resolve(apex_domain, SocketAddr::new(bind_address, port))
+        .resolve(sub_domain, SocketAddr::new(bind_address, port))
         .build()
         .unwrap();
 
-    // Test with canister ID in the query parameters.
-    let url = format!(
-        "http://{}:{}/?canisterId={}",
-        custom_domain, port, canister_id
-    );
-    let res = client.get(&url).send().await.unwrap();
-    let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
-    assert!(page.contains("<title>Internet Identity</title>"));
-
-    // Test with canister ID in the subdomain.
-    let url = format!("http://{}:{}", sub_custom_domain, port);
-    let res = client.get(&url).send().await.unwrap();
-    let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
-    assert!(page.contains("<title>Internet Identity</title>"));
+    // Verify all three domains: custom (www), apex, and subdomain (app).
+    // No canister ID appears in any URL; the file mapping provides it in each case.
+    for domain in [custom_domain, apex_domain, sub_domain] {
+        let url = format!("http://{}:{}", domain, port);
+        let res = client.get(&url).send().await.unwrap();
+        assert_eq!(
+            res.headers()
+                .get("x-ic-canister-id")
+                .expect("x-ic-canister-id header missing")
+                .to_str()
+                .unwrap(),
+            canister_id.to_string(),
+            "unexpected canister ID for domain {domain}",
+        );
+        let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+        assert!(
+            page.contains("<title>Internet Identity</title>"),
+            "II title not found for domain {domain}",
+        );
+    }
 
     pic.drop().await;
 }
