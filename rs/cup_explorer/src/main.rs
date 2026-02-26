@@ -69,7 +69,8 @@ async fn main() {
             .await;
         }
         SubCommand::VerifyCUPOfHaltedSubnet(verify_args) => {
-            let status = verify(args.nns_url, args.nns_pem, &verify_args.cup_path);
+            let status = verify(args.nns_url, args.nns_pem, &verify_args.cup_path)
+                .expect("Failed to verify CUP");
             if status == SubnetStatus::Running {
                 panic!(
                     "Verification failed: Subnet wasn't instructed to halt on this CUP. Therefore, this CUP is NOT guaranteed to represent the latest state of the subnet!"

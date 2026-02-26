@@ -43,6 +43,7 @@ use ic_btc_replica_types::{
     GetSuccessorsResponseComplete, SendTransactionResponse,
 };
 use ic_crypto_internal_types::NodeIndex;
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
@@ -672,6 +673,14 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
     }
 }
 
+impl ExhaustiveSet for Witness {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let mut digest = [0u8; 32];
+        rng.fill_bytes(&mut digest);
+        vec![Witness::new_for_testing(Digest(digest))]
+    }
+}
+
 impl ExhaustiveSet for NiDkgConfig {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let nidkg_ids = <(NiDkgId, bool)>::exhaustive_set(rng);
@@ -1037,7 +1046,7 @@ mod tests {
 
         for (i, cup) in set.into_iter().enumerate() {
             assert!(cup.check_integrity(), "Integrity check failed");
-            let bytes = pb::CatchUpContent::from(&cup).encode_to_vec();
+            let bytes = pb::CatchUpContent::from(cup).encode_to_vec();
             let file_path = directory.join(format!("{i}.pb"));
             fs::write(file_path, bytes).expect("Failed to write bytes");
         }
@@ -1076,7 +1085,7 @@ mod tests {
         for cup in &set {
             assert!(cup.check_integrity());
             // serialize -> deserialize round-trip
-            let bytes = pb::CatchUpPackage::from(cup).encode_to_vec();
+            let bytes = pb::CatchUpPackage::from(cup.clone()).encode_to_vec();
             let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
             let new_cup = CatchUpPackage::try_from(&proto_cup).unwrap();
 

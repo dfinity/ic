@@ -89,6 +89,9 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
+        // There is a malicious node which creates corrupted idkg dealings, so it's expected
+        // that the metric will increase.
+        .remove_metrics_to_check("idkg_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }

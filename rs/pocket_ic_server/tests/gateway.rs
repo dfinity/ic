@@ -410,6 +410,7 @@ fn test_unresponsive_gateway_backend() {
         forward_to: HttpGatewayBackend::Replica(backend_instance_url.to_string()),
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let res = client
         .post(create_gateway_endpoint)
@@ -478,6 +479,7 @@ fn test_gateway_invalid_forward_to() {
             forward_to,
             domains: None,
             https_config: None,
+            domain_custom_provider_local_file: None,
         };
         let client = Client::builder()
             .timeout(Duration::from_secs(300)) // same as bazel test timeout for this test
@@ -502,6 +504,171 @@ fn test_gateway_invalid_forward_to() {
     }
 }
 
+// Test that the HTTP gateway accepts a `domain_custom_provider_local_file` configuration.
+// Three domain forms for the same canister are verified, all driven exclusively by entries
+// in the provider file (no canister ID appears in any URL — that is the whole point of
+// custom domains). None of the domains are added to `domains`; `DomainResolver` falls
+// through to `CustomDomainStorage` for an exact-match lookup in each case.
+//
+//   custom  →  test
+//   apex    →  domain.test
+//   subdomain → www.domain.test
+
+#[tokio::test]
+async fn test_gateway_custom_domain_provider_file() {
+    let server_url = start_server();
+
+    // Create a PocketIC instance with NNS and application subnets.
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+
+    // Deploy II onto that instance.
+    let canister_id = deploy_ii_async(&pic).await;
+
+    // Enable auto progress for asset certification to work.
+    pic.auto_progress().await;
+
+    // Three domain forms, all mapping to the same canister — the canister ID is hidden in the file.
+    let custom_domain = "test";
+    let apex_domain = "domain.test";
+    let sub_domain = "www.domain.test";
+    let bind_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+    let (mut mapping_file, mapping_file_path) = NamedTempFile::new().unwrap().keep().unwrap();
+    mapping_file
+        .write_all(
+            format!(
+                "{}:{}\n{}:{}\n{}:{}",
+                custom_domain, canister_id, apex_domain, canister_id, sub_domain, canister_id,
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    // Create an HTTP gateway with the custom domain provider file.
+    let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
+    let http_gateway_config = HttpGatewayConfig {
+        ip_addr: Some(bind_address.to_string()),
+        port: None,
+        forward_to: HttpGatewayBackend::PocketIcInstance(pic.instance_id),
+        domains: Some(vec!["localhost".to_string()]),
+        https_config: None,
+        domain_custom_provider_local_file: Some(mapping_file_path.to_str().unwrap().to_string()),
+    };
+    let client = NonblockingClient::new();
+    let res = client
+        .post(create_gateway_endpoint)
+        .json(&http_gateway_config)
+        .send()
+        .await
+        .unwrap()
+        .json::<CreateHttpGatewayResponse>()
+        .await
+        .unwrap();
+    let port = match res {
+        CreateHttpGatewayResponse::Created(info) => info.port,
+        CreateHttpGatewayResponse::Error { message } => {
+            panic!("Failed to create HTTP gateway: {message}")
+        }
+    };
+
+    // Build a reqwest client that resolves both domains to the gateway's address.
+    let client = NonblockingClient::builder()
+        .resolve(custom_domain, SocketAddr::new(bind_address, port))
+        .resolve(apex_domain, SocketAddr::new(bind_address, port))
+        .resolve(sub_domain, SocketAddr::new(bind_address, port))
+        .build()
+        .unwrap();
+
+    // Verify all three domains: custom (www), apex, and subdomain (app).
+    // No canister ID appears in any URL; the file mapping provides it in each case.
+    for domain in [custom_domain, apex_domain, sub_domain] {
+        let url = format!("http://{}:{}", domain, port);
+        let res = client.get(&url).send().await.unwrap();
+        assert_eq!(
+            res.headers()
+                .get("x-ic-canister-id")
+                .expect("x-ic-canister-id header missing")
+                .to_str()
+                .unwrap(),
+            canister_id.to_string(),
+            "unexpected canister ID for domain {domain}",
+        );
+        let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+        assert!(
+            page.contains("<title>Internet Identity</title>"),
+            "II title not found for domain {domain}",
+        );
+    }
+
+    pic.drop().await;
+}
+
+// Test that the HTTP gateway's authority validation is skipped (--domain-skip-authority-validation
+// is enabled in PocketIC if `domains` is `None`). Requests from any domain
+// should still succeed when the canister ID is resolvable from the URL.
+
+#[tokio::test]
+async fn test_gateway_skip_authority_validation() {
+    let server_url = start_server();
+
+    // Create a PocketIC instance with NNS and application subnets.
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+
+    // Deploy II onto that instance.
+    let canister_id = deploy_ii_async(&pic).await;
+
+    // Start an HTTP gateway configured with only the default domain (localhost).
+    let bind_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let port = pic
+        .make_live_with_params(Some(bind_address), None, None, None)
+        .await
+        .port_or_known_default()
+        .unwrap();
+
+    // Use a domain that is NOT in the configured `domains` list.
+    let unlisted_domain = "not-configured-domain.test";
+
+    // Build a reqwest client that resolves the unlisted domain to the gateway's address.
+    let client = NonblockingClient::builder()
+        .resolve(unlisted_domain, SocketAddr::new(bind_address, port))
+        .build()
+        .unwrap();
+
+    // With `--domain-skip-authority-validation` always enabled in PocketIC, a request from an
+    // unlisted domain with the canister ID in query parameters should succeed.
+    let url = format!(
+        "http://{}:{}/?canisterId={}",
+        unlisted_domain, port, canister_id
+    );
+    let res = client.get(&url).send().await.unwrap();
+    let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+    assert!(page.contains("<title>Internet Identity</title>"));
+
+    // Requests with canister ID as a subdomain of the unlisted domain should also succeed.
+    let sub_unlisted_domain = format!("{canister_id}.{unlisted_domain}");
+    let client = NonblockingClient::builder()
+        .resolve(&sub_unlisted_domain, SocketAddr::new(bind_address, port))
+        .build()
+        .unwrap();
+    let url = format!("http://{}:{}", sub_unlisted_domain, port);
+    let res = client.get(&url).send().await.unwrap();
+    let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+    assert!(page.contains("<title>Internet Identity</title>"));
+
+    pic.stop_live().await;
+    pic.drop().await;
+}
+
 // Test that trying to bind the HTTP gateway to the same port twice fails gracefully.
 
 fn create_gateway(
@@ -516,6 +683,7 @@ fn create_gateway(
         forward_to,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let res = reqwest::blocking::Client::new()
         .post(endpoint)

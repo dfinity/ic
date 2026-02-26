@@ -1,10 +1,12 @@
 pub mod proto;
 pub mod subnet_call_context_manager;
+pub mod subnet_schedule;
 #[cfg(test)]
 mod tests;
 
+use self::subnet_call_context_manager::SubnetCallContextManager;
+use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
-use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use crate::{CheckpointLoadingMetrics, canister_state::system_state::CyclesUseCase};
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
@@ -62,6 +64,10 @@ pub struct SystemMetadata {
 
     /// XNet stream state indexed by the _destination_ subnet id.
     pub(super) streams: Arc<StreamMap>,
+
+    /// Scheduling priorities of the canisters on this subnet.
+    #[validate_eq(CompareWithValidateEq)]
+    pub subnet_schedule: SubnetSchedule,
 
     /// The canister ID ranges from which this subnet generates canister IDs.
     canister_allocation_ranges: CanisterIdRanges,
@@ -181,10 +187,10 @@ pub struct SystemMetadata {
 /// use.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NetworkTopology {
-    pub subnets: BTreeMap<SubnetId, SubnetTopology>,
+    subnets: BTreeMap<SubnetId, SubnetTopology>,
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-    pub routing_table: Arc<RoutingTable>,
+    routing_table: Arc<RoutingTable>,
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub canister_migrations: Arc<CanisterMigrations>,
@@ -231,6 +237,37 @@ impl Default for NetworkTopology {
 }
 
 impl NetworkTopology {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        subnets: BTreeMap<SubnetId, SubnetTopology>,
+        routing_table: Arc<RoutingTable>,
+        canister_migrations: Arc<CanisterMigrations>,
+        nns_subnet_id: SubnetId,
+        chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
+        bitcoin_testnet_canister_id: Option<CanisterId>,
+        bitcoin_mainnet_canister_id: Option<CanisterId>,
+    ) -> Self {
+        Self {
+            subnets,
+            routing_table,
+            canister_migrations,
+            nns_subnet_id,
+            chain_key_enabled_subnets,
+            bitcoin_testnet_canister_id,
+            bitcoin_mainnet_canister_id,
+        }
+    }
+
+    /// Returns a reference to the subnets map.
+    pub fn subnets(&self) -> &BTreeMap<SubnetId, SubnetTopology> {
+        &self.subnets
+    }
+
+    /// Returns a reference to the routing table.
+    pub fn routing_table(&self) -> &Arc<RoutingTable> {
+        &self.routing_table
+    }
+
     /// Returns a list of subnets where the chain key feature is enabled.
     pub fn chain_key_enabled_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
         self.chain_key_enabled_subnets
@@ -280,6 +317,7 @@ pub struct SubnetTopology {
     /// holding the key as backup to actually produce signatures or VetKd key derivations.
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
     pub cost_schedule: CanisterCyclesCostSchedule,
+    pub subnet_admins: BTreeSet<PrincipalId>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
@@ -362,6 +400,7 @@ impl SystemMetadata {
             own_subnet_type,
             ingress_history: Default::default(),
             streams: Default::default(),
+            subnet_schedule: Default::default(),
             canister_allocation_ranges: Default::default(),
             last_generated_canister_id: None,
             batch_time: UNIX_EPOCH,
@@ -575,6 +614,11 @@ impl SystemMetadata {
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
 
+        // "Preserve" the subnet schedule. This is actually persisted per-canister, as
+        // part of the respective canister state, so will only actually be retained for
+        // local canisters.
+        res.subnet_schedule = self.subnet_schedule;
+
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
         // `self.batch_time`.
@@ -640,6 +684,7 @@ impl SystemMetadata {
         let &mut SystemMetadata {
             ref mut ingress_history,
             streams: _,
+            ref mut subnet_schedule,
             canister_allocation_ranges: _,
             last_generated_canister_id: _,
             prev_state_hash: _,
@@ -684,6 +729,9 @@ impl SystemMetadata {
                 // Or this is subnet A' and message is addressed to the management canister.
                 || split_from_subnet == *own_subnet_id && canister_id == IC_00
         });
+
+        // Only retain canister priorities for hosted canisters.
+        subnet_schedule.split(&is_local_canister);
 
         // Split complete, reset split marker.
         *split_from = None;
@@ -747,6 +795,7 @@ impl SystemMetadata {
         let Self {
             mut ingress_history,
             mut streams,
+            mut subnet_schedule,
             mut canister_allocation_ranges,
             mut last_generated_canister_id,
             prev_state_hash,
@@ -836,6 +885,9 @@ impl SystemMetadata {
         // Set the split marker to the original subnet ID, on both subnets.
         subnet_split_from = Some(own_subnet_id);
 
+        // Only retain canister priorities for hosted canisters.
+        subnet_schedule.split(is_local_canister);
+
         // Only retain Bitcoin responses for hosted canisters.
         bitcoin_get_successors_follow_up_responses
             .retain(|canister_id, _| is_local_canister(*canister_id));
@@ -843,6 +895,7 @@ impl SystemMetadata {
         Ok(Self {
             ingress_history,
             streams,
+            subnet_schedule,
             // Already populated from the registry for subnet B.
             canister_allocation_ranges,
             last_generated_canister_id,
@@ -1841,6 +1894,33 @@ impl UnflushedCheckpointOps {
 pub mod testing {
     use super::*;
 
+    /// Exposes `NetworkTopology` internals for use in tests.
+    pub trait NetworkTopologyTesting {
+        /// Returns a mutable reference to the subnets map.
+        fn subnets_mut(&mut self) -> &mut BTreeMap<SubnetId, SubnetTopology>;
+        /// Sets the subnets map.
+        fn set_subnets(&mut self, subnets: BTreeMap<SubnetId, SubnetTopology>);
+        /// Returns a mutable reference to the routing table.
+        fn routing_table_mut(&mut self) -> &mut RoutingTable;
+        /// Sets the routing table.
+        fn set_routing_table(&mut self, routing_table: RoutingTable);
+    }
+
+    impl NetworkTopologyTesting for NetworkTopology {
+        fn subnets_mut(&mut self) -> &mut BTreeMap<SubnetId, SubnetTopology> {
+            &mut self.subnets
+        }
+        fn set_subnets(&mut self, subnets: BTreeMap<SubnetId, SubnetTopology>) {
+            self.subnets = subnets;
+        }
+        fn routing_table_mut(&mut self) -> &mut RoutingTable {
+            Arc::make_mut(&mut self.routing_table)
+        }
+        fn set_routing_table(&mut self, routing_table: RoutingTable) {
+            self.routing_table = Arc::new(routing_table);
+        }
+    }
+
     pub trait StreamTesting {
         /// Creates a new `Stream` with the given `messages` and `signals_end`.
         #[allow(clippy::new_ret_no_self)]
@@ -1914,6 +1994,7 @@ pub mod testing {
             ingress_history,
             // No need to cover streams, they always stay with the subnet.
             streams: Default::default(),
+            subnet_schedule: Default::default(),
             canister_allocation_ranges: Default::default(),
             last_generated_canister_id: None,
             batch_time: UNIX_EPOCH,

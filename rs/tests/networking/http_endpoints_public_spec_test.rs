@@ -41,7 +41,7 @@ Edge cases for method names in update and query calls:
 
 end::catalog[] */
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use candid::Principal;
 use ic_agent::{Agent, AgentError};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -51,7 +51,7 @@ use ic_http_endpoints_test_agent::*;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        group::SystemTestGroup,
+        group::{SystemTestGroup, SystemTestSubGroup},
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
@@ -64,7 +64,7 @@ use ic_system_test_driver::{
 use ic_types::{CanisterId, PrincipalId};
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::ManagementCanister;
-use ic_utils::interfaces::management_canister::builders::InstallMode;
+use ic_utils::interfaces::management_canister::builders::CanisterInstallMode;
 use maplit::btreemap;
 use reqwest::{Response, StatusCode};
 use serde_cbor::Value;
@@ -436,14 +436,50 @@ async fn deploy_wasm_to_fresh_canister(
         .unwrap()
         .0;
     ic00.install_code(&canister_id, wasm)
-        .with_mode(InstallMode::Reinstall)
+        .with_mode(CanisterInstallMode::Reinstall)
         .call_and_wait()
         .await
         .unwrap();
     canister_id
 }
 
+/// Retries a request (update or query) and asserts it fails with the expected error.
+/// Transport errors are retried since the server may close the connection while
+/// the client is still streaming a large request body.
+async fn assert_large_request_rejected<F, Fut>(
+    label: String,
+    logger: &Logger,
+    call: F,
+    is_expected: impl Fn(&AgentError) -> bool,
+) where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<u8>, AgentError>>,
+{
+    ic_system_test_driver::retry_with_msg_async!(
+        label.as_str(),
+        logger,
+        Duration::from_secs(60),
+        Duration::from_secs(5),
+        || async {
+            match call().await {
+                Err(AgentError::TransportError(e)) => {
+                    bail!("transport error, retrying: {e}")
+                }
+                Err(ref e) if is_expected(e) => Ok(()),
+                other => panic!("{}: unexpected result: {:?}", label, other),
+            }
+        }
+    )
+    .await
+    .unwrap()
+}
+
+fn is_http_status(err: &AgentError, status: StatusCode) -> bool {
+    matches!(err, AgentError::HttpError(p) if p.status == status.as_u16())
+}
+
 fn method_name_edge_cases(env: TestEnv) {
+    let logger = env.logger();
     let snapshot = env.topology_snapshot();
 
     // We use an application subnet in this test
@@ -456,187 +492,200 @@ fn method_name_edge_cases(env: TestEnv) {
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
-        for (url, is_api_bn) in [(subnet_replica_url, false), (api_bn_url, true)] {
-            let client = reqwest::Client::builder()
-                .danger_accept_invalid_certs(true)
-                .build()
-                .unwrap();
-            let agent = Agent::builder()
-                .with_url(url.clone())
-                .with_http_client(client)
-                .build()
-                .unwrap();
-            agent.fetch_root_key().await.unwrap();
-
-            for method_name in [
-                "",
-                "method name with spaces",
-                &'x'.to_string().repeat(10_000),
-                &'x'.to_string().repeat(20_000),
-            ] {
-                // We start with the successful case of a canister
-                // actually exporting a method with the given name.
-                let wasm = wasm_with_exported_method_name(method_name.to_string());
-                let canister_id =
-                    deploy_wasm_to_fresh_canister(&agent, app_uc.into(), wasm.as_slice()).await;
-
-                let response = agent
-                    .update(&canister_id, method_name)
-                    .call_and_wait()
-                    .await
+        let outer_futs: Vec<_> = [(subnet_replica_url, false), (api_bn_url, true)]
+            .into_iter()
+            .map(|(url, is_api_bn)| {
+                let logger = logger.clone();
+                async move {
+                let client = reqwest::Client::builder()
+                    .danger_accept_invalid_certs(true)
+                    .build()
                     .unwrap();
-                assert!(response.is_empty());
-                let response = agent.query(&canister_id, method_name).call().await.unwrap();
-                assert!(response.is_empty());
+                let agent = Agent::builder()
+                    .with_url(url.clone())
+                    .with_http_client(client)
+                    .build()
+                    .unwrap();
+                agent.fetch_root_key().await.unwrap();
 
-                // We continue with testing graceful handling of method names
-                // not exported by the canister.
-                // To this end, we use a trivial WASM exporting no method.
+                let method_names: Vec<String> = vec![
+                    "".to_string(),
+                    "method name with spaces".to_string(),
+                    'x'.to_string().repeat(10_000),
+                    'x'.to_string().repeat(20_000),
+                ];
+
+                let method_name_futs: Vec<_> = method_names
+                    .iter()
+                    .map(|method_name| {
+                        let agent = agent.clone();
+                        let method_name = method_name.clone();
+                        async move {
+                            // We start with the successful case of a canister
+                            // actually exporting a method with the given name.
+                            let wasm =
+                                wasm_with_exported_method_name(method_name.to_string());
+                            let canister_id = deploy_wasm_to_fresh_canister(
+                                &agent,
+                                app_uc.into(),
+                                wasm.as_slice(),
+                            )
+                            .await;
+
+                            let response = agent
+                                .update(&canister_id, &method_name)
+                                .call_and_wait()
+                                .await
+                                .unwrap();
+                            assert!(response.is_empty());
+                            let response =
+                                agent.query(&canister_id, &method_name).call().await.unwrap();
+                            assert!(response.is_empty());
+
+                            // We continue with testing graceful handling of method names
+                            // not exported by the canister.
+                            // To this end, we use a trivial WASM exporting no method.
+                            let trivial_wasm =
+                                vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+                            // We deploy a fresh canister to prevent test flakiness due to query caching.
+                            let canister_id = deploy_wasm_to_fresh_canister(
+                                &agent,
+                                app_uc.into(),
+                                trivial_wasm.as_slice(),
+                            )
+                            .await;
+
+                            let short_method_name =
+                                &method_name[..std::cmp::min(method_name.len(), 50)];
+                            let err: AgentError = agent
+                                .update(&canister_id, &method_name)
+                                .call_and_wait()
+                                .await
+                                .unwrap_err();
+                            assert!(
+                                matches!(err, AgentError::CertifiedReject { .. }),
+                                "update: {} ({}) got error: {}",
+                                short_method_name,
+                                method_name.len(),
+                                err
+                            );
+                            let err = agent
+                                .query(&canister_id, &method_name)
+                                .call()
+                                .await
+                                .unwrap_err();
+                            assert!(
+                                matches!(err, AgentError::UncertifiedReject { .. }),
+                                "query: {} ({}) got error: {}",
+                                short_method_name,
+                                method_name.len(),
+                                err
+                            );
+                        }
+                    })
+                    .collect();
+                futures::future::join_all(method_name_futs).await;
+
+                // For the failure cases, we just need a canister.
+                // The actual method name does not matter.
                 let trivial_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-                // We deploy a fresh canister to prevent test flakiness due to query caching.
                 let canister_id =
                     deploy_wasm_to_fresh_canister(&agent, app_uc.into(), trivial_wasm.as_slice())
                         .await;
-
-                let short_method_name = &method_name[..std::cmp::min(method_name.len(), 50)];
-                let err: AgentError = agent
-                    .update(&canister_id, method_name)
+                let too_long_method_name = 'x'.to_string().repeat(1 << 20);
+                let err = agent
+                    .update(&canister_id, &too_long_method_name)
                     .call_and_wait()
                     .await
                     .unwrap_err();
-                assert!(
-                    matches!(err, AgentError::CertifiedReject { .. }),
-                    "update: {} ({}) got error: {}",
-                    short_method_name,
-                    method_name.len(),
-                    err
-                );
+
+                if is_api_bn {
+                    // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
+                    assert!(
+                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
+                        "api bn update for 'x' * 2**20: got error {}",
+                        err
+                    );
+                } else {
+                    // When bypassing the API BN, the replica responds with a reject.
+                    assert!(
+                        matches!(err, AgentError::CertifiedReject { .. }),
+                        "direct replica update for 'x' * 2**20: got error {}",
+                        err
+                    );
+                }
                 let err = agent
-                    .query(&canister_id, method_name)
+                    .query(&canister_id, &too_long_method_name)
                     .call()
                     .await
                     .unwrap_err();
-                assert!(
-                    matches!(err, AgentError::UncertifiedReject { .. }),
-                    "query: {} ({}) got error: {}",
-                    short_method_name,
-                    method_name.len(),
-                    err
-                );
-            }
 
-            // For the failure cases, we just need a canister.
-            // The actual method name does not matter.
-            let trivial_wasm = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-            let canister_id =
-                deploy_wasm_to_fresh_canister(&agent, app_uc.into(), trivial_wasm.as_slice()).await;
-            let too_long_method_name = 'x'.to_string().repeat(1 << 20);
-            let err = agent
-                .update(&canister_id, &too_long_method_name)
-                .call_and_wait()
-                .await
-                .unwrap_err();
+                if is_api_bn {
+                    // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
+                    assert!(
+                        matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
+                        "api bn update for 'x' * 2**20: got error {}",
+                        err
+                    );
+                } else {
+                    // When bypassing the API BN, the replica responds with a reject.
+                    assert!(
+                        matches!(err, AgentError::UncertifiedReject { .. }),
+                        "direct replica update for 'x' * 2**20: got error {}",
+                        err
+                    );
+                }
 
-            if is_api_bn {
-                // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
-                assert!(
-                    matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
-                    "api bn update for 'x' * 2**20: got error {}",
-                    err
-                );
-            } else {
-                // When bypassing the API BN, the replica responds with a reject.
-                assert!(
-                    matches!(err, AgentError::CertifiedReject { .. }),
-                    "direct replica update for 'x' * 2**20: got error {}",
-                    err
-                );
-            }
-            let err = agent
-                .query(&canister_id, &too_long_method_name)
-                .call()
-                .await
-                .unwrap_err();
-
-            if is_api_bn {
-                // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
-                assert!(
-                    matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
-                    "api bn update for 'x' * 2**20: got error {}",
-                    err
-                );
-            } else {
-                // When bypassing the API BN, the replica responds with a reject.
-                assert!(
-                    matches!(err, AgentError::UncertifiedReject { .. }),
-                    "direct replica update for 'x' * 2**20: got error {}",
-                    err
-                );
-            }
-
-            let too_long_method_name = 'x'.to_string().repeat(3 << 20);
-            let err = agent
-                .update(&canister_id, &too_long_method_name)
-                .call_and_wait()
-                .await
-                .unwrap_err();
-
-            let payload_too_large = |err: AgentError| {
-                match err {
-                    AgentError::HttpError(payload) => {
-                        assert_eq!(payload.status, StatusCode::PAYLOAD_TOO_LARGE.as_u16());
-                    }
-                    _ => panic!("Unexpected error: {:?}", err),
-                };
-            };
-
-            if is_api_bn {
+                let too_long_method_name = 'x'.to_string().repeat(3 << 20);
                 // The API BN has more generous limits, so it still responds with HTTP 400 Bad Request.
-                assert!(
-                    matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
-                    "api bn update for 'x' * 3**20: got error {}",
-                    err
-                );
-            } else {
-                payload_too_large(err);
-            }
+                // When bypassing the API BN, the replica responds with PAYLOAD_TOO_LARGE for updates
+                // or an UncertifiedReject for queries.
+                assert_large_request_rejected(
+                    format!("update 'x' * 3*2^20 (is_api_bn={})", is_api_bn),
+                    &logger,
+                    || agent.update(&canister_id, &too_long_method_name).call_and_wait(),
+                    |e: &AgentError| {
+                        if is_api_bn {
+                            is_http_status(e, StatusCode::BAD_REQUEST)
+                        } else {
+                            is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE)
+                        }
+                    },
+                )
+                .await;
+                assert_large_request_rejected(
+                    format!("query 'x' * 3*2^20 (is_api_bn={})", is_api_bn),
+                    &logger,
+                    || agent.query(&canister_id, &too_long_method_name).call(),
+                    |e: &AgentError| {
+                        if is_api_bn {
+                            is_http_status(e, StatusCode::BAD_REQUEST)
+                        } else {
+                            matches!(e, AgentError::UncertifiedReject { .. })
+                        }
+                    },
+                )
+                .await;
 
-            let err = agent
-                .query(&canister_id, &too_long_method_name)
-                .call()
-                .await
-                .unwrap_err();
-
-            if is_api_bn {
-                // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
-                assert!(
-                    matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
-                    "api bn update for 'x' * 3**20: got error {}",
-                    err
-                );
-            } else {
-                // When bypassing the API BN, the replica responds with a reject.
-                assert!(
-                    matches!(err, AgentError::UncertifiedReject { .. }),
-                    "direct replica update for 'x' * 3**20: got error {}",
-                    err
-                );
-            }
-
-            let too_long_method_name = 'x'.to_string().repeat(5 << 20);
-            let err = agent
-                .update(&canister_id, &too_long_method_name)
-                .call_and_wait()
-                .await
-                .unwrap_err();
-            payload_too_large(err);
-            let err = agent
-                .query(&canister_id, &too_long_method_name)
-                .call()
-                .await
-                .unwrap_err();
-            payload_too_large(err);
-        }
+                let too_long_method_name = 'x'.to_string().repeat(5 << 20);
+                assert_large_request_rejected(
+                    "update 'x' * 5*2^20".to_string(),
+                    &logger,
+                    || agent.update(&canister_id, &too_long_method_name).call_and_wait(),
+                    |e: &AgentError| is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE),
+                )
+                .await;
+                assert_large_request_rejected(
+                    "query 'x' * 5*2^20".to_string(),
+                    &logger,
+                    || agent.query(&canister_id, &too_long_method_name).call(),
+                    |e: &AgentError| is_http_status(e, StatusCode::PAYLOAD_TOO_LARGE),
+                )
+                .await;
+                }
+            })
+            .collect();
+        futures::future::join_all(outer_futs).await;
     });
 }
 
@@ -757,19 +806,26 @@ fn assert_4xx(status: &u16) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(query_calls; query::Version::V2))
-        .add_test(systest!(query_calls; query::Version::V3))
-        .add_test(systest!(update_calls; Call::V2))
-        .add_test(systest!(update_calls; Call::V3))
-        .add_test(systest!(update_calls; Call::V4))
-        .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V2))
-        .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V3))
-        .add_test(systest!(read_state_malformed_rejected; read_state::canister::Version::V2))
-        .add_test(systest!(read_state_malformed_rejected; read_state::canister::Version::V3))
-        .add_test(systest!(read_time; read_state::canister::Version::V2))
-        .add_test(systest!(read_time; read_state::canister::Version::V3))
-        .add_test(systest!(malformed_http_request))
-        .add_test(systest!(method_name_edge_cases))
+        .add_parallel(
+            SystemTestSubGroup::new()
+                .add_test(systest!(query_calls; query::Version::V2))
+                .add_test(systest!(query_calls; query::Version::V3))
+                .add_test(systest!(update_calls; Call::V2))
+                .add_test(systest!(update_calls; Call::V3))
+                .add_test(systest!(update_calls; Call::V4))
+                .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V2))
+                .add_test(systest!(read_state_valid_succeeds; read_state::canister::Version::V3))
+                .add_test(
+                    systest!(read_state_malformed_rejected; read_state::canister::Version::V2),
+                )
+                .add_test(
+                    systest!(read_state_malformed_rejected; read_state::canister::Version::V3),
+                )
+                .add_test(systest!(read_time; read_state::canister::Version::V2))
+                .add_test(systest!(read_time; read_state::canister::Version::V3))
+                .add_test(systest!(malformed_http_request))
+                .add_test(systest!(method_name_edge_cases)),
+        )
         .execute_from_args()?;
 
     Ok(())

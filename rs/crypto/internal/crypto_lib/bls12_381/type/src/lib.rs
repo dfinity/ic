@@ -1892,31 +1892,71 @@ macro_rules! declare_muln_vartime_dispatch_for {
             /// memory-based side channels. Do not use this function with secret
             /// scalars.
             pub fn muln_vartime(points: &[Self], scalars: &[Scalar]) -> Self {
-                if points.len() == 1 {
+                let terms = std::cmp::min(points.len(), scalars.len());
+
+                if terms == 0 {
+                    return Self::identity();
+                } else if terms == 1 {
                     return &points[0] * &scalars[0];
-                } else if points.len() == 2 {
+                } else if terms == 2 {
                     return Self::mul2_vartime(&points[0], &scalars[0], &points[1], &scalars[1]);
-                } else if points.len() < $naive_cutoff {
+                } else if terms < $naive_cutoff {
                     Self::muln_vartime_naive(points, scalars)
-                } else if points.len() < $w3_cutoff {
+                } else if terms < $w3_cutoff {
                     Self::muln_vartime_window_3(points, scalars)
                 } else {
                     Self::muln_vartime_window_4(points, scalars)
                 }
             }
 
-            fn muln_vartime_naive(points: &[Self], scalars: &[Scalar]) -> Self {
-                let (accum, points, scalars) = if points.len() % 2 == 0 {
-                    (Self::identity(), points, scalars)
+            /// Multiscalar multiplication from references
+            ///
+            /// Same as `muln_vartime` but accepts points as a slice of references,
+            /// avoiding the need for callers to clone points into a contiguous `Vec`.
+            pub fn muln_vartime_ref(points: &[&Self], scalars: &[Scalar]) -> Self {
+                let terms = std::cmp::min(points.len(), scalars.len());
+
+                if terms == 0 {
+                    return Self::identity();
+                } else if terms == 1 {
+                    return points[0] * &scalars[0];
+                } else if terms == 2 {
+                    return Self::mul2_vartime(points[0], &scalars[0], points[1], &scalars[1]);
+                } else if terms < $naive_cutoff {
+                    Self::muln_vartime_naive(points, scalars)
+                } else if terms < $w3_cutoff {
+                    Self::muln_vartime_window_3(points, scalars)
                 } else {
-                    (&points[0] * &scalars[0], &points[1..], &scalars[1..])
+                    Self::muln_vartime_window_4(points, scalars)
+                }
+            }
+
+            fn muln_vartime_naive<P: std::borrow::Borrow<Self>>(
+                points: &[P],
+                scalars: &[Scalar],
+            ) -> Self {
+                let terms = std::cmp::min(points.len(), scalars.len());
+
+                let not_in_pair = if terms % 2 == 1 { 1 } else { 0 };
+
+                let mut accum = {
+                    if not_in_pair == 0 {
+                        Self::identity()
+                    } else {
+                        points[0].borrow() * &scalars[0]
+                    }
                 };
-                points
-                    .chunks(2)
-                    .zip(scalars.chunks(2))
-                    .fold(accum, |accum, (c_p, c_s)| {
-                        accum + Self::mul2_vartime(&c_p[0], &c_s[0], &c_p[1], &c_s[1])
-                    })
+
+                for i in (not_in_pair..terms).step_by(2) {
+                    accum += Self::mul2_vartime(
+                        points[i].borrow(),
+                        &scalars[i],
+                        points[i + 1].borrow(),
+                        &scalars[i + 1],
+                    )
+                }
+
+                accum
             }
         }
     };
@@ -1940,36 +1980,81 @@ macro_rules! declare_muln_affine_vartime_dispatch_for {
             /// memory-based side channels. Do not use this function with secret
             /// scalars.
             pub fn muln_affine_vartime(points: &[$affine], scalars: &[Scalar]) -> Self {
-                if points.len() == 1 {
+                let terms = std::cmp::min(points.len(), scalars.len());
+
+                if terms == 0 {
+                    return Self::identity();
+                } else if terms == 1 {
                     return &points[0] * &scalars[0];
-                } else if points.len() == 2 {
+                } else if terms == 2 {
                     return Self::mul2_affine_vartime(
                         &points[0],
                         &scalars[0],
                         &points[1],
                         &scalars[1],
                     );
-                } else if points.len() < $naive_cutoff {
+                } else if terms < $naive_cutoff {
                     Self::muln_affine_vartime_naive(points, scalars)
-                } else if points.len() < $w3_cutoff {
+                } else if terms < $w3_cutoff {
                     Self::muln_affine_vartime_window_3(points, scalars)
                 } else {
                     Self::muln_affine_vartime_window_4(points, scalars)
                 }
             }
 
-            fn muln_affine_vartime_naive(points: &[$affine], scalars: &[Scalar]) -> Self {
-                let (accum, points, scalars) = if points.len() % 2 == 0 {
-                    (Self::identity(), points, scalars)
+            /// Multiscalar multiplication from references
+            ///
+            /// Same as `muln_affine_vartime` but accepts points as a slice of references,
+            /// avoiding the need for callers to clone points into a contiguous `Vec`.
+            pub fn muln_affine_vartime_ref(points: &[&$affine], scalars: &[Scalar]) -> Self {
+                let terms = std::cmp::min(points.len(), scalars.len());
+
+                if terms == 0 {
+                    return Self::identity();
+                } else if terms == 1 {
+                    return points[0] * &scalars[0];
+                } else if terms == 2 {
+                    return Self::mul2_affine_vartime(
+                        points[0],
+                        &scalars[0],
+                        points[1],
+                        &scalars[1],
+                    );
+                } else if terms < $naive_cutoff {
+                    Self::muln_affine_vartime_naive(points, scalars)
+                } else if terms < $w3_cutoff {
+                    Self::muln_affine_vartime_window_3(points, scalars)
                 } else {
-                    (&points[0] * &scalars[0], &points[1..], &scalars[1..])
+                    Self::muln_affine_vartime_window_4(points, scalars)
+                }
+            }
+
+            fn muln_affine_vartime_naive<P: std::borrow::Borrow<$affine>>(
+                points: &[P],
+                scalars: &[Scalar],
+            ) -> Self {
+                let terms = std::cmp::min(points.len(), scalars.len());
+
+                let not_in_pair = if terms % 2 == 1 { 1 } else { 0 };
+
+                let mut accum = {
+                    if not_in_pair == 0 {
+                        Self::identity()
+                    } else {
+                        points[0].borrow() * &scalars[0]
+                    }
                 };
-                points
-                    .chunks(2)
-                    .zip(scalars.chunks(2))
-                    .fold(accum, |accum, (c_p, c_s)| {
-                        accum + Self::mul2_affine_vartime(&c_p[0], &c_s[0], &c_p[1], &c_s[1])
-                    })
+
+                for i in (not_in_pair..terms).step_by(2) {
+                    accum += Self::mul2_affine_vartime(
+                        points[i].borrow(),
+                        &scalars[i],
+                        points[i + 1].borrow(),
+                        &scalars[i + 1],
+                    )
+                }
+
+                accum
             }
         }
     };
@@ -1978,7 +2063,7 @@ macro_rules! declare_muln_affine_vartime_dispatch_for {
 macro_rules! declare_pippengers_for {
     ( $typ:ty, $fn_name:ident, $input:ty, $window:expr_2021 ) => {
         impl $typ {
-            fn $fn_name(points: &[$input], scalars: &[Scalar]) -> Self {
+            fn $fn_name<P: std::borrow::Borrow<$input>>(points: &[P], scalars: &[Scalar]) -> Self {
                 // Configurable window size: can be in 1..=8
                 type Window = WindowInfo<$window>;
 
@@ -2004,7 +2089,7 @@ macro_rules! declare_pippengers_for {
                     for j in 0..count {
                         let bucket_index = windows[j][i] as usize;
                         if bucket_index > 0 {
-                            buckets[bucket_index] += &points[j];
+                            buckets[bucket_index] += points[j].borrow();
                             max_bucket = std::cmp::max(max_bucket, bucket_index);
                         }
                     }
@@ -2567,8 +2652,6 @@ const NUM_BITS_BATCH_VERIFICATION: u8 = 30;
 /// pairwise verification. For efficiency, the provided batch is automatically
 /// dispatched into subcases: same message, same public key, distinct keys and
 /// messages batches.
-///
-/// TODO(CRP-2013): use only one multi-pairing per call.
 pub fn verify_bls_signature_batch<R: RngCore + CryptoRng>(
     sigs_pks_msgs: &[(&G1Affine, &G2Affine, &G1Affine)],
     rng: &mut R,
