@@ -893,16 +893,14 @@ fn extract_node_ids_from_tree(
 /// Recursively walk the tree collecting top-level Labeled keys as node Principals.
 fn collect_node_ids(tree: &MixedHashTree, members: &mut HashSet<Principal>) {
     match tree {
-        MixedHashTree::Labeled(label, _) => {
-            match Principal::try_from_slice(label.as_bytes()) {
-                Ok(id) => {
-                    members.insert(id);
-                }
-                Err(e) => {
-                    warn!("Unexpected label in node subtree: {e}");
-                }
+        MixedHashTree::Labeled(label, _) => match Principal::try_from_slice(label.as_bytes()) {
+            Ok(id) => {
+                members.insert(id);
             }
-        }
+            Err(e) => {
+                warn!("Unexpected label in node subtree: {e}");
+            }
+        },
         MixedHashTree::Fork(lr) => {
             collect_node_ids(&lr.0, members);
             collect_node_ids(&lr.1, members);
