@@ -47,7 +47,7 @@ mod database_access {
         con: &mut Connection,
         hb: &HashedBlock,
     ) -> Result<(), BlockStoreError> {
-        let mut stmt = con.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
+        let mut stmt = con.prepare_cached("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
             :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
             )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
         execute_insert_block_statement(&mut stmt, hb)
@@ -138,9 +138,6 @@ mod database_access {
     pub fn get_all_block_indices_from_blocks_table(
         connection: &mut Connection,
     ) -> Result<Vec<u64>, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() instead of prepare() to reuse the compiled SQL statement
-        // across multiple invocations. This is called during table coherence checks and can be
-        // called multiple times during the lifetime of the application.
         let mut stmt = connection
             .prepare_cached("SELECT block_idx from blocks")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -154,8 +151,6 @@ mod database_access {
     pub fn get_all_block_indices_from_account_balances_table(
         connection: &mut Connection,
     ) -> Result<Vec<u64>, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() instead of prepare() to reuse the compiled SQL statement.
-        // This is called during table coherence checks which can happen multiple times.
         let mut stmt = connection
             .prepare_cached("SELECT block_idx FROM account_balances")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -170,9 +165,6 @@ mod database_access {
         connection: &mut Connection,
         block_idx: &u64,
     ) -> Result<bool, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() instead of prepare() since contains_block is called
-        // frequently throughout the codebase for validation. Caching the prepared statement
-        // provides significant speedup when checking multiple blocks.
         let mut stmt = connection
             .prepare_cached("SELECT Null FROM blocks WHERE block_idx = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -188,9 +180,6 @@ mod database_access {
         connection: &mut Connection,
         block_idx: &u64,
     ) -> Result<icp_ledger::Transaction, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() instead of prepare() since get_transaction is called
-        // frequently when serving /block and /search/transactions API requests. The query is
-        // identical each time, so caching provides significant performance benefits.
         let command = "SELECT encoded_block from blocks where block_idx = ?";
         let mut stmt = connection
             .prepare_cached(command)
@@ -248,9 +237,6 @@ mod database_access {
         connection: &mut Connection,
         block_idx: &u64,
     ) -> Result<Option<HashOf<icp_ledger::Transaction>>, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() instead of prepare() to cache this frequently-used query.
-        // Transaction hash lookups are common in search operations and block validation.
-        // The tx_hash column already has an index (created in create_tables), so this query is fast.
         let command = "SELECT tx_hash from blocks where block_idx = ?";
         let mut stmt = connection
             .prepare_cached(command)
@@ -275,10 +261,6 @@ mod database_access {
         connection: &mut Connection,
         hash: &HashOf<icp_ledger::Transaction>,
     ) -> Result<Vec<u64>, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() to cache this critical query used in /search/transactions.
-        // This is one of the most frequently called queries when searching for transactions by hash.
-        // The tx_hash_index (created in create_tables) makes this query fast, and caching the
-        // prepared statement eliminates the compilation overhead on each call.
         let mut stmt = connection
             .prepare_cached("SELECT block_idx from blocks where tx_hash = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))
@@ -301,9 +283,6 @@ mod database_access {
         connection: &mut Connection,
         hash: &HashOf<EncodedBlock>,
     ) -> Result<u64, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() to cache this query used for block lookups by hash.
-        // This is frequently called when serving /block endpoint with a block hash parameter.
-        // The block_hash_index (created in create_tables) makes this query fast.
         let mut stmt = connection
             .prepare_cached("SELECT block_idx from blocks where block_hash = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))
@@ -363,11 +342,6 @@ mod database_access {
         block_idx: &u64,
         account: &AccountIdentifier,
     ) -> Result<Option<u64>, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() for this critical query used in /account/balance endpoint.
-        // This is one of the most frequently called queries in the entire system. The query finds
-        // the most recent balance for an account at or before a given block index.
-        // Note: The ORDER BY DESC LIMIT 1 pattern here is optimal because we need the actual row data,
-        // not just the max value. The block_idx_account_balances index makes this query efficient.
         let command = "SELECT tokens FROM account_balances WHERE block_idx<=?1 AND account=?2 ORDER BY block_idx DESC LIMIT 1";
         let mut stmt = connection
             .prepare_cached(command)
@@ -533,27 +507,20 @@ mod database_access {
         con: &mut Connection,
         hb: &HashedBlock,
     ) -> Result<(), BlockStoreError> {
-        // PERFORMANCE NOTE: This function is called when processing individual blocks (not batches).
-        // For single-block operations, we prepare statements here and pass them to the execution
-        // function. When processing batches (see push_batch), statements are prepared once and
-        // reused across all blocks in the batch, which is more efficient.
-        // Using regular prepare() here is acceptable since prepare_cached() wouldn't help for
-        // single-use scenarios. The cache only benefits repeated calls with the same connection.
         let mut stmt_select =  con
-        .prepare("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
+        .prepare_cached("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_insert = con
-            .prepare("INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)")
-            .expect("Couldn't prepare statement");
+            .prepare_cached(
+                "INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)",
+            )
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         update_balance_book_execution(hb, &mut stmt_select, &mut stmt_insert)
     }
 
     pub fn get_all_accounts(
         connection: &mut Connection,
     ) -> Result<Vec<AccountIdentifier>, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() for this query used during sanity checks and exports.
-        // While not called as frequently as balance queries, caching still provides benefits
-        // when iterating through accounts for validation or reporting purposes.
         let mut accounts = vec![];
         let mut stmt = connection
             .prepare_cached("SELECT DISTINCT account FROM account_balances")
@@ -574,9 +541,6 @@ mod database_access {
         con: &mut Connection,
         block_idx: &u64,
     ) -> Result<(), BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() for the outer query. This is called during pruning
-        // operations to clean up old account balance records while keeping the most recent one
-        // for each account. Pruning helps keep the database size manageable over time.
         let mut stmt = con
             .prepare_cached(
                 "SELECT DISTINCT account FROM account_balances WHERE block_idx <= ?1 AND account IN (SELECT account FROM account_balances WHERE block_idx <= ?1 GROUP BY account HAVING COUNT(block_idx) > 1)",
@@ -586,9 +550,6 @@ mod database_access {
             .query(params![block_idx])
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let get_last_involved_block_idx = |acc: &str| -> Result<u64, BlockStoreError> {
-            // PERFORMANCE: Use prepare_cached() for this nested query that finds the latest
-            // balance record for each account. This gets called once per account during pruning.
-            // Note: ORDER BY DESC LIMIT 1 is correct here as we need the row data, not just MAX.
             let command = "SELECT block_idx FROM account_balances WHERE block_idx <= ?1 AND account = ?2 ORDER BY block_idx DESC LIMIT 1";
             let mut stmt = con
                 .prepare_cached(command)
@@ -622,56 +583,41 @@ mod database_access {
     ) -> Result<Vec<(u64, Tokens)>, BlockStoreError> {
         let first_idx = get_first_hashed_block(connection, Some(true))?.index;
 
-        let command = match max_block {
-            Some(limit) => match first_idx {
-                0 => {
-                    format!(
-                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {limit} ORDER BY block_idx DESC"
-                    )
-                }
-                _ => {
-                    format!(
-                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {limit} AND block_idx > {first_idx} ORDER BY block_idx DESC"
-                    )
-                }
-            },
-            None => match first_idx {
-                0 => String::from(
-                    "SELECT block_idx,tokens from account_balances where account = ? ORDER BY block_idx DESC",
-                ),
-
-                _ => {
-                    format!(
-                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx > {first_idx} ORDER BY block_idx DESC"
-                    )
-                }
-            },
-        };
         let account = acc.to_hex();
-        let mut result = Vec::new();
+
+        let (sql, params): (&str, _) = match (max_block, first_idx) {
+            (Some(_), 0) => (
+                "SELECT block_idx,tokens FROM account_balances WHERE account = ?1 AND block_idx <= ?2 ORDER BY block_idx DESC",
+                params![account, max_block.unwrap()],
+            ),
+            (Some(_), _) => (
+                "SELECT block_idx,tokens FROM account_balances WHERE account = ?1 AND block_idx <= ?2 AND block_idx > ?3 ORDER BY block_idx DESC",
+                params![account, max_block.unwrap(), first_idx],
+            ),
+            (None, 0) => (
+                "SELECT block_idx,tokens FROM account_balances WHERE account = ? ORDER BY block_idx DESC",
+                params![account],
+            ),
+            (None, _) => (
+                "SELECT block_idx,tokens FROM account_balances WHERE account = ?1 AND block_idx > ?2 ORDER BY block_idx DESC",
+                params![account, first_idx],
+            ),
+        };
+
         let mut stmt = connection
-            .prepare(command.as_str())
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
-        let account_history = stmt
-            .query_map(params![account], |row| {
-                let block_idx: u64 = row.get(0)?;
-                // Read as i64 and reinterpret as u64 to handle the full u64 range
-                let tokens_i64: i64 = row.get(1)?;
-                let tokens_u64 = tokens_i64 as u64;
-                Ok((block_idx, Tokens::from_e8s(tokens_u64)))
-            })
+            .prepare_cached(sql)
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        for tuple in account_history {
-            result.push(tuple.unwrap());
-        }
-        Ok(result)
+        stmt.query_map(params, |row| {
+            let block_idx: u64 = row.get(0)?;
+            let tokens_i64: i64 = row.get(1)?;
+            Ok((block_idx, Tokens::from_e8s(tokens_i64 as u64)))
+        })
+        .map_err(|e| BlockStoreError::Other(e.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| BlockStoreError::Other(e.to_string()))
     }
 
     pub fn is_verified(con: &mut Connection, block_idx: &u64) -> Result<bool, BlockStoreError> {
-        // PERFORMANCE: Use prepare_cached() for this frequently-called verification check.
-        // This is called before serving many API responses to ensure we only return verified data.
-        // The query is simple and fast, but caching eliminates the compilation overhead.
         let command = "SELECT null from blocks WHERE verified=TRUE AND block_idx=?";
         let mut stmt = con
             .prepare_cached(command)
@@ -1371,14 +1317,16 @@ impl Blocks {
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
-        let mut stmt_hb = connection.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
+        let mut stmt_hb = connection.prepare_cached("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
             :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
             )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_select =  connection
-        .prepare("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
+        .prepare_cached("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_insert = connection
-            .prepare("INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)")
+            .prepare_cached(
+                "INSERT INTO account_balances (block_idx,account,tokens) VALUES (?1,?2,?3)",
+            )
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
 
         for hb in &batch {
@@ -1459,7 +1407,7 @@ impl Blocks {
                     *block_height
                 };
                 let mut stmt = connection
-                    .prepare("UPDATE blocks SET verified = TRUE WHERE block_idx >= ?1 AND block_idx <= ?2")
+                    .prepare_cached("UPDATE blocks SET verified = TRUE WHERE block_idx >= ?1 AND block_idx <= ?2")
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
                 stmt.execute(params![verified.index, height])
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1472,7 +1420,7 @@ impl Blocks {
                     *block_height
                 };
                 let mut stmt = connection
-                    .prepare("UPDATE blocks SET verified = TRUE WHERE block_idx <= ?")
+                    .prepare_cached("UPDATE blocks SET verified = TRUE WHERE block_idx <= ?")
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
                 stmt.execute(params![height])
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1744,10 +1692,6 @@ impl Blocks {
             .connection
             .lock()
             .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-        // PERFORMANCE: Optimized from "ORDER BY ... DESC LIMIT 1" to use MAX() which is more
-        // efficient. MAX() allows the database to use index statistics rather than scanning
-        // and sorting rows. This is significantly faster on large tables. This pattern was
-        // successfully applied in the ICRC rosetta service (commit 1a92267b05).
         let block_idx = match connection
             .prepare_cached("SELECT MAX(rosetta_block_idx) FROM rosetta_blocks")
             .map_err(|e| format!("Unable to prepare query: {e:?}"))?
