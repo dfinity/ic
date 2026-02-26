@@ -419,13 +419,13 @@ mod sanity_check {
         let after = fetch_metrics(state_machine);
 
         println!(
-            "start_date",
+            "start_date {:?}",
             after
                 .governance_most_recent_monthly_node_provider_rewards
                 .start_date,
         );
         println!(
-            "end_date",
+            "end_date {:?}",
             after
                 .governance_most_recent_monthly_node_provider_rewards
                 .end_date,
@@ -439,6 +439,7 @@ mod sanity_check {
     ) {
         // Advance time in the state machine to just before the next node provider
         // rewards distribution time.
+        // Important to reach the exact moment when node provider rewards are distributed!
         let seconds_to_node_provider_reward_distribution = before_timestamp
             + NODE_PROVIDER_REWARD_PERIOD_SECONDS
             - state_machine.get_time().as_secs_since_unix_epoch();
