@@ -1,10 +1,7 @@
 use crate::{
     IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     admin_helper::RegistryParams,
-    cli::{
-        print_height_info, read_optional, read_optional_data_location, read_optional_node_ids,
-        read_optional_version,
-    },
+    cli::{print_height_info, read_optional, read_optional_data_location, read_optional_node_ids},
     command_helper::pipe_all,
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
@@ -201,7 +198,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
         match step_type {
             StepType::ProposeToCreateSubnet => {
                 if self.params.replica_version.is_none() {
-                    self.params.replica_version = read_optional_version(
+                    self.params.replica_version = read_optional(
                         &self.logger,
                         "New NNS version (current unassigned version or other version blessed by parent NNS): ",
                     );

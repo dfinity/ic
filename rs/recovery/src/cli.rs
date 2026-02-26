@@ -11,9 +11,7 @@ use crate::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryHelper,
     steps::Step,
-    util,
-    util::data_location_from_str,
-    util::subnet_id_from_str,
+    util::{data_location_from_str, node_id_from_str, subnet_id_from_str},
 };
 use core::fmt::Debug;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
@@ -227,7 +225,7 @@ pub fn wait_for_confirmation(logger: &Logger) {
 }
 
 /// Request and read input from the user with the given prompt.
-pub fn read_input(logger: &Logger, prompt: &str) -> String {
+fn read_input(logger: &Logger, prompt: &str) -> String {
     info!(logger, "{}", prompt);
     let _ = stdout().flush();
     let mut input = String::new();
@@ -235,15 +233,8 @@ pub fn read_input(logger: &Logger, prompt: &str) -> String {
     input.trim().to_string()
 }
 
-pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeId>> {
-    read_optional_type(logger, prompt, |input| {
-        input
-            .split(' ')
-            .map(util::node_id_from_str)
-            .collect::<Result<Vec<NodeId>, _>>()
-    })
-}
-
+/// Read an optional input that can be parsed from a string. If the user input is empty, `None` is
+/// returned. Otherwise, the input is parsed and returned as `Some(value)`.
 pub fn read_optional<T: FromStr>(logger: &Logger, prompt: &str) -> Option<T>
 where
     <T as FromStr>::Err: std::fmt::Display,
@@ -251,8 +242,13 @@ where
     read_optional_type(logger, prompt, FromStr::from_str)
 }
 
-pub fn read_optional_version(logger: &Logger, prompt: &str) -> Option<ReplicaVersion> {
-    read_optional_type(logger, prompt, |s| ReplicaVersion::try_from(s))
+pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeId>> {
+    read_optional_type(logger, prompt, |input| {
+        input
+            .split(' ')
+            .map(node_id_from_str)
+            .collect::<Result<Vec<NodeId>, _>>()
+    })
 }
 
 pub fn read_optional_subnet_id(logger: &Logger, prompt: &str) -> Option<SubnetId> {
@@ -279,6 +275,8 @@ pub fn read_optional_type<T, E: Display>(
     })
 }
 
+/// Read an input that can be parsed from a string. In contrast to `read_optional`, an empty input
+/// will still be parsed and returned as a value of the generic type.
 pub fn read<T: FromStr>(logger: &Logger, prompt: &str) -> T
 where
     <T as FromStr>::Err: std::fmt::Display,

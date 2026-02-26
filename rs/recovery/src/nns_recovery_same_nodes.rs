@@ -1,9 +1,6 @@
 use crate::{
     RecoveryArgs, RecoveryResult,
-    cli::{
-        consent_given, print_height_info, read_optional, read_optional_data_location,
-        read_optional_version,
-    },
+    cli::{consent_given, print_height_info, read_optional, read_optional_data_location},
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
@@ -290,8 +287,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::ICReplay => {
                 if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version =
-                        read_optional_version(&self.logger, "Upgrade version: ");
+                    self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
                 };
                 if self.params.upgrade_version.is_some()
                     && self.params.add_and_bless_upgrade_version.is_none()

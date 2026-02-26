@@ -2,8 +2,7 @@ use crate::{
     DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     cli::{
         consent_given, print_height_info, read, read_optional, read_optional_data_location,
-        read_optional_node_ids, read_optional_subnet_id, read_optional_type, read_optional_version,
-        wait_for_confirmation,
+        read_optional_node_ids, read_optional_subnet_id, read_optional_type, wait_for_confirmation,
     },
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
@@ -348,8 +347,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::BlessVersion => {
                 if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version =
-                        read_optional_version(&self.logger, "Upgrade version: ");
+                    self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
                 }
             }
 
