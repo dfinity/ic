@@ -93,7 +93,7 @@ use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     convert::{Into, TryFrom},
     fmt,
     str::FromStr,
@@ -808,6 +808,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::UninstallCode) => {
                 let res = UninstallCodeArgs::decode(payload).and_then(|args| {
+                    let subnet_admins = state.get_own_subnet_admins();
                     self.canister_manager
                         .uninstall_code(
                             msg.canister_change_origin(args.get_sender_canister_version()),
@@ -815,6 +816,7 @@ impl ExecutionEnvironment {
                             &mut state,
                             round_limits,
                             &self.metrics.canister_not_found_error,
+                            &subnet_admins,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into())
@@ -903,6 +905,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::CanisterStatus) => {
                 let res = CanisterIdRecord::decode(payload).and_then(|args| {
+                    let subnet_admins = state.get_own_subnet_admins();
                     let ready_for_migration = state.ready_for_migration(&args.get_canister_id());
                     self.get_canister_status(
                         *msg.sender(),
@@ -910,6 +913,7 @@ impl ExecutionEnvironment {
                         &state,
                         registry_settings.subnet_size,
                         ready_for_migration,
+                        &subnet_admins,
                     )
                     .map(|res| (res, Some(args.get_canister_id())))
                 });
@@ -964,9 +968,15 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::StartCanister) => {
+                let subnet_admins = state.get_own_subnet_admins();
                 let res = CanisterIdRecord::decode(payload).and_then(|args| {
-                    self.start_canister(args.get_canister_id(), *msg.sender(), &mut state)
-                        .map(|res| (res, Some(args.get_canister_id())))
+                    self.start_canister(
+                        args.get_canister_id(),
+                        *msg.sender(),
+                        &mut state,
+                        &subnet_admins,
+                    )
+                    .map(|res| (res, Some(args.get_canister_id())))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -981,7 +991,10 @@ impl ExecutionEnvironment {
                     refund: msg.take_cycles(),
                     instructions: NumInstructions::new(0),
                 },
-                Ok(args) => self.stop_canister(args.get_canister_id(), &msg, &mut state),
+                Ok(args) => {
+                    let subnet_admins = state.get_own_subnet_admins();
+                    self.stop_canister(args.get_canister_id(), &msg, &mut state, &subnet_admins)
+                }
             },
 
             Ok(Ic00Method::DeleteCanister) => {
@@ -989,9 +1002,10 @@ impl ExecutionEnvironment {
                     // Start logging execution time for `delete_canister`.
                     let since = Instant::now();
 
+                    let subnet_admins = state.get_own_subnet_admins();
                     let result = self
                         .canister_manager
-                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits)
+                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits, &subnet_admins)
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into());
 
@@ -2359,10 +2373,13 @@ impl ExecutionEnvironment {
         canister_id: CanisterId,
         sender: PrincipalId,
         state: &mut ReplicatedState,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<Vec<u8>, UserError> {
         let canister = canister_make_mut(canister_id, state)?;
 
-        let result = self.canister_manager.start_canister(sender, canister);
+        let result = self
+            .canister_manager
+            .start_canister(sender, canister, subnet_admins);
 
         match result {
             Ok(stop_contexts) => {
@@ -2420,6 +2437,7 @@ impl ExecutionEnvironment {
         state: &ReplicatedState,
         subnet_size: usize,
         ready_for_migration: bool,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<Vec<u8>, UserError> {
         let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister(canister_id, state)?;
@@ -2430,6 +2448,7 @@ impl ExecutionEnvironment {
                 subnet_size,
                 cost_schedule,
                 ready_for_migration,
+                subnet_admins,
             )
             .map(|status| status.encode())
             .map_err(|err| err.into())
@@ -2480,6 +2499,7 @@ impl ExecutionEnvironment {
         canister_id: CanisterId,
         msg: &CanisterCall,
         state: &mut ReplicatedState,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> ExecuteSubnetMessageResult {
         let call_id = state
             .metadata
@@ -2493,6 +2513,7 @@ impl ExecutionEnvironment {
             canister_id,
             StopCanisterContext::from((msg.clone(), call_id)),
             state,
+            subnet_admins,
         ) {
             StopCanisterResult::RequestAccepted => ExecuteSubnetMessageResult::Processing,
             StopCanisterResult::Failure {

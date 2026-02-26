@@ -102,7 +102,7 @@ impl NestedNodes {
                 };
                 env.write_nested_vm(
                     &node.name,
-                    &vm_spec,
+                    Some(&vm_spec),
                     &res_group.vms[&node.name],
                     &NestedVmConfig {
                         // TEE not supported in virtual nodes
@@ -123,7 +123,7 @@ impl NestedNodes {
             let vm = allocated_vm_for_bare_metal_instance(&bare_metal_nodes[0], &group_name)?;
             env.write_nested_vm(
                 &bare_metal_nodes[0].name,
-                &bare_metal_vm_spec(),
+                None,
                 &vm,
                 &NestedVmConfig {
                     enable_trusted_execution_environment,
@@ -300,7 +300,7 @@ pub trait HasNestedVms {
     fn write_nested_vm(
         &self,
         name: &str,
-        vm_spec: &VmSpec,
+        vm_spec: Option<&VmSpec>,
         vm: &AllocatedVm,
         nested_vm_config: &NestedVmConfig,
     ) -> Result<()>;
@@ -344,7 +344,7 @@ impl HasNestedVms for TestEnv {
     fn write_nested_vm(
         &self,
         name: &str,
-        vm_spec: &VmSpec,
+        vm_spec: Option<&VmSpec>,
         vm: &AllocatedVm,
         nested_vm_config: &NestedVmConfig,
     ) -> Result<()> {
@@ -386,7 +386,9 @@ impl HasNestedVms for TestEnv {
 
         let vm_path: PathBuf = [NESTED_VMS_DIR, name].iter().collect();
         self.write_json_object(vm_path.join(NESTED_VM_PATH), &mapped_vm)?;
-        self.write_json_object(vm_path.join(NESTED_VM_SPEC_PATH), &vm_spec)?;
+        if let Some(vm_spec) = vm_spec {
+            self.write_json_object(vm_path.join(NESTED_VM_SPEC_PATH), vm_spec)?;
+        }
         self.write_json_object(vm_path.join(NESTED_NETWORK_PATH), &nested_network)?;
         self.write_json_object(vm_path.join(NESTED_VM_CONFIG), &nested_vm_config)?;
 
@@ -449,12 +451,5 @@ pub enum UnassignedRecordConfig {
 impl TestEnvAttribute for UnassignedRecordConfig {
     fn attribute_name() -> String {
         "unassigned_record_config".to_string()
-    }
-}
-
-pub fn bare_metal_vm_spec() -> VmSpec {
-    VmSpec {
-        v_cpus: 64,
-        memory_ki_b: 490 * 1024 * 1024,
     }
 }

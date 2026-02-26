@@ -1,5 +1,6 @@
 use crate::as_round_instructions;
-use crate::execution::{common::validate_controller, install_code::OriginalContext};
+use crate::execution::common::{validate_controller, validate_controller_or_subnet_admin};
+use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
     CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
@@ -70,6 +71,7 @@ use ic_wasm_types::WasmHash;
 use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
+use std::collections::BTreeSet;
 use std::iter::zip;
 use std::path::PathBuf;
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
@@ -179,14 +181,33 @@ impl CanisterManager {
             )),
 
             // These methods are only valid if they are sent by the controller
-            // of the canister. We assume that the canister always wants to
-            // accept messages from its controller.
+            // of the canister or a subnet admin. We assume that the canister
+            // always wants to accept such messages.
             Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
-            | Ok(Ic00Method::DeleteCanister)
-            | Ok(Ic00Method::UpdateSettings)
+            | Ok(Ic00Method::DeleteCanister) => {
+                match effective_canister_id {
+                    Some(canister_id) => {
+                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            format!("Canister {canister_id} not found"),
+                        ))?;
+                        let subnet_admins = state.get_own_subnet_admins();
+                        validate_controller_or_subnet_admin(canister, &subnet_admins, sender.get_ref()).map_err(|err| err.into())
+                    },
+                    None => Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Failed to decode payload for ic00 method: {method_name}"),
+                    )),
+                }
+            },
+
+            // These methods are only valid if they are sent by the controller
+            // of the canister. We assume that the canister always wants to
+            // accept messages from its controller.
+            Ok(Ic00Method::UpdateSettings)
             | Ok(Ic00Method::InstallCode)
             | Ok(Ic00Method::InstallChunkedCode)
             | Ok(Ic00Method::UploadChunk)
@@ -943,6 +964,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         canister_not_found_error: &IntCounter,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
         let time = state.time();
@@ -951,11 +973,11 @@ impl CanisterManager {
             None => return Err(CanisterManagerError::CanisterNotFound(canister_id)),
         };
 
-        // Skip the controller validation if the sender is the governance
-        // canister. The governance canister can forcefully
+        // Skip the controller or subnet admins validation if the sender is the
+        // governance canister. The governance canister can forcefully
         // uninstall the code of any canister.
         if sender != GOVERNANCE_CANISTER_ID.get() {
-            validate_controller(canister, &sender)?
+            validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
         }
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
@@ -1006,6 +1028,7 @@ impl CanisterManager {
         canister_id: CanisterId,
         mut stop_context: StopCanisterContext,
         state: &mut ReplicatedState,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> StopCanisterResult {
         let canister = match state.canister_state(&canister_id) {
             None => {
@@ -1017,7 +1040,9 @@ impl CanisterManager {
             Some(canister) => canister,
         };
 
-        if let Err(err) = validate_controller(canister, stop_context.sender()) {
+        if let Err(err) =
+            validate_controller_or_subnet_admin(canister, subnet_admins, stop_context.sender())
+        {
             return StopCanisterResult::Failure {
                 error: err,
                 cycles_to_return: stop_context.take_cycles(),
@@ -1050,8 +1075,9 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &mut CanisterState,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<Vec<StopCanisterContext>, CanisterManagerError> {
-        validate_controller(canister, &sender)?;
+        validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
 
         let stop_contexts = canister.system_state.start_canister();
         canister.system_state.bump_canister_version();
@@ -1067,11 +1093,12 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         ready_for_migration: bool,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
         if sender != canister.canister_id().get() {
-            validate_controller(canister, &sender)?
+            validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?
         }
 
         let controller = canister.system_state.controller();
@@ -1205,6 +1232,7 @@ impl CanisterManager {
         canister_id_to_delete: CanisterId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
+        subnet_admins: &BTreeSet<PrincipalId>,
     ) -> Result<(), CanisterManagerError> {
         if let Ok(canister_id) = CanisterId::try_from(sender)
             && canister_id == canister_id_to_delete
@@ -1215,8 +1243,7 @@ impl CanisterManager {
 
         let canister_to_delete = self.validate_canister_exists(state, canister_id_to_delete)?;
 
-        // Validate the request is from the controller.
-        validate_controller(canister_to_delete, &sender)?;
+        validate_controller_or_subnet_admin(canister_to_delete, subnet_admins, &sender)?;
 
         self.validate_canister_is_stopped(canister_to_delete)?;
 

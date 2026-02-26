@@ -65,7 +65,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
-use std::time::Duration;
+use std::{collections::BTreeSet, time::Duration};
 
 use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 
@@ -711,6 +711,7 @@ pub(crate) struct SchedulerTestBuilder {
     round_summary: Option<ExecutionRoundSummary>,
     replica_version: ReplicaVersion,
     cost_schedule: CanisterCyclesCostSchedule,
+    subnet_admins: BTreeSet<PrincipalId>,
 }
 
 impl Default for SchedulerTestBuilder {
@@ -741,6 +742,7 @@ impl Default for SchedulerTestBuilder {
             round_summary: None,
             replica_version: ReplicaVersion::default(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_admins: BTreeSet::new(),
         }
     }
 }
@@ -868,6 +870,7 @@ impl SchedulerTestBuilder {
                 self.subnet_type,
                 registry_settings.subnet_size,
                 self.cost_schedule,
+                self.subnet_admins,
             ));
         state
             .metadata
