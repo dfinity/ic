@@ -622,10 +622,6 @@ mod database_access {
     ) -> Result<Vec<(u64, Tokens)>, BlockStoreError> {
         let first_idx = get_first_hashed_block(connection, Some(true))?.index;
 
-        // PERFORMANCE: Note that we cannot use prepare_cached() here because the SQL query
-        // is dynamically constructed based on the parameters (max_block and first_idx).
-        // Each combination of parameters produces a different SQL string, so caching would
-        // not be effective. The query is already optimized with proper indexes on block_idx.
         let command = match max_block {
             Some(limit) => match first_idx {
                 0 => {
