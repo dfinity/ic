@@ -230,6 +230,7 @@ impl InternalHttpQueryHandler {
                             .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE),
                         state.get_ref().get_own_cost_schedule(),
                         ready_for_migration,
+                        &state.get_ref().get_own_subnet_admins(),
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
