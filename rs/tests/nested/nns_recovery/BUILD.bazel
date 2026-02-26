@@ -111,7 +111,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "nr_seq_np_actions",
+    name = "nr_all_broken_seq_np_actions",
     env = ENV,
     flaky = True,
     guestos_update = "test",
