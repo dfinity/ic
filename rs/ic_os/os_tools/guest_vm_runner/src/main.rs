@@ -212,6 +212,82 @@ impl VirtualMachine {
         })
     }
 
+    /// Destroys any pre-existing domain with the same name.
+    ///
+    /// If the domain is found but **inactive** (libvirtd bug –
+    /// see <https://gitlab.com/libvirt/libvirt/-/issues/853>), restarts libvirtd and retries
+    /// up to 3 times. Returns [`GuestVmServiceError::UnrecoverableNeedsReboot`] if the
+    /// domain is still inactive after all attempts.
+    async fn try_destroy_existing_vm(
+        libvirt_connection: &dyn LibvirtConnection,
+        vm_domain_name: &str,
+        command_runner: &dyn AsyncCommandRunner,
+    ) -> Result<(), GuestVmServiceError> {
+        let mut libvirt_restart_attempts = 3;
+        loop {
+            let existing_domain = match libvirt_connection.lookup_domain_by_name(vm_domain_name) {
+                Ok(existing_domain) => existing_domain,
+                Err(err)
+                    if err
+                        .downcast_ref::<virt::error::Error>()
+                        .is_some_and(|e| e.code() == virt::error::ErrorNumber::NoDomain) =>
+                {
+                    println!("No existing domain found, skipping cleanup.");
+                    return Ok(());
+                }
+                Err(err) => {
+                    return Err(GuestVmServiceError::Other(
+                        err.context("Failed to find domain"),
+                    ));
+                }
+            };
+
+            let domain_active = existing_domain.is_active().unwrap_or_else(|err| {
+                eprintln!(
+                    "Failed to check if domain '{vm_domain_name}' is active: {err}. \
+                         Assuming it's inactive."
+                );
+                false
+            });
+
+            if domain_active {
+                eprintln!("Existing domain '{vm_domain_name}' is active, attempting to destroy it");
+                if let Err(err) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
+                    eprintln!("destroy_flags failed: {err}");
+                }
+                return Ok(());
+            }
+
+            if libvirt_restart_attempts == 0 {
+                break;
+            }
+
+            // Domain is inactive: restart libvirtd to recover.
+            eprintln!(
+                "Existing domain '{vm_domain_name}' is not active - probably hit \
+                 https://gitlab.com/libvirt/libvirt/-/issues/853 - restarting libvirtd \
+                 ({} attempts remaining)",
+                libvirt_restart_attempts
+            );
+
+            if let Err(err) = command_runner
+                .status(
+                    &mut tokio::process::Command::new("systemctl")
+                        .arg("restart")
+                        .arg("libvirtd")
+                        .arg("virtlogd"),
+                )
+                .await
+            {
+                eprintln!("Failed to restart libvirtd: {err}");
+            }
+            libvirt_restart_attempts -= 1;
+        }
+
+        eprintln!("Too many libvirtd restarts, issuing HostOS reboot");
+        Err(GuestVmServiceError::UnrecoverableNeedsReboot)
+    }
+
     fn get_domain(&self) -> Result<Box<dyn LibvirtDomain>> {
         self.libvirt_connect
             .lookup_domain_by_id(self.domain_id)
@@ -456,88 +532,13 @@ impl GuestVmService {
         }
     }
 
-    /// Destroys any pre-existing domain with the same name.
-    ///
-    /// If the domain is found but **inactive** (libvirtd bug –
-    /// see <https://gitlab.com/libvirt/libvirt/-/issues/853>), restarts libvirtd and retries
-    /// up to 3 times. Returns [`GuestVmServiceError::UnrecoverableNeedsReboot`] if the
-    /// domain is still inactive after all attempts.
-    async fn try_destroy_existing_vm(&self) -> Result<(), GuestVmServiceError> {
-        let vm_domain_name = vm_domain_name(self.guest_vm_type);
-        let mut libvirt_restart_attempts = 3;
-        loop {
-            let existing_domain = match self
-                .libvirt_connection
-                .lookup_domain_by_name(vm_domain_name)
-            {
-                Ok(existing_domain) => existing_domain,
-                Err(err)
-                    if err
-                        .downcast_ref::<virt::error::Error>()
-                        .is_some_and(|e| e.code() == virt::error::ErrorNumber::NoDomain) =>
-                {
-                    println!("No existing domain found, skipping cleanup.");
-                    return Ok(());
-                }
-                Err(err) => {
-                    return Err(GuestVmServiceError::Other(
-                        err.context("Failed to find domain"),
-                    ));
-                }
-            };
-
-            let domain_active = match existing_domain.is_active() {
-                Ok(active) => active,
-                Err(err) => {
-                    eprintln!(
-                        "Failed to check if domain '{vm_domain_name}' is active: {err}. \
-                         Assuming it's inactive."
-                    );
-                    false
-                }
-            };
-
-            if domain_active {
-                eprintln!("Existing domain '{vm_domain_name}' is active, attempting to destroy it");
-                if let Err(err) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
-                    eprintln!("destroy_flags failed: {err}");
-                }
-                return Ok(());
-            }
-
-            if libvirt_restart_attempts == 0 {
-                break;
-            }
-
-            // Domain is inactive: restart libvirtd to recover.
-            eprintln!(
-                "Existing domain '{vm_domain_name}' is not active - probably hit \
-                 https://gitlab.com/libvirt/libvirt/-/issues/853 - restarting libvirtd \
-                 ({} attempts remaining)",
-                libvirt_restart_attempts
-            );
-
-            if let Err(err) = self
-                .command_runner
-                .status(
-                    &mut tokio::process::Command::new("systemctl")
-                        .arg("restart")
-                        .arg("libvirtd")
-                        .arg("virtlogd"),
-                )
-                .await
-            {
-                eprintln!("Failed to restart libvirtd: {err}");
-            }
-            libvirt_restart_attempts -= 1;
-        }
-
-        eprintln!("Too many libvirtd restarts, issuing HostOS reboot");
-        Err(GuestVmServiceError::UnrecoverableNeedsReboot)
-    }
-
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
-        self.try_destroy_existing_vm().await?;
+        VirtualMachine::try_destroy_existing_vm(
+            self.libvirt_connection.as_ref(),
+            vm_domain_name(self.guest_vm_type),
+            self.command_runner.as_ref(),
+        )
+        .await?;
 
         let config_media = NamedTempFile::with_prefix("config_media")
             .context("Failed to create config media file")?;
