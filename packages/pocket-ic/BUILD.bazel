@@ -184,7 +184,7 @@ rust_test(
             # Keep sorted.
             ":pocket-ic",
             "//packages/icrc-ledger-types",
-	    "//rs/config",
+            "//rs/config",
             "//rs/crypto/node_key_generation",
             "//rs/migration_canister:ic_migration_canister",
             "//rs/nns/cmc",
