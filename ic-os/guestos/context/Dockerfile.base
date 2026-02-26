@@ -27,6 +27,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
     ca-certificates \
     curl \
+    gcc \
+    libc6-dev \
     perl
 
 # Download and verify node_exporter
@@ -34,6 +36,26 @@ RUN cd /tmp/ && \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz && \
     echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     sha256sum -c node_exporter.sha256
+
+# Build THP + MADV_REMOVE regression test binary (NODE-1852)
+RUN cd /tmp/ && \
+    mkdir -p thp-test/src && \
+    printf '[package]\nname = "thp-madv-remove-test"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\nlibc = "0.2"\n\n[workspace]\n' > thp-test/Cargo.toml
+COPY thp-madv-remove-test-main.rs /tmp/thp-test/src/main.rs
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal && \
+    . "$HOME/.cargo/env" && \
+    cd /tmp/thp-test && \
+    cargo build --release && \
+    cp target/release/thp-madv-remove-test /tmp/thp-madv-remove-test && \
+    rm -rf /tmp/thp-test "$HOME/.cargo" "$HOME/.rustup"
+
+# Download mainline kernel 6.18.10 for testing (NODE-1852)
+RUN cd /tmp/ && \
+    curl -L -O https://kernel.ubuntu.com/mainline/v6.18.10/amd64/linux-image-unsigned-6.18.10-061810-generic_6.18.10-061810.202602111353_amd64.deb && \
+    curl -L -O https://kernel.ubuntu.com/mainline/v6.18.10/amd64/linux-modules-6.18.10-061810-generic_6.18.10-061810.202602111353_amd64.deb && \
+    echo "2cc3e1ca74e627181813ae704d02a50204977f2d880de1b73f3f42b532b054f9  linux-image-unsigned-6.18.10-061810-generic_6.18.10-061810.202602111353_amd64.deb" > kernel.sha256 && \
+    echo "904f2b7ce110c70d680ab48e578b22fe035c7dd055523bb7ff694e67dda8f3c8  linux-modules-6.18.10-061810-generic_6.18.10-061810.202602111353_amd64.deb" >> kernel.sha256 && \
+    sha256sum -c kernel.sha256
 
 #
 # Second build stage:
@@ -59,14 +81,24 @@ ARG PACKAGE_FILES=packages.common
 ARG _KERNEL_PACKAGE=linux-image-virtual-hwe-24.04
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
+# Install THP regression test binary (NODE-1852)
+COPY --from=download /tmp/thp-madv-remove-test /usr/local/bin/thp-madv-remove-test
+RUN chmod 0755 /usr/local/bin/thp-madv-remove-test
+
 RUN apt-get -y update && \
     apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) \
-        # TODO(NODE-1852): Temporarily pin the kernel here.
-        # ${_KERNEL_PACKAGE} \
-        # linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
-        linux-image-6.14.0-37-generic linux-modules-extra-6.14.0-37-generic && \
+    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
+
+# Install mainline kernel 6.18.10 (NODE-1852: testing newer kernel)
+# wireless-regdb is needed by linux-modules but not pulled in by packages.common/dev
+COPY --from=download /tmp/linux-image-unsigned-6.18.10-061810-generic_6.18.10-061810.202602111353_amd64.deb /tmp/
+COPY --from=download /tmp/linux-modules-6.18.10-061810-generic_6.18.10-061810.202602111353_amd64.deb /tmp/
+RUN apt-get -y --no-install-recommends install wireless-regdb && \
+    dpkg --no-triggers -i /tmp/linux-modules-6.18.10-061810-generic_6.18.10-061810.202602111353_amd64.deb \
+            /tmp/linux-image-unsigned-6.18.10-061810-generic_6.18.10-061810.202602111353_amd64.deb && \
+    dpkg --configure --pending && \
+    rm /tmp/linux-*.deb
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
