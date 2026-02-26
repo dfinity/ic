@@ -6,27 +6,38 @@ use std::process::Command;
 const VERITY_HASH_OFFSET: u64 = 10603200512;
 
 /// Execute veritysetup command with the given device and hash
-pub fn veritysetup(device: &Path, hash: &str, command_runner: &dyn CommandRunner) -> Result<()> {
-    eprintln!(
-        "Running veritysetup verify for device {:?} with hash {hash}",
-        device
-    );
-    let verify_output = command_runner
-        .output(
-            Command::new("veritysetup")
-                .arg("verify")
-                .arg(device)
-                .arg(device)
-                .arg(hash)
-                .arg("--hash-offset")
-                .arg(VERITY_HASH_OFFSET.to_string()),
-        )
-        .context("Failed to execute veritysetup verify")?;
+pub fn veritysetup(
+    device: &Path,
+    hash: &str,
+    command_runner: &dyn CommandRunner,
+    is_sev: bool,
+) -> Result<()> {
+    // If we're running with SEV - run full device hash verification
+    if is_sev {
+        eprintln!(
+            "Running 'veritysetup verify' for device {:?} with hash {hash}",
+            device
+        );
 
-    ensure!(
-        verify_output.status.success(),
-        "veritysetup verify failed: {verify_output:?}"
-    );
+        let verify_output = command_runner
+            .output(
+                Command::new("veritysetup")
+                    .arg("verify")
+                    .arg(device)
+                    .arg(device)
+                    .arg(hash)
+                    .arg("--hash-offset")
+                    .arg(VERITY_HASH_OFFSET.to_string()),
+            )
+            .context("Failed to execute veritysetup verify")?;
+
+        ensure!(
+            verify_output.status.success(),
+            "veritysetup verify failed: {verify_output:?}"
+        );
+    } else {
+        eprintln!("Skipping 'veritysetup verify' because running without SEV");
+    }
 
     let open_output = command_runner
         .output(
