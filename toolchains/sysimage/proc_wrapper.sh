@@ -6,7 +6,12 @@
 
 set -euo pipefail
 
+# Each build stage should have a unique storage dir. All podman calls within
+# one stage should use the same storage.
+# /tmp/containers should be a tmpfs for best performance.
+mkdir -p /tmp/containers
+podman_storage_dir=$(mktemp -d --tmpdir="/tmp/containers" "icosbuildXXXX")
+
 tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
-# NOTE: Ignore failure to cleanup the directory for now. This should not be a problem after NODE-1048.
-trap 'sudo rm -rf "$tmpdir" || true' INT TERM EXIT
-TMPDIR="$tmpdir" "$@"
+trap 'sudo rm -rf "$tmpdir"; sudo rm -rf "$podman_storage_dir"' INT TERM EXIT
+TMPDIR="$tmpdir" PODMAN_STORAGE_DIR="$podman_storage_dir" "$@"
