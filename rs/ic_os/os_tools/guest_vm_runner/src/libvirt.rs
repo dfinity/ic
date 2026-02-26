@@ -1,7 +1,5 @@
 use anyhow::Result;
-use std::cell::{Ref, RefCell};
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use virt::sys::virDomainState;
 

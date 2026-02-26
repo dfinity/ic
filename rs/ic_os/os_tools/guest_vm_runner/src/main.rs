@@ -137,7 +137,7 @@ fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
 pub struct VirtualMachine {
     domain_id: u32,
     domain_name: String,
-    libvirt_connect: Arc<dyn LibvirtConnect>,
+    libvirt_connect: Box<dyn LibvirtConnect>,
     // These fields hold resources (files) that are used by the virtual machine and must be kept
     // alive until the virtual machine is destroyed.
     _config_media: NamedTempFile,
@@ -148,7 +148,7 @@ impl VirtualMachine {
     /// Creates a new virtual machine from the provided XML configuration.
     /// The `config_media` is moved into the struct and deleted when the struct goes out of scope.
     pub async fn new(
-        libvirt_connect: Arc<dyn LibvirtConnect>,
+        libvirt_connect: Box<dyn LibvirtConnect>,
         xml_config: &str,
         config_media: NamedTempFile,
         direct_boot: Option<DirectBoot>,
@@ -280,9 +280,9 @@ impl Debug for GuestVmServiceError {
 /// Service responsible for managing the GuestOS virtual machine lifecycle
 pub struct GuestVmService {
     metrics: GuestVmMetrics,
-    libvirt_connect: Arc<dyn LibvirtConnect>,
+    libvirt_connect: LibvirtConnectionWithReconnect,
     hostos_config: HostOSConfig,
-    systemd_notifier: Arc<dyn SystemdNotifier>,
+    systemd_notifier: Box<dyn SystemdNotifier>,
     console_ttys: Vec<Mutex<Box<dyn Write + Send + Sync>>>,
     guest_vm_type: GuestVMType,
     sev_certificate_provider: HostSevCertificateProvider,
@@ -347,10 +347,10 @@ impl GuestVmService {
 
         Ok(Self {
             metrics,
-            libvirt_connect: Arc::new(libvirt_connect),
+            libvirt_connect,
             hostos_config,
             guest_vm_type,
-            systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
+            systemd_notifier: Box::new(systemd_notifier::DefaultSystemdNotifier),
             console_ttys: vec![
                 Mutex::new(Box::new(console_tty1)),
                 Mutex::new(Box::new(console_tty_serial)),
@@ -557,7 +557,7 @@ impl GuestVmService {
         println!("Creating GuestOS virtual machine");
 
         let virtual_machine = VirtualMachine::new(
-            self.libvirt_connect.clone() as Arc<dyn LibvirtConnect>,
+            Box::new(self.libvirt_connect.clone()),
             &vm_config,
             config_media,
             direct_boot,
@@ -777,7 +777,7 @@ mod tests {
         libvirt_connect: LibvirtConnectionWithReconnect,
         console_file: NamedTempFile,
         metrics_file: NamedTempFile,
-        systemd_notifier: Arc<MockSystemdNotifier>,
+        systemd_notifier: MockSystemdNotifier,
         termination_token: CancellationToken,
         _sev_certificate_cache_dir: TempDir,
     }
@@ -958,16 +958,16 @@ mod tests {
         fn start_service(&self, guest_vm_type: GuestVMType) -> TestServiceInstance {
             let console_file = NamedTempFile::new().expect("Failed to create console log file");
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
-            let systemd_notifier = Arc::new(MockSystemdNotifier::new());
+            let systemd_notifier = MockSystemdNotifier::new();
             let termination_token = CancellationToken::new();
             let (sev_certificate_provider, sev_certificate_cache_dir) =
                 mock_host_sev_certificate_provider()
                     .expect("Failed to create mock SEV cert provider");
             let mut service = GuestVmService {
                 metrics: GuestVmMetrics::new(metrics_file.path().to_path_buf()).unwrap(),
-                libvirt_connect: Arc::new(self.libvirt_connect.clone()),
+                libvirt_connect: self.libvirt_connect.clone(),
                 hostos_config: self.hostos_config.clone(),
-                systemd_notifier: systemd_notifier.clone(),
+                systemd_notifier: Box::new(systemd_notifier.clone()),
                 console_ttys: vec![Mutex::new(Box::new(
                     File::create(console_file.path()).unwrap(),
                 ))],
