@@ -33,6 +33,8 @@ pub struct SubnetTopology {
         tag = "7"
     )]
     pub canister_cycles_cost_schedule: i32,
+    #[prost(message, repeated, tag = "8")]
+    pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
