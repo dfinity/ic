@@ -9,6 +9,7 @@ pub use hash::CryptoHashDomain;
 pub use hash::CryptoHashable;
 pub use hash::CryptoHashableTestDummy;
 pub use hash::crypto_hash;
+pub use hash::randomness_from_crypto_hashable;
 
 mod sign;
 

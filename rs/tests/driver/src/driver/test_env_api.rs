@@ -161,7 +161,10 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
-use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{self, NnsCanisters},
+};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
@@ -215,8 +218,12 @@ pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
-// It usually takes below 60 secs to install nns canisters.
-const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+// NNS canister installation involves sequential canister creation at specific
+// IDs followed by parallel installation and controller setup. With ~12
+// canisters being created sequentially (~5s each) plus parallel installation
+// and controller setting, this typically takes 120-180s but can exceed 160s
+// under load.
+const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(300);
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -1178,13 +1185,10 @@ impl IcNodeSnapshot {
         ))
     }
 
-    pub fn assert_no_critical_errors(&self) {
+    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>) {
         block_on(async {
-            let replica_metric_name_prefix = "critical_errors";
-            let replica_metrics_fetcher = MetricsFetcher::new(
-                std::iter::once(self.clone()),
-                vec![replica_metric_name_prefix.to_string()],
-            );
+            let replica_metrics_fetcher =
+                MetricsFetcher::new(std::iter::once(self.clone()), metrics_to_check);
             let replica_metrics_result = replica_metrics_fetcher.fetch::<u64>().await;
             let replica_metrics = match replica_metrics_result {
                 Ok(replica_metrics) => replica_metrics,
@@ -1198,14 +1202,16 @@ impl IcNodeSnapshot {
             };
             assert!(
                 !replica_metrics.is_empty(),
-                "No critical error counters were found in replica metrics for node {}",
+                "No error counters were found in replica metrics for node {}",
                 self.node_id
             );
             for (name, value) in replica_metrics {
                 assert_eq!(
                     value[0], 0,
-                    "Critical error {} raised by node {}. Create `SystemTestGroup` using `without_assert_no_critical_errors` if critical errors are expected in your test",
-                    name, self.node_id
+                    "The metric `{name}` on node {} has non-zero value. \
+                    If the metric is allowed to be non-zero in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
+                    self.node_id,
                 );
             }
         });
@@ -2095,6 +2101,51 @@ impl NnsInstallationBuilder {
         });
         Ok(())
     }
+}
+
+/// Installs the registry canister on the NNS subnet, initializing it with the testnet's topology.
+///
+/// An optional `customizations` builder allows configuring additional registry init parameters.
+pub fn install_registry_canister_with_testnet_topology(
+    env: &TestEnv,
+    customizations: Option<RegistryCanisterInitPayloadBuilder>,
+) {
+    let node = env.get_first_healthy_nns_node_snapshot();
+    let url = node.get_public_url();
+    let prep_dir = env
+        .prep_dir(&node.ic_name())
+        .expect("Prep Dir does not exist");
+
+    let registry_local_store = prep_dir.registry_local_store_path();
+    let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
+
+    let mut builder = customizations.unwrap_or_else(RegistryCanisterInitPayloadBuilder::new);
+    for mutation in initial_mutations {
+        builder.push_init_mutate_request(mutation);
+    }
+    let registry_init_payload = builder.build();
+
+    let agent = InternalAgent::new(
+        url,
+        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+    );
+    let runtime = Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: REGISTRY_CANISTER_ID.into(),
+    });
+
+    block_on(async {
+        let mut canister = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Failed to create registry canister");
+        assert_eq!(
+            canister.canister_id(),
+            REGISTRY_CANISTER_ID,
+            "Failed to create registry canister at expected ID 0. Call this method before creating any other canisters."
+        );
+        itest_helpers::install_registry_canister(&mut canister, registry_init_payload).await;
+    });
 }
 
 pub trait HasRegistryVersion {

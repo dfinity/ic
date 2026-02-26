@@ -130,6 +130,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
             canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
                 item.cost_schedule,
             )),
+            subnet_admins: item.subnet_admins.iter().map(|sa| (*sa).into()).collect(),
         }
     }
 }
@@ -156,6 +157,10 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 },
             )?,
         );
+        let mut subnet_admins = BTreeSet::new();
+        for subnet_admin in item.subnet_admins {
+            subnet_admins.insert(PrincipalId::try_from(subnet_admin)?);
+        }
 
         Ok(Self {
             public_key: item.public_key,
@@ -170,6 +175,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .unwrap_or_default(),
             chain_keys_held,
             cost_schedule,
+            subnet_admins,
         })
     }
 }
@@ -332,11 +338,21 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
 
 /// Decodes a `SystemMetadata` proto. The metrics are provided as a side-channel
 /// for recording errors without being forced to return `Err(_)`.
-impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for SystemMetadata {
+impl
+    TryFrom<(
+        pb_metadata::SystemMetadata,
+        SubnetSchedule,
+        &dyn CheckpointLoadingMetrics,
+    )> for SystemMetadata
+{
     type Error = ProxyDecodeError;
 
     fn try_from(
-        (item, metrics): (pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics),
+        (item, subnet_schedule, metrics): (
+            pb_metadata::SystemMetadata,
+            SubnetSchedule,
+            &dyn CheckpointLoadingMetrics,
+        ),
     ) -> Result<Self, Self::Error> {
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
@@ -427,6 +443,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // properly set this value.
             ingress_history: Default::default(),
             streams: Arc::new(streams),
+            subnet_schedule,
             network_topology: try_from_option_field(
                 item.network_topology,
                 "SystemMetadata::network_topology",

@@ -38,30 +38,6 @@ function copy_config_files() {
         echo >&2 "SSH keys not in use."
     fi
 
-    echo "* Copying node operator private key..."
-    use_node_operator_private_key=$(get_config_value '.icos_settings.use_node_operator_private_key')
-    if [[ "${use_node_operator_private_key,,}" == "true" ]]; then
-        if [ -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
-            cp "${CONFIG_DIR}/node_operator_private_key.pem" "${CONFIG_PARTITION_PATH}/"
-            log_and_halt_installation_on_error "${?}" "Unable to copy node operator private key to hostOS config partition."
-            # Set restrictive permissions: owner read/write only (600) to prevent limited-console user from reading
-            chmod 600 "${CONFIG_PARTITION_PATH}/node_operator_private_key.pem"
-            log_and_halt_installation_on_error "${?}" "Unable to set permissions on node operator private key."
-        else
-            log_and_halt_installation_on_error "1" "use_node_operator_private_key set to true but not found"
-        fi
-    else
-        echo >&2 "Warning: node_operator_private_key.pem does not exist, requiring HSM."
-    fi
-
-    echo "* Copying NNS public key override to hostOS config partition..."
-    if [ -f "/data/nns_public_key_override.pem" ]; then
-        cp /data/nns_public_key_override.pem "${CONFIG_PARTITION_PATH}/"
-        log_and_halt_installation_on_error "${?}" "Unable to copy NNS public key override to hostOS config partition."
-    else
-        echo >&2 "nns_public_key_override.pem does not exist, skipping."
-    fi
-
     echo "* Converting 'config.json' to hostOS config file 'config-hostos.json'..."
     /opt/ic/bin/config_tool generate-hostos-config
     log_and_halt_installation_on_error "${?}" "Unable to generate hostos configuration."

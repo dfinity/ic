@@ -50,7 +50,8 @@ archive_override(
     patch_strip = 1,
     patches = ["//bazel:rules_foreign_cc.patch"],
     strip_prefix = "rules_foreign_cc-77d4483fadbb1b7bcace18ed8e8e87e8791050f6",
-    urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/77d4483fadbb1b7bcace18ed8e8e87e8791050f6.tar.gz"],
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/bazelbuild/rules_foreign_cc/tar.gz/77d4483fadbb1b7bcace18ed8e8e87e8791050f6"],
 )
 
 # Misc tools
@@ -82,8 +83,6 @@ use_repo(pip, "python_deps")
 bazel_dep(
     name = "protobuf",
     version = "32.1",
-    # We rename it to keep the legacy name used throughout our bazel files
-    repo_name = "com_google_protobuf",
 )
 
 # protobuf linter
@@ -160,7 +159,7 @@ use_repo(oci, "dogecoind", "dogecoind_linux_amd64")
 # IC HTTP Gateway container used in tests
 oci.pull(
     name = "ic_gatewayd",
-    image = "ghcr.io/dfinity/ic-gateway@sha256:0a25e9da712202966447919dfce145f9af5df62e282f2dfe8a7ea226a44b077a",
+    image = "ghcr.io/dfinity/ic-gateway@sha256:ae2de90b6224fcbe1fdfcadd033159b3a6a2c2f4e9174311d6fc18a0dd06e024",
     platforms = [
         "linux/amd64",
     ],
@@ -304,9 +303,9 @@ http_jar(
 http_archive(
     name = "tla_apalache",
     build_file = "@//third_party:BUILD.tla_apalache.bazel",
-    sha256 = "173a683707c2a639c955328746461cad39e4b8a5adff95e156ce3bf376ba293b",
-    strip_prefix = "apalache-0.44.11",
-    url = "https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz",
+    sha256 = "e0ebea7e45c8f99df8d92f2755101dda84ab71df06d1ec3a21955d3b53a886e2",
+    strip_prefix = "apalache-0.52.2",
+    url = "https://github.com/apalache-mc/apalache/releases/download/v0.52.2/apalache-0.52.2.tgz",
 )
 
 # Official WebAssembly test suite.
@@ -316,7 +315,8 @@ http_archive(
     build_file = "@//third_party:BUILD.wasmtestsuite.bazel",
     sha256 = "9afc0e7c250b5f0dcf32e9a95860b99a392ab78a653fcf3705778e8a9357f3c4",
     strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
-    url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
+    type = "tar.gz",
+    url = "https://codeload.github.com/WebAssembly/testsuite/tar.gz/4f77306bb63151631d84f58dedf67958eb9911b9",
 )
 
 # Asset canister
@@ -360,8 +360,8 @@ http_file(
 http_file(
     name = "doge_canister",
     downloaded_file_path = "ic-doge-canister.wasm.gz",
-    sha256 = "2efd5a5b28315a3d4896419df14a4aad8a346174f53cc7727a63b37ec086b3ac",
-    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2025-12-10/ic-doge-canister.wasm.gz",
+    sha256 = "5d61d0fbccca7bb7e86b9c914a36c2cacbf4c01dcaee9c4fae04b54bfca4802c",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2026-02-06/ic-doge-canister.wasm.gz",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test
@@ -642,7 +642,8 @@ http_archive(
     build_file = "@//third_party:BUILD.libfuzzer.bazel",
     integrity = "sha256-CLw4JzN3fdo8liWeNzL/lsHfmNBHDE+FsWMnTq5of08=",
     strip_prefix = "llvm-project-llvmorg-20.1.0/compiler-rt/lib/fuzzer",
-    urls = ["https://github.com/llvm/llvm-project/archive/refs/tags/llvmorg-20.1.0.tar.gz"],
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/llvm/llvm-project/tar.gz/refs/tags/llvmorg-20.1.0"],
 )
 
 http_archive(
@@ -650,8 +651,9 @@ http_archive(
     build_file = "@//third_party:BUILD.jemalloc.bazel",
     sha256 = "ef6f74fd45e95ee4ef7f9e19ebe5b075ca6b7fbe0140612b2a161abafb7ee179",
     strip_prefix = "jemalloc-5.3.0",
+    type = "tar.gz",
     urls = [
-        "https://github.com/jemalloc/jemalloc/archive/refs/tags/5.3.0.tar.gz",
+        "https://codeload.github.com/jemalloc/jemalloc/tar.gz/refs/tags/5.3.0",
     ],
 )
 
@@ -898,9 +900,10 @@ http_archive(
         "find . -mindepth 1 -maxdepth 1 ! -name proto -exec rm -rf {} +",
         "find ./proto -name BUILD -delete",
     ],
-    sha256 = "9c675c30ae4c7e41018ad5539fc27287221d31fc3ab7c6439a30f46c4325c56a",
-    strip_prefix = "buildbuddy-2.241.0",
-    url = "https://github.com/buildbuddy-io/buildbuddy/archive/refs/tags/v2.241.0.tar.gz",
+    sha256 = "eff54923b6afdf4507f9b07fc9906f06580fdba72d96e9d58d8e6ea8ac4f71cd",
+    strip_prefix = "buildbuddy-89d510c91a18ec0469043a50750145ac51983f74",
+    type = "tar.gz",
+    url = "https://codeload.github.com/buildbuddy-io/buildbuddy/tar.gz/89d510c91a18ec0469043a50750145ac51983f74",  # v2.242.0
 )
 
 ## shfmt, for formatting bash code
@@ -1158,7 +1161,8 @@ archive_override(
     module_name = "rules_motoko",
     integrity = "sha256-cheylLgUCNaODuEtYla4/oVrj6F0FMp7nRjui1AvCo4=",
     strip_prefix = "rules_motoko-9b6d6311db8f1c1fe4c24b70414edf149913ae44",
-    urls = ["https://github.com/dfinity/rules_motoko/archive/9b6d6311db8f1c1fe4c24b70414edf149913ae44.tar.gz"],
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/dfinity/rules_motoko/tar.gz/9b6d6311db8f1c1fe4c24b70414edf149913ae44"],
 )
 
 motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")

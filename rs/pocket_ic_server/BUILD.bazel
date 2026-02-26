@@ -288,8 +288,11 @@ MAINNET_NNS_CANISTER_ENV = {
         name = "pocket-ic-server" + name_suffix,
         testonly = True,
         srcs = ["src/main.rs"],
-        compile_data = ["src/mainnet-routing-table.json"],
+        compile_data = ["//:mainnet-routing-table.json"],
         proc_macro_deps = MACRO_DEPENDENCIES,
+        rustc_env = {
+            "MAINNET_ROUTING_TABLE": "$(location //:mainnet-routing-table.json)",
+        },
         # TODO: restrict the visibility
         visibility = ["//visibility:public"],
         deps = LIB_DEPENDENCIES + [
@@ -380,7 +383,7 @@ rust_test(
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     tags = [
-        "test_all_platforms",
+        "test_all_platforms_slow",
     ],
     deps = TEST_DEPENDENCIES,
 )

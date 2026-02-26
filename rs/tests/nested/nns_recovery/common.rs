@@ -44,16 +44,15 @@ use slog::{Logger, info};
 use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(16)),
-    memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
+    vcpus: Some(NrOfVCPUs::new(32)),
+    memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
     boot_image_minimal_size_gibibytes: None,
 };
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
-/// DKG interval of 9 is large enough for a subnet of that size and as small as possible to keep the
-/// test runtime low
-pub const DKG_INTERVAL: u64 = 9;
+/// DKG interval as small as possible to keep the test runtime low
+pub const DKG_INTERVAL: u64 = 4 * SUBNET_SIZE as u64 + 13;
 
 /// 40 nodes and DKG interval of 499 are the production values for the NNS but 49 was chosen for
 /// the DKG interval to make the test faster

@@ -19,6 +19,7 @@ use ic_replicated_state::{
     canister_state::{
         DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase,
     },
+    metadata_state::testing::NetworkTopologyTesting,
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
@@ -44,7 +45,6 @@ use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::mem::size_of;
-use std::sync::Arc;
 
 #[cfg(test)]
 mod canister_task;
@@ -722,7 +722,11 @@ fn stopping_a_canister_with_incorrect_controller_fails() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.universal_canister().unwrap();
     let controller = test.user_id();
-    test.set_user_id(user_test_id(13));
+    let test_user = user_test_id(13);
+    // Set a user that is a non-controller.
+    test.set_user_id(test_user);
+    assert_ne!(controller, test_user);
+
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
     let IngressStatus::Known {
@@ -735,7 +739,7 @@ fn stopping_a_canister_with_incorrect_controller_fails() {
         panic!("Unexpected ingress status {ingress_status:?}")
     };
     assert_eq!(receiver, ic00::IC_00.get());
-    assert_eq!(user_id, user_test_id(13));
+    assert_eq!(user_id, test_user);
     assert_eq!(time, test.time());
     error.assert_contains(
         ErrorCode::CanisterInvalidController,
@@ -781,6 +785,9 @@ fn get_running_canister_status_from_another_canister() {
             + test
                 .canister_state(canister)
                 .canister_history_memory_usage()
+            + test
+                .canister_state(canister)
+                .log_memory_store_memory_usage()
     );
     assert_eq!(
         Cycles::new(csr.idle_cycles_burned_per_day()),
@@ -890,12 +897,14 @@ fn get_canister_status_memory_metrics() {
     let stable_memory_size = csr.stable_memory_size();
     let global_memory_size = csr.global_memory_size();
     let wasm_binary_size = csr.wasm_binary_size();
+    let log_memory_store_size = csr.log_memory_store_size();
     let custom_sections_size = csr.custom_sections_size();
 
     let execution_memory_size = wasm_memory_size
         + stable_memory_size
         + global_memory_size
         + wasm_binary_size
+        + log_memory_store_size
         + custom_sections_size;
 
     let canister_history_size = csr.canister_history_size();
@@ -1634,9 +1643,15 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, own_subnet_id);
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, own_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1651,7 +1666,10 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates canister 1 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_1, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1706,7 +1724,10 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     );
 
     // Simulate a subnet split that migrates canister 2 to another subnet.
-    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+    test.state_mut()
+        .metadata
+        .network_topology
+        .routing_table_mut()
         .assign_canister(canister_id_2, other_subnet_id);
     test.online_split_state(own_subnet_id, other_subnet_id);
 
@@ -1970,8 +1991,7 @@ fn canister_snapshots_after_split() {
 fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls: usize) {
     // Collect all `StopCanisterContexts` from all stopping canisters.
     let canister_stop_canister_contexts: Vec<_> = state
-        .canister_states
-        .values()
+        .canisters_iter()
         .filter_map(|canister| {
             if let CanisterStatus::Stopping {
                 call_context_manager: _,
@@ -2808,7 +2828,7 @@ fn management_message_with_forbidden_method_is_not_accepted() {
 }
 
 #[test]
-fn management_message_with_invalid_sender_is_not_accepted() {
+fn management_message_with_invalid_sender_is_not_accepted_without_subnet_admins() {
     let mut test = ExecutionTestBuilder::new().build();
     test.set_user_id(user_test_id(0));
     let canister = test.universal_canister().unwrap();
@@ -2818,6 +2838,28 @@ fn management_message_with_invalid_sender_is_not_accepted() {
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterInvalidController, err.code());
+}
+
+#[test]
+fn management_message_with_invalid_sender_is_not_accepted_with_subnet_admins() {
+    let subnet_admin = user_test_id(1);
+    let controller = user_test_id(2);
+    let test_user = user_test_id(3);
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+    test.set_user_id(controller);
+    let canister = test.universal_canister().unwrap();
+
+    test.set_user_id(test_user);
+    let arg: CanisterIdRecord = canister.into();
+    let err = test
+        .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
+        .unwrap_err();
+    assert_eq!(
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
+        err.code()
+    );
 }
 
 // A Wasm module that allocates 10 wasm pages of heap memory and 10 wasm

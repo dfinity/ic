@@ -16,6 +16,7 @@ pub struct UnexpectedChainLength {
     pub expected: usize,
     pub returned: usize,
 }
+
 /// A struct and corresponding impl with helper methods to obtain particular
 /// artifacts/messages from the artifact pool.
 ///
@@ -28,7 +29,7 @@ pub struct PoolReader<'a> {
 }
 
 impl<'a> PoolReader<'a> {
-    /// Create a PoolReader for a ConsensusPool.
+    /// Create a [`PoolReader`] for a [`ConsensusPool`].
     pub fn new(pool: &'a dyn ConsensusPool) -> Self {
         Self {
             pool,
@@ -37,12 +38,12 @@ impl<'a> PoolReader<'a> {
         }
     }
 
-    /// Return a ConsensusPoolCache reference.
+    /// Return a [`ConsensusPoolCache`] reference.
     pub fn as_cache(&self) -> &dyn ConsensusPoolCache {
         self.cache
     }
 
-    /// Return a ConsensusBlockCache reference.
+    /// Return a [`ConsensusBlockCache`] reference.
     pub fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
         self.block_cache
     }
@@ -113,47 +114,30 @@ impl<'a> PoolReader<'a> {
     /// Returns the parent of the given block if there exists one.
     pub fn get_parent(&self, child: &HashedBlock) -> Option<HashedBlock> {
         match child.height().cmp(&self.get_catch_up_height()) {
-            Ordering::Greater => match self
-                .get_block(&child.as_ref().parent, child.height().decrement())
-            {
-                Ok(block) => Some(block),
-                Err(OnlyError::NoneAvailable) => None,
-                Err(OnlyError::MultipleValues) => panic!("Multiple parents found for {child:?}"),
-            },
+            Ordering::Greater => self.get_block(&child.as_ref().parent, child.height().decrement()),
             _ => None,
         }
     }
 
     /// Return a valid block with the matching hash and height if it exists.
-    pub fn get_block(
-        &self,
-        hash: &CryptoHashOf<Block>,
-        h: Height,
-    ) -> Result<HashedBlock, OnlyError> {
+    pub fn get_block(&self, hash: &CryptoHashOf<Block>, h: Height) -> Option<HashedBlock> {
         match h.cmp(&self.get_catch_up_height()) {
-            Ordering::Less => Err(OnlyError::NoneAvailable),
+            Ordering::Less => None,
             Ordering::Equal => {
                 let cup = self.get_highest_catch_up_package();
                 if cup.content.block.get_hash() != hash {
-                    Err(OnlyError::NoneAvailable)
+                    None
                 } else {
-                    Ok(cup.content.block)
+                    Some(cup.content.block)
                 }
             }
-            Ordering::Greater => {
-                let mut blocks: Vec<BlockProposal> = self
-                    .pool
-                    .validated()
-                    .block_proposal()
-                    .get_by_height(h)
-                    .filter(|x| x.content.get_hash() == hash)
-                    .collect();
-                match blocks.len() {
-                    0 => Err(OnlyError::NoneAvailable),
-                    1 => Ok(blocks.remove(0).content),
-                    _ => Err(OnlyError::MultipleValues),
-                }
-            }
+            Ordering::Greater => self
+                .pool
+                .validated()
+                .block_proposal()
+                .get_by_height(h)
+                .find(|x| x.content.get_hash() == hash)
+                .map(|block_proposal| block_proposal.content),
         }
     }
 
@@ -163,7 +147,7 @@ impl<'a> PoolReader<'a> {
         &self,
         hash: &CryptoHashOf<Block>,
         h: Height,
-    ) -> Result<HashedBlock, OnlyError> {
+    ) -> Option<HashedBlock> {
         self.get_block(hash, h).and_then(|block| {
             if h > self.get_catch_up_height() {
                 if self
@@ -173,12 +157,12 @@ impl<'a> PoolReader<'a> {
                     .get_by_height(h)
                     .any(|x| &x.content.block == hash)
                 {
-                    Ok(block)
+                    Some(block)
                 } else {
-                    Err(OnlyError::NoneAvailable)
+                    None
                 }
             } else {
-                Ok(block)
+                Some(block)
             }
         })
     }
@@ -210,7 +194,8 @@ impl<'a> PoolReader<'a> {
                 let mut iterator = self.get_notarized_blocks(h);
                 match (iterator.next(), iterator.next()) {
                     (None, None) => panic!(
-                        "No notarized blocks at height {h:?} found, which is below the finalization tip"
+                        "No notarized blocks at height {h:?} found, \
+                        which is below the finalization tip"
                     ),
                     // If we have exactly one notarized block, return it. This
                     // always works, because we know that we have validated
@@ -221,8 +206,8 @@ impl<'a> PoolReader<'a> {
                     // chain.
                     (Some(block), None) => Some(block.into_inner()),
                     // If we have multiple notarized blocks, create a finalization height range,
-                    // starting from `h`, then get the next finalization above `h`, and walk the chain
-                    // back to `h`.
+                    // starting from `h`, then get the next finalization above `h`, and walk the
+                    // chain back to `h`.
                     _ => {
                         let height_range = HeightRange::new(
                             h,
@@ -237,12 +222,8 @@ impl<'a> PoolReader<'a> {
                             .finalization()
                             .get_by_height_range(height_range)
                             .next()
-                            .and_then(|f| {
-                                self.get_block(&f.content.block, f.content.height)
-                                    .ok()
-                                    .map(|block| block.into_inner())
-                            })
-                            .and_then(|block| self.follow_to_height(block, h))
+                            .and_then(|f| self.get_block(&f.content.block, f.content.height))
+                            .and_then(|block| self.follow_to_height(block.into_inner(), h))
                     }
                 }
             }
@@ -501,7 +482,7 @@ impl<'a> PoolReader<'a> {
             .get_by_height_range(HeightRange::new(from, to))
     }
 
-    /// Get all valid CatchUpPackageShares at the given height.
+    /// Get all valid [`CatchUpPackageShares`] at the given height.
     pub fn get_catch_up_package_shares(
         &self,
         h: Height,
