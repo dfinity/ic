@@ -3,7 +3,9 @@ use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
 use crate::hugepages::{read_available_hugepages_gib, reserve_hugepages};
-use crate::libvirt::{LibvirtConnection, LibvirtConnectionImpl, LibvirtDomain};
+use crate::libvirt::{
+    LibvirtConnection, LibvirtConnectionImpl, LibvirtConnectionWithReconnect, LibvirtDomain,
+};
 use crate::metrics::GuestVmMetrics;
 use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
@@ -27,7 +29,6 @@ use std::time::Duration;
 use strum_macros::AsRefStr;
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -326,7 +327,10 @@ impl GuestVmService {
     pub fn new(guest_vm_type: GuestVMType) -> Result<Self> {
         let metrics = GuestVmMetrics::new(PathBuf::from(Self::metrics_path(guest_vm_type)))
             .context("Failed to create metrics")?;
-        let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
+        let libvirt_connection = LibvirtConnectionWithReconnect::new(Arc::new(|| {
+            let connect = Connect::open(None).context("Failed to connect to libvirt")?;
+            Ok(Arc::new(LibvirtConnectionImpl(connect)) as Arc<dyn LibvirtConnection>)
+        }));
         let hostos_config: HostOSConfig =
             config_tool::deserialize_config(config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
@@ -364,7 +368,7 @@ impl GuestVmService {
 
         Ok(Self {
             metrics,
-            libvirt_connection: Arc::new(LibvirtConnectionImpl(libvirt_connection)),
+            libvirt_connection: Arc::new(libvirt_connection),
             hostos_config,
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
@@ -410,7 +414,7 @@ impl GuestVmService {
                 },
                 Err(GuestVmServiceError::UnrecoverableNeedsReboot) => {
                     println!("Issuing HostOS reboot");
-                    let mut cmd = Command::new("reboot");
+                    let mut cmd = tokio::process::Command::new("reboot");
                     self.command_runner.status(&mut cmd).await?;
                     bail!("Found unrecoverable error, issued reboot");
                 }
@@ -462,12 +466,24 @@ impl GuestVmService {
         let vm_domain_name = vm_domain_name(self.guest_vm_type);
         let mut libvirt_restart_attempts = 3;
         loop {
-            let Ok(existing_domain) = self
+            let existing_domain = match self
                 .libvirt_connection
                 .lookup_domain_by_name(vm_domain_name)
-            else {
-                println!("No existing domain found, skipping cleanup.");
-                return Ok(());
+            {
+                Ok(existing_domain) => existing_domain,
+                Err(err)
+                    if err
+                        .downcast_ref::<virt::error::Error>()
+                        .is_some_and(|e| e.code() == virt::error::ErrorNumber::NoDomain) =>
+                {
+                    println!("No existing domain found, skipping cleanup.");
+                    return Ok(());
+                }
+                Err(err) => {
+                    return Err(GuestVmServiceError::Other(
+                        err.context("Failed to find domain"),
+                    ));
+                }
             };
 
             let domain_active = match existing_domain.is_active() {
@@ -504,7 +520,7 @@ impl GuestVmService {
             if let Err(err) = self
                 .command_runner
                 .status(
-                    &mut Command::new("systemctl")
+                    &mut tokio::process::Command::new("systemctl")
                         .arg("restart")
                         .arg("libvirtd")
                         .arg("virtlogd"),
@@ -742,7 +758,7 @@ impl GuestVmService {
 #[cfg(all(test, feature = "integration_tests"))]
 mod tests {
     use super::*;
-    use crate::libvirt::testing::DelegatingLibvirtConnect;
+    use crate::libvirt::testing::libvirt_connect_error;
     use crate::libvirt::{MockLibvirtConnection, MockLibvirtDomain};
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use anyhow::ensure;
@@ -1280,11 +1296,20 @@ mod tests {
     /// the domain is no longer there and the service starts successfully.
     #[tokio::test]
     async fn test_inactive_domain_triggers_libvirtd_restart() {
+        let mut mock_command_runner = MockAsyncCommandRunner::new();
+        mock_command_runner.expect_status().once().returning(|cmd| {
+            assert_eq!(
+                format!("{:?}", cmd.as_std()),
+                r#""systemctl" "restart" "libvirtd" "virtlogd""#
+            );
+            Box::pin(async { Ok(std::process::ExitStatus::from_raw(0)) })
+        });
+
         let mut fixture = TestFixture::new(valid_hostos_config());
 
-        // Domain exists but is inactive → triggers libvirtd restart
-        let mut mock_connect = MockLibvirtConnection::new();
-        mock_connect
+        // First connection: domain exists but is inactive → triggers libvirtd restart
+        let mut connection_with_inactive_domain = MockLibvirtConnection::new();
+        connection_with_inactive_domain
             .expect_lookup_domain_by_name()
             .return_once(|name| {
                 assert_eq!(name, "guestos");
@@ -1292,23 +1317,24 @@ mod tests {
                 // Simulate libvirt bug where an existing domain gets stuck in an inactive state
                 domain.expect_is_active().once().returning(|| Ok(false));
                 Ok(Box::new(domain))
-            });
-        let delegating_libvirt_connect =
-            Arc::new(DelegatingLibvirtConnect::new(Arc::new(mock_connect)));
-        let delegating_libvirt_connect_c = delegating_libvirt_connect.clone();
-        let mut mock_command_runner = MockAsyncCommandRunner::new();
-        let orig_libvirt_connect = fixture.libvirt_connection;
-        mock_command_runner.expect_status().return_once(move |cmd| {
-            assert_eq!(
-                format!("{:?}", cmd.as_std()),
-                r#""systemctl" "restart" "libvirtd" "virtlogd""#
-            );
-            // After libvirtd restart, use the original libvirt connection (bug no longer present)
-            delegating_libvirt_connect_c.set(orig_libvirt_connect);
-            Box::pin(async { Ok(std::process::ExitStatus::from_raw(0)) })
-        });
-
-        fixture.libvirt_connection = delegating_libvirt_connect;
+            })
+            .return_once(|_| Err(libvirt_connect_error().into()));
+        // On the first call, the factory returns the mock connection (simulating the libvirt bug
+        // where an existing domain gets stuck in an inactive state). On subsequent calls it uses
+        // the real test connection so the VM can be started normally after the restart.
+        let connection_with_inactive_domain = Mutex::new(Some(Arc::new(
+            connection_with_inactive_domain,
+        )
+            as Arc<dyn LibvirtConnection>));
+        let orig_libvirt_connection = fixture.libvirt_connection;
+        fixture.libvirt_connection =
+            Arc::new(LibvirtConnectionWithReconnect::new(Arc::new(move || {
+                Ok(connection_with_inactive_domain
+                    .lock()
+                    .unwrap()
+                    .take()
+                    .unwrap_or_else(|| orig_libvirt_connection.clone()))
+            })));
         fixture.command_runner = Arc::new(mock_command_runner);
 
         let mut service = fixture.start_service(GuestVMType::Default);
