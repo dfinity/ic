@@ -7,6 +7,7 @@ use ic_types::{
     consensus::idkg::{self, IDkgMasterPublicKeyId, common::CombinedSignature},
     messages::{CallbackId, RejectContext},
 };
+use rayon::ThreadPool;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Helper to create a reject response to the management canister
@@ -37,6 +38,7 @@ pub(crate) fn update_signature_agreements(
     payload: &mut idkg::IDkgPayload,
     valid_keys: &BTreeSet<IDkgMasterPublicKeyId>,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
+    thread_pool: &ThreadPool,
 ) {
     let all_random_ids = all_requests
         .values()
@@ -54,78 +56,78 @@ pub(crate) fn update_signature_agreements(
         .map(|random_id| (*random_id, idkg::CompletedSignature::ReportedToExecution))
         .collect();
 
-    // Then we collect new signatures into the signature_agreements
-    for (&callback_id, context) in all_requests {
-        if payload
-            .signature_agreements
-            .contains_key(&context.pseudo_random_id)
-        {
-            continue;
-        }
-        if !valid_keys.contains(&context.key_id()) {
-            // Reject new requests with unknown key Ids.
-            // Note that no pre-signatures are consumed at this stage.
-            payload.signature_agreements.insert(
-                context.pseudo_random_id,
-                idkg::CompletedSignature::Unreported(reject_response(
-                    callback_id,
-                    RejectCode::CanisterReject,
-                    format!(
-                        "Invalid key_id in signature request: {:?}",
-                        context.key_id()
-                    ),
-                )),
-            );
-
-            if let Some(metrics) = idkg_payload_metrics {
-                metrics.payload_errors_inc("invalid_keyid_requests");
-            }
-            continue;
-        }
-
-        if request_expiry_time.is_some_and(|expiry| context.batch_time < expiry) {
-            payload.signature_agreements.insert(
-                context.pseudo_random_id,
-                idkg::CompletedSignature::Unreported(reject_response(
-                    callback_id,
-                    RejectCode::CanisterError,
-                    "Signature request expired",
-                )),
-            );
-            if let Some(metrics) = idkg_payload_metrics {
-                metrics.payload_errors_inc("expired_requests");
-            }
-
-            continue;
-        }
-
-        let signature = match signature_builder.get_completed_signature(callback_id, context) {
-            Some(CombinedSignature::Ecdsa(signature)) => SignWithECDSAReply {
-                signature: signature.signature.clone(),
-            }
-            .encode(),
-            Some(CombinedSignature::Schnorr(signature)) => SignWithSchnorrReply {
-                signature: signature.signature.clone(),
-            }
-            .encode(),
-            Some(CombinedSignature::VetKd(_)) => {
-                if let Some(metrics) = idkg_payload_metrics {
-                    metrics.payload_errors_inc("vetkd_in_idkg_payload");
+    let new_agreements = thread_pool.install(|| {
+        all_requests
+            .into_par_iter()
+            .filter_map(|(callback_id, context)| {
+                if payload
+                    .signature_agreements
+                    .contains_key(&context.pseudo_random_id)
+                {
+                    return None;
                 }
-                continue;
-            }
-            None => continue,
-        };
 
-        let response = ic_types::batch::ConsensusResponse::new(
-            callback_id,
-            ic_types::messages::Payload::Data(signature),
-        );
-        payload.signature_agreements.insert(
-            context.pseudo_random_id,
-            idkg::CompletedSignature::Unreported(response),
-        );
-    }
+                if !valid_keys.contains(&context.key_id()) {
+                    if let Some(metrics) = idkg_payload_metrics {
+                        metrics.payload_errors_inc("invalid_keyid_requests");
+                    }
+                    return Some((
+                        context.pseudo_random_id,
+                        idkg::CompletedSignature::Unreported(reject_response(
+                            callback_id,
+                            RejectCode::CanisterReject,
+                            format!(
+                                "Invalid key_id in signature request: {:?}",
+                                context.key_id()
+                            ),
+                        )),
+                    ));
+                }
+
+                if request_expiry_time.is_some_and(|expiry| context.batch_time < expiry) {
+                    if let Some(metrics) = idkg_payload_metrics {
+                        metrics.payload_errors_inc("expired_requests");
+                    }
+                    return Some((
+                        context.pseudo_random_id,
+                        idkg::CompletedSignature::Unreported(reject_response(
+                            callback_id,
+                            RejectCode::CanisterError,
+                            "Signature request expired",
+                        )),
+                    ));
+                }
+
+                let signature =
+                    match signature_builder.get_completed_signature(callback_id, context) {
+                        Some(CombinedSignature::Ecdsa(signature)) => SignWithECDSAReply {
+                            signature: signature.signature,
+                        }
+                        .encode(),
+                        Some(CombinedSignature::Schnorr(signature)) => SignWithSchnorrReply {
+                            signature: signature.signature,
+                        }
+                        .encode(),
+                        Some(CombinedSignature::VetKd(_)) => {
+                            if let Some(metrics) = idkg_payload_metrics {
+                                metrics.payload_errors_inc("vetkd_in_idkg_payload");
+                            }
+                            return None;
+                        }
+                        None => return None,
+                    };
+
+                Some((
+                    context.pseudo_random_id,
+                    idkg::CompletedSignature::Unreported(ic_types::batch::ConsensusResponse::new(
+                        callback_id,
+                        ic_types::messages::Payload::Data(signature),
+                    )),
+                ))
+            })
+            .collect::<Vec<_>>()
+    });
+    payload.signature_agreements.extend(new_agreements);
 }
 
 #[cfg(test)]
@@ -134,6 +136,7 @@ mod tests {
     use crate::test_utils::{
         TestThresholdSignatureBuilder, into_idkg_contexts, set_up_idkg_payload,
     };
+    use crate::{MAX_IDKG_THREADS, utils::build_thread_pool};
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_management_canister_types_private::MasterPublicKeyId;
@@ -202,6 +205,7 @@ mod tests {
 
         // old signature in the agreement AND in state is replaced by `ReportedToExecution`
         // old signature in the agreement but NOT in state is removed.
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         update_signature_agreements(
             &contexts,
             &TestThresholdSignatureBuilder::new(),
@@ -209,6 +213,7 @@ mod tests {
             &mut idkg_payload,
             &BTreeSet::from([key_id]),
             None,
+            thread_pool.as_ref(),
         );
 
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
@@ -280,6 +285,7 @@ mod tests {
         }
 
         // Only the uncompleted request with available pre-signature should be completed
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -287,6 +293,7 @@ mod tests {
             &mut idkg_payload,
             &valid_keys,
             None,
+            thread_pool.as_ref(),
         );
 
         assert_eq!(idkg_payload.signature_agreements.len(), 2);
@@ -352,6 +359,7 @@ mod tests {
         );
 
         // Only the ecdsa request should be completed
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -359,6 +367,7 @@ mod tests {
             &mut idkg_payload,
             &valid_keys,
             None,
+            thread_pool.as_ref(),
         );
 
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
