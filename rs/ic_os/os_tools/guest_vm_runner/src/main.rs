@@ -855,9 +855,7 @@ mod tests {
         }
 
         fn get_domain(&self) -> Box<dyn LibvirtDomain> {
-            self.libvirt_connect
-                .lookup_domain_by_name(&self.vm_domain_name)
-                .expect("Failed to find VM domain")
+            self.try_get_domain().expect("Failed to find VM domain")
         }
 
         fn check_vm_running(&self) -> Result<()> {
