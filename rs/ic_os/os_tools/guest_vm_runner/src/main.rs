@@ -272,7 +272,7 @@ impl VirtualMachine {
 
             if let Err(err) = command_runner
                 .status(
-                    &mut tokio::process::Command::new("systemctl")
+                    tokio::process::Command::new("systemctl")
                         .arg("restart")
                         .arg("libvirtd")
                         .arg("virtlogd"),
