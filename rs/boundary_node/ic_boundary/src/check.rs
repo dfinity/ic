@@ -310,6 +310,7 @@ impl SubnetActor {
             // All states are Some() - it's checked above in self.init_done()
             .map(|x| *x.as_ref().unwrap())
             .enumerate()
+            // Map from idx to a node
             .map(|(idx, state)| (self.subnet.nodes[idx].clone(), state))
             // Discard unhealthy & lagging behind
             .filter(|(_, state)| state.healthy && state.height >= min_height)
