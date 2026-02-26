@@ -384,6 +384,7 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
 
 mod sanity_check {
     use super::*;
+    use dfn_core::println;
     use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
     use ic_nns_governance_api::DateUtc;
 
@@ -416,6 +417,19 @@ mod sanity_check {
             .timestamp;
         advance_time_to_allow_for_voting_and_node_rewards(state_machine, before_timestamp);
         let after = fetch_metrics(state_machine);
+
+        println!(
+            "start_date",
+            after
+                .governance_most_recent_monthly_node_provider_rewards
+                .start_date,
+        );
+        println!(
+            "end_date",
+            after
+                .governance_most_recent_monthly_node_provider_rewards
+                .end_date,
+        );
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
