@@ -18,6 +18,7 @@ use ic_types::messages::{
     HttpReadStateResponse, HttpRequestEnvelope, HttpStatusResponse, ReplicaHealthStatus,
 };
 use mockall::automock;
+use rand::seq::SliceRandom;
 use simple_moving_average::{SMA, SumTreeSMA};
 use strum::IntoStaticStr;
 #[allow(clippy::disallowed_types)]
@@ -365,7 +366,9 @@ impl SubnetActor {
     ) -> Option<HashSet<Principal>> {
         const MAX_ATTEMPTS: usize = 3;
 
-        for (node, _) in preliminary_healthy.iter().take(MAX_ATTEMPTS) {
+        let candidates = preliminary_healthy.choose_multiple(&mut rand::rng(), MAX_ATTEMPTS);
+
+        for (node, _) in candidates {
             match self
                 .membership_fetcher
                 .fetch_certified_members(node, self.subnet.id)
