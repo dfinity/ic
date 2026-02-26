@@ -57,11 +57,13 @@ function detect_hardware_generation() {
 
     local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
-    # All type0.* and type1.* are considered gen1, all type3.* are gen2
+    # All type0.* and type1.* are considered gen1, all type3.* are gen2, all type4.* are cloud engine nodes
     if [[ $node_reward_type =~ ^type(0|1)(\.[0-9]+)?$ ]]; then
         HARDWARE_GENERATION=1
     elif [[ $node_reward_type =~ ^type3(\.[0-9]+)?$ ]]; then
         HARDWARE_GENERATION=2
+    elif [[ $node_reward_type =~ ^type4(\.[0-9]+)?$ ]]; then
+        HARDWARE_GENERATION=3
     else
         log_and_halt_installation_on_error "1" "Unknown or unsupported node reward type '${node_reward_type}'."
     fi
@@ -302,12 +304,17 @@ main() {
     log_start "$(basename $0)"
     if check_cmdline_var ic.setupos.run_checks; then
         detect_hardware_generation
-        verify_cpu
-        verify_memory
-        verify_disks
-        verify_drive_health
-        verify_deployment_path
-        verify_sev_snp
+
+        if [[ "${HARDWARE_GENERATION}" == "3" ]]; then
+            echo "* Cloud Engine node detected, skipping checks."
+        else
+            verify_cpu
+            verify_memory
+            verify_disks
+            verify_drive_health
+            verify_deployment_path
+            verify_sev_snp
+        fi
     else
         echo "* Hardware checks skipped by request via kernel command line"
     fi

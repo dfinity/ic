@@ -5477,11 +5477,16 @@ name = "guestos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "base64 0.13.1",
  "clap 4.5.27",
  "config_tool",
  "config_types",
  "indoc 1.0.9",
  "network",
+ "nix 0.24.3",
+ "reqwest",
+ "serde",
+ "serde_json",
  "utils",
 ]
 
@@ -9555,7 +9560,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=339c9b0c678407d05577350ad2b069a806bf9495#339c9b0c678407d05577350ad2b069a806bf9495"
+source = "git+https://github.com/dfinity/ic-gateway?rev=f33afac2aa47b8760090c93823b7fa7f5ba67dc4#f33afac2aa47b8760090c93823b7fa7f5ba67dc4"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -9585,7 +9590,7 @@ dependencies = [
  "ic-transport-types",
  "itertools 0.14.0",
  "lazy_static",
- "maxminddb 0.26.0",
+ "maxminddb 0.27.3",
  "moka",
  "prometheus",
  "rand 0.8.5",
@@ -11180,6 +11185,7 @@ dependencies = [
  "mockall",
  "pocket-ic",
  "prost 0.13.4",
+ "rust_decimal",
  "serde",
  "tokio",
 ]
@@ -17487,9 +17493,9 @@ dependencies = [
 
 [[package]]
 name = "maxminddb"
-version = "0.26.0"
+version = "0.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a197e44322788858682406c74b0b59bf8d9b4954fe1f224d9a25147f1880bba"
+checksum = "76371bd37ce742f8954daabd0fde7f1594ee43ac2200e20c003ba5c3d65e2192"
 dependencies = [
  "ipnetwork 0.21.1",
  "log",

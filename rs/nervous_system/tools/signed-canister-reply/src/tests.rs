@@ -26,6 +26,7 @@ async fn test_call_canister() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pocket_ic = PocketIcBuilder::new()
         .with_application_subnet()

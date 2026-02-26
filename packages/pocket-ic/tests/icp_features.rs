@@ -171,6 +171,7 @@ fn nns_ui_requires_other_icp_features() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let icp_features = IcpFeatures {
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
@@ -190,6 +191,7 @@ fn test_ii_nns_ui() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
@@ -225,6 +227,7 @@ fn test_no_canister_http_without_auto_progress() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())

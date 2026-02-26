@@ -8,7 +8,7 @@ source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
 function mount_config_device() {
-    MAX_TRIES=10
+    MAX_TRIES=3
     CONFIG_DEVICE="/dev/disk/by-label/CONFIG"
 
     while [ $MAX_TRIES -gt 0 ]; do
@@ -39,14 +39,22 @@ function mount_config_device() {
     done
 }
 
+# Try config disk first, then run Cloud provisioning if that fails
 if ! mount_config_device; then
-    exit 1
+    echo "Config disk not found, trying cloud provisioning"
+
+    # Since root is read-only - mount a tmpfs at /mnt/config to be able to write a config.json there
+    mount -t tmpfs config /mnt/config
+
+    if ! /opt/ic/bin/guestos_tool cloud-provision; then
+        echo "Cloud provisioning failed"
+        exit 1
+    fi
 fi
 
 trap "umount /mnt/config" EXIT
 
-mkdir /run/config
-mkdir /run/config/bootstrap
+mkdir -p /run/config/bootstrap
 
 # Check if ic-bootstrap.tar exists (backward compatibility with older HostOS versions)
 # TODO(NODE-1821): Remove this check once all nodes have HostOS that supports tarless configuration.

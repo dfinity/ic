@@ -919,6 +919,10 @@ impl StateManager for StateMachineStateManager {
         self.deref().list_state_hashes_to_certify()
     }
 
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        self.deref().list_state_heights_to_certify()
+    }
+
     fn deliver_state_certification(&self, certification: Certification) {
         self.deref().deliver_state_certification(certification)
     }
