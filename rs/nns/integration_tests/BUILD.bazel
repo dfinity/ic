@@ -343,23 +343,24 @@ rust_ic_test(
 # is required in order to proceed with upgrading the CMC.
 #
 # TODO: When the plaform supports best-effort requests, make the CMC use that.
-rust_ic_test(
-    name = "upgrade_canisters_with_golden_nns_state",
-    # This uses on the order of 10 GB of disk space.
-    # Therefore, size = "large" is not large enough.
-    size = "enormous",
-    srcs = [
-        "src/upgrade_canisters_with_golden_nns_state.rs",
-    ],
-    aliases = ALIASES,
-    crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
-    data = DEV_DATA,
-    env = DEV_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
-        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
-        "requires-network",  # Because mainnet state is downloaded (and used).
-    ],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
+# TODO: re-enable once fixed
+# rust_ic_test(
+#     name = "upgrade_canisters_with_golden_nns_state",
+#     # This uses on the order of 10 GB of disk space.
+#     # Therefore, size = "large" is not large enough.
+#     size = "enormous",
+#     srcs = [
+#         "src/upgrade_canisters_with_golden_nns_state.rs",
+#     ],
+#     aliases = ALIASES,
+#     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
+#     data = DEV_DATA,
+#     env = DEV_ENV,
+#     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+#     tags = [
+#         "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+#         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+#         "requires-network",  # Because mainnet state is downloaded (and used).
+#     ],
+#     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+# )
