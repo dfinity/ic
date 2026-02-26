@@ -2393,37 +2393,57 @@ pub struct Gt {
 
 static GT_GENERATOR: LazyLock<Gt> = LazyLock::new(|| Gt::new(ic_bls12_381::Gt::generator()));
 
-// Lookup table used by Gt::g_mul_u16
-static GT_MUL_U16_GENERATOR_TBL: LazyLock<Vec<Gt>> = LazyLock::new(|| {
-    const WINDOW_BITS: usize = 4;
-    const WINDOW_ELEMENTS: usize = (1 << WINDOW_BITS) - 1;
-    const WINDOWS: usize = (u16::BITS as usize) / WINDOW_BITS;
+struct GtMulU16Table {
+    tbl: Vec<Gt>,
+}
 
-    let mut tbl = Vec::with_capacity(WINDOWS * WINDOW_ELEMENTS);
-    let mut base = Gt::new(ic_bls12_381::Gt::generator());
-    for _ in 0..WINDOWS {
-        // Compute [base*1, base*2, ..., base*15]
-        let g1 = base;
-        let g2 = g1.double();
-        let g3 = &g2 + &g1;
-        let g4 = g2.double();
-        let g5 = &g4 + &g1;
-        let g6 = g3.double();
-        let g7 = &g6 + &g1;
-        let g8 = g4.double();
-        let g9 = &g8 + &g1;
-        let g10 = g5.double();
-        let g11 = &g10 + &g1;
-        let g12 = g6.double();
-        let g13 = &g12 + &g1;
-        let g14 = g7.double();
-        let g15 = &g14 + &g1;
-        // Next window starts at (2**4)*base = 2(8*base)
-        base = g8.double();
-        tbl.extend([g1, g2, g3, g4, g5, g6, g7, g8, g9, g10, g11, g12, g13, g14, g15]);
+impl GtMulU16Table {
+    const WINDOW_BITS: usize = 4; // Works for 1, 2, 4, or 8
+    const WINDOW_MASK: u16 = ((1 << Self::WINDOW_BITS) - 1) as u16;
+    const WINDOW_ELEMENTS: usize = (1 << Self::WINDOW_BITS) - 1;
+    const WINDOWS: usize = (u16::BITS as usize) / Self::WINDOW_BITS;
+
+    fn new(g: &Gt) -> Self {
+        let mut tbl = Vec::with_capacity(Self::WINDOWS * Self::WINDOW_ELEMENTS);
+        let mut base = g.clone();
+        for _ in 0..Self::WINDOWS {
+            // Put [base*1, base*2, ..., base*(2^W-1)] into tbl[w_start...w_start+(2^W-1)]
+            let w_start = tbl.len();
+
+            tbl.push(base.clone());
+            for i in 1..Self::WINDOW_ELEMENTS {
+                let m = i + 1; // multiplier
+                let next = if m % 2 == 0 {
+                    // m is even: m*base = double((m/2)*base)
+                    tbl[w_start + m / 2 - 1].double()
+                } else {
+                    // m is odd: m*base = (m-1)*base + base
+                    &tbl[w_start + i - 1] + &base
+                };
+                tbl.push(next);
+            }
+
+            // Next window: base = (2^W)*base = 2*(2^W)*base
+            base = tbl[w_start + Self::WINDOW_ELEMENTS/2].double();
+        }
+        Self { tbl }
     }
-    tbl
-});
+
+    fn mul(&self, val: u16) -> Gt {
+        let mut r = Gt::identity();
+
+        for i in 0..Self::WINDOWS {
+            let w = ((val >> (Self::WINDOW_BITS * i)) & Self::WINDOW_MASK) as usize;
+            let tbl_for_i = &self.tbl[(i * Self::WINDOW_ELEMENTS)..(i * Self::WINDOW_ELEMENTS + Self::WINDOW_ELEMENTS)];
+            r += Gt::ct_select(tbl_for_i, w);
+        }
+
+        r
+    }
+}
+
+// Lookup table used by Gt::g_mul_u16
+static GT_MUL_U16_GENERATOR_TBL: LazyLock<GtMulU16Table> = LazyLock::new(|| GtMulU16Table::new(Gt::generator()));
 
 impl Gt {
     /// The size in bytes of this type
@@ -2553,15 +2573,7 @@ impl Gt {
     /// This function avoids leaking val through timing side channels,
     /// since it is used when decrypting NIDKG dealings.
     pub fn g_mul_u16(val: u16) -> Self {
-        let mut r = Gt::identity();
-
-        for i in 0..4 {
-            let w = ((val >> (4 * i)) & 0b1111) as usize;
-            let tbl_for_i = &GT_MUL_U16_GENERATOR_TBL[(i * 15)..(i * 15 + 15)];
-            r += Self::ct_select(tbl_for_i, w);
-        }
-
-        r
+        GT_MUL_U16_GENERATOR_TBL.mul(val)
     }
 }
 
