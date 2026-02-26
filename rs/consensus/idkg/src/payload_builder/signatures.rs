@@ -7,7 +7,10 @@ use ic_types::{
     consensus::idkg::{self, IDkgMasterPublicKeyId, common::CombinedSignature},
     messages::{CallbackId, RejectContext},
 };
-use rayon::ThreadPool;
+use rayon::{
+    ThreadPool,
+    iter::{IntoParallelIterator, ParallelIterator},
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Helper to create a reject response to the management canister
@@ -59,7 +62,7 @@ pub(crate) fn update_signature_agreements(
     let new_agreements = thread_pool.install(|| {
         all_requests
             .into_par_iter()
-            .filter_map(|(callback_id, context)| {
+            .filter_map(|(&callback_id, context)| {
                 if payload
                     .signature_agreements
                     .contains_key(&context.pseudo_random_id)
