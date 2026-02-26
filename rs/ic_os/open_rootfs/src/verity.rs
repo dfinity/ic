@@ -10,10 +10,10 @@ pub fn veritysetup(
     device: &Path,
     hash: &str,
     command_runner: &dyn CommandRunner,
-    is_sev: bool,
+    verify: bool,
 ) -> Result<()> {
-    // If we're running with SEV - run full device hash verification
-    if is_sev {
+    // Verify the device hash if asked to do so
+    if verify {
         eprintln!(
             "Running 'veritysetup verify' for device {:?} with hash {hash}",
             device
@@ -36,7 +36,7 @@ pub fn veritysetup(
             "veritysetup verify failed: {verify_output:?}"
         );
     } else {
-        eprintln!("Skipping 'veritysetup verify' because running without SEV");
+        eprintln!("Skipping 'veritysetup verify'");
     }
 
     let open_output = command_runner
