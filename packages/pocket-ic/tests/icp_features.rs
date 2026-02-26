@@ -1024,7 +1024,10 @@ fn read_registry() {
     assert_eq!(get_subnet_from_registry(&pic, canister_2), subnet_2);
 }
 
-fn prepare_add_node_payload(mutation_id: u8, node_reward_type: NodeRewardType) -> AddNodePayload {
+fn prepare_add_node_payload(
+    node_sequence_number: u8,
+    node_reward_type: NodeRewardType,
+) -> AddNodePayload {
     // As the node canister checks for validity of keys, we need to generate them first
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
     let node_public_keys =
@@ -1046,8 +1049,8 @@ fn prepare_add_node_payload(mutation_id: u8, node_reward_type: NodeRewardType) -
         ni_dkg_dealing_encryption_pk,
         transport_tls_cert,
         idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
-        xnet_endpoint: format!("128.0.{mutation_id}.100:1234"),
-        http_endpoint: format!("128.0.{mutation_id}.100:4321"),
+        xnet_endpoint: format!("128.0.{node_sequence_number}.100:1234"),
+        http_endpoint: format!("128.0.{node_sequence_number}.100:4321"),
         node_registration_attestation: None,
         public_ipv4_config: None,
         domain: Some("api-example.com".to_string()),
