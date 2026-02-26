@@ -1489,6 +1489,9 @@ impl Scheduler for SchedulerImpl {
                 // TODO(DSM-103): Consider only covering actually scheduled canisters.
                 for canister in state.canisters_iter_mut() {
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
+                    self.metrics
+                        .canister_heap_delta_debits
+                        .observe(heap_delta_debit as f64);
                     if heap_delta_debit > 0 {
                         let canister = Arc::make_mut(canister);
                         canister.scheduler_state.heap_delta_debit =
@@ -1502,6 +1505,9 @@ impl Scheduler for SchedulerImpl {
                     }
 
                     let install_code_debit = canister.scheduler_state.install_code_debit.get();
+                    self.metrics
+                        .canister_install_code_debits
+                        .observe(install_code_debit as f64);
                     if install_code_debit > 0 {
                         let canister = Arc::make_mut(canister);
                         canister.scheduler_state.install_code_debit =

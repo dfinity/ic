@@ -51,9 +51,7 @@ pub struct ReplicatedStateMetrics {
     queues_oversized_requests_extra_bytes: IntGauge,
     queues_best_effort_message_bytes: IntGauge,
     current_heap_delta: IntGauge,
-    canister_heap_delta_debits: Histogram,
     canisters_not_in_routing_table: IntGauge,
-    canister_install_code_debits: Histogram,
     old_open_call_contexts: IntGaugeVec,
     canisters_with_old_open_call_contexts: IntGaugeVec,
     total_canister_balance: Gauge,
@@ -181,21 +179,9 @@ impl ReplicatedStateMetrics {
                 "current_heap_delta",
                 "Estimate of the current size of the heap delta since the last checkpoint",
             ),
-            canister_heap_delta_debits: metrics_registry.histogram(
-                "scheduler_canister_heap_delta_debits",
-                "The heap delta debit of a canister at the end of the round, before \
-                subtracting the rate limit allowed amount.",
-                decimal_buckets(6, 10),
-            ),
             canisters_not_in_routing_table: metrics_registry.int_gauge(
                 "replicated_state_canisters_not_in_routing_table",
                 "Number of canisters in the state not assigned to the subnet range in the routing table."
-            ),
-            canister_install_code_debits: instructions_histogram(
-                "scheduler_canister_install_code_debits",
-                "The install code debit of a canister at the end of the round, before \
-                subtracting the rate limit allowed amount",
-                metrics_registry,
             ),
             old_open_call_contexts: metrics_registry.int_gauge_vec(
                 "scheduler_old_open_call_contexts",
@@ -291,10 +277,6 @@ impl ReplicatedStateMetrics {
 
     pub fn current_heap_delta(&self) -> usize {
         self.current_heap_delta.get() as usize
-    }
-
-    pub fn canister_heap_delta_debits(&self) -> &Histogram {
-        &self.canister_heap_delta_debits
     }
 
     pub fn old_open_call_contexts(&self) -> &IntGaugeVec {
@@ -555,24 +537,6 @@ impl ReplicatedStateMetrics {
         self.num_canister_snapshots
             .set(state.canister_snapshots.count() as i64);
 
-        for canister in state.canisters_iter() {
-            self.canister_heap_delta_debits
-                .observe(canister.scheduler_state.heap_delta_debit.get() as f64);
-
-            self.canister_install_code_debits
-                .observe(canister.scheduler_state.install_code_debit.get() as f64);
-
-            let log_memory_usage = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                canister.system_state.log_memory_store.memory_usage()
-            } else {
-                canister.system_state.canister_log.bytes_used()
-            };
-            self.canister_log_memory_usage_v2
-                .observe(log_memory_usage as f64);
-            self.canister_log_memory_usage_v3
-                .observe(log_memory_usage as f64);
-        }
-
         // TODO: Consider only doing this every Nth round.
         for canister in state.canisters_iter() {
             self.observe_canister_metrics(canister);
@@ -595,6 +559,16 @@ impl ReplicatedStateMetrics {
             .observe(canister.memory_allocation().pre_allocated_bytes().get() as f64);
         self.canister_compute_allocation
             .observe(canister.compute_allocation().as_percent() as f64 / 100.0);
+
+        let log_memory_usage = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister.system_state.log_memory_store.memory_usage()
+        } else {
+            canister.system_state.canister_log.bytes_used()
+        };
+        self.canister_log_memory_usage_v2
+            .observe(log_memory_usage as f64);
+        self.canister_log_memory_usage_v3
+            .observe(log_memory_usage as f64);
     }
 }
 
