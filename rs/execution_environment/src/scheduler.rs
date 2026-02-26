@@ -210,13 +210,14 @@ impl SchedulerImpl {
                 self.config.max_instructions_per_install_code_slice,
             );
             let instructions_before = round_limits.instructions;
-            let (new_state, message_instructions) = self.exec_env.resume_install_code(
-                state,
-                canister_id,
-                instruction_limits,
-                round_limits,
-                subnet_size,
-            );
+            let (new_state, execute_subnet_message_result_type) =
+                self.exec_env.resume_install_code(
+                    state,
+                    canister_id,
+                    instruction_limits,
+                    round_limits,
+                    subnet_size,
+                );
             state = new_state;
             ongoing_long_install_code |= state
                 .canister_state(canister_id)
@@ -225,7 +226,11 @@ impl SchedulerImpl {
             let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
 
-            let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
+            let messages = match execute_subnet_message_result_type {
+                ExecuteSubnetMessageResultType::Finished(_) => NumMessages::from(1),
+                ExecuteSubnetMessageResultType::Processing => NumMessages::from(0),
+                ExecuteSubnetMessageResultType::Paused => NumMessages::from(0),
+            };
             measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
 
             // Break when round limits are reached or found a canister
@@ -281,7 +286,7 @@ impl SchedulerImpl {
                 break;
             }
             if let Some(msg) = state.pop_subnet_input() {
-                let (new_state, message_instructions) = self.execute_subnet_message(
+                let (new_state, execute_subnet_message_result_type) = self.execute_subnet_message(
                     msg,
                     state,
                     csprng,
@@ -294,7 +299,7 @@ impl SchedulerImpl {
                 );
                 state = new_state;
 
-                if message_instructions.is_none() {
+                if let ExecuteSubnetMessageResultType::Paused = execute_subnet_message_result_type {
                     // This may happen only if the message execution was paused,
                     // which means that there should not be any instructions
                     // remaining in the round. Since we do not update
@@ -324,11 +329,11 @@ impl SchedulerImpl {
         replica_version: &ReplicaVersion,
         measurement_scope: &MeasurementScope,
         chain_key_data: &ChainKeyData,
-    ) -> (ReplicatedState, Option<NumInstructions>) {
+    ) -> (ReplicatedState, ExecuteSubnetMessageResultType) {
         let instruction_limits = get_instruction_limits_for_subnet_message(&self.config, &msg);
 
         let instructions_before = round_limits.instructions;
-        let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
+        let (new_state, execute_subnet_message_result_type) = self.exec_env.execute_subnet_message(
             msg,
             state,
             instruction_limits,
@@ -341,9 +346,13 @@ impl SchedulerImpl {
         );
         let round_instructions_executed =
             as_num_instructions(instructions_before - round_limits.instructions);
-        let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
+        let messages = match execute_subnet_message_result_type {
+            ExecuteSubnetMessageResultType::Finished(_) => NumMessages::from(1),
+            ExecuteSubnetMessageResultType::Processing => NumMessages::from(0),
+            ExecuteSubnetMessageResultType::Paused => NumMessages::from(0),
+        };
         measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
-        (new_state, message_instructions)
+        (new_state, execute_subnet_message_result_type)
     }
 
     /// Invoked in the first iteration of the inner round to add the `Heartbeat`

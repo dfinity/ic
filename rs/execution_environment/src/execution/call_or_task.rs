@@ -17,9 +17,7 @@ use ic_embedders::{
     wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
 };
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
 use ic_logger::{ReplicaLogger, info};
 use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState,
@@ -116,17 +114,6 @@ pub fn execute_call_or_task(
             }
         };
 
-    let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-        clean_canister.system_state.freeze_threshold,
-        clean_canister.system_state.memory_allocation,
-        clean_canister.memory_usage(),
-        clean_canister.message_memory_usage(),
-        clean_canister.compute_allocation(),
-        subnet_size,
-        round.cost_schedule,
-        clean_canister.system_state.reserved_balance(),
-    );
-
     let request_metadata = match &call_or_task {
         CanisterCallOrTask::Update(CanisterCall::Request(request))
         | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
@@ -146,7 +133,6 @@ pub fn execute_call_or_task(
         subnet_size,
         time,
         request_metadata,
-        freezing_threshold,
         canister_id: clean_canister.canister_id(),
         log_dirty_pages,
     };
@@ -321,7 +307,6 @@ struct OriginalContext {
     subnet_size: usize,
     time: Time,
     request_metadata: RequestMetadata,
-    freezing_threshold: Cycles,
     canister_id: CanisterId,
     log_dirty_pages: FlagStatus,
 }
@@ -494,7 +479,6 @@ impl CallOrTaskHelper {
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
-        let old_balance = self.canister.system_state.balance();
         let requested = canister_state_changes
             .system_state_modifications
             .removed_cycles();
@@ -508,28 +492,23 @@ impl CallOrTaskHelper {
             + canister_state_changes
                 .system_state_modifications
                 .reserved_cycles();
-        let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-            clean_canister.system_state.freeze_threshold,
-            clean_canister.system_state.memory_allocation,
-            new_memory_usage,
-            new_message_memory_usage,
-            clean_canister.compute_allocation(),
-            original.subnet_size,
-            round.cost_schedule,
-            new_reserved_balance,
-        );
         let reveal_top_up = self
             .canister
             .controllers()
             .contains(&original.call_origin.get_principal());
-        if old_balance < requested + freezing_threshold {
-            let err = CanisterOutOfCyclesError {
-                canister_id: self.canister.canister_id(),
-                available: old_balance,
+        if let Err(err) = round
+            .cycles_account_manager
+            .can_withdraw_cycles_with_threshold(
+                &self.canister.system_state,
                 requested,
-                threshold: original.freezing_threshold,
+                new_memory_usage,
+                new_message_memory_usage,
+                new_reserved_balance,
+                original.subnet_size,
+                round.cost_schedule,
                 reveal_top_up,
-            };
+            )
+        {
             let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
             info!(
                 round.log,
