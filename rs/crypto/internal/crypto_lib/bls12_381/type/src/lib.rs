@@ -2424,7 +2424,7 @@ impl GtMulU16Table {
             }
 
             // Next window: base = (2^W)*base = 2*(2^W)*base
-            base = tbl[w_start + Self::WINDOW_ELEMENTS/2].double();
+            base = tbl[w_start + Self::WINDOW_ELEMENTS / 2].double();
         }
         Self { tbl }
     }
@@ -2434,7 +2434,8 @@ impl GtMulU16Table {
 
         for i in 0..Self::WINDOWS {
             let w = ((val >> (Self::WINDOW_BITS * i)) & Self::WINDOW_MASK) as usize;
-            let tbl_for_i = &self.tbl[(i * Self::WINDOW_ELEMENTS)..(i * Self::WINDOW_ELEMENTS + Self::WINDOW_ELEMENTS)];
+            let tbl_for_i = &self.tbl
+                [(i * Self::WINDOW_ELEMENTS)..(i * Self::WINDOW_ELEMENTS + Self::WINDOW_ELEMENTS)];
             r += Gt::ct_select(tbl_for_i, w);
         }
 
@@ -2443,7 +2444,8 @@ impl GtMulU16Table {
 }
 
 // Lookup table used by Gt::g_mul_u16
-static GT_MUL_U16_GENERATOR_TBL: LazyLock<GtMulU16Table> = LazyLock::new(|| GtMulU16Table::new(Gt::generator()));
+static GT_MUL_U16_GENERATOR_TBL: LazyLock<GtMulU16Table> =
+    LazyLock::new(|| GtMulU16Table::new(Gt::generator()));
 
 impl Gt {
     /// The size in bytes of this type
