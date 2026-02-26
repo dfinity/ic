@@ -32,8 +32,7 @@ use ic_bn_lib_common::{
     types::http::{ClientOptions, ConnInfo},
 };
 use ic_gateway::{
-    Cli,
-    ProvidesCustomDomains,
+    Cli, ProvidesCustomDomains,
     ic_bn_lib::{
         custom_domains::LocalFileProvider,
         http::{
@@ -819,7 +818,10 @@ impl ApiState {
                 let custom_domain_providers: Vec<Arc<dyn ProvidesCustomDomains>> =
                     domain_custom_provider_local_file
                         .iter()
-                        .map(|path| Arc::new(LocalFileProvider::new(path.into())) as Arc<dyn ProvidesCustomDomains>)
+                        .map(|path| {
+                            Arc::new(LocalFileProvider::new(path.into()))
+                                as Arc<dyn ProvidesCustomDomains>
+                        })
                         .collect();
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
