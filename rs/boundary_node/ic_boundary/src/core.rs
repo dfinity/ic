@@ -63,7 +63,7 @@ use tracing::warn;
 
 use crate::{
     bouncer,
-    check::{Checker, Runner as CheckRunner},
+    check::{CertifiedMembershipFetcherImpl, Checker, Runner as CheckRunner},
     cli::{self, Cli},
     dns::DnsResolver,
     errors::ErrorCause,
@@ -649,6 +649,10 @@ async fn setup_registry(
     tasks.add_interval("snapshotter", Arc::new(snapshotter), 5 * SECOND);
 
     // Start the health checking
+    let membership_fetcher = CertifiedMembershipFetcherImpl::new(
+        http_client_check.clone(),
+        cli.health.health_check_timeout,
+    );
     let checker = Checker::new(http_client_check, cli.health.health_check_timeout);
     let checker = WithMetricsCheck(checker, MetricParamsCheck::new(metrics_registry));
     let check_runner = CheckRunner::new(
@@ -658,6 +662,7 @@ async fn setup_registry(
         Arc::new(checker),
         Arc::new(persister),
         Mutex::new(channel_snapshot_recv),
+        Arc::new(membership_fetcher),
     );
     tasks.add("check_runner", Arc::new(check_runner));
 

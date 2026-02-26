@@ -1,16 +1,22 @@
 use std::{
+    collections::HashSet,
     fmt::Display,
     sync::{Arc, atomic::Ordering},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
+use candid::Principal;
 use derive_new::new;
 use http::Method;
 use ic_bn_lib_common::traits::{Run, http::Client};
-use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
+use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
+use ic_types::messages::{
+    Blob, Certificate as StateCertificate, HttpReadState, HttpReadStateContent,
+    HttpReadStateResponse, HttpRequestEnvelope, HttpStatusResponse, ReplicaHealthStatus,
+};
 use mockall::automock;
 use simple_moving_average::{SMA, SumTreeSMA};
 use strum::IntoStaticStr;
@@ -25,6 +31,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::{debug, warn};
 
 use crate::{
+    http::RequestType,
     metrics::{MetricParamsCheck, WithMetricsCheck},
     persist::Persist,
     snapshot::RegistrySnapshot,
@@ -196,6 +203,7 @@ struct SubnetActor {
     healthy_nodes: Option<Vec<Arc<Node>>>,
     state_changed: bool,
     init_done: bool,
+    membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
 }
 
 impl Display for SubnetActor {
@@ -213,6 +221,7 @@ impl SubnetActor {
         checker: Arc<dyn Check>,
         channel_out: mpsc::Sender<(usize, Subnet)>,
         max_height_lag: u64,
+        membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
     ) -> Self {
         let (channel_send, channel_recv) = mpsc::channel(128);
         let tracker = TaskTracker::new();
@@ -245,6 +254,7 @@ impl SubnetActor {
             healthy_nodes: None,
             state_changed: false,
             init_done: false,
+            membership_fetcher,
         }
     }
 
@@ -293,24 +303,36 @@ impl SubnetActor {
         // Calculate the minimum height across this subnet
         let min_height = self.calc_min_height();
 
-        // Generate a list of healthy nodes
-        let healthy_nodes = self
+        // Build preliminary healthy list based on health status and height.
+        let preliminary_healthy: Vec<(Arc<Node>, NodeState)> = self
             .states
             .iter()
             // All states are Some() - it's checked above in self.init_done()
-            .map(|x| x.as_ref().unwrap())
+            .map(|x| *x.as_ref().unwrap())
             .enumerate()
-            // Map from idx to a node
             .map(|(idx, state)| (self.subnet.nodes[idx].clone(), state))
             // Discard unhealthy & lagging behind
             .filter(|(_, state)| state.healthy && state.height >= min_height)
             // Update the latency on the node
+            .collect();
+
+        // Fetch certified membership from the subnet's own state tree.
+        let certified_members = self.try_fetch_certified_members(&preliminary_healthy).await;
+
+        // Filter the preliminary healthy nodes to only include those that are recognized by the subnet's consensus
+        let healthy_nodes: Vec<Arc<Node>> = preliminary_healthy
+            .into_iter()
+            .filter(|(node, _)| match &certified_members {
+                Some(members) => members.contains(&node.id),
+                // Fail-open: if the fetch fails, include all preliminary_healthy nodes.
+                None => true,
+            })
             .map(|(node, state)| {
                 node.avg_latency_us
                     .store(state.avg_latency_us, Ordering::SeqCst);
                 node
             })
-            .collect::<Vec<_>>();
+            .collect();
 
         // See if the healthy nodes set changed
         if self.healthy_nodes.is_none() || &healthy_nodes != self.healthy_nodes.as_ref().unwrap() {
@@ -334,6 +356,39 @@ impl SubnetActor {
             // It can never fail in our case
             let _ = self.channel_out.send((self.idx, subnet)).await;
         }
+    }
+
+    async fn try_fetch_certified_members(
+        &self,
+        preliminary_healthy: &[(Arc<Node>, NodeState)],
+    ) -> Option<HashSet<Principal>> {
+        const MAX_ATTEMPTS: usize = 3;
+
+        for (node, _) in preliminary_healthy.iter().take(MAX_ATTEMPTS) {
+            match self
+                .membership_fetcher
+                .fetch_certified_members(node, self.subnet.id)
+                .await
+            {
+                Ok(members) => {
+                    debug!(
+                        "{self}: certified membership: {}/{} nodes",
+                        members.len(),
+                        self.subnet.nodes.len()
+                    );
+                    return Some(members);
+                }
+                Err(e) => {
+                    warn!(
+                        "{self}: certified membership fetch from {} failed: {e}",
+                        node
+                    );
+                }
+            }
+        }
+
+        warn!("{self}: all certified membership fetches failed, skipping membership filter");
+        None
     }
 
     async fn run(&mut self, update_interval: Duration) {
@@ -414,6 +469,7 @@ impl GlobalActor {
         checker: Arc<dyn Check>,
         persister: Arc<dyn Persist>,
         token: CancellationToken,
+        membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
     ) -> Self {
         let tracker = TaskTracker::new();
         let token_subnets = CancellationToken::new();
@@ -429,6 +485,7 @@ impl GlobalActor {
                 checker.clone(),
                 channel_send.clone(),
                 max_height_lag,
+                membership_fetcher.clone(),
             );
 
             tracker.spawn(async move {
@@ -517,6 +574,7 @@ pub struct Runner {
     persister: Arc<dyn Persist>,
     // Tokio mutex is used because its MutexGuard is Send
     channel_snapshot: Mutex<watch::Receiver<Option<Arc<RegistrySnapshot>>>>,
+    membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
 }
 
 impl Runner {
@@ -531,6 +589,7 @@ impl Runner {
             self.checker.clone(),
             self.persister.clone(),
             token.child_token(),
+            self.membership_fetcher.clone(),
         );
 
         tracker.spawn(async move {
@@ -703,6 +762,146 @@ impl<T: Check> Check for WithMetricsCheck<T> {
     }
 }
 
+/// Fetches the certified subnet membership from a node's state tree.
+#[automock]
+#[async_trait]
+pub trait CertifiedMembershipFetcher: Send + Sync {
+    async fn fetch_certified_members(
+        &self,
+        node: &Node,
+        subnet_id: Principal,
+    ) -> Result<HashSet<Principal>, CheckError>;
+}
+
+/// Implementation that queries a node's /api/v3/subnet/<id>/read_state endpoint
+/// and extracts the set of node Principals from the certified state tree.
+#[derive(new)]
+pub struct CertifiedMembershipFetcherImpl {
+    http_client: Arc<dyn Client>,
+    timeout: Duration,
+}
+
+#[async_trait]
+impl CertifiedMembershipFetcher for CertifiedMembershipFetcherImpl {
+    async fn fetch_certified_members(
+        &self,
+        node: &Node,
+        subnet_id: Principal,
+    ) -> Result<HashSet<Principal>, CheckError> {
+        let url = node
+            .build_url(RequestType::ReadStateSubnetV3, subnet_id)
+            .map_err(|e| CheckError::Generic(format!("Failed to build read_state URL: {e}")))?;
+
+        let body = build_read_state_request_body(subnet_id)?;
+
+        let mut request = reqwest::Request::new(Method::POST, url);
+        *request.timeout_mut() = Some(self.timeout);
+        request.headers_mut().insert(
+            http::header::CONTENT_TYPE,
+            "application/cbor".parse().unwrap(),
+        );
+        *request.body_mut() = Some(reqwest::Body::from(body));
+
+        let response = self
+            .http_client
+            .execute(request)
+            .await
+            .map_err(|err| CheckError::Network(err.to_string()))?;
+
+        if response.status() != reqwest::StatusCode::OK {
+            return Err(CheckError::Http(response.status().into()));
+        }
+
+        let response_bytes = response
+            .bytes()
+            .await
+            .map_err(|e| CheckError::ReadBody(e.to_string()))?;
+
+        let read_state_resp: HttpReadStateResponse = serde_cbor::from_slice(&response_bytes)
+            .map_err(|e| CheckError::Cbor(format!("Failed to decode read_state response: {e}")))?;
+
+        let certificate: StateCertificate = serde_cbor::from_slice(&read_state_resp.certificate.0)
+            .map_err(|e| CheckError::Cbor(format!("Failed to decode certificate: {e}")))?;
+
+        extract_node_ids_from_tree(&certificate.tree, subnet_id)
+    }
+}
+
+fn build_read_state_request_body(subnet_id: Principal) -> Result<Vec<u8>, CheckError> {
+    let ingress_expiry = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time before epoch")
+        .as_nanos() as u64
+        + 300_000_000_000; // 5 minutes from now
+
+    let envelope = HttpRequestEnvelope {
+        content: HttpReadStateContent::ReadState {
+            read_state: HttpReadState {
+                sender: Blob(vec![0x04]), // anonymous principal
+                paths: vec![ic_crypto_tree_hash::Path::new(vec![
+                    ic_crypto_tree_hash::Label::from("subnet"),
+                    ic_crypto_tree_hash::Label::from(subnet_id.as_slice()),
+                    ic_crypto_tree_hash::Label::from("node"),
+                ])],
+                nonce: None,
+                ingress_expiry,
+            },
+        },
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    serde_cbor::to_vec(&envelope)
+        .map_err(|e| CheckError::Cbor(format!("Failed to encode read_state request: {e}")))
+}
+
+fn extract_node_ids_from_tree(
+    tree: &MixedHashTree,
+    subnet_id: Principal,
+) -> Result<HashSet<Principal>, CheckError> {
+    let node_subtree = match tree.lookup(&[b"subnet" as &[u8], subnet_id.as_slice(), b"node"]) {
+        LookupStatus::Found(subtree) => subtree,
+        LookupStatus::Absent => {
+            return Err(CheckError::Generic(
+                "Node subtree absent in certificate".into(),
+            ));
+        }
+        LookupStatus::Unknown => {
+            return Err(CheckError::Generic(
+                "Node subtree unknown/pruned in certificate".into(),
+            ));
+        }
+    };
+
+    let mut members = HashSet::new();
+    collect_node_ids(node_subtree, &mut members);
+
+    if members.is_empty() {
+        return Err(CheckError::Generic(
+            "Certificate contained no node members".into(),
+        ));
+    }
+
+    Ok(members)
+}
+
+/// Recursively walk the tree collecting top-level Labeled keys as node Principals.
+fn collect_node_ids(tree: &MixedHashTree, members: &mut HashSet<Principal>) {
+    match tree {
+        MixedHashTree::Labeled(label, _) => {
+            if let Ok(id) = Principal::try_from_slice(label.as_bytes()) {
+                members.insert(id);
+            }
+        }
+        MixedHashTree::Fork(lr) => {
+            collect_node_ids(&lr.0, members);
+            collect_node_ids(&lr.1, members);
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use std::{
@@ -804,6 +1003,14 @@ pub(crate) mod test {
         }
     }
 
+    fn noop_membership_fetcher() -> Arc<dyn CertifiedMembershipFetcher> {
+        let mut fetcher = MockCertifiedMembershipFetcher::new();
+        fetcher
+            .expect_fetch_certified_members()
+            .returning(|_, _| Err(CheckError::Generic("test: not implemented".into())));
+        Arc::new(fetcher)
+    }
+
     #[test]
     fn test_checkerror() {
         let error_str: &'static str = CheckError::Cbor("foo".into()).into();
@@ -848,6 +1055,7 @@ pub(crate) mod test {
             persister,
             #[allow(clippy::disallowed_types)]
             Mutex::new(channel_recv),
+            noop_membership_fetcher(),
         );
         tokio::spawn(async move {
             let _ = runner.run(CancellationToken::new()).await;
@@ -897,6 +1105,7 @@ pub(crate) mod test {
             persister,
             #[allow(clippy::disallowed_types)]
             Mutex::new(channel_recv),
+            noop_membership_fetcher(),
         );
         tokio::spawn(async move {
             let _ = runner.run(CancellationToken::new()).await;
@@ -983,6 +1192,7 @@ pub(crate) mod test {
             persister,
             #[allow(clippy::disallowed_types)]
             Mutex::new(channel_recv),
+            noop_membership_fetcher(),
         );
 
         tokio::spawn(async move {
