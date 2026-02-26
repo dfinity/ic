@@ -866,6 +866,8 @@ impl ApiState {
                 .await
                 .unwrap();
 
+                tasks.start();
+
                 let backend_client = Arc::new(ReqwestClient::new(reqwest::Client::new()));
                 let cors_get = layer(&[Method::HEAD, Method::GET]);
                 Router::new()

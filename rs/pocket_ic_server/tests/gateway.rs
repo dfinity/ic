@@ -507,8 +507,12 @@ fn test_gateway_invalid_forward_to() {
 // Test that the HTTP gateway accepts a `domain_custom_provider_local_file` configuration.
 // The file maps a custom domain directly to a specific canister ID.
 // A request to the custom domain itself (no canister ID in the URL) should serve the correct
-// canister via the file mapping, and subdomain routing should also work since the custom domain
-// is listed in `domains`.
+// canister via the file mapping.
+//
+// Note: the custom domain must NOT be listed in `domains` (the gateway's configured base
+// domains). If it were, `DomainResolver` would match it as a base domain with no canister ID
+// and never consult the custom-domain storage, causing requests to be redirected to the IC
+// dashboard instead of being routed to the canister.
 
 #[tokio::test]
 async fn test_gateway_custom_domain_provider_file() {
@@ -540,11 +544,15 @@ async fn test_gateway_custom_domain_provider_file() {
 
     // Create an HTTP gateway with the custom domain provider file.
     let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
+    // Use localhost as the gateway's base domain; do NOT include custom_domain here.
+    // The file provider maps custom_domain to the canister, so keeping it out of the
+    // base-domain list is what allows `DomainResolver` to fall through to the
+    // custom-domain storage and find the canister ID.
     let http_gateway_config = HttpGatewayConfig {
         ip_addr: Some(bind_address.to_string()),
         port: None,
         forward_to: HttpGatewayBackend::PocketIcInstance(pic.instance_id),
-        domains: Some(vec![custom_domain.to_string()]),
+        domains: Some(vec!["localhost".to_string()]),
         https_config: None,
         domain_custom_provider_local_file: Some(mapping_file_path.to_str().unwrap().to_string()),
     };
@@ -565,25 +573,15 @@ async fn test_gateway_custom_domain_provider_file() {
         }
     };
 
-    // Build a reqwest client that resolves the custom domain and its
-    // canister subdomain to the gateway's address.
-    let sub_custom_domain = format!("{canister_id}.{custom_domain}");
+    // Build a reqwest client that resolves the custom domain to the gateway's address.
     let client = NonblockingClient::builder()
         .resolve(custom_domain, SocketAddr::new(bind_address, port))
-        .resolve(&sub_custom_domain, SocketAddr::new(bind_address, port))
         .build()
         .unwrap();
 
-    // Test that the custom domain alone resolves to the canister (the file provider maps
-    // `my-custom-domain.test` directly to the canister ID, no canister ID in the URL).
+    // Test that the custom domain alone resolves to the canister: the file provider maps
+    // `my-custom-domain.test` directly to the canister ID, no canister ID in the URL needed.
     let url = format!("http://{}:{}", custom_domain, port);
-    let res = client.get(&url).send().await.unwrap();
-    let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
-    assert!(page.contains("<title>Internet Identity</title>"));
-
-    // Test subdomain routing: since `my-custom-domain.test` is also a configured domain,
-    // `<canister-id>.my-custom-domain.test` resolves via subdomain extraction.
-    let url = format!("http://{}:{}", sub_custom_domain, port);
     let res = client.get(&url).send().await.unwrap();
     let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
     assert!(page.contains("<title>Internet Identity</title>"));
