@@ -912,6 +912,7 @@ pub(crate) mod test {
 
     use arc_swap::ArcSwapOption;
     use candid::Principal;
+    use ic_crypto_tree_hash::Label;
     use ic_registry_subnet_type::SubnetType;
 
     use super::*;
