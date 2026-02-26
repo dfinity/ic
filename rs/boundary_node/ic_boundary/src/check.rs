@@ -1234,9 +1234,7 @@ pub(crate) mod test {
         let persister = Arc::new(Persister::new(routes.clone()));
 
         let mut checker = MockCheck::new();
-        checker
-            .expect_check()
-            .returning(|_| Ok(check_result(1000)));
+        checker.expect_check().returning(|_| Ok(check_result(1000)));
 
         let (channel_send, channel_recv) = watch::channel(None);
         let runner = Runner::new(
@@ -1336,10 +1334,6 @@ pub(crate) mod test {
 
         let result = extract_node_ids_from_tree(&tree, subnet_id);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("no node members"));
+        assert!(result.unwrap_err().to_string().contains("no node members"));
     }
-
 }
