@@ -58,7 +58,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "sr_app_same_nodes_provision_write_access_test",
+    name = "sr_app_no_upgrade_provision_write_access_test",
     guestos_update = "test",
     tags = [
         "colocate",

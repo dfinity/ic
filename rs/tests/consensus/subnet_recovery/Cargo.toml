@@ -42,8 +42,8 @@ name = "ic-systest-subnet-recovery-app-same-nodes"
 path = "sr_app_same_nodes_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-same-nodes-provision-write-access"
-path = "sr_app_same_nodes_provision_write_access_test.rs"
+name = "ic-systest-subnet-recovery-app-no-upgrade-provision-write-access"
+path = "sr_app_no_upgrade_provision_write_access_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-failover-nodes"

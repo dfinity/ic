@@ -369,8 +369,10 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
     app_subnet_recovery_test(env, config);
 }
 
-pub fn test_provisioning_write_access(env: TestEnv) {
-    let config = TestConfig::new().with_provision_write_access();
+pub fn test_no_upgrade_provision_write_access(env: TestEnv) {
+    let config = TestConfig::new()
+        .with_no_upgrade()
+        .with_provision_write_access();
     app_subnet_recovery_test(env, config);
 }
 
