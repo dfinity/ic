@@ -1,10 +1,6 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
-    pb::v1::{
-        FulfillSubnetRentalRequest, GovernanceError, SelfDescribingValue,
-        governance_error::ErrorType,
-    },
-    proposals::self_describing::LocallyDescribableProposalAction,
+    pb::v1::{FulfillSubnetRentalRequest, GovernanceError, governance_error::ErrorType},
 };
 
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
@@ -97,18 +93,6 @@ impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
             node_ids,
             replica_version_id,
         })
-    }
-}
-
-impl LocallyDescribableProposalAction for ValidFulfillSubnetRentalRequest {
-    const TYPE_NAME: &'static str = "Subnet Rental Agreement";
-    const TYPE_DESCRIPTION: &'static str = "Create a rented subnet with a subnet rental \
-        agreement, based on a previously executed Subnet Rental Request proposal. The resulting \
-        subnet allows only the user of the rental agreement to create canisters, and canisters \
-        are not charged cycles for computation and storage.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
-        SelfDescribingValue::from(self.clone())
     }
 }
 

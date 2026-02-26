@@ -4,9 +4,7 @@ use crate::{
         GovernanceError, KnownNeuron, KnownNeuronData, SelfDescribingValue, Topic,
         governance_error::ErrorType,
     },
-    proposals::self_describing::{
-        LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
-    },
+    proposals::self_describing::{SelfDescribingProstEnum, ValueBuilder},
 };
 
 use ic_nervous_system_common_validation::validate_url;
@@ -178,15 +176,11 @@ impl KnownNeuron {
     }
 }
 
-impl LocallyDescribableProposalAction for KnownNeuron {
-    const TYPE_NAME: &'static str = "Register Known Neuron";
-    const TYPE_DESCRIPTION: &'static str = "Register an existing neuron as a \"known neuron,\" \
-        giving it a name and an optional description, and adding it to the list of known neurons.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
+impl From<KnownNeuron> for SelfDescribingValue {
+    fn from(value: KnownNeuron) -> Self {
         ValueBuilder::new()
-            .add_field("neuron_id", self.id.map(|id| id.id))
-            .add_field("known_neuron_data", self.known_neuron_data.clone())
+            .add_field("neuron_id", value.id.map(|id| id.id))
+            .add_field("known_neuron_data", value.known_neuron_data)
             .build()
     }
 }

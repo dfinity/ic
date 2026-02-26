@@ -5,9 +5,7 @@ use crate::{
     proposals::{
         call_canister::CallCanister,
         invalid_proposal_error,
-        self_describing::{
-            LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
-        },
+        self_describing::{SelfDescribingProstEnum, ValueBuilder},
         topic_to_manage_canister,
     },
 };
@@ -168,13 +166,9 @@ impl CallCanister for InstallCode {
     }
 }
 
-impl LocallyDescribableProposalAction for InstallCode {
-    const TYPE_NAME: &'static str = "Install Code";
-    const TYPE_DESCRIPTION: &'static str = "Install, reinstall or upgrade code of a canister \
-        controlled by the NNS.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
-        let Self {
+impl From<InstallCode> for SelfDescribingValue {
+    fn from(value: InstallCode) -> Self {
+        let InstallCode {
             canister_id,
             install_mode,
             wasm_module_hash,
@@ -182,15 +176,15 @@ impl LocallyDescribableProposalAction for InstallCode {
             skip_stopping_before_installing,
             wasm_module: _,
             arg: _,
-        } = self;
+        } = value;
 
         let install_mode = install_mode.map(SelfDescribingProstEnum::<CanisterInstallMode>::new);
 
         ValueBuilder::new()
-            .add_field("canister_id", *canister_id)
+            .add_field("canister_id", canister_id)
             .add_field("install_mode", install_mode)
-            .add_field("wasm_module_hash", wasm_module_hash.clone())
-            .add_field("arg_hash", arg_hash.clone())
+            .add_field("wasm_module_hash", wasm_module_hash)
+            .add_field("arg_hash", arg_hash)
             .add_field(
                 "skip_stopping_before_installing",
                 skip_stopping_before_installing.unwrap_or_default(),
@@ -203,9 +197,8 @@ impl LocallyDescribableProposalAction for InstallCode {
 mod tests {
     use super::*;
 
-    use crate::{
-        pb::v1::governance_error::ErrorType,
-        proposals::self_describing::LocallyDescribableProposalAction,
+    use crate::pb::v1::{
+        SelfDescribingValue as SelfDescribingValuePb, governance_error::ErrorType,
     };
 
     use candid::Decode;
@@ -466,8 +459,7 @@ mod tests {
             arg_hash: Some(arg_hash.clone()),
         };
 
-        let action = install_code.to_self_describing_action();
-        let value = SelfDescribingValue::from(action.value.unwrap());
+        let value = SelfDescribingValue::from(SelfDescribingValuePb::from(install_code));
 
         assert_eq!(
             value,
@@ -493,8 +485,7 @@ mod tests {
             arg_hash: Some(Sha256::hash(&[]).to_vec()),
         };
 
-        let action = install_code.to_self_describing_action();
-        let value = SelfDescribingValue::from(action.value.unwrap());
+        let value = SelfDescribingValue::from(SelfDescribingValuePb::from(install_code));
 
         assert_eq!(
             value,

@@ -1,6 +1,9 @@
 use super::*;
 
-use crate::pb::v1::{AddOrRemoveNodeProvider, NodeProvider, add_or_remove_node_provider::Change};
+use crate::pb::v1::{
+    AddOrRemoveNodeProvider, NodeProvider, SelfDescribingValue as SelfDescribingValuePb,
+    add_or_remove_node_provider::Change,
+};
 
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
@@ -273,11 +276,9 @@ fn test_to_self_describing_value() {
     };
 
     assert_eq!(
-        SelfDescribingValue::from(
-            ValidAddOrRemoveNodeProvider::try_from(add_node_provider)
-                .unwrap()
-                .to_self_describing_value()
-        ),
+        SelfDescribingValue::from(SelfDescribingValuePb::from(
+            ValidAddOrRemoveNodeProvider::try_from(add_node_provider).unwrap(),
+        )),
         SelfDescribingValue::Map(hashmap! {
             "ToAdd".to_string() => SelfDescribingValue::Map(hashmap! {
                 "id".to_string() => SelfDescribingValue::from("6fyp7-3ibaa-aaaaa-aaaap-4ai"),
@@ -294,11 +295,9 @@ fn test_to_self_describing_value() {
     };
 
     assert_eq!(
-        SelfDescribingValue::from(
-            ValidAddOrRemoveNodeProvider::try_from(remove_node_provider)
-                .unwrap()
-                .to_self_describing_value()
-        ),
+        SelfDescribingValue::from(SelfDescribingValuePb::from(
+            ValidAddOrRemoveNodeProvider::try_from(remove_node_provider).unwrap(),
+        )),
         SelfDescribingValue::Map(hashmap! {
             "ToRemove".to_string() => SelfDescribingValue::Map(hashmap! {
                 "id".to_string() => SelfDescribingValue::from("6fyp7-3ibaa-aaaaa-aaaap-4ai")

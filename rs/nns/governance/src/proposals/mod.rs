@@ -4,15 +4,14 @@ use crate::{
         ApproveGenesisKyc, BlessAlternativeGuestOsVersion, CreateServiceNervousSystem,
         DeregisterKnownNeuron, GovernanceError, InstallCode, KnownNeuron, LoadCanisterSnapshot,
         ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
-        RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister,
-        TakeCanisterSnapshot, Topic, UpdateCanisterSettings, Vote, governance_error::ErrorType,
-        proposal::Action,
+        RewardNodeProviders, SelfDescribingProposalAction, SelfDescribingValue,
+        StopOrStartCanister, TakeCanisterSnapshot, Topic, UpdateCanisterSettings, Vote,
+        governance_error::ErrorType, proposal::Action,
     },
     proposals::{
         add_or_remove_node_provider::ValidAddOrRemoveNodeProvider,
         execute_nns_function::ValidExecuteNnsFunction,
         fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest,
-        self_describing::LocallyDescribableProposalAction,
     },
 };
 use ic_base_types::CanisterId;
@@ -215,6 +214,18 @@ impl ValidProposalAction {
         &self,
         env: Arc<dyn Environment>,
     ) -> Result<SelfDescribingProposalAction, GovernanceError> {
+        let to_self_describing_action =
+            |type_name: &str,
+             type_description: &str,
+             value: SelfDescribingValue|
+             -> Result<SelfDescribingProposalAction, GovernanceError> {
+                Ok(SelfDescribingProposalAction {
+                    type_name: type_name.to_string(),
+                    type_description: type_description.to_string(),
+                    value: Some(value),
+                })
+            };
+
         match self {
             // ExecuteNnsFunction is the only case where we need to call `canister_metadata` to get
             // the candid file of an external canister, and hence it's the only one with `await`.
@@ -222,48 +233,155 @@ impl ValidProposalAction {
                 execute_nns_function.to_self_describing_action(env).await
             }
 
-            ValidProposalAction::Motion(motion) => Ok(motion.to_self_describing_action()),
+            ValidProposalAction::Motion(motion) => to_self_describing_action(
+                "Motion",
+                "Propose a text that can be adopted or rejected. \
+                    No code is executed when a motion is adopted. An adopted motion should guide the future \
+                    strategy of the Internet Computer ecosystem.",
+                SelfDescribingValue::from(motion.clone()),
+            ),
             ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc) => {
-                Ok(approve_genesis_kyc.to_self_describing_action())
+                to_self_describing_action(
+                    "Approve Genesis KYC",
+                    "Set GenesisKYC=true for batches of principals.\n\n\
+                    When new neurons are created at Genesis, they have GenesisKYC=false. This restricts what \
+                    actions they can perform. Specifically, they cannot spawn new neurons, and once their \
+                    dissolve delays are zero, they cannot be disbursed and their balances unlocked to new \
+                    accounts.\n\n\
+                    (Special note: The Genesis event disburses all ICP in the form of neurons, \
+                    whose principals must be KYCed. Consequently, all neurons created after Genesis have \
+                    GenesisKYC=true set automatically since they must have been derived from balances that \
+                    have already been KYCed.)",
+                    SelfDescribingValue::from(approve_genesis_kyc.clone()),
+                )
             }
             ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
-                Ok(add_or_remove_node_provider.to_self_describing_action())
+                to_self_describing_action(
+                    "Add or Remove Node Provider",
+                    "Assign (or revoke) an identity to a node provider, \
+                        associating key information regarding the legal person associated that should provide a \
+                        way to uniquely identify it.",
+                    SelfDescribingValue::from(add_or_remove_node_provider.clone()),
+                )
             }
             ValidProposalAction::RegisterKnownNeuron(register_known_neuron) => {
-                Ok(register_known_neuron.to_self_describing_action())
+                to_self_describing_action(
+                    "Register Known Neuron",
+                    "Register an existing neuron as a \"known neuron,\" \
+                    giving it a name and an optional description, and adding it to the list of known neurons.",
+                    SelfDescribingValue::from(register_known_neuron.clone()),
+                )
             }
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
-                Ok(deregister_known_neuron.to_self_describing_action())
+                to_self_describing_action(
+                    "Deregister Known Neuron",
+                    "Deregister an existing neuron as a \"known neuron\" \
+                        and remove it from the list of known neurons.",
+                    SelfDescribingValue::from(*deregister_known_neuron),
+                )
             }
-            ValidProposalAction::InstallCode(install_code) => {
-                Ok(install_code.to_self_describing_action())
-            }
+            ValidProposalAction::InstallCode(install_code) => to_self_describing_action(
+                "Install Code",
+                "Install, reinstall or upgrade code of a canister controlled by the NNS.",
+                SelfDescribingValue::from(install_code.clone()),
+            ),
             ValidProposalAction::StopOrStartCanister(stop_or_start_canister) => {
-                Ok(stop_or_start_canister.to_self_describing_action())
+                to_self_describing_action(
+                    "Stop or Start Canister",
+                    "Stop or start a canister controlled by the NNS.",
+                    SelfDescribingValue::from(stop_or_start_canister.clone()),
+                )
             }
             ValidProposalAction::UpdateCanisterSettings(update_canister_settings) => {
-                Ok(update_canister_settings.to_self_describing_action())
+                to_self_describing_action(
+                    "Update Canister Settings",
+                    "Update the settings of an NNS-controlled canister.",
+                    SelfDescribingValue::from(update_canister_settings.clone()),
+                )
             }
-            ValidProposalAction::ManageNeuron(manage_neuron) => {
-                Ok(manage_neuron.to_self_describing_action())
-            }
+            ValidProposalAction::ManageNeuron(manage_neuron) => to_self_describing_action(
+                "Manage Neuron",
+                "Call a major function on a specified target neuron. \
+                    Only the followees of the target neuron may vote on these proposals, which effectively \
+                    provides the followees with control over the target neuron. This can provide a convenient \
+                    and highly secure means for a team of individuals to manage an important neuron. For \
+                    example, a neuron might hold a large balance, or belong to an organization of high \
+                    repute, and be publicized so that many other neurons can follow its vote. In both cases, \
+                    managing the private key of the principal securely could be problematic. (Either a single \
+                    copy is held, which is very insecure and provides for a single party to take control, or \
+                    a group of individuals must divide responsibility — for example, using threshold \
+                    cryptography, which is complex and time consuming). To address this using this proposal \
+                    type, the important neuron can be configured to follow the neurons controlled by \
+                    individual members of a team. Now they can submit proposals to make the important neuron \
+                    perform actions, which are adopted if and only if a majority of them vote to adopt. \
+                    (Submitting such a proposal costs a small fee, to prevent denial-of-service attacks.) \
+                    Nearly any command on the target neuron can be executed, including commands that change \
+                    the follow rules, allowing the set of team members to be dynamic. Only the final step of \
+                    dissolving the neuron once its dissolve delay reaches zero cannot be performed using this \
+                    type of proposal, since this would allow control/\"ownership\" over the locked balances \
+                    to be transferred. (The only exception to this rule applies to not-for-profit \
+                    organizations, which may be allowed to dissolve their neurons without using the initial \
+                    private key.) To prevent a neuron falling under the malign control of the principal's \
+                    private key by accident, the private key can be destroyed so that the neuron can only be \
+                    controlled by its followees, although this makes it impossible to subsequently unlock the \
+                    balance.",
+                SelfDescribingValue::from(manage_neuron.as_ref().clone()),
+            ),
             ValidProposalAction::ManageNetworkEconomics(manage_network_economics) => {
-                Ok(manage_network_economics.to_self_describing_action())
+                to_self_describing_action(
+                    "Manage Network Economics",
+                    "Update the network economics parameters that control \
+                        various costs, rewards, and thresholds in the Network Nervous System, including proposal \
+                        costs, neuron staking requirements, transaction fees, and voting power economics.",
+                    SelfDescribingValue::from(manage_network_economics.clone()),
+                )
             }
             ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
-                Ok(fulfill_subnet_rental_request.to_self_describing_action())
+                to_self_describing_action(
+                    "Subnet Rental Agreement",
+                    "Create a rented subnet with a subnet rental \
+                        agreement, based on a previously executed Subnet Rental Request proposal. The resulting \
+                        subnet allows only the user of the rental agreement to create canisters, and canisters \
+                        are not charged cycles for computation and storage.",
+                    SelfDescribingValue::from(fulfill_subnet_rental_request.clone()),
+                )
             }
             ValidProposalAction::CreateServiceNervousSystem(create_service_nervous_system) => {
-                Ok(create_service_nervous_system.to_self_describing_action())
+                to_self_describing_action(
+                    "Create Service Nervous System (SNS)",
+                    "Create a new Service Nervous System (SNS).",
+                    SelfDescribingValue::from(create_service_nervous_system.clone()),
+                )
             }
             ValidProposalAction::BlessAlternativeGuestOsVersion(
                 bless_alternative_guest_os_version,
-            ) => Ok(bless_alternative_guest_os_version.to_self_describing_action()),
+            ) => to_self_describing_action(
+                "Bless Alternative GuestOS Version",
+                "Bless an alternative GuestOS version that can be \
+                    used to recover the specified set of replicas that are in a non-functional state. This \
+                    is a last resort recovery mechanism to be used when the replica cannot be upgraded \
+                    through the regular mechanisms.",
+                SelfDescribingValue::from(bless_alternative_guest_os_version.clone()),
+            ),
             ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
-                Ok(take_canister_snapshot.to_self_describing_action())
+                to_self_describing_action(
+                    "Take Canister Snapshot",
+                    "Create a snapshot of a canister controlled by the \
+                    NNS. The snapshot saves the canister's current stable memory, heap memory, data, and \
+                    Wasm module. The snapshot can be loaded later using a Load Canister Snapshot proposal, \
+                    rolling the canister back to the state saved within the snapshot.",
+                    SelfDescribingValue::from(take_canister_snapshot.clone()),
+                )
             }
             ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
-                Ok(load_canister_snapshot.to_self_describing_action())
+                to_self_describing_action(
+                    "Load Canister Snapshot",
+                    "Load a snapshot created by a Take Canister Snapshot \
+                    proposal into a canister controlled by the NNS. Loading a snapshot replaces the \
+                    canister's current stable memory, heap memory, data, and Wasm module with what was saved \
+                    in the snapshot, rolling the canister back to that earlier state.",
+                    SelfDescribingValue::from(load_canister_snapshot.clone()),
+                )
             }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,

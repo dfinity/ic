@@ -1,6 +1,6 @@
 use crate::pb::v1::{
-    Account, ApproveGenesisKyc, Empty, Motion, NetworkEconomics, SelfDescribingProposalAction,
-    SelfDescribingValue, SelfDescribingValueArray, SelfDescribingValueMap,
+    Account, ApproveGenesisKyc, Empty, Motion, SelfDescribingValue, SelfDescribingValueArray,
+    SelfDescribingValueMap,
     self_describing_value::Value::{self, Array, Blob, Map, Text},
 };
 
@@ -13,66 +13,19 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
 use std::{collections::HashMap, marker::PhantomData};
 
-/// A proposal action that can be described locally, without having to call `canister_metadata`
-/// management canister method to get the candid file of an external canister. Every proposal action
-/// except for `ExecuteNnsFunction` should implement this trait.
-pub trait LocallyDescribableProposalAction {
-    const TYPE_NAME: &'static str;
-    const TYPE_DESCRIPTION: &'static str;
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue;
-
-    fn to_self_describing_action(&self) -> SelfDescribingProposalAction {
-        SelfDescribingProposalAction {
-            type_name: Self::TYPE_NAME.to_string(),
-            type_description: Self::TYPE_DESCRIPTION.to_string(),
-            value: Some(self.to_self_describing_value()),
-        }
-    }
-}
-
-impl LocallyDescribableProposalAction for Motion {
-    const TYPE_NAME: &'static str = "Motion";
-
-    const TYPE_DESCRIPTION: &'static str = "Propose a text that can be adopted or rejected. \
-        No code is executed when a motion is adopted. An adopted motion should guide the future \
-        strategy of the Internet Computer ecosystem.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
+impl From<Motion> for SelfDescribingValue {
+    fn from(value: Motion) -> Self {
         ValueBuilder::new()
-            .add_field("motion_text", self.motion_text.clone())
+            .add_field("motion_text", value.motion_text)
             .build()
     }
 }
 
-impl LocallyDescribableProposalAction for ApproveGenesisKyc {
-    const TYPE_NAME: &'static str = "Approve Genesis KYC";
-
-    const TYPE_DESCRIPTION: &'static str = "Set GenesisKYC=true for batches of principals.\n\n\
-        When new neurons are created at Genesis, they have GenesisKYC=false. This restricts what \
-        actions they can perform. Specifically, they cannot spawn new neurons, and once their \
-        dissolve delays are zero, they cannot be disbursed and their balances unlocked to new \
-        accounts.\n\n\
-        (Special note: The Genesis event disburses all ICP in the form of neurons, \
-        whose principals must be KYCed. Consequently, all neurons created after Genesis have \
-        GenesisKYC=true set automatically since they must have been derived from balances that \
-        have already been KYCed.)";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
+impl From<ApproveGenesisKyc> for SelfDescribingValue {
+    fn from(value: ApproveGenesisKyc) -> Self {
         ValueBuilder::new()
-            .add_field("principals", self.principals.clone())
+            .add_field("principals", value.principals)
             .build()
-    }
-}
-
-impl LocallyDescribableProposalAction for NetworkEconomics {
-    const TYPE_NAME: &'static str = "Manage Network Economics";
-    const TYPE_DESCRIPTION: &'static str = "Update the network economics parameters that control \
-        various costs, rewards, and thresholds in the Network Nervous System, including proposal \
-        costs, neuron staking requirements, transaction fees, and voting power economics.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
-        SelfDescribingValue::from(self.clone())
     }
 }
 
