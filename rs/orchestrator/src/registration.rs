@@ -561,6 +561,7 @@ impl NodeRegistration {
         if let Some(config) = rustls_config {
             let reqwest_client = reqwest::ClientBuilder::default()
                 .use_preconfigured_tls(config)
+                .timeout(Duration::from_secs(360)) // Default timeout of `ic-agent:0.45.0`
                 .build()
                 .map_err(|e| {
                     format!("Failed to create reqwest client with custom TLS config: {e}")
