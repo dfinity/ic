@@ -35,9 +35,9 @@ use ic_logger::{
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
-    CanisterUpgradeOptions, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
-    LogVisibilityV2, MasterPublicKeyId, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    SchnorrAlgorithm, UpdateSettingsArgs,
+    CanisterUpgradeOptions, EmptyBlob, InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2,
+    MasterPublicKeyId, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
+    UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -66,15 +66,16 @@ use ic_types::batch::{CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
+use ic_types::messages::SignedIngressContent;
 use ic_types::{
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterCall, CanisterTask, CertificateDelegationMetadata,
+        CallbackId, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
-        QuerySource, RequestOrResponse, Response, SubnetMessage,
+        QuerySource, RequestOrResponse, Response, SubnetMessage, extract_effective_canister_id,
     },
     time::UNIX_EPOCH,
 };
@@ -1451,7 +1452,7 @@ impl ExecutionTest {
                 return false;
             }
         };
-        let maybe_canister_id = get_canister_id_if_install_code(message.clone());
+        let maybe_canister_id = get_effective_canister_id(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1505,6 +1506,15 @@ impl ExecutionTest {
                         NumInstructions::from(slice_instructions_used.get() as u64),
                     );
                 }
+            }
+        } else {
+            assert_eq!(slice_instructions_used.get(), 0);
+            match execute_subnet_message_result_type {
+                ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
+                    assert_eq!(message_instructions_used.get(), 0);
+                }
+                ExecuteSubnetMessageResultType::Processing => (),
+                ExecuteSubnetMessageResultType::Paused => unreachable!(),
             }
         }
         true
@@ -2888,22 +2898,21 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
     output
 }
 
-fn get_canister_id_if_install_code(message: SubnetMessage) -> Option<CanisterId> {
-    let message = match message {
-        SubnetMessage::Response(_) => return None,
-        SubnetMessage::Request(request) => CanisterCall::Request(request),
-        SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
-    };
-    if message.method_name() == "install_code" {
-        InstallCodeArgsV2::decode(message.method_payload())
-            .map(|args| CanisterId::try_from(args.canister_id).unwrap())
-            .ok()
-    } else if message.method_name() == "install_chunked_code" {
-        InstallChunkedCodeArgs::decode(message.method_payload())
-            .map(|args| CanisterId::try_from(args.target_canister).unwrap())
-            .ok()
-    } else {
-        None
+fn get_effective_canister_id(message: SubnetMessage) -> Option<CanisterId> {
+    match message {
+        SubnetMessage::Response(_) => None,
+        SubnetMessage::Request(request) => request.extract_effective_canister_id(),
+        SubnetMessage::Ingress(ingress) => {
+            let signed_ingress_content = SignedIngressContent::new_for_testing(
+                ingress.source,
+                ingress.receiver,
+                ingress.method_name.clone(),
+                ingress.method_payload.clone(),
+                0,
+                None,
+            );
+            extract_effective_canister_id(&signed_ingress_content).ok()?
+        }
     }
 }
 
