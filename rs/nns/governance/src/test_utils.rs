@@ -20,7 +20,6 @@ use ic_sns_swap::pb::{
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount};
-use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use lazy_static::lazy_static;
 use std::{
@@ -94,17 +93,6 @@ impl IcpLedger for StubIcpLedger {
         unimplemented!()
     }
 
-    async fn icrc2_transfer_from(
-        &self,
-        _from: Account,
-        _to: Account,
-        _amount_e8s: u64,
-        _fee_e8s: u64,
-        _memo: u64,
-    ) -> Result<u64, NervousSystemError> {
-        unimplemented!()
-    }
-
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         unimplemented!()
     }
@@ -171,28 +159,20 @@ impl ExpectedCallCanisterMethodCallArguments {
 
 pub(crate) struct MockRandomness {
     seed: Option<[u8; 32]>,
-    counter: u64,
 }
 impl MockRandomness {
     pub fn new() -> MockRandomness {
-        MockRandomness {
-            seed: None,
-            counter: 0,
-        }
+        MockRandomness { seed: None }
     }
 }
 
 impl RandomnessGenerator for MockRandomness {
     fn random_u64(&mut self) -> Result<u64, RngError> {
-        self.counter += 1;
-        Ok(self.counter)
+        todo!()
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        self.counter += 1;
-        let mut bytes = [0u8; 32];
-        bytes[..8].copy_from_slice(&self.counter.to_le_bytes());
-        Ok(bytes)
+        todo!()
     }
 
     fn seed_rng(&mut self, seed: [u8; 32]) {

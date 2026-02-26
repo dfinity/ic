@@ -25,7 +25,6 @@ icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 mockall = { workspace = true }
 prost = { workspace = true }
-rust_decimal = "1.36.0"
 
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }

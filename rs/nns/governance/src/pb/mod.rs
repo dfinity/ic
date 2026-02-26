@@ -2,7 +2,7 @@ use crate::{
     governance::MAX_FOLLOWEES_PER_TOPIC,
     neuron::Neuron,
     pb::v1::{
-        ArchivedMonthlyNodeProviderRewards, Followees, Topic,
+        ArchivedMonthlyNodeProviderRewards, Topic,
         manage_neuron::{SetFollowing, set_following::FolloweesForTopic},
     },
 };
@@ -10,10 +10,7 @@ use ic_base_types::PrincipalId;
 use ic_nns_governance_api::{GovernanceError, governance_error::ErrorType};
 use ic_stable_structures::{Storable, storable::Bound};
 use prost::Message;
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-};
+use std::{borrow::Cow, collections::HashSet};
 
 #[allow(clippy::all)]
 #[path = "../gen/ic_nns_governance.pb.v1.rs"]
@@ -39,19 +36,6 @@ impl Storable for ArchivedMonthlyNodeProviderRewards {
 }
 
 impl SetFollowing {
-    /// Converts a HashMap of topic codes to Followees into a SetFollowing.
-    pub fn from_followees(followees: HashMap<i32, Followees>) -> Self {
-        Self {
-            topic_following: followees
-                .into_iter()
-                .map(|(topic, followees)| FolloweesForTopic {
-                    topic: Some(topic),
-                    followees: followees.followees,
-                })
-                .collect(),
-        }
-    }
-
     /// Returns Err if some of the following requirements are not met:
     ///
     ///     1. Topics are unique. If we allowed duplicates, that would give
@@ -77,15 +61,6 @@ impl SetFollowing {
         self.validate_authorized(caller, neuron)?;
 
         Ok(())
-    }
-
-    pub fn into_followees(self) -> HashMap<i32, Followees> {
-        self.topic_following
-            .into_iter()
-            .map(|FolloweesForTopic { topic, followees }| {
-                (topic.unwrap_or_default(), Followees { followees })
-            })
-            .collect()
     }
 
     /// Does the same thing as validate, except no authorization check.
