@@ -3,6 +3,7 @@ use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusResultV2,
@@ -19,10 +20,12 @@ use ic_replicated_state::{
     canister_state::{
         DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase,
     },
+    metadata_state::subnet_call_context_manager::PreSignatureStash,
     metadata_state::testing::NetworkTopologyTesting,
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
+use ic_test_utilities_consensus::idkg::fake_pre_signature_stash;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
     get_reject, get_reply,
@@ -32,6 +35,7 @@ use ic_types::{
     CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
     batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpMethod, Transform},
+    consensus::idkg::IDkgMasterPublicKeyId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
@@ -44,6 +48,7 @@ use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, u
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
+use std::collections::BTreeMap;
 use std::mem::size_of;
 
 #[cfg(test)]
@@ -4577,5 +4582,87 @@ fn cannot_accept_cycles_after_replying() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles + (transferred_cycles / 2u64)
+    );
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_vetkd_returns_registry_max() {
+    // Keys that don't use pre-signatures (e.g. VetKd) get the registry max queue size.
+    let key_id = make_vetkd_key("vetkd_key");
+    let stashes: BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash> = BTreeMap::new();
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 50, &key_id),
+        50
+    );
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 200, &key_id),
+        200
+    );
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_idkg_empty_stash_returns_min_of_registry_and_cap() {
+    // Ecdsa/Schnorr key with no stash: queue size is min(registry, MAX_PAIRED_PRE_SIGNATURES).
+    let key_id = make_ecdsa_key("ecdsa_test_key");
+    let stashes: BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash> = BTreeMap::new();
+
+    // Registry < constant → result is registry limit.
+    let max_queue_size_registry = MAX_PAIRED_PRE_SIGNATURES as u32 - 50;
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, max_queue_size_registry, &key_id),
+        max_queue_size_registry as usize
+    );
+    // Registry > contant → result is the constant (capped).
+    let max_queue_size_registry = MAX_PAIRED_PRE_SIGNATURES as u32 + 50;
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, max_queue_size_registry, &key_id),
+        MAX_PAIRED_PRE_SIGNATURES
+    );
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_idkg_stash_size_within_range() {
+    // Stash size in [max_queue_size, MAX_PAIRED_PRE_SIGNATURES] is returned as-is.
+    let ecdsa_key_id = IDkgMasterPublicKeyId::try_from(make_ecdsa_key("ecdsa_stash_test")).unwrap();
+    let key_id = ecdsa_key_id.inner();
+    let pre_signature_count = 30;
+    let stash = fake_pre_signature_stash(&ecdsa_key_id, pre_signature_count);
+    let stashes = BTreeMap::from([(ecdsa_key_id.clone(), stash)]);
+
+    // Registry 20, stash 30 → max_queue_size=20, result = clamp(30, 20, 100) = 30.
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 20, key_id),
+        pre_signature_count as usize
+    );
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_idkg_stash_size_capped_at_max_paired() {
+    // Stash size > MAX_PAIRED_PRE_SIGNATURES is capped.
+    let ecdsa_key_id =
+        IDkgMasterPublicKeyId::try_from(make_ecdsa_key("ecdsa_large_stash")).unwrap();
+    let key_id = ecdsa_key_id.inner();
+    let stash = fake_pre_signature_stash(&ecdsa_key_id, 150);
+    let stashes = BTreeMap::from([(ecdsa_key_id.clone(), stash)]);
+
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 20, key_id),
+        MAX_PAIRED_PRE_SIGNATURES
+    );
+}
+
+#[test]
+fn get_dynamic_signature_queue_size_idkg_stash_below_floor_returns_floor() {
+    // Stash size < max_queue_size → result is max_queue_size (floor).
+    let ecdsa_key_id =
+        IDkgMasterPublicKeyId::try_from(make_ecdsa_key("ecdsa_small_stash")).unwrap();
+    let key_id = ecdsa_key_id.inner();
+    let stash = fake_pre_signature_stash(&ecdsa_key_id, 5);
+    let stashes = BTreeMap::from([(ecdsa_key_id.clone(), stash)]);
+
+    // Registry 50, stash 5 → max_queue_size=50, result = clamp(5, 50, 100) = 50.
+    assert_eq!(
+        super::get_dynamic_signature_queue_size(&stashes, 50, key_id),
+        50
     );
 }
