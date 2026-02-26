@@ -2827,6 +2827,7 @@ fn with_http_gateway_config_but_no_auto_progress() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
@@ -2881,6 +2882,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
         server_binary: None,
         reuse: false,
         ttl: None,
+        hard_ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -2900,6 +2902,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_server_url(server_url.clone())
@@ -2967,6 +2970,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         server_binary: None,
         reuse: false,
         ttl: None,
+        hard_ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -2980,6 +2984,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let auto_progress_config = AutoProgressConfig {
         artificial_delay_ms: None,
@@ -3013,6 +3018,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         server_binary: None,
         reuse: false,
         ttl: None,
+        hard_ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3024,6 +3030,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_server_url(server_url.clone())
@@ -3081,6 +3088,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         server_binary: None,
         reuse: false,
         ttl: None,
+        hard_ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3093,6 +3101,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
             cert_path: "".to_string(),
             key_path: "".to_string(),
         }),
+        domain_custom_provider_local_file: None,
     };
     let subnet_config_set = SubnetConfigSet {
         application: 1,
@@ -3146,6 +3155,7 @@ fn canister_not_found() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()

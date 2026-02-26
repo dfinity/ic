@@ -159,7 +159,7 @@ use_repo(oci, "dogecoind", "dogecoind_linux_amd64")
 # IC HTTP Gateway container used in tests
 oci.pull(
     name = "ic_gatewayd",
-    image = "ghcr.io/dfinity/ic-gateway@sha256:0a25e9da712202966447919dfce145f9af5df62e282f2dfe8a7ea226a44b077a",
+    image = "ghcr.io/dfinity/ic-gateway@sha256:ae2de90b6224fcbe1fdfcadd033159b3a6a2c2f4e9174311d6fc18a0dd06e024",
     platforms = [
         "linux/amd64",
     ],

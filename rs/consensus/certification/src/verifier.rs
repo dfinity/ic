@@ -42,6 +42,7 @@ mod tests {
     use super::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
@@ -68,6 +69,7 @@ mod tests {
         signature.signer = signer;
         Certification {
             height,
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 signature,
                 content: CertificationContent::new(hash),

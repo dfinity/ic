@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::{Config, LsmtConfig, lsmt_config_default};
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{
     certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},
@@ -87,6 +88,7 @@ pub fn certify_height(state_manager: &impl StateManager, h: Height) -> Certifica
 
     let certification = Certification {
         height: h,
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),
@@ -392,7 +394,7 @@ pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
     let wasm = alternate_wasm();
 
     state
-        .canister_state_mut(&canister_id)
+        .canister_state_make_mut(&canister_id)
         .unwrap()
         .execution_state
         .as_mut()
