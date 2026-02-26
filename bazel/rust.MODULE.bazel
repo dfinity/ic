@@ -10,7 +10,6 @@ archive_override(
     patches = [
         "//bazel:rules_rust_strip_level.patch",
         "//bazel:rules_rust_package_alias.patch",
-        "//bazel:rules_rust_rust_test.patch",
     ],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.67.0/rules_rust-0.67.0.tar.gz"],
 )
@@ -619,7 +618,7 @@ crate.spec(
         "acme-alpn",
     ],
     package = "ic-bn-lib",
-    version = "0.1.14",
+    version = "0.1.15",
 )
 crate.spec(
     package = "ic-bn-lib-common",
@@ -678,7 +677,7 @@ crate.spec(
     default_features = False,
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    rev = "339c9b0c678407d05577350ad2b069a806bf9495",
+    rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4",
 )
 crate.spec(
     package = "ic-custom-domains-backend",
@@ -993,6 +992,8 @@ crate.spec(
 crate.spec(
     features = [
         "ptrace",
+        "user",
+        "signal",
     ],
     package = "nix",
     version = "^0.24.3",

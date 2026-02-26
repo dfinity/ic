@@ -1,5 +1,5 @@
 {
-  "checksum": "817e15beb94440b10d7d49f2c07311b372864f381ae144a4da73ef64c7c89038",
+  "checksum": "5d1d0615a6d5f57f633b87a5ef8f568eafaff9402d70ce69043c225997c0ad33",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14989,7 +14989,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             }
           ],
@@ -17164,7 +17164,7 @@
               "target": "crossbeam_queue"
             },
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             }
           ],
@@ -17219,7 +17219,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             }
           ],
@@ -17278,7 +17278,7 @@
               "target": "crossbeam_epoch"
             },
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             }
           ],
@@ -17334,7 +17334,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             }
           ],
@@ -17389,7 +17389,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             }
           ],
@@ -17405,14 +17405,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "crossbeam-utils 0.8.19": {
+    "crossbeam-utils 0.8.21": {
       "name": "crossbeam-utils",
-      "version": "0.8.19",
+      "version": "0.8.21",
       "package_url": "https://github.com/crossbeam-rs/crossbeam",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/crossbeam-utils/0.8.19/download",
-          "sha256": "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
+          "url": "https://static.crates.io/crates/crossbeam-utils/0.8.21/download",
+          "sha256": "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
         }
       },
       "targets": [
@@ -17456,14 +17456,14 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.19"
+        "version": "0.8.21"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -19441,7 +19441,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             },
             {
@@ -21650,7 +21650,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-bn-lib 0.1.14",
+              "id": "ic-bn-lib 0.1.15",
               "target": "ic_bn_lib"
             },
             {
@@ -21954,7 +21954,7 @@
               "target": "mockito"
             },
             {
-              "id": "moka 0.12.8",
+              "id": "moka 0.12.12",
               "target": "moka"
             },
             {
@@ -32392,7 +32392,7 @@
               "target": "hickory_proto"
             },
             {
-              "id": "moka 0.12.8",
+              "id": "moka 0.12.12",
               "target": "moka"
             },
             {
@@ -34596,14 +34596,14 @@
       ],
       "license_file": null
     },
-    "ic-bn-lib 0.1.14": {
+    "ic-bn-lib 0.1.15": {
       "name": "ic-bn-lib",
-      "version": "0.1.14",
+      "version": "0.1.15",
       "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-bn-lib/0.1.14/download",
-          "sha256": "40500560a2a8de5f8a6028ade52f832cd36d18c5510c9b1aba74e121e55203ff"
+          "url": "https://static.crates.io/crates/ic-bn-lib/0.1.15/download",
+          "sha256": "bebf3f7882b98efacbbf60f2b215d4856f66aa3d5367eb0c9273a3f10bad676b"
         }
       },
       "targets": [
@@ -34765,7 +34765,7 @@
               "target": "itertools"
             },
             {
-              "id": "moka 0.12.8",
+              "id": "moka 0.12.12",
               "target": "moka"
             },
             {
@@ -34957,7 +34957,7 @@
           ],
           "selects": {}
         },
-        "version": "0.1.14"
+        "version": "0.1.15"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36065,7 +36065,7 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.1.14",
+              "id": "ic-bn-lib 0.1.15",
               "target": "ic_bn_lib"
             },
             {
@@ -36209,7 +36209,7 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.1.14",
+              "id": "ic-bn-lib 0.1.15",
               "target": "ic_bn_lib"
             },
             {
@@ -36401,7 +36401,7 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.1.14",
+              "id": "ic-bn-lib 0.1.15",
               "target": "ic_bn_lib"
             },
             {
@@ -36666,7 +36666,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "339c9b0c678407d05577350ad2b069a806bf9495"
+            "Rev": "f33afac2aa47b8760090c93823b7fa7f5ba67dc4"
           }
         }
       },
@@ -36764,7 +36764,7 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.1.14",
+              "id": "ic-bn-lib 0.1.15",
               "target": "ic_bn_lib"
             },
             {
@@ -36796,11 +36796,11 @@
               "target": "lazy_static"
             },
             {
-              "id": "maxminddb 0.26.0",
+              "id": "maxminddb 0.27.3",
               "target": "maxminddb"
             },
             {
-              "id": "moka 0.12.8",
+              "id": "moka 0.12.12",
               "target": "moka"
             },
             {
@@ -40316,7 +40316,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             },
             {
@@ -40430,7 +40430,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             },
             {
@@ -42554,14 +42554,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "keccak 0.1.4": {
+    "keccak 0.1.6": {
       "name": "keccak",
-      "version": "0.1.4",
+      "version": "0.1.6",
       "package_url": "https://github.com/RustCrypto/sponges/tree/master/keccak",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/keccak/0.1.4/download",
-          "sha256": "8f6d5ed8676d904364de097082f4e7d240b571b67989ced0240f08b7f966f940"
+          "url": "https://static.crates.io/crates/keccak/0.1.6/download",
+          "sha256": "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
         }
       },
       "targets": [
@@ -42595,7 +42595,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.1.4"
+        "version": "0.1.6"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -47399,21 +47399,21 @@
       ],
       "license_file": "LICENSE"
     },
-    "maxminddb 0.26.0": {
+    "maxminddb 0.27.3": {
       "name": "maxminddb",
-      "version": "0.26.0",
+      "version": "0.27.3",
       "package_url": "https://github.com/oschwald/maxminddb-rust",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/maxminddb/0.26.0/download",
-          "sha256": "2a197e44322788858682406c74b0b59bf8d9b4954fe1f224d9a25147f1880bba"
+          "url": "https://static.crates.io/crates/maxminddb/0.27.3/download",
+          "sha256": "76371bd37ce742f8954daabd0fde7f1594ee43ac2200e20c003ba5c3d65e2192"
         }
       },
       "targets": [
         {
           "Library": {
             "crate_name": "maxminddb",
-            "crate_root": "src/maxminddb/lib.rs",
+            "crate_root": "src/lib.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -47460,7 +47460,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.26.0"
+        "version": "0.27.3"
       },
       "license": "ISC",
       "license_ids": [
@@ -47932,7 +47932,7 @@
               "target": "byteorder"
             },
             {
-              "id": "keccak 0.1.4",
+              "id": "keccak 0.1.6",
               "target": "keccak"
             },
             {
@@ -49073,14 +49073,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "moka 0.12.8": {
+    "moka 0.12.12": {
       "name": "moka",
-      "version": "0.12.8",
+      "version": "0.12.12",
       "package_url": "https://github.com/moka-rs/moka",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/moka/0.12.8/download",
-          "sha256": "32cf62eb4dd975d2dde76432fb1075c49e3ee2331cf36f1f8fd4b66550d32b6f"
+          "url": "https://static.crates.io/crates/moka/0.12.12/download",
+          "sha256": "a3dec6bd31b08944e08b58fd99373893a6c17054d6f3ea5006cc894f4f4eee2a"
         }
       },
       "targets": [
@@ -49088,18 +49088,6 @@
           "Library": {
             "crate_name": "moka",
             "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -49117,13 +49105,10 @@
         "crate_features": {
           "common": [
             "async-lock",
-            "async-trait",
-            "atomic64",
             "default",
             "event-listener",
             "future",
             "futures-util",
-            "quanta",
             "sync"
           ],
           "selects": {}
@@ -49143,8 +49128,12 @@
               "target": "crossbeam_epoch"
             },
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
+            },
+            {
+              "id": "equivalent 1.0.1",
+              "target": "equivalent"
             },
             {
               "id": "event-listener 5.3.1",
@@ -49155,20 +49144,12 @@
               "target": "futures_util"
             },
             {
-              "id": "moka 0.12.8",
-              "target": "build_script_build"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
               "id": "parking_lot 0.12.5",
               "target": "parking_lot"
             },
             {
-              "id": "quanta 0.12.3",
-              "target": "quanta"
+              "id": "portable-atomic 1.11.0",
+              "target": "portable_atomic"
             },
             {
               "id": "smallvec 1.15.1",
@@ -49179,14 +49160,6 @@
               "target": "tagptr"
             },
             {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "triomphe 0.1.9",
-              "target": "triomphe"
-            },
-            {
               "id": "uuid 1.12.1",
               "target": "uuid"
             }
@@ -49194,40 +49167,9 @@
           "selects": {}
         },
         "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.12.8"
+        "version": "0.12.12"
       },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(rustver)": [
-              {
-                "id": "rustc_version 0.4.0",
-                "target": "rustc_version"
-              }
-            ]
-          }
-        }
-      },
-      "license": "MIT OR Apache-2.0",
+      "license": "(MIT OR Apache-2.0) AND Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -61804,7 +61746,7 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             },
             {
@@ -64046,7 +63988,7 @@
               "target": "crossbeam_deque"
             },
             {
-              "id": "crossbeam-utils 0.8.19",
+              "id": "crossbeam-utils 0.8.21",
               "target": "crossbeam_utils"
             },
             {
@@ -73665,7 +73607,7 @@
               "target": "digest"
             },
             {
-              "id": "keccak 0.1.4",
+              "id": "keccak 0.1.6",
               "target": "keccak"
             }
           ],
@@ -84671,45 +84613,6 @@
         "MIT"
       ],
       "license_file": null
-    },
-    "triomphe 0.1.9": {
-      "name": "triomphe",
-      "version": "0.1.9",
-      "package_url": "https://github.com/Manishearth/triomphe",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/triomphe/0.1.9/download",
-          "sha256": "0eee8098afad3fb0c54a9007aab6804558410503ad676d4633f9c2559a00ac0f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "triomphe",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "triomphe",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.1.9"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "trust-dns-proto 0.22.0": {
       "name": "trust-dns-proto",
@@ -97789,7 +97692,6 @@
       "x86_64-apple-darwin",
       "x86_64-unknown-linux-gnu"
     ],
-    "cfg(rustver)": [],
     "cfg(target_arch = \"aarch64\")": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu"
@@ -97968,7 +97870,7 @@
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.12",
     "ic-agent 0.45.0",
-    "ic-bn-lib 0.1.14",
+    "ic-bn-lib 0.1.15",
     "ic-bn-lib-common 0.1.4",
     "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",
@@ -98045,7 +97947,7 @@
     "minicbor-derive 0.13.0",
     "mockall 0.13.1",
     "mockito 1.7.0",
-    "moka 0.12.8",
+    "moka 0.12.12",
     "more-asserts 0.3.1",
     "nftables 0.4.1",
     "nix 0.24.3",

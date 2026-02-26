@@ -427,7 +427,7 @@ mod tests {
         RegistryVersion, ReplicaVersion,
         consensus::{Block, BlockPayload, DataPayload, HasHeight, dkg::DkgDataPayload},
         crypto::threshold_sig::ni_dkg::{
-            NiDkgId, NiDkgMasterPublicKeyId, NiDkgTargetId, NiDkgTargetSubnet,
+            NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
         time::UNIX_EPOCH,
     };
@@ -1331,7 +1331,7 @@ mod tests {
                                 dependencies.state_manager.clone(),
                                 dependencies.registry.get_latest_version(),
                                 vec![],
-                                Some(100),
+                                Some(dkg_interval_length as usize + 1),
                                 None,
                             );
 
@@ -1649,7 +1649,7 @@ mod tests {
             assert_eq!(extract_dkg_configs_from_highest_block(&pool).len(), 4);
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
-            // Put three dealing in the pool and check that they get included
+            // Put three dealings in the pool and check that they get included
             // Additionally check that there are no remote transcripts
             let dealings = (0..3)
                 .map(|i| ChangeAction::AddToValidated(create_dealing(i, remote_dkg_ids[0].clone())))
@@ -1660,14 +1660,14 @@ mod tests {
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
             // For the next round, we put nothing into the pool
-            // We will try to build a remote transcript, his will fail, however,
-            // since we don't have enought dealings to build both transcripts (one high one low)
+            // We will try to build a remote transcript, this will fail, however,
+            // since we don't have enough dealings to build both transcripts (one high, one low)
             pool.advance_round_normal_operation();
             assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
             // Now we put the other dealings into the pool
-            // The payload builder will include the dealing
+            // The payload builder will include the dealings
             let dealings = (0..3)
                 .map(|i| ChangeAction::AddToValidated(create_dealing(i, remote_dkg_ids[1].clone())))
                 .collect::<Vec<_>>();
@@ -1676,10 +1676,25 @@ mod tests {
             assert_eq!(extract_dealings_from_highest_block(&pool).len(), 3);
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
-            // Now sufficient dealings are in the pool, check that payload contains early remote transcripts
+            // Now sufficient dealings are on the block chain, check that payload contains early remote transcripts
             pool.advance_round_normal_operation();
             assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
-            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 2);
+            let remote_dkgs = extract_remote_dkgs_from_highest_block(&pool);
+            assert_eq!(remote_dkgs.len(), 2);
+            for (dkg_id, _, result) in &remote_dkgs {
+                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
+                assert!(result.is_ok());
+            }
+            assert!(
+                remote_dkgs
+                    .iter()
+                    .any(|(id, _, __)| id.dkg_tag == NiDkgTag::HighThreshold)
+            );
+            assert!(
+                remote_dkgs
+                    .iter()
+                    .any(|(id, _, __)| id.dkg_tag == NiDkgTag::LowThreshold)
+            );
 
             // Check that the payload also validates
             let block: Block = pool
@@ -1756,7 +1771,7 @@ mod tests {
 
             // Advance the pool a until the next DKG, check that the early remote transcripts are not
             // generated multiple times, and in particular that they are not included in the summary.
-            for _ in 0..100 {
+            for _ in 0..dkg_interval_length + 1 {
                 pool.advance_round_normal_operation();
                 assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
                 assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
@@ -1807,7 +1822,7 @@ mod tests {
             complement_state_manager_with_reshare_chain_key_request(
                 state_manager.clone(),
                 registry.get_latest_version(),
-                key_id,
+                key_id.clone(),
                 vec![10, 11, 12, 13],
                 None,
                 Some(target_id),
@@ -1833,7 +1848,15 @@ mod tests {
             // Now sufficient dealings are in the pool, check that payload contains early remote transcript
             pool.advance_round_normal_operation();
             assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
-            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 1);
+            let remote_dkgs = extract_remote_dkgs_from_highest_block(&pool);
+            assert_eq!(remote_dkgs.len(), 1);
+            let (dkg_id, _, result) = &remote_dkgs[0];
+            assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
+            assert!(result.is_ok());
+            assert_eq!(
+                dkg_id.dkg_tag,
+                NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id))
+            );
 
             // Check that the payload also validates
             let block: Block = pool
@@ -1875,7 +1898,7 @@ mod tests {
 
             // Advance the pool until the next DKG, check that the early remote transcript is not
             // generated multiple times
-            for _ in 0..100 {
+            for _ in 0..dkg_interval_length + 1 {
                 pool.advance_round_normal_operation();
                 assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
                 assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);

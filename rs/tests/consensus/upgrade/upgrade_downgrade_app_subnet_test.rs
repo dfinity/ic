@@ -35,7 +35,7 @@ use ic_types::Height;
 use slog::info;
 
 const SCHNORR_MSG_SIZE_BYTES: usize = 32;
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(35 * 60);
@@ -174,6 +174,11 @@ fn main() -> Result<()> {
         .with_timeout_per_test(UP_DOWNGRADE_PER_TEST_TIMEOUT)
         .with_setup(setup)
         .add_test(systest!(upgrade_downgrade_app_subnet))
+        // TODO(CON-1644): remove once the mainnet version no longer handles
+        // duplicate artifacts as invalid.
+        .remove_metrics_to_check("idkg_invalidated_artifacts")
+        // TODO(CON-1658): Re-enable after certification witnesses are deployed to all subnets.
+        .remove_metrics_to_check("certification_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }

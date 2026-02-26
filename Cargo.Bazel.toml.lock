@@ -2942,9 +2942,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-utils"
-version = "0.8.19"
+version = "0.8.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
+checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
 name = "crossterm"
@@ -5973,9 +5973,9 @@ dependencies = [
 
 [[package]]
 name = "ic-bn-lib"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40500560a2a8de5f8a6028ade52f832cd36d18c5510c9b1aba74e121e55203ff"
+checksum = "bebf3f7882b98efacbbf60f2b215d4856f66aa3d5367eb0c9273a3f10bad676b"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -6396,7 +6396,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=339c9b0c678407d05577350ad2b069a806bf9495#339c9b0c678407d05577350ad2b069a806bf9495"
+source = "git+https://github.com/dfinity/ic-gateway?rev=f33afac2aa47b8760090c93823b7fa7f5ba67dc4#f33afac2aa47b8760090c93823b7fa7f5ba67dc4"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -6426,7 +6426,7 @@ dependencies = [
  "ic-transport-types 0.45.0",
  "itertools 0.14.0",
  "lazy_static",
- "maxminddb 0.26.0",
+ "maxminddb 0.27.3",
  "moka",
  "prometheus 0.14.0",
  "rand 0.8.5",
@@ -7466,9 +7466,9 @@ dependencies = [
 
 [[package]]
 name = "keccak"
-version = "0.1.4"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f6d5ed8676d904364de097082f4e7d240b571b67989ced0240f08b7f966f940"
+checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
 dependencies = [
  "cpufeatures",
 ]
@@ -8188,9 +8188,9 @@ dependencies = [
 
 [[package]]
 name = "maxminddb"
-version = "0.26.0"
+version = "0.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a197e44322788858682406c74b0b59bf8d9b4954fe1f224d9a25147f1880bba"
+checksum = "76371bd37ce742f8954daabd0fde7f1594ee43ac2200e20c003ba5c3d65e2192"
 dependencies = [
  "ipnetwork 0.21.1",
  "log",
@@ -8451,25 +8451,21 @@ dependencies = [
 
 [[package]]
 name = "moka"
-version = "0.12.8"
+version = "0.12.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32cf62eb4dd975d2dde76432fb1075c49e3ee2331cf36f1f8fd4b66550d32b6f"
+checksum = "a3dec6bd31b08944e08b58fd99373893a6c17054d6f3ea5006cc894f4f4eee2a"
 dependencies = [
  "async-lock",
- "async-trait",
  "crossbeam-channel",
  "crossbeam-epoch",
  "crossbeam-utils",
+ "equivalent",
  "event-listener 5.3.1",
  "futures-util",
- "once_cell",
  "parking_lot 0.12.5",
- "quanta",
- "rustc_version",
+ "portable-atomic",
  "smallvec",
  "tagptr",
- "thiserror 1.0.68",
- "triomphe",
  "uuid",
 ]
 
@@ -14221,12 +14217,6 @@ checksum = "761e8d5ad7ce14bb82b7e61ccc0ca961005a275a060b9644a2431aa11553c2ff"
 dependencies = [
  "serde_json",
 ]
-
-[[package]]
-name = "triomphe"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0eee8098afad3fb0c54a9007aab6804558410503ad676d4633f9c2559a00ac0f"
 
 [[package]]
 name = "trust-dns-proto"

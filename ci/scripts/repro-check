@@ -4,6 +4,7 @@ import argparse
 import collections
 import concurrent.futures
 import contextlib
+import copy
 import hashlib
 import json
 import logging
@@ -180,6 +181,16 @@ def compare_hashes(local_hash_value: str, remote_hash_value: str, os_type: str) 
         )
         return True
 
+def format_measurements(measurements: dict) -> dict:
+    """Formats the 'measurement' field from a list of integers to a hex string."""
+    formatted = copy.deepcopy(measurements)
+    if "guest_launch_measurements" in formatted:
+        for item in formatted["guest_launch_measurements"]:
+            if "measurement" in item and isinstance(item["measurement"], list):
+                item["measurement"] = bytes(item["measurement"]).hex()
+    return formatted
+
+
 def compare_measurements(local_measurements: str, remote_measurements: str) -> bool:
     """
     Compares the local measurements against the remote to verify reproducibility.
@@ -189,8 +200,8 @@ def compare_measurements(local_measurements: str, remote_measurements: str) -> b
     if local_measurements != remote_measurements:
         logger.error(
             f"Error! The measurements from the remote does not match the ones we just built for guest-os.\n"
-            f"Local:   {local_measurements}\n"
-            f"Remote:  {remote_measurements}"
+            f"Local:   {format_measurements(local_measurements)}\n"
+            f"Remote:  {format_measurements(remote_measurements)}"
         )
         return False
     else:
@@ -198,8 +209,8 @@ def compare_measurements(local_measurements: str, remote_measurements: str) -> b
         logger.info(
             f"The measurements for guest-os from the artifact built locally and "
             f"the one fetched from remote match:\n"
-            f"\tLocal = {local_measurements}\n"
-            f"\tRemote = {remote_measurements}\n"
+            f"\tLocal = {format_measurements(local_measurements)}\n"
+            f"\tRemote = {format_measurements(remote_measurements)}\n"
         )
         return True
 
@@ -754,7 +765,8 @@ class ReproducibilityVerifier:
             final_measurements.append(local_measurements)
 
         if len(set(final_measurements)) != 1:
-            raise VerificationError(f"The sources for guest-os do not all match! {final_measurements}")
+            formatted_measurements = [format_measurements(json.loads(m)) for m in final_measurements]
+            raise VerificationError(f"The sources for guest-os do not all match! {formatted_measurements}")
         return final_measurements[0]
 
     def compare_proposal_vs_cdn(
@@ -807,8 +819,8 @@ class ReproducibilityVerifier:
         if cdn_measurements != proposal_measurements:
             raise VerificationError(
                 "The measurements from the proposal do not match the ones from the CDN storage for GuestOS.\n"
-                f"Proposal measurements: {proposal_measurements}\n"
-                f"CDN measurements:      {cdn_measurements}"
+                f"Proposal measurements: {format_measurements(proposal_measurements)}\n"
+                f"CDN measurements:      {format_measurements(cdn_measurements)}"
             )
         else:
             logger.info("The GuestOS measurements from the proposal and remote match.")

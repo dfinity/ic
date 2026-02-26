@@ -2,17 +2,18 @@ use crate::guest_direct_boot::{DirectBoot, prepare_direct_boot};
 use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
+use crate::hugepages::{read_available_hugepages_gib, reserve_hugepages};
+use crate::metrics::GuestVmMetrics;
 use crate::systemd_notifier::SystemdNotifier;
 use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{Context, Error, Result, anyhow, bail};
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use command_runner::{AsyncCommandRunner, RealAsyncCommandRunner};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use ic_device::device_mapping::MappedDevice;
 use ic_device::mount::{GptPartitionProvider, PartitionProvider};
-use ic_metrics_tool::{Metric, MetricsWriter};
 use nix::unistd::getuid;
 use sev_host::HostSevCertificateProvider;
 use std::fmt::{Debug, Formatter};
@@ -38,6 +39,8 @@ use virt::sys::{
 mod boot_args;
 mod guest_direct_boot;
 mod guest_vm_config;
+mod hugepages;
+mod metrics;
 mod systemd_notifier;
 mod upgrade_device_mapper;
 
@@ -50,7 +53,7 @@ const CONSOLE_TTY1_PATH: &str = "/dev/tty1";
 const CONSOLE_TTY_SERIAL_PATH: &str = "/dev/ttyS0";
 const GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
 
-const SEV_CERTIFICATE_CACHE_DIR: &str = "/var/ic/sev/certificates";
+const SEV_CERTIFICATE_CACHE_DIR: &str = "/boot/config/sev/certificates";
 
 /// If we cannot decide from the logs within this timeout whether the GuestOS boot succeeded or
 /// failed, we dump GuestOS logs on the console.
@@ -78,10 +81,23 @@ impl GuestVMType {
     }
 }
 
+#[derive(Subcommand)]
+enum Command {
+    /// Run the GuestOS virtual machine
+    Run {
+        #[arg(long = "type", default_value = "default", value_enum)]
+        vm_type: GuestVMType,
+    },
+    /// Reserve hugepages for the GuestOS virtual machine.
+    /// Only allocates hugepages when trusted execution environment (SEV-SNP) is disabled in
+    /// the config.
+    ReserveHugepages,
+}
+
 #[derive(Parser)]
 struct Args {
-    #[arg(long = "type", default_value = "default", value_enum)]
-    vm_type: GuestVMType,
+    #[command(subcommand)]
+    command: Command,
 }
 
 #[tokio::main]
@@ -93,7 +109,14 @@ pub async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    let startup_message = match args.vm_type {
+    match args.command {
+        Command::ReserveHugepages => reserve_hugepages(),
+        Command::Run { vm_type } => run(vm_type).await,
+    }
+}
+
+async fn run(vm_type: GuestVMType) -> Result<()> {
+    let startup_message = match vm_type {
         GuestVMType::Default => "Launching GuestOS Virtual Machine...",
         GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
     };
@@ -108,7 +131,7 @@ pub async fn main() -> Result<()> {
     let termination_token = CancellationToken::new();
     setup_signal_handler(termination_token.clone()).context("Failed to setup signal handler")?;
 
-    GuestVmService::create_and_run(args.vm_type, termination_token).await
+    GuestVmService::create_and_run(vm_type, termination_token).await
 }
 
 fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
@@ -373,7 +396,7 @@ impl Debug for GuestVmServiceError {
 
 /// Service responsible for managing the GuestOS virtual machine lifecycle
 pub struct GuestVmService {
-    metrics_writer: MetricsWriter,
+    metrics: GuestVmMetrics,
     libvirt_connection: Connect,
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
@@ -397,7 +420,8 @@ impl GuestVmService {
 
     #[cfg(target_os = "linux")]
     pub fn new(guest_vm_type: GuestVMType) -> Result<Self> {
-        let metrics_writer = MetricsWriter::new(PathBuf::from(Self::metrics_path(guest_vm_type)));
+        let metrics = GuestVmMetrics::new(PathBuf::from(Self::metrics_path(guest_vm_type)))
+            .context("Failed to create metrics")?;
         let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
             config_tool::deserialize_config(config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
@@ -435,7 +459,7 @@ impl GuestVmService {
             .unwrap_or(Path::new(GUESTOS_DEVICE));
 
         Ok(Self {
-            metrics_writer,
+            metrics,
             libvirt_connection,
             hostos_config,
             guest_vm_type,
@@ -503,23 +527,11 @@ impl GuestVmService {
     ) -> Result<(), GuestVmServiceError> {
         let virtual_machine = match self.start_virtual_machine().await {
             Ok(virtual_machine) => {
-                self.metrics_writer
-                    .write_metrics(&[Metric::with_annotation(
-                        "hostos_guestos_service_start",
-                        1.0,
-                        "GuestOS virtual machine define state",
-                    )
-                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
+                self.metrics.set_service_start(self.guest_vm_type, true);
                 virtual_machine
             }
             Err(err) => {
-                self.metrics_writer
-                    .write_metrics(&[Metric::with_annotation(
-                        "hostos_guestos_service_start",
-                        0.0,
-                        "GuestOS virtual machine define state",
-                    )
-                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
+                self.metrics.set_service_start(self.guest_vm_type, false);
                 return Err(err);
             }
         };
@@ -585,6 +597,9 @@ impl GuestVmService {
         )
         .context("Failed to assemble config media")?;
 
+        let available_hugepages_gib = read_available_hugepages_gib();
+        println!("Available huge pages: {} GiB", available_hugepages_gib);
+
         let vm_config = generate_vm_config(
             &self.hostos_config,
             config_media.path(),
@@ -592,6 +607,8 @@ impl GuestVmService {
             &self.disk_device,
             &self.vm_serial_log_path,
             self.guest_vm_type,
+            available_hugepages_gib,
+            &self.metrics,
         )
         .context("Failed to generate GuestOS VM config")?;
 
@@ -996,7 +1013,7 @@ mod tests {
                 mock_host_sev_certificate_provider()
                     .expect("Failed to create mock SEV cert provider");
             let mut service = GuestVmService {
-                metrics_writer: MetricsWriter::new(metrics_file.path().to_path_buf()),
+                metrics: GuestVmMetrics::new(metrics_file.path().to_path_buf()).unwrap(),
                 libvirt_connection: self.libvirt_connection.clone(),
                 hostos_config: self.hostos_config.clone(),
                 systemd_notifier: systemd_notifier.clone(),
@@ -1094,6 +1111,11 @@ mod tests {
                 "GuestOS virtual machine launched",
                 "2001:db8::6800:d8ff:fecb:f597",
             ])
+            .unwrap();
+
+        // No hugepages available in the test environment
+        service
+            .check_metrics_contains("hostos_guestos_hugepages_enabled{vm_type=\"default\"} 0")
             .unwrap();
 
         // Ensure that the config media and kernel exist
