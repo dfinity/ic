@@ -6,6 +6,7 @@ package(default_visibility = [
     "//rs/registry:__subpackages__",
     "//rs/replica:__subpackages__",
     "//rs/test_utilities:__subpackages__",
+    "//rs/tests/consensus:__subpackages__",
 ])
 
 rust_library(

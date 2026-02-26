@@ -15686,6 +15686,7 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-consensus-features",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-cup-explorer",
  "ic-limits",

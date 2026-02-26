@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -240,6 +240,49 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "subnet_splitting_v2_test",
+    env = {
+        "MESSAGE_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/message:message.wasm.gz)",
+        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
+    },
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_splitting",
+    ],
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | XNET_TEST_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/canister_client",
+        "//rs/consensus/features",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/xnet_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:http-body-util",
+        "@crate_index//:hyper",
+        "@crate_index//:hyper-util",
+        "@crate_index//:prost",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
     ],
 )
 

@@ -14,6 +14,7 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-consensus-features = { path = "../../consensus/features" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-cup-explorer = { path = "../../cup_explorer" }
 ic-limits = { path = "../../limits" }
@@ -106,6 +107,10 @@ path = "catch_up_loop_prevention_test.rs"
 [[bin]]
 name = "ic-systest-subnet-splitting"
 path = "subnet_splitting_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-splitting-v2"
+path = "subnet_splitting_v2_test.rs"
 
 [features]
 upload_perf_systest_results = []
