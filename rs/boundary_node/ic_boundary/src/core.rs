@@ -648,7 +648,7 @@ async fn setup_registry(
     );
     tasks.add_interval("snapshotter", Arc::new(snapshotter), 5 * SECOND);
 
-    // Start the health checking
+    // Start the health checking and certified membership fetching
     let membership_fetcher = CertifiedMembershipFetcherImpl::new(
         http_client_check.clone(),
         cli.health.health_check_timeout,
