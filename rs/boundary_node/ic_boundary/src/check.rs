@@ -1224,4 +1224,121 @@ pub(crate) mod test {
 
         Ok(())
     }
+
+    // Ensure that when the membership fetcher fails, all healthy nodes are
+    // included (fail-open behavior).
+    #[tokio::test]
+    async fn test_membership_fetch_failure_includes_all_nodes() -> Result<(), Error> {
+        let routes = Arc::new(ArcSwapOption::empty());
+        let persister = Arc::new(Persister::new(routes.clone()));
+
+        let mut checker = MockCheck::new();
+        checker
+            .expect_check()
+            .returning(|_| Ok(check_result(1000)));
+
+        let (channel_send, channel_recv) = watch::channel(None);
+        let runner = Runner::new(
+            10,
+            Duration::from_millis(100),
+            Duration::from_millis(1),
+            Arc::new(checker),
+            persister,
+            #[allow(clippy::disallowed_types)]
+            Mutex::new(channel_recv),
+            noop_membership_fetcher(), // always returns Err → fail-open
+        );
+        tokio::spawn(async move {
+            let _ = runner.run(CancellationToken::new()).await;
+        });
+
+        let snapshot = generate_custom_registry_snapshot(2, 2, 0);
+        channel_send.send(Some(Arc::new(snapshot))).unwrap();
+
+        for _ in 1..10 {
+            if routes.load().is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        let rt = routes.load_full().unwrap();
+        assert_eq!(rt.node_count, 4);
+        assert!(rt.node_exists(node_id(0)));
+        assert!(rt.node_exists(node_id(1)));
+        assert!(rt.node_exists(node_id(100)));
+        assert!(rt.node_exists(node_id(101)));
+
+        Ok(())
+    }
+
+    fn build_node_tree(subnet_id: Principal, node_ids: &[Principal]) -> MixedHashTree {
+        let node_subtree = match node_ids.len() {
+            0 => MixedHashTree::Empty,
+            1 => MixedHashTree::Labeled(
+                Label::from(node_ids[0].as_slice()),
+                Box::new(MixedHashTree::Leaf(vec![1])),
+            ),
+            _ => {
+                let mut tree = MixedHashTree::Fork(Box::new((
+                    MixedHashTree::Labeled(
+                        Label::from(node_ids[0].as_slice()),
+                        Box::new(MixedHashTree::Leaf(vec![1])),
+                    ),
+                    MixedHashTree::Labeled(
+                        Label::from(node_ids[1].as_slice()),
+                        Box::new(MixedHashTree::Leaf(vec![1])),
+                    ),
+                )));
+                for id in &node_ids[2..] {
+                    tree = MixedHashTree::Fork(Box::new((
+                        tree,
+                        MixedHashTree::Labeled(
+                            Label::from(id.as_slice()),
+                            Box::new(MixedHashTree::Leaf(vec![1])),
+                        ),
+                    )));
+                }
+                tree
+            }
+        };
+
+        MixedHashTree::Labeled(
+            Label::from("subnet"),
+            Box::new(MixedHashTree::Labeled(
+                Label::from(subnet_id.as_slice()),
+                Box::new(MixedHashTree::Labeled(
+                    Label::from("node"),
+                    Box::new(node_subtree),
+                )),
+            )),
+        )
+    }
+
+    #[test]
+    fn test_extract_node_ids_happy_path() {
+        let subnet_id = subnet_test_id(0).get().0;
+        let ids = vec![node_id(0), node_id(1), node_id(2)];
+        let tree = build_node_tree(subnet_id, &ids);
+
+        let result = extract_node_ids_from_tree(&tree, subnet_id).unwrap();
+        assert_eq!(result.len(), 3);
+        for id in &ids {
+            assert!(result.contains(id));
+        }
+    }
+
+    #[test]
+    fn test_extract_node_ids_empty_subtree() {
+        let subnet_id = subnet_test_id(0).get().0;
+        let tree = build_node_tree(subnet_id, &[]);
+
+        let result = extract_node_ids_from_tree(&tree, subnet_id);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("no node members"));
+    }
+
 }
