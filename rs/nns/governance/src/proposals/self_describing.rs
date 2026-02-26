@@ -82,15 +82,14 @@ impl DocumentedAction for NetworkEconomics {
 
 impl DocumentedAction for RewardNodeProvider {
     const NAME: &'static str = "Reward Node Provider";
-    const DESCRIPTION: &'static str = "Propose to reward a node provider an amount of ICP, \
-        either by minting directly to their account or by creating a new neuron on \
-        their behalf.";
+    const DESCRIPTION: &'static str = "Reward a node provider an amount of ICP as compensation \
+        for providing nodes to the IC.";
 }
 
 impl DocumentedAction for RewardNodeProviders {
     const NAME: &'static str = "Reward Node Providers";
-    const DESCRIPTION: &'static str = "Propose to reward multiple node providers, either with \
-        specified amounts or with rewards derived from the registry.";
+    const DESCRIPTION: &'static str = "Reward multiple node providers an amount of ICP as \
+        compensation for providing nodes to the IC.";
 }
 
 /// A builder for `SelfDescribingValue` objects.
