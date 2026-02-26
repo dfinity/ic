@@ -2488,6 +2488,7 @@ impl CanisterManager {
             round_limits,
             validated_cycles_and_memory_usage,
         );
+        // `instructions_for_execution_state` have already been deducted by `create_execution_state`
         round_limits.instructions -= as_round_instructions(instructions_for_snapshot);
 
         // The canister ID from which the snapshot was loaded in case
@@ -2644,7 +2645,7 @@ impl CanisterManager {
         let num_instructions = self.config.canister_snapshot_data_baseline_instructions;
         round_limits.instructions -= as_round_instructions(num_instructions);
 
-        let result = ReadCanisterSnapshotMetadataResponse {
+        let response = ReadCanisterSnapshotMetadataResponse {
             source: snapshot.source(),
             taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
@@ -2669,7 +2670,7 @@ impl CanisterManager {
                 .execution_snapshot()
                 .on_low_wasm_memory_hook_status,
         };
-        (Ok(result), num_instructions)
+        (Ok(response), NumInstructions::new(0))
     }
 
     pub(crate) fn read_snapshot_data(

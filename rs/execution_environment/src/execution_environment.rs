@@ -2559,17 +2559,16 @@ impl ExecutionEnvironment {
             cost_schedule,
             resource_saturation,
         );
-        let result = result
-            .map(
-                |UploadChunkResult {
-                     reply,
-                     heap_delta_increase,
-                 }| {
-                    state.metadata.heap_delta_estimate += heap_delta_increase;
-                    reply.encode()
-                },
-            )
-            .map_err(|err| err.into());
+        let result = match result {
+            Ok(UploadChunkResult {
+                reply,
+                heap_delta_increase,
+            }) => {
+                state.metadata.heap_delta_estimate += heap_delta_increase;
+                Ok(reply.encode())
+            }
+            Err(err) => Err(err.into()),
+        };
         (result, instructions_used)
     }
 
@@ -2813,9 +2812,10 @@ impl ExecutionEnvironment {
             subnet_size,
             round_limits,
         );
-        let result = result
-            .map(|result| Encode!(&result).unwrap())
-            .map_err(UserError::from);
+        let result = match result {
+            Ok(result) => Ok(Encode!(&result).unwrap()),
+            Err(err) => Err(UserError::from(err)),
+        };
 
         // Put canister back.
         state.put_canister_state(canister);
