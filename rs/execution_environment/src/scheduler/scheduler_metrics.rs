@@ -8,7 +8,10 @@ use ic_replicated_state::metrics::{
     duration_histogram, instructions_buckets, instructions_histogram, messages_buckets,
     messages_histogram, slices_histogram,
 };
+use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::{PrincipalId, Time};
 use prometheus::{Gauge, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec};
+use std::collections::BTreeMap;
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
 pub(crate) const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str =
@@ -496,4 +499,50 @@ fn phase_messages_histogram(
         )
         .unwrap(),
     )
+}
+
+/// Aggregator and observer of per-canister ingress queue latencies.
+pub(super) struct CanisterIngressQueueLatencies {
+    /// Per canister observed ingress message latency sum and count.
+    latencies: BTreeMap<PrincipalId, (f64, usize)>,
+    /// Current block time.
+    time: Time,
+    /// Histogram to observe the latencies.
+    histogram: Histogram,
+}
+
+impl CanisterIngressQueueLatencies {
+    pub(super) fn new(time: Time, histogram: Histogram) -> Self {
+        Self {
+            latencies: BTreeMap::new(),
+            time,
+            histogram,
+        }
+    }
+
+    /// Records the ingress queue latency of a message iff it is transitioning from
+    /// `Received` to some other state (i.e. when popped from the ingress queue).
+    pub(super) fn on_ingress_status_changed(&mut self, old_status: &IngressStatus) {
+        if let IngressStatus::Known {
+            receiver,
+            user_id: _,
+            time,
+            state: IngressState::Received,
+        } = old_status
+        {
+            let (latency, count) = self.latencies.entry(*receiver).or_default();
+            *latency += self.time.saturating_duration_since(*time).as_secs_f64();
+            *count += 1;
+        }
+    }
+}
+
+impl Drop for CanisterIngressQueueLatencies {
+    /// Observes the average ingress queue latency of each canister at the end of
+    /// the round.
+    fn drop(&mut self) {
+        for (latency, count) in self.latencies.values() {
+            self.histogram.observe(*latency / *count as f64);
+        }
+    }
 }
