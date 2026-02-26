@@ -9,7 +9,7 @@ use ic_types::{
 };
 use rayon::{
     ThreadPool,
-    iter::{IntoParallelIterator, ParallelIterator},
+    iter::{IntoParallelRefIterator, ParallelIterator},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -61,7 +61,7 @@ pub(crate) fn update_signature_agreements(
 
     let new_agreements = thread_pool.install(|| {
         all_requests
-            .into_par_iter()
+            .par_iter()
             .filter_map(|(&callback_id, context)| {
                 if payload
                     .signature_agreements
