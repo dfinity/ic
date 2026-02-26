@@ -529,28 +529,25 @@ where
     }
 
     fn sync_blocks(&mut self, channel: &mut impl Channel<Network::Header, Network::Block>) {
-        // Timeout requests so they may be retried again.
-        let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
-        // Track which peer each timed-out block was previously sent to,
-        // so we can avoid retrying on the same peer (which likely doesn't have the block).
-        let mut timed_out_peers: HashMap<BlockHash, SocketAddr> = HashMap::new();
-        for (block_hash, request) in self.getdata_request_info.iter_mut() {
+        // Timeout requests so they may be retried again, but the same peer should be avoided.
+        let mut retry_queue: LinkedHashSet<(BlockHash, Option<SocketAddr>)> = LinkedHashSet::new();
+        for (block_hash, request) in self.getdata_request_info.iter() {
             match request.sent_at {
                 Some(sent_at) => {
                     if sent_at.elapsed() > self.request_timeout {
-                        retry_queue.insert(*block_hash);
-                        timed_out_peers.insert(*block_hash, request.socket);
+                        retry_queue.insert((*block_hash, Some(request.socket)));
                     }
                 }
                 None => {
-                    retry_queue.insert(*block_hash);
+                    // This request wasn't sent, so no peer is recorded.
+                    retry_queue.insert((*block_hash, None));
                 }
             }
         }
 
         // If a request timed out, there is no point in storing it in getdata_request_info
         // Not removing it can actually lead to the adapter stalling, thinking all of its peers are busy.
-        for block_hash in &retry_queue {
+        for (block_hash, _) in &retry_queue {
             self.getdata_request_info.remove(block_hash);
         }
 
@@ -590,22 +587,19 @@ where
             let num_requests_to_be_sent =
                 INV_PER_GET_DATA_REQUEST.saturating_sub(*requests_sent_to_peer);
 
-            // Randomly sample some inventory to be requested from the peer.
+            // Select inventory to be requested from the peer.
             let mut selected_inventory = vec![];
             for _ in 0..num_requests_to_be_sent {
-                // First try new blocks from sync_queue (any peer is fine).
-                if let Some(hash) = self.block_sync_queue.pop_front() {
-                    selected_inventory.push(hash);
-                } else {
-                    // Then try retry blocks, but avoid peers that already timed out for that block.
-                    match pop_retry_block_for_peer(&mut retry_queue, &peer.socket, &timed_out_peers)
-                    {
-                        Some(hash) => {
-                            selected_inventory.push(hash);
-                        }
-                        None => {
-                            break;
-                        }
+                match get_next_block_hash_to_sync(
+                    Some(peer.socket),
+                    &mut retry_queue,
+                    &mut self.block_sync_queue,
+                ) {
+                    Some(hash) => {
+                        selected_inventory.push(hash);
+                    }
+                    None => {
+                        break;
                     }
                 }
             }
@@ -644,11 +638,9 @@ where
             }
         }
 
-        // Put any remaining retry blocks back into the sync queue so they aren't lost.
-        // This can happen when all peers have been tried for certain blocks.
-        for hash in retry_queue {
-            self.block_sync_queue.insert(hash);
-        }
+        // Note that leftovers in retry_queue are not put back to block_sync_queue
+        // because timed out requests are likely for blocks not on the main branch
+        // and when all peers are already busy it should be okay not to process them.
     }
 
     /// This function is called by the adapter when a new event takes place.
@@ -780,43 +772,32 @@ where
     }
 }
 
-/// Picks a block from the retry queue that was NOT previously sent to the given peer.
-/// This prevents the adapter from repeatedly sending `getdata` for a block to a peer
-/// that doesn't have it (e.g. a block from a fork that only exists on another peer).
-/// If all retry blocks have been tried on this peer, returns `None` so the block
-/// can be picked up by a different peer.
-fn pop_retry_block_for_peer(
-    retry_queue: &mut LinkedHashSet<BlockHash>,
-    peer: &SocketAddr,
-    timed_out_peers: &HashMap<BlockHash, SocketAddr>,
+// Pick a block by removing it from the queues. If it was from the retry_queue, the peer
+// must not be the same as the given peer, because it is likely to time out again.
+//
+// Prioritzes new blocks that are in the sync queue over the ones in the retry queue, as
+// blocks in the retry queue are most likely not part of the main chain. See more in CON-1464.
+fn get_next_block_hash_to_sync(
+    peer: Option<SocketAddr>,
+    retry_queue: &mut LinkedHashSet<(BlockHash, Option<SocketAddr>)>,
+    sync_queue: &mut LinkedHashSet<BlockHash>,
 ) -> Option<BlockHash> {
-    // Find the first block that wasn't previously tried on this peer.
-    let preferred = retry_queue
-        .iter()
-        .find(|hash| timed_out_peers.get(*hash) != Some(peer))
-        .copied();
-    if let Some(hash) = preferred {
-        retry_queue.remove(&hash);
-        return Some(hash);
-    }
-    // All remaining retry blocks were tried on this peer.
-    // Return None to let other peers try them.
-    None
+    sync_queue.pop_front().or_else(|| {
+        retry_queue
+            .iter()
+            .find(|(_, timed_out_peer)| timed_out_peer != &peer)
+            .cloned()
+            .map(|selected| {
+                retry_queue.remove(&selected);
+                selected.0
+            })
+    })
 }
 
 #[cfg(test)]
 pub mod test {
     use super::*;
 
-    // Only returns a block if the cache is not full.
-    // Prioritzes new blocks that are in the sync queue over the ones in the retry queue, as
-    // blocks in the retry queue are most likely not part of the main chain. See more in CON-1464.
-    fn get_next_block_hash_to_sync(
-        retry_queue: &mut LinkedHashSet<BlockHash>,
-        sync_queue: &mut LinkedHashSet<BlockHash>,
-    ) -> Option<BlockHash> {
-        sync_queue.pop_front().or_else(|| retry_queue.pop_front())
-    }
     use crate::common::test_common::TestState;
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
@@ -1618,6 +1599,45 @@ pub mod test {
         );
     }
 
+    /// Test to check that the retry queue avoids returning hash with a known peer.
+    #[test]
+    fn test_get_next_block_hash_with_known_peer() {
+        let genesis_block = genesis_block(Network::Regtest);
+        let headers = generate_headers(
+            genesis_block.block_hash(),
+            genesis_block.header.time,
+            2,
+            &[],
+        );
+        // Sync queue starts empty.
+        let mut sync_queue = LinkedHashSet::new();
+        // Retry queue starts with 2 item.
+        let peer = SocketAddr::from_str("127.0.0.1:2345").unwrap();
+        let mut retry_queue: LinkedHashSet<_> = headers
+            .iter()
+            .map(|h| (h.block_hash(), Some(peer)))
+            .take(2)
+            .collect();
+        // Set peer to None for the last item.
+        let (hash, _) = retry_queue.pop_back().unwrap();
+        retry_queue.insert((hash, None));
+
+        // Try with `is_cache_full` set to false.
+        let first_hash = retry_queue.front().unwrap().0;
+        let second_hash = retry_queue.back().unwrap().0;
+        // With known peer, it should get the second hash.
+        let result = get_next_block_hash_to_sync(Some(peer), &mut retry_queue, &mut sync_queue);
+        assert!(matches!(result, Some(block_hash) if block_hash == second_hash));
+        // With the same peer, it should get none.
+        assert_eq!(retry_queue.len(), 1);
+        let result = get_next_block_hash_to_sync(Some(peer), &mut retry_queue, &mut sync_queue);
+        assert!(result.is_none());
+        // With no peer, it should get the first hash.
+        let result = get_next_block_hash_to_sync(None, &mut retry_queue, &mut sync_queue);
+        assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
+        assert_eq!(retry_queue.len(), 0);
+    }
+
     /// Test to check that the retry queue is always used to retrieve the next block hash.
     #[test]
     fn test_get_next_block_hash_to_sync_retrieves_from_sync_queue_first_only_if_cahce_not_full() {
@@ -1632,9 +1652,9 @@ pub mod test {
         let mut sync_queue: LinkedHashSet<BlockHash> =
             headers.iter().map(|h| h.block_hash()).take(2).collect();
         // Retry queue starts with 1 item.
-        let mut retry_queue: LinkedHashSet<BlockHash> = headers
+        let mut retry_queue: LinkedHashSet<_> = headers
             .iter()
-            .map(|h| h.block_hash())
+            .map(|h| (h.block_hash(), None))
             .skip(2)
             .take(1)
             .collect();
@@ -1644,7 +1664,7 @@ pub mod test {
             .front()
             .copied()
             .expect("Sync queue queue should have 2 items.");
-        let result = get_next_block_hash_to_sync(&mut retry_queue, &mut sync_queue);
+        let result = get_next_block_hash_to_sync(None, &mut retry_queue, &mut sync_queue);
         // The result is part of sync queue, and now sync queue only has one item
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(retry_queue.len(), 1);
@@ -1669,7 +1689,7 @@ pub mod test {
             .front()
             .copied()
             .expect("Sync queue should have 1 item.");
-        let result = get_next_block_hash_to_sync(&mut retry_queue, &mut sync_queue);
+        let result = get_next_block_hash_to_sync(None, &mut retry_queue, &mut sync_queue);
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(sync_queue.len(), 0);
         assert_eq!(retry_queue.len(), 0);
