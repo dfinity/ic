@@ -282,6 +282,7 @@ system_test_nns(
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",
+        "manual",  # the test is too flaky to run on CI
     ],
     deps = COMMON_DEPS + [
         "@crate_index//:tokio",
