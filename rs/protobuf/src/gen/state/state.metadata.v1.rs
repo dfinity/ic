@@ -247,7 +247,7 @@ pub mod pricing_version {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Replication {
-    #[prost(oneof = "replication::ReplicationType", tags = "1, 2")]
+    #[prost(oneof = "replication::ReplicationType", tags = "1, 2, 3")]
     pub replication_type: ::core::option::Option<replication::ReplicationType>,
 }
 /// Nested message and enum types in `Replication`.
@@ -258,7 +258,18 @@ pub mod replication {
         FullyReplicated(()),
         #[prost(message, tag = "2")]
         NonReplicated(super::super::super::super::types::v1::NodeId),
+        #[prost(message, tag = "3")]
+        Flexible(super::FlexibleReplication),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleReplication {
+    #[prost(message, repeated, tag = "1")]
+    pub committee: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+    #[prost(uint32, tag = "2")]
+    pub min_responses: u32,
+    #[prost(uint32, tag = "3")]
+    pub max_responses: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContextTree {

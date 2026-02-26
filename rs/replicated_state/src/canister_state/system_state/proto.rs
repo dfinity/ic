@@ -180,15 +180,10 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
     }
 }
 
-// TODO(DSM-95): Drop the `ccm` parameter in the next replica release.
-// It is only needed for backward compatible decoding of the legacy
-// `ExecutionTask::Response` variant, which has no callback.
-impl TryFrom<(pb::ExecutionTask, &mut CallContextManager)> for ExecutionTask {
+impl TryFrom<pb::ExecutionTask> for ExecutionTask {
     type Error = ProxyDecodeError;
 
-    fn try_from(
-        (value, ccm): (pb::ExecutionTask, &mut CallContextManager),
-    ) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::ExecutionTask) -> Result<Self, Self::Error> {
         let task = value
             .task
             .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
@@ -204,16 +199,6 @@ impl TryFrom<(pb::ExecutionTask, &mut CallContextManager)> for ExecutionTask {
                     PbInput::Request(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Request(Arc::new(v.try_into()?)),
                     ),
-                    PbInput::Response(v) => {
-                        let response = Response::try_from(v)?;
-                        let callback = ccm
-                            .unregister_callback(response.originator_reply_callback)
-                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?;
-                        CanisterMessageOrTask::Message(CanisterMessage::Response {
-                            response: Arc::new(response),
-                            callback,
-                        })
-                    }
                     PbInput::AbortedResponse(v) => {
                         let response = v
                             .response

@@ -85,6 +85,7 @@ type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
   features : SubnetFeatures;
   max_ingress_bytes_per_message : nat64;
+  max_ingress_bytes_per_block: opt nat64;
   dkg_dealings_per_block : nat64;
   max_block_payload_size : nat64;
   start_as_nns : bool;
@@ -453,6 +454,7 @@ type UpdateSubnetPayload = record {
   start_as_nns : opt bool;
   is_halted : opt bool;
   max_ingress_messages_per_block : opt nat64;
+  max_ingress_bytes_per_block: opt nat64;
   max_number_of_canisters : opt nat64;
   retransmission_request_ms : opt nat32;
   dkg_interval_length : opt nat64;
