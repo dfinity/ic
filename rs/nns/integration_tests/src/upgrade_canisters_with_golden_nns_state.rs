@@ -422,7 +422,13 @@ mod sanity_check {
                 println!(
                     "Feb reward: amount = {}, node provider = {}",
                     reward.amount_e8s / 10000,
-                    reward.node_provider.unwrap().id.unwrap().to_string()
+                    reward
+                        .node_provider
+                        .clone()
+                        .unwrap()
+                        .id
+                        .unwrap()
+                        .to_string()
                 )
             });
 
@@ -434,7 +440,13 @@ mod sanity_check {
                 println!(
                     "March - Node provider reward: amount = {}, node provider = {}",
                     reward.amount_e8s / 10000,
-                    reward.node_provider.unwrap().id.unwrap().to_string()
+                    reward
+                        .node_provider
+                        .clone()
+                        .unwrap()
+                        .id
+                        .unwrap()
+                        .to_string()
                 )
             });
 
