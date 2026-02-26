@@ -68,7 +68,9 @@ pub struct SchedulerMetrics {
     pub(super) round_finalization_stop_canisters: Histogram,
     pub(super) round_finalization_ingress: Histogram,
     pub(super) round_finalization_charge: Histogram,
+    pub(super) canister_heap_delta_debits: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
+    pub(super) canister_install_code_debits: Histogram,
     pub(super) canister_invariants: IntCounter,
     pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
     pub(super) scheduler_cores_invariant_broken: IntCounter,
@@ -316,11 +318,23 @@ impl SchedulerMetrics {
             // Pruning of expired messages from the ingress history.
             round_finalization_ingress: round_finalization_phase_duration_histogram("prune ingress", metrics_registry),
             round_finalization_charge: round_finalization_phase_duration_histogram("charge canisters", metrics_registry),
+            canister_heap_delta_debits: metrics_registry.histogram(
+                "scheduler_canister_heap_delta_debits",
+                "The heap delta debit of a canister at the end of the round, before \
+                subtracting the rate limit allowed amount.",
+                decimal_buckets(6, 10),
+            ),
             heap_delta_rate_limited_canisters_per_round: metrics_registry.histogram(
                 "scheduler_heap_delta_rate_limited_canisters_per_round",
                 "Number of canisters that were heap delta rate limited in a given round.",
                 // 0, 1, 2, 5, …, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
+            ),
+            canister_install_code_debits: instructions_histogram(
+                "scheduler_canister_install_code_debits",
+                "The install code debit of a canister at the end of the round, before \
+                subtracting the rate limit allowed amount",
+                metrics_registry,
             ),
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
             scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
@@ -359,9 +373,7 @@ pub(super) struct ReplicatedStateMetrics {
     pub(super) queues_oversized_requests_extra_bytes: IntGauge,
     pub(super) queues_best_effort_message_bytes: IntGauge,
     pub(super) current_heap_delta: IntGauge,
-    pub(super) canister_heap_delta_debits: Histogram,
     pub(super) canisters_not_in_routing_table: IntGauge,
-    pub(super) canister_install_code_debits: Histogram,
     pub(super) old_open_call_contexts: IntGaugeVec,
     pub(super) canisters_with_old_open_call_contexts: IntGaugeVec,
     pub(super) subnet_memory_usage_invariant: IntCounter,
@@ -490,21 +502,9 @@ impl ReplicatedStateMetrics {
                 "current_heap_delta",
                 "Estimate of the current size of the heap delta since the last checkpoint",
             ),
-            canister_heap_delta_debits: metrics_registry.histogram(
-                "scheduler_canister_heap_delta_debits",
-                "The heap delta debit of a canister at the end of the round, before \
-                subtracting the rate limit allowed amount.",
-                decimal_buckets(6, 10),
-            ),
             canisters_not_in_routing_table: metrics_registry.int_gauge(
                 "replicated_state_canisters_not_in_routing_table",
                 "Number of canisters in the state not assigned to the subnet range in the routing table."
-            ),
-            canister_install_code_debits: instructions_histogram(
-                "scheduler_canister_install_code_debits",
-                "The install code debit of a canister at the end of the round, before \
-                subtracting the rate limit allowed amount",
-                metrics_registry,
             ),
             old_open_call_contexts: metrics_registry.int_gauge_vec(
                 "scheduler_old_open_call_contexts",

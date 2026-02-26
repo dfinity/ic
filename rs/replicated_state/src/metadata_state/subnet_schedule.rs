@@ -39,6 +39,18 @@ impl CanisterPriority {
         long_execution_mode: LongExecutionMode::Opportunistic,
         last_full_execution_round: ExecutionRound::new(0),
     };
+
+    /// Returns the true priority of the canister, i.e. the accumulated priority
+    /// minus any priority credit.
+    pub fn true_priority(&self) -> AccumulatedPriority {
+        self.accumulated_priority - self.priority_credit
+    }
+
+    /// Returns true if the canister has non-zero accumulated priority or priority
+    /// credit.
+    pub fn is_non_zero(&self) -> bool {
+        self.accumulated_priority.get() != 0 || self.priority_credit.get() != 0
+    }
 }
 
 impl Default for CanisterPriority {

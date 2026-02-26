@@ -452,10 +452,6 @@ impl RoundSchedule {
                 .insert(*canister_id);
         }
 
-        fn true_priority(canister_priority: &CanisterPriority) -> AccumulatedPriority {
-            canister_priority.accumulated_priority - canister_priority.priority_credit
-        }
-
         // Add all canisters that we (tried to) schedule this round to the subnet
         // schedule; grant them their compute allocation; and calculate the subnet-wide
         // free allocation (as the deviation from zero of all canisters' total
@@ -469,7 +465,7 @@ impl RoundSchedule {
             };
             let canister_priority = subnet_schedule.get_mut(*canister_id);
             canister_priority.accumulated_priority += from_ca(canister.compute_allocation());
-            free_allocation -= true_priority(canister_priority);
+            free_allocation -= canister_priority.true_priority();
             Arc::make_mut(canister)
                 .system_state
                 .canister_metrics_mut()
@@ -497,7 +493,7 @@ impl RoundSchedule {
         // if it has no more inputs and has reached zero accumulated priority.
         let mut sorted_canister_priorities = subnet_schedule
             .iter()
-            .map(|(c, p)| (*c, true_priority(p)))
+            .map(|(c, p)| (*c, p.true_priority()))
             .collect::<Vec<_>>();
         sorted_canister_priorities.sort_by_key(|(c, p)| (std::cmp::Reverse(*p), *c));
         let mut accumulated_priority_deviation = 0.0;
@@ -521,10 +517,16 @@ impl RoundSchedule {
                 None => NextExecution::None,
             };
             if priority >= -canister_free_allocation && next_execution == NextExecution::None {
-                // Canister with no inputs that has just reached zero accumulated priority. Drop
-                // it from the subnet schedule.
-                subnet_schedule.remove(&canister_id);
+                // Canister with no inputs that has just reached zero accumulated priority.
+                subnet_schedule.get_mut(canister_id).accumulated_priority = ZERO;
                 free_allocation += priority;
+
+                // Drop it from the subnet schedule iff it has no heap delta or install code
+                // debits.
+                if canister_state.is_none_or(|canister_state| !canister_state.must_be_in_schedule())
+                {
+                    subnet_schedule.remove(&canister_id);
+                }
                 // println!(
                 //     "Removed canister: {} with priority: {}",
                 //     canister_id, priority
@@ -542,7 +544,7 @@ impl RoundSchedule {
                 const AP_ROUNDS_MAX: i64 = 5;
                 let canister_free_allocation = std::cmp::min(
                     canister_free_allocation,
-                    ONE_HUNDRED_PERCENT * AP_ROUNDS_MAX - true_priority(canister_priority),
+                    ONE_HUNDRED_PERCENT * AP_ROUNDS_MAX - canister_priority.true_priority(),
                 );
 
                 canister_priority.accumulated_priority += canister_free_allocation;

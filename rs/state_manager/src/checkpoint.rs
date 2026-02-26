@@ -548,7 +548,9 @@ impl CheckpointLoader {
 
         for result in results.into_iter() {
             let (canister_state, canister_priority, durations) = result?;
-            priorities.insert(canister_state.canister_id(), canister_priority);
+            if canister_priority.is_non_zero() || canister_state.must_be_in_schedule() {
+                priorities.insert(canister_state.canister_id(), canister_priority);
+            }
             canister_states.insert(canister_state.canister_id(), Arc::new(canister_state));
 
             durations.apply(&self.metrics);

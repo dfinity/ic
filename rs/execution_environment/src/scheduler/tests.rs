@@ -500,6 +500,8 @@ fn canister_gets_heap_delta_rate_limited() {
     test.canister_state_mut(canister_id)
         .scheduler_state
         .heap_delta_debit = heap_delta_rate_limit * 2 - NumBytes::from(1);
+    // Add the canister to the subnet schedule.
+    test.state_mut().canister_priority_mut(canister_id);
 
     // Current heap delta debit is over the limit, so the canister shouldn't run.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -2865,11 +2867,13 @@ fn heap_delta_rate_limiting_metrics_recorded() {
         .build();
 
     // One canister starts with a heap delta already above the limit, so it should
-    // still be rate limited at the end of the round.
+    // be rate limited throughout the round.
     let canister0 = test.create_canister();
     test.canister_state_mut(canister0)
         .scheduler_state
-        .heap_delta_debit = scheduler_config.heap_delta_rate_limit.increment();
+        .heap_delta_debit = scheduler_config.heap_delta_rate_limit;
+    // Add it to the subnet schedule.
+    test.state_mut().canister_priority_mut(canister0);
     test.send_ingress(canister0, ingress(1).dirty_pages(1));
 
     let canister1 = test.create_canister();
@@ -2877,16 +2881,12 @@ fn heap_delta_rate_limiting_metrics_recorded() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let state_metrics = &test.scheduler().state_metrics;
-    assert_eq!(
-        state_metrics.canister_heap_delta_debits.get_sample_count(),
-        2
-    );
-    assert_eq!(
-        state_metrics.canister_heap_delta_debits.get_sample_sum(),
-        1.0
-    );
     let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.canister_heap_delta_debits.get_sample_count(), 2);
+    assert_eq!(
+        metrics.canister_heap_delta_debits.get_sample_sum() as u64,
+        scheduler_config.heap_delta_rate_limit.get() + 4096
+    );
     assert_eq!(
         metrics
             .heap_delta_rate_limited_canisters_per_round
@@ -2913,16 +2913,9 @@ fn heap_delta_rate_limiting_disabled() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let state_metrics = &test.scheduler().state_metrics;
-    assert_eq!(
-        state_metrics.canister_heap_delta_debits.get_sample_count(),
-        2
-    );
-    assert_eq!(
-        state_metrics.canister_heap_delta_debits.get_sample_sum() as u64,
-        0,
-    );
     let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.canister_heap_delta_debits.get_sample_count(), 2);
+    assert_eq!(metrics.canister_heap_delta_debits.get_sample_sum(), 0.0);
     assert_eq!(
         metrics
             .heap_delta_rate_limited_canisters_per_round

@@ -1472,9 +1472,16 @@ impl Scheduler for SchedulerImpl {
 
             let mut final_state;
             {
-                // TODO(DSM-103): Consider only covering actually scheduled canisters.
-                for canister in state.canisters_iter_mut() {
+                let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
+                for (canister_id, _) in subnet_schedule.iter() {
+                    let Some(canister) = canister_states.get_mut(canister_id) else {
+                        continue;
+                    };
+
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
+                    self.metrics
+                        .canister_heap_delta_debits
+                        .observe(heap_delta_debit as f64);
                     if heap_delta_debit > 0 {
                         let canister = Arc::make_mut(canister);
                         canister.scheduler_state.heap_delta_debit =
@@ -1488,6 +1495,9 @@ impl Scheduler for SchedulerImpl {
                     }
 
                     let install_code_debit = canister.scheduler_state.install_code_debit.get();
+                    self.metrics
+                        .canister_install_code_debits
+                        .observe(install_code_debit as f64);
                     if install_code_debit > 0 {
                         let canister = Arc::make_mut(canister);
                         canister.scheduler_state.install_code_debit =
@@ -1499,6 +1509,12 @@ impl Scheduler for SchedulerImpl {
                                 FlagStatus::Disabled => NumInstructions::from(0),
                             };
                     }
+                }
+
+                for canister_id in round_schedule.round_scheduled_canisters() {
+                    let Some(canister) = state.canister_state_mut_arc(canister_id) else {
+                        continue;
+                    };
 
                     let new_log = &canister.system_state.log_memory_store;
                     let old_log = &canister.system_state.canister_log;
@@ -2107,14 +2123,6 @@ fn observe_replicated_state_metrics(
         .set(state.canister_snapshots.count() as i64);
 
     for canister in state.canisters_iter() {
-        metrics
-            .canister_heap_delta_debits
-            .observe(canister.scheduler_state.heap_delta_debit.get() as f64);
-
-        metrics
-            .canister_install_code_debits
-            .observe(canister.scheduler_state.install_code_debit.get() as f64);
-
         let log_memory_usage = if LOG_MEMORY_STORE_FEATURE_ENABLED {
             canister.system_state.log_memory_store.memory_usage()
         } else {
