@@ -1028,7 +1028,7 @@ fn prepare_add_node_payload(
     node_sequence_number: u8,
     node_reward_type: NodeRewardType,
 ) -> AddNodePayload {
-    // As the node canister checks for validity of keys, we need to generate them first
+    // As the registry canister checks for validity of keys, we need to generate them first
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
     let node_public_keys =
         generate_node_keys_once(&config, None).expect("error generating node public keys");
