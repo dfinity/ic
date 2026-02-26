@@ -386,17 +386,16 @@ impl ValidProposalAction {
             ValidProposalAction::RewardNodeProvider(reward_node_provider) => {
                 to_self_describing_action(
                     "Reward Node Provider",
-                    "Propose to reward a node provider an amount of ICP, \
-                    either by minting directly to their account or by creating a new neuron on \
-                    their behalf.",
+                    "Reward a node provider an amount of ICP as compensation \
+                    for providing nodes to the IC.",
                     SelfDescribingValue::from(reward_node_provider.clone()),
                 )
             }
             ValidProposalAction::RewardNodeProviders(reward_node_providers) => {
                 to_self_describing_action(
                     "Reward Node Providers",
-                    "Propose to reward multiple node providers, either with \
-                    specified amounts or with rewards derived from the registry.",
+                    "Reward multiple node providers an amount of ICP as \
+                    compensation for providing nodes to the IC.",
                     SelfDescribingValue::from(reward_node_providers.clone()),
                 )
             }
