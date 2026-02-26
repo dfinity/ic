@@ -1,7 +1,9 @@
 use anyhow::Result;
+use std::cell::{Ref, RefCell};
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
-use virt::sys::{virDomainRunningReason, virDomainState};
+use virt::sys::virDomainState;
 
 /// Facade trait for operations on a libvirt domain.
 ///
@@ -35,8 +37,6 @@ pub trait LibvirtConnect: Send + Sync {
     /// Looks up a domain by its numeric id.
     fn lookup_domain_by_id(&self, id: u32) -> Result<Box<dyn LibvirtDomain>>;
 }
-
-// ─── Production implementations ──────────────────────────────────────────────
 
 /// Wraps a real `virt::domain::Domain` and implements [`LibvirtDomain`].
 #[cfg(target_os = "linux")]
@@ -106,12 +106,22 @@ impl LibvirtConnect for VirtConnectImpl {
 /// calls. If a call fails with [`virt::error::ErrorNumber::InvalidConn`] the
 /// cached connection is discarded, a fresh one is obtained from the factory,
 /// and the failing call is retried once with the new connection.
-pub struct LibvirtConnectionWithRetry {
+pub struct LibvirtConnectionWithReconnect {
     factory: Arc<dyn Fn() -> Result<Arc<dyn LibvirtConnect>> + Send + Sync>,
     connection: Mutex<Option<Arc<dyn LibvirtConnect>>>,
 }
 
-impl LibvirtConnectionWithRetry {
+/// Clones the connection factory (the cached connection is not cloned).
+impl Clone for LibvirtConnectionWithReconnect {
+    fn clone(&self) -> Self {
+        Self {
+            factory: self.factory.clone(),
+            connection: Mutex::new(None),
+        }
+    }
+}
+
+impl LibvirtConnectionWithReconnect {
     pub fn new(factory: Arc<dyn Fn() -> Result<Arc<dyn LibvirtConnect>> + Send + Sync>) -> Self {
         Self {
             factory,
@@ -133,7 +143,7 @@ impl LibvirtConnectionWithRetry {
     ///
     /// Call this whenever an external event (e.g. a libvirtd restart) has made
     /// the existing connection stale.
-    pub fn invalidate(&self) {
+    fn invalidate(&self) {
         *self.connection.lock().unwrap() = None;
     }
 
@@ -152,7 +162,7 @@ impl LibvirtConnectionWithRetry {
     }
 }
 
-impl LibvirtConnect for LibvirtConnectionWithRetry {
+impl LibvirtConnect for LibvirtConnectionWithReconnect {
     fn create_domain_xml(&self, xml: &str, flags: u32) -> Result<Box<dyn LibvirtDomain>> {
         self.call_with_reconnect(|conn| conn.create_domain_xml(xml, flags))
     }
