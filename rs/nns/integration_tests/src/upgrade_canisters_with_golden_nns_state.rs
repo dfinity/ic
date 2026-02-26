@@ -411,33 +411,38 @@ mod sanity_check {
         state_machine: &StateMachine,
         before: Metrics,
     ) {
-        advance_time_to_allow_for_voting_and_node_rewards(state_machine);
+        let before_timestamp = before
+            .governance_most_recent_monthly_node_provider_rewards
+            .timestamp;
+        advance_time_to_allow_for_voting_and_node_rewards(state_machine, before_timestamp);
         let after = fetch_metrics(state_machine);
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
-    fn advance_time_to_allow_for_voting_and_node_rewards(state_machine: &StateMachine) {
-        assert_eq!(NODE_PROVIDER_REWARD_PERIOD_SECONDS, ONE_MONTH_SECONDS);
-        // This is also enough time to make sure that there are some voting rewards.
-        let total_seconds = NODE_PROVIDER_REWARD_PERIOD_SECONDS
-            // Extra time. Not really sure if this is actually helpful (at
-            // reducing flakes), but it doesn't really hurt either
-            + 3 * ONE_DAY_SECONDS;
-        let step_seconds = 6 * 60 * 60;
-        let iterations = total_seconds.div_ceil(step_seconds);
-        for _ in 0..iterations {
-            state_machine.advance_time(Duration::from_secs(step_seconds));
-            state_machine.tick();
-            state_machine.tick();
-            state_machine.tick();
+    fn advance_time_to_allow_for_voting_and_node_rewards(
+        state_machine: &StateMachine,
+        before_timestamp: u64,
+    ) {
+        // Advance time in the state machine to just before the next node provider
+        // rewards distribution time.
+        let seconds_to_node_provider_reward_distribution = before_timestamp
+            + NODE_PROVIDER_REWARD_PERIOD_SECONDS
+            - state_machine.get_time().as_secs_since_unix_epoch();
+        state_machine.advance_time(std::time::Duration::from_secs(
+            seconds_to_node_provider_reward_distribution - 1,
+        ));
+        for _ in 0..100 {
+            state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
         }
 
-        // Extra time to give things a chance to settle down. Again, it's not
-        // clear whether this is actually helpful, but it also isn't super
-        // expensive.
-        for _ in 0..60 {
-            state_machine.advance_time(Duration::from_secs(1));
+        // Advance time in the state machine by one month to ensure that voting rewards
+        // are also distributed.
+        state_machine.advance_time(std::time::Duration::from_secs(
+            ONE_MONTH_SECONDS - seconds_to_node_provider_reward_distribution,
+        ));
+        for _ in 0..100 {
+            state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
         }
     }
