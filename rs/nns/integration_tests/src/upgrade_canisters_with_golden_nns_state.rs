@@ -493,6 +493,7 @@ mod sanity_check {
         for _ in 0..iterations {
             state_machine.advance_time(Duration::from_secs(step_seconds));
             state_machine.tick();
+            state_machine.tick();
         }
 
         // Extra time to give things a chance to settle down. Again, it's not
