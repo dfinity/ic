@@ -40,12 +40,10 @@ use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, NumMessages, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId,
-    Time,
+    NumInstructions, NumMessages, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
 };
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
-use prometheus::Histogram;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
@@ -642,7 +640,7 @@ impl SchedulerImpl {
             let old_status = self
                 .ingress_history_writer
                 .set_status(&mut state, message_id, status);
-            canister_ingress_latencies.on_ingress_status_changed(old_status);
+            canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
         self.metrics
             .executable_canisters_per_round
@@ -835,7 +833,7 @@ impl SchedulerImpl {
                     state: IngressState::Failed(error),
                 },
             );
-            canister_ingress_latencies.on_ingress_status_changed(old_status);
+            canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
     }
 
@@ -2143,50 +2141,4 @@ fn scheduled_heap_delta_limit(
         .get()
         .saturating_sub(remaining_heap_delta_reserve)
         .into()
-}
-
-/// Aggregator and observer of per-canister ingress queue latencies.
-struct CanisterIngressQueueLatencies {
-    /// Per canister observed ingress message latency sum and count.
-    latencies: BTreeMap<PrincipalId, (f64, usize)>,
-    /// Current block time.
-    time: Time,
-    /// Histogram to observe the latencies.
-    histogram: Histogram,
-}
-
-impl CanisterIngressQueueLatencies {
-    fn new(time: Time, histogram: Histogram) -> Self {
-        Self {
-            latencies: BTreeMap::new(),
-            time,
-            histogram,
-        }
-    }
-
-    /// Records the ingress queue latency of a message iff it is transitioning from
-    /// `Received` to some other state (i.e. when popped from the ingress queue).
-    fn on_ingress_status_changed(&mut self, old_status: Arc<IngressStatus>) {
-        if let IngressStatus::Known {
-            receiver,
-            user_id: _,
-            time,
-            state: IngressState::Received,
-        } = &*old_status
-        {
-            let (latency, count) = self.latencies.entry(*receiver).or_default();
-            *latency += self.time.saturating_duration_since(*time).as_secs_f64();
-            *count += 1;
-        }
-    }
-}
-
-impl Drop for CanisterIngressQueueLatencies {
-    /// Observes the average ingress queue latency of each canister at the end of
-    /// the round.
-    fn drop(&mut self) {
-        for (latency, count) in self.latencies.values() {
-            self.histogram.observe(*latency / *count as f64);
-        }
-    }
 }
