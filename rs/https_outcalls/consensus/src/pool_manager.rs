@@ -730,6 +730,26 @@ pub mod test {
         }
     }
 
+    fn test_request_context(
+        replication: Replication,
+        pricing_version: PricingVersion,
+        max_response_bytes: Option<NumBytes>,
+    ) -> CanisterHttpRequestContext {
+        CanisterHttpRequestContext {
+            request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+            url: "".to_string(),
+            max_response_bytes,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: ic_types::Time::from_nanos_since_unix_epoch(10),
+            replication,
+            pricing_version,
+            refund_status: RefundStatus::default(),
+        }
+    }
+
     #[test]
     pub fn test_validation_of_shares_above_known_requests() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -747,19 +767,11 @@ pub mod test {
                     .expect_try_receive()
                     .return_const(Err(TryReceiveError::Empty));
 
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
 
                 state_manager
                     .get_mut()
@@ -855,19 +867,11 @@ pub mod test {
                     .expect_try_receive()
                     .return_const(Err(TryReceiveError::Empty));
 
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
 
                 // NOTE: We need at least some context in the state, otherwise next_callback_id will be 0 and no
                 // artifacts can have a smaller callback_id and be valid
@@ -970,19 +974,11 @@ pub mod test {
                     .expect_try_receive()
                     .return_const(Err(TryReceiveError::Empty));
 
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
 
                 state_manager
                     .get_mut()
@@ -1104,19 +1100,11 @@ pub mod test {
 
                 let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
 
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::NonReplicated(delegated_node_id),
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request = test_request_context(
+                    Replication::NonReplicated(delegated_node_id),
+                    PricingVersion::Legacy,
+                    None,
+                );
 
                 state_manager
                     .get_mut()
@@ -1244,19 +1232,11 @@ pub mod test {
                 let callback_id = CallbackId::from(0);
 
                 // 2. CONTEXT: The request is explicitly delegated to `delegated_node_id`.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::NonReplicated(delegated_node_id),
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request_context = test_request_context(
+                    Replication::NonReplicated(delegated_node_id),
+                    PricingVersion::Legacy,
+                    None,
+                );
                 state_manager
                     .get_mut()
                     .expect_get_latest_state()
@@ -1349,19 +1329,11 @@ pub mod test {
                     .return_const(Err(TryReceiveError::Empty));
 
                 // This request is fully replicated across the committee.
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
 
                 state_manager
                     .get_mut()
@@ -1463,19 +1435,11 @@ pub mod test {
                 let max_response_bytes = NumBytes::from(2000);
 
                 // 1. Set up a state context with a specific max_response_bytes limit.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: Some(max_response_bytes),
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::NonReplicated(delegated_node_id),
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request_context = test_request_context(
+                    Replication::NonReplicated(delegated_node_id),
+                    PricingVersion::Legacy,
+                    Some(max_response_bytes),
+                );
 
                 state_manager
                     .get_mut()
@@ -1646,19 +1610,11 @@ pub mod test {
                 let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
 
                 // 2. CONTEXT: Create a request context where max_response_bytes is 0.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: Some(NumBytes::from(0)), // Set to zero
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::NonReplicated(delegated_node_id),
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request_context = test_request_context(
+                    Replication::NonReplicated(delegated_node_id),
+                    PricingVersion::Legacy,
+                    Some(NumBytes::from(0)), // Set to zero
+                );
 
                 state_manager
                     .get_mut()
@@ -1759,19 +1715,11 @@ pub mod test {
 
                 // 2. CONTEXT: Set up a NonReplicated request context in the state manager.
                 // This ensures we test the gossiping code path.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::NonReplicated(delegated_node_id),
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request_context = test_request_context(
+                    Replication::NonReplicated(delegated_node_id),
+                    PricingVersion::Legacy,
+                    None,
+                );
                 state_manager
                     .get_mut()
                     .expect_get_latest_state()
@@ -1884,19 +1832,11 @@ pub mod test {
                 let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
 
                 // 2. CONTEXT: Set up a NonReplicated request context.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::NonReplicated(delegated_node_id),
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request_context = test_request_context(
+                    Replication::NonReplicated(delegated_node_id),
+                    PricingVersion::Legacy,
+                    None,
+                );
                 state_manager
                     .get_mut()
                     .expect_get_latest_state()
@@ -2017,19 +1957,11 @@ pub mod test {
                 let callback_id = CallbackId::from(0);
 
                 // 2. CONTEXT: A valid request context must exist for validation to proceed.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::NonReplicated(delegated_node_id),
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request_context = test_request_context(
+                    Replication::NonReplicated(delegated_node_id),
+                    PricingVersion::Legacy,
+                    None,
+                );
                 state_manager
                     .get_mut()
                     .expect_get_latest_state()
@@ -2141,19 +2073,11 @@ pub mod test {
                 let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
 
                 // 1. Set up a state context with a very low max_response_bytes limit.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: Some(NumBytes::from(LOW_MAX_RESPONSE_BYTES)),
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::NonReplicated(delegated_node_id),
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request_context = test_request_context(
+                    Replication::NonReplicated(delegated_node_id),
+                    PricingVersion::Legacy,
+                    Some(NumBytes::from(LOW_MAX_RESPONSE_BYTES)),
+                );
 
                 state_manager
                     .get_mut()
@@ -2259,19 +2183,11 @@ pub mod test {
                 let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
 
                 state_manager
                     .get_mut()
@@ -2409,19 +2325,11 @@ pub mod test {
                 let callback_id = CallbackId::from(5);
 
                 // 1. Set up the state to contain a non-replicated request context.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::NonReplicated(delegated_node_id),
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request_context = test_request_context(
+                    Replication::NonReplicated(delegated_node_id),
+                    PricingVersion::Legacy,
+                    None,
+                );
                 state_manager
                     .get_mut()
                     .expect_get_latest_state()
@@ -2509,19 +2417,11 @@ pub mod test {
                     .expect_try_receive()
                     .return_const(Err(TryReceiveError::Empty));
 
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
 
                 // Expect times to be called exactly once to check that already
                 // requested cache works.
@@ -2619,45 +2519,29 @@ pub mod test {
 
                 // Request where our node IS in the committee -- should be sent.
                 let callback_id_in_committee = CallbackId::from(0);
-                let request_in_committee = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::Flexible {
+                let request_in_committee = test_request_context(
+                    Replication::Flexible {
                         committee: BTreeSet::from([committee_member_1_self, committee_member_2]),
                         min_responses: 1,
                         max_responses: 2,
                     },
-                    pricing_version: PricingVersion::PayAsYouGo,
-                    refund_status: RefundStatus::default(),
-                };
+                    PricingVersion::PayAsYouGo,
+                    None,
+                );
 
                 // Request where our node is NOT in the committee -- should be skipped.
                 let callback_id_not_in_committee = CallbackId::from(1);
                 let non_member_1 = ic_test_utilities_types::ids::node_test_id(2);
                 let non_member_2 = ic_test_utilities_types::ids::node_test_id(3);
-                let request_not_in_committee = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::Flexible {
+                let request_not_in_committee = test_request_context(
+                    Replication::Flexible {
                         committee: BTreeSet::from([non_member_1, non_member_2]),
                         min_responses: 1,
                         max_responses: 2,
                     },
-                    pricing_version: PricingVersion::PayAsYouGo,
-                    refund_status: RefundStatus::default(),
-                };
+                    PricingVersion::PayAsYouGo,
+                    None,
+                );
 
                 state_manager
                     .get_mut()
@@ -2724,23 +2608,15 @@ pub mod test {
                 let callback_id = CallbackId::from(0);
 
                 // 2. CONTEXT: The request is in the committee.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::Flexible {
+                let request_context = test_request_context(
+                    Replication::Flexible {
                         committee: BTreeSet::from([committee_member]),
                         min_responses: 1,
                         max_responses: 1,
                     },
-                    pricing_version: PricingVersion::PayAsYouGo,
-                    refund_status: RefundStatus::default(),
-                };
+                    PricingVersion::PayAsYouGo,
+                    None,
+                );
                 state_manager
                     .get_mut()
                     .expect_get_latest_state()
@@ -2830,23 +2706,15 @@ pub mod test {
                 let committee_member = replica_config.node_id;
                 let callback_id = CallbackId::from(0);
 
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::Flexible {
+                let request = test_request_context(
+                    Replication::Flexible {
                         committee: BTreeSet::from([committee_member]),
                         min_responses: 1,
                         max_responses: 1,
                     },
-                    pricing_version: PricingVersion::PayAsYouGo,
-                    refund_status: RefundStatus::default(),
-                };
+                    PricingVersion::PayAsYouGo,
+                    None,
+                );
 
                 state_manager
                     .get_mut()
@@ -2980,23 +2848,15 @@ pub mod test {
                 let callback_id = CallbackId::from(0);
 
                 // Flexible requests have max_response_bytes: None, so the 2MB hard limit applies.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::Flexible {
+                let request_context = test_request_context(
+                    Replication::Flexible {
                         committee: BTreeSet::from([committee_member]),
                         min_responses: 1,
                         max_responses: 1,
                     },
-                    pricing_version: PricingVersion::Legacy,
-                    refund_status: RefundStatus::default(),
-                };
+                    PricingVersion::Legacy,
+                    None,
+                );
 
                 state_manager
                     .get_mut()
@@ -3158,23 +3018,15 @@ pub mod test {
                 let callback_id = CallbackId::from(5);
 
                 // 1. Set up the state to contain a flexible request context.
-                let request_context = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::Flexible {
+                let request_context = test_request_context(
+                    Replication::Flexible {
                         committee: BTreeSet::from([dummy_node_id]),
                         min_responses: 1,
                         max_responses: 1,
                     },
-                    pricing_version: PricingVersion::PayAsYouGo,
-                    refund_status: RefundStatus::default(),
-                };
+                    PricingVersion::PayAsYouGo,
+                    None,
+                );
                 state_manager
                     .get_mut()
                     .expect_get_latest_state()
