@@ -50,7 +50,7 @@ pub fn setup(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
         )
         .add_subnet(
-            Subnet::fast(SubnetType::Application, NUM_APP_NODES)
+            Subnet::fast(SubnetType::CloudEngine, NUM_APP_NODES)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
         )
         .setup_and_start(&env)

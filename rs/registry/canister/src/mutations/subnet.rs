@@ -13,6 +13,7 @@ use ic_cdk::println;
 use ic_management_canister_types_private::{
     MasterPublicKeyId, ReshareChainKeyArgs, ReshareChainKeyResponse,
 };
+use ic_protobuf::registry::subnet::v1::DeletedSubnetListRecord;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::{
     crypto::v1::ChainKeyEnabledSubnetList,
@@ -20,7 +21,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_deleted_subnet_list_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_transport::{
@@ -75,6 +76,21 @@ impl Registry {
             None => panic!(
                 "{LOG_PREFIX}set_subnet_membership_mutation: subnet list record not found in the registry.",
             ),
+        }
+    }
+
+    pub fn get_deleted_subnet_list_record(&self) -> DeletedSubnetListRecord {
+        match self.get(
+            make_deleted_subnet_list_record_key().as_bytes(),
+            self.latest_version(),
+        ) {
+            Some(RegistryValue {
+                value,
+                version: _,
+                deletion_marker: _,
+                timestamp_nanoseconds: _,
+            }) => DeletedSubnetListRecord::decode(value.as_slice()).unwrap(),
+            None => panic!("{LOG_PREFIX}: deleted subnet list record not found in the registry.",),
         }
     }
 
