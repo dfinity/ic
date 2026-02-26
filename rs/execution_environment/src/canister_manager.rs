@@ -2670,7 +2670,7 @@ impl CanisterManager {
                 .execution_snapshot()
                 .on_low_wasm_memory_hook_status,
         };
-        (Ok(response), NumInstructions::new(0))
+        (Ok(response), num_instructions)
     }
 
     pub(crate) fn read_snapshot_data(
