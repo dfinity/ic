@@ -1,6 +1,7 @@
 [Unit]
 Description=Manage GuestOS virtual machine
-Requires=libvirtd.service
+# Not Requires, otherwise guestos will restart when libvirtd restarts
+Wants=libvirtd.service
 After=libvirtd.service
 
 RequiresMountsFor=/var
