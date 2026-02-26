@@ -366,7 +366,7 @@ impl SubnetActor {
     ) -> Option<HashSet<Principal>> {
         const MAX_ATTEMPTS: usize = 3;
 
-        let candidates = preliminary_healthy.choose_multiple(&mut rand::rng(), MAX_ATTEMPTS);
+        let candidates = preliminary_healthy.choose_multiple(&mut rand::thread_rng(), MAX_ATTEMPTS);
 
         for (node, _) in candidates {
             match self
