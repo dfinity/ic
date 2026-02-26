@@ -2,8 +2,7 @@
 
 use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
-use ic_base_types::{NodeId, PrincipalId};
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_management_canister_types::{
@@ -28,7 +27,6 @@ use pocket_ic::{
     Time, start_server, update_candid_as,
 };
 use prost::Message;
-use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use registry_canister::mutations::do_create_subnet::{CreateSubnetPayload, NewSubnet};
 use registry_canister::mutations::do_remove_node_operators::{
