@@ -3,7 +3,7 @@ use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
-use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -31,7 +31,6 @@ use std::{
     fmt::{Debug, Formatter},
     fs,
     str::FromStr,
-    time::Duration,
 };
 
 struct NnsCanisterUpgrade {
@@ -417,19 +416,19 @@ mod sanity_check {
             .timestamp;
         advance_time_to_allow_for_voting_and_node_rewards(state_machine, before_timestamp);
         let after = fetch_metrics(state_machine);
+        let after_start_date = after
+            .governance_most_recent_monthly_node_provider_rewards
+            .start_date
+            .clone()
+            .unwrap();
+        let after_end_date = after
+            .governance_most_recent_monthly_node_provider_rewards
+            .end_date
+            .clone()
+            .unwrap();
 
-        println!(
-            "start_date {:?}",
-            after
-                .governance_most_recent_monthly_node_provider_rewards
-                .start_date,
-        );
-        println!(
-            "end_date {:?}",
-            after
-                .governance_most_recent_monthly_node_provider_rewards
-                .end_date,
-        );
+        println!("node provider rewards start_date {:?}", after_start_date);
+        println!("node provider rewards end_date {:?}", after_end_date);
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
