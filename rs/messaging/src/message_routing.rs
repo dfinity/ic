@@ -1080,26 +1080,25 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 })?,
             );
             let mut subnet_admins = BTreeSet::new();
-            for p in subnet_record.subnet_admins.into_iter() {
-                let subnet_admin = PrincipalId::try_from(p).map_err(|err| {
-                    ReadRegistryError::Persistent(format!(
-                        "'failed to read subnet admins from subnet record', err: {err:?}"
-                    ))
-                })?;
-                subnet_admins.insert(subnet_admin);
-            }
-            // If the subnet is not rented, i.e., if the subnet is not an application subnet on a "free" cost schedule,
-            // then it cannot have a non-empty subnet admins list. If that's the case, this indicates
-            // a bug and a critical error is raised. The subnet admins is set to empty list in that case
-            // to avoid any potential errors in using an incorrect list.
-            //
-            // Note that clippy believes another version of the condition below is "simpler", however humans agreed that
-            // the one used is actually better, so clippy is explicitly ignored.
-            #[allow(clippy::nonminimal_bool)]
-            if !(subnet_type == SubnetType::Application
-                && cost_schedule == CanisterCyclesCostSchedule::Free)
-                && !subnet_admins.is_empty()
+            // Only rented subnets, i.e., application subnets on a "free" cost
+            // schedule can have a non-empty subnet admins list. In this case,
+            // parse the protobuf field to populate the list.
+            if subnet_type == SubnetType::Application
+                && cost_schedule == CanisterCyclesCostSchedule::Free
             {
+                for p in subnet_record.subnet_admins.into_iter() {
+                    let subnet_admin = PrincipalId::try_from(p).map_err(|err| {
+                        ReadRegistryError::Persistent(format!(
+                            "'failed to read subnet admins from subnet record', err: {err:?}"
+                        ))
+                    })?;
+                    subnet_admins.insert(subnet_admin);
+                }
+            } else if !subnet_record.subnet_admins.is_empty() {
+                // If the subnet is not rented and it has a non-empty subnet
+                // admins list, it indicates a bug and a critical error is
+                // raised. No admins are parsed out in that case and the list
+                // remains empty.
                 self.metrics
                     .critical_error_illegal_non_empty_subnet_admins
                     .inc();
@@ -1110,8 +1109,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     subnet_id,
                     subnet_admins,
                 );
-                subnet_admins = BTreeSet::new();
             }
+
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
