@@ -2,7 +2,7 @@ use crate::{
     catch_up_package_provider::LocalCUPReader,
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
-    registry_helper::RegistryHelper,
+    registry_helper::{RegistryError, RegistryHelper},
 };
 use ic_config::firewall::{
     BoundaryNodeConfig as BoundaryNodeFirewallConfig, FIREWALL_FILE_DEFAULT_PATH,
@@ -125,7 +125,7 @@ impl Firewall {
             .get_subnet_id_from_node_id(self.node_id, registry_version);
         match (maybe_boundary_node_record, maybe_subnet_id) {
             (_, Ok(Some(subnet_id))) => Ok(Role::AssignedReplica(subnet_id)),
-            (Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)), Ok(None)) => {
+            (Err(RegistryError::ApiBoundaryNodeMissing(_, _)), Ok(None)) => {
                 Ok(Role::UnassignedReplica)
             }
             (Ok(_), _) => Ok(Role::BoundaryNode),

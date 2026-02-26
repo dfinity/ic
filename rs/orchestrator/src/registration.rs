@@ -738,14 +738,14 @@ fn metrics_config_to_endpoint(
         return get_endpoint(log, saddr.ip().to_string(), saddr.port());
     }
 
-    Err(OrchestratorError::invalid_configuration_error(
+    Err(OrchestratorError::invalid_configuration(
         "Metrics endpoint is not configured.",
     ))
 }
 
 fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> OrchestratorResult<String> {
     let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|err| {
-        OrchestratorError::invalid_configuration_error(format!(
+        OrchestratorError::invalid_configuration(format!(
             "Could not parse IP-address {ip_addr}: {err}"
         ))
     })?;
@@ -769,14 +769,14 @@ fn process_ipv4_config(
     info!(log, "Reading ipv4 config for registration");
     if !ipv4_config.public_address.is_empty() {
         let (node_ip_address, prefix_length) = ipv4_config.public_address.split_once('/').ok_or(
-            OrchestratorError::invalid_configuration_error(format!(
+            OrchestratorError::invalid_configuration(format!(
                 "Failed to split the IPv4 public address into IP address and prefix: {}",
                 ipv4_config.public_address
             )),
         )?;
 
         let prefix_length = prefix_length.parse::<u32>().map_err(|err| {
-            OrchestratorError::invalid_configuration_error(format!(
+            OrchestratorError::invalid_configuration(format!(
                 "IPv4 prefix length is malformed. It should be an integer: {err}",
             ))
         })?;
@@ -786,7 +786,7 @@ fn process_ipv4_config(
             ipv4_config.public_gateway.clone(),
             prefix_length,
         )
-        .map_err(|err| OrchestratorError::invalid_configuration_error(format!("{err}",)))?;
+        .map_err(|err| OrchestratorError::invalid_configuration(format!("{err}",)))?;
 
         return Ok(Some(ipv4_config));
     }
@@ -800,7 +800,7 @@ fn process_domain_name(log: &ReplicaLogger, domain: &str) -> OrchestratorResult<
     }
 
     if !domain_to_ascii_strict(domain).is_ok_and(|s| s == domain) {
-        return Err(OrchestratorError::invalid_configuration_error(format!(
+        return Err(OrchestratorError::invalid_configuration(format!(
             "Provided domain name {domain} is invalid",
         )));
     }
