@@ -18,7 +18,10 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_management_canister_types_private::{
     MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
 };
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, RegistryStoreUri};
+use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
+use ic_protobuf::registry::subnet::v1::{
+    ChainKeyConfig as ChainKeyConfigPb, RecoveryArgs, RegistryStoreUri,
+};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_record_key,
@@ -201,7 +204,13 @@ impl Registry {
         // Set the height, time and state hash of the payload
         cup_contents.height = payload.height;
         cup_contents.time = payload.time_ns;
-        cup_contents.state_hash = payload.state_hash;
+        cup_contents.state_hash = payload.state_hash.clone();
+
+        cup_contents.cup_type = Some(CupType::Recovery(RecoveryArgs {
+            height: payload.height,
+            time: payload.time_ns,
+            state_hash: payload.state_hash,
+        }));
 
         mutations.push(RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,

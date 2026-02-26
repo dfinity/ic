@@ -14,6 +14,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/consensus/features",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
@@ -90,6 +91,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:pretty_assertions",
     "@crate_index//:rand",
     "@crate_index//:rand_distr",
+    "@crate_index//:rstest",
     "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
