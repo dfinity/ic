@@ -115,7 +115,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
 
         # Shutdown the VM
         echo "Shutting down $VMNAME"
-        for i in {1..300}; do
+        for i in $(seq 1 300); do
                 if [ $(sudo virsh list | grep $VMNAME | wc -l) -eq 0 ]; then
                         break
                 fi
@@ -126,7 +126,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
 
         # Get the file name and dd it to disk device
         CONFIG=$(mktemp)
-        trap "rm -f $CONFIG; sudo losetup -d ${LOOP_DEVICE} &>/dev/null || true" INT TERM EXIT
+        trap "rm -f $CONFIG; sudo losetup -d ${LOOP_DEVICE} >/dev/null 2>&1 || true" INT TERM EXIT
         sudo virsh dumpxml $VMNAME > $CONFIG
         IMAGE="$(xmlstarlet sel -t -v "string(/domain/devices/disk[target[@dev='vda']]/source/@file)" "$CONFIG")"
         echo "Moving $VMNAME to /dev/hostlvm/guest"
