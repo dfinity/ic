@@ -68,9 +68,9 @@ use ic_management_canister_types_private::{
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
     CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
-    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
-    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply, VetKdDeriveKeyResult,
+    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SetupInitialDKGResponse,
+    SignWithECDSAReply, SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    UploadChunkArgs, UploadChunkReply, VetKdDeriveKeyResult,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -1786,10 +1786,39 @@ impl StateMachine {
             self.query_stats_payload_builder.purge(query_stats);
         }
         let self_validating = Some(batch_payload.self_validating);
+        let mut consensus_responses = http_responses;
+        // `setup_initial_dkg` can only be called on the NNS subnet
+        // and thus the seed does not need to depend on the subnet ID
+        let mut rng = StdRng::seed_from_u64(certified_height.get());
+        for callback_id in state
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts
+            .keys()
+        {
+            let ni_dkg_transcript = dummy_initial_dkg_transcript_with_master_key(&mut rng).0;
+            let public_key = (&ni_dkg_transcript).try_into().unwrap();
+            let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+            let subnet_id = PrincipalId::new_self_authenticating(&public_key_der).into();
+            let mut high_threshold_transcript_record = ni_dkg_transcript.clone();
+            high_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
+            let mut low_threshold_transcript_record = ni_dkg_transcript;
+            low_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
+            let initial_transcript_records = SetupInitialDKGResponse {
+                low_threshold_transcript_record: high_threshold_transcript_record.into(),
+                high_threshold_transcript_record: low_threshold_transcript_record.into(),
+                fresh_subnet_id: subnet_id,
+                subnet_threshold_public_key: public_key.into(),
+            };
+            consensus_responses.push(ConsensusResponse::new(
+                *callback_id,
+                MsgPayload::Data(initial_transcript_records.encode()),
+            ));
+        }
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
-            .with_consensus_responses(http_responses)
+            .with_consensus_responses(consensus_responses)
             .with_query_stats(query_stats)
             .with_self_validating(self_validating);
         if let Some(blockmaker_metrics) = blockmaker_metrics {
