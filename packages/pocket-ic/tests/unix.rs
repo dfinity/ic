@@ -2,21 +2,22 @@
 
 use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
+use ic_base_types::{NodeId, PrincipalId};
 use ic_base_types::{PrincipalId, SubnetId};
+use ic_config::crypto::CryptoConfig;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_management_canister_types::{
     HttpRequestResult, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord,
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
+use ic_registry_canister_api::AddNodePayload;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
 use ic_types::ReplicaVersion;
-use ic_registry_canister_api::AddNodePayload;
-use ic_protobuf::registry::node::v1::NodeRewardType;
-use ic_crypto_node_key_generation::generate_node_keys_once;
-use ic_config::crypto::CryptoConfig;
-use ic_base_types::{NodeId, PrincipalId};
+use maplit::btreemap;
 use pocket_ic::common::rest::{
     CreateInstanceResponse, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
     IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig,
@@ -24,13 +25,12 @@ use pocket_ic::common::rest::{
 use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
     PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, SubnetBlockmakers, TickConfigs,
-    start_server, update_candid_as, Time,
+    Time, start_server, update_candid_as,
 };
-use maplit::btreemap;
 use prost::Message;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
-use registry_canister::mutations::do_create_subnet::{CreateSubnetPayload, NewSubnet};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use registry_canister::mutations::do_create_subnet::{CreateSubnetPayload, NewSubnet};
 use registry_canister::mutations::do_remove_node_operators::{
     NodeOperatorPrincipals, RemoveNodeOperatorsPayload,
 };
