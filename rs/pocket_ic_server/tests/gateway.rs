@@ -505,10 +505,14 @@ fn test_gateway_invalid_forward_to() {
 }
 
 // Test that the HTTP gateway accepts a `domain_custom_provider_local_file` configuration.
-// Three access patterns for the same canister are verified, all driven exclusively by entries
+// Three domain forms for the same canister are verified, all driven exclusively by entries
 // in the provider file (no canister ID appears in any URL — that is the whole point of
-// custom domains). The custom domain is NOT added to `domains`; `DomainResolver` falls
-// through to `CustomDomainStorage` for an exact-match lookup in both cases.
+// custom domains). None of the domains are added to `domains`; `DomainResolver` falls
+// through to `CustomDomainStorage` for an exact-match lookup in each case.
+//
+//   custom  →  test
+//   apex    →  domain.test
+//   subdomain → www.domain.test
 
 #[tokio::test]
 async fn test_gateway_custom_domain_provider_file() {
@@ -528,10 +532,10 @@ async fn test_gateway_custom_domain_provider_file() {
     // Enable auto progress for asset certification to work.
     pic.auto_progress().await;
 
-    // Apex domain and a human-readable subdomain — the canister ID is hidden in the file.
-    let custom_domain = "www.my-custom-domain.test";
-    let apex_domain = "my-custom-domain.test";
-    let sub_domain = "app.my-custom-domain.test";
+    // Three domain forms, all mapping to the same canister — the canister ID is hidden in the file.
+    let custom_domain = "test";
+    let apex_domain = "domain.test";
+    let sub_domain = "www.domain.test";
     let bind_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
     let (mut mapping_file, mapping_file_path) = NamedTempFile::new().unwrap().keep().unwrap();

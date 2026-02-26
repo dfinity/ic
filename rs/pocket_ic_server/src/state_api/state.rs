@@ -817,11 +817,11 @@ impl ApiState {
                 args.push("--domain-canister-id-from-referer".to_string());
                 let custom_domain_providers: Vec<Arc<dyn ProvidesCustomDomains>> =
                     domain_custom_provider_local_file
-                        .iter()
                         .map(|path| {
                             Arc::new(LocalFileProvider::new(path.into()))
                                 as Arc<dyn ProvidesCustomDomains>
                         })
+                        .into_iter()
                         .collect();
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
