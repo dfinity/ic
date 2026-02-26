@@ -73,7 +73,7 @@ use ic_types::{
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterTask, CertificateDelegationMetadata,
+        CallbackId, CanisterCall, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
         QuerySource, RequestOrResponse, Response, SubnetMessage, extract_effective_canister_id,
     },
@@ -1453,6 +1453,7 @@ impl ExecutionTest {
             }
         };
         let maybe_canister_id = get_effective_canister_id(message.clone());
+        let is_install_code = check_is_install_code(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1490,11 +1491,13 @@ impl ExecutionTest {
                         self.install_code_instruction_limits.message(),
                     );
                     assert_eq!(message_instructions_used, capped_slice_instructions_used);
-                    self.update_execution_stats(
-                        canister_id,
-                        message_instructions_used,
-                        cost_schedule,
-                    );
+                    if is_install_code {
+                        self.update_execution_stats(
+                            canister_id,
+                            message_instructions_used,
+                            cost_schedule,
+                        );
+                    }
                 }
                 ExecuteSubnetMessageResultType::Processing => {
                     // such subnet messages should not consume any instructions
@@ -2914,6 +2917,15 @@ fn get_effective_canister_id(message: SubnetMessage) -> Option<CanisterId> {
             extract_effective_canister_id(&signed_ingress_content).ok()?
         }
     }
+}
+
+fn check_is_install_code(message: SubnetMessage) -> bool {
+    let message = match message {
+        SubnetMessage::Response(_) => return false,
+        SubnetMessage::Request(request) => CanisterCall::Request(request),
+        SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
+    };
+    message.method_name() == "install_code" || message.method_name() == "install_chunked_code"
 }
 
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {

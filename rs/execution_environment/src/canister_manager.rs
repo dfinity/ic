@@ -2335,7 +2335,7 @@ impl CanisterManager {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
                     let err = CanisterManagerError::from((canister_id, err));
-                    return (Err(err), NumInstructions::new(0));
+                    return (Err(err), instructions_for_execution_state);
                 }
             };
 
@@ -2350,7 +2350,7 @@ impl CanisterManager {
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
                             message: "Wasm exported globals of canister module and snapshot metadata do not match.".to_string(),
                         }),
-                    NumInstructions::new(0),
+                        instructions_for_execution_state,
                     );
             }
 
@@ -2371,7 +2371,7 @@ impl CanisterManager {
                                 canister_id,
                                 snapshot_id,
                             }),
-                            NumInstructions::new(0),
+                            instructions_for_execution_state,
                         );
                     }
                 };
@@ -2388,7 +2388,7 @@ impl CanisterManager {
                                 canister_id,
                                 snapshot_id,
                             }),
-                            NumInstructions::new(0),
+                            instructions_for_execution_state,
                         );
                     }
                 };
@@ -2445,7 +2445,7 @@ impl CanisterManager {
                             "Hook status ({snapshot_hook_status:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {hook_condition})."
                         ),
                     }),
-                    NumInstructions::new(0),
+                    instructions_for_execution_state,
                 );
             }
         }
@@ -2476,7 +2476,7 @@ impl CanisterManager {
         ) {
             Ok(validated_cycles_and_memory_usage) => validated_cycles_and_memory_usage,
             Err(err) => {
-                return (Err(err), NumInstructions::new(0));
+                return (Err(err), instructions_for_execution_state);
             }
         };
 
