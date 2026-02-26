@@ -223,8 +223,7 @@ impl VirtualMachine {
         vm_domain_name: &str,
         command_runner: &dyn AsyncCommandRunner,
     ) -> Result<(), GuestVmServiceError> {
-        let mut libvirt_restart_attempts = 3;
-        loop {
+        for libvirt_restart_attempt in (0..=3).rev() {
             let existing_domain = match libvirt_connection.lookup_domain_by_name(vm_domain_name) {
                 Ok(existing_domain) => existing_domain,
                 Err(err)
@@ -258,7 +257,7 @@ impl VirtualMachine {
                 return Ok(());
             }
 
-            if libvirt_restart_attempts == 0 {
+            if libvirt_restart_attempt == 0 {
                 break;
             }
 
@@ -267,7 +266,7 @@ impl VirtualMachine {
                 "Existing domain '{vm_domain_name}' is not active - probably hit \
                  https://gitlab.com/libvirt/libvirt/-/issues/853 - restarting libvirtd \
                  ({} attempts remaining)",
-                libvirt_restart_attempts
+                libvirt_restart_attempt
             );
 
             if let Err(err) = command_runner
@@ -281,7 +280,6 @@ impl VirtualMachine {
             {
                 eprintln!("Failed to restart libvirtd: {err}");
             }
-            libvirt_restart_attempts -= 1;
         }
 
         eprintln!("Too many libvirtd restarts, issuing HostOS reboot");
