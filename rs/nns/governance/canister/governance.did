@@ -1504,7 +1504,35 @@ type SelfDescribingValue = variant {
 
 type GetPendingProposalsRequest = record {
   return_self_describing_action : opt bool;
-}
+};
+
+// Request to create a new neuron using ICRC-2 transfer_from.
+// The caller must have previously approved the governance canister to spend the specified amount.
+type CreateNeuronRequest = record {
+  // Required. The amount of ICP to stake in e8s.
+  amount_e8s : opt nat64;
+  // The subaccount of the caller to transfer ICP from. Defaults to the default subaccount.
+  source_subaccount: opt blob;
+  // The controller of the new neuron. Defaults to the caller.
+  controller : opt principal;
+  // The followees to set for the new neuron. Defaults to the network's default followees.
+  followees : opt SetFollowing;
+  // The dissolve delay in seconds. Defaults to 7 days. Clamped to [0, 8 years].
+  dissolve_delay_seconds : opt nat64;
+  // Whether the neuron should start dissolving immediately. Defaults to false.
+  dissolving : opt bool;
+  // Whether to automatically stake maturity. Defaults to false.
+  auto_stake_maturity : opt bool;
+};
+
+type CreatedNeuron = record {
+  neuron_id : opt NeuronId;
+};
+
+type CreateNeuronResponse = variant {
+  Ok : CreatedNeuron;
+  Err : GovernanceError;
+};
 
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
@@ -1545,6 +1573,7 @@ service : (Governance) -> {
   list_proposals : (ListProposalInfoRequest) -> (ListProposalInfoResponse) query;
   list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
+  create_neuron : (CreateNeuronRequest) -> (CreateNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );
