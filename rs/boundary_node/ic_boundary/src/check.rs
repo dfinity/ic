@@ -891,8 +891,13 @@ fn extract_node_ids_from_tree(
 fn collect_node_ids(tree: &MixedHashTree, members: &mut HashSet<Principal>) {
     match tree {
         MixedHashTree::Labeled(label, _) => {
-            if let Ok(id) = Principal::try_from_slice(label.as_bytes()) {
-                members.insert(id);
+            match Principal::try_from_slice(label.as_bytes()) {
+                Ok(id) => {
+                    members.insert(id);
+                }
+                Err(e) => {
+                    warn!("Unexpected label in node subtree: {e}");
+                }
             }
         }
         MixedHashTree::Fork(lr) => {
