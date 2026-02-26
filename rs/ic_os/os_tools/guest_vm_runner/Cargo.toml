@@ -28,7 +28,6 @@ prometheus = { workspace = true }
 regex = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
