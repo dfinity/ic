@@ -33,7 +33,9 @@ use ic_bn_lib_common::{
 };
 use ic_gateway::{
     Cli,
+    ProvidesCustomDomains,
     ic_bn_lib::{
+        custom_domains::LocalFileProvider,
         http::{
             dns::Resolver,
             headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
@@ -814,10 +816,11 @@ impl ApiState {
                 }
                 args.push("--domain-canister-id-from-query-params".to_string());
                 args.push("--domain-canister-id-from-referer".to_string());
-                if let Some(ref path) = domain_custom_provider_local_file {
-                    args.push("--domain-custom-provider-local-file".to_string());
-                    args.push(path.clone());
-                }
+                let custom_domain_providers: Vec<Arc<dyn ProvidesCustomDomains>> =
+                    domain_custom_provider_local_file
+                        .iter()
+                        .map(|path| Arc::new(LocalFileProvider::new(path.into())) as Arc<dyn ProvidesCustomDomains>)
+                        .collect();
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
@@ -845,7 +848,7 @@ impl ApiState {
                 let health_manager = Arc::new(HealthManager::default());
                 let ic_gateway_router = setup_router(
                     &cli,
-                    vec![],
+                    custom_domain_providers,
                     reload_handle,
                     &mut tasks,
                     health_manager,

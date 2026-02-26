@@ -505,8 +505,10 @@ fn test_gateway_invalid_forward_to() {
 }
 
 // Test that the HTTP gateway accepts a `domain_custom_provider_local_file` configuration.
-// The file maps a custom domain to a specific canister ID.
-// Requests to that domain (via subdomain and query parameter) should serve the correct canister.
+// The file maps a custom domain directly to a specific canister ID.
+// A request to the custom domain itself (no canister ID in the URL) should serve the correct
+// canister via the file mapping, and subdomain routing should also work since the custom domain
+// is listed in `domains`.
 
 #[tokio::test]
 async fn test_gateway_custom_domain_provider_file() {
@@ -572,16 +574,15 @@ async fn test_gateway_custom_domain_provider_file() {
         .build()
         .unwrap();
 
-    // Test with canister ID in the query parameters.
-    let url = format!(
-        "http://{}:{}/?canisterId={}",
-        custom_domain, port, canister_id
-    );
+    // Test that the custom domain alone resolves to the canister (the file provider maps
+    // `my-custom-domain.test` directly to the canister ID, no canister ID in the URL).
+    let url = format!("http://{}:{}", custom_domain, port);
     let res = client.get(&url).send().await.unwrap();
     let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
     assert!(page.contains("<title>Internet Identity</title>"));
 
-    // Test with canister ID in the subdomain.
+    // Test subdomain routing: since `my-custom-domain.test` is also a configured domain,
+    // `<canister-id>.my-custom-domain.test` resolves via subdomain extraction.
     let url = format!("http://{}:{}", sub_custom_domain, port);
     let res = client.get(&url).send().await.unwrap();
     let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
