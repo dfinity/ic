@@ -64,7 +64,7 @@ use std::{
 };
 use std::{fs::File, time::Duration};
 
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 

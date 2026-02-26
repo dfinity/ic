@@ -3115,15 +3115,19 @@ impl ExecutionEnvironment {
                 let reveal_top_up = paying_canister
                     .controllers()
                     .contains(&ingress.sender().get());
-                if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
-                    &paying_canister.system_state,
-                    cost,
-                    paying_canister.memory_usage(),
-                    paying_canister.message_memory_usage(),
-                    subnet_size,
-                    state.get_own_cost_schedule(),
-                    reveal_top_up,
-                ) {
+                if let Err(err) = self
+                    .cycles_account_manager
+                    .can_withdraw_cycles_with_threshold(
+                        &paying_canister.system_state,
+                        cost,
+                        paying_canister.memory_usage(),
+                        paying_canister.message_memory_usage(),
+                        paying_canister.system_state.reserved_balance(),
+                        subnet_size,
+                        state.get_own_cost_schedule(),
+                        reveal_top_up,
+                    )
+                {
                     return Err(UserError::new(
                         ErrorCode::CanisterOutOfCycles,
                         err.to_string(),

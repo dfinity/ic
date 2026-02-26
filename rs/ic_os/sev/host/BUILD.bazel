@@ -16,6 +16,7 @@ rust_library(
         "@crate_index//:reqwest",
         "@crate_index//:sev",
         "@crate_index//:tempfile",
+        "@crate_index//:tokio",
     ],
 )
 
