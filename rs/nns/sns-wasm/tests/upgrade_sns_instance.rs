@@ -1141,8 +1141,9 @@ fn sns_wait_for_pending_upgrade(machine: &StateMachine, governance: CanisterId) 
             attempt_count < 50,
             "Never found pending upgrade after {attempt_count} attempts"
         );
-
+        println!("Before sleep with attempt count: {attempt_count}");
         std::thread::sleep(std::time::Duration::from_millis(50));
+        println!("After sleep with attempt count: {attempt_count}");
     }
 }
 

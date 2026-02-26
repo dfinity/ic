@@ -1318,7 +1318,7 @@ impl Governance {
             ledger,
             cmc,
             randomness,
-            closest_proposal_deadline_timestamp_seconds: 0,
+            closest_proposal_deadline_timestamp_seconds: 1,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
