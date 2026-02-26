@@ -413,59 +413,6 @@ mod sanity_check {
     ) {
         advance_time_to_allow_for_voting_and_node_rewards(state_machine);
         let after = fetch_metrics(state_machine);
-
-        before
-            .governance_most_recent_monthly_node_provider_rewards
-            .rewards
-            .iter()
-            .for_each(|reward| {
-                println!(
-                    "Feb reward: amount = {}, node provider = {}",
-                    reward.amount_e8s / 10000,
-                    reward
-                        .node_provider
-                        .clone()
-                        .unwrap()
-                        .id
-                        .unwrap()
-                        .to_string()
-                )
-            });
-
-        after
-            .governance_most_recent_monthly_node_provider_rewards
-            .rewards
-            .iter()
-            .for_each(|reward| {
-                println!(
-                    "March - Node provider reward: amount = {}, node provider = {}",
-                    reward.amount_e8s / 10000,
-                    reward
-                        .node_provider
-                        .clone()
-                        .unwrap()
-                        .id
-                        .unwrap()
-                        .to_string()
-                )
-            });
-
-        println!(
-            "start {:?}",
-            after
-                .governance_most_recent_monthly_node_provider_rewards
-                .start_date
-                .clone()
-                .unwrap()
-        );
-        println!(
-            "end {:?}",
-            after
-                .governance_most_recent_monthly_node_provider_rewards
-                .end_date
-                .clone()
-                .unwrap()
-        );
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
@@ -476,7 +423,7 @@ mod sanity_check {
             // Extra time. Not really sure if this is actually helpful (at
             // reducing flakes), but it doesn't really hurt either
             + 3 * ONE_DAY_SECONDS;
-        let step_seconds = 6 * 60 * 60;
+        let step_seconds = 3 * 60 * 60;
         let iterations = total_seconds.div_ceil(step_seconds);
         for _ in 0..iterations {
             state_machine.advance_time(Duration::from_secs(step_seconds));
