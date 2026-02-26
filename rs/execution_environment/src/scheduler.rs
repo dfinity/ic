@@ -2,6 +2,7 @@ pub use self::round_schedule::RoundSchedule;
 use self::round_schedule::*;
 use self::scheduler_metrics::*;
 use self::threshold_signatures::*;
+use crate::ExecuteSubnetMessageResultType;
 use crate::canister_manager::uninstall_canister;
 use crate::execution_environment::{
     ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
