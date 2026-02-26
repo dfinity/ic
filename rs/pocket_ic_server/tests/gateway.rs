@@ -505,7 +505,7 @@ fn test_gateway_invalid_forward_to() {
 }
 
 // Test that the HTTP gateway accepts a `domain_custom_provider_local_file` configuration.
-// Two access patterns for the same canister are verified, both driven exclusively by entries
+// Three access patterns for the same canister are verified, all driven exclusively by entries
 // in the provider file (no canister ID appears in any URL — that is the whole point of
 // custom domains). The custom domain is NOT added to `domains`; `DomainResolver` falls
 // through to `CustomDomainStorage` for an exact-match lookup in both cases.
@@ -534,11 +534,6 @@ async fn test_gateway_custom_domain_provider_file() {
     let sub_domain = "app.my-custom-domain.test";
     let bind_address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
-    // Write two entries to the provider file:
-    //   1. `my-custom-domain.test:<id>`     – apex access
-    //   2. `app.my-custom-domain.test:<id>` – subdomain access
-    // Both are resolved via exact-match in `CustomDomainStorage`; no canister ID
-    // needs to appear in any request URL.
     let (mut mapping_file, mapping_file_path) = NamedTempFile::new().unwrap().keep().unwrap();
     mapping_file
         .write_all(
