@@ -1081,11 +1081,12 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             );
             let mut subnet_admins = BTreeSet::new();
             // Only rented subnets, i.e., application subnets on a "free" cost
-            // schedule, and cloud engines can have a non-empty subnet admins list. In this case,
+            // schedule, and cloud engines on a "free" cost schedule can have a non-empty subnet admins list. In this case,
             // parse the protobuf field to populate the list.
             if (subnet_type == SubnetType::Application
                 && cost_schedule == CanisterCyclesCostSchedule::Free)
-                || subnet_type == SubnetType::CloudEngine
+                || (subnet_type == SubnetType::CloudEngine
+                    && cost_schedule == CanisterCyclesCostSchedule::Free)
             {
                 for p in subnet_record.subnet_admins.into_iter() {
                     let subnet_admin = PrincipalId::try_from(p).map_err(|err| {

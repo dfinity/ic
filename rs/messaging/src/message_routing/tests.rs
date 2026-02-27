@@ -1596,7 +1596,7 @@ fn try_read_registry_succeeds_and_populates_subnet_admins() {
         let engine_subnet_id = subnet_test_id(15);
         let engine_subnet_admin = user_test_id(2);
         let engine_subnet_record = SubnetRecord {
-            subnet_type: SubnetType::Application,
+            subnet_type: SubnetType::CloudEngine,
             cost_schedule: CanisterCyclesCostSchedule::Free,
             subnet_admins: vec![engine_subnet_admin.get()],
             ..Default::default()
@@ -1662,18 +1662,26 @@ fn try_read_registry_succeeds_and_resets_subnet_admins() {
         let nns_subnet_id = subnet_test_id(42);
 
         let own_subnet_id = subnet_test_id(13);
-        let subnet_admin = user_test_id(1);
+        let own_subnet_admin = user_test_id(1);
         let own_subnet_record = SubnetRecord {
             subnet_type: SubnetType::Application,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
-            subnet_admins: vec![subnet_admin.get()],
+            subnet_admins: vec![own_subnet_admin.get()],
+            ..Default::default()
+        };
+        let engine_subnet_id = subnet_test_id(14);
+        let engine_subnet_admin = user_test_id(2);
+        let engine_subnet_record = SubnetRecord {
+            subnet_type: SubnetType::CloudEngine,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_admins: vec![engine_subnet_admin.get()],
             ..Default::default()
         };
 
         let minimal_input = TestRecords {
-            subnet_ids: Valid([own_subnet_id]),
-            subnet_records: [Valid(&own_subnet_record)],
-            ni_dkg_transcripts: [Valid(Some(&dummy_transcript))],
+            subnet_ids: Valid([own_subnet_id, engine_subnet_id]),
+            subnet_records: [Valid(&own_subnet_record), Valid(&engine_subnet_record)],
+            ni_dkg_transcripts: [Valid(Some(&dummy_transcript)); 2],
             nns_subnet_id: Valid(nns_subnet_id),
             chain_key_enabled_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
@@ -1698,9 +1706,15 @@ fn try_read_registry_succeeds_and_resets_subnet_admins() {
         // Check that subnet admins are reset and a critical error is raised.
         let own_subnet_record_from_topo = network_topology.subnets().get(&own_subnet_id).unwrap();
         assert_eq!(own_subnet_record_from_topo.subnet_admins, BTreeSet::new());
+        let engine_subnet_record_from_topo =
+            network_topology.subnets().get(&engine_subnet_id).unwrap();
+        assert_eq!(
+            engine_subnet_record_from_topo.subnet_admins,
+            BTreeSet::new()
+        );
         assert_eq!(
             metrics.critical_error_illegal_non_empty_subnet_admins.get(),
-            1
+            2
         );
     });
 }
