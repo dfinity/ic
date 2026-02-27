@@ -1,5 +1,7 @@
 use candid::{CandidType, Principal};
-use ic_btc_interface::{InitConfig as BitcoinInitConfig, SetConfigRequest as BitcoinSetConfigRequest};
+use ic_btc_interface::{
+    InitConfig as BitcoinInitConfig, SetConfigRequest as BitcoinSetConfigRequest,
+};
 use ic_doge_interface::{Fees, Flag, InitConfig as DogecoinInitConfig};
 use icrc_ledger_types::icrc1::account::Account;
 
