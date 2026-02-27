@@ -1083,6 +1083,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             // Only rented subnets, i.e., application subnets on a "free" cost
             // schedule, and cloud engines on a "free" cost schedule can have a non-empty subnet admins list. In this case,
             // parse the protobuf field to populate the list.
+            #[allow(clippy::nonminimal_bool)]
             if (subnet_type == SubnetType::Application
                 && cost_schedule == CanisterCyclesCostSchedule::Free)
                 || (subnet_type == SubnetType::CloudEngine
