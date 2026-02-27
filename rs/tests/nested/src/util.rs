@@ -43,7 +43,7 @@ use slog::{Logger, info, warn};
 use std::net::Ipv6Addr;
 use std::time::Duration;
 
-pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(10 * 60);

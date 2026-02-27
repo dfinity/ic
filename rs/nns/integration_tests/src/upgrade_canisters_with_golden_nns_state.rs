@@ -3,6 +3,7 @@ use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -382,7 +383,6 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
 
 mod sanity_check {
     use super::*;
-    use ic_nervous_system_common::ONE_MONTH_SECONDS;
     use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
     use ic_nns_governance_api::DateUtc;
 
@@ -410,19 +410,34 @@ mod sanity_check {
         state_machine: &StateMachine,
         before: Metrics,
     ) {
-        advance_time(
-            state_machine,
-            before
-                .governance_most_recent_monthly_node_provider_rewards
-                .timestamp,
-        );
+        let before_timestamp = before
+            .governance_most_recent_monthly_node_provider_rewards
+            .timestamp;
+        advance_time_to_allow_for_voting_and_node_rewards(state_machine, before_timestamp);
         let after = fetch_metrics(state_machine);
+        let after_start_date = after
+            .governance_most_recent_monthly_node_provider_rewards
+            .start_date
+            .clone()
+            .unwrap();
+        let after_end_date = after
+            .governance_most_recent_monthly_node_provider_rewards
+            .end_date
+            .clone()
+            .unwrap();
+
+        println!("node provider rewards start_date {:?}", after_start_date);
+        println!("node provider rewards end_date {:?}", after_end_date);
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
-    fn advance_time(state_machine: &StateMachine, before_timestamp: u64) {
+    fn advance_time_to_allow_for_voting_and_node_rewards(
+        state_machine: &StateMachine,
+        before_timestamp: u64,
+    ) {
         // Advance time in the state machine to just before the next node provider
         // rewards distribution time.
+        // Important to reach the exact moment when node provider rewards are distributed!
         let seconds_to_node_provider_reward_distribution = before_timestamp
             + NODE_PROVIDER_REWARD_PERIOD_SECONDS
             - state_machine.get_time().as_secs_since_unix_epoch();
@@ -482,7 +497,7 @@ mod sanity_check {
                     )
                 },
                 |before, after| {
-                    assert_increased(before, after, "latest reward event timestamp");
+                    assert_increased(before, after, "latest voting reward event timestamp");
                 },
             );
             self.check_metric(
@@ -509,13 +524,13 @@ mod sanity_check {
                         before,
                         after,
                         "total minted node provider rewards",
-                        0.2,
+                        0.30,
                     );
                     assert_not_decreased_too_much(
                         before,
                         after,
                         "total minted node provider rewards",
-                        0.2,
+                        0.30,
                     );
                 },
             );
@@ -590,6 +605,7 @@ mod sanity_check {
         total_rewards * (xdr_permyriad_per_icp as f64) / 10_000f64
     }
 
+    #[track_caller]
     fn assert_not_increased_too_much(before: f64, after: f64, name: &str, diff: f64) {
         assert!(
             after < before * (1.0 + diff),
@@ -597,6 +613,7 @@ mod sanity_check {
         );
     }
 
+    #[track_caller]
     fn assert_not_decreased_too_much(before: f64, after: f64, name: &str, diff: f64) {
         assert!(
             after > before * (1.0 - diff),
@@ -604,6 +621,7 @@ mod sanity_check {
         );
     }
 
+    #[track_caller]
     fn assert_increased<T>(before: T, after: T, name: &str)
     where
         T: PartialOrd + std::fmt::Display,

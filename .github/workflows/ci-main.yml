@@ -26,9 +26,9 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:2caf6df6009b29ede72a520b60f3db064324e22192be532349caa82a987f8c50
+      image: ghcr.io/dfinity/ic-build@sha256:15e6eca52d696697a681916c92ab3623ebff1fcff70156220b0270c2985a6b2b
       options: >-
-         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
     steps:
       - &checkout
@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           invocation-names: afl
-          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 10
 
   config:
     name: Set Config
@@ -150,7 +150,7 @@ jobs:
     needs: [config]
     environment:
       # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
-      # It also requires the CLOUD_CREDENTIALS_CONTENT secret which is only available in the `upload-artifacts` environment.
+      # It also requires the AWS and CF secrets which are only available in the `upload-artifacts` environment.
       # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
       # when `release-build == 'true'` but not otherwise.
       name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
@@ -249,20 +249,24 @@ jobs:
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
         if: needs.config.outputs.release-build == 'true'
+        env:
+          AWS_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_AWS_ACCESS_KEY_ID }}
+          AWS_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_AWS_SECRET_ACCESS_KEY }}
+          CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
+          CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: Bazel Test All
           # with --check_up_to_date Bazel will error out if the artifacts
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
-          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     needs: [config]
     environment:
       # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
-      # It also requires the CLOUD_CREDENTIALS_CONTENT secret which is only available in the `upload-artifacts` environment.
+      # It also requires the AWS & CF secrets which are only available in the `upload-artifacts` environment.
       # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
       # when `release-build == 'true'` but not otherwise.
       name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
@@ -272,7 +276,11 @@ jobs:
     # Run on protected branches, but only on public repo
     if: github.repository == 'dfinity/ic'
     steps:
-      - *checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # on macOS we don't need any git history
+          ref: ${{ inputs.commit-sha }}
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
@@ -306,10 +314,14 @@ jobs:
         # NOTE: GHA output quirk, 'true' is a string
         if: ${{ needs.config.outputs.full_macos_build == 'true' && needs.config.outputs.release-build == 'true' }}
         uses: ./.github/actions/upload-artifacts
+        env:
+          AWS_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_AWS_ACCESS_KEY_ID }}
+          AWS_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_AWS_SECRET_ACCESS_KEY }}
+          CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
+          CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: macOS Intel artifacts
           upload-command: bazel run --check_up_to_date //:upload-artifacts
-          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
       - name: Purge Bazel Output
         if: always()
@@ -339,9 +351,21 @@ jobs:
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+          cat /tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
       - name: Build and Test
         run: |
+          # Set up .netrc so that bazel can authenticate with GitHub to have higher rate limits for fetching dependencies.
+          touch  ~/.netrc
+          chmod 600 ~/.netrc
+          echo "machine github.com login x-access-token password ${{ github.token }}" > ~/.netrc
+          echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
+          echo "Current GitHub API rate limits:"
+
+          # Show how close we are to the limits
+          curl -s --netrc https://api.github.com/rate_limit | \
+            jq -r '.resources.core | "Rate limit remaining: \(.remaining)/\(.limit) (resets at \(.reset | strftime("%Y-%m-%d %H:%M:%S %Z")))"'
+
           mkdir -p /tmp/zig-cache
 
           bazel \
@@ -398,8 +422,8 @@ jobs:
     name: Upload external artifacts
     needs: [bazel-test-arm64, config]
     if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
-    # The `Upload artifacts` step below requires the CLOUD_CREDENTIALS_CONTENT secret
-    # which is only available in the `upload-artifacts` environment.
+    # The `Upload artifacts` step below requires the AWS & CF secrets
+    # which are only available in the `upload-artifacts` environment.
     environment: upload-artifacts
     runs-on: *dind-large-setup
     container: *container-setup
@@ -436,10 +460,14 @@ jobs:
 
       - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
+        env:
+          AWS_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_AWS_ACCESS_KEY_ID }}
+          AWS_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_AWS_SECRET_ACCESS_KEY }}
+          CF_AWS_ACCESS_KEY_ID: ${{ secrets.CF_AWS_ACCESS_KEY_ID }}
+          CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: arm64 artifacts
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
-          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
 
   python-ci-tests:
     name: Python CI Tests

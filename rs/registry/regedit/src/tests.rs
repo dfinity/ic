@@ -147,6 +147,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             subnet_nodes,
             ReplicaVersion::default(),
             None,
+            /*max_ingress_bytes_per_block=*/ None,
             None,
             None,
             None,
