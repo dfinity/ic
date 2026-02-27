@@ -234,6 +234,9 @@ const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
+pub(crate) const REPLICA_METRICS_PORT: u16 = 9090;
+pub(crate) const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
+
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
     if !(l == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit())) {
@@ -1185,13 +1188,19 @@ impl IcNodeSnapshot {
         ))
     }
 
-    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>) {
+    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>, port: u16) {
+        if metrics_to_check.is_empty() {
+            return;
+        }
+
         block_on(async {
-            let replica_metrics_fetcher =
-                MetricsFetcher::new(std::iter::once(self.clone()), metrics_to_check);
-            let replica_metrics_result = replica_metrics_fetcher.fetch::<u64>().await;
-            let replica_metrics = match replica_metrics_result {
-                Ok(replica_metrics) => replica_metrics,
+            let metrics_fetcher = MetricsFetcher::new_with_port(
+                std::iter::once(self.clone()),
+                metrics_to_check,
+                port,
+            );
+            let metrics = match metrics_fetcher.fetch::<u64>().await {
+                Ok(metrics) => metrics,
                 Err(e) => {
                     info!(
                         self.env.logger(),
@@ -1201,11 +1210,11 @@ impl IcNodeSnapshot {
                 }
             };
             assert!(
-                !replica_metrics.is_empty(),
-                "No error counters were found in replica metrics for node {}",
+                !metrics.is_empty(),
+                "No error counters were found in metrics for node {} on port {port}",
                 self.node_id
             );
-            for (name, value) in replica_metrics {
+            for (name, value) in metrics {
                 assert_eq!(
                     value[0], 0,
                     "The metric `{name}` on node {} has non-zero value. \
@@ -1223,7 +1232,7 @@ impl IcNodeSnapshot {
             let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
                 std::iter::once(self.clone()),
                 vec![orchestrator_metric_name.to_string()],
-                9091,
+                ORCHESTRATOR_METRICS_PORT,
             );
             let orchestrator_metrics_result = orchestrator_metrics_fetcher.fetch::<u64>().await;
             let orchestrator_metrics = match orchestrator_metrics_result {
@@ -1741,7 +1750,7 @@ impl HasMetricsUrl for IcNodeSnapshot {
         let node_record = self.raw_node_record();
         node_record.http.map(|me| {
             let mut url = IcNodeSnapshot::http_endpoint_to_url(&me);
-            let _ = url.set_port(Some(9090));
+            let _ = url.set_port(Some(REPLICA_METRICS_PORT));
             url
         })
     }

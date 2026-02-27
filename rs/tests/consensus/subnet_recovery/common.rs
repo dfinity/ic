@@ -247,7 +247,8 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-enum CupCorruption {
+#[derive(Debug)]
+pub enum CupCorruption {
     NotCorrupted,
     CorruptedWithValidNiDkgId,
     CorruptedIncludingInvalidNiDkgId,
@@ -291,14 +292,7 @@ pub fn test_with_chain_keys(env: TestEnv) {
     );
 }
 
-pub fn test_without_chain_keys(env: TestEnv) {
-    // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
-    // not be able to see the recovery CUP in the registry
-    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
-        CupCorruption::CorruptedIncludingInvalidNiDkgId
-    } else {
-        CupCorruption::NotCorrupted
-    };
+pub fn test_without_chain_keys(env: TestEnv, corrupt_cup: CupCorruption) {
     app_subnet_recovery_test(
         env,
         TestConfig {
@@ -311,16 +305,7 @@ pub fn test_without_chain_keys(env: TestEnv) {
     );
 }
 
-pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
-    // Test the recoverable corrupt CUP case only when recovering an app subnet with chain keys
-    // without upgrade
-    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
-        // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
-        // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
-        CupCorruption::CorruptedWithValidNiDkgId
-    } else {
-        CupCorruption::NotCorrupted
-    };
+pub fn test_no_upgrade_with_chain_keys(env: TestEnv, corrupt_cup: CupCorruption) {
     app_subnet_recovery_test(
         env,
         TestConfig {
