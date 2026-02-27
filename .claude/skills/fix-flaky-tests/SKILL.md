@@ -35,14 +35,15 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
        `<test_name>` might be suffixed with `_head_nns` or `_colocate` which are variants of the same test. Strip those suffixes when checking for open PRs or commits to avoid missing matches.
 
-       To check if there is an open PR mentioning the test, run the following command:
+       To check if there is an open PR mentioning the test, run the following command
+       (replace underscores with spaces because GitHub search doesn't match underscored compound words):
        ```
-       gh pr list --search "<test_name>" --state open
+       gh pr list --search "$(echo '<test_name>' | tr '_' ' ')" --state open
        ```
 
        To check if there is a git commit mentioning the test, run the following command:
        ```
-       git log --since 'last week' | grep <test_name>
+       git log --oneline --since 'last week' | grep "$(echo '<test_name>' | tr '_' '.')"
        ```
 
        Continue with the next test if you find an open PR or commit mentioning `<test_name>`
