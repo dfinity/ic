@@ -758,49 +758,50 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::CreateCanister) => {
-                match &mut msg {
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::CreateCanister)
-                    }
-                    CanisterCall::Request(req) => {
-                        let cycles = Arc::make_mut(req).take_cycles();
-                        match CreateCanisterArgs::decode(req.method_payload()) {
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: cycles,
-                                instructions: NumInstructions::new(0),
-                            },
-                            Ok(args) => {
-                                // Start logging execution time for `create_canister`.
-                                let since = Instant::now();
+                let subnet_admins = state.get_own_subnet_admins();
+                if subnet_admins.is_empty()
+                    && let CanisterCall::Ingress(_) = msg
+                {
+                    self.reject_unexpected_ingress(Ic00Method::CreateCanister)
+                } else {
+                    match CreateCanisterArgs::decode(payload) {
+                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(err),
+                            refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
+                        },
+                        Ok(args) => {
+                            // Start logging execution time for `create_canister`.
+                            let since = Instant::now();
 
-                                let sender_canister_version = args.get_sender_canister_version();
+                            let cycles = msg.take_cycles();
 
-                                let settings = args.settings.unwrap_or_default();
-                                let result = match CanisterSettings::try_from(settings) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err.into()),
-                                        refund: cycles,
-                                        instructions: NumInstructions::new(0),
-                                    },
-                                    Ok(settings) => self.create_canister(
-                                        msg.canister_change_origin(sender_canister_version),
-                                        cycles,
-                                        settings,
-                                        registry_settings,
-                                        &mut state,
-                                        round_limits,
-                                    ),
-                                };
-                                info!(
-                                    self.log,
-                                    "Finished executing create_canister message after {:?} with result: {:?}",
-                                    since.elapsed().as_secs_f64(),
-                                    result
-                                );
+                            let sender_canister_version = args.get_sender_canister_version();
 
+                            let settings = args.settings.unwrap_or_default();
+                            let result = match CanisterSettings::try_from(settings) {
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err.into()),
+                                    refund: cycles,
+                                    instructions: NumInstructions::new(0),
+                                },
+                                Ok(settings) => self.create_canister(
+                                    msg.canister_change_origin(sender_canister_version),
+                                    cycles,
+                                    settings,
+                                    registry_settings,
+                                    &mut state,
+                                    round_limits,
+                                ),
+                            };
+                            info!(
+                                self.log,
+                                "Finished executing create_canister message after {:?} with result: {:?}",
+                                since.elapsed().as_secs_f64(),
                                 result
-                            }
+                            );
+
+                            result
                         }
                     }
                 }
@@ -2305,39 +2306,26 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
     ) -> ExecuteSubnetMessageResult {
-        let sender = origin.origin();
-        match state.find_subnet_id(sender) {
-            Ok(sender_subnet_id) => {
-                let (res, cycles) = self.canister_manager.create_canister(
-                    origin,
-                    sender_subnet_id,
-                    cycles,
-                    settings,
-                    registry_settings.max_number_of_canisters,
-                    state,
-                    registry_settings.subnet_size,
-                    round_limits,
-                    self.subnet_memory_saturation(&round_limits.subnet_available_memory),
-                    &self.metrics.canister_creation_error,
-                );
-                ExecuteSubnetMessageResult::Finished {
-                    response: res
-                        .map(|new_canister_id| {
-                            (
-                                CanisterIdRecord::from(new_canister_id).encode(),
-                                Some(new_canister_id),
-                            )
-                        })
-                        .map_err(|err| err.into()),
-                    refund: cycles,
-                    instructions: NumInstructions::new(0),
-                }
-            }
-            Err(err) => ExecuteSubnetMessageResult::Finished {
-                response: Err(err),
-                refund: cycles,
-                instructions: NumInstructions::new(0),
-            },
+        let (res, cycles) = self.canister_manager.create_canister(
+            origin,
+            cycles,
+            settings,
+            registry_settings.max_number_of_canisters,
+            state,
+            registry_settings.subnet_size,
+            round_limits,
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+            &self.metrics.canister_creation_error,
+        );
+        ExecuteSubnetMessageResult::Finished {
+            response: res.map(|new_canister_id| {
+                (
+                    CanisterIdRecord::from(new_canister_id).encode(),
+                    Some(new_canister_id),
+                )
+            }),
+            refund: cycles,
+            instructions: NumInstructions::new(0),
         }
     }
 
