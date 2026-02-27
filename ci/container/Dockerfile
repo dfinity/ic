@@ -45,8 +45,8 @@ RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert
     echo "$mkcert_sha /usr/local/bin/mkcert" | sha256sum --check && \
     chmod +x /usr/local/bin/mkcert
 
-ARG bazelisk_sha=fd8fdff418a1758887520fa42da7e6ae39aefc788cf5e7f7bb8db6934d279fc4
-RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/bazelisk-linux-amd64 -o /usr/bin/bazel && \
+ARG bazelisk_sha=22e7d3a188699982f661cf4687137ee52d1f24fec1ec893d91a6c4d791a75de8
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
@@ -84,21 +84,9 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
-# Pre-populate the Bazel installation for root
-# (note: this is only used for bash completion; the actual bazel version comes from bazelisk)
-COPY .bazelversion /tmp/bazel/
-RUN cd /tmp/bazel && bazel version
-
-COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
-RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
-    echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
-
 USER ubuntu
 # Set PATH for ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-
-# Pre-populate the Bazel installation for ubuntu
-RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
 RUN mkdir -p /tmp/rust-version/
