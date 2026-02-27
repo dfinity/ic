@@ -626,7 +626,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-btc-interface",
-    version = "^0.2.3",
+    version = "^3.0.0",
 )
 crate.spec(
     package = "ic-canister-log",
