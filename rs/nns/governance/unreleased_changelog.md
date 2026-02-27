@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added support for recalling replica versions for subnets.
-
 ## Changed
 
 ## Deprecated
