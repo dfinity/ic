@@ -783,6 +783,7 @@ fn get_next_block_hash_to_sync(
     sync_queue: &mut LinkedHashSet<BlockHash>,
 ) -> Option<BlockHash> {
     sync_queue.pop_front().or_else(|| {
+        // The find below will always get the first item satisfying the condition.
         retry_queue
             .iter()
             .find(|(_, timed_out_peer)| timed_out_peer != &peer)
@@ -1609,7 +1610,7 @@ pub mod test {
             2,
             &[],
         );
-        // Sync queue starts empty.
+        // Let sync_queue be empty so that the next hash is always taken from retry_queue.
         let mut sync_queue = LinkedHashSet::new();
         // Retry queue starts with 2 item.
         let peer = SocketAddr::from_str("127.0.0.1:2345").unwrap();
