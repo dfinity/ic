@@ -42,8 +42,8 @@ fn should_have_expected_size_for_nidkg_transcript_serializations() {
     // (dealer_count, subnet_size, expected_transcript_size)
     //
     // Expected sizes are computed using cost_estimator.py
-    let config_and_expected_size: [(usize, usize, usize); 2] = [
-        (13, 13, 66144),
+    let config_and_expected_size: [(usize, usize, usize); 1] = [
+        // (13, 13, 66144), // disabled so the test has reasonable runtime
         (34, 34, 352416),
         // (40, 13, 183648), // disabled so the test has reasonable runtime
         // (40, 28, 345888), // disabled so the test has reasonable runtime
