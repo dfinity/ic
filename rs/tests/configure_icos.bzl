@@ -26,9 +26,6 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     icos_images = {}
     runtime_deps = {}
 
-    # Some tests need the build-setupos-config-image.sh script. It's free to include, so we always include it.
-    runtime_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
-
     # Normalize guestos to a dictionary format
     if type(guestos) == "dict":
         guestos_dict = guestos
