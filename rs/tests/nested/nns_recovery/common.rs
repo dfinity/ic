@@ -532,7 +532,10 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to spoof GuestOS DNS");
 
-    // Wait until the node has booted the expected GuestOS version
+    // Wait until the node has booted the expected GuestOS version.
+    // Use a generous timeout because in large subnet tests (e.g. nr_large with 40 nodes),
+    // many VMs boot in parallel causing significant resource contention, which can make
+    // individual nodes take much longer to boot (observed >600s in CI).
     retry_with_msg_async!(
         format!(
             "Waiting until GuestOS {} boots on the upgrade version {}",
@@ -540,7 +543,7 @@ async fn simulate_node_provider_action(
             upgrade_version
         ),
         &logger,
-        secs(600),
+        secs(1200),
         secs(10),
         || async {
             match host.status_async().await {
