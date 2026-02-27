@@ -482,6 +482,12 @@ fn init_timers() {
         }
         saved_timer_id.replace(new_timer_id);
     });
+
+    // Upgrade the index canister to set `retrieve_blocks_from_ledger_interval_seconds` to 5s. It
+    // can be removed in the next SNS Root version.
+    ic_cdk_timers::set_timer(Duration::ZERO, async {
+        SnsRootCanister::upgrade_index_canister_to_5s_interval(&STATE).await
+    });
 }
 
 #[update]

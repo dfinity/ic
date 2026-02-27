@@ -23,6 +23,7 @@ ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../packages/ic-http-types" }
+ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
@@ -31,6 +32,8 @@ ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-sns-governance-api = { path = "../governance/api" }
 ic-sns-swap = { path = "../swap" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 prost = { workspace = true }

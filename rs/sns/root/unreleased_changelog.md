@@ -11,6 +11,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+- On upgrade, a one-shot timer upgrades the SNS index canister to set
+  `retrieve_blocks_from_ledger_interval_seconds` to 5s (previously 1s default).
+
 ## Deprecated
 
 ## Removed

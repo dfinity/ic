@@ -283,6 +283,22 @@ rust_test(
 )
 
 rust_test(
+    name = "upgrade_index_canister_to_5s_interval",
+    timeout = "long",
+    srcs = [
+        "tests/upgrade_index_canister_to_5s_interval.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "cpu:4",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
     name = "sns_release_qualification_legacy",
     timeout = "long",
     srcs = [

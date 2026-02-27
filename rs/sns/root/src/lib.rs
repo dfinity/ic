@@ -34,6 +34,7 @@ pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
 pub mod pb;
 pub mod types;
+pub mod upgrade_index_canister_to_5s_interval;
 
 // The number of dapp amd extension canisters that can be registered with the SNS Root
 const DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT: usize = 100;
