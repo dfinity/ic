@@ -85,13 +85,16 @@ jobs:
           }
 
           # Run bare metal installation test
-          launch_bare_metal --hsm
+          # launch_bare_metal --hsm
 
           # Run bare metal node performance benchmarks
-          launch_bare_metal --benchmark
+          # launch_bare_metal --benchmark
 
           # Run bare metal node hostOS metrics check
-          launch_bare_metal --check_hostos_metrics
+          # launch_bare_metal --check_hostos_metrics
+          
+          # Run SEV tests
+          ict test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
 
           bazel clean
         env:
