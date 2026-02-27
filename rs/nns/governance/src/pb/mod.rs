@@ -23,6 +23,8 @@ mod conversions;
 mod convert_struct_to_enum;
 pub mod proposal_conversions;
 
+pub use conversions::convert_guest_launch_measurements_from_pb_to_api;
+
 impl Storable for ArchivedMonthlyNodeProviderRewards {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.encode_to_vec())
