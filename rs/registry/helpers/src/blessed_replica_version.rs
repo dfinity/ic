@@ -93,6 +93,14 @@ mod tests {
         }
     }
 
+    fn create_replica_record_without_measurements(package_hash: &str) -> ReplicaVersionRecord {
+        ReplicaVersionRecord {
+            release_package_sha256_hex: package_hash.to_string(),
+            release_package_urls: vec![],
+            guest_launch_measurements: None,
+        }
+    }
+
     #[test]
     fn test_get_blessed_guest_launch_measurements() {
         let registry_version = RegistryVersion::from(42);
@@ -110,6 +118,10 @@ mod tests {
             ),
             ("version2", create_replica_record("abcde", &[measurement3])),
             ("version3", create_replica_record("99999", &[measurement4])),
+            (
+                "version4",
+                create_replica_record_without_measurements("424242"),
+            ),
         ];
 
         // Set up registry data provider
