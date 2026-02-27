@@ -33,7 +33,7 @@ ALL_BINARIES = {
     "sns-audit": "//rs/sns/audit:sns-audit",
     "state-tool": "//rs/state_tool:state-tool",
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
-    "pocket-ic-head": "//rs/pocket_ic_server:pocket-ic-server-head-nns",
+    "pocket-ic-head-nns": "//rs/pocket_ic_server:pocket-ic-server-head-nns",
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
     "state-layout-test": "//rs/state_layout:state_layout_test_binary",
