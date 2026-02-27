@@ -823,6 +823,8 @@ impl ApiState {
                         })
                         .into_iter()
                         .collect();
+                args.push("--domain-custom-provider-poll-interval".to_string());
+                args.push("1s".to_string());
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
