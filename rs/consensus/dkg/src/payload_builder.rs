@@ -1,5 +1,5 @@
 use crate::{
-    MAX_EARLY_REMOTE_TRANSCRIPT_RESPONSES, MAX_REMOTE_DKG_ATTEMPTS, MAX_REMOTE_DKGS_PER_INTERVAL,
+    MAX_EARLY_REMOTE_TRANSCRIPTS, MAX_REMOTE_DKG_ATTEMPTS, MAX_REMOTE_DKGS_PER_INTERVAL,
     REMOTE_DKG_REPEATED_FAILURE_ERROR,
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
 };
@@ -179,6 +179,7 @@ pub(crate) fn create_early_remote_transcripts(
     for config in last_dkg_summary.configs.values() {
         let dkg_id = config.dkg_id();
         if completed.contains(dkg_id) {
+            // Skip DKGs that have already been completed
             continue;
         }
         if let NiDkgTargetSubnet::Remote(target_id) = dkg_id.target_subnet {
@@ -189,11 +190,18 @@ pub(crate) fn create_early_remote_transcripts(
     let state_ref = state.get_ref();
     let callback_id_map = build_target_id_callback_map(state_ref);
     let mut selected_transcripts = vec![];
-    for (target_id, configs) in remote_configs {
-        // Lookup the callback id
-        let Some(callback_id) = callback_id_map.get(&target_id) else {
+    'TARGET_ID: for (target_id, configs) in remote_configs {
+        // Lookup the callback id and the expected number of configs for this target_id
+        let Some((expected_config_num, callback_id)) = callback_id_map.get(&target_id) else {
             continue;
         };
+
+        // Check that we have the expected number of configs for this target_id
+        if configs.len() != *expected_config_num {
+            // This may happen if we only managed to create one transcript (out of two) as part
+            // of the last summary block. We will handle this in the next summary block.
+            continue;
+        }
 
         // If any of the configs has less dealings than the threshold, we skip this target_id
         if configs.iter().any(|config| {
@@ -220,13 +228,15 @@ pub(crate) fn create_early_remote_transcripts(
                         parent.height.increment(),
                         err
                     );
-                    continue;
+                    continue 'TARGET_ID;
                 }
                 Err(err) => {
                     // Return on transient crypto errors
                     return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
                 }
             };
+            // Push to an intermediate vector such that we append either all transcripts for the
+            // target_id or none of them.
             transcripts.push((
                 config.dkg_id().clone(),
                 *callback_id,
@@ -234,38 +244,9 @@ pub(crate) fn create_early_remote_transcripts(
             ));
         }
 
-        // For initial DKG transcripts, we need a pair of values while for VetKD we need a single transcript.
-        // Here we do some matching, to check that we have the right number of transcripts.
-        let is_valid = match transcripts.len() {
-            1 => {
-                // For VetKD, we need to check that it has a HighThresholdForKey tag
-                matches!(transcripts[0].0.dkg_tag, NiDkgTag::HighThresholdForKey(_))
-            }
-            2 => {
-                // If we have two transcripts for the same ID, we check that it is
-                // one low and one high threshold transcript.
-                let tags: BTreeSet<_> = transcripts
-                    .iter()
-                    .map(|(dkg_id, _, _)| dkg_id.dkg_tag.clone())
-                    .collect();
-                tags.contains(&NiDkgTag::LowThreshold) && tags.contains(&NiDkgTag::HighThreshold)
-            }
-            other => {
-                warn!(
-                    logger,
-                    "Produced unexpected number of early remote NiDKG transcripts at height {}: {}",
-                    parent.height.increment(),
-                    other
-                );
-                false
-            }
-        };
-
-        if is_valid {
-            selected_transcripts.append(&mut transcripts);
-            if selected_transcripts.len() >= MAX_EARLY_REMOTE_TRANSCRIPT_RESPONSES {
-                break;
-            }
+        selected_transcripts.append(&mut transcripts);
+        if selected_transcripts.len() >= MAX_EARLY_REMOTE_TRANSCRIPTS {
+            break;
         }
     }
 
@@ -316,6 +297,7 @@ pub(super) fn create_summary_payload(
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
         if completed.contains(dkg_id) {
+            // Skip DKGs that have already been completed as part of data blocks
             continue;
         }
         match create_transcript(crypto, config, &all_dealings, &logger) {
@@ -997,19 +979,21 @@ fn eq_sans_height(dkg_id1: &NiDkgId, dkg_id2: &NiDkgId) -> bool {
         && dkg_id1.target_subnet == dkg_id2.target_subnet
 }
 
-fn build_target_id_callback_map(state: &ReplicatedState) -> BTreeMap<NiDkgTargetId, CallbackId> {
+fn build_target_id_callback_map(
+    state: &ReplicatedState,
+) -> BTreeMap<NiDkgTargetId, (usize, CallbackId)> {
     let call_contexts = &state.metadata.subnet_call_context_manager;
     call_contexts
         .setup_initial_dkg_contexts
         .iter()
-        .map(|(&callback_id, context)| (context.target_id, callback_id))
+        .map(|(&callback_id, context)| (context.target_id, (2, callback_id)))
         .chain(
             call_contexts
                 .reshare_chain_key_contexts
                 .iter()
-                .map(|(&callback_id, context)| (context.target_id, callback_id)),
+                .map(|(&callback_id, context)| (context.target_id, (1, callback_id))),
         )
-        .collect::<BTreeMap<NiDkgTargetId, CallbackId>>()
+        .collect::<BTreeMap<NiDkgTargetId, (usize, CallbackId)>>()
 }
 
 fn add_callback_ids_to_transcript_results(
@@ -1024,7 +1008,7 @@ fn add_callback_ids_to_transcript_results(
         .filter_map(|(id, result)| match id.target_subnet {
             NiDkgTargetSubnet::Local => None,
             NiDkgTargetSubnet::Remote(target_id) => match callback_id_map.get(&target_id) {
-                Some(&callback_id) => Some((id, callback_id, result)),
+                Some(&(_, callback_id)) => Some((id, callback_id, result)),
                 None => {
                     error!(
                         log,

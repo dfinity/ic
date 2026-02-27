@@ -45,9 +45,9 @@ pub use payload_builder::{create_payload, get_dkg_summary_from_cup_contents};
 /// The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
 
-/// The maximum number of early remote DKG responses we want to include in a data payload.
+/// The maximum number of early remote DKG transcripts we want to include in a data payload.
 /// Note that responses for `SetupInitialDKG` requests contain two transcripts.
-const MAX_EARLY_REMOTE_TRANSCRIPT_RESPONSES: usize = 1;
+const MAX_EARLY_REMOTE_TRANSCRIPTS: usize = 2;
 
 /// The maximum number of intervals during which an initial DKG request is
 /// attempted.
@@ -425,7 +425,11 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         RegistryVersion, ReplicaVersion,
-        consensus::{Block, BlockPayload, DataPayload, HasHeight, dkg::DkgDataPayload},
+        batch::ValidationContext,
+        consensus::{
+            Block, BlockPayload, DataPayload, HasHeight,
+            dkg::{DkgDataPayload, DkgSummary},
+        },
         crypto::threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -1776,6 +1780,184 @@ mod tests {
                 assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
                 assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
             }
+        });
+    }
+
+    /// Tests that no early remote transcripts are created when a
+    /// setup_initial_dkg target has only one of its expected two configs
+    /// in the summary (because one transcript was already created in a
+    /// previous summary block). Instead, the next summary block should
+    /// contain both transcripts.
+    #[test]
+    fn test_no_early_transcripts_for_single_setup_initial_dkg_config() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let node_ids = (1..4).map(node_test_id).collect::<Vec<_>>();
+            let dkg_interval_length = 99;
+            let subnet_id = subnet_test_id(0);
+
+            let Dependencies {
+                mut pool,
+                registry,
+                state_manager,
+                dkg_pool,
+                crypto,
+                ..
+            } = dependencies_with_subnet_records_with_raw_state_manager(
+                pool_config,
+                subnet_id,
+                vec![(
+                    10,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            );
+
+            let target_id = NiDkgTargetId::new([0u8; 32]);
+            complement_state_manager_with_setup_initial_dkg_request(
+                state_manager.clone(),
+                registry.get_latest_version(),
+                vec![10, 11, 12, 13],
+                None,
+                Some(target_id),
+            );
+
+            // First summary: 2 remote configs (low + high) for the target
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+            let remote_dkg_ids = extract_remote_dkg_ids_from_highest_block(&pool, target_id);
+            assert_eq!(remote_dkg_ids.len(), 2);
+            assert_eq!(extract_dkg_configs_from_highest_block(&pool).len(), 4);
+
+            let original_summary = {
+                let block: Block = pool
+                    .validated()
+                    .block_proposal()
+                    .get_highest()
+                    .unwrap()
+                    .content
+                    .into_inner();
+                block.payload.as_ref().as_summary().dkg.clone()
+            };
+
+            // Add dealings for both remote configs to the chain
+            for dkg_id in &remote_dkg_ids {
+                let dealings = (0..3)
+                    .map(|i| ChangeAction::AddToValidated(create_dealing(i, dkg_id.clone())))
+                    .collect::<Vec<_>>();
+                dkg_pool.write().unwrap().apply(dealings);
+                pool.advance_round_normal_operation();
+            }
+
+            // Construct a modified summary with only 1 remote config.
+            // This simulates the scenario where one transcript was already
+            // created in a previous summary block, and only the remaining
+            // config needs to be computed.
+            let removed_dkg_id = remote_dkg_ids[0].clone();
+            let kept_tag = remote_dkg_ids[1].dkg_tag.clone();
+            let mut dummy_transcript = ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests();
+            dummy_transcript.dkg_id = removed_dkg_id.clone();
+            let modified_summary = DkgSummary::new(
+                original_summary
+                    .configs
+                    .values()
+                    .filter(|c| {
+                        c.dkg_id().target_subnet == NiDkgTargetSubnet::Local
+                            || c.dkg_id().dkg_tag == kept_tag
+                    })
+                    .cloned()
+                    .collect(),
+                original_summary.current_transcripts().clone(),
+                original_summary.next_transcripts().clone(),
+                vec![(
+                    removed_dkg_id,
+                    ic_types::messages::CallbackId::from(0u64),
+                    Ok(dummy_transcript),
+                )],
+                original_summary.registry_version,
+                original_summary.interval_length,
+                original_summary.next_interval_length,
+                original_summary.height,
+                BTreeMap::new(),
+            );
+
+            assert_eq!(
+                modified_summary
+                    .configs
+                    .values()
+                    .filter(|c| matches!(c.dkg_id().target_subnet, NiDkgTargetSubnet::Remote(_)))
+                    .count(),
+                1,
+            );
+
+            let parent = pool.get_cache().finalized_block();
+            let pool_reader = PoolReader::new(&pool);
+            let validation_context = ValidationContext {
+                registry_version: registry.get_latest_version(),
+                certified_height: Height::from(0),
+                time: UNIX_EPOCH,
+            };
+
+            // Even though sufficient dealings exist on chain for both configs,
+            // no early transcript should be created because the summary only
+            // has 1 of the expected 2 configs for a setup_initial_dkg target.
+            let early_transcripts = payload_builder::create_early_remote_transcripts(
+                &pool_reader,
+                crypto.as_ref(),
+                &parent,
+                &modified_summary,
+                state_manager.as_ref(),
+                &validation_context,
+                no_op_logger(),
+            )
+            .unwrap();
+            assert!(
+                early_transcripts.is_empty(),
+                "No early transcripts should be created for a single \
+                 setup_initial_dkg config, but got {early_transcripts:?}",
+            );
+
+            // Control: using the original summary with both configs DOES
+            // produce early transcripts.
+            let early_transcripts = payload_builder::create_early_remote_transcripts(
+                &pool_reader,
+                crypto.as_ref(),
+                &parent,
+                &original_summary,
+                state_manager.as_ref(),
+                &validation_context,
+                no_op_logger(),
+            )
+            .unwrap();
+            assert_eq!(early_transcripts.len(), 2);
+
+            // If a config exists in the summary but there is no corresponding
+            // context in the state, no early transcript should be created.
+            // Set up a state manager whose context has a different target_id.
+            let unrelated_target_id = NiDkgTargetId::new([1u8; 32]);
+            let no_match_state_manager =
+                Arc::new(ic_test_utilities::state_manager::RefMockStateManager::default());
+            complement_state_manager_with_setup_initial_dkg_request(
+                no_match_state_manager.clone(),
+                registry.get_latest_version(),
+                vec![10, 11, 12, 13],
+                None,
+                Some(unrelated_target_id),
+            );
+            let early_transcripts = payload_builder::create_early_remote_transcripts(
+                &pool_reader,
+                crypto.as_ref(),
+                &parent,
+                &original_summary,
+                no_match_state_manager.as_ref(),
+                &validation_context,
+                no_op_logger(),
+            )
+            .unwrap();
+            assert!(
+                early_transcripts.is_empty(),
+                "No early transcripts should be created when config's target_id \
+                 has no corresponding context, but got {early_transcripts:?}",
+            );
         });
     }
 
