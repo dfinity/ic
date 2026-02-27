@@ -3,7 +3,7 @@ use candid::types::subtype::equal;
 use candid_parser::utils::{CandidSource, instantiate_candid};
 use flate2::read::GzDecoder;
 use ic_btc_interface::InitConfig as BitcoinInitConfig;
-use pocket_ic_server::external_canister_types::DogecoinCanisterArg;
+use pocket_ic_server::external_canister_types::{BitcoinCanisterArg, DogecoinCanisterArg};
 use pocket_ic_server::external_canister_types::{
     /*CyclesLedgerArgs, */ InternetIdentityInit, NnsDappCanisterArguments, SnsAggregatorConfig,
 };
@@ -74,7 +74,7 @@ fn bitcoin_testnet_canister_candid_equality() {
     const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
         include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
 
-    check_init_arg::<BitcoinInitConfig>(BITCOIN_TESTNET_CANISTER_WASM);
+    check_init_arg::<BitcoinCanisterArg>(BITCOIN_TESTNET_CANISTER_WASM);
 }
 
 #[test]

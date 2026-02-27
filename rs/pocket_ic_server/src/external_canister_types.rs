@@ -1,4 +1,5 @@
 use candid::{CandidType, Principal};
+use ic_btc_interface::{InitConfig as BitcoinInitConfig, SetConfigRequest as BitcoinSetConfigRequest};
 use ic_doge_interface::{Fees, Flag, InitConfig as DogecoinInitConfig};
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -129,6 +130,15 @@ pub struct InternetIdentityInit {
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
+}
+
+/* Bitcoin canister */
+#[derive(CandidType, serde::Deserialize)]
+pub enum BitcoinCanisterArg {
+    #[serde(rename = "init")]
+    Init(BitcoinInitConfig),
+    #[serde(rename = "upgrade")]
+    Upgrade(Option<BitcoinSetConfigRequest>),
 }
 
 /* Dogecoin canister */
