@@ -132,7 +132,6 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_fails_without_cycles_test",
-    flaky = True,  # flakiness rate of over 1.05% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "long_test",
     ],
@@ -154,7 +153,6 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_from_nns_without_cycles_test",
-    flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/consensus/tecdsa:tecdsa_signature_from_nns_without_cycles_test_head_nns variant.
     tags = [
         "long_test",
     ],
@@ -215,7 +213,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_signature_life_cycle_test",
     # Remove when CON-937 is resolved
-    flaky = True,  # flakiness rate of 1.57% over the month from 2025-02-11 till 2025-03-11
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
