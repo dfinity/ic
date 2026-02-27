@@ -149,7 +149,13 @@ fn setup(env: TestEnv) {
     app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
-fn test(env: TestEnv, message_size: usize, rps: f64) {
+#[derive(Debug)]
+struct TestParameters {
+    message_size: usize,
+    rps: f64,
+}
+
+fn test(env: TestEnv, TestParameters { message_size, rps }: TestParameters) {
     let logger = env.logger();
 
     // create the runtime that lives until this variable is dropped.
@@ -196,22 +202,6 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 }
 
-fn test_single_tiny_message(env: TestEnv) {
-    test(env, 1, 1.0)
-}
-
-fn test_single_large_message(env: TestEnv) {
-    test(env, 1_999_500, 1.0)
-}
-
-fn test_small_messages(env: TestEnv) {
-    test(env, 9_500, 1_000.0)
-}
-
-fn test_large_messages(env: TestEnv) {
-    test(env, 1_999_500, 5.0)
-}
-
 fn teardown(env: TestEnv) {
     let should_download_prometheus_data =
         std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
@@ -236,10 +226,10 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        .add_test(systest!(test_single_tiny_message))
-        .add_test(systest!(test_small_messages))
-        .add_test(systest!(test_single_large_message))
-        .add_test(systest!(test_large_messages))
+        .add_test(systest!(test; TestParameters { message_size: 1, rps: 1.0 }))
+        .add_test(systest!(test; TestParameters { message_size: 9_500, rps: 1_000.0 }))
+        .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 1.0 }))
+        .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 5.0 }))
         .with_teardown(teardown)
         .execute_from_args()?;
     Ok(())
