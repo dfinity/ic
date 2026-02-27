@@ -50,6 +50,7 @@ TESTONLY_BINARIES = [
     "ic-prep",
     "ic-test-state-machine",
     "pocket-ic",
+    "pocket-ic-head-nns",
     "replicated-state-test",
     "state-layout-test",
     "types-test",
