@@ -6,7 +6,7 @@ use ic_crypto_test_utils_ni_dkg::{
     NiDkgTestEnvironment, RandomNiDkgConfig, create_dealings,
     run_ni_dkg_and_create_single_transcript,
 };
-use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::{
     LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner,
 };
