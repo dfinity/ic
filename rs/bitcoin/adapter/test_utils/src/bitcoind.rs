@@ -352,7 +352,7 @@ impl<T: RpcClientType> Daemon<T> {
     pub fn new(daemon_path: &str, network: T, conf: &Conf) -> Daemon<T> {
         const NUM_RETRIES: u8 = 2;
         for i in 0..=NUM_RETRIES {
-            match Self::create(daemon_path, network, &conf) {
+            match Self::create(daemon_path, network, conf) {
                 Ok(daemon) => return daemon,
                 Err(DaemonStatus::SpawnError(err)) => {
                     panic!("Failed to spawn daemon process {daemon_path}: {:?}", err)
