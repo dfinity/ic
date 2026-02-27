@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::Error;
+use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use bytes::Buf;
 use candid::Principal;
@@ -189,6 +190,80 @@ impl NodeActor {
     }
 }
 
+type SharedMembership = Arc<ArcSwapOption<HashSet<Principal>>>;
+
+/// MembershipActor periodically fetches the certified membership set for a subnet
+/// from one of its nodes and stores the result in shared state.
+struct MembershipActor {
+    subnet_id: Principal,
+    subnet_name: String,
+    nodes: Vec<Arc<Node>>,
+    membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
+    certified_members: SharedMembership,
+    token: CancellationToken,
+}
+
+impl Display for MembershipActor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MembershipActor({})", self.subnet_name)
+    }
+}
+
+impl MembershipActor {
+    async fn fetch(&self) {
+        const MAX_ATTEMPTS: usize = 3;
+
+        let candidates = self
+            .nodes
+            .choose_multiple(&mut rand::thread_rng(), MAX_ATTEMPTS);
+
+        for node in candidates {
+            match self
+                .membership_fetcher
+                .fetch_certified_members(node, self.subnet_id)
+                .await
+            {
+                Ok(members) => {
+                    debug!(
+                        "{self}: certified membership: {}/{} nodes",
+                        members.len(),
+                        self.nodes.len()
+                    );
+                    self.certified_members.store(Some(Arc::new(members)));
+                    return;
+                }
+                Err(e) => {
+                    warn!(
+                        "{self}: certified membership fetch from {} failed: {e}",
+                        node
+                    );
+                }
+            }
+        }
+
+        warn!("{self}: all certified membership fetches failed, skipping membership filter");
+        self.certified_members.store(None);
+    }
+
+    async fn run(&self, fetch_interval: Duration) {
+        debug!("{self}: started");
+
+        let mut interval = tokio::time::interval(fetch_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        loop {
+            select! {
+                _ = self.token.cancelled() => {
+                    debug!("{self}: stopped");
+                    return;
+                }
+
+                _ = interval.tick() => self.fetch().await,
+            }
+        }
+    }
+}
+
 /// SubnetActor spawns NodeActors, receives their state, computes minimum height for the subnet and sends the
 /// Subnet with healthy nodes down to GlobalActor when the health state changes
 struct SubnetActor {
@@ -204,7 +279,7 @@ struct SubnetActor {
     healthy_nodes: Option<Vec<Arc<Node>>>,
     state_changed: bool,
     init_done: bool,
-    membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
+    certified_members: SharedMembership,
 }
 
 impl Display for SubnetActor {
@@ -218,6 +293,7 @@ impl SubnetActor {
         idx: usize,
         subnet: Subnet,
         check_interval: Duration,
+        membership_fetch_interval: Duration,
         token: CancellationToken,
         checker: Arc<dyn Check>,
         channel_out: mpsc::Sender<(usize, Subnet)>,
@@ -242,6 +318,22 @@ impl SubnetActor {
             });
         }
 
+        let certified_members: SharedMembership = Arc::new(ArcSwapOption::empty());
+
+        let membership_actor = MembershipActor {
+            subnet_id: subnet.id,
+            subnet_name: subnet.to_string(),
+            nodes: subnet.nodes.clone(),
+            membership_fetcher,
+            certified_members: certified_members.clone(),
+            token: token_nodes.child_token(),
+        };
+
+        let interval = membership_fetch_interval;
+        tracker.spawn(async move {
+            membership_actor.run(interval).await;
+        });
+
         Self {
             idx,
             states: vec![None; subnet.nodes.len()],
@@ -255,7 +347,7 @@ impl SubnetActor {
             healthy_nodes: None,
             state_changed: false,
             init_done: false,
-            membership_fetcher,
+            certified_members,
         }
     }
 
@@ -318,13 +410,12 @@ impl SubnetActor {
             // Update the latency on the node
             .collect();
 
-        // Fetch certified membership from the subnet's own state tree.
-        let certified_members = self.try_fetch_certified_members(&preliminary_healthy).await;
+        // Read the latest certified membership from the background MembershipActor.
+        let certified_members = self.certified_members.load();
 
-        // Filter the preliminary healthy nodes to only include those that are recognized by the subnet's consensus
         let healthy_nodes: Vec<Arc<Node>> = preliminary_healthy
             .into_iter()
-            .filter(|(node, _)| match &certified_members {
+            .filter(|(node, _)| match certified_members.as_deref() {
                 Some(members) => members.contains(&node.id),
                 // Fail-open: if the fetch fails, include all preliminary_healthy nodes.
                 None => true,
@@ -358,41 +449,6 @@ impl SubnetActor {
             // It can never fail in our case
             let _ = self.channel_out.send((self.idx, subnet)).await;
         }
-    }
-
-    async fn try_fetch_certified_members(
-        &self,
-        preliminary_healthy: &[(Arc<Node>, NodeState)],
-    ) -> Option<HashSet<Principal>> {
-        const MAX_ATTEMPTS: usize = 3;
-
-        let candidates = preliminary_healthy.choose_multiple(&mut rand::thread_rng(), MAX_ATTEMPTS);
-
-        for (node, _) in candidates {
-            match self
-                .membership_fetcher
-                .fetch_certified_members(node, self.subnet.id)
-                .await
-            {
-                Ok(members) => {
-                    debug!(
-                        "{self}: certified membership: {}/{} nodes",
-                        members.len(),
-                        self.subnet.nodes.len()
-                    );
-                    return Some(members);
-                }
-                Err(e) => {
-                    warn!(
-                        "{self}: certified membership fetch from {} failed: {e}",
-                        node
-                    );
-                }
-            }
-        }
-
-        warn!("{self}: all certified membership fetches failed, skipping membership filter");
-        None
     }
 
     async fn run(&mut self, update_interval: Duration) {
@@ -469,6 +525,7 @@ impl GlobalActor {
         subnets: Vec<Subnet>,
         check_interval: Duration,
         update_interval: Duration,
+        membership_fetch_interval: Duration,
         max_height_lag: u64,
         checker: Arc<dyn Check>,
         persister: Arc<dyn Persist>,
@@ -485,6 +542,7 @@ impl GlobalActor {
                 idx,
                 subnet.clone(),
                 check_interval,
+                membership_fetch_interval,
                 token_subnets.child_token(),
                 checker.clone(),
                 channel_send.clone(),
@@ -574,6 +632,7 @@ pub struct Runner {
     max_height_lag: u64,
     check_interval: Duration,
     update_interval: Duration,
+    membership_fetch_interval: Duration,
     checker: Arc<dyn Check>,
     persister: Arc<dyn Persist>,
     // Tokio mutex is used because its MutexGuard is Send
@@ -589,6 +648,7 @@ impl Runner {
             subnets,
             self.check_interval,
             self.update_interval,
+            self.membership_fetch_interval,
             self.max_height_lag,
             self.checker.clone(),
             self.persister.clone(),
@@ -1059,6 +1119,7 @@ pub(crate) mod test {
             10,
             Duration::from_millis(100),
             Duration::from_millis(1),
+            Duration::from_millis(1),
             Arc::new(checker),
             persister,
             #[allow(clippy::disallowed_types)]
@@ -1108,6 +1169,7 @@ pub(crate) mod test {
         let runner = Runner::new(
             10,
             Duration::from_millis(100),
+            Duration::from_millis(1),
             Duration::from_millis(1),
             Arc::new(checker),
             persister,
@@ -1196,6 +1258,7 @@ pub(crate) mod test {
             10,
             Duration::from_millis(100),
             Duration::from_millis(1),
+            Duration::from_millis(1),
             Arc::new(checker),
             persister,
             #[allow(clippy::disallowed_types)]
@@ -1247,6 +1310,7 @@ pub(crate) mod test {
         let runner = Runner::new(
             10,
             Duration::from_millis(100),
+            Duration::from_millis(1),
             Duration::from_millis(1),
             Arc::new(checker),
             persister,

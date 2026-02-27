@@ -659,6 +659,7 @@ async fn setup_registry(
         cli.health.health_max_height_lag,
         cli.health.health_check_interval,
         cli.health.health_update_interval,
+        cli.health.health_membership_fetch_interval,
         Arc::new(checker),
         Arc::new(persister),
         Mutex::new(channel_snapshot_recv),
