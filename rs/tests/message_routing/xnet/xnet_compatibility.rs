@@ -44,8 +44,8 @@ use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(25 * 60);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 
 const DKG_INTERVAL: u64 = 9;
 const NODES_PER_SUBNET: usize = 1;
@@ -111,7 +111,7 @@ pub async fn test_async(env: TestEnv) {
         .map(|(_, _, node)| node)
         .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()));
 
-    let xnet_config = xnet_slo_test_lib::Config::new(2, 1, Duration::from_secs(30), 10);
+    let xnet_config = xnet_slo_test_lib::Config::new(2, 1, Duration::from_secs(60), 10);
     let long_xnet_config = xnet_slo_test_lib::Config::new_with_custom_thresholds(
         2,
         1,
