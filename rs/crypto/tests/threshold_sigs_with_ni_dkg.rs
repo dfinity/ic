@@ -845,3 +845,301 @@ mod non_interactive_distributed_key_generation {
         }
     }
 }
+
+mod verification_failures {
+    use super::*;
+    use ic_types::crypto::{CombinedThresholdSig, ThresholdSigShare};
+
+    #[test]
+    fn should_fail_to_verify_threshold_sig_share_with_wrong_message() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..7);
+        let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
+
+        run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
+
+        let msg = SignableMock::new(b"message".to_vec());
+        let wrong_msg = SignableMock::new(b"wrong message".to_vec());
+
+        let signer = random_node_in(config.receivers().get(), rng);
+        let sig_share = crypto_for(signer, &crypto_components)
+            .sign_threshold(&msg, &dkg_id)
+            .expect("signing failed");
+
+        let verifier = random_node_in(config.receivers().get(), rng);
+        let result = crypto_for(verifier, &crypto_components)
+            .verify_threshold_sig_share(&sig_share, &wrong_msg, &dkg_id, signer);
+
+        assert_matches!(result, Err(CryptoError::SignatureVerification { .. }));
+    }
+
+    #[test]
+    fn should_fail_to_verify_threshold_sig_share_with_wrong_signer() {
+        let rng = &mut reproducible_rng();
+        // Use a larger subnet to ensure different polynomial evaluations for different nodes
+        let subnet_size = rng.gen_range(4..7);
+        let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
+
+        run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
+
+        let msg = SignableMock::new(b"message".to_vec());
+
+        let receivers: Vec<_> = config.receivers().get().iter().copied().collect();
+        assert!(
+            receivers.len() >= 2,
+            "Need at least 2 receivers for this test"
+        );
+        let actual_signer = receivers[0];
+        let claimed_signer = receivers[1];
+        assert_ne!(
+            actual_signer, claimed_signer,
+            "Signers must be different for this test"
+        );
+
+        let sig_share = crypto_for(actual_signer, &crypto_components)
+            .sign_threshold(&msg, &dkg_id)
+            .expect("signing failed");
+
+        let verifier = random_node_in(config.receivers().get(), rng);
+        let result = crypto_for(verifier, &crypto_components).verify_threshold_sig_share(
+            &sig_share,
+            &msg,
+            &dkg_id,
+            claimed_signer,
+        );
+
+        assert_matches!(result, Err(CryptoError::SignatureVerification { .. }));
+    }
+
+    #[test]
+    fn should_fail_to_verify_threshold_sig_combined_with_wrong_message() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..7);
+        let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
+
+        run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
+
+        let msg = SignableMock::new(b"message".to_vec());
+        let wrong_msg = SignableMock::new(b"wrong message".to_vec());
+
+        let combiner = random_node_in(config.receivers().get(), rng);
+        let combined_sig = threshold_sign_and_combine(
+            SignersAndCombiner {
+                signers: n_random_nodes_in(config.receivers().get(), config.threshold().get(), rng),
+                combiner,
+            },
+            &msg,
+            dkg_id.clone(),
+            &crypto_components,
+        );
+
+        let verifier = random_node_in(config.receivers().get(), rng);
+        let result = crypto_for(verifier, &crypto_components).verify_threshold_sig_combined(
+            &combined_sig,
+            &wrong_msg,
+            &dkg_id,
+        );
+
+        assert_matches!(result, Err(CryptoError::SignatureVerification { .. }));
+    }
+
+    #[test]
+    fn should_fail_to_verify_threshold_sig_share_from_different_dkg_unless_transcript_loaded() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..7);
+
+        // Setup first DKG
+        let (config1, dkg_id1, crypto_components1) =
+            setup_with_random_ni_dkg_config(subnet_size, rng);
+
+        let transcript1 = run_ni_dkg_and_create_single_transcript(&config1, &crypto_components1);
+        load_transcript_for_receivers_expecting_status(
+            &config1,
+            &transcript1,
+            &crypto_components1,
+            Some(LoadTranscriptResult::SigningKeyAvailable),
+        );
+
+        // Setup second DKG with different nodes
+        let (config2, _dkg_id2, crypto_components2) =
+            setup_with_random_ni_dkg_config(subnet_size, rng);
+        run_ni_dkg_and_load_transcript_for_receivers(&config2, &crypto_components2);
+
+        let msg = SignableMock::new(b"message".to_vec());
+
+        // Sign with one DKG
+        let signer1 = random_node_in(config1.receivers().get(), rng);
+        let sig_share = crypto_for(signer1, &crypto_components1)
+            .sign_threshold(&msg, &dkg_id1)
+            .expect("signing failed");
+
+        // Try to verify in another DKG
+        let verifier2 = random_node_in(config2.receivers().get(), rng);
+
+        // The verifier doesn't have DKG1's transcript loaded
+        let result = crypto_for(verifier2, &crypto_components2)
+            .verify_threshold_sig_share(&sig_share, &msg, &dkg_id1, signer1);
+
+        assert_matches!(result, Err(CryptoError::ThresholdSigDataNotFound { .. }));
+
+        // Load DKG1 transcript into verifier2 and try again:
+        crypto_for(verifier2, &crypto_components2)
+            .load_transcript(&transcript1)
+            .expect("Failed to load transcript1 into verifier2");
+
+        let result = crypto_for(verifier2, &crypto_components2)
+            .verify_threshold_sig_share(&sig_share, &msg, &dkg_id1, signer1);
+
+        assert_matches!(result, Ok(()));
+    }
+
+    #[test]
+    fn should_fail_to_verify_threshold_sig_combined_from_different_dkg_unless_transcript_loaded() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..7);
+
+        // Setup first DKG
+        let (config1, dkg_id1, crypto_components1) =
+            setup_with_random_ni_dkg_config(subnet_size, rng);
+
+        let transcript1 = run_ni_dkg_and_create_single_transcript(&config1, &crypto_components1);
+        load_transcript_for_receivers_expecting_status(
+            &config1,
+            &transcript1,
+            &crypto_components1,
+            Some(LoadTranscriptResult::SigningKeyAvailable),
+        );
+
+        // Setup second DKG
+        let (config2, _dkg_id2, crypto_components2) =
+            setup_with_random_ni_dkg_config(subnet_size, rng);
+        run_ni_dkg_and_load_transcript_for_receivers(&config2, &crypto_components2);
+
+        let msg = SignableMock::new(b"message".to_vec());
+
+        // Create combined sig with DKG1
+        let combiner1 = random_node_in(config1.receivers().get(), rng);
+        let combined_sig = threshold_sign_and_combine(
+            SignersAndCombiner {
+                signers: n_random_nodes_in(
+                    config1.receivers().get(),
+                    config1.threshold().get(),
+                    rng,
+                ),
+                combiner: combiner1,
+            },
+            &msg,
+            dkg_id1.clone(),
+            &crypto_components1,
+        );
+
+        // Try to verify with DKG2
+        let verifier2 = random_node_in(config2.receivers().get(), rng);
+        let result = crypto_for(verifier2, &crypto_components2).verify_threshold_sig_combined(
+            &combined_sig,
+            &msg,
+            &dkg_id1,
+        );
+
+        // Should fail because DKG1's transcript is not loaded in DKG2's components
+        assert_matches!(result, Err(CryptoError::ThresholdSigDataNotFound { .. }));
+
+        // Load DKG1 transcript into verifier2 and try again:
+        crypto_for(verifier2, &crypto_components2)
+            .load_transcript(&transcript1)
+            .expect("Failed to load transcript1 into verifier2");
+
+        let result = crypto_for(verifier2, &crypto_components2).verify_threshold_sig_combined(
+            &combined_sig,
+            &msg,
+            &dkg_id1,
+        );
+
+        assert_matches!(result, Ok(()));
+    }
+
+    #[test]
+    fn should_fail_to_verify_threshold_sig_share_with_invalid_point() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..7);
+        let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
+
+        run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
+
+        let msg = SignableMock::new(b"message".to_vec());
+
+        let signer = random_node_in(config.receivers().get(), rng);
+        let sig_share = crypto_for(signer, &crypto_components)
+            .sign_threshold(&msg, &dkg_id)
+            .expect("signing failed");
+
+        // Corrupt the first byte which contains BLS curve point encoding flags.
+        // This creates an invalid point encoding that can't be parsed.
+        let mut corrupted_bytes = sig_share.get().0.clone();
+        corrupted_bytes[0] ^= 0xFF;
+        let corrupted_sig_share: ThresholdSigShareOf<SignableMock> =
+            ThresholdSigShareOf::new(ThresholdSigShare(corrupted_bytes));
+
+        let verifier = random_node_in(config.receivers().get(), rng);
+
+        let result = crypto_for(verifier, &crypto_components).verify_threshold_sig_share(
+            &corrupted_sig_share,
+            &msg,
+            &dkg_id,
+            signer,
+        );
+
+        assert_matches!(result, Err(CryptoError::MalformedSignature { .. }));
+    }
+
+    #[test]
+    fn should_fail_to_verify_threshold_sig_share_with_truncated_bytes() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..7);
+        let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
+
+        run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
+
+        let msg = SignableMock::new(b"message".to_vec());
+
+        let signer = random_node_in(config.receivers().get(), rng);
+
+        // Create a signature share with wrong length (truncated)
+        let truncated_sig_share: ThresholdSigShareOf<SignableMock> =
+            ThresholdSigShareOf::new(ThresholdSigShare(vec![1, 2, 3]));
+
+        let verifier = random_node_in(config.receivers().get(), rng);
+        let result = crypto_for(verifier, &crypto_components).verify_threshold_sig_share(
+            &truncated_sig_share,
+            &msg,
+            &dkg_id,
+            signer,
+        );
+
+        assert_matches!(result, Err(CryptoError::MalformedSignature { .. }));
+    }
+
+    #[test]
+    fn should_fail_to_verify_threshold_sig_combined_with_truncated_bytes() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..7);
+        let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
+
+        run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
+
+        let msg = SignableMock::new(b"message".to_vec());
+
+        // Create a combined signature with wrong length (truncated)
+        let truncated_combined_sig: CombinedThresholdSigOf<SignableMock> =
+            CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1, 2, 3]));
+
+        let verifier = random_node_in(config.receivers().get(), rng);
+        let result = crypto_for(verifier, &crypto_components).verify_threshold_sig_combined(
+            &truncated_combined_sig,
+            &msg,
+            &dkg_id,
+        );
+
+        assert_matches!(result, Err(CryptoError::MalformedSignature { .. }));
+    }
+}

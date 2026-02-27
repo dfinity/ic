@@ -17,3 +17,8 @@ rtl2832
 samba
 stm
 wifi
+ntfs
+Xen
+nouveau
+fpga
+jfs

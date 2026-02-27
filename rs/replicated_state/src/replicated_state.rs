@@ -733,6 +733,17 @@ impl ReplicatedState {
             .map(|x| x.cost_schedule)
     }
 
+    /// Returns the list of subnet admins of this subnet.
+    pub fn get_own_subnet_admins(&self) -> BTreeSet<PrincipalId> {
+        let subnet_id = self.metadata.own_subnet_id;
+        self.metadata
+            .network_topology
+            .subnets()
+            .get(&subnet_id)
+            .map(|x| x.subnet_admins.clone())
+            .unwrap_or_default()
+    }
+
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
         self.metadata
             .ingress_history
