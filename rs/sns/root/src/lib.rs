@@ -31,6 +31,7 @@ use std::{
 use types::SnsCanisterType;
 
 pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+pub mod install_index_canister_if_missing;
 pub mod logs;
 pub mod pb;
 pub mod types;
