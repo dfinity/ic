@@ -4,8 +4,8 @@
     "sha256": "5bf34cb029e437c4ccb990b1595876d4c869566d66b8b58059d0ee742891c219"
   },
   "bitcoin_testnet": {
-    "sha256": "ee669a352fbca79f21aa6d0b7190f4daae74ef203b0ccf8d7fb82123dfd2d6a6",
-    "tag": "release/2025-12-03"
+    "sha256": "b7829e6ae6100c789bb967bc9ba49c72d12c6bdf56a28c0188d688a22d75ef47",
+    "tag": "release/2026-02-18"
   },
   "ck_btc_archive": {
     "rev": "512cf412f33d430b79f42330518166d14fc6884e",
@@ -48,8 +48,8 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
-    "sha256": "40a204bf4abc14bd61553b2b56413709a2fc7175227253d2809ffdb977c934de"
+    "rev": "f9048ef265113604d2879d6c93114a18c804b217",
+    "sha256": "9afc0b12240539d4b5c7f209698fb01f74fd2550e4bda625dfd7c583e8482136"
   },
   "cycles_ledger": {
     "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
@@ -68,20 +68,20 @@
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "43723a278465c0725b7cc2e3374f7c8545395cb6",
-    "sha256": "a5a16a1086ac99f3aadbd3fc27f3a088aeee3dfd4b1b0fac3e3bebe01decdf9a"
+    "rev": "f9048ef265113604d2879d6c93114a18c804b217",
+    "sha256": "4051d0d3304c0747b3688f7a3ca0b5e621e60b363efaa1a2fe8864dac7878b32"
   },
   "governance-canister_test": {
-    "rev": "43723a278465c0725b7cc2e3374f7c8545395cb6",
-    "sha256": "4d3cb493ce147ff37c47556468378667ffdcfc140d383dd24d064e4352146e83"
+    "rev": "f9048ef265113604d2879d6c93114a18c804b217",
+    "sha256": "c1971ab7a780807253f9deb1f294a58a788f1942e1a397031beeae4b47512cce"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "c777435f0537b0ef094a109f2508bc2669f7bf9860785df08eed3a900f424be1",
-    "tag": "release-2026-02-13"
+    "sha256": "db10c84daeee7a539695a55e4cf1176207ffe22eec9df8a635cdcb7c4f917771",
+    "tag": "release-2026-02-17"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -96,16 +96,16 @@
     "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
   },
   "nns_dapp_test": {
-    "sha256": "5b5948b29d8a7c54a4ef726f313b4c21e399d8dec6bd5a346546662c54d8f8c9",
-    "tag": "proposal-140402"
+    "sha256": "d6cbeefa5463c95fd21ad247027476bee70dcc11a8739bc9294f642fceee5b1f",
+    "tag": "proposal-140496"
   },
   "node-rewards": {
     "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
     "sha256": "4511bdb31e19a1ab304d897075abba82f46cc0629e6bc0f036f364f1fd7b26b7"
   },
   "registry": {
-    "rev": "43723a278465c0725b7cc2e3374f7c8545395cb6",
-    "sha256": "a953038d3eabd740f0600337ccf9cb6a722cc08170e36805aacb7a0379d90496"
+    "rev": "f9048ef265113604d2879d6c93114a18c804b217",
+    "sha256": "6dc5b2a9be47b792e3031d3802a7e7cfb53d27d6bccc344e1e2e34679368beeb"
   },
   "root": {
     "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",
