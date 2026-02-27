@@ -3412,6 +3412,60 @@ fn fails_when_keeping_main_memory_without_enhanced_orthogonal_persistence() {
 }
 
 #[test]
+fn instructions_for_compilation_of_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let classical_persistence = r#"
+    (module
+        (memory 1)
+    )
+    "#;
+    let classical_persistence_wasm = wat::parse_str(classical_persistence).unwrap();
+
+    let orthogonal_persistence = r#"
+    (module
+        (memory 1)
+        (@custom "icp:private enhanced-orthogonal-persistence" "")
+    )
+    "#;
+    let orthogonal_persistence_wasm = wat::parse_str(orthogonal_persistence).unwrap();
+
+    // Make sure both classical and orthogonal persistence WASM are in compilation cache.
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, classical_persistence_wasm.clone())
+        .unwrap();
+    test.reinstall_canister(canister_id, orthogonal_persistence_wasm.clone())
+        .unwrap();
+
+    let original_execution_cost = test.canister_execution_cost(canister_id);
+    test.upgrade_canister_v2(
+        canister_id,
+        orthogonal_persistence_wasm.clone(),
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap();
+    let successful_execution_cost =
+        test.canister_execution_cost(canister_id) - original_execution_cost;
+
+    let original_execution_cost = test.canister_execution_cost(canister_id);
+    test.upgrade_canister_v2(
+        canister_id,
+        classical_persistence_wasm,
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap_err();
+    let failed_execution_cost = test.canister_execution_cost(canister_id) - original_execution_cost;
+
+    assert_eq!(successful_execution_cost, failed_execution_cost);
+}
+
+#[test]
 fn test_upgrade_to_enhanced_orthogonal_persistence() {
     let mut test = ExecutionTestBuilder::new().build();
 
