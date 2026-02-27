@@ -1,5 +1,7 @@
 use crate::as_round_instructions;
-use crate::execution::common::{validate_controller, validate_controller_or_subnet_admin};
+use crate::execution::common::{
+    validate_controller, validate_controller_or_subnet_admin, validate_subnet_admin,
+};
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
@@ -147,7 +149,6 @@ impl CanisterManager {
             // The method is either invalid or it is of a type that users
             // are not allowed to send.
             Err(_)
-            | Ok(Ic00Method::CreateCanister)
             | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::CanisterMetadata)
             | Ok(Ic00Method::ECDSAPublicKey)
@@ -179,6 +180,18 @@ impl CanisterManager {
                 ErrorCode::CanisterRejectedMessage,
                 format!("Only canisters can call ic00 method {method_name}"),
             )),
+
+            // Canister creation via ingress is only allowed by subnet admins.
+            Ok(Ic00Method::CreateCanister) => {
+                let subnet_admins = state.get_own_subnet_admins();
+                // In case the subnet admins list is empty, return the same error as
+                // before introducing the notion of subnet admins to maintain backward compatibility.
+                if subnet_admins.is_empty() {
+                  Err(UserError::new(ErrorCode::CanisterRejectedMessage, format!("Only canisters can call ic00 method {method_name}")))
+                } else {
+                  validate_subnet_admin(&subnet_admins, sender.get_ref()).map_err(|err| err.into())
+                }
+            }
 
             // These methods are only valid if they are sent by the controller
             // of the canister or a subnet admin. We assume that the canister

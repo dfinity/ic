@@ -323,6 +323,10 @@ pub(crate) struct UploadChunkResult {
 
 #[derive(Eq, PartialEq, Debug)]
 pub(crate) enum CanisterManagerError {
+    InvalidSubnetAdmin {
+        subnet_admins_expected: BTreeSet<PrincipalId>,
+        caller: PrincipalId,
+    },
     CanisterInvalidController {
         canister_id: CanisterId,
         controllers_expected: BTreeSet<PrincipalId>,
@@ -496,6 +500,11 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::InvalidSenderSubnet(_)
             | CanisterManagerError::SenderNotInWhitelist(_)
             | CanisterManagerError::CanisterNotHostedBySubnet { .. } => ErrorHelp::InternalError,
+            CanisterManagerError::InvalidSubnetAdmin { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a subnet admin \
+                            or add the current caller as a subnet admin.".to_string(),
+                doc_link: doc_ref("invalid-subnet-admin"),
+            },
             CanisterManagerError::CanisterInvalidController { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a controller of the target canister or \
                 add the current caller as a controller."
@@ -800,6 +809,24 @@ impl From<CanisterManagerError> for UserError {
                     available.display(),
                 ),
             ),
+            InvalidSubnetAdmin {
+                subnet_admins_expected,
+                caller,
+            } => {
+                let subnet_admins_expected = subnet_admins_expected
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                Self::new(
+                    ErrorCode::InvalidSubnetAdmin,
+                    format!(
+                        "Only the subnet admins can perform certain actions.\n\
+                        Subnet admins: {subnet_admins_expected}\n\
+                        Sender's ID: {caller}{additional_help}"
+                    ),
+                )
+            }
             CanisterNonEmpty(canister_id) => Self::new(
                 ErrorCode::CanisterNonEmpty,
                 format!(

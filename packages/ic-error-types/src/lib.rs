@@ -93,6 +93,7 @@ impl From<ErrorCode> for RejectCode {
             InvalidManagementPayload => CanisterReject,
             CanisterNotHostedBySubnet => CanisterReject,
             CanisterSnapshotImmutable => CanisterReject,
+            InvalidSubnetAdmin => CanisterReject,
             // Canister errors.
             CanisterInvalidController => CanisterError,
             CanisterInvalidControllerOrSubnetAdmin => CanisterError,
@@ -184,6 +185,7 @@ pub enum ErrorCode {
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
     CanisterSnapshotImmutable = 409,
+    InvalidSubnetAdmin = 410,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
@@ -322,6 +324,7 @@ impl UserError {
             | ErrorCode::CanisterRejectedMessage
             | ErrorCode::UnknownManagementMessage
             | ErrorCode::InvalidManagementPayload
+            | ErrorCode::InvalidSubnetAdmin
             | ErrorCode::CanisterTrapped
             | ErrorCode::CanisterCalledTrap
             | ErrorCode::CanisterContractViolation

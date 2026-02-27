@@ -355,6 +355,19 @@ pub(crate) fn validate_controller(
     Ok(())
 }
 
+pub(crate) fn validate_subnet_admin(
+    subnet_admins: &BTreeSet<PrincipalId>,
+    sender: &PrincipalId,
+) -> Result<(), CanisterManagerError> {
+    if !subnet_admins.contains(sender) {
+        return Err(CanisterManagerError::InvalidSubnetAdmin {
+            subnet_admins_expected: subnet_admins.clone(),
+            caller: *sender,
+        });
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_controller_or_subnet_admin(
     canister: &CanisterState,
     subnet_admins: &BTreeSet<PrincipalId>,
