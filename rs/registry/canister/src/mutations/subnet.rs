@@ -90,7 +90,9 @@ impl Registry {
                 deletion_marker: _,
                 timestamp_nanoseconds: _,
             }) => DeletedSubnetListRecord::decode(value.as_slice()).unwrap(),
-            None => panic!("{LOG_PREFIX}: deleted subnet list record not found in the registry.",),
+            None => DeletedSubnetListRecord {
+                deleted_subnets: vec![],
+            },
         }
     }
 

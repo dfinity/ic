@@ -58,6 +58,7 @@ registry-canister = { path = "../../registry/canister" }
 axum = { workspace = true }
 ic-registry-transport = { path = "../../registry/transport" }
 prost = { workspace = true }
+ic-protobuf = {workspace = true}
 url = { workspace = true }
 
 [[bin]]

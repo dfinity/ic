@@ -8,8 +8,12 @@ end::catalog[] */
 use anyhow::Result;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_protobuf::registry::subnet::v1::DeletedSubnetListRecord;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
+use ic_registry_transport::pb::v1::{
+    RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
+};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -22,6 +26,8 @@ use ic_system_test_driver::nns::{self, get_software_version_from_snapshot};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_types::{Height, RegistryVersion};
+use prost::Message;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use slog::info;
 use std::collections::BTreeSet;
 use std::time::Duration;
@@ -66,21 +72,38 @@ pub fn test(env: TestEnv) {
     let log = &env.logger();
 
     // [Phase I] Prepare NNS
-    install_registry_canister_with_testnet_topology(&env, None);
+    let deleted_subnet_list_mutation = RegistryMutation {
+        mutation_type: registry_mutation::Type::Insert as i32,
+        key: "deleted_subnet_list".as_bytes().to_vec(),
+        value: DeletedSubnetListRecord {
+            deleted_subnets: vec![],
+        }
+        .encode_to_vec(),
+    };
+    let mut mutations = RegistryCanisterInitPayloadBuilder::new();
+    mutations.push_init_mutate_request(RegistryAtomicMutateRequest {
+        mutations: vec![deleted_subnet_list_mutation],
+        preconditions: vec![],
+    });
+    install_registry_canister_with_testnet_topology(&env, Some(mutations));
     let topology_snapshot = &env.topology_snapshot();
     let nns_subnet = topology_snapshot.root_subnet();
-    let app_subnets: Vec<SubnetSnapshot> = topology_snapshot
+    let app_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::Application)
-        .collect();
-    let app_subnet_1 = app_subnets[0].clone();
-    let app_subnet_2 = app_subnets[1].clone();
-    let app_subnet_2_nodes: Vec<IcNodeSnapshot> = app_subnet_2.nodes().collect();
+        .collect::<Vec<_>>();
+    let app_subnet = app_subnet.first().unwrap();
+    let engine_subnet = topology_snapshot
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::CloudEngine)
+        .collect::<Vec<_>>();
+    let engine_subnet = engine_subnet.first().unwrap();
+    let engine_nodes: Vec<IcNodeSnapshot> = engine_subnet.nodes().collect();
     assert_eq!(
-        app_subnet_2_nodes.first().unwrap().subnet_id(),
-        Some(app_subnet_2.subnet_id)
+        engine_nodes.first().unwrap().subnet_id(),
+        Some(engine_subnet.subnet_id)
     );
-    let app_subnet_2_node_ids = BTreeSet::from_iter(app_subnet_2_nodes.iter().map(|x| x.node_id));
+    let app_subnet_2_node_ids = BTreeSet::from_iter(engine_nodes.iter().map(|x| x.node_id));
     assert!(
         topology_snapshot
             .unassigned_nodes()
@@ -126,7 +149,7 @@ pub fn test(env: TestEnv) {
         };
 
         let arg = DeleteSubnetPayload {
-            subnet_id: app_subnet_2.subnet_id.get().into(),
+            subnet_id: engine_subnet.subnet_id.get().into(),
         };
         let bytes = registry_canister
             .update("delete_subnet")
@@ -134,7 +157,10 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap();
         let Ok(()) = Decode!(&bytes, Result<(), String>).unwrap() else {
-            panic!("Expected Ok(())")
+            let Err(e) = Decode!(&bytes, Result<(), String>).unwrap() else {
+                unreachable!()
+            };
+            panic!("Expected Ok(()), got {:?}", e);
         };
 
         let new_topology_snapshot = topology_snapshot
@@ -149,7 +175,7 @@ pub fn test(env: TestEnv) {
 
         let final_subnets = get_subnet_list_from_registry(&client).await;
         info!(log, "final subnets: {:?}", final_subnets);
-        assert!(!final_subnets.contains(&app_subnet_2.subnet_id));
+        assert!(!final_subnets.contains(&engine_subnet.subnet_id));
     });
 }
 
