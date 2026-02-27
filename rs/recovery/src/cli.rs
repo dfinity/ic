@@ -14,11 +14,10 @@ use crate::{
     util::{data_location_from_str, node_id_from_str, subnet_id_from_str},
 };
 use core::fmt::Debug;
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use ic_types::{NodeId, SubnetId};
 use serde::{Serialize, de::DeserializeOwned};
 use slog::{Logger, info, warn};
 use std::{
-    convert::TryFrom,
     fmt::Display,
     io::{Write, stdin, stdout},
     str::FromStr,
