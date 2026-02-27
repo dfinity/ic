@@ -58,6 +58,23 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "sr_app_no_upgrade_provision_write_access_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
     name = "sr_app_same_nodes_enable_chain_keys_test",
     flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",
@@ -215,7 +232,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "sr_app_large_with_chain_keys_test",
+    name = "sr_app_large_no_upgrade_with_chain_keys_test",
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     guestos_update = "test",

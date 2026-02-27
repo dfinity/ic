@@ -134,6 +134,7 @@ mod tests {
 
     use super::*;
     use ic_base_types::{PrincipalId, SubnetId};
+    use ic_types::NodeId;
     use tempfile::tempdir;
     use url::Url;
 
@@ -184,8 +185,13 @@ mod tests {
                 upgrade_version: None,
                 replacement_nodes: None,
                 replay_until_height: None,
-                readonly_pub_key: Some(String::from("Fake public key")),
+                readonly_pub_key: Some(String::from("Fake readonly public key")),
                 readonly_key_file: Some(PathBuf::from(dir)),
+                write_node_id_and_pub_key: Some((
+                    fake_node_id(),
+                    String::from("Fake write public key"),
+                )),
+                recovery_key_file: Some(PathBuf::from(dir)),
                 download_pool_node: None,
                 download_state_method: None,
                 keep_downloaded_state: Some(false),
@@ -205,6 +211,12 @@ mod tests {
     fn fake_subnet_id() -> SubnetId {
         PrincipalId::from_str("gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe")
             .map(SubnetId::from)
+            .unwrap()
+    }
+
+    fn fake_node_id() -> NodeId {
+        PrincipalId::from_str("igjkj-job4m-om7ug-cmzok-admxb-ag2xv-xqlgk-2bxsr-ro2mx-r5i7q-hqe")
+            .map(NodeId::from)
             .unwrap()
     }
 }

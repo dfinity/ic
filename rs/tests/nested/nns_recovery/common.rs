@@ -2,8 +2,7 @@ use std::path::Path;
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
-    get_admin_keys_and_generate_backup_keys,
+    BACKUP_USERNAME, SshKeys, assert_subnet_is_broken, break_nodes, get_ssh_keys_for_user,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
     node_with_highest_certification_share_height, remote_recovery,
 };
@@ -190,14 +189,16 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
 
-    let AdminAndUserKeys {
-        ssh_admin_priv_key_path,
-        admin_auth,
-        ssh_user_priv_key_path: ssh_backup_priv_key_path,
-        user_auth: backup_auth,
-        ssh_user_pub_key: ssh_backup_pub_key,
-        ..
-    } = get_admin_keys_and_generate_backup_keys(&env);
+    let SshKeys {
+        ssh_priv_key_path: ssh_admin_priv_key_path,
+        auth: admin_auth,
+        ssh_pub_key: _,
+    } = get_ssh_keys_for_user(&env, SSH_USERNAME);
+    let SshKeys {
+        ssh_priv_key_path: ssh_backup_priv_key_path,
+        auth: backup_auth,
+        ssh_pub_key: ssh_backup_pub_key,
+    } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
