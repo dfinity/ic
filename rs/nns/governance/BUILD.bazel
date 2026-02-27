@@ -2,7 +2,7 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_test", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 load("//rs/nervous_system/patch_canister_did:defs.bzl", "canister_test_did")
 
@@ -423,8 +423,7 @@ filegroup(
 )
 
 rust_test_suite_with_extra_srcs(
-    name = "governance_integration_test",
-    timeout = "long",  # the "governance" and "merge_neurons" tests often take more than 5 minutes
+    name = "test_suite",
     srcs = glob(
         ["tests/*.rs"],
         exclude = [
@@ -432,10 +431,40 @@ rust_test_suite_with_extra_srcs(
             "tests/fake.rs",
             # check generated files is handled in the generated_files_check rule above
             "tests/check_generated_files.rs",
+            "tests/governance.rs",  # there's a dedicated :governance_integration_test target for this test below.
+            "tests/merge_neurons.rs",  # there's a dedicated :merge_neurons_test target for this test below.
         ],
     ),
     aliases = ALIASES,
     crate_features = TEST_WITH_TLA,
+    data = [
+        ":tests/neurons.csv",
+    ],
+    env = {
+        "NEURON_CSV_PATH": "$(rootpath :tests/neurons.csv)",
+    },
+    extra_srcs = glob([
+        "tests/*/*.rs",
+    ]) + ["tests/fake.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
+rust_ic_test(
+    name = "governance_integration_test",
+    timeout = "long",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/fake.rs",
+        "tests/fixtures/environment_fixture.rs",
+        "tests/fixtures/mod.rs",
+        "tests/governance.rs",
+    ],
+    aliases = ALIASES,
+    crate_features = TEST_WITH_TLA,
+    crate_root = "tests/governance.rs",
     data = [
         ":tests/neurons.csv",
         ":tla_models",
@@ -446,10 +475,38 @@ rust_test_suite_with_extra_srcs(
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
         "TLA_MODULES": "$(locations :tla_models)",
     },
-    extra_srcs = glob([
-        "tests/*/*.rs",
-    ]) + ["tests/fake.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["long_test"],
+    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
+rust_ic_test(
+    name = "merge_neurons_test",
+    timeout = "long",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/fake.rs",
+        "tests/fixtures/environment_fixture.rs",
+        "tests/fixtures/mod.rs",
+        "tests/merge_neurons.rs",
+    ],
+    aliases = ALIASES,
+    crate_features = TEST_WITH_TLA,
+    crate_root = "tests/merge_neurons.rs",
+    data = [
+        ":tests/neurons.csv",
+        ":tla_models",
+        "@tla_apalache//:bin/apalache-mc",
+    ],
+    env = {
+        "NEURON_CSV_PATH": "$(rootpath :tests/neurons.csv)",
+        "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+        "TLA_MODULES": "$(locations :tla_models)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["long_test"],
     deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
     ],

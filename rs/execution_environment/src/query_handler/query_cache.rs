@@ -5,6 +5,7 @@ use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metrics::duration_histogram;
 use ic_types::{
     Cycles, DiskBytes, Time, UserId,
     batch::QueryStats,
@@ -14,8 +15,6 @@ use ic_types::{
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{collections::BTreeMap, sync::Mutex, time::Duration};
-
-use crate::metrics::duration_histogram;
 
 #[cfg(test)]
 mod tests;

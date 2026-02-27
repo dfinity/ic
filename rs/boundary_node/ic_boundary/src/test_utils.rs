@@ -106,6 +106,7 @@ pub fn test_subnet_record() -> SubnetRecord {
     SubnetRecord {
         membership: vec![],
         max_ingress_bytes_per_message: 2 * 1024 * 1024,
+        max_ingress_bytes_per_block: 4 * 1024 * 1024,
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
@@ -123,6 +124,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_backup_access: vec![],
         chain_key_config: None,
         canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+        subnet_admins: vec![],
         recalled_replica_version_ids: vec![],
     }
 }

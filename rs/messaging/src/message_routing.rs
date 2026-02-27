@@ -43,7 +43,8 @@ use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
-    Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
+    Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
+    Time,
 };
 use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
@@ -129,6 +130,7 @@ const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_all
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
+const CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS: &str = "mr_illegal_non_empty_subnet_admins";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -363,6 +365,8 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
+    /// Critical error: a non-rental subnet has a non-empty subnet admins list.
+    critical_error_illegal_non_empty_subnet_admins: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -522,6 +526,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
             critical_error_induct_response_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
+            critical_error_illegal_non_empty_subnet_admins: metrics_registry
+                .error_counter(CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
 
@@ -917,6 +923,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
+
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
             .subnet_info
@@ -1072,6 +1079,38 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     ))
                 })?,
             );
+            let mut subnet_admins = BTreeSet::new();
+            // Only rented subnets, i.e., application subnets on a "free" cost
+            // schedule can have a non-empty subnet admins list. In this case,
+            // parse the protobuf field to populate the list.
+            if subnet_type == SubnetType::Application
+                && cost_schedule == CanisterCyclesCostSchedule::Free
+            {
+                for p in subnet_record.subnet_admins.into_iter() {
+                    let subnet_admin = PrincipalId::try_from(p).map_err(|err| {
+                        ReadRegistryError::Persistent(format!(
+                            "'failed to read subnet admins from subnet record', err: {err:?}"
+                        ))
+                    })?;
+                    subnet_admins.insert(subnet_admin);
+                }
+            } else if !subnet_record.subnet_admins.is_empty() {
+                // If the subnet is not rented and it has a non-empty subnet
+                // admins list, it indicates a bug and a critical error is
+                // raised. No admins are parsed out in that case and the list
+                // remains empty.
+                self.metrics
+                    .critical_error_illegal_non_empty_subnet_admins
+                    .inc();
+                warn!(
+                    self.log,
+                    "{}: subnet {} is a non-rental subnet, but has a non-empty list of subnet admins {:?}.",
+                    CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS,
+                    subnet_id,
+                    subnet_admins,
+                );
+            }
+
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -1081,6 +1120,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     subnet_features,
                     chain_keys_held,
                     cost_schedule,
+                    subnet_admins,
                 },
             );
         }

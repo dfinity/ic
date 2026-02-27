@@ -65,7 +65,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
-use std::time::Duration;
+use std::{collections::BTreeSet, time::Duration};
 
 use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 
@@ -157,7 +157,9 @@ impl SchedulerTest {
     }
 
     pub fn canister_state_mut(&mut self, canister_id: CanisterId) -> &mut CanisterState {
-        self.state_mut().canister_state_mut(&canister_id).unwrap()
+        self.state_mut()
+            .canister_state_make_mut(&canister_id)
+            .unwrap()
     }
 
     pub fn ingress_queue_size(&self, canister_id: CanisterId) -> usize {
@@ -299,7 +301,7 @@ impl SchedulerTest {
     pub fn send_ingress(&mut self, canister_id: CanisterId, message: TestMessage) -> MessageId {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let message_id = wasm_executor.push_ingress(
             canister_id,
             canister,
@@ -318,7 +320,7 @@ impl SchedulerTest {
     ) -> MessageId {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
-        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let message_id = wasm_executor.push_ingress(canister_id, canister, message, expiry_time);
         self.state = Some(state);
         message_id
@@ -709,6 +711,7 @@ pub(crate) struct SchedulerTestBuilder {
     round_summary: Option<ExecutionRoundSummary>,
     replica_version: ReplicaVersion,
     cost_schedule: CanisterCyclesCostSchedule,
+    subnet_admins: BTreeSet<PrincipalId>,
 }
 
 impl Default for SchedulerTestBuilder {
@@ -739,6 +742,7 @@ impl Default for SchedulerTestBuilder {
             round_summary: None,
             replica_version: ReplicaVersion::default(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_admins: BTreeSet::new(),
         }
     }
 }
@@ -866,6 +870,7 @@ impl SchedulerTestBuilder {
                 self.subnet_type,
                 registry_settings.subnet_size,
                 self.cost_schedule,
+                self.subnet_admins,
             ));
         state
             .metadata

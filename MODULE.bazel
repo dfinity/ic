@@ -159,7 +159,7 @@ use_repo(oci, "dogecoind", "dogecoind_linux_amd64")
 # IC HTTP Gateway container used in tests
 oci.pull(
     name = "ic_gatewayd",
-    image = "ghcr.io/dfinity/ic-gateway@sha256:0a25e9da712202966447919dfce145f9af5df62e282f2dfe8a7ea226a44b077a",
+    image = "ghcr.io/dfinity/ic-gateway@sha256:ae2de90b6224fcbe1fdfcadd033159b3a6a2c2f4e9174311d6fc18a0dd06e024",
     platforms = [
         "linux/amd64",
     ],
@@ -360,8 +360,8 @@ http_file(
 http_file(
     name = "doge_canister",
     downloaded_file_path = "ic-doge-canister.wasm.gz",
-    sha256 = "2efd5a5b28315a3d4896419df14a4aad8a346174f53cc7727a63b37ec086b3ac",
-    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2025-12-10/ic-doge-canister.wasm.gz",
+    sha256 = "5d61d0fbccca7bb7e86b9c914a36c2cacbf4c01dcaee9c4fae04b54bfca4802c",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2026-02-06/ic-doge-canister.wasm.gz",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test

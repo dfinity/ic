@@ -1,7 +1,7 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, InternetIdentityInit,
-    NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig, SnsAggregatorConfig,
-    StaticCaptchaTrigger,
+    BitcoinCanisterArg, CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig,
+    DogecoinCanisterArg, InternetIdentityInit, NnsDappCanisterArguments, OpenIdConfig,
+    RateLimitConfig, SnsAggregatorConfig, StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -2266,11 +2266,12 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, BITCOIN_TESTNET_CANISTER_ID);
 
             // Install the Bitcoin testnet canister.
-            let args = BitcoinInitConfig {
+            let init_config = BitcoinInitConfig {
                 network: Some(BitcoinNetwork::Regtest),
                 fees: Some(BitcoinFees::testnet()),
                 ..Default::default()
             };
+            let args = BitcoinCanisterArg::Init(init_config);
             btc_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -2339,11 +2340,12 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, DOGECOIN_CANISTER_ID);
 
             // Install the Dogecoin mainnet canister configured for the regtest network.
-            let args = DogecoinInitConfig {
+            let init_config = DogecoinInitConfig {
                 network: Some(DogecoinNetwork::Regtest),
                 fees: Some(DogecoinFees::mainnet()),
                 ..Default::default()
             };
+            let args = DogecoinCanisterArg::Init(init_config);
             btc_subnet
                 .state_machine
                 .install_wasm_in_mode(
@@ -3264,6 +3266,8 @@ fn http_method_from(
         ic_types::canister_http::CanisterHttpMethod::GET => CanisterHttpMethod::GET,
         ic_types::canister_http::CanisterHttpMethod::POST => CanisterHttpMethod::POST,
         ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
+        ic_types::canister_http::CanisterHttpMethod::PUT => CanisterHttpMethod::PUT,
+        ic_types::canister_http::CanisterHttpMethod::DELETE => CanisterHttpMethod::DELETE,
     }
 }
 

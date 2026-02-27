@@ -281,6 +281,7 @@ system_test_nns(
     name = "firewall_max_connections_test",
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     tags = [
+        "colocate",
         "long_test",
     ],
     deps = COMMON_DEPS + [
@@ -310,6 +311,7 @@ system_test_nns(
     flaky = False,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",

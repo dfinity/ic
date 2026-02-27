@@ -1101,6 +1101,7 @@ impl EcdsaSubnetConfig {
                     vec![]
                 },
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_bytes_per_block: 120 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 2 * 1024 * 1024,
                 unit_delay_millis: 500,
@@ -1135,6 +1136,7 @@ impl EcdsaSubnetConfig {
                     max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
                 recalled_replica_version_ids: vec![],
             },
         }

@@ -8,12 +8,15 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_management_canister_types_private::{
     MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
 };
-use ic_protobuf::registry::{
-    node::v1::NodeRecord,
-    subnet::v1::{
-        CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
-        ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+use ic_protobuf::{
+    registry::{
+        node::v1::NodeRecord,
+        subnet::v1::{
+            CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
+            ChainKeyConfig as ChainKeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+        },
     },
+    types::v1::PrincipalId as PrincipalIdPb,
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
@@ -258,6 +261,7 @@ pub struct CreateSubnetPayload {
     pub subnet_id_override: Option<PrincipalId>,
 
     pub max_ingress_bytes_per_message: u64,
+    pub max_ingress_bytes_per_block: Option<u64>,
     pub max_ingress_messages_per_block: u64,
     pub max_block_payload_size: u64,
     pub unit_delay_millis: u64,
@@ -283,6 +287,8 @@ pub struct CreateSubnetPayload {
     /// None is treated the same as Some(Normal). Some(Normal) should be
     /// preferred over None though, because explicit is better than implicit.
     pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
+
+    pub subnet_admins: Option<Vec<PrincipalId>>,
 
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub ingress_bytes_per_block_soft_cap: u64,
@@ -518,6 +524,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .map(|id| id.get().into_vec())
                 .collect::<Vec<_>>(),
             max_ingress_bytes_per_message: val.max_ingress_bytes_per_message,
+            max_ingress_bytes_per_block: val.max_ingress_bytes_per_block.unwrap_or_default(),
             max_ingress_messages_per_block: val.max_ingress_messages_per_block,
             max_block_payload_size: val.max_block_payload_size,
             replica_version_id: val.replica_version_id.clone(),
@@ -551,6 +558,13 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .map(CanisterCyclesCostSchedulePb::from)
                 .unwrap_or(CanisterCyclesCostSchedulePb::Normal)
                 as i32,
+
+            subnet_admins: val
+                .subnet_admins
+                .unwrap_or_default()
+                .into_iter()
+                .map(PrincipalIdPb::from)
+                .collect(),
 
             recalled_replica_version_ids: vec![],
         }
