@@ -12,7 +12,7 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    ImageUpgrader, Rebooting,
+    ImageUpgrader, State,
     error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -223,9 +223,11 @@ pub(crate) struct Upgrade {
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
+    replica_hash: String,
     replica_config_file: PathBuf,
     pub ic_binary_dir: PathBuf,
     pub image_path: PathBuf,
+    pub replica_path: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
     init_time: Instant,
     pub logger: ReplicaLogger,
@@ -245,6 +247,7 @@ impl Upgrade {
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
+        replica_hash: String,
         replica_config_file: PathBuf,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
@@ -264,9 +267,11 @@ impl Upgrade {
             subnet_assignment,
             node_id,
             replica_version,
+            replica_hash,
             replica_config_file,
             ic_binary_dir,
             image_path: release_content_dir.join("image.bin"),
+            replica_path: release_content_dir.join("replica"),
             registry_replicator,
             init_time,
             logger: logger.clone(),
@@ -471,28 +476,61 @@ impl Upgrade {
         let new_replica_version = self
             .registry
             .get_replica_version(subnet_id, cup_registry_version)?;
-        if new_replica_version != self.replica_version {
-            self.ensure_upgrade_should_be_executed(
-                subnet_id,
-                latest_registry_version,
-                &new_replica_version,
-            )?;
 
-            info!(
-                self.logger,
-                "Starting version upgrade at CUP registry version {}: {} -> {}",
-                cup_registry_version,
-                self.replica_version,
-                new_replica_version
-            );
-            // Only downloads the new image if it doesn't already exists locally, i.e. it
-            // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
-            // below.
-            return self
-                .execute_upgrade(&new_replica_version)
-                .await
-                .map_err(OrchestratorError::from)
-                .map(|Rebooting| OrchestratorControlFlow::Stop);
+        if self.is_slow_upgrade(&new_replica_version)? {
+            if new_replica_version != self.replica_version {
+                self.ensure_upgrade_should_be_executed(
+                    subnet_id,
+                    latest_registry_version,
+                    &new_replica_version,
+                )?;
+
+                info!(
+                    self.logger,
+                    "Starting version upgrade at CUP registry version {}: {} -> {}",
+                    cup_registry_version,
+                    self.replica_version,
+                    new_replica_version
+                );
+                // Only downloads the new image if it doesn't already exists locally, i.e. it
+                // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
+                // below.
+                return self
+                    .execute_upgrade(&new_replica_version, Some(&subnet_id))
+                    .await
+                    .map_err(OrchestratorError::from)
+                    // Always reboot after "slow" upgrades
+                    .map(|_rebooting| OrchestratorControlFlow::Stop);
+            }
+        } else {
+            let (_url, new_replica_hash) = self.get_replica_urls_and_hash(&new_replica_version)?;
+            let new_replica_hash = new_replica_hash.expect("Fast upgrades require hash to be set");
+            if new_replica_hash != self.replica_hash {
+                self.ensure_upgrade_should_be_executed(
+                    subnet_id,
+                    latest_registry_version,
+                    &new_replica_version,
+                )?;
+
+                info!(
+                    self.logger,
+                    "Starting version upgrade at CUP registry version {}: {} -> {}",
+                    cup_registry_version,
+                    self.replica_hash,
+                    new_replica_hash
+                );
+                // Only downloads the new image if it doesn't already exists locally, i.e. it
+                // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
+                // below.
+                match self
+                    .execute_upgrade(&new_replica_version, Some(&subnet_id))
+                    .await
+                    .map_err(OrchestratorError::from)?
+                {
+                    State::Rebooting => return Ok(OrchestratorControlFlow::Stop),
+                    State::Continue => return Ok(flow),
+                }
+            }
         }
 
         // If we arrive here, we are on the newest replica version.
@@ -604,15 +642,33 @@ impl Upgrade {
         let expected_replica_version = self
             .registry
             .get_replica_version(subnet_id, registry_version)?;
-        if expected_replica_version != self.replica_version {
-            info!(
-                self.logger,
-                "Replica version upgrade detected at registry version {}: {} -> {}",
-                registry_version,
-                self.replica_version,
-                expected_replica_version
-            );
-            self.prepare_upgrade(&expected_replica_version).await?
+
+        if self.is_slow_upgrade(&expected_replica_version)? {
+            if expected_replica_version != self.replica_version {
+                info!(
+                    self.logger,
+                    "Replica version upgrade detected at registry version {}: {} -> {}",
+                    registry_version,
+                    self.replica_version,
+                    expected_replica_version
+                );
+                self.prepare_upgrade(&expected_replica_version).await?
+            }
+        } else {
+            let (_url, expected_replica_hash) =
+                self.get_replica_urls_and_hash(&expected_replica_version)?;
+            let expected_replica_hash =
+                expected_replica_hash.expect("Fast upgrades require hash to be set");
+            if expected_replica_hash != self.replica_hash {
+                info!(
+                    self.logger,
+                    "Replica version upgrade detected at registry version {}: {} -> {}",
+                    registry_version,
+                    self.replica_hash,
+                    expected_replica_hash
+                );
+                self.prepare_upgrade(&expected_replica_version).await?
+            }
         }
         Ok(())
     }
@@ -632,21 +688,47 @@ impl Upgrade {
                 err => Err(err),
             })?;
 
-        if self.replica_version == replica_version {
-            return Ok(OrchestratorControlFlow::Unassigned);
+        if self.is_slow_upgrade(&replica_version)? {
+            if self.replica_version == replica_version {
+                return Ok(OrchestratorControlFlow::Unassigned);
+            }
+
+            info!(
+                self.logger,
+                "Replica upgrade on unassigned node detected: old version {}, new version {}",
+                self.replica_version,
+                replica_version
+            );
+
+            return self
+                .execute_upgrade(&replica_version, None)
+                .await
+                .map_err(OrchestratorError::from)
+                // Always reboot after "slow" upgrades
+                .map(|_rebooting| OrchestratorControlFlow::Stop);
+        } else {
+            let (_url, replica_hash) = self.get_replica_urls_and_hash(&replica_version)?;
+            let replica_hash = replica_hash.expect("Fast upgrades require hash to be set");
+            if replica_hash != self.replica_hash {
+                info!(
+                    self.logger,
+                    "Replica upgrade on unassigned node detected: old version {}, new version {:?}",
+                    self.replica_hash,
+                    replica_hash
+                );
+
+                match self
+                    .execute_upgrade(&replica_version, None)
+                    .await
+                    .map_err(OrchestratorError::from)?
+                {
+                    State::Rebooting => return Ok(OrchestratorControlFlow::Stop),
+                    State::Continue => return Ok(OrchestratorControlFlow::Unassigned),
+                }
+            }
         }
 
-        info!(
-            self.logger,
-            "Replica upgrade on unassigned node detected: old version {}, new version {}",
-            self.replica_version,
-            replica_version
-        );
-
-        self.execute_upgrade(&replica_version)
-            .await
-            .map_err(OrchestratorError::from)
-            .map(|Rebooting| OrchestratorControlFlow::Stop)
+        Ok(OrchestratorControlFlow::Unassigned)
     }
 
     /// Stop the current replica process.
@@ -780,7 +862,7 @@ impl Upgrade {
 }
 
 #[async_trait]
-impl ImageUpgrader<ReplicaVersion> for Upgrade {
+impl ImageUpgrader<ReplicaVersion, SubnetId> for Upgrade {
     type UpgradeType = OrchestratorControlFlow;
 
     fn get_prepared_version(&self) -> Option<&ReplicaVersion> {
@@ -797,6 +879,10 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
 
     fn image_path(&self) -> &PathBuf {
         &self.image_path
+    }
+
+    fn replica_path(&self) -> &PathBuf {
+        &self.replica_path
     }
 
     fn data_dir(&self) -> Option<&PathBuf> {
@@ -829,6 +915,18 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         }
     }
 
+    fn get_replica_urls_and_hash(
+        &self,
+        version: &ReplicaVersion,
+    ) -> UpgradeResult<(Vec<String>, Option<String>)> {
+        let record = self
+            .registry
+            .get_replica_version_record(version.clone(), self.registry.get_latest_version())
+            .map_err(UpgradeError::from)?;
+
+        Ok((record.replica_urls, record.replica_sha256_hex))
+    }
+
     fn log(&self) -> &ReplicaLogger {
         &self.logger
     }
@@ -841,6 +939,42 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
 
     async fn check_for_upgrade(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
         self.check().await.map_err(UpgradeError::from)
+    }
+
+    async fn shim_swap_restart_replica(
+        &mut self,
+        subnet_id: Option<&SubnetId>,
+    ) -> UpgradeResult<State> {
+        self.stop_replica()?;
+        while self.replica_process.lock().unwrap().is_running() {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        }
+        // NOTE: Replica looks for canister sandbox based on replica dir. For now, bind into place
+        // self.ic_binary_dir = PathBuf::from("/opt/ic/bin/other-replica/");
+        let mut bindmnt_cmd = tokio::process::Command::new("sudo");
+        bindmnt_cmd
+            .arg("/opt/ic/bin/swap-replica.sh")
+            .arg(self.replica_path());
+        info!(self.logger, "Running command '{:?}'...", bindmnt_cmd);
+        if !bindmnt_cmd.status().await.unwrap().success() {
+            return Err(UpgradeError::GenericError(
+                "Failed to bindmnt the new replica".to_string(),
+            ));
+        }
+        if let Some(&subnet_id) = subnet_id {
+            self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
+        }
+
+        Ok(State::Continue)
+    }
+
+    fn is_slow_upgrade(&self, version: &ReplicaVersion) -> UpgradeResult<bool> {
+        let record = self
+            .registry
+            .get_replica_version_record(version.clone(), self.registry.get_latest_version())
+            .map_err(UpgradeError::from)?;
+
+        Ok(!record.fast_upgrade)
     }
 }
 

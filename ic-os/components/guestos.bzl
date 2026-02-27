@@ -4,6 +4,8 @@ Enumerate every component file dependency for GuestOS
 
 def component_files(mode):
     return {
+        Label("swap-replica.sh"): "/opt/ic/bin/swap-replica.sh",
+
         # environment
         Label("guestos/environment/90-sev-status.sh"): "/etc/systemd/system-environment-generators/90-sev-status.sh",
 

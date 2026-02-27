@@ -267,6 +267,8 @@ pub struct IcConfig {
     initial_release_package_sha256_hex: Option<String>,
     /// The guest launch measurements of the initial release package.
     guest_launch_measurements: Option<GuestLaunchMeasurements>,
+    initial_replica_url: Option<Url>,
+    initial_replica_sha256_hex: Option<String>,
     /// Should the tool generate the subnet records.
     generate_subnet_records: bool,
     /// The index of the NNS subnet, if any.
@@ -386,6 +388,15 @@ impl IcConfig {
         self.skip_unassigned_record = true;
     }
 
+    pub fn set_initial_replica(
+        &mut self,
+        initial_replica_url: Url,
+        initial_replica_sha256_hex: String,
+    ) {
+        self.initial_replica_url = Some(initial_replica_url);
+        self.initial_replica_sha256_hex = Some(initial_replica_sha256_hex);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
@@ -410,6 +421,8 @@ impl IcConfig {
             nns_subnet_index,
             initial_release_package_url: release_package_url,
             initial_release_package_sha256_hex: release_package_sha256_hex,
+            initial_replica_url: None,
+            initial_replica_sha256_hex: None,
             initial_registry_node_operator_entries: Vec::new(),
             initial_dc_records: Vec::new(),
             guest_launch_measurements,
@@ -619,6 +632,9 @@ impl IcConfig {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
             guest_launch_measurements: self.guest_launch_measurements,
+            replica_urls: opturl_to_string_vec(self.initial_replica_url),
+            replica_sha256_hex: self.initial_replica_sha256_hex,
+            fast_upgrade: false,
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {
