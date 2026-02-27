@@ -130,7 +130,6 @@ fn baby_giant_big_range() {
 //
 // This takes ~20 seconds in release mode or ~hours in debug
 #[test]
-#[ignore]
 fn honest_dealer_search_works_exhaustive_test() {
     let search = HonestDealerDlogLookupTable::new();
 

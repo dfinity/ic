@@ -467,7 +467,6 @@ fn test_gt_mul_u16_is_correct() {
 }
 
 #[test]
-#[ignore]
 fn test_gt_mul_u16_is_correct_exhaustive_test() {
     // This takes several minutes to run in debug mode
 
