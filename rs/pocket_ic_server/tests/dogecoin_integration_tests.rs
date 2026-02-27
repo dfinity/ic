@@ -58,7 +58,7 @@ fn dogecoin_integration_test() {
         p2p: true,
         ..Conf::default()
     };
-    let dogecoind = Daemon::new(&dogecoind_path, DogeNetwork::Regtest, conf);
+    let dogecoind = Daemon::new(&dogecoind_path, DogeNetwork::Regtest, &conf);
 
     let icp_features = IcpFeatures {
         dogecoin: Some(IcpFeaturesConfig::DefaultConfig),
