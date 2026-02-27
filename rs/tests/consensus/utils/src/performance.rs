@@ -29,26 +29,38 @@ const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls a
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
 
-const INGRESS_BYTES_DELIVERED_METRIC: HistogramMetric =
-    HistogramMetric::Unfiltered("consensus_ingress_message_bytes_delivered");
-const INGRESS_MESSAGES_DELIVERED_METRIC: HistogramMetric =
-    HistogramMetric::Unfiltered("consensus_ingress_messages_delivered");
-const INGRESS_MESSAGE_E2E_LATENCY_METRICS: HistogramMetric = HistogramMetric::Unfiltered(
-    "replica_http_ingress_watcher_wait_for_certification_duration_seconds",
-);
-const TIME_TO_RECEIVE_RANK_0_BLOCK_METRIC: HistogramMetric =
-    HistogramMetric::Filtered("consensus_time_to_receive_block", "rank=\"0\"");
-const CONSENSUS_GET_PAYLOAD_DURATION_METRICS: HistogramMetric =
-    HistogramMetric::Unfiltered("consensus_get_payload_duration_seconds");
-const CONSENSUS_VALIDATE_PAYLOAD_DURTION_METRICS: HistogramMetric =
-    HistogramMetric::Unfiltered("consensus_validate_payload_duration_seconds");
-const BLOCK_ASSEMBLY_DURATION_METRICS: HistogramMetric =
-    HistogramMetric::Unfiltered("ic_stripped_consensus_artifact_total_block_assembly_duration");
+const INGRESS_BYTES_DELIVERED_METRIC: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "consensus_ingress_message_bytes_delivered",
+};
+const INGRESS_MESSAGES_DELIVERED_METRIC: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "consensus_ingress_messages_delivered",
+};
+const INGRESS_MESSAGE_E2E_LATENCY_METRICS: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "replica_http_ingress_watcher_wait_for_certification_duration_seconds",
+};
+const TIME_TO_RECEIVE_RANK_0_BLOCK_METRIC: HistogramMetric = HistogramMetric::Filtered {
+    name: "consensus_time_to_receive_block",
+    filter: "rank=\"0\"",
+};
+const CONSENSUS_GET_PAYLOAD_DURATION_METRICS: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "consensus_get_payload_duration_seconds",
+};
+const CONSENSUS_VALIDATE_PAYLOAD_DURTION_METRICS: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "consensus_validate_payload_duration_seconds",
+};
+const BLOCK_ASSEMBLY_DURATION_METRICS: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "ic_stripped_consensus_artifact_total_block_assembly_duration",
+};
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug)]
 enum HistogramMetric {
-    Unfiltered(&'static str),
-    Filtered(&'static str, &'static str),
+    Unfiltered {
+        name: &'static str,
+    },
+    Filtered {
+        name: &'static str,
+        filter: &'static str,
+    },
 }
 
 const HISTOGRAM_METRICS_TO_TRACK: &[HistogramMetric; 7] = &[
@@ -339,12 +351,12 @@ struct HistogramMetrics {
 impl HistogramMetrics {
     async fn fetch(metric: &HistogramMetric, nodes: &[IcNodeSnapshot]) -> Self {
         let (metrics_sum, metrics_count) = match metric {
-            HistogramMetric::Unfiltered(metric_name) => {
-                (format!("{metric_name}_sum"), format!("{metric_name}_count"))
+            HistogramMetric::Unfiltered { name } => {
+                (format!("{name}_sum"), format!("{name}_count"))
             }
-            HistogramMetric::Filtered(metric_name, filter) => (
-                format!("{metric_name}_sum{{{filter}}}"),
-                format!("{metric_name}_count{{{filter}}}"),
+            HistogramMetric::Filtered { name, filter } => (
+                format!("{name}_sum{{{filter}}}"),
+                format!("{name}_count{{{filter}}}"),
             ),
         };
 
