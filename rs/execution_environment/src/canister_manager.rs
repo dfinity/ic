@@ -1,5 +1,7 @@
 use crate::as_round_instructions;
-use crate::execution::common::{validate_controller, validate_controller_or_subnet_admin};
+use crate::execution::common::{
+    validate_controller, validate_controller_or_subnet_admin, validate_subnet_admin,
+};
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
@@ -59,7 +61,7 @@ use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
     MAX_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SnapshotId, SubnetId, Time,
+    SnapshotId, Time,
     ingress::{IngressState, IngressStatus},
     messages::{
         CanisterCall, Payload, RejectContext, Response as CanisterResponse, SignedIngressContent,
@@ -147,7 +149,6 @@ impl CanisterManager {
             // The method is either invalid or it is of a type that users
             // are not allowed to send.
             Err(_)
-            | Ok(Ic00Method::CreateCanister)
             | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::CanisterMetadata)
             | Ok(Ic00Method::ECDSAPublicKey)
@@ -179,6 +180,18 @@ impl CanisterManager {
                 ErrorCode::CanisterRejectedMessage,
                 format!("Only canisters can call ic00 method {method_name}"),
             )),
+
+            // Canister creation via ingress is only allowed by subnet admins.
+            Ok(Ic00Method::CreateCanister) => {
+                let subnet_admins = state.get_own_subnet_admins();
+                // In case the subnet admins list is empty, return the same error as
+                // before introducing the notion of subnet admins to maintain backward compatibility.
+                if subnet_admins.is_empty() {
+                  Err(UserError::new(ErrorCode::CanisterRejectedMessage, format!("Only canisters can call ic00 method {method_name}")))
+                } else {
+                  validate_subnet_admin(&subnet_admins, sender.get_ref()).map_err(|err| err.into())
+                }
+            }
 
             // These methods are only valid if they are sent by the controller
             // of the canister or a subnet admin. We assume that the canister
@@ -710,13 +723,27 @@ impl CanisterManager {
         Ok(())
     }
 
+    /// Check if the sender is on NNS or on the same subnet.
+    fn sender_subnet_is_nns_or_self(
+        &self,
+        state: &ReplicatedState,
+        sender: &PrincipalId,
+    ) -> Result<(), UserError> {
+        let sender_subnet_id = state.find_subnet_id(*sender)?;
+        if sender_subnet_id != state.metadata.network_topology.nns_subnet_id
+            && sender_subnet_id != self.config.own_subnet_id
+        {
+            return Err(CanisterManagerError::InvalidSenderSubnet(sender_subnet_id).into());
+        }
+        Ok(())
+    }
+
     /// Creates a new canister and inserts it into `ReplicatedState`.
     ///
     /// Returns the auto-generated id the new canister that has been created.
     pub(crate) fn create_canister(
         &self,
         origin: CanisterChangeOrigin,
-        sender_subnet_id: SubnetId,
         cycles: Cycles,
         mut settings: CanisterSettings,
         max_number_of_canisters: u64,
@@ -725,18 +752,31 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         subnet_memory_saturation: ResourceSaturation,
         canister_creation_error: &IntCounter,
-    ) -> (Result<CanisterId, CanisterManagerError>, Cycles) {
-        // Creating a canister is possible only in the following cases:
-        // 1. sender is on NNS => it can create canister on any subnet
-        // 2. sender is not NNS => can create canister only if sender is on
-        // same subnet.
-        if sender_subnet_id != state.metadata.network_topology.nns_subnet_id
-            && sender_subnet_id != self.config.own_subnet_id
-        {
-            return (
-                Err(CanisterManagerError::InvalidSenderSubnet(sender_subnet_id)),
-                cycles,
-            );
+    ) -> (Result<CanisterId, UserError>, Cycles) {
+        let sender = origin.origin();
+        let subnet_admins = state.get_own_subnet_admins();
+        match validate_subnet_admin(&subnet_admins, &sender) {
+            // subnet admins can always create canisters
+            Ok(()) => (),
+            Err(subnet_admin_err) => match self.sender_subnet_is_nns_or_self(state, &sender) {
+                // canisters on NNS or the same subnet can always create canisters
+                Ok(()) => (),
+                Err(sender_subnet_err) => {
+                    if subnet_admins.is_empty() {
+                        // if there are no subnet admins, then the sender must be a canister
+                        // and the canister creation message should not have been routed
+                        // all the way to here unless the sender subnet is buggy/malicious
+                        canister_creation_error.inc();
+                        error!(
+                            self.log,
+                            "[EXC-BUG] Misrouted canister creation request from sender {}", sender
+                        );
+                        return (Err(sender_subnet_err), cycles);
+                    } else {
+                        return (Err(subnet_admin_err.into()), cycles);
+                    }
+                }
+            },
         }
 
         let fee = self
@@ -747,7 +787,8 @@ impl CanisterManager {
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
                     sent: cycles,
                     required: fee,
-                }),
+                }
+                .into()),
                 cycles,
             );
         }
@@ -771,7 +812,7 @@ impl CanisterManager {
             subnet_size,
             state.get_own_cost_schedule(),
         ) {
-            Err(err) => (Err(err), cycles),
+            Err(err) => (Err(err.into()), cycles),
             Ok(validate_settings) => {
                 // Test coverage relies on the fact that
                 // the IC method `provisional_create_canister_with_cycles`
@@ -791,7 +832,7 @@ impl CanisterManager {
                     canister_creation_error,
                 ) {
                     Ok(canister_id) => canister_id,
-                    Err(err) => return (Err(err), cycles),
+                    Err(err) => return (Err(err.into()), cycles),
                 };
                 (Ok(canister_id), Cycles::zero())
             }

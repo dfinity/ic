@@ -42,6 +42,7 @@ pub mod v1 {
                 ErrorCodePublic::CanisterRejectedMessage => ErrorCode::CanisterRejectedMessage,
                 ErrorCodePublic::UnknownManagementMessage => ErrorCode::UnknownManagementMessage,
                 ErrorCodePublic::InvalidManagementPayload => ErrorCode::InvalidManagementPayload,
+                ErrorCodePublic::InvalidSubnetAdmin => ErrorCode::InvalidSubnetAdmin,
                 ErrorCodePublic::CanisterTrapped => ErrorCode::CanisterTrapped,
                 ErrorCodePublic::CanisterCalledTrap => ErrorCode::CanisterCalledTrap,
                 ErrorCodePublic::CanisterContractViolation => ErrorCode::CanisterContractViolation,
@@ -167,6 +168,7 @@ pub mod v1 {
                 ErrorCode::InvalidManagementPayload => {
                     Ok(ErrorCodePublic::InvalidManagementPayload)
                 }
+                ErrorCode::InvalidSubnetAdmin => Ok(ErrorCodePublic::InvalidSubnetAdmin),
                 ErrorCode::CanisterTrapped => Ok(ErrorCodePublic::CanisterTrapped),
                 ErrorCode::CanisterCalledTrap => Ok(ErrorCodePublic::CanisterCalledTrap),
                 ErrorCode::CanisterContractViolation => {
