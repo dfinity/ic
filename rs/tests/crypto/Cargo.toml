@@ -15,6 +15,7 @@ ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-certification = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../../crypto/internal/crypto_lib/basic_sig/der_utils" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-crypto-internal-bls12-381-type = { path = "../../crypto/internal/crypto_lib/bls12_381/type" }
 ic-crypto-test-utils = { path = "../../crypto/test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
