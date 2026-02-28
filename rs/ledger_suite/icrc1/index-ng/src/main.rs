@@ -4,7 +4,6 @@ use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{SpanName, SpanStats, measure_span};
 use ic_cdk::trap;
 use ic_cdk::{init, post_upgrade, query};
-use ic_cdk_timers::TimerId;
 use ic_crypto_sha2::Sha256;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
@@ -58,6 +57,8 @@ const ACCOUNT_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
+const MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
+const MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(64);
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -112,8 +113,6 @@ thread_local! {
     /// persistent between upgrades
     static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
 
-    /// The ID of the block sync timer.
-    static TIMER_ID: RefCell<TimerId> = RefCell::new(TimerId::default());
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -325,12 +324,14 @@ fn init(index_arg: Option<IndexArg>) {
         state.ledger_id = ledger_id;
         state.retrieve_blocks_from_ledger_interval =
             retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
+        state.last_wait_time = state.retrieve_blocks_from_ledger_interval().clamp(
+            MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL,
+            MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL,
+        );
     });
 
     // set the first build_index to be called after init
-    set_build_index_timer(with_state(|state| {
-        state.retrieve_blocks_from_ledger_interval()
-    }));
+    set_build_index_timer(with_state(|state| state.last_wait_time));
 }
 
 // The part of the legacy index (//rs/ledger_suite/icrc1/index) state
@@ -396,10 +397,17 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
         let _maybe_first_key_value = account_data.first_key_value();
     });
 
-    // set the first build_index to be called after init
-    set_build_index_timer(with_state(|state| {
-        state.retrieve_blocks_from_ledger_interval()
-    }));
+    // set the first build_index to be called after post_upgrade
+    mutate_state(|state| {
+        if state.last_wait_time.is_zero() {
+            state.last_wait_time = state.retrieve_blocks_from_ledger_interval();
+        }
+        state.last_wait_time = state.last_wait_time.clamp(
+            MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL,
+            MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL,
+        );
+    });
+    set_build_index_timer(with_state(|state| state.last_wait_time));
 }
 
 async fn get_supported_standards_from_ledger() -> Vec<String> {
@@ -601,23 +609,22 @@ pub async fn build_index() -> Option<()> {
     };
     match num_indexed {
         Ok(num_indexed) => {
-            let retrieve_blocks_from_ledger_interval =
-                with_state(|state| state.retrieve_blocks_from_ledger_interval());
-            log!(
-                P1,
-                "Indexed: {} waiting : {:?}",
-                num_indexed,
-                retrieve_blocks_from_ledger_interval
-            );
+            let wait_time = compute_wait_time(num_indexed);
+            mutate_state(|state| {
+                state.last_wait_time = wait_time;
+            });
+            log!(P1, "Indexed: {} waiting : {:?}", num_indexed, wait_time);
+            set_build_index_timer(wait_time);
         }
         Err(error) => {
             log!(P0, "{}", error.message);
             ic_cdk::eprintln!("{}", error.message);
-            if !error.retriable {
+            if error.retriable {
+                let wait_time = with_state(|state| state.last_wait_time);
+                set_build_index_timer(wait_time);
+            } else {
                 log!(P0, "Stopping the indexing timer.");
                 ic_cdk::eprintln!("Stopping the indexing timer.");
-                let timer_id = TIMER_ID.with(|tid| *tid.borrow());
-                ic_cdk_timers::clear_timer(timer_id);
             }
         }
     };
@@ -725,10 +732,29 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
 }
 
 fn set_build_index_timer(after: Duration) {
-    let timer_id = ic_cdk_timers::set_timer_interval(after, async || {
+    ic_cdk_timers::set_timer(after, async {
         let _ = build_index().await;
     });
-    TIMER_ID.with(|tid| *tid.borrow_mut() = timer_id);
+}
+
+/// Compute the wait time before the next indexing based on the number of
+/// blocks indexed in the last round. If at least one block was indexed,
+/// the wait time is halved (the ledger is likely producing blocks).
+/// If no blocks were indexed, the wait time is doubled (the ledger is
+/// likely idle). The wait time is clamped between
+/// [MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL] and
+/// [MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL].
+fn compute_wait_time(num_indexed: u64) -> Duration {
+    let last_wait_time = with_state(|state| state.last_wait_time);
+    let new_wait_time = if num_indexed > 0 {
+        last_wait_time / 2
+    } else {
+        last_wait_time.saturating_mul(2)
+    };
+    new_wait_time.clamp(
+        MIN_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL,
+        MAX_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL,
+    )
 }
 
 fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), SyncError> {

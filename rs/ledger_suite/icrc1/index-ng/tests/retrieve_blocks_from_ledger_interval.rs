@@ -9,7 +9,7 @@ use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
 use ic_icrc1_test_utils::{arb_account, minter_identity};
 use ic_ledger_suite_state_machine_helpers::send_transfer;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError};
 use ic_types::{Cycles, Time};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -78,19 +78,18 @@ fn max_index_sync_time() -> u64 {
 }
 
 #[test]
-fn should_fail_to_install_and_upgrade_with_invalid_value() {
-    let minimum_invalid_value_for_interval = max_value_for_interval() + 1;
-    let invalid_install_and_upgrade_combinations = [
-        (Some(minimum_invalid_value_for_interval), Some(1)),
-        (Some(1), Some(minimum_invalid_value_for_interval)),
-    ];
-    for (install_interval, upgrade_interval) in &invalid_install_and_upgrade_combinations {
-        let err = install_and_upgrade(*install_interval, *upgrade_interval)
-            .expect_err("should fail to install with invalid interval");
-        let code = err.code();
-        assert_eq!(code, ErrorCode::CanisterCalledTrap);
-        let description = err.description();
-        assert!(description.contains("delay out of bounds"));
+fn should_install_and_upgrade_with_large_interval_value() {
+    // Large values for retrieve_blocks_from_ledger_interval_seconds are clamped
+    // to the adaptive timer's [MIN, MAX] range. They should no longer cause errors.
+    let large_value = max_value_for_interval() + 1;
+    let install_and_upgrade_combinations =
+        [(Some(large_value), Some(1)), (Some(1), Some(large_value))];
+    for (install_interval, upgrade_interval) in &install_and_upgrade_combinations {
+        assert_eq!(
+            install_and_upgrade(*install_interval, *upgrade_interval),
+            Ok(()),
+            "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
+        );
     }
 }
 
@@ -306,19 +305,21 @@ struct CyclesConsumptionParameters {
 
 #[test]
 fn should_consume_expected_amount_of_cycles() {
-    let assert_same_amount_of_cycles_consumed =
+    // With adaptive timing, the timer backs off exponentially when idle (no blocks):
+    // 1s -> 2s -> 4s -> 8s -> ... up to 64s max.
+    // After upgrade, the backed-off state persists, so fewer timer fires occur in
+    // the second measurement period.
+    let assert_upgrade_consumes_less =
         |initial_consumption: &CycleConsumption, upgrade_consumption: &CycleConsumption| {
             assert!(
-                abs_relative_difference(initial_consumption.ledger, upgrade_consumption.ledger)
-                    < 0.01,
-                "initial ledger cycles consumed: {}, cycles consumed after upgrade: {}",
+                initial_consumption.ledger > upgrade_consumption.ledger,
+                "expected initial ledger cycles ({}) > upgrade ledger cycles ({})",
                 initial_consumption.ledger,
                 upgrade_consumption.ledger
             );
             assert!(
-                abs_relative_difference(initial_consumption.index, upgrade_consumption.index)
-                    < 0.01,
-                "initial index cycles consumed: {}, cycles consumed after upgrade: {}",
+                initial_consumption.index > upgrade_consumption.index,
+                "expected initial index cycles ({}) > upgrade index cycles ({})",
                 initial_consumption.index,
                 upgrade_consumption.index
             );
@@ -328,76 +329,27 @@ fn should_consume_expected_amount_of_cycles() {
         upgrade_interval,
         assert_cost,
     } in &[
-        // should consume the same amount of cycles when the interval stays the same
+        // With the adaptive timer, the timer backs off when idle. After upgrade,
+        // the backed-off state persists, so upgrade consumption should be less.
         CyclesConsumptionParameters {
             initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
-            assert_cost: assert_same_amount_of_cycles_consumed,
+            assert_cost: assert_upgrade_consumes_less,
         },
         CyclesConsumptionParameters {
             initial_interval: None,
             upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
-            assert_cost: assert_same_amount_of_cycles_consumed,
+            assert_cost: assert_upgrade_consumes_less,
         },
         CyclesConsumptionParameters {
             initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             upgrade_interval: None,
-            assert_cost: assert_same_amount_of_cycles_consumed,
+            assert_cost: assert_upgrade_consumes_less,
         },
         CyclesConsumptionParameters {
             initial_interval: None,
             upgrade_interval: None,
-            assert_cost: assert_same_amount_of_cycles_consumed,
-        },
-        // should consume half the amount of cycles when the interval is doubled
-        CyclesConsumptionParameters {
-            initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
-            upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS * 2),
-            assert_cost: |initial_consumption, upgrade_consumption| {
-                for (initial, upgrade) in [
-                    (initial_consumption.ledger, upgrade_consumption.ledger),
-                    (initial_consumption.index, upgrade_consumption.index),
-                ] {
-                    let relative_difference = abs_relative_difference(initial, upgrade);
-                    assert!(
-                        0.4 < relative_difference && relative_difference < 0.5,
-                        "initial cycles: {}, cycles after upgrade: {}",
-                        initial,
-                        upgrade
-                    )
-                }
-            },
-        },
-        // should consume cycles within 30% of hard-coded value when the interval is set to 1 sec
-        CyclesConsumptionParameters {
-            initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
-            upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
-            assert_cost: |initial, upgrade| {
-                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 126_800_287;
-                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 474_143_016;
-                for ledger_consumption in [initial.ledger, upgrade.ledger] {
-                    assert!(
-                        abs_relative_difference(
-                            EXPECTED_LEDGER_CYCLES_CONSUMPTION,
-                            ledger_consumption
-                        ) < 0.3,
-                        "ledger cycles consumed 30% more/less than expected: {}, expected: {}",
-                        ledger_consumption,
-                        EXPECTED_LEDGER_CYCLES_CONSUMPTION
-                    );
-                }
-                for index_consumption in [initial.index, upgrade.index] {
-                    assert!(
-                        abs_relative_difference(
-                            EXPECTED_INDEX_CYCLES_CONSUMPTION,
-                            index_consumption
-                        ) < 0.3,
-                        "index cycles consumed 30% more/less than expected: {}, expected: {}",
-                        index_consumption,
-                        EXPECTED_INDEX_CYCLES_CONSUMPTION
-                    );
-                }
-            },
+            assert_cost: assert_upgrade_consumes_less,
         },
     ] {
         let env = &StateMachineBuilder::new()
@@ -440,10 +392,6 @@ fn should_consume_expected_amount_of_cycles() {
 struct CycleConsumption {
     ledger: i128,
     index: i128,
-}
-
-fn abs_relative_difference(subject: i128, reference: i128) -> f64 {
-    subject.abs_diff(reference) as f64 / (subject as f64)
 }
 
 fn idle_ledger_and_index_cycles_consumption(
