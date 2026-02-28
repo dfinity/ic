@@ -33,7 +33,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
-use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_limits::{
+    LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, MAX_PAIRED_PRE_SIGNATURES, SMALL_APP_SUBNET_MAX_SIZE,
+};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -61,9 +63,9 @@ use ic_replicated_state::{
         system_state::{CyclesUseCase, PausedExecutionId},
     },
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, InstallCodeCall, InstallCodeCallId, ReshareChainKeyContext,
-        SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
-        SubnetCallContext, ThresholdArguments, VetKdArguments,
+        EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash,
+        ReshareChainKeyContext, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
+        StopCanisterCall, SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
 };
 use ic_types::{
@@ -71,6 +73,7 @@ use ic_types::{
     ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
+    consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{
         ExtendedDerivationPath,
         canister_threshold_sig::{MasterPublicKey, PublicKey},
@@ -3547,7 +3550,7 @@ impl ExecutionEnvironment {
         mut request: Request,
         args: ThresholdArguments,
         derivation_path: Vec<Vec<u8>>,
-        max_queue_size: u32,
+        max_queue_size_registry: u32,
         state: &mut ReplicatedState,
         rng: &mut dyn RngCore,
         subnet_size: usize,
@@ -3624,12 +3627,18 @@ impl ExecutionEnvironment {
             ));
         }
 
+        let dynamic_queue_size = get_dynamic_signature_queue_size(
+            state.pre_signature_stashes(),
+            max_queue_size_registry,
+            &threshold_key,
+        );
+
         // Check if the queue is full.
         if state
             .metadata
             .subnet_call_context_manager
             .sign_with_threshold_contexts_count(&threshold_key)
-            >= max_queue_size as usize
+            >= dynamic_queue_size
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
@@ -4790,5 +4799,31 @@ fn get_master_public_key<'a>(
             format!("Subnet {subnet_id} does not hold threshold key {key_id}."),
         )),
         Some(master_key) => Ok(master_key),
+    }
+}
+
+/// Returns the dynamic signature request queue size for the given key.
+/// In case the stash contains many pre-signatures for the requested key, then we increase
+/// the queue size dynamically up to the maximum number of paired pre-signatures.
+/// This is because a signature is much easier to produce if there is already a pre-signature
+/// available.
+pub(crate) fn get_dynamic_signature_queue_size(
+    stashes: &BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash>,
+    max_queue_size_registry: u32,
+    key_id: &MasterPublicKeyId,
+) -> usize {
+    if let Ok(key_id) = IDkgMasterPublicKeyId::try_from(key_id.clone()) {
+        // If this key uses pre-signatures, we can accept more requests if there are unpaired
+        // pre-signatures available in the stash.
+        let stash_size = stashes
+            .get(&key_id)
+            .map(|stash| stash.pre_signatures.len())
+            .unwrap_or_default();
+        // We never want to allow more requests than the maximum number of paired pre-signatures.
+        let max_queue_size = MAX_PAIRED_PRE_SIGNATURES.min(max_queue_size_registry as usize);
+        stash_size.clamp(max_queue_size, MAX_PAIRED_PRE_SIGNATURES)
+    } else {
+        // If this key doesn't use pre-signatures, we use the registry's max queue size.
+        max_queue_size_registry as usize
     }
 }
