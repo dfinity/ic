@@ -27,7 +27,7 @@ use tokio::{
     time::MissedTickBehavior,
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::{
     metrics::{MetricParamsCheck, WithMetricsCheck},
