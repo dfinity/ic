@@ -20,7 +20,7 @@ pub(crate) const SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN: &str =
     "scheduler_compute_allocation_invariant_broken";
 pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invariant_broken";
 
-pub(super) struct SchedulerMetrics {
+pub struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
     pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_log_delta_memory_usage: Histogram,
@@ -74,7 +74,7 @@ pub(super) struct SchedulerMetrics {
 }
 
 impl SchedulerMetrics {
-    pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             canister_age: metrics_registry.histogram(
                 "scheduler_canister_age_rounds",

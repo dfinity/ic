@@ -39,6 +39,18 @@ impl CanisterPriority {
         long_execution_mode: LongExecutionMode::Opportunistic,
         last_full_execution_round: ExecutionRound::new(0),
     };
+
+    /// Returns the true priority of the canister, i.e. the accumulated priority
+    /// minus any priority credit.
+    pub fn true_priority(&self) -> AccumulatedPriority {
+        self.accumulated_priority - self.priority_credit
+    }
+
+    /// Returns true if the canister has non-zero accumulated priority or priority
+    /// credit.
+    pub fn is_non_zero(&self) -> bool {
+        self.accumulated_priority.get() != 0 || self.priority_credit.get() != 0
+    }
 }
 
 impl Default for CanisterPriority {
@@ -51,6 +63,9 @@ impl Default for CanisterPriority {
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetSchedule {
     priorities: BTreeMap<CanisterId, CanisterPriority>,
+
+    #[cfg(debug_assertions)]
+    pub fully_executed_canisters: std::collections::BTreeSet<CanisterId>,
 }
 
 /// Two schedules are equal if they have the same canister priorities (modulo
@@ -76,7 +91,11 @@ impl ValidateEq for SubnetSchedule {
 
 impl SubnetSchedule {
     pub fn new(priorities: BTreeMap<CanisterId, CanisterPriority>) -> Self {
-        Self { priorities }
+        Self {
+            priorities,
+            #[cfg(debug_assertions)]
+            fully_executed_canisters: std::collections::BTreeSet::new(),
+        }
     }
 
     /// Returns the priority for the given canister, or the default priority if not
