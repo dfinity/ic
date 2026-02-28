@@ -186,6 +186,7 @@ go.sum                    @dfinity/idx
 /rs/query_stats/                                        @dfinity/team-dsm @dfinity/consensus
 /rs/recovery/                                           @dfinity/consensus
 /rs/registry/                                           @dfinity/governance-team
+/rs/registry/canister/canister/cloud_engine_endpoints.rs @dfinity/dre
 /rs/registry/canister/src/invariants/crypto.rs          @dfinity/consensus
 /rs/registry/helpers/src/crypto.rs                      @dfinity/consensus
 /rs/registry/helpers/src/crypto/                        @dfinity/consensus
