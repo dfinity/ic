@@ -372,7 +372,7 @@ fn valid_keys_from_payload(
                 format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
             })?)
         } else {
-            None
+            return Err(String::from("idkg_dealing_encryption_pk is missing"));
         };
 
     // 3. get the node id from the node_signing_pk

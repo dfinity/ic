@@ -291,9 +291,9 @@ impl NodeRegistration {
                 node_pub_keys.dkg_dealing_encryption_public_key.unwrap(),
             ),
             transport_tls_cert: protobuf_to_vec(node_pub_keys.tls_certificate.unwrap()),
-            idkg_dealing_encryption_pk: node_pub_keys
-                .idkg_dealing_encryption_public_key
-                .map(protobuf_to_vec),
+            idkg_dealing_encryption_pk: Some(protobuf_to_vec(
+                node_pub_keys.idkg_dealing_encryption_public_key.unwrap(),
+            )),
             xnet_endpoint: msg_routing_config_to_endpoint(
                 &self.log,
                 &self.node_config.message_routing,
