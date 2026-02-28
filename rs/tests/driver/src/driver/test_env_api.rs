@@ -2120,9 +2120,8 @@ pub fn install_registry_canister_with_testnet_topology(
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
 
     let mut builder = customizations.unwrap_or_else(RegistryCanisterInitPayloadBuilder::new);
-    for mutation in initial_mutations {
-        builder.push_init_mutate_request(mutation);
-    }
+    builder.push_front_mutations(initial_mutations);
+
     let registry_init_payload = builder.build();
 
     let agent = InternalAgent::new(
