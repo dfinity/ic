@@ -461,6 +461,18 @@ impl RoundSchedule {
         // a default priority when not found), so this iteration covers all canisters.
         for (_, canister_priority) in subnet_schedule.iter_mut() {
             let canister_free_allocation = free_allocation / remaining_canisters;
+
+            // Max out at an arbitrary 5 rounds of accumulated priority.
+            //
+            // Without this, a canister with 100 compute allocation will accumulate 100
+            // priority it can then never spend for every round of an aborted DTS execution
+            // (priority credit is increased by 100 per round, but reset on abort).
+            const AP_ROUNDS_MAX: i64 = 5;
+            let canister_free_allocation = std::cmp::min(
+                canister_free_allocation,
+                ONE_HUNDRED_PERCENT * AP_ROUNDS_MAX - true_priority(canister_priority),
+            );
+
             canister_priority.accumulated_priority += canister_free_allocation;
             free_allocation -= canister_free_allocation;
 
