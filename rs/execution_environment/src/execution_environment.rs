@@ -1583,22 +1583,28 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::UploadChunk) => {
                 let resource_saturation =
                     self.subnet_memory_saturation(&round_limits.subnet_available_memory);
-                let res = UploadChunkArgs::decode(payload).and_then(|args| {
-                    let canister_id = args.get_canister_id();
-                    self.upload_chunk(
-                        *msg.sender(),
-                        &mut state,
-                        args,
-                        round_limits,
-                        registry_settings.subnet_size,
-                        &resource_saturation,
-                    )
-                    .map(|res| (res, Some(canister_id)))
-                });
-                ExecuteSubnetMessageResult::Finished {
-                    response: res,
-                    refund: msg.take_cycles(),
-                    instructions: NumInstructions::new(0),
+                match UploadChunkArgs::decode(payload) {
+                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                        response: Err(err),
+                        refund: msg.take_cycles(),
+                        instructions: NumInstructions::new(0),
+                    },
+                    Ok(args) => {
+                        let canister_id = args.get_canister_id();
+                        let (result, instructions_used) = self.upload_chunk(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            round_limits,
+                            registry_settings.subnet_size,
+                            &resource_saturation,
+                        );
+                        ExecuteSubnetMessageResult::Finished {
+                            response: result.map(|res| (res, Some(canister_id))),
+                            refund: msg.take_cycles(),
+                            instructions: instructions_used,
+                        }
+                    }
                 }
             }
 
@@ -2560,29 +2566,34 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let cost_schedule = state.get_own_cost_schedule();
-        let canister = canister_make_mut(args.get_canister_id(), state)?;
-        self.canister_manager
-            .upload_chunk(
-                sender,
-                canister,
-                args.chunk,
-                round_limits,
-                subnet_size,
-                cost_schedule,
-                resource_saturation,
-            )
-            .map(
-                |UploadChunkResult {
-                     reply,
-                     heap_delta_increase,
-                 }| {
-                    state.metadata.heap_delta_estimate += heap_delta_increase;
-                    reply.encode()
-                },
-            )
-            .map_err(|err| err.into())
+        let canister = match canister_make_mut(args.get_canister_id(), state) {
+            Ok(canister) => canister,
+            Err(err) => {
+                return (Err(err), NumInstructions::new(0));
+            }
+        };
+        let (result, instructions_used) = self.canister_manager.upload_chunk(
+            sender,
+            canister,
+            args.chunk,
+            round_limits,
+            subnet_size,
+            cost_schedule,
+            resource_saturation,
+        );
+        let result = match result {
+            Ok(UploadChunkResult {
+                reply,
+                heap_delta_increase,
+            }) => {
+                state.metadata.heap_delta_estimate += heap_delta_increase;
+                Ok(reply.encode())
+            }
+            Err(err) => Err(err.into()),
+        };
+        (result, instructions_used)
     }
 
     fn clear_chunk_store(
@@ -2650,7 +2661,7 @@ impl ExecutionEnvironment {
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
         let uninstall_code = args.uninstall_code().unwrap_or_default();
-        let result = self.canister_manager.take_canister_snapshot(
+        let (result, instructions_used) = self.canister_manager.take_canister_snapshot(
             subnet_size,
             origin,
             Arc::make_mut(&mut canister),
@@ -2663,8 +2674,8 @@ impl ExecutionEnvironment {
         // Put canister back.
         state.put_canister_state(canister);
 
-        match result {
-            Ok((response, rejects, instructions_used)) => {
+        let result = match result {
+            Ok((response, rejects)) => {
                 crate::util::process_responses(
                     rejects,
                     state,
@@ -2672,10 +2683,11 @@ impl ExecutionEnvironment {
                     self.log.clone(),
                     self.canister_not_found_error(),
                 );
-                (Ok(response.encode()), instructions_used)
+                Ok(response.encode())
             }
-            Err(err) => (Err(err.into()), NumInstructions::new(0)),
-        }
+            Err(err) => Err(err.into()),
+        };
+        (result, instructions_used)
     }
 
     /// Loads a canister snapshot onto an existing canister.
@@ -2815,7 +2827,7 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
-        let result = match self.canister_manager.read_snapshot_data(
+        let (result, instructions_used) = self.canister_manager.read_snapshot_data(
             sender,
             Arc::make_mut(&mut canister),
             args.get_snapshot_id(),
@@ -2823,14 +2835,15 @@ impl ExecutionEnvironment {
             state,
             subnet_size,
             round_limits,
-        ) {
-            Ok((result, num_instructions)) => (Ok(Encode!(&result).unwrap()), num_instructions),
-            Err(err) => (Err(UserError::from(err)), NumInstructions::new(0)),
+        );
+        let result = match result {
+            Ok(result) => Ok(Encode!(&result).unwrap()),
+            Err(err) => Err(UserError::from(err)),
         };
 
         // Put canister back.
         state.put_canister_state(canister);
-        result
+        (result, instructions_used)
     }
 
     fn rename_canister(
@@ -2892,16 +2905,18 @@ impl ExecutionEnvironment {
             Err(e) => return (Err(e), NumInstructions::new(0)),
         };
         let snapshot_id = args.get_snapshot_id();
-        match self.canister_manager.read_snapshot_metadata(
+        let (result, instructions_used) = self.canister_manager.read_snapshot_metadata(
             sender,
             snapshot_id,
             canister,
             state,
             round_limits,
-        ) {
-            Ok((response, instructions)) => (Ok(Encode!(&response).unwrap()), instructions),
-            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
-        }
+        );
+        let result = match result {
+            Ok(response) => Ok(Encode!(&response).unwrap()),
+            Err(e) => Err(UserError::from(e)),
+        };
+        (result, instructions_used)
     }
 
     fn create_snapshot_from_metadata(
@@ -2929,7 +2944,7 @@ impl ExecutionEnvironment {
 
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
-        let result = self.canister_manager.create_snapshot_from_metadata(
+        let (result, instructions_used) = self.canister_manager.create_snapshot_from_metadata(
             sender,
             Arc::make_mut(&mut canister),
             args,
@@ -2940,13 +2955,10 @@ impl ExecutionEnvironment {
         );
         // Put canister back.
         state.put_canister_state(canister);
-        match result {
-            Ok((snapshot_id, instructions_used)) => (
-                Ok(Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap()),
-                instructions_used,
-            ),
-            Err(e) => (Err(e), NumInstructions::new(0)),
-        }
+        let result = result.map(|snapshot_id| {
+            Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap()
+        });
+        (result, instructions_used)
     }
 
     fn write_snapshot_data(
