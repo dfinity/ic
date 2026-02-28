@@ -89,6 +89,10 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img-dev.tar.zst" if dev else "//ic-os/setupos:mainnet-latest-test-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_hostos_images_dev//:launch-measurements-guest.json" if dev else "@mainnet_latest_hostos_images//:launch-measurements-guest.json"
 
+    def hostos_dependencies():
+        """Configure required dependencies when a HostOS is used. """
+        runtime_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
+
     def hostos_local():
         """Configure a HostOS base image (the HostOS that the test starts with) built from the local workspace."""
         icos_images["ENV_DEPS__HOSTOS_INITIAL_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img.tar.zst"
@@ -169,10 +173,13 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     # HostOS base image configuration
     if hostos == True:
         hostos_local()
+        hostos_dependencies()
     elif hostos == "mainnet_latest":
         hostos_mainnet()
+        hostos_dependencies()
     elif hostos == "mainnet_latest_dev":
         hostos_mainnet(dev = True)
+        hostos_dependencies()
     elif hostos:
         fail("unknown hostos: " + str(hostos))
 
