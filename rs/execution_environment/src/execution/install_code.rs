@@ -316,6 +316,7 @@ impl InstallCodeHelper {
                 self.canister.canister_id(),
                 round.log,
                 round.counters.charging_from_balance_error,
+                round.cost_schedule,
             );
 
         let wasm_memory_usage = self
@@ -874,6 +875,7 @@ pub(crate) fn finish_err(
             new_canister.canister_id(),
             round.log,
             round.counters.charging_from_balance_error,
+            round.cost_schedule,
         );
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();

@@ -24,7 +24,6 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     CanisterId,
-    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
@@ -489,12 +488,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
         .canister_id(canister_test_id(0))
         .build();
     let cost_of_ingress = cycles_account_manager
-        .ingress_induction_cost(
-            &signed_ingress,
-            None,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
-        )
+        .ingress_induction_cost(&signed_ingress, None, SMALL_APP_SUBNET_MAX_SIZE)
         .cost();
 
     let ingress_history_writer = NoopIngressHistoryWriter;
@@ -657,12 +651,7 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
         let effective_canister_id = None;
         let cost = CyclesAccountManagerBuilder::new()
             .build()
-            .ingress_induction_cost(
-                &ingress,
-                effective_canister_id,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                CanisterCyclesCostSchedule::Normal,
-            )
+            .ingress_induction_cost(&ingress, effective_canister_id, SMALL_APP_SUBNET_MAX_SIZE)
             .cost();
 
         valid_set_rule.induct_message(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE);

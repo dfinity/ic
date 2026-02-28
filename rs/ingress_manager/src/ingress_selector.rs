@@ -549,7 +549,6 @@ impl IngressManager {
             signed_ingress,
             effective_canister_id,
             subnet_size,
-            state.get_own_cost_schedule(),
         ) {
             IngressInductionCost::Fee {
                 payer,
@@ -789,7 +788,7 @@ pub(crate) mod tests {
     use ic_types::{
         Height, RegistryVersion,
         artifact::IngressMessageId,
-        batch::{CanisterCyclesCostSchedule, IngressPayload},
+        batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
@@ -1597,12 +1596,7 @@ pub(crate) mod tests {
                             // Enough cycles to induct only m1
                             .with_cycles(
                                 cycles_account_manager
-                                    .ingress_induction_cost(
-                                        &m1,
-                                        None,
-                                        SMALL_APP_SUBNET_MAX_SIZE,
-                                        CanisterCyclesCostSchedule::Normal,
-                                    )
+                                    .ingress_induction_cost(&m1, None, SMALL_APP_SUBNET_MAX_SIZE)
                                     .cost(),
                             )
                             .build(),

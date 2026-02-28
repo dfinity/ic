@@ -544,14 +544,12 @@ impl ExecutionEnvironment {
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
                                 registry_settings.subnet_size,
-                                cost_schedule,
                             );
 
                             let new_price = self.cycles_account_manager.http_request_fee_beta(
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
                                 registry_settings.subnet_size,
-                                cost_schedule,
                                 NumBytes::from(response.payload_size_bytes()),
                             );
 
@@ -871,7 +869,6 @@ impl ExecutionEnvironment {
                                     .ingress_induction_cost_from_bytes(
                                         NumBytes::from(bytes_to_charge as u64),
                                         registry_settings.subnet_size,
-                                        cost_schedule,
                                     );
                                 let memory_usage = canister.memory_usage();
                                 let message_memory_usage = canister.message_memory_usage();
@@ -1976,7 +1973,6 @@ impl ExecutionEnvironment {
             canister_http_request_context.variable_parts_size(),
             canister_http_request_context.max_response_bytes,
             registry_settings.subnet_size,
-            state.get_own_cost_schedule(),
         );
         // Here we make sure that we do not let upper layers open new
         // http calls while the maximum number of calls is in-flight.
@@ -2000,18 +1996,25 @@ impl ExecutionEnvironment {
                     self.config.max_canister_http_requests_in_flight
                 ),
             ))
-        } else if request.payment < http_request_fee {
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} request sent with {} cycles, but {} cycles are required.",
-                    Ic00Method::HttpRequest,
-                    request.payment,
-                    http_request_fee
-                ),
-            ))
         } else {
-            canister_http_request_context.request.payment -= http_request_fee;
+            match state.get_own_cost_schedule() {
+                CanisterCyclesCostSchedule::Free => {}
+                CanisterCyclesCostSchedule::Normal => {
+                    if request.payment < http_request_fee {
+                        return Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!(
+                                "{} request sent with {} cycles, but {} cycles are required.",
+                                Ic00Method::HttpRequest,
+                                request.payment,
+                                http_request_fee
+                            ),
+                        ));
+                    } else {
+                        canister_http_request_context.request.payment -= http_request_fee;
+                    }
+                }
+            }
             let http_fee = NominalCycles::from(http_request_fee);
             state.metadata.subnet_metrics.consumed_cycles_http_outcalls += http_fee;
             state
@@ -2400,6 +2403,7 @@ impl ExecutionEnvironment {
         msg: &mut CanisterCall,
         state: &mut ReplicatedState,
     ) -> ExecuteSubnetMessageResult {
+        let cost_schedule = state.get_own_cost_schedule();
         match state.canister_state_make_mut(&canister_id) {
             None => ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
@@ -2412,9 +2416,11 @@ impl ExecutionEnvironment {
 
             Some(canister_state) => {
                 let cycles = msg.take_cycles();
-                canister_state
-                    .system_state
-                    .add_cycles(cycles, CyclesUseCase::NonConsumed);
+                canister_state.system_state.add_cycles(
+                    cycles,
+                    CyclesUseCase::NonConsumed,
+                    cost_schedule,
+                );
                 if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     info!(
                         self.log,
@@ -2545,9 +2551,16 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
     ) -> Result<Vec<u8>, UserError> {
+        let cost_schedule = state.get_own_cost_schedule();
         let canister = canister_make_mut(canister_id, state)?;
         self.canister_manager
-            .add_cycles(sender, cycles, canister, provisional_whitelist)
+            .add_cycles(
+                sender,
+                cycles,
+                canister,
+                provisional_whitelist,
+                cost_schedule,
+            )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
@@ -3127,12 +3140,12 @@ impl ExecutionEnvironment {
                 .network_topology
                 .get_subnet_size(&state.metadata.own_subnet_id)
                 .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
-            let induction_cost = self.cycles_account_manager.ingress_induction_cost(
-                ingress,
-                effective_canister_id,
-                subnet_size,
-                state.get_own_cost_schedule(),
-            );
+            let induction_cost = match state.get_own_cost_schedule() {
+                CanisterCyclesCostSchedule::Free => IngressInductionCost::Free,
+                CanisterCyclesCostSchedule::Normal => self
+                    .cycles_account_manager
+                    .ingress_induction_cost(ingress, effective_canister_id, subnet_size),
+            };
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
                 let paying_canister = canister(payer)?;
@@ -3530,17 +3543,12 @@ impl ExecutionEnvironment {
         )
     }
 
-    fn calculate_signature_fee(
-        &self,
-        args: &ThresholdArguments,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
-    ) -> Cycles {
+    fn calculate_signature_fee(&self, args: &ThresholdArguments, subnet_size: usize) -> Cycles {
         let cam = &self.cycles_account_manager;
         match args {
-            ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size, cost_schedule),
-            ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size, cost_schedule),
-            ThresholdArguments::VetKd(_) => cam.vetkd_fee(subnet_size, cost_schedule),
+            ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
+            ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
+            ThresholdArguments::VetKd(_) => cam.vetkd_fee(subnet_size),
         }
     }
 
@@ -3580,33 +3588,37 @@ impl ExecutionEnvironment {
         let source_subnet = state.metadata.network_topology.route(request.sender.get());
         let nns_subnet_id = state.metadata.network_topology.nns_subnet_id;
         if source_subnet != Some(nns_subnet_id) {
-            let cost_schedule = state.get_own_cost_schedule();
-            let signature_fee = self.calculate_signature_fee(&args, subnet_size, cost_schedule);
-            if request.payment < signature_fee {
-                return Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} request sent with {} cycles, but {} cycles are required.",
-                        request.method_name, request.payment, signature_fee
-                    ),
-                ));
-            } else {
-                // Charge for the request.
-                request.payment -= signature_fee;
-                let nominal_fee = NominalCycles::from(signature_fee);
-                let use_case = match args {
-                    ThresholdArguments::Ecdsa(_) => {
-                        state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += nominal_fee;
-                        CyclesUseCase::ECDSAOutcalls
+            let signature_fee = self.calculate_signature_fee(&args, subnet_size);
+            match state.get_own_cost_schedule() {
+                CanisterCyclesCostSchedule::Free => {}
+                CanisterCyclesCostSchedule::Normal => {
+                    if request.payment < signature_fee {
+                        return Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!(
+                                "{} request sent with {} cycles, but {} cycles are required.",
+                                request.method_name, request.payment, signature_fee
+                            ),
+                        ));
+                    } else {
+                        // Charge for the request.
+                        request.payment -= signature_fee;
                     }
-                    ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
-                    ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
-                };
-                state
-                    .metadata
-                    .subnet_metrics
-                    .observe_consumed_cycles_with_use_case(use_case, nominal_fee);
+                }
             }
+            let nominal_fee = NominalCycles::from(signature_fee);
+            let use_case = match args {
+                ThresholdArguments::Ecdsa(_) => {
+                    state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += nominal_fee;
+                    CyclesUseCase::ECDSAOutcalls
+                }
+                ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
+                ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
+            };
+            state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(use_case, nominal_fee);
         }
 
         let threshold_key = args.key_id();
@@ -4166,7 +4178,12 @@ impl ExecutionEnvironment {
     }
 
     /// Aborts paused execution in the given state.
-    pub fn abort_canister(&self, canister: &mut Arc<CanisterState>, log: &ReplicaLogger) {
+    pub fn abort_canister(
+        &self,
+        canister: &mut Arc<CanisterState>,
+        log: &ReplicaLogger,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) {
         if !canister.system_state.task_queue.is_empty() {
             if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
                 self.metrics.executions_aborted.inc();
@@ -4187,6 +4204,7 @@ impl ExecutionEnvironment {
                         canister_id,
                         log,
                         &self.metrics.charging_from_balance_error,
+                        cost_schedule,
                     );
             }
         };
@@ -4194,8 +4212,9 @@ impl ExecutionEnvironment {
 
     /// Aborts all paused execution in the given state.
     pub fn abort_all_paused_executions(&self, state: &mut ReplicatedState, log: &ReplicaLogger) {
+        let cost_schedule = state.get_own_cost_schedule();
         for canister in state.canisters_iter_mut() {
-            self.abort_canister(canister, log);
+            self.abort_canister(canister, log, cost_schedule);
         }
     }
 

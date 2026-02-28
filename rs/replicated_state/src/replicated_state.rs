@@ -718,9 +718,7 @@ impl ReplicatedState {
         let subnet_id = self.metadata.own_subnet_id;
         self.metadata
             .network_topology
-            .subnets()
-            .get(&subnet_id)
-            .map(|x| x.cost_schedule)
+            .get_cost_schedule(&subnet_id)
             .unwrap_or_default()
     }
 
@@ -985,6 +983,7 @@ impl ReplicatedState {
         &mut self,
         msg: RequestOrResponse,
         subnet_available_guaranteed_response_memory: &mut i64,
+        cycles_cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
         let sender = msg.sender();
@@ -1003,6 +1002,7 @@ impl ReplicatedState {
                 subnet_available_guaranteed_response_memory,
                 own_subnet_type,
                 input_queue_type,
+                cycles_cost_schedule,
             ),
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
@@ -1062,11 +1062,17 @@ impl ReplicatedState {
     ///
     /// Returns `true` if the recipient canister exists and was credited, `false`
     /// otherwise.
-    pub fn credit_refund(&mut self, refund: &Refund) -> bool {
+    pub fn credit_refund(
+        &mut self,
+        refund: &Refund,
+        cycles_cost_schedule: CanisterCyclesCostSchedule,
+    ) -> bool {
         if let Some(canister) = self.canister_state_make_mut(&refund.recipient()) {
-            canister
-                .system_state
-                .add_cycles(refund.amount(), CyclesUseCase::NonConsumed);
+            canister.system_state.add_cycles(
+                refund.amount(),
+                CyclesUseCase::NonConsumed,
+                cycles_cost_schedule,
+            );
             true
         } else {
             false

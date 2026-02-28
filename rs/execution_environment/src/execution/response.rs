@@ -20,13 +20,13 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, error, info};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
-use ic_types::Cycles;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
     Response,
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
+use ic_types::{Cycles, batch::CanisterCyclesCostSchedule};
 use ic_types::{NumBytes, NumInstructions, Time};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
@@ -174,7 +174,6 @@ impl ResponseHelper {
                 &response.response_payload,
                 original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
-                round.cost_schedule,
             );
 
         let canister = clean_canister.clone();
@@ -198,14 +197,17 @@ impl ResponseHelper {
     ///
     /// These are the only state changes to the initial canister state before
     /// executing Wasm code.
-    fn apply_initial_refunds(&mut self) {
-        self.canister
-            .system_state
-            .add_cycles(self.refund_for_sent_cycles, CyclesUseCase::NonConsumed);
+    fn apply_initial_refunds(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+        self.canister.system_state.add_cycles(
+            self.refund_for_sent_cycles,
+            CyclesUseCase::NonConsumed,
+            cost_schedule,
+        );
 
         self.canister.system_state.add_cycles(
             self.refund_for_response_transmission,
             CyclesUseCase::RequestAndResponseTransmission,
+            cost_schedule,
         );
     }
 
@@ -328,7 +330,7 @@ impl ResponseHelper {
 
         helper.apply_subnet_memory_reservation(round_limits);
 
-        helper.apply_initial_refunds();
+        helper.apply_initial_refunds(round.cost_schedule);
 
         // This validation succeeded in `execute_response()` and we expect it to
         // succeed here too.
@@ -367,6 +369,7 @@ impl ResponseHelper {
                 self.canister.canister_id(),
                 round.log,
                 round.counters.charging_from_balance_error,
+                round.cost_schedule,
             );
 
         // Check that the cycles balance does not go below zero after applying
@@ -474,6 +477,7 @@ impl ResponseHelper {
                 self.canister.canister_id(),
                 round.log,
                 round.counters.charging_from_balance_error,
+                round.cost_schedule,
             );
 
         apply_canister_state_changes(
@@ -960,7 +964,7 @@ pub fn execute_response(
         round_limits,
         deallocation_sender,
     );
-    helper.apply_initial_refunds();
+    helper.apply_initial_refunds(round.cost_schedule);
     let helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
         Err(result) => {

@@ -25,6 +25,7 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, MAX_RESPONSE_COUNT_BYTES,
     NO_DEADLINE, StopCanisterCallId, StopCanisterContext,
@@ -144,6 +145,7 @@ impl CanisterStateFixture {
             &mut SUBNET_AVAILABLE_MEMORY.clone(),
             subnet_type,
             input_queue_type,
+            CanisterCyclesCostSchedule::default(),
         )
     }
 
@@ -645,6 +647,7 @@ fn canister_state_push_input_request_memory_limit_test_impl(
         &mut subnet_available_memory,
         own_subnet_type,
         input_queue_type,
+        CanisterCyclesCostSchedule::default(),
     );
     if should_enforce_limit {
         assert_eq!(
@@ -709,6 +712,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
                 &mut subnet_available_memory,
                 own_subnet_type,
                 input_queue_type,
+                CanisterCyclesCostSchedule::default(),
             )
             .unwrap()
     );
@@ -785,6 +789,7 @@ fn canister_state_push_input_response_memory_limit_test_impl(
                 &mut subnet_available_memory,
                 own_subnet_type,
                 input_queue_type,
+                CanisterCyclesCostSchedule::default(),
             )
             .unwrap()
     );
@@ -840,6 +845,7 @@ fn canister_state_ingress_induction_cycles_debit() {
         system_state.canister_id(),
         &no_op_logger(),
         &mock_metrics(),
+        CanisterCyclesCostSchedule::default(),
     );
     assert_eq!(
         Cycles::zero(),
@@ -874,7 +880,11 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let initial_consumed_cycles = Cycles::new(1000);
-    system_state.remove_cycles(initial_consumed_cycles, CyclesUseCase::Memory);
+    system_state.remove_cycles(
+        initial_consumed_cycles,
+        CyclesUseCase::Memory,
+        CanisterCyclesCostSchedule::default(),
+    );
     assert_eq!(
         system_state.balance(),
         INITIAL_CYCLES - initial_consumed_cycles
@@ -885,7 +895,11 @@ fn update_balance_and_consumed_cycles_correctly() {
     );
 
     let cycles = Cycles::new(100);
-    system_state.add_cycles(cycles, CyclesUseCase::Memory);
+    system_state.add_cycles(
+        cycles,
+        CyclesUseCase::Memory,
+        CanisterCyclesCostSchedule::default(),
+    );
     assert_eq!(
         system_state.balance(),
         INITIAL_CYCLES - initial_consumed_cycles + cycles
@@ -900,10 +914,18 @@ fn update_balance_and_consumed_cycles_correctly() {
 fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let cycles_to_consume = Cycles::from(1000u128);
-    system_state.remove_cycles(cycles_to_consume, CyclesUseCase::Memory);
+    system_state.remove_cycles(
+        cycles_to_consume,
+        CyclesUseCase::Memory,
+        CanisterCyclesCostSchedule::default(),
+    );
 
     let cycles_to_add = Cycles::from(100u128);
-    system_state.add_cycles(cycles_to_add, CyclesUseCase::Memory);
+    system_state.add_cycles(
+        cycles_to_add,
+        CyclesUseCase::Memory,
+        CanisterCyclesCostSchedule::default(),
+    );
     assert_eq!(
         system_state.balance(),
         INITIAL_CYCLES - cycles_to_consume + cycles_to_add

@@ -224,6 +224,7 @@ impl StreamBuilderImpl {
         reject_code: RejectCode,
         reject_message: String,
     ) {
+        let cost_schedule = state.get_own_cost_schedule();
         state
             .push_input(
                 Response {
@@ -243,6 +244,7 @@ impl StreamBuilderImpl {
                 .into(),
                 // Arbitrary large amount, pushing a response always returns memory.
                 &mut (i64::MAX / 2),
+                cost_schedule,
             )
             .map(|_| ())
             .unwrap_or_else(|(err, response)| {

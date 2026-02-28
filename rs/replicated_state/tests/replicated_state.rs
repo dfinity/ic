@@ -156,9 +156,11 @@ impl ReplicatedStateFixture {
         &mut self,
         msg: RequestOrResponse,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
+        let cost_schedule = self.state.get_own_cost_schedule();
         self.state.push_input(
             msg,
             &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone(),
+            cost_schedule,
         )
     }
 
@@ -359,6 +361,7 @@ fn memory_taken_by_canister_queues() {
     let mut fixture = ReplicatedStateFixture::new();
     let mut subnet_available_guaranteed_response_memory =
         SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY;
+    let cost_schedule = fixture.state.get_own_cost_schedule();
 
     // Zero memory used initially.
     assert_execution_memory_taken(0, &fixture);
@@ -373,6 +376,7 @@ fn memory_taken_by_canister_queues() {
             .push_input(
                 request_from(OTHER_CANISTER_ID).into(),
                 &mut subnet_available_guaranteed_response_memory,
+                cost_schedule,
             )
             .unwrap()
     );
@@ -414,7 +418,8 @@ fn memory_taken_by_canister_queues() {
             .state
             .push_input(
                 request.clone().into(),
-                &mut subnet_available_guaranteed_response_memory
+                &mut subnet_available_guaranteed_response_memory,
+                cost_schedule,
             )
             .unwrap()
     );
@@ -445,6 +450,7 @@ fn memory_taken_by_subnet_queues() {
     let mut fixture = ReplicatedStateFixture::new();
     let mut subnet_available_guaranteed_response_memory =
         SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY;
+    let cost_schedule = fixture.state.get_own_cost_schedule();
 
     // Zero memory used initially.
     assert_execution_memory_taken(0, &fixture);
@@ -459,6 +465,7 @@ fn memory_taken_by_subnet_queues() {
             .push_input(
                 request_to(SUBNET_ID.into()).into(),
                 &mut subnet_available_guaranteed_response_memory,
+                cost_schedule,
             )
             .unwrap()
     );
@@ -502,7 +509,8 @@ fn memory_taken_by_subnet_queues() {
             .state
             .push_input(
                 request.clone().into(),
-                &mut subnet_available_guaranteed_response_memory
+                &mut subnet_available_guaranteed_response_memory,
+                cost_schedule,
             )
             .unwrap()
     );
@@ -541,6 +549,7 @@ fn memory_taken_by_wasm_custom_sections() {
     let mut fixture = ReplicatedStateFixture::with_wasm_metadata(&[CANISTER_ID], wasm_metadata);
     let mut subnet_available_guaranteed_response_memory =
         SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY;
+    let cost_schedule = fixture.state.get_own_cost_schedule();
 
     // Only memory for wasm custom sections is used initially.
     assert_execution_memory_taken(wasm_metadata_memory.get() as usize, &fixture);
@@ -553,6 +562,7 @@ fn memory_taken_by_wasm_custom_sections() {
             .push_input(
                 request_from(OTHER_CANISTER_ID).into(),
                 &mut subnet_available_guaranteed_response_memory,
+                cost_schedule,
             )
             .unwrap()
     );
@@ -636,6 +646,7 @@ fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory
     let initial_available_guaranteed_response_memory = MAX_RESPONSE_COUNT_BYTES as i64;
     let mut subnet_available_guaranteed_response_memory =
         initial_available_guaranteed_response_memory;
+    let cost_schedule = fixture.state.get_own_cost_schedule();
 
     // Zero memory used initially.
     assert_execution_memory_taken(0, &fixture);
@@ -650,6 +661,7 @@ fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory
             .push_input(
                 request_to(SUBNET_ID.into()).into(),
                 &mut subnet_available_guaranteed_response_memory,
+                cost_schedule,
             )
             .unwrap()
     );
@@ -669,6 +681,7 @@ fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory
     let res = fixture.state.push_input(
         request_to(SUBNET_ID.into()).into(),
         &mut subnet_available_guaranteed_response_memory,
+        cost_schedule,
     );
 
     // No more memory for a second guaranteed response request.
@@ -697,7 +710,8 @@ fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory
             .state
             .push_input(
                 request.clone().into(),
-                &mut subnet_available_guaranteed_response_memory
+                &mut subnet_available_guaranteed_response_memory,
+                cost_schedule,
             )
             .unwrap()
     );
@@ -747,12 +761,14 @@ fn push_input_queues_respects_local_remote_subnet() {
 #[test]
 fn subnet_queue_push_input_response() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+    let cost_schedule = state.get_own_cost_schedule();
 
     let response = response_to(SUBNET_ID.into());
     assert_eq!(
         state.push_input(
             response.clone().into(),
-            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
+            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone(),
+            cost_schedule,
         ),
         Err((
             StateError::non_matching_response(
@@ -1485,11 +1501,13 @@ fn ready_for_migration() {
 fn credit_refund() {
     let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID]);
     let initial_balance = fixture.canister_balance(&CANISTER_ID).unwrap();
+    let cost_schedule = fixture.state.get_own_cost_schedule();
 
     // Refund 10 cycles to `CANISTER_ID`.
-    let credited = fixture
-        .state
-        .credit_refund(&Refund::anonymous(CANISTER_ID, Cycles::new(10)));
+    let credited = fixture.state.credit_refund(
+        &Refund::anonymous(CANISTER_ID, Cycles::new(10)),
+        cost_schedule,
+    );
     assert!(credited);
     assert_eq!(
         Some(initial_balance + Cycles::new(10)),
@@ -1497,9 +1515,10 @@ fn credit_refund() {
     );
 
     // Refunding to a non-existent canister is a no-op.
-    let credited = fixture
-        .state
-        .credit_refund(&Refund::anonymous(OTHER_CANISTER_ID, Cycles::new(11)));
+    let credited = fixture.state.credit_refund(
+        &Refund::anonymous(OTHER_CANISTER_ID, Cycles::new(11)),
+        cost_schedule,
+    );
     assert!(!credited);
     assert_eq!(
         Some(initial_balance + Cycles::new(10)),
