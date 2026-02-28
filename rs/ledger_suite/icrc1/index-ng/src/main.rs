@@ -386,6 +386,14 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
         _ => (),
     };
 
+    // Migrate canisters that were using the old 1s default to 5s. Can be removed after one
+    // upgrade cycle.
+    mutate_state(|state| {
+        if state.retrieve_blocks_from_ledger_interval.is_none() {
+            state.retrieve_blocks_from_ledger_interval = Some(Duration::from_secs(5));
+        }
+    });
+
     with_account_data(|account_data| {
         // Try to read the first key-value from the account data map. This will fail (and the
         // canister will trap, i.e., the upgrade will fail) if:
