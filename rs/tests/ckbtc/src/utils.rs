@@ -73,20 +73,59 @@ pub async fn start_canister(canister: &Canister<'_>) {
     assert!(result.is_ok(), "Error while starting the ledger canister");
 }
 
-/// Mint some blocks to the given address.
+/// Mint some blocks to the given address idempotently.
+///
+/// Records the blockchain height before the first attempt and uses it
+/// as a target.  On each retry the current height is re-checked so that
+/// blocks mined by a prior attempt whose RPC response was lost are not
+/// duplicated.  Only the remaining blocks (if any) are generated.
+///
+/// This is safe in regtest mode where no external miner exists, so
+/// height changes are exclusively from our `generate_to_address` calls.
 pub fn generate_blocks<T: RpcClientType>(
     rpc_client: &RpcClient<T>,
     logger: &Logger,
     nb_blocks: u64,
     address: &T::Address,
 ) {
-    let generated_blocks = rpc_client.generate_to_address(nb_blocks, address).unwrap();
-    info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
-    assert_eq!(
-        generated_blocks.len() as u64,
-        nb_blocks,
-        "Expected {nb_blocks} blocks."
-    );
+    let start_height = ic_system_test_driver::retry_with_msg!(
+        format!("Get blockchain info before generating {nb_blocks} blocks"),
+        logger.clone(),
+        Duration::from_secs(30),
+        Duration::from_secs(2),
+        || {
+            rpc_client
+                .get_blockchain_info()
+                .map(|info| info.blocks)
+                .map_err(|e| anyhow::anyhow!("{e:?}"))
+        }
+    )
+    .expect("Failed to get blockchain info");
+    let target_height = start_height + nb_blocks;
+
+    ic_system_test_driver::retry_with_msg!(
+        format!("Generate {nb_blocks} blocks to {address} (target height: {target_height})"),
+        logger.clone(),
+        Duration::from_secs(30),
+        Duration::from_secs(2),
+        || {
+            let current_height = rpc_client
+                .get_blockchain_info()
+                .map_err(|e| anyhow::anyhow!("{e:?}"))?
+                .blocks;
+            if current_height >= target_height {
+                // Blocks were already mined by a prior attempt whose
+                // RPC response was lost.  Nothing more to do.
+                return Ok(());
+            }
+            let remaining = target_height - current_height;
+            rpc_client
+                .generate_to_address(remaining, address)
+                .map(|_| ())
+                .map_err(|e| anyhow::anyhow!("{e:?}"))
+        }
+    )
+    .expect("Failed to generate btc blocks");
 }
 
 /// Wait for the expected balance to be available at the given btc address.
@@ -388,24 +427,49 @@ pub async fn get_btc_address(
     address.parse::<Address<_>>().unwrap().assume_checked()
 }
 
+/// Send BTC to the given address idempotently.
+///
+/// The transaction is created and signed once, then only the broadcast
+/// is retried.  Re-broadcasting the same raw transaction is safe because
+/// bitcoind will return the same txid or reject it as a duplicate.
 pub async fn send_to_btc_address<T: RpcClientType>(
     btc_rpc: &RpcClient<T>,
     logger: &Logger,
     dst: &T::Address,
     amount: u64,
 ) {
-    match btc_rpc.send_to(
-        dst,
-        Amount::from_sat(amount),
-        Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
-    ) {
-        Ok(txid) => {
-            debug!(&logger, "txid: {:?}", txid);
+    // Create and sign the transaction once, outside the retry loop.
+    let from_address = btc_rpc.get_address().expect("No default address");
+    let signed_tx = btc_rpc
+        .create_signed_transaction(
+            from_address,
+            dst,
+            Amount::from_sat(amount),
+            Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
+        )
+        .expect("Failed to create signed transaction");
+
+    // Retry only the broadcast, which is idempotent.
+    ic_system_test_driver::retry_with_msg!(
+        "broadcast signed btc tx",
+        logger.clone(),
+        Duration::from_secs(30),
+        Duration::from_secs(2),
+        || {
+            match btc_rpc.send_raw_transaction::<&[u8]>(signed_tx.hex.as_ref()) {
+                Ok(txid) => {
+                    debug!(&logger, "txid: {:?}", txid);
+                    Ok(())
+                }
+                Err(e) if e.is_duplicate_transaction() => {
+                    debug!(&logger, "transaction already known, treating as success");
+                    Ok(())
+                }
+                Err(e) => Err(anyhow::anyhow!("{e:?}")),
+            }
         }
-        Err(e) => {
-            panic!("bug: could not send btc to btc client : {e:?}");
-        }
-    }
+    )
+    .expect("Failed to send btc");
 }
 
 /// Create a client for bitcoind or dogecoind.

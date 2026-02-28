@@ -87,6 +87,30 @@ pub enum RpcError {
     AddressNotAvailable,
 }
 
+impl RpcError {
+    /// Returns true if the error indicates that the transaction is already
+    /// known (in the mempool or confirmed in a block).  This is useful for
+    /// idempotent broadcast retries: bitcoind returns RPC error code -27
+    /// ("Transaction already in block chain") or -26 with a message
+    /// containing "txn-already-known" / "txn-already-in-mempool".
+    pub fn is_duplicate_transaction(&self) -> bool {
+        if let RpcError::JsonRpc(jsonrpc::error::Error::Rpc(rpc_err)) = self {
+            // -27: transaction already in block chain
+            // -26: transaction rejected (sometimes used for mempool duplicates)
+            if rpc_err.code == -27 {
+                return true;
+            }
+            if rpc_err.code == -26
+                && (rpc_err.message.contains("txn-already-known")
+                    || rpc_err.message.contains("txn-already-in-mempool"))
+            {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 impl From<BtcAddressParseError> for RpcError {
     fn from(e: BtcAddressParseError) -> Self {
         Self::InvalidBtcAddress(e)
@@ -321,6 +345,9 @@ impl<T: RpcClientType> RpcClient<T> {
     }
 
     /// Send bitcoin from the given [from_address].
+    ///
+    /// Selects only the minimum number of UTXOs needed to cover the amount + fee,
+    /// to avoid creating oversized transactions that exceed the minimum relay fee.
     pub fn send(
         &self,
         from_address: &T::Address,
@@ -328,24 +355,46 @@ impl<T: RpcClientType> RpcClient<T> {
         amount: Amount,
         fee: Amount,
     ) -> Result<Txid> {
+        let signed_tx = self.create_signed_transaction(from_address, to_address, amount, fee)?;
+        self.send_raw_transaction::<&[u8]>(signed_tx.hex.as_ref())
+    }
+
+    /// Create a signed transaction without broadcasting it.
+    ///
+    /// This is useful for separating transaction creation from broadcasting,
+    /// allowing the caller to retry only the broadcast step (which is idempotent
+    /// since re-broadcasting the same raw transaction is safe).
+    pub fn create_signed_transaction(
+        &self,
+        from_address: &T::Address,
+        to_address: &T::Address,
+        amount: Amount,
+        fee: Amount,
+    ) -> Result<SignRawTransactionResult> {
         let unspent = self.list_unspent(Some(0), Some(&[from_address]))?;
-        let total: Amount = unspent.iter().map(|x| x.amount).sum();
-        let inputs = unspent
-            .iter()
-            .map(|x| CreateRawTransactionInput {
-                txid: x.txid,
-                vout: x.vout,
+        // Select only enough UTXOs to cover amount + fee, to keep the
+        // transaction small and avoid exceeding the minimum relay fee.
+        let target = amount + fee;
+        let mut selected = Vec::new();
+        let mut selected_total = Amount::ZERO;
+        for utxo in &unspent {
+            if selected_total >= target {
+                break;
+            }
+            selected.push(CreateRawTransactionInput {
+                txid: utxo.txid,
+                vout: utxo.vout,
                 sequence: None,
-            })
-            .collect::<Vec<_>>();
+            });
+            selected_total += utxo.amount;
+        }
         let mut outputs = HashMap::new();
         outputs.insert(to_address.to_string(), amount);
-        if total > amount + fee {
-            outputs.insert(from_address.to_string(), total - amount - fee);
+        if selected_total > target {
+            outputs.insert(from_address.to_string(), selected_total - target);
         }
-        let raw_tx = self.create_raw_transaction(&inputs, &outputs)?;
-        let tx = self.sign_raw_transaction(&raw_tx, None)?;
-        self.send_raw_transaction::<&[u8]>(tx.hex.as_ref())
+        let raw_tx = self.create_raw_transaction(&selected, &outputs)?;
+        self.sign_raw_transaction(&raw_tx, None)
     }
 
     /// Adds a private key (as returned by `dumpprivkey`) to your wallet.
