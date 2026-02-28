@@ -1075,12 +1075,12 @@ impl IcNodeSnapshot {
         .expect("Could not install canister");
     }
 
-    pub fn create_and_install_canister_with_arg_and_cycles(
+    pub fn try_create_and_install_canister_with_arg_and_cycles(
         &self,
         name: &str,
         arg: Option<Vec<u8>>,
         cycles_amount: Option<u128>,
-    ) -> Principal {
+    ) -> Result<Principal, String> {
         let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
 
@@ -1106,7 +1106,16 @@ impl IcNodeSnapshot {
                 .map_err(|err| format!("Couldn't install canister: {err}"))?;
             Ok::<_, String>(canister_id)
         })
-        .expect("Could not install canister")
+    }
+
+    pub fn create_and_install_canister_with_arg_and_cycles(
+        &self,
+        name: &str,
+        arg: Option<Vec<u8>>,
+        cycles_amount: Option<u128>,
+    ) -> Principal {
+        self.try_create_and_install_canister_with_arg_and_cycles(name, arg, cycles_amount)
+            .expect("Could not install canister")
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {

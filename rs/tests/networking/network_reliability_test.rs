@@ -145,14 +145,23 @@ pub fn test(env: TestEnv, config: Config) {
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
-    let canister_app = subnet_app
-        .nodes()
-        .next()
-        .unwrap()
-        .create_and_install_canister_with_arg(
-            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
-            None,
-        );
+    let node_app = subnet_app.nodes().next().unwrap();
+    let canister_app = ic_system_test_driver::retry_with_msg!(
+        "install counter canister on app subnet",
+        log.clone(),
+        Duration::from_secs(120),
+        Duration::from_secs(5),
+        || {
+            node_app
+                .try_create_and_install_canister_with_arg_and_cycles(
+                    &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+                    None,
+                    None,
+                )
+                .map_err(|err| anyhow::anyhow!(err))
+        }
+    )
+    .expect("Failed to install counter canister after retries");
     info!(&log, "Installation of counter canisters has succeeded.");
     info!(
         &log,
