@@ -9,7 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+* **SEV invariant:** Enforced that SEV-enabled subnets contain only SEV-enabled nodes (i.e., nodes with a chip ID in their node record).
+
 ## Changed
+
+* **SEV on existing subnets:** Enabled SEV activation for existing subnets. Once enabled, SEV cannot be disabled.
 
 ## Deprecated
 
