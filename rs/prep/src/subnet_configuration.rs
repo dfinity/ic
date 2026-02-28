@@ -342,6 +342,7 @@ impl SubnetConfig {
             chain_key_config: self.chain_key_config,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            recalled_replica_version_ids: vec![],
         };
 
         let dkg_dealing_encryption_pubkeys: BTreeMap<_, _> = initialized_nodes

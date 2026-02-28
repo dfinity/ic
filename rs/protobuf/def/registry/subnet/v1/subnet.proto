@@ -95,6 +95,15 @@ message SubnetRecord {
   // List of principals that have admin privileges on the subnet.
   repeated types.v1.PrincipalId subnet_admins = 31;
 
+  // List of replica version IDs that are recalled/blocked for this subnet.
+  // Nodes in this subnet will not upgrade to any version in this list.
+  // If the replica_version_id of a subnet points to a broken GuestOS and the subnet is stalled,
+  // even if we manage to rollback the GuestOS locally, the GuestOS would automatically try
+  // to upgrade to the broken GuestOS again. We can use this field to prevent that.
+  // While nodes read the replica_version_id from the registry vesion from the CUP,
+  // they check the latest registry version for recalled_replica_version_ids.
+  repeated string recalled_replica_version_ids = 33;
+
   reserved 1, 2, 4, 6, 13, 20, 21, 22, 27;
   reserved "ic_version_id";
   reserved "initial_dkg_transcript";

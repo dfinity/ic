@@ -91,6 +91,15 @@ pub struct SubnetRecord {
     /// List of principals that have admin privileges on the subnet.
     #[prost(message, repeated, tag = "31")]
     pub subnet_admins: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    /// List of replica version IDs that are recalled/blocked for this subnet.
+    /// Nodes in this subnet will not upgrade to any version in this list.
+    /// If the replica_version_id of a subnet points to a broken GuestOS and the subnet is stalled,
+    /// even if we manage to rollback the GuestOS locally, the GuestOS would automatically try
+    /// to upgrade to the broken GuestOS again. We can use this field to prevent that.
+    /// While nodes read the replica_version_id from the registry vesion from the CUP,
+    /// they check the latest registry version for recalled_replica_version_ids.
+    #[prost(string, repeated, tag = "33")]
+    pub recalled_replica_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {

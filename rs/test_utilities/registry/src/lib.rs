@@ -237,6 +237,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         chain_key_config: None,
         canister_cycles_cost_schedule: CanisterCyclesCostSchedulePb::Normal as i32,
         subnet_admins: vec![],
+        recalled_replica_version_ids: vec![],
     }
 }
 
@@ -358,6 +359,14 @@ impl SubnetRecordBuilder {
 
     pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
         self.record.subnet_admins = subnet_admins.into_iter().map(PrincipalIdPb::from).collect();
+        self
+    }
+
+    pub fn with_recalled_replica_version_ids(
+        mut self,
+        recalled_replica_version_ids: &[String],
+    ) -> Self {
+        self.record.recalled_replica_version_ids = recalled_replica_version_ids.to_vec();
         self
     }
 

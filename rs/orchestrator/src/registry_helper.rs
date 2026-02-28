@@ -227,22 +227,18 @@ impl RegistryHelper {
     /// version
     pub(crate) fn get_recalled_replica_versions(
         &self,
-        _subnet_id: SubnetId,
-        _registry_version: RegistryVersion,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
     ) -> OrchestratorResult<Vec<ReplicaVersion>> {
-        // TODO(NODE-1754): Remove this placeholder and replace with the commented code below once
-        // registry changes were merged
-        Ok(vec![])
-
-        // let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
-        // subnet_record
-        //     .recalled_replica_version_ids
-        //     .iter()
-        //     .map(|version_str| {
-        //         ReplicaVersion::try_from(version_str.as_ref())
-        //             .map_err(OrchestratorError::ReplicaVersionParseError)
-        //     })
-        //     .collect()
+        let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
+        subnet_record
+            .recalled_replica_version_ids
+            .iter()
+            .map(|version_str| {
+                ReplicaVersion::try_from(version_str.as_ref())
+                    .map_err(OrchestratorError::ReplicaVersionParseError)
+            })
+            .collect()
     }
 
     pub(crate) fn get_expected_replica_version(
