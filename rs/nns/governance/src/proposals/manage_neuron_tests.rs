@@ -3,7 +3,11 @@ use super::*;
 use crate::{
     pb::v1::{
         Account, Vote,
-        manage_neuron::{claim_or_refresh, configure::Operation, disburse::Amount, set_following},
+        manage_neuron::{
+            AddHotKey, ChangeAutoStakeMaturity, DisburseMaturity, DisburseToNeuron,
+            IncreaseDissolveDelay, Merge, RemoveHotKey, SetDissolveTimestamp, Spawn, Split,
+            StakeMaturity, claim_or_refresh, configure::Operation, disburse::Amount, set_following,
+        },
     },
     proposals::self_describing::LocallyDescribableProposalAction,
 };
