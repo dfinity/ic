@@ -50,7 +50,6 @@ genrule(
 system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
-    flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
     setupos = True,
     tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
@@ -82,7 +81,6 @@ rust_binary(
 system_test_nns(
     name = "guestos_upgrade_smoke_test",
     env = MAINNET_ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = ["long_test"],
@@ -94,7 +92,6 @@ system_test_nns(
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current",
-    flaky = True,
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
     setupos = "mainnet_latest_dev",
@@ -146,7 +143,6 @@ rust_binary(
 system_test_nns(
     name = "hostos_upgrade_smoke_test",
     env = MAINNET_ENV,
-    flaky = True,
     hostos_update = "test",
     setupos = True,
     tags = ["long_test"],
@@ -158,7 +154,6 @@ system_test_nns(
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
-    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     hostos_update = True,
     setupos = "mainnet_latest_dev",

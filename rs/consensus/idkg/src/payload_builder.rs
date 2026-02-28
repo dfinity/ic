@@ -665,7 +665,7 @@ pub(crate) fn create_data_payload_helper_2(
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     signature_builder: &dyn ThresholdSignatureBuilder,
-    _thread_pool: &ThreadPool,
+    thread_pool: &ThreadPool,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<(), IDkgPayloadError> {
@@ -694,6 +694,7 @@ pub(crate) fn create_data_payload_helper_2(
         idkg_payload,
         valid_keys,
         idkg_payload_metrics,
+        thread_pool,
     );
 
     let new_transcripts = [
@@ -1015,6 +1016,7 @@ mod tests {
         assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
 
         let signature_builder = TestThresholdSignatureBuilder::new();
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         signatures::update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -1022,6 +1024,7 @@ mod tests {
             &mut idkg_payload,
             &BTreeSet::from([key_id.clone()]),
             None,
+            thread_pool.as_ref(),
         );
 
         // The expired context with matched pre-signature should receive a reject response
@@ -1088,6 +1091,7 @@ mod tests {
         assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
 
         let signature_builder = TestThresholdSignatureBuilder::new();
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         signatures::update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -1095,6 +1099,7 @@ mod tests {
             &mut idkg_payload,
             &BTreeSet::from([valid_key_id.clone()]),
             None,
+            thread_pool.as_ref(),
         );
 
         // The contexts with invalid key should receive a reject response

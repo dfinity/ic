@@ -41,6 +41,28 @@ impl HonestDealerDlogLookupTable {
             let x_hash = self.table[x as usize];
 
             for i in 0..targets.len() {
+                /*
+                Should this function need to be further optimized a good start would be to
+                replace the statements below with something like
+
+                // Variable diff equals 0 iff x_hash == target_hashes[i];
+                let diff = x_hash ^ target_hashes[i];
+                // Variable mask equals u32::max if diff == 0, or 0 otherwise
+                let mask = 0u32.wrapping_sub((!diff & diff.wrapping_sub(1)) >> 31);
+                // Selectively OR in x as the solution, iff x_hash == target_hashes[i]
+                scan_results[i] |= (mask as u16) & (x as u16);
+
+                This is more or less what ct_eq / conditional_assign end up being compiled
+                to, with the difference that it skips the volatile loads which subtle uses
+                to (try to) prevent LLVM from optimizing code into using a conditional jump.
+
+                Also regarding performance note that it would be quite straighforward to
+                express the above statements in a 4-wide or 8-wide SIMD expression suitable
+                for SSE2 or AVX2 execution. This would not only be faster but also highly
+                likely immune to compiler optimizations that would introduce jumps, since
+                this would require moving the data out of SIMD registers which would be
+                expensive, and so the compiler would avoid such a transformation.
+                */
                 let hashes_eq = x_hash.ct_eq(&target_hashes[i]);
                 scan_results[i].conditional_assign(&(x as u16), hashes_eq);
             }

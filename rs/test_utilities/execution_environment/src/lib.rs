@@ -18,8 +18,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
-    ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor, IngressFilterMetrics,
-    InternalHttpQueryHandler, RoundInstructions, RoundLimits, execute_canister,
+    ExecuteSubnetMessageResultType, ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor,
+    IngressFilterMetrics, InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+    execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -132,12 +133,14 @@ pub fn generate_subnets(
     own_subnet_type: SubnetType,
     own_subnet_size: usize,
     own_subnet_cost_schedule: CanisterCyclesCostSchedule,
+    own_subnet_admins: BTreeSet<PrincipalId>,
 ) -> BTreeMap<SubnetId, SubnetTopology> {
     let mut result: BTreeMap<SubnetId, SubnetTopology> = Default::default();
     for subnet_id in subnet_ids {
         let mut subnet_type = SubnetType::System;
         let mut nodes = btreeset! {};
         let mut cost_schedule = CanisterCyclesCostSchedule::Normal;
+        let mut subnet_admins = BTreeSet::new();
         if subnet_id == own_subnet_id {
             subnet_type = own_subnet_type;
             cost_schedule = own_subnet_cost_schedule;
@@ -145,6 +148,7 @@ pub fn generate_subnets(
             for i in 0..own_subnet_size {
                 nodes.insert(node_test_id(i as u64));
             }
+            subnet_admins = own_subnet_admins.clone();
         }
         let public_key = if subnet_id == nns_subnet_id {
             root_key.clone().unwrap_or(vec![1, 2, 3, 4])
@@ -160,6 +164,7 @@ pub fn generate_subnets(
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule,
+                subnet_admins,
             },
         );
     }
@@ -174,6 +179,7 @@ pub fn generate_network_topology(
     subnets: Vec<SubnetId>,
     routing_table: Option<RoutingTable>,
     own_subnet_cost_schedule: CanisterCyclesCostSchedule,
+    own_subnet_admins: BTreeSet<PrincipalId>,
 ) -> NetworkTopology {
     let mut topo = NetworkTopology::default();
     topo.nns_subnet_id = nns_subnet_id;
@@ -185,6 +191,7 @@ pub fn generate_network_topology(
         own_subnet_type,
         subnet_size,
         own_subnet_cost_schedule,
+        own_subnet_admins,
     ));
     match routing_table {
         Some(rt) => topo.set_routing_table(rt),
@@ -1462,7 +1469,7 @@ impl ExecutionTest {
         };
 
         let remaining_round_instructions_before = round_limits.instructions;
-        let (new_state, message_instructions_used) = self.exec_env.execute_subnet_message(
+        let (new_state, execute_subnet_message_result_type) = self.exec_env.execute_subnet_message(
             message,
             state,
             self.install_code_instruction_limits.clone(),
@@ -1479,25 +1486,33 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
-            if let Some(message_instructions_used) = message_instructions_used {
-                // cycles charging proceeds by prepaying for the message instruction limit
-                // and subsequently refunding based on `message_instructions_used`
-                // and thus `message_instructions_used` are capped
-                // at the message instruction limit
-                let capped_slice_instructions_used = std::cmp::min(
-                    slice_instructions_used.get() as u64,
-                    self.install_code_instruction_limits.message().get(),
-                );
-                assert_eq!(
-                    message_instructions_used.get(),
-                    capped_slice_instructions_used
-                );
-                self.update_execution_stats(canister_id, message_instructions_used, cost_schedule);
-            } else {
-                self.paused_subnet_message_instructions.insert(
-                    canister_id,
-                    NumInstructions::from(slice_instructions_used.get() as u64),
-                );
+            match execute_subnet_message_result_type {
+                ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
+                    // cycles charging proceeds by prepaying for the message instruction limit
+                    // and subsequently refunding based on `message_instructions_used`
+                    // and thus `message_instructions_used` are capped
+                    // at the message instruction limit
+                    let capped_slice_instructions_used = std::cmp::min(
+                        NumInstructions::from(slice_instructions_used.get() as u64),
+                        self.install_code_instruction_limits.message(),
+                    );
+                    assert_eq!(message_instructions_used, capped_slice_instructions_used);
+                    self.update_execution_stats(
+                        canister_id,
+                        message_instructions_used,
+                        cost_schedule,
+                    );
+                }
+                ExecuteSubnetMessageResultType::Processing => {
+                    // such subnet messages should not consume any instructions
+                    assert_eq!(slice_instructions_used.get(), 0);
+                }
+                ExecuteSubnetMessageResultType::Paused => {
+                    self.paused_subnet_message_instructions.insert(
+                        canister_id,
+                        NumInstructions::from(slice_instructions_used.get() as u64),
+                    );
+                }
             }
         }
         true
@@ -1612,48 +1627,55 @@ impl ExecutionTest {
                     subnet_memory_reservation: self.subnet_memory_reservation,
                 };
                 let remaining_round_instructions_before = round_limits.instructions;
-                let (new_state, message_instructions_used) = self.exec_env.resume_install_code(
-                    state,
-                    &canister_id,
-                    self.install_code_instruction_limits.clone(),
-                    &mut round_limits,
-                    self.subnet_size(),
-                );
+                let (new_state, execute_subnet_message_result_type) =
+                    self.exec_env.resume_install_code(
+                        state,
+                        &canister_id,
+                        self.install_code_instruction_limits.clone(),
+                        &mut round_limits,
+                        self.subnet_size(),
+                    );
                 let slice_instructions_used =
                     remaining_round_instructions_before - round_limits.instructions;
                 state = new_state;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
-                if let Some(message_instructions_used) = message_instructions_used {
-                    let instructions_used_before = self
-                        .paused_subnet_message_instructions
-                        .remove(&canister_id)
-                        .unwrap_or_default();
-                    let instructions_used =
-                        NumInstructions::from(slice_instructions_used.get() as u64)
-                            + instructions_used_before;
-                    // cycles charging proceeds by prepaying for the message instruction limit
-                    // and subsequently refunding based on `message_instructions_used`
-                    // and thus `message_instructions_used` are capped
-                    // at the message instruction limit
-                    let capped_instructions_used = std::cmp::min(
-                        instructions_used,
-                        self.install_code_instruction_limits.message(),
-                    );
-                    assert_eq!(message_instructions_used, capped_instructions_used);
-                    self.update_execution_stats(
-                        canister_id,
-                        message_instructions_used,
-                        cost_schedule,
-                    );
-                } else {
-                    *self
-                        .paused_subnet_message_instructions
-                        .entry(canister_id)
-                        .or_insert(NumInstructions::from(0)) +=
-                        NumInstructions::from(slice_instructions_used.get() as u64);
-                }
+                match execute_subnet_message_result_type {
+                    ExecuteSubnetMessageResultType::Finished(message_instructions_used) => {
+                        let instructions_used_before = self
+                            .paused_subnet_message_instructions
+                            .remove(&canister_id)
+                            .unwrap_or_default();
+                        let instructions_used =
+                            NumInstructions::from(slice_instructions_used.get() as u64)
+                                + instructions_used_before;
+                        // cycles charging proceeds by prepaying for the message instruction limit
+                        // and subsequently refunding based on `message_instructions_used`
+                        // and thus `instructions_used` are capped
+                        // at the message instruction limit
+                        let capped_instructions_used = std::cmp::min(
+                            instructions_used,
+                            self.install_code_instruction_limits.message(),
+                        );
+                        assert_eq!(message_instructions_used, capped_instructions_used);
+                        self.update_execution_stats(
+                            canister_id,
+                            message_instructions_used,
+                            cost_schedule,
+                        );
+                    }
+                    ExecuteSubnetMessageResultType::Processing => {
+                        unreachable!()
+                    }
+                    ExecuteSubnetMessageResultType::Paused => {
+                        *self
+                            .paused_subnet_message_instructions
+                            .entry(canister_id)
+                            .or_insert(NumInstructions::from(0)) +=
+                            NumInstructions::from(slice_instructions_used.get() as u64);
+                    }
+                };
             }
             NextExecution::StartNew | NextExecution::ContinueLong => {
                 let mut round_limits = RoundLimits {
@@ -2033,6 +2055,7 @@ pub struct ExecutionTestBuilder {
     replica_version: ReplicaVersion,
     precompiled_universal_canister: bool,
     cost_schedule: CanisterCyclesCostSchedule,
+    subnet_admins: BTreeSet<PrincipalId>,
     network_topology: Option<NetworkTopology>,
     log_level: Option<Level>,
 }
@@ -2069,6 +2092,7 @@ impl Default for ExecutionTestBuilder {
             replica_version: ReplicaVersion::default(),
             precompiled_universal_canister: true,
             cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_admins: BTreeSet::new(),
             network_topology: None,
             log_level: Some(Level::Warning),
         }
@@ -2518,6 +2542,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
+        self.subnet_admins = subnet_admins.into_iter().collect();
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2555,6 +2584,7 @@ impl ExecutionTestBuilder {
                 self.subnet_type,
                 self.registry_settings.subnet_size,
                 self.cost_schedule,
+                self.subnet_admins,
             ));
             network_topology.set_routing_table(routing_table);
             state.metadata.network_topology = network_topology;

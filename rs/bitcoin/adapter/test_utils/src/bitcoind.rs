@@ -336,26 +336,55 @@ impl<'a> Default for Conf<'a> {
     }
 }
 
+#[derive(Debug)]
+pub enum DaemonStatus {
+    SpawnError(std::io::Error),
+    ClientError(RpcError),
+    Exited,
+    Timeout,
+}
+
 impl<T: RpcClientType> Daemon<T> {
     /// Create a new daemon by running the executable at the given path, network and
-    /// configration.
-    pub fn new(daemon_path: &str, network: T, conf: Conf) -> Daemon<T> {
-        let work_dir = match conf.work_dir {
+    /// configration. A daemon is considered to have started successfully only when
+    /// "Done loading" is observed from its output. Otherwise it will retry if
+    /// `num_retries` is specified.
+    pub fn new(daemon_path: &str, network: T, conf: &Conf) -> Daemon<T> {
+        const NUM_RETRIES: u8 = 2;
+        for i in 0..=NUM_RETRIES {
+            match Self::create(daemon_path, network, conf) {
+                Ok(daemon) => return daemon,
+                Err(DaemonStatus::SpawnError(err)) => {
+                    panic!("Failed to spawn daemon process {daemon_path}: {:?}", err)
+                }
+                Err(err) => {
+                    println!("Failed to start daemon {daemon_path}: {:?}", err);
+                    if i < NUM_RETRIES {
+                        println!("Try again {}/{NUM_RETRIES}", i + 1);
+                    }
+                }
+            }
+        }
+        panic!("Failed to create daemon!")
+    }
+
+    fn create(daemon_path: &str, network: T, conf: &Conf) -> Result<Daemon<T>, DaemonStatus> {
+        let work_dir = match &conf.work_dir {
             Some(dir) => {
                 fs::create_dir_all(dir.clone()).unwrap();
-                WorkDir::Persisted(dir)
+                WorkDir::Persisted(dir.clone())
             }
             None => WorkDir::Temporary(tempdir().unwrap()),
         };
 
         let conf_path = work_dir.path().join("bitcoin.conf");
-        let auth = match conf.auth {
+        let auth = match &conf.auth {
             None => {
                 let cookie_file = work_dir.path().join(network.to_string()).join(".cookie");
                 Auth::CookieFile(cookie_file)
             }
             Some(Auth::UserPass(_, _)) => panic!("Auth::UserPass is not supported"),
-            Some(auth) => auth,
+            Some(auth) => auth.clone(),
         };
         fs::write(conf_path.clone(), "").unwrap();
         let (rpc_listener, rpc_port) = get_available_port().unwrap();
@@ -382,20 +411,17 @@ impl<T: RpcClientType> Daemon<T> {
             .stdout(process::Stdio::piped());
 
         println!("Spawning daemon: {cmd:?}");
-
-        let mut process = cmd.spawn().unwrap();
-
+        // If we drop these ports before spawn(), there is some chance that another
+        // process may steal them. But if we drop these ports after spawn(), we may
+        // drop too late and the daemon could fail to bind them.
+        // This is why Daemon::new() will retry when this happens.
         drop(rpc_listener);
         drop(p2p_listener);
-
-        if let Some(status) = process.try_wait().unwrap() {
-            panic!("early exit with: {status:?}");
-        }
-        assert!(process.stderr.is_none());
-
+        let mut process = cmd.spawn().map_err(DaemonStatus::SpawnError)?;
         // Read child's stdout and wait for "Done loading"
         let stdout = process.stdout.take().expect("child stdout must be piped");
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let view_stdout = conf.view_stdout;
         std::thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
             let mut line = String::new();
@@ -404,15 +430,19 @@ impl<T: RpcClientType> Daemon<T> {
             loop {
                 line.clear();
                 match reader.read_line(&mut line) {
-                    Ok(0) => break, // EOF
+                    Ok(0) => {
+                        // This will signal early exit sooner to avoid waiting for 60 seconds.
+                        let _ = ready_tx.send(Err(DaemonStatus::Exited));
+                        break;
+                    }
                     Ok(_) => {
-                        if conf.view_stdout {
+                        if view_stdout {
                             let _ = out.write_all(line.as_bytes());
                             let _ = out.flush();
                         }
                         if !notified && line.contains("Done loading") {
-                            let _ = ready_tx.send(());
-                            notified = true; // keep mirroring until EOF
+                            let _ = ready_tx.send(Ok(()));
+                            notified = true; // keep mirroring stdout until EOF
                         }
                     }
                     Err(_) => break,
@@ -420,21 +450,21 @@ impl<T: RpcClientType> Daemon<T> {
             }
         });
 
-        let timeout = Duration::from_secs(60);
-
         ready_rx
-            .recv_timeout(timeout)
-            .unwrap_or_else(|_| panic!("expected {cmd:?} to be done loading within {timeout:?}"));
+            .recv_timeout(Duration::from_secs(60))
+            .map_err(|_| DaemonStatus::Timeout)??;
 
-        let rpc_client = RpcClient::new(network, &rpc_url, auth.clone()).unwrap();
-        let rpc_client = rpc_client.ensure_wallet().unwrap();
+        let rpc_client = RpcClient::new(network, &rpc_url, auth.clone())
+            .map_err(DaemonStatus::ClientError)?
+            .ensure_wallet()
+            .map_err(DaemonStatus::ClientError)?;
 
-        Self {
+        Ok(Self {
             _work_dir: work_dir,
             p2p_socket,
             rpc_client,
             process,
-        }
+        })
     }
 
     /// Stop the daemon process and return its [ExitStatus].

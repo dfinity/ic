@@ -42,7 +42,6 @@ rust_library(
 system_test_nns(
     name = "nr_broken_dfinity_node",
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = ["long_test"],
@@ -60,7 +59,6 @@ system_test_nns(
     name = "nr_large",
     enable_head_nns_variant = False,
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = [
@@ -79,7 +77,6 @@ system_test_nns(
 system_test_nns(
     name = "nr_local",
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = ["long_test"],
@@ -96,7 +93,6 @@ system_test_nns(
 system_test_nns(
     name = "nr_no_bless_fix_like_np",
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = ["long_test"],
@@ -113,7 +109,6 @@ system_test_nns(
 system_test_nns(
     name = "nr_seq_np_actions",
     env = ENV,
-    flaky = True,
     guestos_update = "test",
     setupos = True,
     tags = ["long_test"],

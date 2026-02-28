@@ -121,7 +121,7 @@ fn start_bitcoind<T: RpcClientType>(network: T) -> Daemon<T> {
     let name = format!("{}_CORE_PATH", T::NAME.to_uppercase());
     let path = std::env::var(&name).unwrap_or_else(|_| panic!("Failed to get {name} env variable"));
 
-    Daemon::new(&path, network, conf)
+    Daemon::new(&path, network, &conf)
 }
 
 fn start_client<T: RpcClientType>(
