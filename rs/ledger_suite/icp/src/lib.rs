@@ -4,7 +4,9 @@ use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_canister_core::archive::{Archive, ArchiveCanisterWasm};
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
+use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_core::{
     approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
@@ -473,6 +475,70 @@ pub struct LedgerCanisterInitPayload(pub LedgerCanisterPayload);
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct LedgerCanisterUpgradePayload(pub LedgerCanisterPayload);
 
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub struct ChangeArchiveOptions {
+    pub trigger_threshold: Option<usize>,
+    pub num_blocks_to_archive: Option<usize>,
+    pub node_max_memory_size_bytes: Option<u64>,
+    pub max_message_size_bytes: Option<u64>,
+    pub controller_id: Option<PrincipalId>,
+    pub more_controller_ids: Option<Vec<PrincipalId>>,
+    pub cycles_for_archive_creation: Option<u64>,
+    pub max_transactions_per_response: Option<u64>,
+}
+
+impl ChangeArchiveOptions {
+    pub fn apply<Rt: Runtime, Wasm: ArchiveCanisterWasm>(self, archive: &mut Archive<Rt, Wasm>) {
+        if let Some(trigger_threshold) = self.trigger_threshold {
+            archive.trigger_threshold = trigger_threshold;
+        }
+        if let Some(num_blocks_to_archive) = self.num_blocks_to_archive {
+            archive.num_blocks_to_archive = num_blocks_to_archive;
+        }
+        if let Some(node_max_memory_size_bytes) = self.node_max_memory_size_bytes {
+            archive.node_max_memory_size_bytes = node_max_memory_size_bytes;
+        }
+        if let Some(max_message_size_bytes) = self.max_message_size_bytes {
+            archive.max_message_size_bytes = max_message_size_bytes;
+        }
+        if let Some(controller_id) = self.controller_id {
+            archive.controller_id = controller_id;
+        }
+        if let Some(more_controller_ids) = self.more_controller_ids {
+            archive.more_controller_ids = Some(more_controller_ids);
+        }
+        if let Some(cycles_for_archive_creation) = self.cycles_for_archive_creation {
+            archive.cycles_for_archive_creation = cycles_for_archive_creation;
+        }
+        if let Some(max_transactions_per_response) = self.max_transactions_per_response {
+            archive.max_transactions_per_response = Some(max_transactions_per_response);
+        }
+    }
+}
+
+impl TryFrom<ChangeArchiveOptions> for ArchiveOptions {
+    type Error = String;
+
+    fn try_from(change_archive_options: ChangeArchiveOptions) -> Result<Self, Self::Error> {
+        Ok(Self {
+            trigger_threshold: change_archive_options
+                .trigger_threshold
+                .ok_or("trigger_threshold must be set in ChangeArchiveOptions")?,
+            num_blocks_to_archive: change_archive_options
+                .num_blocks_to_archive
+                .ok_or("num_blocks_to_archive must be set in ChangeArchiveOptions")?,
+            node_max_memory_size_bytes: change_archive_options.node_max_memory_size_bytes,
+            max_message_size_bytes: change_archive_options.max_message_size_bytes,
+            controller_id: change_archive_options
+                .controller_id
+                .ok_or("controller_id must be set in ChangeArchiveOptions")?,
+            more_controller_ids: change_archive_options.more_controller_ids,
+            cycles_for_archive_creation: change_archive_options.cycles_for_archive_creation,
+            max_transactions_per_response: change_archive_options.max_transactions_per_response,
+        })
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -480,6 +546,9 @@ pub struct UpgradeArgs {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feature_flags: Option<FeatureFlags>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
 // This is how we pass arguments to 'init' in main.rs
@@ -660,6 +729,7 @@ impl LedgerCanisterInitPayloadBuilder {
 pub struct LedgerCanisterUpgradePayloadBuilder {
     icrc1_minting_account: Option<Account>,
     feature_flags: Option<FeatureFlags>,
+    change_archive_options: Option<ChangeArchiveOptions>,
 }
 
 impl LedgerCanisterUpgradePayloadBuilder {
@@ -667,6 +737,7 @@ impl LedgerCanisterUpgradePayloadBuilder {
         Self {
             icrc1_minting_account: None,
             feature_flags: None,
+            change_archive_options: None,
         }
     }
 
@@ -675,11 +746,17 @@ impl LedgerCanisterUpgradePayloadBuilder {
         self
     }
 
+    pub fn change_archive_options(mut self, change_archive_options: ChangeArchiveOptions) -> Self {
+        self.change_archive_options = Some(change_archive_options);
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterUpgradePayload, String> {
         Ok(LedgerCanisterUpgradePayload(
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
                 icrc1_minting_account: self.icrc1_minting_account,
                 feature_flags: self.feature_flags,
+                change_archive_options: self.change_archive_options,
             })),
         ))
     }

@@ -1,6 +1,6 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{api::time, trap};
-use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
+use ic_ledger_canister_core::archive::{Archive, ArchiveCanisterWasm};
 use ic_ledger_canister_core::blockchain::{BlockDataContainer, Blockchain};
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
@@ -31,7 +31,8 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::sync::RwLock;
+use std::ops::DerefMut;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[cfg(test)]
@@ -567,6 +568,37 @@ impl Ledger {
         }
         if let Some(feature_flags) = args.feature_flags {
             self.feature_flags = feature_flags;
+        }
+        if let Some(change_archive_options) = args.change_archive_options {
+            let new_archive = {
+                let mut maybe_archive = self.blockchain.archive.write().expect(
+                    "BUG: should be unreachable since upgrade has exclusive write access to the ledger",
+                );
+                match maybe_archive.deref_mut() {
+                    Some(archive) => {
+                        change_archive_options.apply(archive);
+                        None
+                    }
+                    None => {
+                        // Need to first create the Archive instance in order to apply the options.
+                        // The options also need to have all the required fields set, otherwise the Archive instance won't be created.
+                        let archive_options =
+                            ic_ledger_canister_core::archive::ArchiveOptions::try_from(
+                                change_archive_options,
+                            )
+                            .unwrap_or_else(|e| {
+                                panic!(
+                                    "No archive configured, and ChangeArchiveOptions did not specify all mandatory fields: {}",
+                                    e
+                                )
+                            });
+                        Some(Arc::new(RwLock::new(Some(Archive::new(archive_options)))))
+                    }
+                }
+            };
+            if let Some(archive) = new_archive {
+                self.blockchain.archive = archive;
+            }
         }
     }
 
