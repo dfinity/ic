@@ -390,7 +390,7 @@ impl SubnetActor {
         // Ignore the certified set if it covers fewer than 2/3 of the subnet's nodes,
         // since the subnet cannot make progress below that threshold anyway.
         let certified_members = self.certified_members.load();
-        let min_members = (self.subnet.nodes.len() * 2 + 2) / 3;
+        let min_members = (self.subnet.nodes.len() * 2).div_ceil(3);
         let certified_set_sufficient = certified_members
             .as_deref()
             .is_some_and(|m| m.len() >= min_members);
@@ -398,10 +398,10 @@ impl SubnetActor {
         let healthy_nodes: Vec<Arc<Node>> = preliminary_healthy
             .into_iter()
             .filter(|(node, _)| {
-                if let Some(members) = certified_members.as_deref() {
-                    if certified_set_sufficient {
-                        return members.contains(&node.id);
-                    }
+                if let Some(members) = certified_members.as_deref()
+                    && certified_set_sufficient
+                {
+                    return members.contains(&node.id);
                 }
                 true
             })
