@@ -150,22 +150,22 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-#[cfg(feature = "canbench-rs")]
-mod benches;
+pub mod disburse_maturity;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
+pub mod test_data;
 #[cfg(test)]
 mod tests;
+pub mod voting_power_snapshots;
 
-pub mod create_neuron;
-pub mod disburse_maturity;
-pub mod test_data;
-#[cfg(feature = "tla")]
-pub mod tla;
+#[cfg(feature = "canbench-rs")]
+mod benches;
+
 #[macro_use]
 pub mod tla_macros;
-pub mod voting_power_snapshots;
+#[cfg(feature = "tla")]
+pub mod tla;
 
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;

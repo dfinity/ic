@@ -12,7 +12,6 @@ on the process that this file is part of, see
 * Added an optional field `max_ingress_bytes_per_block` to `CreateSubnetPayload`
 and `UpdateSubnetPayload` which, when present, will set a limit on how big the ingress payload can
 be in blocks produced by the created/updated subnet.
-* A `create_neuron` method to create neurons through staking ICPs using the ICRC2 standard.
 
 ## Changed
 
