@@ -1,7 +1,7 @@
 use super::*;
 
+use crate::pb::v1::SelfDescribingValue as SelfDescribingValuePb;
 use crate::{
-    proposals::self_describing::LocallyDescribableProposalAction,
     temporarily_disable_bless_alternative_guest_os_version_proposals,
     temporarily_enable_bless_alternative_guest_os_version_proposals,
 };
@@ -260,8 +260,9 @@ fn test_bless_alternative_guest_os_version_to_self_describing() {
         }),
     };
 
-    let value =
-        SelfDescribingValue::from(bless_alternative_guest_os_version.to_self_describing_value());
+    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(
+        bless_alternative_guest_os_version,
+    ));
 
     assert_eq!(
         value,

@@ -1,11 +1,8 @@
 use super::*;
 
-use crate::{
-    pb::v1::{
-        Account, Vote,
-        manage_neuron::{claim_or_refresh, configure::Operation, disburse::Amount, set_following},
-    },
-    proposals::self_describing::LocallyDescribableProposalAction,
+use crate::pb::v1::{
+    Account, SelfDescribingValue as SelfDescribingValuePb, Vote,
+    manage_neuron::{claim_or_refresh, configure::Operation, disburse::Amount, set_following},
 };
 
 use ic_base_types::PrincipalId;
@@ -19,15 +16,13 @@ fn assert_manage_neuron_self_describing_value_is(
     manage_neuron: ManageNeuron,
     expected: SelfDescribingValue,
 ) {
-    let value = manage_neuron.to_self_describing_value();
-    let value = SelfDescribingValue::from(value);
+    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(manage_neuron));
     assert_eq!(value, expected);
 }
 
 #[track_caller]
 fn assert_command_self_describing_value_is(command: Command, expected: SelfDescribingValue) {
-    let value = crate::pb::v1::SelfDescribingValue::from(command);
-    let value = SelfDescribingValue::from(value);
+    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(command));
     assert_eq!(value, expected);
 }
 

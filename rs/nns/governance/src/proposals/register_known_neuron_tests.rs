@@ -1,10 +1,12 @@
 use super::*;
 
-use crate::proposals::self_describing::LocallyDescribableProposalAction;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
-    pb::v1::{KnownNeuron, KnownNeuronData, Topic, governance_error::ErrorType},
+    pb::v1::{
+        KnownNeuron, KnownNeuronData, SelfDescribingValue as SelfDescribingValuePb, Topic,
+        governance_error::ErrorType,
+    },
     proposals::register_known_neuron::{
         KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN,
     },
@@ -513,8 +515,7 @@ fn test_known_neuron_to_self_describing() {
         }),
     };
 
-    let action = known_neuron.to_self_describing_action();
-    let value = SelfDescribingValue::from(action.value.unwrap());
+    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(known_neuron));
 
     assert_eq!(
         value,
@@ -546,8 +547,7 @@ fn test_known_neuron_to_self_describing_empty_fields() {
         }),
     };
 
-    let action = known_neuron.to_self_describing_action();
-    let value = SelfDescribingValue::from(action.value.unwrap());
+    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(known_neuron));
 
     assert_eq!(
         value,
