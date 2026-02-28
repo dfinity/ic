@@ -144,7 +144,7 @@ pub struct Health {
     #[clap(env, long, default_value = "5s", value_parser = parse_duration)]
     pub health_update_interval: Duration,
 
-    /// Timeout for health check and certified membership fetch requests.
+    /// Timeout for the health check request.
     /// This includes connection phase and the actual HTTP request.
     /// Should be longer than HTTP client connect timeout.
     #[clap(env, long, default_value = "4s", value_parser = parse_duration)]
