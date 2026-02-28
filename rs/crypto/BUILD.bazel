@@ -166,9 +166,19 @@ rust_test_suite(
     name = "integration_suite",
     srcs = glob(
         ["tests/*.rs"],
+        exclude = ["tests/nidkg_transcript_size.rs"],
     ),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":crypto"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "nidkg_transcript_size",
+    srcs = ["tests/nidkg_transcript_size.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["long"],
     deps = [":crypto"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

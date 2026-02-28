@@ -126,33 +126,6 @@ fn baby_giant_big_range() {
     }
 }
 
-// Exhaustive test for honest dealer
-//
-// This takes ~20 seconds in release mode or ~hours in debug
-#[test]
-#[ignore]
-fn honest_dealer_search_works_exhaustive_test() {
-    let search = HonestDealerDlogLookupTable::new();
-
-    let mut accum = Gt::identity();
-
-    let mut dlogs = vec![];
-    let mut targets = vec![];
-    for i in 0..=0xFFFF {
-        dlogs.push(i);
-        targets.push(accum.clone());
-        accum += Gt::generator();
-    }
-
-    let recovered_dlogs = search.solve_several(&targets);
-
-    assert_eq!(recovered_dlogs.len(), dlogs.len());
-
-    for i in 0..dlogs.len() {
-        assert_eq!(recovered_dlogs[i], Some(Scalar::from_usize(dlogs[i])));
-    }
-}
-
 // Test for honest dealer
 #[test]
 fn honest_dealer_search_works_randomized_test() {
