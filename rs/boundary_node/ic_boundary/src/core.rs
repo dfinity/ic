@@ -63,7 +63,7 @@ use tracing::warn;
 
 use crate::{
     bouncer,
-    check::{Checker, Runner as CheckRunner},
+    check::{CertifiedMembershipFetcherImpl, Checker, Runner as CheckRunner},
     cli::{self, Cli},
     dns::DnsResolver,
     errors::ErrorCause,
@@ -220,18 +220,12 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
 
     // Registry Client
     let registry_client = if cli.registry.registry_local_store_path.is_some() {
-        let persister = WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry));
-
-        // Snapshotting
         Some(
             setup_registry(
                 &cli,
                 registry_snapshot.clone(),
-                persister,
-                http_client_check,
                 &metrics_registry,
                 channel_snapshot_send,
-                channel_snapshot_recv.clone(),
                 &mut tasks,
             )
             .await
@@ -248,7 +242,8 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     };
 
     // IC Agent
-    let agent = if cli.rate_limiting.rate_limit_generic_canister_id.is_some()
+    let agent = if registry_client.is_some()
+        || cli.rate_limiting.rate_limit_generic_canister_id.is_some()
         || cli.obs.obs_log_anonymization_canister_id.is_some()
     {
         if cli.misc.crypto_config.is_some() && registry_client.is_none() {
@@ -288,6 +283,29 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     } else {
         None
     };
+
+    // Start the health checking and certified membership fetching
+    if registry_client.is_some() {
+        let persister = WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry));
+        let membership_fetcher = CertifiedMembershipFetcherImpl::new(
+            agent
+                .clone()
+                .expect("Agent must be available when registry is present"),
+        );
+        let checker = Checker::new(http_client_check.clone(), cli.health.health_check_timeout);
+        let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&metrics_registry));
+        let check_runner = CheckRunner::new(
+            cli.health.health_max_height_lag,
+            cli.health.health_check_interval,
+            cli.health.health_update_interval,
+            cli.health.health_membership_fetch_interval,
+            Arc::new(checker),
+            Arc::new(persister),
+            Mutex::new(channel_snapshot_recv.clone()),
+            Arc::new(membership_fetcher),
+        );
+        tasks.add("check_runner", Arc::new(check_runner));
+    }
 
     // Caching
     let cache_state = if cli.cache.cache_size.is_some() {
@@ -620,11 +638,8 @@ async fn create_agent(
 async fn setup_registry(
     cli: &Cli,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-    persister: WithMetricsPersist<Persister>,
-    http_client_check: Arc<dyn Client>,
     metrics_registry: &Registry,
     channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
-    channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     tasks: &mut TaskManager,
 ) -> Result<Arc<dyn RegistryClient>, Error> {
     let local_store = Arc::new(LocalStoreImpl::new(
@@ -647,19 +662,6 @@ async fn setup_registry(
         MetricParamsSnapshot::new(metrics_registry),
     );
     tasks.add_interval("snapshotter", Arc::new(snapshotter), 5 * SECOND);
-
-    // Start the health checking
-    let checker = Checker::new(http_client_check, cli.health.health_check_timeout);
-    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(metrics_registry));
-    let check_runner = CheckRunner::new(
-        cli.health.health_max_height_lag,
-        cli.health.health_check_interval,
-        cli.health.health_update_interval,
-        Arc::new(checker),
-        Arc::new(persister),
-        Mutex::new(channel_snapshot_recv),
-    );
-    tasks.add("check_runner", Arc::new(check_runner));
 
     Ok(registry_client)
 }
