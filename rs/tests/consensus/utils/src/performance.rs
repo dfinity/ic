@@ -19,6 +19,7 @@ use ic_types::ReplicaVersion;
 
 use futures::future::join_all;
 use slog::{Logger, error, info};
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 
@@ -28,12 +29,49 @@ const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls a
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
 
-const INGRESS_BYTES_COUNT_METRIC: &str = "consensus_ingress_message_bytes_delivered_count";
-const INGRESS_BYTES_SUM_METRIC: &str = "consensus_ingress_message_bytes_delivered_sum";
-const INGRESS_MESSAGES_SUM_METRIC: &str = "consensus_ingress_messages_delivered_sum";
-const INGRESS_MESSAGE_E2E_LATENCY_METRICS: &str =
-    "replica_http_ingress_watcher_wait_for_certification_duration_seconds";
-const TIME_TO_RECEIVE_BLOCK_METRICS: &str = "consensus_time_to_receive_block";
+const INGRESS_BYTES_DELIVERED_METRIC: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "consensus_ingress_message_bytes_delivered",
+};
+const INGRESS_MESSAGES_DELIVERED_METRIC: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "consensus_ingress_messages_delivered",
+};
+const INGRESS_MESSAGE_E2E_LATENCY_METRICS: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "replica_http_ingress_watcher_wait_for_certification_duration_seconds",
+};
+const TIME_TO_RECEIVE_RANK_0_BLOCK_METRIC: HistogramMetric = HistogramMetric::Filtered {
+    name: "consensus_time_to_receive_block",
+    filter: "rank=\"0\"",
+};
+const CONSENSUS_GET_PAYLOAD_DURATION_METRICS: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "consensus_get_payload_duration_seconds",
+};
+const CONSENSUS_VALIDATE_PAYLOAD_DURTION_METRICS: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "consensus_validate_payload_duration_seconds",
+};
+const BLOCK_ASSEMBLY_DURATION_METRICS: HistogramMetric = HistogramMetric::Unfiltered {
+    name: "ic_stripped_consensus_artifact_total_block_assembly_duration",
+};
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug)]
+enum HistogramMetric {
+    Unfiltered {
+        name: &'static str,
+    },
+    Filtered {
+        name: &'static str,
+        filter: &'static str,
+    },
+}
+
+const HISTOGRAM_METRICS_TO_TRACK: &[HistogramMetric; 7] = &[
+    INGRESS_BYTES_DELIVERED_METRIC,
+    INGRESS_MESSAGES_DELIVERED_METRIC,
+    CONSENSUS_GET_PAYLOAD_DURATION_METRICS,
+    INGRESS_MESSAGE_E2E_LATENCY_METRICS,
+    CONSENSUS_VALIDATE_PAYLOAD_DURTION_METRICS,
+    BLOCK_ASSEMBLY_DURATION_METRICS,
+    TIME_TO_RECEIVE_RANK_0_BLOCK_METRIC,
+];
 
 pub fn test_with_rt_handle(
     env: TestEnv,
@@ -176,6 +214,9 @@ pub struct TestMetrics {
     throughput_messages_per_second: f64,
     average_e2e_latency: f64,
     average_time_to_receive_block: f64,
+    average_payload_creation_duration_seconds: f64,
+    average_payload_validation_duration_seconds: f64,
+    average_block_assembly_duration_seconds: f64,
 }
 
 impl TestMetrics {
@@ -186,22 +227,36 @@ impl TestMetrics {
         duration: Duration,
     ) -> Self {
         let metrics_difference = after - before;
-        let blocks_per_second = metrics_difference.delivered_blocks as f64 / duration.as_secs_f64();
-        let throughput_bytes_per_second =
-            metrics_difference.delivered_ingress_messages_bytes as f64 / duration.as_secs_f64();
-        let throughput_messages_per_second =
-            metrics_difference.delivered_ingress_messages as f64 / duration.as_secs_f64();
-        let e2e_latency = metrics_difference.latency.average();
-        let time_to_receive_block = metrics_difference.time_to_receive_block.average();
 
         Self {
-            blocks_per_second,
             success_rate: (load_metrics.success_calls() as f64)
                 / (load_metrics.total_calls() as f64),
-            throughput_bytes_per_second,
-            throughput_messages_per_second,
-            average_e2e_latency: e2e_latency,
-            average_time_to_receive_block: time_to_receive_block,
+            blocks_per_second: metrics_difference.histogram_metrics[&INGRESS_BYTES_DELIVERED_METRIC]
+                .count as f64
+                / duration.as_secs_f64(),
+            throughput_bytes_per_second: metrics_difference.histogram_metrics
+                [&INGRESS_BYTES_DELIVERED_METRIC]
+                .sum as f64
+                / duration.as_secs_f64(),
+            throughput_messages_per_second: metrics_difference.histogram_metrics
+                [&INGRESS_MESSAGES_DELIVERED_METRIC]
+                .sum as f64
+                / duration.as_secs_f64(),
+            average_time_to_receive_block: metrics_difference.histogram_metrics
+                [&TIME_TO_RECEIVE_RANK_0_BLOCK_METRIC]
+                .average(),
+            average_e2e_latency: metrics_difference.histogram_metrics
+                [&INGRESS_MESSAGE_E2E_LATENCY_METRICS]
+                .average(),
+            average_payload_creation_duration_seconds: metrics_difference.histogram_metrics
+                [&CONSENSUS_GET_PAYLOAD_DURATION_METRICS]
+                .average(),
+            average_payload_validation_duration_seconds: metrics_difference.histogram_metrics
+                [&CONSENSUS_VALIDATE_PAYLOAD_DURTION_METRICS]
+                .average(),
+            average_block_assembly_duration_seconds: metrics_difference.histogram_metrics
+                [&BLOCK_ASSEMBLY_DURATION_METRICS]
+                .average(),
         }
     }
 }
@@ -209,33 +264,45 @@ impl TestMetrics {
 impl std::fmt::Display for TestMetrics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Success rate: {:.1}%", 100. * self.success_rate)?;
-        writeln!(f, "Block rate: {:.1} blocks/s", self.blocks_per_second)?;
+        writeln!(f, "Block rate: {:.2} blocks/s", self.blocks_per_second)?;
         writeln!(
             f,
-            "Throughput: {:.1} MiB/s, {:.1} messages/s",
+            "Throughput: {:.2} MiB/s, {:.2} messages/s",
             self.throughput_bytes_per_second / (1024. * 1024.),
             self.throughput_messages_per_second
         )?;
         writeln!(
             f,
-            "Average time to receive a rank 0 block: {:.2}s",
+            "Average time to receive a rank 0 block: {:.3}s",
             self.average_time_to_receive_block
         )?;
-        write!(
+        writeln!(
             f,
             "Avarage E2E ingress message latency: {:.2}s",
             self.average_e2e_latency
-        )
+        )?;
+        writeln!(
+            f,
+            "Avarage time to create a block payload: {:.3}s",
+            self.average_payload_creation_duration_seconds
+        )?;
+        writeln!(
+            f,
+            "Avarage time to validate a block payload: {:.3}s",
+            self.average_payload_validation_duration_seconds
+        )?;
+        write!(
+            f,
+            "Avarage time to assemble a block proposal: {:.3}s",
+            self.average_block_assembly_duration_seconds,
+        )?;
+        Ok(())
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct ConsensusMetrics {
-    delivered_blocks: u64,
-    delivered_ingress_messages: u64,
-    delivered_ingress_messages_bytes: u64,
-    latency: HistogramMetrics,
-    time_to_receive_block: HistogramMetrics,
+    histogram_metrics: BTreeMap<HistogramMetric, HistogramMetrics>,
 }
 
 impl std::ops::Sub for ConsensusMetrics {
@@ -243,68 +310,54 @@ impl std::ops::Sub for ConsensusMetrics {
 
     fn sub(self, other: Self) -> Self {
         Self {
-            delivered_blocks: self.delivered_blocks - other.delivered_blocks,
-            delivered_ingress_messages: self.delivered_ingress_messages
-                - other.delivered_ingress_messages,
-            delivered_ingress_messages_bytes: self.delivered_ingress_messages_bytes
-                - other.delivered_ingress_messages_bytes,
-            latency: self.latency - other.latency,
-            time_to_receive_block: self.time_to_receive_block - other.time_to_receive_block,
+            histogram_metrics: self
+                .histogram_metrics
+                .into_iter()
+                .map(|(name, metrics)| {
+                    (
+                        name,
+                        metrics
+                            - other
+                                .histogram_metrics
+                                .get(&name)
+                                .cloned()
+                                .unwrap_or_default(),
+                    )
+                })
+                .collect(),
         }
     }
 }
 
 async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
-    let fetcher = MetricsFetcher::new(
-        nodes.iter().cloned(),
-        vec![
-            INGRESS_BYTES_COUNT_METRIC.to_string(),
-            INGRESS_BYTES_SUM_METRIC.to_string(),
-            INGRESS_MESSAGES_SUM_METRIC.to_string(),
-        ],
-    );
+    let mut histogram_metrics = BTreeMap::new();
 
-    let metrics = fetcher
-        .fetch::<u64>()
-        .await
-        .expect("Should be able to fetch the metrics");
-
-    let avg_blocks = average(&metrics[INGRESS_BYTES_COUNT_METRIC]);
-    let avg_ingress_messages = average(&metrics[INGRESS_MESSAGES_SUM_METRIC]);
-    let avg_ingress_bytes = average(&metrics[INGRESS_BYTES_SUM_METRIC]);
-
-    ConsensusMetrics {
-        delivered_blocks: avg_blocks,
-        delivered_ingress_messages: avg_ingress_messages,
-        delivered_ingress_messages_bytes: avg_ingress_bytes,
-        latency: HistogramMetrics::fetch(INGRESS_MESSAGE_E2E_LATENCY_METRICS, None, nodes).await,
-        time_to_receive_block: HistogramMetrics::fetch(
-            TIME_TO_RECEIVE_BLOCK_METRICS,
-            Some("rank=\"0\""),
-            nodes,
-        )
-        .await,
+    for metric_name in HISTOGRAM_METRICS_TO_TRACK {
+        histogram_metrics.insert(
+            *metric_name,
+            HistogramMetrics::fetch(metric_name, nodes).await,
+        );
     }
+
+    ConsensusMetrics { histogram_metrics }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 struct HistogramMetrics {
     sum: f64,
     count: f64,
 }
 
 impl HistogramMetrics {
-    async fn fetch(metrics_name: &str, filter: Option<&str>, nodes: &[IcNodeSnapshot]) -> Self {
-        let (metrics_sum, metrics_count) = if let Some(filter) = filter {
-            (
-                format!("{metrics_name}_sum{{{filter}}}"),
-                format!("{metrics_name}_count{{{filter}}}"),
-            )
-        } else {
-            (
-                format!("{metrics_name}_sum"),
-                format!("{metrics_name}_count"),
-            )
+    async fn fetch(metric: &HistogramMetric, nodes: &[IcNodeSnapshot]) -> Self {
+        let (metrics_sum, metrics_count) = match metric {
+            HistogramMetric::Unfiltered { name } => {
+                (format!("{name}_sum"), format!("{name}_count"))
+            }
+            HistogramMetric::Filtered { name, filter } => (
+                format!("{name}_sum{{{filter}}}"),
+                format!("{name}_count{{{filter}}}"),
+            ),
         };
 
         let fetcher = MetricsFetcher::new(
@@ -347,6 +400,7 @@ pub async fn persist_metrics(
     latency: Duration,
     bandwidth_bits_per_seconds: u32,
     subnet_size: usize,
+    max_ingress_bytes_per_block: Option<u64>, // None means the default value
     log: &Logger,
 ) {
     // elastic search url
@@ -367,6 +421,7 @@ pub async fn persist_metrics(
                 "latency_seconds": latency.as_secs_f64(),
                 "bandwith_bits_per_second": bandwidth_bits_per_seconds,
                 "subnet_size": subnet_size,
+                "max_ingress_bytes_per_block": max_ingress_bytes_per_block.unwrap_or(ic_limits::MAX_INGRESS_BYTES_PER_BLOCK),
             },
             "benchmark_results": {
                 "success_rate": metrics.success_rate,
@@ -375,6 +430,9 @@ pub async fn persist_metrics(
                 "throughput_messages_per_second": metrics.throughput_messages_per_second,
                 "average_e2e_latency": metrics.average_e2e_latency,
                 "average_time_to_receive_block": metrics.average_time_to_receive_block,
+                "average_payload_creation_duration_seconds": metrics.average_payload_creation_duration_seconds,
+                "average_payload_validation_duration_seconds": metrics.average_payload_validation_duration_seconds,
+                "average_block_assembly_duration_seconds": metrics.average_block_assembly_duration_seconds,
             }
         }
     );
@@ -415,12 +473,6 @@ pub async fn persist_metrics(
             )
         }
     }
-}
-
-fn average(nums: &[u64]) -> u64 {
-    assert!(!nums.is_empty());
-
-    nums.iter().sum::<u64>() / (nums.len() as u64)
 }
 
 fn average_f64(nums: &[f64]) -> f64 {
