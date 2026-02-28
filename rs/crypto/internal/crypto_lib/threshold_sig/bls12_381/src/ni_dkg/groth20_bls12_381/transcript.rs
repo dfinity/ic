@@ -11,6 +11,7 @@ use crate::types as threshold_types;
 use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
+use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::ops::{AddAssign, MulAssign};
@@ -209,18 +210,18 @@ fn compute_transcript(
             LagrangeCoefficients::at_zero(&indices).into_coefficients()
         };
 
-        let mut combined = Vec::with_capacity(threshold.get() as usize);
-
-        // TODO(CRP-2550) this loop can run in parallel
-        for i in 0..threshold.get() as usize {
-            let points: Vec<_> = individual_public_coefficients
-                .values()
-                .map(|pc| &pc.coefficients[i].0)
-                .collect();
-            combined.push(crate::types::PublicKey(
-                G2Projective::muln_affine_vartime_ref(&points, &coefficients).to_affine(),
-            ));
-        }
+        let combined: Vec<_> = (0..threshold.get() as usize)
+            .into_par_iter()
+            .map(|i| {
+                let points: Vec<_> = individual_public_coefficients
+                    .values()
+                    .map(|pc| pc.coefficients[i].0.clone())
+                    .collect();
+                crate::types::PublicKey(
+                    G2Projective::muln_affine_vartime(&points, &coefficients).to_affine(),
+                )
+            })
+            .collect();
 
         let combined_public_coefficients = threshold_types::PublicCoefficients::new(combined);
         // This type conversion is needed because of the internal/CSP type duplication.
@@ -262,7 +263,7 @@ pub fn compute_threshold_signing_key(
     let shares_from_each_dealer: Result<BTreeMap<NodeIndex, threshold_types::SecretKey>, _> =
         transcript
             .receiver_data
-            .iter()
+            .par_iter()
             .map(|(dealer_index, encrypted_shares)| {
                 let secret_key = decrypt(
                     encrypted_shares,

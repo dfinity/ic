@@ -16,6 +16,7 @@ use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
     EncryptionKeyInstance, EncryptionKeyPop, prove_pop, verify_pop,
 };
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{HashedMap, random_oracle};
+use rayon::prelude::*;
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::CiphertextIntegrityError::{
     CrszVectorsLengthMismatch, InvalidNidkgCiphertext,
@@ -219,7 +220,7 @@ impl BTENode {
             b: G2Affine::deserialize_unchecked(&node.b).expect("Malformed secret key at BTENode.b"),
             d_t: node
                 .d_t
-                .iter()
+                .par_iter()
                 .map(|g2| {
                     G2Affine::deserialize_unchecked(&g2)
                         .expect("Malformed secret key at BTENode.d_t")
@@ -227,7 +228,7 @@ impl BTENode {
                 .collect(),
             d_h: node
                 .d_h
-                .iter()
+                .par_iter()
                 .map(|g2| {
                     G2Affine::deserialize_unchecked(&g2)
                         .expect("Malformed secret key at BTENode.d_h")
@@ -518,19 +519,24 @@ impl SecretKey {
                 b_blind += (&f_acc + &sys.f[n]) * &delta;
 
                 let e_blind = (&sys.h * &delta) + &node.e;
-                let mut d_t_blind = LinkedList::new();
-                let mut k = n + 1;
-                d_t.iter().for_each(|d| {
-                    let tmp = (&sys.f[k] * &delta) + d;
-                    d_t_blind.push_back(tmp.to_affine());
-                    k += 1;
-                });
 
-                let mut d_h_blind = Vec::new();
-                node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-                    let tmp = (f * &delta) + d;
-                    d_h_blind.push(tmp);
-                });
+                let d_t_vec: Vec<_> = d_t.iter().collect();
+                let d_t_blind_vec: Vec<G2Affine> = d_t_vec
+                    .par_iter()
+                    .enumerate()
+                    .map(|(i, d)| (&sys.f[n + 1 + i] * &delta + *d).to_affine())
+                    .collect();
+                let mut d_t_blind = LinkedList::new();
+                d_t_blind_vec
+                    .into_iter()
+                    .for_each(|d| d_t_blind.push_back(d));
+
+                let d_h_blind: Vec<G2Projective> = node
+                    .d_h
+                    .par_iter()
+                    .zip(sys.f_h.par_iter())
+                    .map(|(d, f)| (f * &delta) + d)
+                    .collect();
                 let d_h_blind = G2Projective::batch_normalize(&d_h_blind);
 
                 self.bte_nodes.push_back(BTENode {
@@ -554,20 +560,26 @@ impl SecretKey {
         let e = &sys.h * &delta + &node.e;
         b_acc += f_acc * &delta;
 
-        let mut d_t_blind = LinkedList::new();
         // Typically `d_t_blind` remains empty.
         // It is only nontrivial if `epoch` is less than LAMBDA_T bits.
-        let mut k = epoch.len();
-        d_t.iter().for_each(|d| {
-            let tmp = (&sys.f[k] * &delta) + d;
-            d_t_blind.push_back(tmp.to_affine());
-            k += 1;
-        });
-        let mut d_h_blind = Vec::new();
-        node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-            let tmp = f * &delta + d;
-            d_h_blind.push(tmp.to_affine());
-        });
+        let epoch_len = epoch.len();
+        let d_t_vec: Vec<_> = d_t.iter().collect();
+        let d_t_blind_vec: Vec<G2Affine> = d_t_vec
+            .par_iter()
+            .enumerate()
+            .map(|(i, d)| (&sys.f[epoch_len + i] * &delta + *d).to_affine())
+            .collect();
+        let mut d_t_blind = LinkedList::new();
+        d_t_blind_vec
+            .into_iter()
+            .for_each(|d| d_t_blind.push_back(d));
+
+        let d_h_blind: Vec<G2Affine> = node
+            .d_h
+            .par_iter()
+            .zip(sys.f_h.par_iter())
+            .map(|(d, f)| (f * &delta + d).to_affine())
+            .collect();
 
         self.bte_nodes.push_back(BTENode {
             tau,
@@ -604,7 +616,7 @@ impl SecretKey {
         Self {
             bte_nodes: secret_key
                 .bte_nodes
-                .iter()
+                .par_iter()
                 .map(BTENode::deserialize_unchecked)
                 .collect(),
         }
@@ -659,7 +671,7 @@ impl FsEncryptionCiphertext {
 
         let cc: Vec<[G1Affine; NUM_CHUNKS]> = ciphertext
             .ciphertext_chunks
-            .iter()
+            .par_iter()
             .map(|cj| G1Affine::batch_deserialize_array(cj).or(Err("Malformed ciphertext_chunk")))
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -696,8 +708,6 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     sys: &SysParam,
     rng: &mut R,
 ) -> (FsEncryptionCiphertext, EncryptionWitness) {
-    let receivers = recipient_and_message.len();
-
     let g1 = G1Affine::generator();
 
     let s = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
@@ -706,23 +716,14 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let r = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
     let rr = g1.batch_mul_array(&r);
 
-    // TODO(CRP-2550) This can run in parallel (n = # receivers)
-    let cc = {
-        let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
-
-        for (pk, ptext) in recipient_and_message {
+    let cc: Vec<[G1Affine; NUM_CHUNKS]> = recipient_and_message
+        .par_iter()
+        .map(|(pk, ptext)| {
             let pk_g1_tbl = G1Projective::compute_mul2_affine_tbl(pk, g1);
-
             let chunks = ptext.chunks_as_scalars();
-
-            let enc_chunks =
-                G1Projective::batch_normalize_array(&pk_g1_tbl.mul2_array(&r, &chunks));
-
-            cc.push(enc_chunks);
-        }
-
-        cc
-    };
+            G1Projective::batch_normalize_array(&pk_g1_tbl.mul2_array(&r, &chunks))
+        })
+        .collect();
 
     let id = ftau_extended(&cc, &rr, &ss, sys, epoch, associated_data);
     let id_h_tbl = G2Projective::compute_mul2_tbl(&id, &G2Projective::from(&sys.h));
@@ -800,19 +801,17 @@ pub fn dec_chunks(
     let bneg = G2Prepared::from(&bneg);
     let eneg = G2Prepared::from(&dk.e.neg());
 
-    let mut powers = Vec::with_capacity(m);
-
-    // TODO(CRP-2550) These multipairings could be computed in parallel
-    for i in 0..m {
-        let x = Gt::multipairing(&[
-            (&cj[i], G2Prepared::generator()),
-            (&crsz.rr[i], &bneg),
-            (&dk.a, &G2Prepared::from(&crsz.zz[i])),
-            (&crsz.ss[i], &eneg),
-        ]);
-
-        powers.push(x);
-    }
+    let powers: Vec<_> = (0..m)
+        .into_par_iter()
+        .map(|i| {
+            Gt::multipairing(&[
+                (&cj[i], G2Prepared::generator()),
+                (&crsz.rr[i], &bneg),
+                (&dk.a, &G2Prepared::from(&crsz.zz[i])),
+                (&crsz.ss[i], &eneg),
+            ])
+        })
+        .collect();
 
     // Find discrete log of the powers
     let linear_search = HonestDealerDlogLookupTable::new();
@@ -821,15 +820,23 @@ pub fn dec_chunks(
         let mut dlogs = linear_search.solve_several(&powers);
 
         if dlogs.iter().any(|x| x.is_none()) {
-            // Cheating dealer case
+            // Cheating dealer case — each BSGS solve can take hours
             let cheating_solver = CheatingDealerDlogSolver::new(n, m);
 
-            for i in 0..dlogs.len() {
-                if dlogs[i].is_none() {
-                    // TODO(CRP-2550) All BSGS could be run in parallel
-                    // It may take hours to brute force a cheater's discrete log.
-                    dlogs[i] = cheating_solver.solve(&powers[i]);
-                }
+            let unsolved: Vec<_> = dlogs
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| d.is_none())
+                .map(|(i, _)| i)
+                .collect();
+
+            let solved: Vec<_> = unsolved
+                .par_iter()
+                .map(|&i| (i, cheating_solver.solve(&powers[i])))
+                .collect();
+
+            for (i, result) in solved {
+                dlogs[i] = result;
             }
         }
 
@@ -878,19 +885,20 @@ pub fn verify_ciphertext_integrity(
     let g1_neg = G1Affine::generator().neg();
     let precomp_id = G2Prepared::from(&id);
 
-    // TODO(CRP-2550) Each of these checks could be run in parallel
-    for i in 0..NUM_CHUNKS {
+    let all_valid = (0..NUM_CHUNKS).into_par_iter().all(|i| {
         let r = &crsz.rr[i];
         let s = &crsz.ss[i];
         let z = G2Prepared::from(&crsz.zz[i]);
 
         let v = Gt::multipairing(&[(r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
+        v.is_identity()
+    });
 
-        if !v.is_identity() {
-            return Err(InvalidNidkgCiphertext);
-        }
+    if all_valid {
+        Ok(())
+    } else {
+        Err(InvalidNidkgCiphertext)
     }
-    Ok(())
 }
 
 #[derive(Eq, PartialEq, Debug)]

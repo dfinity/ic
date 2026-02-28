@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "@crate_index//:parking_lot",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:rayon",  # no features in bazel?
     "@crate_index//:sha2",
     "@crate_index//:subtle",
     "@crate_index//:zeroize",
@@ -40,6 +41,17 @@ rust_library(
     name = "type",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    crate_name = "ic_crypto_internal_bls12_381_type",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "type_rayon",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_features = ["rayon"],
     crate_name = "ic_crypto_internal_bls12_381_type",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
