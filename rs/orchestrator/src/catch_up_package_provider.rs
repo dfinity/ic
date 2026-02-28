@@ -703,6 +703,18 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn mock_tls_config() -> MockTlsConfig {
+        mock_tls_config_impl::<usize>(None)
+    }
+
+    pub(crate) fn mock_tls_config_called_times<Times: Into<mockall::TimesRange>>(
+        times: Times,
+    ) -> MockTlsConfig {
+        mock_tls_config_impl(Some(times))
+    }
+
+    fn mock_tls_config_impl<Times: Into<mockall::TimesRange>>(
+        opt_times: Option<Times>,
+    ) -> MockTlsConfig {
         #[derive(Debug)]
         struct NoVerify;
         impl ServerCertVerifier for NoVerify {
@@ -745,9 +757,12 @@ pub(crate) mod tests {
             .with_no_client_auth();
 
         let mut tls_config = MockTlsConfig::new();
-        tls_config
+        let expectation = tls_config
             .expect_client_config()
             .returning(move |_, _| Ok(accept_any_config.clone()));
+        if let Some(t) = opt_times {
+            expectation.times(t);
+        }
         tls_config
     }
 

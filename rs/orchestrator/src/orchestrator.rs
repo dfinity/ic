@@ -230,6 +230,7 @@ impl Orchestrator {
             Arc::clone(&metrics),
             node_id,
             Arc::clone(&crypto) as _,
+            Arc::clone(&crypto) as _,
             registry_local_store.clone(),
         );
 

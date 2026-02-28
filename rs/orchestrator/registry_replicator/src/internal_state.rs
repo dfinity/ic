@@ -355,14 +355,14 @@ impl InternalState {
                 n_record
                     .http
                     .as_ref()
-                    .and_then(|h| self.http_endpoint_to_url(h))
+                    .and_then(|h| self.https_endpoint_to_url(h))
             })
             .collect();
         urls.sort();
         Ok(urls)
     }
 
-    fn http_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
+    fn https_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
             Ok(v) => {
                 if v.is_ipv6() {
@@ -377,7 +377,7 @@ impl InternalState {
             }
         };
 
-        let url = format!("http://{}:{}/", host_str, http.port);
+        let url = format!("https://{}:{}/", host_str, http.port);
         match Url::parse(&url) {
             Ok(v) => Some(v),
             Err(e) => {
@@ -651,7 +651,7 @@ mod test {
             let local_store = Arc::new(LocalStoreImpl::new(tempdir.path()));
             let registry_client = Arc::new(FakeRegistryClient::new(local_store.clone()));
 
-            let config_nns_urls = vec![Url::parse("http://fallback:1234").unwrap()];
+            let config_nns_urls = vec![Url::parse("https://fallback:1234").unwrap()];
             let config_nns_pub_key = create_threshold_sig_public_key(0);
 
             // Initialize root subnet, public key and node record in the registry
@@ -724,7 +724,9 @@ mod test {
             );
 
             // Will first try to fetch from data found inside the registry
-            let node_api_url = internal_state.http_endpoint_to_url(&http_endpoint).unwrap();
+            let node_api_url = internal_state
+                .https_endpoint_to_url(&http_endpoint)
+                .unwrap();
             let fallback_url = &config_nns_urls[0];
             for _ in 0..MAX_CONSECUTIVE_FAILURES {
                 let result = internal_state.poll().await;
@@ -734,7 +736,7 @@ mod test {
                     // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
                     // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
                     // failed for
-                    // http://[2001:db8::1]:8080/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
+                    // https://[2001:db8::1]:8080/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
                     // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
                     // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
                     // unreachable\\\" }))\")"
@@ -752,7 +754,7 @@ mod test {
                 // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
                 // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
                 // failed for
-                // http://fallback:1234/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
+                // https://fallback:1234/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
                 // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
                 // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
                 // unreachable\\\" }))\")"

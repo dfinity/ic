@@ -18790,6 +18790,7 @@ dependencies = [
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-crypto-returning-ok",
+ "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
