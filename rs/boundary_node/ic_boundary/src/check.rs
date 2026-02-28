@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     fmt::Display,
     sync::{Arc, atomic::Ordering},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 use anyhow::Error;
@@ -12,14 +12,11 @@ use bytes::Buf;
 use candid::Principal;
 use derive_new::new;
 use http::Method;
+use ic_agent::Agent;
+use ic_agent::hash_tree::{HashTree, HashTreeNode, Label, SubtreeLookupResult};
 use ic_bn_lib_common::traits::{Run, http::Client};
-use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
-use ic_types::messages::{
-    Blob, Certificate as StateCertificate, HttpReadState, HttpReadStateContent,
-    HttpReadStateResponse, HttpRequestEnvelope, HttpStatusResponse, ReplicaHealthStatus,
-};
+use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use rand::seq::SliceRandom;
 use simple_moving_average::{SMA, SumTreeSMA};
 use strum::IntoStaticStr;
 #[allow(clippy::disallowed_types)]
@@ -33,7 +30,6 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::{debug, warn};
 
 use crate::{
-    http::RequestType,
     metrics::{MetricParamsCheck, WithMetricsCheck},
     persist::Persist,
     snapshot::RegistrySnapshot,
@@ -193,11 +189,10 @@ impl NodeActor {
 type SharedMembership = Arc<ArcSwapOption<HashSet<Principal>>>;
 
 /// MembershipActor periodically fetches the certified membership set for a subnet
-/// from one of its nodes and stores the result in shared state.
+/// via the IC Agent and stores the result in shared state.
 struct MembershipActor {
     subnet_id: Principal,
     subnet_name: String,
-    nodes: Vec<Arc<Node>>,
     membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
     certified_members: SharedMembership,
     token: CancellationToken,
@@ -211,38 +206,20 @@ impl Display for MembershipActor {
 
 impl MembershipActor {
     async fn fetch(&self) {
-        const MAX_ATTEMPTS: usize = 3;
-
-        let candidates = self
-            .nodes
-            .choose_multiple(&mut rand::thread_rng(), MAX_ATTEMPTS);
-
-        for node in candidates {
-            match self
-                .membership_fetcher
-                .fetch_certified_members(node, self.subnet_id)
-                .await
-            {
-                Ok(members) => {
-                    debug!(
-                        "{self}: certified membership: {}/{} nodes",
-                        members.len(),
-                        self.nodes.len()
-                    );
-                    self.certified_members.store(Some(Arc::new(members)));
-                    return;
-                }
-                Err(e) => {
-                    warn!(
-                        "{self}: certified membership fetch from {} failed: {e}",
-                        node
-                    );
-                }
+        match self
+            .membership_fetcher
+            .fetch_certified_members(self.subnet_id)
+            .await
+        {
+            Ok(members) => {
+                debug!("{self}: certified membership: {} nodes", members.len());
+                self.certified_members.store(Some(Arc::new(members)));
+            }
+            Err(e) => {
+                warn!("{self}: certified membership fetch failed: {e}");
+                self.certified_members.store(None);
             }
         }
-
-        warn!("{self}: all certified membership fetches failed, skipping membership filter");
-        self.certified_members.store(None);
     }
 
     async fn run(&self, fetch_interval: Duration) {
@@ -323,7 +300,6 @@ impl SubnetActor {
         let membership_actor = MembershipActor {
             subnet_id: subnet.id,
             subnet_name: subnet.to_string(),
-            nodes: subnet.nodes.clone(),
             membership_fetcher,
             certified_members: certified_members.clone(),
             token: token_nodes.child_token(),
@@ -826,120 +802,71 @@ impl<T: Check> Check for WithMetricsCheck<T> {
     }
 }
 
-/// Fetches the certified subnet membership from a node's state tree.
+/// Fetches the certified subnet membership via the IC Agent's read_state API.
 #[automock]
 #[async_trait]
 pub trait CertifiedMembershipFetcher: Send + Sync {
     async fn fetch_certified_members(
         &self,
-        node: &Node,
         subnet_id: Principal,
     ) -> Result<HashSet<Principal>, CheckError>;
 }
 
-/// Implementation that queries a node's /api/v3/subnet/<id>/read_state endpoint
+/// Implementation that uses the IC Agent to query the subnet's read_state endpoint
 /// and extracts the set of node Principals from the certified state tree.
-#[derive(new)]
 pub struct CertifiedMembershipFetcherImpl {
-    http_client: Arc<dyn Client>,
-    timeout: Duration,
+    agent: Agent,
+}
+
+impl CertifiedMembershipFetcherImpl {
+    pub fn new(agent: Agent) -> Self {
+        Self { agent }
+    }
 }
 
 #[async_trait]
 impl CertifiedMembershipFetcher for CertifiedMembershipFetcherImpl {
     async fn fetch_certified_members(
         &self,
-        node: &Node,
         subnet_id: Principal,
     ) -> Result<HashSet<Principal>, CheckError> {
-        let url = node
-            .build_url(RequestType::ReadStateSubnetV3, subnet_id)
-            .map_err(|e| CheckError::Generic(format!("Failed to build read_state URL: {e}")))?;
+        let paths: Vec<Vec<Label<Vec<u8>>>> = vec![vec![
+            Label::from("subnet"),
+            Label::from(subnet_id.as_slice()),
+            Label::from("node"),
+        ]];
 
-        let body = build_read_state_request_body(subnet_id)?;
-
-        let mut request = reqwest::Request::new(Method::POST, url);
-        *request.timeout_mut() = Some(self.timeout);
-        request.headers_mut().insert(
-            http::header::CONTENT_TYPE,
-            "application/cbor".parse().unwrap(),
-        );
-        *request.body_mut() = Some(reqwest::Body::from(body));
-
-        let response = self
-            .http_client
-            .execute(request)
+        let certificate = self
+            .agent
+            .read_subnet_state_raw(paths, subnet_id)
             .await
-            .map_err(|err| CheckError::Network(err.to_string()))?;
-
-        if response.status() != reqwest::StatusCode::OK {
-            return Err(CheckError::Http(response.status().into()));
-        }
-
-        let response_bytes = response
-            .bytes()
-            .await
-            .map_err(|e| CheckError::ReadBody(e.to_string()))?;
-
-        let read_state_resp: HttpReadStateResponse = serde_cbor::from_slice(&response_bytes)
-            .map_err(|e| CheckError::Cbor(format!("Failed to decode read_state response: {e}")))?;
-
-        let certificate: StateCertificate = serde_cbor::from_slice(&read_state_resp.certificate.0)
-            .map_err(|e| CheckError::Cbor(format!("Failed to decode certificate: {e}")))?;
+            .map_err(|e| CheckError::Generic(format!("read_state failed: {e}")))?;
 
         extract_node_ids_from_tree(&certificate.tree, subnet_id)
     }
 }
 
-fn build_read_state_request_body(subnet_id: Principal) -> Result<Vec<u8>, CheckError> {
-    let ingress_expiry = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time before epoch")
-        .as_nanos() as u64
-        + 300_000_000_000; // 5 minutes from now
-
-    let envelope = HttpRequestEnvelope {
-        content: HttpReadStateContent::ReadState {
-            read_state: HttpReadState {
-                sender: Blob(vec![0x04]), // anonymous principal
-                paths: vec![ic_crypto_tree_hash::Path::new(vec![
-                    ic_crypto_tree_hash::Label::from("subnet"),
-                    ic_crypto_tree_hash::Label::from(subnet_id.as_slice()),
-                    ic_crypto_tree_hash::Label::from("node"),
-                ])],
-                nonce: None,
-                ingress_expiry,
-            },
-        },
-        sender_pubkey: None,
-        sender_sig: None,
-        sender_delegation: None,
-    };
-
-    serde_cbor::to_vec(&envelope)
-        .map_err(|e| CheckError::Cbor(format!("Failed to encode read_state request: {e}")))
-}
-
 fn extract_node_ids_from_tree(
-    tree: &MixedHashTree,
+    tree: &HashTree<Vec<u8>>,
     subnet_id: Principal,
 ) -> Result<HashSet<Principal>, CheckError> {
-    let node_subtree = match tree.lookup(&[b"subnet" as &[u8], subnet_id.as_slice(), b"node"]) {
-        LookupStatus::Found(subtree) => subtree,
-        LookupStatus::Absent => {
-            return Err(CheckError::Generic(
-                "Node subtree absent in certificate".into(),
-            ));
-        }
-        LookupStatus::Unknown => {
-            return Err(CheckError::Generic(
-                "Node subtree unknown/pruned in certificate".into(),
-            ));
-        }
-    };
+    let node_subtree =
+        match tree.lookup_subtree(&[b"subnet" as &[u8], subnet_id.as_slice(), b"node"]) {
+            SubtreeLookupResult::Found(subtree) => subtree,
+            SubtreeLookupResult::Absent => {
+                return Err(CheckError::Generic(
+                    "Node subtree absent in certificate".into(),
+                ));
+            }
+            SubtreeLookupResult::Unknown => {
+                return Err(CheckError::Generic(
+                    "Node subtree unknown/pruned in certificate".into(),
+                ));
+            }
+        };
 
     let mut members = HashSet::new();
-    collect_node_ids(node_subtree, &mut members);
+    collect_node_ids(node_subtree.as_ref(), &mut members);
 
     if members.is_empty() {
         return Err(CheckError::Generic(
@@ -951,9 +878,9 @@ fn extract_node_ids_from_tree(
 }
 
 /// Recursively walk the tree collecting top-level Labeled keys as node Principals.
-fn collect_node_ids(tree: &MixedHashTree, members: &mut HashSet<Principal>) {
+fn collect_node_ids(tree: &HashTreeNode<Vec<u8>>, members: &mut HashSet<Principal>) {
     match tree {
-        MixedHashTree::Labeled(label, _) => match Principal::try_from_slice(label.as_bytes()) {
+        HashTreeNode::Labeled(label, _) => match Principal::try_from_slice(label.as_bytes()) {
             Ok(id) => {
                 members.insert(id);
             }
@@ -961,7 +888,7 @@ fn collect_node_ids(tree: &MixedHashTree, members: &mut HashSet<Principal>) {
                 warn!("Unexpected label in node subtree: {e}");
             }
         },
-        MixedHashTree::Fork(lr) => {
+        HashTreeNode::Fork(lr) => {
             collect_node_ids(&lr.0, members);
             collect_node_ids(&lr.1, members);
         }
@@ -979,7 +906,7 @@ pub(crate) mod test {
 
     use arc_swap::ArcSwapOption;
     use candid::Principal;
-    use ic_crypto_tree_hash::Label;
+    use ic_agent::hash_tree::{Label, empty, fork, label, leaf};
     use ic_registry_subnet_type::SubnetType;
 
     use super::*;
@@ -1075,7 +1002,7 @@ pub(crate) mod test {
         let mut fetcher = MockCertifiedMembershipFetcher::new();
         fetcher
             .expect_fetch_certified_members()
-            .returning(|_, _| Err(CheckError::Generic("test: not implemented".into())));
+            .returning(|_| Err(CheckError::Generic("test: not implemented".into())));
         Arc::new(fetcher)
     }
 
@@ -1342,46 +1269,28 @@ pub(crate) mod test {
         Ok(())
     }
 
-    fn build_node_tree(subnet_id: Principal, node_ids: &[Principal]) -> MixedHashTree {
-        let node_subtree = match node_ids.len() {
-            0 => MixedHashTree::Empty,
-            1 => MixedHashTree::Labeled(
-                Label::from(node_ids[0].as_slice()),
-                Box::new(MixedHashTree::Leaf(vec![1])),
-            ),
+    fn build_node_tree(subnet_id: Principal, node_ids: &[Principal]) -> HashTree<Vec<u8>> {
+        let node_subtree: HashTree<Vec<u8>> = match node_ids.len() {
+            0 => empty(),
+            1 => label(Label::from(node_ids[0].as_slice()), leaf(vec![1])),
             _ => {
-                let mut tree = MixedHashTree::Fork(Box::new((
-                    MixedHashTree::Labeled(
-                        Label::from(node_ids[0].as_slice()),
-                        Box::new(MixedHashTree::Leaf(vec![1])),
-                    ),
-                    MixedHashTree::Labeled(
-                        Label::from(node_ids[1].as_slice()),
-                        Box::new(MixedHashTree::Leaf(vec![1])),
-                    ),
-                )));
+                let mut tree = fork(
+                    label(Label::from(node_ids[0].as_slice()), leaf(vec![1])),
+                    label(Label::from(node_ids[1].as_slice()), leaf(vec![1])),
+                );
                 for id in &node_ids[2..] {
-                    tree = MixedHashTree::Fork(Box::new((
-                        tree,
-                        MixedHashTree::Labeled(
-                            Label::from(id.as_slice()),
-                            Box::new(MixedHashTree::Leaf(vec![1])),
-                        ),
-                    )));
+                    tree = fork(tree, label(Label::from(id.as_slice()), leaf(vec![1])));
                 }
                 tree
             }
         };
 
-        MixedHashTree::Labeled(
-            Label::from("subnet"),
-            Box::new(MixedHashTree::Labeled(
+        label(
+            "subnet",
+            label(
                 Label::from(subnet_id.as_slice()),
-                Box::new(MixedHashTree::Labeled(
-                    Label::from("node"),
-                    Box::new(node_subtree),
-                )),
-            )),
+                label("node", node_subtree),
+            ),
         )
     }
 
