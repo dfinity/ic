@@ -18127,6 +18127,7 @@ dependencies = [
  "prost 0.13.4",
  "registry-canister",
  "reqwest",
+ "serde",
  "serde_cbor",
  "slog",
  "tokio",
