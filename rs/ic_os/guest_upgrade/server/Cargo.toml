@@ -10,6 +10,7 @@ config_types = { path = "../../config/types" }
 der = { workspace = true }
 guest_upgrade_shared = { path = "../shared" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic-registry-client-helpers = { path = "../../../registry/helpers" }
 sev_guest = { path = "../../sev/guest" }
 rcgen = { workspace = true }
 sev = { workspace = true }
