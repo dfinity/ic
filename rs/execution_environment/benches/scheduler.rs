@@ -63,13 +63,13 @@ fn main() {
 
     group.bench_function("iteration", |bench| {
         bench.iter(|| {
-            round_schedule.start_iteration(&mut state, &metrics, &log);
+            round_schedule.start_iteration(&mut state, true, &metrics, &log);
             round_schedule.end_iteration(&mut state, &executed_canisters, &executed_canisters);
         });
     });
 
     // Populate the subnet schedule, even if the iteration benchmark is not run.
-    round_schedule.start_iteration(&mut state, &metrics, &log);
+    round_schedule.start_iteration(&mut state, true, &metrics, &log);
 
     group.bench_function("finish_round", |bench| {
         bench.iter(|| {

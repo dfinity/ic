@@ -111,37 +111,87 @@ struct Config {
     rate_limiting_of_heap_delta: FlagStatus,
 }
 
-/// Represents the current round schedule. It is updated on every iteration
-/// based on the canisters' current "next executions".
+/// Result of one iteration: the schedule for this iteration only.
+/// Use it to partition canisters to cores and to query iteration-specific values.
+#[derive(Debug)]
+pub struct IterationSchedule {
+    /// Ordered canister IDs. First `long_executions_count` are long executions, the
+    /// rest are new.
+    schedule: Vec<CanisterId>,
+    /// Number of scheduler cores.
+    scheduler_cores: usize,
+    /// Number of cores reserved for long executions this iteration.
+    long_execution_cores: usize,
+    /// Current iteration: number of long execution canisters.
+    long_executions_count: usize,
+}
+
+impl IterationSchedule {
+    /// Partitions the executable canisters to the available cores for execution.
+    #[allow(clippy::type_complexity)]
+    pub fn partition_canisters_to_cores(
+        &self,
+        mut canisters: BTreeMap<CanisterId, Arc<CanisterState>>,
+    ) -> (
+        Vec<Vec<Arc<CanisterState>>>,
+        BTreeMap<CanisterId, Arc<CanisterState>>,
+    ) {
+        let mut canisters_partitioned_by_cores = vec![vec![]; self.scheduler_cores];
+        let long_execution_cores = self.long_execution_cores;
+        let mut idx = 0;
+
+        for canister_id in self.schedule.iter().take(long_execution_cores) {
+            let canister_state = canisters.remove(canister_id).unwrap();
+            canisters_partitioned_by_cores[idx].push(canister_state);
+            idx += 1;
+        }
+        let new_execution_cores = self.scheduler_cores - long_execution_cores;
+        debug_assert_gt!(new_execution_cores, 0);
+        for canister_id in self.schedule.iter().skip(self.long_executions_count) {
+            let canister_state = canisters.remove(canister_id).unwrap();
+            canisters_partitioned_by_cores[idx].push(canister_state);
+            idx = long_execution_cores
+                + (idx - long_execution_cores + 1) % new_execution_cores.max(1);
+        }
+        for canister_id in self
+            .schedule
+            .iter()
+            .take(self.long_executions_count)
+            .skip(long_execution_cores)
+        {
+            let canister_state = canisters.remove(canister_id).unwrap();
+            canisters_partitioned_by_cores[idx].push(canister_state);
+            idx = (idx + 1) % self.scheduler_cores;
+        }
+
+        (canisters_partitioned_by_cores, canisters)
+    }
+
+    /// Returns `true` if no canisters were scheduled this iteration.
+    pub fn is_empty(&self) -> bool {
+        self.schedule.is_empty()
+    }
+}
+
+/// Round-level schedule and accounting: builds the iteration schedule each iteration,
+/// accumulates round-wide state, and applies priority credit at end of round.
 #[derive(Debug)]
 pub struct RoundSchedule {
     /// Immutable configuration for this round.
     config: Config,
 
-    /// Current iteration: prioritized scheduled canisters. First
-    /// `long_executions_count` are long executions, the rest are new executions.
-    schedule: Vec<CanisterId>,
-    /// Current iteration: sum of all scheduled canisters' compute allocations.
-    total_compute_allocation: AccumulatedPriority,
-    /// Current iteration: number of long execution canisters.
-    long_executions_count: usize,
-    /// Current iteration: sum of all long executions' compute allocations.
-    long_executions_compute_allocation: AccumulatedPriority,
-    /// `true` initially, `false` after the first `start_iteration()` call.
-    is_first_iteration: bool,
-
-    /// Full round: canisters that were scheduled.
+    /// Canisters that were scheduled.
     round_scheduled_canisters: BTreeSet<CanisterId>,
-    /// Full round: canisters that had a long execution at round start.
+    /// Canisters that had a long execution at round start.
     round_long_execution_canisters: BTreeSet<CanisterId>,
-    /// Full round: canisters that advanced or completed a message execution.
+    /// Canisters that advanced or completed a message execution.
     executed_canisters: BTreeSet<CanisterId>,
-    /// Full round: canisters that completed message executions.
+    /// Canisters that completed message executions.
     canisters_with_completed_messages: BTreeSet<CanisterId>,
-    /// Full round: canisters that got a "full execution" (scheduled first or
+    /// Canisters that got a "full execution" (scheduled first or
     /// consumed all inputs).
     fully_executed_canisters: BTreeSet<CanisterId>,
-    /// Full round: canisters that were heap delta rate-limited in at least one
+    /// Canisters that were heap delta rate-limited in at least one
     /// iteration.
     rate_limited_canisters: BTreeSet<CanisterId>,
 }
@@ -159,11 +209,6 @@ impl RoundSchedule {
         };
         Self {
             config,
-            schedule: vec![],
-            total_compute_allocation: ZERO,
-            long_executions_count: 0,
-            long_executions_compute_allocation: ZERO,
-            is_first_iteration: true,
             round_scheduled_canisters: BTreeSet::new(),
             executed_canisters: BTreeSet::new(),
             round_long_execution_canisters: BTreeSet::new(),
@@ -173,33 +218,20 @@ impl RoundSchedule {
         }
     }
 
-    /// Computes the number of long execution cores by dividing
-    /// `long_execution_compute_allocation` by `100%` and rounding up (as one
-    /// scheduler core is reserved to guarantee long executions progress).
-    fn long_execution_cores(&self) -> usize {
-        if self.schedule.is_empty() {
-            return 0;
-        }
-        let compute_capacity = self.compute_capacity();
-        let free_compute = compute_capacity - self.total_compute_allocation;
-        let long_executions_compute = self.long_executions_compute_allocation
-            + (free_compute * self.long_executions_count as i64 / self.schedule.len() as i64);
-        std::cmp::min(
-            self.long_executions_count,
-            ((long_executions_compute + ONE_HUNDRED_PERCENT - AccumulatedPriority::new(1))
-                / ONE_HUNDRED_PERCENT) as usize,
-        )
-    }
-
+    /// Builds this iteration's schedule from state, updates round accumulators and state,
+    /// and returns the iteration schedule for partitioning and execution.
     pub fn start_iteration(
         &mut self,
         state: &mut ReplicatedState,
+        is_first_iteration: bool,
         metrics: &SchedulerMetrics,
         logger: &ReplicaLogger,
-    ) {
-        self.total_compute_allocation = ZERO;
-        self.long_executions_count = 0;
-        self.long_executions_compute_allocation = ZERO;
+    ) -> IterationSchedule {
+        // Sum of all scheduled canisters' compute allocations.
+        let mut total_compute_allocation = ZERO;
+        let mut long_executions_count = 0usize;
+        // Sum of all long executions' compute allocations.
+        let mut long_executions_compute_allocation = ZERO;
 
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
@@ -226,43 +258,58 @@ impl RoundSchedule {
                         CanisterRoundState::new(canister, subnet_schedule.get(canister_id))
                     }
                     NextExecution::ContinueLong => {
-                        if self.is_first_iteration {
+                        if is_first_iteration {
                             self.round_long_execution_canisters.insert(*canister_id);
                         }
                         let rs =
                             CanisterRoundState::new(canister, subnet_schedule.get(canister_id));
-                        self.long_executions_count += 1;
-                        self.long_executions_compute_allocation += rs.compute_allocation;
+                        long_executions_count += 1;
+                        long_executions_compute_allocation += rs.compute_allocation;
                         rs
                     }
                     NextExecution::None | NextExecution::ContinueInstallCode => return None,
                 };
 
-                self.total_compute_allocation += canister_round_state.compute_allocation;
+                total_compute_allocation += canister_round_state.compute_allocation;
                 self.round_scheduled_canisters.insert(*canister_id);
 
                 Some(canister_round_state)
             })
             .collect();
         schedule.sort();
-        self.schedule = schedule.into_iter().map(|rs| rs.canister_id).collect();
+        let schedule: Vec<CanisterId> = schedule.into_iter().map(|rs| rs.canister_id).collect();
 
-        let long_execution_cores = self.long_execution_cores();
+        // Compute the number of long execution cores by dividing
+        // `long_executions_compute_allocation` by `100%` and rounding up (as one
+        // scheduler core is reserved to guarantee long executions progress).
         let compute_capacity = self.compute_capacity();
+        let long_execution_cores = if schedule.is_empty() {
+            0
+        } else {
+            let free_compute = compute_capacity - total_compute_allocation;
+            let long_executions_compute = long_executions_compute_allocation
+                + (free_compute * long_executions_count as i64 / schedule.len() as i64);
+            std::cmp::min(
+                long_executions_count,
+                ((long_executions_compute + ONE_HUNDRED_PERCENT - AccumulatedPriority::new(1))
+                    / ONE_HUNDRED_PERCENT) as usize,
+            )
+        };
+
         // Assert there is at least `1%` of free capacity to distribute across canisters.
         // It's guaranteed by `validate_compute_allocation()`
         debug_assert_or_critical_error!(
-            self.total_compute_allocation + ONE_PERCENT <= compute_capacity,
+            total_compute_allocation + ONE_PERCENT <= compute_capacity,
             metrics.scheduler_compute_allocation_invariant_broken,
             logger,
             "{}: Total compute allocation {}% must be less than compute capacity {}%",
             SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN,
-            self.total_compute_allocation,
+            total_compute_allocation,
             compute_capacity
         );
         // If there are long executions, the `long_execution_cores` must be non-zero.
         debug_assert_or_critical_error!(
-            self.long_executions_count == 0 || long_execution_cores > 0,
+            long_executions_count == 0 || long_execution_cores > 0,
             metrics.scheduler_cores_invariant_broken,
             logger,
             "{}: Number of long execution cores {} must be more than 0",
@@ -281,13 +328,13 @@ impl RoundSchedule {
             self.config.scheduler_cores
         );
 
-        if self.is_first_iteration {
+        if is_first_iteration {
             // TODO(DSM-103): We should not consider an aborted long execution (e.g. due to
             // exceeding the paused execution limit) as fully executed, even if the canister
             // was scheduled first.
 
             // First iteration: mark the first canisters on each core as fully executed.
-            self.schedule
+            schedule
                 .iter()
                 .take(long_execution_cores)
                 .for_each(|canister| {
@@ -298,89 +345,21 @@ impl RoundSchedule {
                     subnet_schedule.get_mut(*canister).long_execution_mode =
                         LongExecutionMode::Prioritized;
                 });
-            self.schedule
+            schedule
                 .iter()
-                .skip(self.long_executions_count)
+                .skip(long_executions_count)
                 .take(self.config.scheduler_cores - long_execution_cores)
                 .for_each(|canister| {
                     self.fully_executed_canisters.insert(*canister);
                 });
         }
-        self.is_first_iteration = false;
 
-        // println!("is_first_iteration: {}", is_first_iteration);
-        // println!("schedule: {:?}", self.schedule);
-        // println!(
-        //     "heartbeat_and_timer_canisters: {:?}",
-        //     self.heartbeat_and_timer_canisters
-        // );
-    }
-
-    /// Partitions the executable Canisters to the available cores for execution.
-    ///
-    /// Returns the executable Canisters partitioned by cores and a map of
-    /// the non-executable Canisters.
-    ///
-    /// ## Example
-    ///
-    /// Given a round schedule with:
-    ///
-    /// * 1 long execution core
-    /// * 3 Canisters (ids 1-3) with pending long executions
-    /// * 5 Canisters (ids 4-8) with new executions
-    ///
-    /// The function will produce the following result:
-    ///
-    /// * Core 1 (long execution core) takes: `CanisterId 1`, `CanisterId 3`
-    /// * Core 2 takes: `CanisterId 4`,  `CanisterId 6`, `CanisterId 8`
-    /// * Core 3 takes: `CanisterId 5`,  `CanisterId 7`, `CanisterId 2`
-    #[allow(clippy::type_complexity)]
-    pub(super) fn partition_canisters_to_cores(
-        &self,
-        mut canisters: BTreeMap<CanisterId, Arc<CanisterState>>,
-    ) -> (
-        Vec<Vec<Arc<CanisterState>>>,
-        BTreeMap<CanisterId, Arc<CanisterState>>,
-    ) {
-        let mut canisters_partitioned_by_cores = vec![vec![]; self.config.scheduler_cores];
-
-        let mut idx = 0;
-        // To guarantee progress and minimize potential aborts, the first
-        // `long_execution_cores` canisters (having prioritized long execution mode) get
-        // scheduled on long execution cores.
-        let long_execution_cores = self.long_execution_cores();
-        for canister in self.schedule.iter().take(long_execution_cores) {
-            let canister_state = canisters.remove(canister).unwrap();
-            canisters_partitioned_by_cores[idx].push(canister_state);
-            idx += 1;
+        IterationSchedule {
+            schedule,
+            scheduler_cores: self.config.scheduler_cores,
+            long_execution_cores,
+            long_executions_count,
         }
-        // Canisters with no pending long executions get scheduled across new execution
-        // cores according to their round priority as the regular scheduler does. This will
-        // guarantee their reservations; and ensure low latency except immediately after a long
-        // message execution.
-        let new_execution_cores = self.config.scheduler_cores - long_execution_cores;
-        debug_assert_gt!(new_execution_cores, 0);
-        for canister in self.schedule.iter().skip(self.long_executions_count) {
-            let canister_state = canisters.remove(canister).unwrap();
-            canisters_partitioned_by_cores[idx].push(canister_state);
-            idx = long_execution_cores
-                + (idx - long_execution_cores + 1) % new_execution_cores.max(1);
-        }
-        // Remaining canisters with long pending executions get scheduled across
-        // all cores according to their priority order, starting from the next available core onto which a new
-        // execution canister would have been scheduled.
-        for canister in self
-            .schedule
-            .iter()
-            .take(self.long_executions_count)
-            .skip(long_execution_cores)
-        {
-            let canister_state = canisters.remove(canister).unwrap();
-            canisters_partitioned_by_cores[idx].push(canister_state);
-            idx = (idx + 1) % self.config.scheduler_cores;
-        }
-
-        (canisters_partitioned_by_cores, canisters)
     }
 
     pub fn end_iteration(
@@ -587,10 +566,6 @@ impl RoundSchedule {
         // default execution mode because the canister does not have a
         // pending execution anymore.
         canister_priority.long_execution_mode = LongExecutionMode::default();
-    }
-
-    pub fn schedule_length(&self) -> usize {
-        self.schedule.len()
     }
 
     /// Full round: canisters that were scheduled.

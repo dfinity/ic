@@ -1,5 +1,5 @@
-pub use self::round_schedule::RoundSchedule;
 use self::round_schedule::*;
+pub use self::round_schedule::{IterationSchedule, RoundSchedule};
 use self::scheduler_metrics::*;
 use self::threshold_signatures::*;
 use crate::ExecuteSubnetMessageResultType;
@@ -489,14 +489,19 @@ impl SchedulerImpl {
 
             // Scheduling.
             let scheduling_timer = self.metrics.round_inner_iteration_scheduling.start_timer();
-            round_schedule.start_iteration(&mut state, &self.metrics, round_log);
-            if round_schedule.schedule_length() == 0 {
+            let iteration_schedule = round_schedule.start_iteration(
+                &mut state,
+                is_first_iteration,
+                &self.metrics,
+                round_log,
+            );
+            if iteration_schedule.is_empty() {
                 break state;
             }
 
             let canisters = state.take_canister_states();
             let (mut active_canisters_partitioned_by_cores, inactive_canisters) =
-                round_schedule.partition_canisters_to_cores(canisters);
+                iteration_schedule.partition_canisters_to_cores(canisters);
 
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
