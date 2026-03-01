@@ -391,3 +391,152 @@ pub struct CanisterHttpResponsePayload {
 }
 
 impl Payload<'_> for CanisterHttpResponsePayload {}
+
+/// The result type for the `flexible_http_request` management canister endpoint.
+///
+/// ```text
+/// type flexible_http_request_result = variant {
+///   ok: vec http_request_result;
+///   err: flexible_http_request_err;
+/// };
+/// ```
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub enum FlexibleHttpRequestResult {
+    #[serde(rename = "ok")]
+    Ok(Vec<CanisterHttpResponsePayload>),
+    #[serde(rename = "err")]
+    Err(FlexibleHttpRequestErr),
+}
+
+/// The error type returned by `flexible_http_request`.
+///
+/// ```text
+/// type flexible_http_request_err = record {
+///   global_error: opt variant { ... };
+///   node_details : vec record { ... };
+///   message: text;
+/// };
+/// ```
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct FlexibleHttpRequestErr {
+    pub global_error: Option<FlexibleHttpGlobalError>,
+    pub node_details: Vec<FlexibleHttpNodeDetail>,
+    pub message: String,
+}
+
+/// Why the flexible HTTP outcall failed globally.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub enum FlexibleHttpGlobalError {
+    #[serde(rename = "invalid_parameters")]
+    InvalidParameters,
+    #[serde(rename = "timeout")]
+    Timeout,
+    #[serde(rename = "out_of_cycles")]
+    OutOfCycles,
+    #[serde(rename = "responses_too_large")]
+    ResponsesTooLarge,
+}
+
+/// Per-node detail in a flexible HTTP outcall error.
+///
+/// ```text
+/// record {
+///   node_id: principal;
+///   report: http_request_resource_report;
+///   error: opt record { code: text; message: text };
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct FlexibleHttpNodeDetail {
+    pub node_id: candid::Principal,
+    pub report: HttpRequestResourceReport,
+    pub error: Option<FlexibleHttpNodeError>,
+}
+
+/// Per-node resource usage accounting for an HTTP outcall.
+///
+/// ```text
+/// type http_request_resource_report = record {
+///   raw_response_bytes: opt variant { used: nat64; exceeded: reserved };
+///   http_roundtrip_time_ms: opt variant { used: nat64; exceeded: reserved };
+///   transform_instructions: opt variant { used: nat64; exceeded: reserved };
+///   transformed_response_bytes: opt variant { used: nat64; exceeded: reserved };
+///   cycles: opt variant { used: nat; exceeded: reserved };
+/// };
+/// ```
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct HttpRequestResourceReport {
+    pub raw_response_bytes: Option<ResourceUsage<u64>>,
+    pub http_roundtrip_time_ms: Option<ResourceUsage<u64>>,
+    pub transform_instructions: Option<ResourceUsage<u64>>,
+    pub transformed_response_bytes: Option<ResourceUsage<u64>>,
+    pub cycles: Option<ResourceUsage<candid::Nat>>,
+}
+
+/// Tracks whether a resource was used or exceeded its budget.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub enum ResourceUsage<T> {
+    #[serde(rename = "used")]
+    Used(T),
+    #[serde(rename = "exceeded")]
+    Exceeded,
+}
+
+/// Error details from a specific node during a flexible HTTP outcall.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct FlexibleHttpNodeError {
+    pub code: String,
+    pub message: String,
+}
+
+#[cfg(test)]
+mod flexible_result_tests {
+    use super::*;
+    use candid::{Decode, Encode, Nat};
+
+    fn roundtrip(original: &FlexibleHttpRequestResult) -> FlexibleHttpRequestResult {
+        let bytes = Encode!(original).unwrap();
+        Decode!(&bytes, FlexibleHttpRequestResult).unwrap()
+    }
+
+    fn sample_response(status: u128) -> CanisterHttpResponsePayload {
+        CanisterHttpResponsePayload {
+            status,
+            headers: vec![HttpHeader {
+                name: "content-type".to_string(),
+                value: "text/plain".to_string(),
+            }],
+            body: b"hello".to_vec(),
+        }
+    }
+
+    #[test]
+    fn ok_with_multiple_responses() {
+        let original =
+            FlexibleHttpRequestResult::Ok(vec![sample_response(200), sample_response(404)]);
+        assert_eq!(roundtrip(&original), original);
+    }
+
+    #[test]
+    fn err_roundtrip_with_nested_fields() {
+        let original = FlexibleHttpRequestResult::Err(FlexibleHttpRequestErr {
+            global_error: Some(FlexibleHttpGlobalError::Timeout),
+            node_details: vec![FlexibleHttpNodeDetail {
+                node_id: candid::Principal::from_slice(&[1, 2, 3]),
+                report: HttpRequestResourceReport {
+                    raw_response_bytes: Some(ResourceUsage::Used(1024)),
+                    http_roundtrip_time_ms: Some(ResourceUsage::Used(200)),
+                    transform_instructions: Some(ResourceUsage::Exceeded),
+                    transformed_response_bytes: None,
+                    cycles: Some(ResourceUsage::Used(Nat::from(500_000u64))),
+                },
+                error: Some(FlexibleHttpNodeError {
+                    code: "CONNECTION_REFUSED".to_string(),
+                    message: "connection refused by remote".to_string(),
+                }),
+            }],
+            message: "partial failure".to_string(),
+        });
+        assert_eq!(roundtrip(&original), original);
+    }
+}
