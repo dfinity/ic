@@ -2768,8 +2768,6 @@ fn can_record_metrics_for_a_round() {
     );
     assert_eq!(metrics.round_finalization_ingress.get_sample_count(), 1);
     assert_eq!(metrics.round_finalization_charge.get_sample_count(), 1);
-    // Compute allocation violation is not observed for newly created canisters.
-    assert_eq!(metrics.canister_compute_allocation_violation.get(), 0);
 
     // `2 * scheduler_cores` messages were executed.
     assert_eq!(
@@ -2794,16 +2792,13 @@ fn can_record_metrics_for_a_round() {
     // Bump up the round number.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // For allocation violation to happen, the canister age should be more than `100/9 = 11 rounds`
-    // plus 2 rounds already executed.
+    // Advance 11 rounds (relative to the 2 rounds already executed).
     test.advance_to_round(ExecutionRound::from(11 + 2));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     let metrics = &test.scheduler().metrics;
     // The canister age metric should be observed now.
     assert_eq!(metrics.canister_age.get_sample_sum() as i64, 12);
-    // Compute allocation violation should also be observed now.
-    assert_eq!(metrics.canister_compute_allocation_violation.get(), 1);
 }
 
 /// Check that when a canister is scheduled and can't prepay for execution, the

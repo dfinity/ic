@@ -19,7 +19,6 @@ pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invar
 
 pub struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
-    pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_log_delta_memory_usage: Histogram,
     pub(super) canister_ingress_queue_latencies: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
@@ -78,10 +77,6 @@ impl SchedulerMetrics {
                 "Number of rounds for which a canister was not scheduled.",
                 // 1, 2, 5, …, 1000, 2000, 5000
                 decimal_buckets(0, 3),
-            ),
-            canister_compute_allocation_violation: metrics_registry.int_counter(
-                "scheduler_compute_allocation_violations",
-                "Total number of canister allocation violations.",
             ),
             canister_log_delta_memory_usage: metrics_registry.histogram(
                 "canister_log_delta_memory_usage_bytes",

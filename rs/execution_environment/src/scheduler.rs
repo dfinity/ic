@@ -44,7 +44,6 @@ use ic_types::{
     Time,
 };
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
-use num_rational::Ratio;
 use prometheus::Histogram;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -608,16 +607,24 @@ impl SchedulerImpl {
             }
         }
 
-        for canister_id in round_schedule.fully_executed_canisters().iter() {
-            state
-                .metadata
-                .subnet_schedule
-                .get_mut(*canister_id)
-                .last_full_execution_round = current_round;
+        for (message_id, status) in ingress_execution_results {
+            let old_status = self
+                .ingress_history_writer
+                .set_status(&mut state, message_id, status);
+            canister_ingress_latencies.on_ingress_status_changed(old_status);
         }
 
-        // We only export metrics for "executable" canisters to ensure that the metrics
-        // are not polluted by canisters that haven't had any messages for a long time.
+        state
+    }
+
+    // TODO: Move this to `RoundSchedule::finish_round`.
+    fn export_round_metrics(
+        &self,
+        state: &ReplicatedState,
+        current_round: ExecutionRound,
+        round_schedule: &RoundSchedule,
+    ) {
+        // Export the age of all scheduled canisters.
         for canister_id in round_schedule.round_scheduled_canisters() {
             // Newly created canisters have `last_full_execution_round` set to zero,
             // and hence skew the `canister_age` metric.
@@ -635,22 +642,7 @@ impl SchedulerImpl {
             if last_full_execution_round.get() != 0 {
                 let canister_age = current_round.get() - last_full_execution_round.get();
                 self.metrics.canister_age.observe(canister_age as f64);
-                // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
-                // scheduled.
-                let canister_state = state.canister_state(canister_id).unwrap();
-                let allocation = Ratio::new(canister_state.compute_allocation().as_percent(), 100);
-                if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
-                {
-                    self.metrics.canister_compute_allocation_violation.inc();
-                }
             };
-        }
-
-        for (message_id, status) in ingress_execution_results {
-            let old_status = self
-                .ingress_history_writer
-                .set_status(&mut state, message_id, status);
-            canister_ingress_latencies.on_ingress_status_changed(old_status);
         }
         self.metrics
             .executable_canisters_per_round
@@ -662,8 +654,6 @@ impl SchedulerImpl {
         self.metrics
             .heap_delta_rate_limited_canisters_per_round
             .observe(round_schedule.rate_limited_canisters().len() as f64);
-
-        state
     }
 
     /// Executes canisters in parallel using the thread pool.
@@ -824,8 +814,10 @@ impl SchedulerImpl {
                     .extend(canister.system_state.retain_ingress_messages(not_expired));
             }
         }
+        self.metrics
+            .expired_ingress_messages_count
+            .inc_by(expired_ingress_messages.len() as u64);
         for ingress in expired_ingress_messages.iter() {
-            self.metrics.expired_ingress_messages_count.inc();
             let error = UserError::new(
                 ErrorCode::IngressMessageTimeout,
                 format!(
@@ -1473,13 +1465,16 @@ impl Scheduler for SchedulerImpl {
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
-            let subnet_call_context_manager = &mut state.metadata.subnet_call_context_manager;
+            let _timer = self
+                .metrics
+                .round_update_signature_request_contexts_duration
+                .start_timer();
 
+            let subnet_call_context_manager = &mut state.metadata.subnet_call_context_manager;
             let contexts = subnet_call_context_manager
                 .sign_with_threshold_contexts
                 .values_mut()
                 .collect();
-
             let pre_signature_stashes = &mut subnet_call_context_manager.pre_signature_stashes;
 
             update_signature_request_contexts(
@@ -1589,7 +1584,7 @@ impl Scheduler for SchedulerImpl {
                 //     );
                 // }
 
-                // Check if the invariants are still valid after the execution for active canisters.
+                // Check that invariants still hold for scheduled canisters after execution.
                 self.check_canister_invariants(
                     &round_log,
                     &current_round,
@@ -1621,6 +1616,7 @@ impl Scheduler for SchedulerImpl {
             {
                 let _timer = self.metrics.round_scheduling_duration.start_timer();
                 round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
+                self.export_round_metrics(&final_state, current_round, &round_schedule);
             }
             self.finish_round(
                 &mut final_state,

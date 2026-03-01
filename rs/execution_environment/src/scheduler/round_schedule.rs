@@ -193,7 +193,7 @@ impl RoundSchedule {
 
         // Collect all active canisters and their next executions.
         let mut schedule: Vec<CanisterRoundState> = canister_states
-            .iter_mut()
+            .iter()
             .filter_map(|(canister_id, canister)| {
                 if self.rate_limiting_of_heap_delta == FlagStatus::Enabled
                     && canister.scheduler_state.heap_delta_debit >= self.heap_delta_rate_limit
