@@ -777,40 +777,6 @@ impl CanisterManager {
         }
     }
 
-    /// Checks if the given wasm module is a Wasm64 module.
-    /// This is solely for the purpose of install code, when at the replica level
-    /// we don't know yet if the module is Wasm32/64 and we need to prepay accordingly.
-    /// In case of errors, we simply return false, assuming Wasm32.
-    /// The errors will be caught and handled by the sandbox later.
-    fn check_if_wasm64_module(&self, wasm_module_source: WasmSource) -> bool {
-        let wasm_module = match wasm_module_source.into_canister_module() {
-            Ok(wasm_module) => wasm_module,
-            Err(_err) => {
-                return false;
-            }
-        };
-
-        let decoded_wasm_module = match decode_wasm(
-            EmbeddersConfig::new().wasm_max_size,
-            Arc::new(wasm_module.as_slice().to_vec()),
-        ) {
-            Ok(decoded_wasm_module) => decoded_wasm_module,
-            Err(_err) => {
-                return false;
-            }
-        };
-
-        let parser = wasmparser::Parser::new(0);
-        for section in parser.parse_all(decoded_wasm_module.as_slice()).flatten() {
-            if let wasmparser::Payload::MemorySection(reader) = section
-                && let Some(memory) = reader.into_iter().flatten().next()
-            {
-                return memory.memory64;
-            }
-        }
-        false
-    }
-
     /// Installs code to a canister.
     ///
     /// Only the controller of the canister can install code.
@@ -860,9 +826,8 @@ impl CanisterManager {
             };
         }
 
-        let wasm_execution_mode = WasmExecutionMode::from_is_wasm64(
-            self.check_if_wasm64_module(context.wasm_source.clone()),
-        );
+        let wasm_execution_mode =
+            WasmExecutionMode::from_is_wasm64(check_if_wasm64_module(context.wasm_source.clone()));
 
         let prepaid_execution_cycles = match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => prepaid_execution_cycles,
@@ -2288,12 +2253,12 @@ impl CanisterManager {
 
         // All basic checks have passed, charge baseline instructions.
         let old_memory_usage = canister.memory_usage();
-        let mut canister_clone = canister.clone();
 
+        let baseline_instructions = self.config.canister_snapshot_baseline_instructions;
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
-            &mut canister_clone,
-            self.config.canister_snapshot_baseline_instructions,
+            canister,
+            baseline_instructions,
             subnet_size,
             state.get_own_cost_schedule(),
             // For the `load_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
@@ -2307,8 +2272,10 @@ impl CanisterManager {
                 0.into(),
             );
         };
+        round_limits.instructions -= as_round_instructions(baseline_instructions);
 
-        let (_old_execution_state, mut system_state, scheduler_state) = canister_clone.into_parts();
+        let (_old_execution_state, mut system_state, scheduler_state) =
+            canister.clone().into_parts();
 
         let (instructions_for_execution_state, new_execution_state) = {
             let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
@@ -2335,7 +2302,10 @@ impl CanisterManager {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
                     let err = CanisterManagerError::from((canister_id, err));
-                    return (Err(err), instructions_for_execution_state);
+                    return (
+                        Err(err),
+                        baseline_instructions + instructions_for_execution_state,
+                    );
                 }
             };
 
@@ -2350,6 +2320,7 @@ impl CanisterManager {
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
                             message: "Wasm exported globals of canister module and snapshot metadata do not match.".to_string(),
                         }),
+                        baseline_instructions +
                         instructions_for_execution_state,
                     );
             }
@@ -2371,7 +2342,7 @@ impl CanisterManager {
                                 canister_id,
                                 snapshot_id,
                             }),
-                            instructions_for_execution_state,
+                            baseline_instructions + instructions_for_execution_state,
                         );
                     }
                 };
@@ -2388,7 +2359,7 @@ impl CanisterManager {
                                 canister_id,
                                 snapshot_id,
                             }),
-                            instructions_for_execution_state,
+                            baseline_instructions + instructions_for_execution_state,
                         );
                     }
                 };
@@ -2445,7 +2416,7 @@ impl CanisterManager {
                             "Hook status ({snapshot_hook_status:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {hook_condition})."
                         ),
                     }),
-                    instructions_for_execution_state,
+                    baseline_instructions + instructions_for_execution_state,
                 );
             }
         }
@@ -2476,7 +2447,10 @@ impl CanisterManager {
         ) {
             Ok(validated_cycles_and_memory_usage) => validated_cycles_and_memory_usage,
             Err(err) => {
-                return (Err(err), instructions_for_execution_state);
+                return (
+                    Err(err),
+                    baseline_instructions + instructions_for_execution_state,
+                );
             }
         };
 
@@ -2531,7 +2505,7 @@ impl CanisterManager {
             .heap_delta_estimate
             .saturating_add(&new_canister.heap_delta());
 
-        (Ok(new_canister), instructions)
+        (Ok(new_canister), baseline_instructions + instructions)
     }
 
     /// Returns the canister snapshots list, or
@@ -2619,7 +2593,7 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         canister: &CanisterState,
         state: &ReplicatedState,
-        round_limits: &mut RoundLimits,
+        _round_limits: &mut RoundLimits,
     ) -> (
         Result<ReadCanisterSnapshotMetadataResponse, CanisterManagerError>,
         NumInstructions,
@@ -2642,8 +2616,8 @@ impl CanisterManager {
         let maybe_instruction_counter = globals.pop();
         debug_assert!(maybe_instruction_counter.is_some());
 
-        let num_instructions = self.config.canister_snapshot_data_baseline_instructions;
-        round_limits.instructions -= as_round_instructions(num_instructions);
+        //let num_instructions = self.config.canister_snapshot_data_baseline_instructions;
+        //round_limits.instructions -= as_round_instructions(num_instructions);
 
         let response = ReadCanisterSnapshotMetadataResponse {
             source: snapshot.source(),
@@ -2670,7 +2644,7 @@ impl CanisterManager {
                 .execution_snapshot()
                 .on_low_wasm_memory_hook_status,
         };
-        (Ok(response), num_instructions)
+        (Ok(response), NumInstructions::new(0))
     }
 
     pub(crate) fn read_snapshot_data(
@@ -3373,6 +3347,40 @@ pub fn uninstall_canister(
                 }
             }
         })
+}
+
+/// Checks if the given wasm module is a Wasm64 module.
+/// This is solely for the purpose of install code, when at the replica level
+/// we don't know yet if the module is Wasm32/64 and we need to prepay accordingly.
+/// In case of errors, we simply return false, assuming Wasm32.
+/// The errors will be caught and handled by the sandbox later.
+pub fn check_if_wasm64_module(wasm_module_source: WasmSource) -> bool {
+    let wasm_module = match wasm_module_source.into_canister_module() {
+        Ok(wasm_module) => wasm_module,
+        Err(_err) => {
+            return false;
+        }
+    };
+
+    let decoded_wasm_module = match decode_wasm(
+        EmbeddersConfig::new().wasm_max_size,
+        Arc::new(wasm_module.as_slice().to_vec()),
+    ) {
+        Ok(decoded_wasm_module) => decoded_wasm_module,
+        Err(_err) => {
+            return false;
+        }
+    };
+
+    let parser = wasmparser::Parser::new(0);
+    for section in parser.parse_all(decoded_wasm_module.as_slice()).flatten() {
+        if let wasmparser::Payload::MemorySection(reader) = section
+            && let Some(memory) = reader.into_iter().flatten().next()
+        {
+            return memory.memory64;
+        }
+    }
+    false
 }
 
 fn globals_match(g1: &[Global], g2: &[Global]) -> bool {
