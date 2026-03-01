@@ -100,14 +100,23 @@ impl PartialOrd for CanisterRoundState {
     }
 }
 
+/// Immutable configuration for a round.
+#[derive(Debug)]
+struct Config {
+    /// Total number of scheduler cores.
+    scheduler_cores: usize,
+    /// Heap delta threshold above which a canister is suspended for the round.
+    heap_delta_rate_limit: NumBytes,
+    /// Whether heap delta rate limiting is enabled.
+    rate_limiting_of_heap_delta: FlagStatus,
+}
+
 /// Represents the current round schedule. It is updated on every iteration
 /// based on the canisters' current "next executions".
 #[derive(Debug)]
 pub struct RoundSchedule {
-    /// Total number of scheduler cores.
-    scheduler_cores: usize,
-    heap_delta_rate_limit: NumBytes,
-    rate_limiting_of_heap_delta: FlagStatus,
+    /// Immutable configuration for this round.
+    config: Config,
 
     /// Current iteration: prioritized scheduled canisters. First
     /// `long_executions_count` are long executions, the rest are new executions.
@@ -143,10 +152,13 @@ impl RoundSchedule {
         heap_delta_rate_limit: NumBytes,
         rate_limiting_of_heap_delta: FlagStatus,
     ) -> Self {
-        Self {
+        let config = Config {
             scheduler_cores,
             heap_delta_rate_limit,
             rate_limiting_of_heap_delta,
+        };
+        Self {
+            config,
             schedule: vec![],
             total_compute_allocation: ZERO,
             long_executions_count: 0,
@@ -168,7 +180,7 @@ impl RoundSchedule {
         if self.schedule.is_empty() {
             return 0;
         }
-        let compute_capacity = Self::compute_capacity(self.scheduler_cores);
+        let compute_capacity = self.compute_capacity();
         let free_compute = compute_capacity - self.total_compute_allocation;
         let long_executions_compute = self.long_executions_compute_allocation
             + (free_compute * self.long_executions_count as i64 / self.schedule.len() as i64);
@@ -195,8 +207,9 @@ impl RoundSchedule {
         let mut schedule: Vec<CanisterRoundState> = canister_states
             .iter()
             .filter_map(|(canister_id, canister)| {
-                if self.rate_limiting_of_heap_delta == FlagStatus::Enabled
-                    && canister.scheduler_state.heap_delta_debit >= self.heap_delta_rate_limit
+                if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
+                    && canister.scheduler_state.heap_delta_debit
+                        >= self.config.heap_delta_rate_limit
                 {
                     // Record and filter out rate limited canisters.
                     self.rate_limited_canisters.insert(*canister_id);
@@ -235,7 +248,7 @@ impl RoundSchedule {
         self.schedule = schedule.into_iter().map(|rs| rs.canister_id).collect();
 
         let long_execution_cores = self.long_execution_cores();
-        let compute_capacity = Self::compute_capacity(self.scheduler_cores);
+        let compute_capacity = self.compute_capacity();
         // Assert there is at least `1%` of free capacity to distribute across canisters.
         // It's guaranteed by `validate_compute_allocation()`
         debug_assert_or_critical_error!(
@@ -259,13 +272,13 @@ impl RoundSchedule {
         // As one scheduler core is reserved, the `long_execution_cores` is always
         // less than `scheduler_cores`
         debug_assert_or_critical_error!(
-            long_execution_cores < self.scheduler_cores,
+            long_execution_cores < self.config.scheduler_cores,
             metrics.scheduler_cores_invariant_broken,
             logger,
             "{}: Number of long execution cores {} must be less than scheduler cores {}",
             SCHEDULER_CORES_INVARIANT_BROKEN,
             long_execution_cores,
-            self.scheduler_cores
+            self.config.scheduler_cores
         );
 
         if self.is_first_iteration {
@@ -288,7 +301,7 @@ impl RoundSchedule {
             self.schedule
                 .iter()
                 .skip(self.long_executions_count)
-                .take(self.scheduler_cores - long_execution_cores)
+                .take(self.config.scheduler_cores - long_execution_cores)
                 .for_each(|canister| {
                     self.fully_executed_canisters.insert(*canister);
                 });
@@ -329,7 +342,7 @@ impl RoundSchedule {
         Vec<Vec<Arc<CanisterState>>>,
         BTreeMap<CanisterId, Arc<CanisterState>>,
     ) {
-        let mut canisters_partitioned_by_cores = vec![vec![]; self.scheduler_cores];
+        let mut canisters_partitioned_by_cores = vec![vec![]; self.config.scheduler_cores];
 
         let mut idx = 0;
         // To guarantee progress and minimize potential aborts, the first
@@ -345,7 +358,7 @@ impl RoundSchedule {
         // cores according to their round priority as the regular scheduler does. This will
         // guarantee their reservations; and ensure low latency except immediately after a long
         // message execution.
-        let new_execution_cores = self.scheduler_cores - long_execution_cores;
+        let new_execution_cores = self.config.scheduler_cores - long_execution_cores;
         debug_assert_gt!(new_execution_cores, 0);
         for canister in self.schedule.iter().skip(self.long_executions_count) {
             let canister_state = canisters.remove(canister).unwrap();
@@ -364,7 +377,7 @@ impl RoundSchedule {
         {
             let canister_state = canisters.remove(canister).unwrap();
             canisters_partitioned_by_cores[idx].push(canister_state);
-            idx = (idx + 1) % self.scheduler_cores;
+            idx = (idx + 1) % self.config.scheduler_cores;
         }
 
         (canisters_partitioned_by_cores, canisters)
@@ -562,8 +575,8 @@ impl RoundSchedule {
     /// Returns scheduler compute capacity in accumulated priority.
     ///
     /// For the DTS scheduler, it's `(number of cores - 1) * 100%`
-    fn compute_capacity(scheduler_cores: usize) -> AccumulatedPriority {
-        ONE_HUNDRED_PERCENT * (scheduler_cores as i64 - 1)
+    fn compute_capacity(&self) -> AccumulatedPriority {
+        ONE_HUNDRED_PERCENT * (self.config.scheduler_cores as i64 - 1)
     }
 
     /// Applies priority credit and resets long execution mode.
