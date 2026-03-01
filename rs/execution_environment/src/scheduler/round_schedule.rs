@@ -100,17 +100,6 @@ impl PartialOrd for CanisterRoundState {
     }
 }
 
-/// Represents three ordered active Canister ID groups to schedule.
-#[derive(Debug, Default)]
-struct SchedulingOrder<P, N, R> {
-    /// Prioritized long executions.
-    prioritized_long_canisters: P,
-    /// New executions.
-    new_canisters: N,
-    /// To be executed when the Canisters from previous two groups are idle.
-    opportunistic_long_canisters: R,
-}
-
 /// Represents the current round schedule. It is updated on every iteration
 /// based on the canisters' current "next executions".
 #[derive(Debug)]
@@ -188,36 +177,6 @@ impl RoundSchedule {
             ((long_executions_compute + ONE_HUNDRED_PERCENT - AccumulatedPriority::new(1))
                 / ONE_HUNDRED_PERCENT) as usize,
         )
-    }
-
-    fn scheduling_order(
-        &self,
-    ) -> SchedulingOrder<
-        impl Iterator<Item = &CanisterId>,
-        impl Iterator<Item = &CanisterId>,
-        impl Iterator<Item = &CanisterId>,
-    > {
-        let long_execution_cores = self.long_execution_cores();
-
-        SchedulingOrder {
-            // To guarantee progress and minimize the potential waste of an abort, top
-            // `long_execution_cores` canisters with prioritized long execution mode and highest
-            // priority get scheduled on long execution cores.
-            prioritized_long_canisters: self.schedule.iter().take(long_execution_cores),
-            // Canisters with no pending long executions get scheduled across new execution
-            // cores according to their round priority as the regular scheduler does. This will
-            // guarantee their reservations; and ensure low latency except immediately after a long
-            // message execution.
-            new_canisters: self.schedule.iter().skip(self.long_executions_count),
-            // Remaining canisters with long pending executions get scheduled across
-            // all cores according to their priority order, starting from the next available core onto which a new
-            // execution canister would have been scheduled.
-            opportunistic_long_canisters: self
-                .schedule
-                .iter()
-                .skip(long_execution_cores)
-                .take(self.long_executions_count - long_execution_cores),
-        }
     }
 
     pub fn start_iteration(
@@ -382,15 +341,27 @@ impl RoundSchedule {
             canisters_partitioned_by_cores[idx].push(canister_state);
             idx += 1;
         }
+        // Canisters with no pending long executions get scheduled across new execution
+        // cores according to their round priority as the regular scheduler does. This will
+        // guarantee their reservations; and ensure low latency except immediately after a long
+        // message execution.
         let new_execution_cores = self.scheduler_cores - long_execution_cores;
         debug_assert_gt!(new_execution_cores, 0);
-        for canister in scheduling_order.new_canisters {
+        for canister in self.schedule.iter().skip(self.long_executions_count) {
             let canister_state = canisters.remove(canister).unwrap();
             canisters_partitioned_by_cores[idx].push(canister_state);
             idx = long_execution_cores
                 + (idx - long_execution_cores + 1) % new_execution_cores.max(1);
         }
-        for canister in scheduling_order.opportunistic_long_canisters {
+        // Remaining canisters with long pending executions get scheduled across
+        // all cores according to their priority order, starting from the next available core onto which a new
+        // execution canister would have been scheduled.
+        for canister in self
+            .schedule
+            .iter()
+            .take(self.long_executions_count)
+            .skip(long_execution_cores)
+        {
             let canister_state = canisters.remove(canister).unwrap();
             canisters_partitioned_by_cores[idx].push(canister_state);
             idx = (idx + 1) % self.scheduler_cores;
