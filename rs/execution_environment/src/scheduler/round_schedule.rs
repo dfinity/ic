@@ -54,12 +54,6 @@ pub(super) struct CanisterRoundState {
 impl CanisterRoundState {
     pub fn new(canister: &CanisterState, canister_priority: &CanisterPriority) -> Self {
         let compute_allocation = from_ca(canister.compute_allocation());
-        // println!(
-        //     "canister {:?} accumulated_priority: {}, priority_credit: {}",
-        //     canister.canister_id(),
-        //     canister_priority.accumulated_priority + compute_allocation,
-        //     canister_priority.priority_credit
-        // );
         Self {
             canister_id: canister.canister_id(),
             accumulated_priority: canister_priority.accumulated_priority + compute_allocation,
@@ -445,11 +439,6 @@ impl RoundSchedule {
         if free_allocation.get() < 0 {
             free_allocation = ZERO;
         }
-        // println!(
-        //     "round {}, free_allocation: {}",
-        //     current_round.get(),
-        //     free_allocation.get()
-        // );
 
         // Fully distribute the free allocation among all canisters, ensuring that we
         // end up with exactly zero at the end of the loop.
@@ -463,11 +452,7 @@ impl RoundSchedule {
             .collect::<Vec<_>>();
         sorted_canister_priorities.sort_by_key(|(c, p)| (std::cmp::Reverse(*p), *c));
         let mut accumulated_priority_deviation = 0.0;
-        let mut remaining_canisters = subnet_schedule.len() as i64;
-        // println!(
-        //     "sorted_canister_priorities: {:?}",
-        //     sorted_canister_priorities
-        // );
+        let mut remaining_canisters = sorted_canister_priorities.len() as i64;
         for (canister_id, priority) in sorted_canister_priorities.into_iter() {
             let canister_free_allocation = free_allocation / remaining_canisters;
             let canister_state = canister_states.get(&canister_id);
@@ -493,10 +478,6 @@ impl RoundSchedule {
                 {
                     subnet_schedule.remove(&canister_id);
                 }
-                // println!(
-                //     "Removed canister: {} with priority: {}",
-                //     canister_id, priority
-                // );
             } else {
                 // Canister with inputs or with negative AP. Bump its AP and keep it in the
                 // schedule.
@@ -529,11 +510,6 @@ impl RoundSchedule {
                 {
                     RoundSchedule::apply_priority_credit(canister_priority);
                 }
-                // println!(
-                //     "Credited canister {} free_allocation {}",
-                //     canister_id,
-                //     canister_free_allocation.get()
-                // );
             }
             remaining_canisters -= 1;
         }
@@ -541,6 +517,42 @@ impl RoundSchedule {
         metrics
             .scheduler_accumulated_priority_deviation
             .set((accumulated_priority_deviation / subnet_schedule.len() as f64).sqrt());
+
+        self.observe_round_metrics(state, current_round, metrics);
+    }
+
+    /// Exports round-level metrics derived from this schedule's accumulators.
+    fn observe_round_metrics(
+        &self,
+        state: &ReplicatedState,
+        current_round: ExecutionRound,
+        metrics: &SchedulerMetrics,
+    ) {
+        // Export the age of all scheduled canisters.
+        for canister_id in self.round_scheduled_canisters() {
+            let last_full_execution_round = if self.fully_executed_canisters.contains(canister_id) {
+                // Canister priority might have been dropped, don't look it up.
+                current_round
+            } else {
+                state
+                    .canister_priority(canister_id)
+                    .last_full_execution_round
+            };
+            // Ignore canisters that were just added to the schedule, they skew the metric.
+            if last_full_execution_round.get() != 0 {
+                let canister_age = current_round.get() - last_full_execution_round.get();
+                metrics.canister_age.observe(canister_age as f64);
+            }
+        }
+        metrics
+            .executable_canisters_per_round
+            .observe(self.round_scheduled_canisters.len() as f64);
+        metrics
+            .executed_canisters_per_round
+            .observe(self.executed_canisters.len() as f64);
+        metrics
+            .heap_delta_rate_limited_canisters_per_round
+            .observe(self.rate_limited_canisters.len() as f64);
     }
 
     /// Returns scheduler compute capacity in percent.
@@ -559,7 +571,7 @@ impl RoundSchedule {
     }
 
     /// Applies priority credit and resets long execution mode.
-    pub fn apply_priority_credit(canister_priority: &mut CanisterPriority) {
+    fn apply_priority_credit(canister_priority: &mut CanisterPriority) {
         canister_priority.accumulated_priority -=
             std::mem::take(&mut canister_priority.priority_credit);
         // Aborting a long-running execution moves the canister to the
@@ -568,32 +580,9 @@ impl RoundSchedule {
         canister_priority.long_execution_mode = LongExecutionMode::default();
     }
 
-    /// Full round: canisters that were scheduled.
+    /// Canisters that were scheduled this round.
     pub fn round_scheduled_canisters(&self) -> &BTreeSet<CanisterId> {
         &self.round_scheduled_canisters
-    }
-
-    /// Full round: canisters that advanced or completed a message execution.
-    pub(super) fn executed_canisters(&self) -> &BTreeSet<CanisterId> {
-        &self.executed_canisters
-    }
-
-    /// Full round: canisters that got a "full execution" (scheduled first or
-    /// consumed all inputs).
-    pub fn canisters_with_completed_messages(&self) -> &BTreeSet<CanisterId> {
-        &self.canisters_with_completed_messages
-    }
-
-    /// Full round: canisters that got a "full execution" (scheduled first or
-    /// consumed all inputs).
-    pub fn fully_executed_canisters(&self) -> &BTreeSet<CanisterId> {
-        &self.fully_executed_canisters
-    }
-
-    /// Full round: canisters that were heap delta rate-limited in at least one
-    /// iteration.
-    pub fn rate_limited_canisters(&self) -> &BTreeSet<CanisterId> {
-        &self.rate_limited_canisters
     }
 }
 

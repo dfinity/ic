@@ -622,45 +622,6 @@ impl SchedulerImpl {
         state
     }
 
-    // TODO: Move this to `RoundSchedule::finish_round`.
-    fn export_round_metrics(
-        &self,
-        state: &ReplicatedState,
-        current_round: ExecutionRound,
-        round_schedule: &RoundSchedule,
-    ) {
-        // Export the age of all scheduled canisters.
-        for canister_id in round_schedule.round_scheduled_canisters() {
-            // Newly created canisters have `last_full_execution_round` set to zero,
-            // and hence skew the `canister_age` metric.
-            let last_full_execution_round = if round_schedule
-                .fully_executed_canisters()
-                .contains(canister_id)
-            {
-                // Canister priority might have been dropped, don't look it up.
-                current_round
-            } else {
-                state
-                    .canister_priority(canister_id)
-                    .last_full_execution_round
-            };
-            if last_full_execution_round.get() != 0 {
-                let canister_age = current_round.get() - last_full_execution_round.get();
-                self.metrics.canister_age.observe(canister_age as f64);
-            };
-        }
-        self.metrics
-            .executable_canisters_per_round
-            .observe(round_schedule.round_scheduled_canisters().len() as f64);
-        self.metrics
-            .executed_canisters_per_round
-            .observe(round_schedule.executed_canisters().len() as f64);
-
-        self.metrics
-            .heap_delta_rate_limited_canisters_per_round
-            .observe(round_schedule.rate_limited_canisters().len() as f64);
-    }
-
     /// Executes canisters in parallel using the thread pool.
     ///
     /// The function is invoked in each iteration of `inner_round`.
@@ -1621,7 +1582,6 @@ impl Scheduler for SchedulerImpl {
             {
                 let _timer = self.metrics.round_scheduling_duration.start_timer();
                 round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
-                self.export_round_metrics(&final_state, current_round, &round_schedule);
             }
             self.finish_round(
                 &mut final_state,
