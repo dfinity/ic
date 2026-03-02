@@ -189,7 +189,7 @@ impl NodeActor {
 type SharedMembership = Arc<ArcSwapOption<HashSet<Principal>>>;
 
 /// MembershipActor periodically fetches the certified membership set for a subnet
-/// via the IC Agent and stores the result in shared state.
+/// via a [CertifiedMembershipFetcher] and stores the result in shared state.
 struct MembershipActor {
     subnet_id: Principal,
     subnet_name: String,
