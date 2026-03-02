@@ -192,7 +192,6 @@ type SharedMembership = Arc<ArcSwapOption<HashSet<Principal>>>;
 /// via a [CertifiedMembershipFetcher] and stores the result in shared state.
 struct MembershipActor {
     subnet_id: Principal,
-    subnet_name: String,
     membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
     certified_members: SharedMembership,
     token: CancellationToken,
@@ -200,7 +199,7 @@ struct MembershipActor {
 
 impl Display for MembershipActor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MembershipActor({})", self.subnet_name)
+        write!(f, "MembershipActor({})", self.subnet_id)
     }
 }
 
@@ -299,7 +298,6 @@ impl SubnetActor {
 
         let membership_actor = MembershipActor {
             subnet_id: subnet.id,
-            subnet_name: subnet.to_string(),
             membership_fetcher,
             certified_members: certified_members.clone(),
             token: token_nodes.child_token(),
