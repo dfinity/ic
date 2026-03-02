@@ -290,6 +290,7 @@ members = [
     "rs/nns/constants",
     "rs/nns/governance",
     "rs/nns/governance/api",
+    "rs/nns/governance/conversions",
     "rs/nns/governance/init",
     "rs/nns/governance/protobuf_generator",
     "rs/nns/gtc",
