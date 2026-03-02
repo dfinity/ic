@@ -415,6 +415,43 @@ fn test_recall_replica_versions() {
         recalled_replica_version_ids: Some(vec![version_id_1.clone()]),
     });
 
+    let subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
+    assert_eq!(
+        subnet_record.recalled_replica_version_ids,
+        vec![version_id_1.clone()]
+    );
+
+    // recalled_replica_version_ids: None, should be NOOP
+    registry.do_set_subnet_operational_level(SetSubnetOperationalLevelPayload {
+        subnet_id: Some(*SUBNET_ID),
+        operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
+        ssh_readonly_access: None,
+        ssh_node_state_write_access: None,
+        recalled_replica_version_ids: None,
+    });
+
+    let subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
+    assert_eq!(
+        subnet_record.recalled_replica_version_ids,
+        vec![version_id_1.clone()]
+    );
+
+    // recalled_replica_version_ids: vec![], should clear recalled_replica_version_ids
+    registry.do_set_subnet_operational_level(SetSubnetOperationalLevelPayload {
+        subnet_id: Some(*SUBNET_ID),
+        operational_level: None,
+        ssh_readonly_access: None,
+        ssh_node_state_write_access: None,
+        recalled_replica_version_ids: Some(vec![]),
+    });
+
+    let subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
+    assert_eq!(
+        subnet_record.recalled_replica_version_ids,
+        Vec::<String>::new()
+    );
+
+    // Overwrite with version_id_2 and version_id_3
     registry.do_set_subnet_operational_level(SetSubnetOperationalLevelPayload {
         subnet_id: Some(*SUBNET_ID),
         operational_level: None,
@@ -423,19 +460,10 @@ fn test_recall_replica_versions() {
         recalled_replica_version_ids: Some(vec![version_id_2.clone(), version_id_3.clone()]),
     });
 
-    // version_id_1 again - should be ignored
-    registry.do_set_subnet_operational_level(SetSubnetOperationalLevelPayload {
-        subnet_id: Some(*SUBNET_ID),
-        operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
-        ssh_readonly_access: None,
-        ssh_node_state_write_access: None,
-        recalled_replica_version_ids: Some(vec![version_id_1.clone()]),
-    });
-
     let subnet_record = registry.get_subnet_or_panic(*SUBNET_ID);
     assert_eq!(
         subnet_record.recalled_replica_version_ids,
-        vec![version_id_1, version_id_2, version_id_3]
+        vec![version_id_2, version_id_3]
     );
 }
 

@@ -507,7 +507,7 @@ type SetSubnetOperationalLevelPayload = record {
   ssh_node_state_write_access : opt vec NodeSshAccess;
 
   // Replica version IDs to recall for this subnet. If specified, these versions
-  // will be added to the subnet's recalled_replica_version_ids list, preventing
+  // will replace the subnet's recalled_replica_version_ids list, preventing
   // the subnet from upgrading to these versions.
   recalled_replica_version_ids : opt vec text;
 };

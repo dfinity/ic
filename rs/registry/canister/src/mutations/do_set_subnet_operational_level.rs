@@ -237,14 +237,7 @@ fn modify_subnet_record_for_set_subnet_operational_level(
     }
 
     if let Some(version_ids) = recalled_replica_version_ids {
-        for version_id in version_ids {
-            if !subnet_record
-                .recalled_replica_version_ids
-                .contains(&version_id)
-            {
-                subnet_record.recalled_replica_version_ids.push(version_id);
-            }
-        }
+        subnet_record.recalled_replica_version_ids = version_ids;
     }
 
     update(

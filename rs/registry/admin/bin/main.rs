@@ -856,7 +856,8 @@ struct ProposeToTakeSubnetOfflineForRepairsCmd {
     pub ssh_node_state_write_access: Vec<NodeSshAccessFlagValue>,
 
     /// List of replica version IDs to recall. These versions will be marked as
-    /// recalled for this subnet, preventing them from being upgraded to them.
+    /// recalled for this subnet, preventing them from being upgraded to them. If the
+    /// subnet already has a list of recalled versions, it will be overwritten.
     #[clap(long, num_args(1..), conflicts_with = "recall_current_replica_version")]
     pub recalled_replica_version_ids: Option<Vec<String>>,
 
