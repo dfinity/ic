@@ -25,7 +25,7 @@ use ic_agent::{
     Agent, AgentError,
     agent::{RejectCode, RejectResponse},
 };
-use ic_base_types::{CanisterId, NumBytes};
+use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{
     HttpHeader, HttpMethod, TransformContext, TransformFunc,
@@ -2642,8 +2642,7 @@ fn expected_cycle_cost(
             .sender(proxy_canister)
             .build(),
         request.into(),
-        &BTreeSet::new(),
-        0,
+        &BTreeSet::from([PrincipalId::new_node_test_id(0).into()]),
         &mut rand::thread_rng(),
     )
     .unwrap();

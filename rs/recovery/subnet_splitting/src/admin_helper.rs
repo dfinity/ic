@@ -10,6 +10,7 @@ const SOURCE_SUBNET_ARG: &str = "source-subnet";
 const DESTINATION_SUBNET_ARG: &str = "destination-subnet";
 const CANISTER_ID_RANGES_ARG: &str = "canister-id-ranges";
 const MIGRATION_TRACE_ARG: &str = "migration-trace";
+const SUBNET_ARG: &str = "subnet";
 
 /// Propose additions or updates to `canister_migrations`.
 ///
@@ -100,9 +101,10 @@ pub(crate) fn get_halt_subnet_at_cup_height_command(
     key: &Option<String>,
 ) -> IcAdmin {
     let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
-    admin_helper.add_propose_to_update_subnet_base(&mut ic_admin, subnet_id);
 
     ic_admin
+        .add_positional_argument("propose-to-update-subnet")
+        .add_argument(SUBNET_ARG, subnet_id)
         .add_argument(
             SUMMARY_ARG,
             quote(format!(
@@ -114,6 +116,8 @@ pub(crate) fn get_halt_subnet_at_cup_height_command(
     if let Some(key) = key {
         ic_admin.add_argument(SSH_READONLY_ACCESS_ARG, quote(key));
     }
+
+    admin_helper.add_proposer_args(&mut ic_admin);
 
     ic_admin
 }
@@ -154,10 +158,10 @@ mod tests {
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-subnet \
             --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
-            --test-neuron-proposer \
             --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe at cup height and optionally update ssh readonly access\" \
             --halt-at-cup-height true \
-            --ssh-readonly-access \"fake ssh key\""
+            --ssh-readonly-access \"fake ssh key\" \
+            --test-neuron-proposer"
         );
     }
 
