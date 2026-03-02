@@ -182,7 +182,11 @@ fn test_full_subnet_mini_chunks() {
                     states.retain(|s| !s.is_equal(&state_sync_empty));
                 }
             };
-            tokio::time::timeout(TEST_STATE_SYNC_TIMEOUT, fut)
+
+            // It should take about 40'000 / (12 * 10) * 0.16s ~= 53s to download all the chunks,
+            // not taking into account the time needed to process them, so just to be on a safe side
+            // we roughly triple the expected time to finish the state sync.
+            tokio::time::timeout(Duration::from_secs(3 * 60), fut)
                 .await
                 .unwrap();
         });
