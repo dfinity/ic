@@ -17,6 +17,7 @@ use ic_types::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU64;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{Infallible, TryFrom},
@@ -360,7 +361,7 @@ impl SubnetAvailableMemory {
         wasm_custom_sections_memory: i64,
     ) -> Self {
         // We do not apply scaling in tests that create `SubnetAvailableMemory` manually.
-        let scaling_factor = 1;
+        let scaling_factor = NonZeroU64::new(1).expect("Must be not zero");
         SubnetAvailableMemory::new_scaled(
             execution_memory,
             guaranteed_response_message_memory,
@@ -373,13 +374,13 @@ impl SubnetAvailableMemory {
         execution_memory: i64,
         guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
-        scaling_factor: u64,
+        scaling_factor: NonZeroU64,
     ) -> Self {
-        let scaling_factor = scaling_factor.max(1) as i64;
+        let divisor = scaling_factor.get() as i64;
         SubnetAvailableMemory {
-            execution_memory: execution_memory / scaling_factor,
-            guaranteed_response_message_memory: guaranteed_response_message_memory / scaling_factor,
-            wasm_custom_sections_memory: wasm_custom_sections_memory / scaling_factor,
+            execution_memory: execution_memory / divisor,
+            guaranteed_response_message_memory: guaranteed_response_message_memory / divisor,
+            wasm_custom_sections_memory: wasm_custom_sections_memory / divisor,
         }
     }
 
@@ -1649,7 +1650,12 @@ mod tests {
         assert_eq!(available.get_guaranteed_response_message_memory(), 10);
         assert_eq!(available.get_wasm_custom_sections_memory(), 4);
 
-        let available = SubnetAvailableMemory::new_scaled(20, 10, 4, 2);
+        let available = SubnetAvailableMemory::new_scaled(
+            20,
+            10,
+            4,
+            NonZeroU64::new(2).expect("Must be non zero"),
+        );
         assert_eq!(available.get_execution_memory(), 10);
         assert_eq!(available.get_guaranteed_response_message_memory(), 5);
         assert_eq!(available.get_wasm_custom_sections_memory(), 2);
