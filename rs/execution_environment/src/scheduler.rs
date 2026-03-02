@@ -895,7 +895,9 @@ impl SchedulerImpl {
                 canister.system_state.memory_allocation = MemoryAllocation::default();
                 canister.system_state.clear_canister_history();
                 // Burn the remaining balance of the canister.
-                canister.system_state.burn_remaining_balance_for_uninstall();
+                canister
+                    .system_state
+                    .burn_remaining_balance_for_uninstall(cost_schedule);
 
                 info!(
                     self.log,
@@ -933,6 +935,7 @@ impl SchedulerImpl {
     /// Messages sent to the subnet are not handled i.e. they take the slow path
     /// through message routing.
     pub fn induct_messages_on_same_subnet(&self, state: &mut ReplicatedState) {
+        let cost_schedule = state.get_own_cost_schedule();
         // Compute subnet available memory *before* taking out the canisters.
         let mut subnet_available_guaranteed_response_memory = self
             .exec_env
@@ -994,6 +997,7 @@ impl SchedulerImpl {
                                 &mut subnet_available_guaranteed_response_memory,
                                 own_subnet_type,
                                 InputQueueType::LocalSubnet,
+                                cost_schedule,
                             )
                             .map(|_| ())
                             .map_err(|(err, msg)| {
@@ -1062,6 +1066,7 @@ impl SchedulerImpl {
 
     /// Aborts paused execution above `max_paused_executions` based on scheduler priority.
     fn abort_paused_executions_above_limit(&self, state: &mut ReplicatedState) {
+        let cost_schedule = state.get_own_cost_schedule();
         let mut paused_round_states = state
             .canisters_iter()
             .filter_map(|canister| {
@@ -1080,7 +1085,8 @@ impl SchedulerImpl {
             .skip(self.config.max_paused_executions)
             .for_each(|rs| {
                 let canister = state.canister_state_mut_arc(&rs.canister_id()).unwrap();
-                self.exec_env.abort_canister(canister, &self.log);
+                self.exec_env
+                    .abort_canister(canister, &self.log, cost_schedule);
             });
     }
 

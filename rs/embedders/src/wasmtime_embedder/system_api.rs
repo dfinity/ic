@@ -4175,14 +4175,16 @@ impl SystemApi for SystemApiImpl {
     ) -> HypervisorResult<()> {
         let execution_mode =
             WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
-        let cost = self
-            .sandbox_safe_system_state
-            .get_cycles_account_manager()
-            .xnet_call_total_fee(
-                (method_name_size.saturating_add(payload_size)).into(),
-                execution_mode,
-                self.get_cost_schedule(),
-            );
+        let cost = match self.get_cost_schedule() {
+            CanisterCyclesCostSchedule::Free => Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal => self
+                .sandbox_safe_system_state
+                .get_cycles_account_manager()
+                .xnet_call_total_fee(
+                    (method_name_size.saturating_add(payload_size)).into(),
+                    execution_mode,
+                ),
+        };
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
         trace_syscall!(self, CostCall, cost);
         Ok(())
@@ -4190,10 +4192,13 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
         let subnet_size = self.sandbox_safe_system_state.subnet_size;
-        let cost = self
-            .sandbox_safe_system_state
-            .get_cycles_account_manager()
-            .canister_creation_fee(subnet_size, self.get_cost_schedule());
+        let cost = match self.get_cost_schedule() {
+            CanisterCyclesCostSchedule::Free => Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal => self
+                .sandbox_safe_system_state
+                .get_cycles_account_manager()
+                .canister_creation_fee(subnet_size),
+        };
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
@@ -4207,15 +4212,13 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let subnet_size = self.sandbox_safe_system_state.subnet_size;
-        let cost = self
-            .sandbox_safe_system_state
-            .get_cycles_account_manager()
-            .http_request_fee(
-                request_size.into(),
-                Some(max_res_bytes.into()),
-                subnet_size,
-                self.get_cost_schedule(),
-            );
+        let cost = match self.get_cost_schedule() {
+            CanisterCyclesCostSchedule::Free => Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal => self
+                .sandbox_safe_system_state
+                .get_cycles_account_manager()
+                .http_request_fee(request_size.into(), Some(max_res_bytes.into()), subnet_size),
+        };
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
         Ok(())
@@ -4257,18 +4260,20 @@ impl SystemApi for SystemApiImpl {
             })?;
 
         let subnet_size = self.sandbox_safe_system_state.subnet_size;
-        let cost = self
-            .sandbox_safe_system_state
-            .get_cycles_account_manager()
-            .http_request_fee_v2(
-                cost_params_v2.request_bytes.into(),
-                Duration::from_millis(cost_params_v2.http_roundtrip_time_ms),
-                cost_params_v2.raw_response_bytes.into(),
-                cost_params_v2.transform_instructions.into(),
-                cost_params_v2.transformed_response_bytes.into(),
-                subnet_size,
-                self.get_cost_schedule(),
-            );
+        let cost = match self.get_cost_schedule() {
+            CanisterCyclesCostSchedule::Free => Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal => self
+                .sandbox_safe_system_state
+                .get_cycles_account_manager()
+                .http_request_fee_v2(
+                    cost_params_v2.request_bytes.into(),
+                    Duration::from_millis(cost_params_v2.http_roundtrip_time_ms),
+                    cost_params_v2.raw_response_bytes.into(),
+                    cost_params_v2.transform_instructions.into(),
+                    cost_params_v2.transformed_response_bytes.into(),
+                    subnet_size,
+                ),
+        };
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request_v2")?;
         trace_syscall!(self, CostHttpRequestV2, cost);
         Ok(())
@@ -4300,15 +4305,17 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
-        let Some((subnet_size, cost_schedule, _)) =
-            self.sandbox_safe_system_state.get_key_subnet_details(key)
+        let Some((subnet_size, _, _)) = self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
-        let cost = self
-            .sandbox_safe_system_state
-            .get_cycles_account_manager()
-            .ecdsa_signature_fee(subnet_size, cost_schedule);
+        let cost = match self.get_cost_schedule() {
+            CanisterCyclesCostSchedule::Free => Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal => self
+                .sandbox_safe_system_state
+                .get_cycles_account_manager()
+                .ecdsa_signature_fee(subnet_size),
+        };
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4340,15 +4347,17 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
-        let Some((subnet_size, cost_schedule, _)) =
-            self.sandbox_safe_system_state.get_key_subnet_details(key)
+        let Some((subnet_size, _, _)) = self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
-        let cost = self
-            .sandbox_safe_system_state
-            .get_cycles_account_manager()
-            .schnorr_signature_fee(subnet_size, cost_schedule);
+        let cost = match self.get_cost_schedule() {
+            CanisterCyclesCostSchedule::Free => Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal => self
+                .sandbox_safe_system_state
+                .get_cycles_account_manager()
+                .schnorr_signature_fee(subnet_size),
+        };
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4380,15 +4389,17 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
-        let Some((subnet_size, cost_schedule, _)) =
-            self.sandbox_safe_system_state.get_key_subnet_details(key)
+        let Some((subnet_size, _, _)) = self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
-        let cost = self
-            .sandbox_safe_system_state
-            .get_cycles_account_manager()
-            .vetkd_fee(subnet_size, cost_schedule);
+        let cost = match self.get_cost_schedule() {
+            CanisterCyclesCostSchedule::Free => Cycles::zero(),
+            CanisterCyclesCostSchedule::Normal => self
+                .sandbox_safe_system_state
+                .get_cycles_account_manager()
+                .vetkd_fee(subnet_size),
+        };
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)

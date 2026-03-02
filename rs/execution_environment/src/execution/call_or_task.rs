@@ -264,6 +264,7 @@ fn finish_err(
         canister.canister_id(),
         round.log,
         round.counters.charging_from_balance_error,
+        round.cost_schedule,
     );
 
     let wasm_execution_mode = canister
@@ -475,6 +476,7 @@ impl CallOrTaskHelper {
                 self.canister.canister_id(),
                 round.log,
                 round.counters.charging_from_balance_error,
+                round.cost_schedule,
             );
 
         // Check that the cycles balance does not go below the freezing

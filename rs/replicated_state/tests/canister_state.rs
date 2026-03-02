@@ -11,6 +11,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     Time,
+    batch::CanisterCyclesCostSchedule,
     messages::{CallbackId, NO_DEADLINE, Request, RequestOrResponse},
     time::{CoarseTime, UNIX_EPOCH},
 };
@@ -85,6 +86,7 @@ impl CanisterFixture {
             &mut subnet_available_memory,
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
+            CanisterCyclesCostSchedule::default(),
         )
     }
 

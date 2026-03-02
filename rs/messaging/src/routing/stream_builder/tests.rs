@@ -23,6 +23,7 @@ use ic_test_utilities_types::ids::{
     SUBNET_3, SUBNET_4, SUBNET_5, SUBNET_27, SUBNET_42, canister_test_id, user_test_id,
 };
 use ic_test_utilities_types::messages::RequestBuilder;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::{
     CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE, Payload, Refund,
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
@@ -87,6 +88,7 @@ fn reject_local_request() {
         let receiver = canister_test_id(4);
 
         let (stream_builder, mut state, _) = new_fixture(&log);
+        let cost_schedule = state.get_own_cost_schedule();
 
         // A CanisterState to test on.
         let canister_id = canister_test_id(3);
@@ -153,6 +155,7 @@ fn reject_local_request() {
                 }
                 .into(),
                 &mut (i64::MAX / 2),
+                cost_schedule,
             )
             .unwrap();
 
@@ -168,6 +171,7 @@ fn reject_local_request() {
 fn build_streams_success() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        let cost_schedule = provided_state.get_own_cost_schedule();
         provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
@@ -191,7 +195,7 @@ fn build_streams_success() {
         let expected_signals_end = expected_stream.signals_end().get();
 
         // Set up the provided_canister_states.
-        let provided_canister_states = canister_states_with_outputs(msgs);
+        let provided_canister_states = canister_states_with_outputs(msgs, cost_schedule);
         provided_state.put_canister_states(provided_canister_states);
 
         // Expect all canister outputs to have been consumed.
@@ -264,12 +268,14 @@ fn build_streams_success() {
 fn build_streams_local_canisters() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        let cost_schedule = provided_state.get_own_cost_schedule();
 
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
 
         // The provided_canister_states contains the source canisters with outgoing
         // messages, but also the destination canisters of all messages.
-        let mut provided_canister_states = canister_states_with_outputs(msgs.clone());
+        let mut provided_canister_states =
+            canister_states_with_outputs(msgs.clone(), cost_schedule);
         for msg in &msgs {
             provided_canister_states
                 .entry(msg.receiver)
@@ -378,6 +384,7 @@ fn build_streams_at_limit_leaves_state_untouched_impl(
             target_stream_size_bytes,
             SYSTEM_SUBNET_STREAM_MSG_LIMIT,
         );
+        let cost_schedule = provided_state.get_own_cost_schedule();
         provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
@@ -393,7 +400,7 @@ fn build_streams_at_limit_leaves_state_untouched_impl(
 
         // Set up the provided_canister_states.
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
-        let provided_canister_states = canister_states_with_outputs(msgs);
+        let provided_canister_states = canister_states_with_outputs(msgs, cost_schedule);
         provided_state.put_canister_states(provided_canister_states);
 
         let expected_state = provided_state.clone();
@@ -467,6 +474,7 @@ fn build_streams_respects_limits(
             target_stream_size_bytes,
             SYSTEM_SUBNET_STREAM_MSG_LIMIT,
         );
+        let cost_schedule = provided_state.get_own_cost_schedule();
         provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
             btreemap! {
                 CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
@@ -479,7 +487,7 @@ fn build_streams_respects_limits(
         );
 
         // Set up the provided_canister_states.
-        let provided_canister_states = canister_states_with_outputs(msgs.clone());
+        let provided_canister_states = canister_states_with_outputs(msgs.clone(), cost_schedule);
         provided_state.put_canister_states(provided_canister_states);
 
         // Expected state starts off from the provided state.
@@ -569,9 +577,10 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
         let msgs = generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
 
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        let cost_schedule = provided_state.get_own_cost_schedule();
 
         // Set up the provided_canister_states.
-        let provided_canister_states = canister_states_with_outputs(msgs.clone());
+        let provided_canister_states = canister_states_with_outputs(msgs.clone(), cost_schedule);
         provided_state.put_canister_states(provided_canister_states);
 
         // Expect all messages in canister output queues to have been consumed.
@@ -632,6 +641,7 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         )];
 
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        let cost_schedule = provided_state.get_own_cost_schedule();
 
         // Ensure the routing table knows about the `REMOTE_SUBNET`.
         provided_state.metadata.network_topology.set_routing_table(RoutingTable::try_from(
@@ -646,7 +656,7 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
             .insert(REMOTE_SUBNET, Default::default());
 
         // Set up the provided_canister_states.
-        let provided_canister_states = canister_states_with_outputs(msgs.clone());
+        let provided_canister_states = canister_states_with_outputs(msgs.clone(), cost_schedule);
         provided_state.put_canister_states(provided_canister_states);
 
         // Set up the expected Stream from the messages.
@@ -726,6 +736,7 @@ fn build_streams_with_best_effort_messages_impl(
         ];
 
         let (stream_builder, mut provided_state, _) = new_fixture(&log);
+        let cost_schedule = provided_state.get_own_cost_schedule();
 
         // Set the subnet types of the local and remote subnets.
         provided_state.metadata.network_topology.set_subnets(btreemap! {
@@ -741,7 +752,7 @@ fn build_streams_with_best_effort_messages_impl(
         ).unwrap());
 
         // Set up a canister with `msgs` in its output queues.
-        let provided_canister_states = canister_states_with_outputs(msgs.clone());
+        let provided_canister_states = canister_states_with_outputs(msgs.clone(), cost_schedule);
         provided_state.put_canister_states(provided_canister_states);
 
         let result_state = stream_builder.build_streams(provided_state);
@@ -866,6 +877,7 @@ fn build_streams_with_refunds(
             TARGET_STREAM_SIZE_BYTES,
             system_subnet_stream_msg_limit,
         );
+        let cost_schedule = provided_state.get_own_cost_schedule();
 
         // Set the type of both subnets.
         provided_state
@@ -945,7 +957,7 @@ fn build_streams_with_refunds(
                     .build(),
             );
         }
-        let provided_canister_states = canister_states_with_outputs(msgs);
+        let provided_canister_states = canister_states_with_outputs(msgs, cost_schedule);
         provided_state.put_canister_states(provided_canister_states);
 
         // Act.
@@ -1164,6 +1176,7 @@ fn build_streams_with_oversized_payloads() {
         };
 
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+        let cost_schedule = provided_state.get_own_cost_schedule();
 
         // Map local canister to `LOCAL_SUBNET` and remote canister to `REMOTE_SUBNET`.
         provided_state.metadata.network_topology.set_routing_table(
@@ -1175,12 +1188,15 @@ fn build_streams_with_oversized_payloads() {
         );
 
         // Provided_canister_states with oversized payload messages as outputs.
-        let provided_canister_states = canister_states_with_outputs::<RequestOrResponse>(vec![
-            local_request.clone().into(),
-            remote_request.into(),
-            data_response.into(),
-            reject_response.into(),
-        ]);
+        let provided_canister_states = canister_states_with_outputs::<RequestOrResponse>(
+            vec![
+                local_request.clone().into(),
+                remote_request.into(),
+                data_response.into(),
+                reject_response.into(),
+            ],
+            cost_schedule,
+        );
         provided_state.put_canister_states(provided_canister_states);
 
         // Expecting all canister outputs to have been consumed.
@@ -1190,7 +1206,7 @@ fn build_streams_with_oversized_payloads() {
         let local_canister = expected_state
             .canister_state_make_mut(&local_canister)
             .unwrap();
-        push_input(local_canister, remote_request_reject.into());
+        push_input(local_canister, remote_request_reject.into(), cost_schedule);
 
         // Expecting a loopback stream consisting of:
         //  * successfully routed local request;
@@ -1605,6 +1621,7 @@ fn generate_message_for_test(
 // Generates `CanisterStates` with the given messages in output queues.
 fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
     msgs: Vec<M>,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> BTreeMap<CanisterId, Arc<CanisterState>> {
     let mut canister_states = BTreeMap::<CanisterId, Arc<CanisterState>>::new();
 
@@ -1641,7 +1658,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
                     Cycles::new(0),
                     NO_DEADLINE,
                 );
-                push_input(canister_state, req.into());
+                push_input(canister_state, req.into(), cost_schedule);
                 canister_state.system_state.pop_input().unwrap();
 
                 canister_state.push_output_response(rep);
@@ -1660,7 +1677,11 @@ fn consume_output_queues(state: &ReplicatedState) -> ReplicatedState {
 }
 
 /// Pushes the message into the given canister's corresponding input queue.
-fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
+fn push_input(
+    canister_state: &mut CanisterState,
+    msg: RequestOrResponse,
+    cost_schedule: CanisterCyclesCostSchedule,
+) {
     let mut subnet_available_memory = 1 << 30;
     assert!(
         canister_state
@@ -1669,6 +1690,7 @@ fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
                 &mut subnet_available_memory,
                 SubnetType::Application,
                 InputQueueType::RemoteSubnet,
+                cost_schedule,
             )
             .unwrap()
     );

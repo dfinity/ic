@@ -123,14 +123,10 @@ fn execute_response_refunds_cycles() {
     // plus the unaccepted cycles (no more the cycles sent via request),
     // the execution cost refund and the refunded transmission fee.
     // Compute the response transmission refund.
-    let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mgr = test.cycles_account_manager();
-    let response_transmission_refund = mgr.xnet_call_bytes_transmitted_fee(
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-        test.subnet_size(),
-        cost_schedule,
-    );
-    mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size(), cost_schedule);
+    let response_transmission_refund = mgr
+        .xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, test.subnet_size());
+    mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size());
     let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
     let execution_refund = mgr
         .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
@@ -1340,7 +1336,6 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -1460,7 +1455,6 @@ fn dts_response_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -1603,7 +1597,6 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -2564,7 +2557,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     // Change the cycles balance to force the response resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance_for_uninstall();
+        .burn_remaining_balance_for_uninstall(CanisterCyclesCostSchedule::default());
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -2653,7 +2646,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     // Change the cycles balance to force the cleanup resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance_for_uninstall();
+        .burn_remaining_balance_for_uninstall(CanisterCyclesCostSchedule::default());
 
     test.execute_slice(a_id);
     assert_eq!(

@@ -846,10 +846,11 @@ impl StreamHandlerImpl {
         let receiver_host_subnet = state.metadata.network_topology.route(msg.receiver().get());
 
         let payload_size = msg.payload_size_bytes().get();
+        let cost_schedule = state.get_own_cost_schedule();
         match receiver_host_subnet {
             // Matching receiver subnet, try inducting message.
             Some(host_subnet) if host_subnet == self.subnet_id => {
-                match state.push_input(msg, available_guaranteed_response_memory) {
+                match state.push_input(msg, available_guaranteed_response_memory, cost_schedule) {
                     // Message successfully inducted, all done.
                     Ok(true) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
@@ -989,11 +990,12 @@ impl StreamHandlerImpl {
             .network_topology
             .route(refund.recipient().get());
 
+        let cost_schedule = state.get_own_cost_schedule();
         match receiver_host_subnet {
             // Matching receiver subnet, try crediting the cycles.
             Some(host_subnet) if host_subnet == self.subnet_id => {
                 stream.push_accept_signal();
-                if state.credit_refund(refund) {
+                if state.credit_refund(refund, cost_schedule) {
                     self.observe_inducted_message_status(
                         LABEL_VALUE_TYPE_REFUND,
                         LABEL_VALUE_SUCCESS,

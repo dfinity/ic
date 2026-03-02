@@ -13,7 +13,7 @@ use ic_test_utilities::universal_canister::wasm;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
-    batch::QueryStats,
+    batch::{CanisterCyclesCostSchedule, QueryStats},
     ingress::WasmResult,
     messages::{
         CanisterTask, CertificateDelegationFormat, CertificateDelegationMetadata, Query,
@@ -537,9 +537,11 @@ fn query_cache_ignores_balance_changes_when_query_does_not_read_balance() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Change the canister balance.
-        test.canister_state_mut(b_id)
-            .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+        test.canister_state_mut(b_id).system_state.remove_cycles(
+            1_u64.into(),
+            CyclesUseCase::Memory,
+            CanisterCyclesCostSchedule::default(),
+        );
 
         // Run the same query for the second time.
         let res_2 = test.non_replicated_query(a_id, method, q);
@@ -567,9 +569,11 @@ fn query_cache_ignores_balance_and_time_changes_when_query_is_static() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Change the canister balance.
-        test.canister_state_mut(b_id)
-            .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+        test.canister_state_mut(b_id).system_state.remove_cycles(
+            1_u64.into(),
+            CyclesUseCase::Memory,
+            CanisterCyclesCostSchedule::default(),
+        );
         // Change the time.
         test.state_mut().metadata.batch_time += Duration::from_secs(1);
 
@@ -720,9 +724,11 @@ fn query_cache_returns_different_results_for_different_canister_balances() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Change the canister balance.
-        test.canister_state_mut(b_id)
-            .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+        test.canister_state_mut(b_id).system_state.remove_cycles(
+            1_u64.into(),
+            CyclesUseCase::Memory,
+            CanisterCyclesCostSchedule::default(),
+        );
 
         let res_2 = test.non_replicated_query(a_id, method, q);
         let m = query_cache_metrics(&test);
@@ -747,9 +753,11 @@ fn query_cache_returns_different_results_for_different_canister_balance128s() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Change the canister balance.
-        test.canister_state_mut(b_id)
-            .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+        test.canister_state_mut(b_id).system_state.remove_cycles(
+            1_u64.into(),
+            CyclesUseCase::Memory,
+            CanisterCyclesCostSchedule::default(),
+        );
 
         let res_2 = test.non_replicated_query(a_id, method, q);
         let m = query_cache_metrics(&test);
@@ -785,9 +793,11 @@ fn query_cache_returns_different_results_on_combined_invalidation() {
         test.canister_state_mut(b_id)
             .system_state
             .bump_canister_version();
-        test.canister_state_mut(b_id)
-            .system_state
-            .remove_cycles(1_u64.into(), CyclesUseCase::Memory);
+        test.canister_state_mut(b_id).system_state.remove_cycles(
+            1_u64.into(),
+            CyclesUseCase::Memory,
+            CanisterCyclesCostSchedule::default(),
+        );
 
         let res_2 = test.non_replicated_query(a_id, method, q);
         assert_eq!(res_1, res_2);
@@ -836,6 +846,7 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     test.canister_state_mut(id).system_state.remove_cycles(
         ((BIG_RESPONSE_SIZE - SMALL_RESPONSE_SIZE) as u64).into(),
         CyclesUseCase::Memory,
+        CanisterCyclesCostSchedule::default(),
     );
 
     // The new 42 reply must invalidate and replace the previous 1MB reply in the cache.
