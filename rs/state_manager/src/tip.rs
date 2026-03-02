@@ -105,7 +105,7 @@ pub(crate) enum TipRequest {
             >,
         >,
     },
-    /// Filter canisters in tip. Remove ones not present in the sets.
+    /// Filter canisters and snapshots in tip. Remove ones not present in the sets.
     ///
     /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {

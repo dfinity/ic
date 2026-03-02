@@ -191,7 +191,7 @@ pub(crate) enum PageMapType {
 }
 
 impl PageMapType {
-    /// List all PageMaps contained in `state`, ignoring PageMaps that are in snapshots.
+    /// List all PageMaps contained in `state`.
     pub(crate) fn list_all(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
         for (id, canister) in state.canister_states() {
