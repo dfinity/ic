@@ -67,8 +67,8 @@ fn only_rented_subnets_can_have_subnet_admins() {
             test_subnet_id,
         );
 
-    // Trivial case. (Never forget the trivial case, because this is an edge
-    // case, and edge cases is where many mistakes are made.)
+    // Trivial case: no admins (and also, no rented subnets). In this case, subnets cannot be invalid,
+    // because it is always acceptable for subnets to have no admins.
     check_subnet_invariants(&snapshot).unwrap();
 
     // Happy case: a compliant `SubnetRecord`.
