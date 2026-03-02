@@ -330,7 +330,7 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
 }
 
 #[test]
-fn test_subnet_rental_canister_can_update_a_subnets_subnet_admins() {
+fn test_subnet_rental_canister_can_update_subnet_admins_of_rented_subnet() {
     state_machine_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
             PrincipalId::from_str(

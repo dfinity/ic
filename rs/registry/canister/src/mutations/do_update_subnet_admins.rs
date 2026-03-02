@@ -321,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn can_not_add_or_remove_empty_list_of_subnet_admins() {
+    fn cannot_add_or_remove_empty_list_of_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(subnet_id);
 
