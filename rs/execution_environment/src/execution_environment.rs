@@ -3658,7 +3658,6 @@ impl ExecutionEnvironment {
                 derivation_path: Arc::new(derivation_path),
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
-                matched_pre_signature: None,
                 nonce: None,
             }),
         );

@@ -156,10 +156,6 @@ pub struct SignWithThresholdContext {
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
-    #[prost(uint64, optional, tag = "6")]
-    pub pre_signature_id: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "7")]
-    pub height: ::core::option::Option<u64>,
     #[prost(bytes = "vec", optional, tag = "8")]
     pub nonce: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
