@@ -586,9 +586,25 @@ async fn test_gateway_custom_domain_provider_file() {
 
     // Verify all three domains: custom (www), apex, and subdomain (app).
     // No canister ID appears in any URL; the file mapping provides it in each case.
+    //
+    // Custom domain mappings are loaded asynchronously by a background polling
+    // task in the gateway, so they may not be available immediately after the
+    // gateway starts listening. We retry each request until the
+    // `x-ic-canister-id` header appears (with a generous timeout).
     for domain in [custom_domain, apex_domain, sub_domain] {
         let url = format!("http://{}:{}", domain, port);
-        let res = client.get(&url).send().await.unwrap();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let res = loop {
+            let res = client.get(&url).send().await.unwrap();
+            if res.headers().get("x-ic-canister-id").is_some() {
+                break res;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "Timed out waiting for x-ic-canister-id header for domain {domain}",
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        };
         assert_eq!(
             res.headers()
                 .get("x-ic-canister-id")
