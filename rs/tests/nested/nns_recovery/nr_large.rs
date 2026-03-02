@@ -24,7 +24,8 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    LARGE_DKG_INTERVAL, LARGE_SUBNET_SIZE, SetupConfig, TestConfig, setup, test,
+    LARGE_DKG_INTERVAL, LARGE_SUBNET_SIZE, NNS_RECOVERY_VM_RESOURCES, SetupConfig, TestConfig,
+    setup, test,
 };
 use ic_system_test_driver::{
     driver::group::SystemTestGroup,
@@ -46,7 +47,8 @@ fn main() -> Result<()> {
                         vcpus: Some(NrOfVCPUs::new(64)),
                         memory_kibibytes: None,
                         boot_image_minimal_size_gibibytes: None,
-                    }.or(&NNS_RECOVERY_VM_RESOURCES),
+                    }
+                    .or(&NNS_RECOVERY_VM_RESOURCES),
                 },
             )
         })
