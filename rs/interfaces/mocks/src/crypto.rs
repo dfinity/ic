@@ -1,19 +1,21 @@
 //! Crypto mock for testing.
 //!
-//! [`MockCrypto`] is a full `mockall`-based mock of every sub-trait required by
+//! [`MockCrypto`] is a `mockall`-based mock of every sub-trait required by
 //! the [`Crypto`](ic_interfaces::crypto::Crypto) trait.
 //!
-//! Most methods are mockable via `expect_*`. Traits whose types contain
-//! lifetime parameters (`ThresholdEcdsaSigner`, `ThresholdSchnorrSigner`,
-//! `ThresholdEcdsaSigVerifier`, `ThresholdSchnorrSigVerifier`, `VetKdProtocol`)
-//! are stubbed with `unimplemented!()` because `mockall` cannot handle them;
-//! add closure-based overrides if you need them.
+//! Most methods are mockable via `expect_*`. Generic traits instantiated for
+//! multiple type parameters use uniquely named inherent methods (e.g.
+//! `expect_sign_basic_block()` for `BasicSigner<BlockMetadata>`). Traits with
+//! conflicting method names use prefixed inherent methods (e.g.
+//! `expect_ni_dkg_create_dealing()` vs `expect_idkg_create_dealing()`).
 //!
-//! Generic traits instantiated for multiple type parameters use uniquely named
-//! inherent methods (e.g. `expect_sign_basic_block()` for
-//! `BasicSigner<BlockMetadata>`). Traits with conflicting method names use
-//! prefixed inherent methods (e.g. `expect_ni_dkg_create_dealing()` vs
-//! `expect_idkg_create_dealing()`).
+//! Traits whose method signatures contain types parameterized by a lifetime
+//! (`ThresholdEcdsaSigner`, `ThresholdEcdsaSigVerifier`,
+//! `ThresholdSchnorrSigner`, `ThresholdSchnorrSigVerifier`, `VetKdProtocol`)
+//! are stubbed with `unimplemented!()` because `mockall::mock!` cannot express
+//! lifetime-parameterized types like `ThresholdEcdsaSigInputs<'a>` or
+//! `VetKdArgs<'a>` (`'_` is forbidden, named lifetimes cannot be declared, and
+//! elision does not work inside the macro).
 
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_interfaces::crypto::{
@@ -256,127 +258,458 @@ mockall::mock! {
     pub Crypto {
         // ── BasicSigner<T> ──────────────────────────────────────────────
 
-        pub fn sign_basic_block(&self, message: &BlockMetadata) -> CryptoResult<BasicSigOf<BlockMetadata>>;
-        pub fn sign_basic_msg_id(&self, message: &MessageId) -> CryptoResult<BasicSigOf<MessageId>>;
-        pub fn sign_basic_dkg_dealing_content(&self, message: &consensus_dkg::DealingContent) -> CryptoResult<BasicSigOf<consensus_dkg::DealingContent>>;
-        pub fn sign_basic_signed_idkg_dealing(&self, message: &SignedIDkgDealing) -> CryptoResult<BasicSigOf<SignedIDkgDealing>>;
-        pub fn sign_basic_idkg_dealing(&self, message: &IDkgDealing) -> CryptoResult<BasicSigOf<IDkgDealing>>;
-        pub fn sign_basic_idkg_complaint(&self, message: &IDkgComplaintContent) -> CryptoResult<BasicSigOf<IDkgComplaintContent>>;
-        pub fn sign_basic_idkg_opening(&self, message: &IDkgOpeningContent) -> CryptoResult<BasicSigOf<IDkgOpeningContent>>;
-        pub fn sign_basic_http(&self, message: &CanisterHttpResponseMetadata) -> CryptoResult<BasicSigOf<CanisterHttpResponseMetadata>>;
-        pub fn sign_basic_query(&self, message: &QueryResponseHash) -> CryptoResult<BasicSigOf<QueryResponseHash>>;
+        pub fn sign_basic_block(
+            &self, message: &BlockMetadata,
+        ) -> CryptoResult<BasicSigOf<BlockMetadata>>;
 
-        // ── BasicSigVerifier<T> (verify + verify_batch; combine uses owned sigs) ──
+        pub fn sign_basic_msg_id(
+            &self, message: &MessageId,
+        ) -> CryptoResult<BasicSigOf<MessageId>>;
 
-        pub fn verify_basic_sig_block(&self, signature: &BasicSigOf<BlockMetadata>, message: &BlockMetadata, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn combine_basic_sig_block(&self, signatures: BTreeMap<NodeId, BasicSigOf<BlockMetadata>>, registry_version: RegistryVersion) -> CryptoResult<BasicSignatureBatch<BlockMetadata>>;
-        pub fn verify_basic_sig_batch_block(&self, signature_batch: &BasicSignatureBatch<BlockMetadata>, message: &BlockMetadata, registry_version: RegistryVersion) -> CryptoResult<()>;
+        pub fn sign_basic_dkg_dealing_content(
+            &self, message: &consensus_dkg::DealingContent,
+        ) -> CryptoResult<BasicSigOf<consensus_dkg::DealingContent>>;
 
-        pub fn verify_basic_sig_dkg_dealing_content(&self, signature: &BasicSigOf<consensus_dkg::DealingContent>, message: &consensus_dkg::DealingContent, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn combine_basic_sig_dkg_dealing_content(&self, signatures: BTreeMap<NodeId, BasicSigOf<consensus_dkg::DealingContent>>, registry_version: RegistryVersion) -> CryptoResult<BasicSignatureBatch<consensus_dkg::DealingContent>>;
-        pub fn verify_basic_sig_batch_dkg_dealing_content(&self, signature_batch: &BasicSignatureBatch<consensus_dkg::DealingContent>, message: &consensus_dkg::DealingContent, registry_version: RegistryVersion) -> CryptoResult<()>;
+        pub fn sign_basic_signed_idkg_dealing(
+            &self, message: &SignedIDkgDealing,
+        ) -> CryptoResult<BasicSigOf<SignedIDkgDealing>>;
 
-        pub fn verify_basic_sig_signed_idkg_dealing(&self, signature: &BasicSigOf<SignedIDkgDealing>, message: &SignedIDkgDealing, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn combine_basic_sig_signed_idkg_dealing(&self, signatures: BTreeMap<NodeId, BasicSigOf<SignedIDkgDealing>>, registry_version: RegistryVersion) -> CryptoResult<BasicSignatureBatch<SignedIDkgDealing>>;
-        pub fn verify_basic_sig_batch_signed_idkg_dealing(&self, signature_batch: &BasicSignatureBatch<SignedIDkgDealing>, message: &SignedIDkgDealing, registry_version: RegistryVersion) -> CryptoResult<()>;
+        pub fn sign_basic_idkg_dealing(
+            &self, message: &IDkgDealing,
+        ) -> CryptoResult<BasicSigOf<IDkgDealing>>;
 
-        pub fn verify_basic_sig_idkg_dealing(&self, signature: &BasicSigOf<IDkgDealing>, message: &IDkgDealing, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn combine_basic_sig_idkg_dealing(&self, signatures: BTreeMap<NodeId, BasicSigOf<IDkgDealing>>, registry_version: RegistryVersion) -> CryptoResult<BasicSignatureBatch<IDkgDealing>>;
-        pub fn verify_basic_sig_batch_idkg(&self, signature_batch: &BasicSignatureBatch<IDkgDealing>, message: &IDkgDealing, registry_version: RegistryVersion) -> CryptoResult<()>;
+        pub fn sign_basic_idkg_complaint(
+            &self, message: &IDkgComplaintContent,
+        ) -> CryptoResult<BasicSigOf<IDkgComplaintContent>>;
 
-        pub fn verify_basic_sig_idkg_complaint(&self, signature: &BasicSigOf<IDkgComplaintContent>, message: &IDkgComplaintContent, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn combine_basic_sig_idkg_complaint(&self, signatures: BTreeMap<NodeId, BasicSigOf<IDkgComplaintContent>>, registry_version: RegistryVersion) -> CryptoResult<BasicSignatureBatch<IDkgComplaintContent>>;
-        pub fn verify_basic_sig_batch_idkg_complaint(&self, signature_batch: &BasicSignatureBatch<IDkgComplaintContent>, message: &IDkgComplaintContent, registry_version: RegistryVersion) -> CryptoResult<()>;
+        pub fn sign_basic_idkg_opening(
+            &self, message: &IDkgOpeningContent,
+        ) -> CryptoResult<BasicSigOf<IDkgOpeningContent>>;
 
-        pub fn verify_basic_sig_idkg_opening(&self, signature: &BasicSigOf<IDkgOpeningContent>, message: &IDkgOpeningContent, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn combine_basic_sig_idkg_opening(&self, signatures: BTreeMap<NodeId, BasicSigOf<IDkgOpeningContent>>, registry_version: RegistryVersion) -> CryptoResult<BasicSignatureBatch<IDkgOpeningContent>>;
-        pub fn verify_basic_sig_batch_idkg_opening(&self, signature_batch: &BasicSignatureBatch<IDkgOpeningContent>, message: &IDkgOpeningContent, registry_version: RegistryVersion) -> CryptoResult<()>;
+        pub fn sign_basic_http(
+            &self, message: &CanisterHttpResponseMetadata,
+        ) -> CryptoResult<BasicSigOf<CanisterHttpResponseMetadata>>;
 
-        pub fn verify_basic_sig_http(&self, signature: &BasicSigOf<CanisterHttpResponseMetadata>, message: &CanisterHttpResponseMetadata, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn combine_basic_sig_http(&self, signatures: BTreeMap<NodeId, BasicSigOf<CanisterHttpResponseMetadata>>, registry_version: RegistryVersion) -> CryptoResult<BasicSignatureBatch<CanisterHttpResponseMetadata>>;
-        pub fn verify_basic_sig_batch_http(&self, signature_batch: &BasicSignatureBatch<CanisterHttpResponseMetadata>, message: &CanisterHttpResponseMetadata, registry_version: RegistryVersion) -> CryptoResult<()>;
+        pub fn sign_basic_query(
+            &self, message: &QueryResponseHash,
+        ) -> CryptoResult<BasicSigOf<QueryResponseHash>>;
+
+        // ── BasicSigVerifier<T> ─────────────────────────────────────────
+        // combine_basic_sig uses owned values because mockall cannot
+        // express the bare `&` inside BTreeMap<NodeId, &BasicSigOf<T>>.
+
+        // BlockMetadata
+        pub fn verify_basic_sig_block(
+            &self, signature: &BasicSigOf<BlockMetadata>,
+            message: &BlockMetadata, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_block(
+            &self, signatures: BTreeMap<NodeId, BasicSigOf<BlockMetadata>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<BlockMetadata>>;
+
+        pub fn verify_basic_sig_batch_block(
+            &self, signature_batch: &BasicSignatureBatch<BlockMetadata>,
+            message: &BlockMetadata, registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        // consensus_dkg::DealingContent
+        pub fn verify_basic_sig_dkg_dealing_content(
+            &self, signature: &BasicSigOf<consensus_dkg::DealingContent>,
+            message: &consensus_dkg::DealingContent, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_dkg_dealing_content(
+            &self,
+            signatures: BTreeMap<NodeId, BasicSigOf<consensus_dkg::DealingContent>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<consensus_dkg::DealingContent>>;
+
+        pub fn verify_basic_sig_batch_dkg_dealing_content(
+            &self,
+            signature_batch: &BasicSignatureBatch<consensus_dkg::DealingContent>,
+            message: &consensus_dkg::DealingContent,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        // SignedIDkgDealing
+        pub fn verify_basic_sig_signed_idkg_dealing(
+            &self, signature: &BasicSigOf<SignedIDkgDealing>,
+            message: &SignedIDkgDealing, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_signed_idkg_dealing(
+            &self,
+            signatures: BTreeMap<NodeId, BasicSigOf<SignedIDkgDealing>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<SignedIDkgDealing>>;
+
+        pub fn verify_basic_sig_batch_signed_idkg_dealing(
+            &self,
+            signature_batch: &BasicSignatureBatch<SignedIDkgDealing>,
+            message: &SignedIDkgDealing, registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        // IDkgDealing
+        pub fn verify_basic_sig_idkg_dealing(
+            &self, signature: &BasicSigOf<IDkgDealing>,
+            message: &IDkgDealing, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_idkg_dealing(
+            &self, signatures: BTreeMap<NodeId, BasicSigOf<IDkgDealing>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<IDkgDealing>>;
+
+        pub fn verify_basic_sig_batch_idkg(
+            &self, signature_batch: &BasicSignatureBatch<IDkgDealing>,
+            message: &IDkgDealing, registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        // IDkgComplaintContent
+        pub fn verify_basic_sig_idkg_complaint(
+            &self, signature: &BasicSigOf<IDkgComplaintContent>,
+            message: &IDkgComplaintContent, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_idkg_complaint(
+            &self,
+            signatures: BTreeMap<NodeId, BasicSigOf<IDkgComplaintContent>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<IDkgComplaintContent>>;
+
+        pub fn verify_basic_sig_batch_idkg_complaint(
+            &self,
+            signature_batch: &BasicSignatureBatch<IDkgComplaintContent>,
+            message: &IDkgComplaintContent, registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        // IDkgOpeningContent
+        pub fn verify_basic_sig_idkg_opening(
+            &self, signature: &BasicSigOf<IDkgOpeningContent>,
+            message: &IDkgOpeningContent, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_idkg_opening(
+            &self,
+            signatures: BTreeMap<NodeId, BasicSigOf<IDkgOpeningContent>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<IDkgOpeningContent>>;
+
+        pub fn verify_basic_sig_batch_idkg_opening(
+            &self,
+            signature_batch: &BasicSignatureBatch<IDkgOpeningContent>,
+            message: &IDkgOpeningContent, registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        // CanisterHttpResponseMetadata
+        pub fn verify_basic_sig_http(
+            &self,
+            signature: &BasicSigOf<CanisterHttpResponseMetadata>,
+            message: &CanisterHttpResponseMetadata, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_http(
+            &self,
+            signatures: BTreeMap<NodeId, BasicSigOf<CanisterHttpResponseMetadata>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<CanisterHttpResponseMetadata>>;
+
+        pub fn verify_basic_sig_batch_http(
+            &self,
+            signature_batch: &BasicSignatureBatch<CanisterHttpResponseMetadata>,
+            message: &CanisterHttpResponseMetadata,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
 
         // ── ThresholdSigner<T> ──────────────────────────────────────────
 
-        pub fn sign_threshold_certification(&self, message: &CertificationContent, dkg_id: &NiDkgId) -> CryptoResult<ThresholdSigShareOf<CertificationContent>>;
-        pub fn sign_threshold_cup(&self, message: &CatchUpContent, dkg_id: &NiDkgId) -> CryptoResult<ThresholdSigShareOf<CatchUpContent>>;
-        pub fn sign_threshold_beacon(&self, message: &RandomBeaconContent, dkg_id: &NiDkgId) -> CryptoResult<ThresholdSigShareOf<RandomBeaconContent>>;
-        pub fn sign_threshold_tape(&self, message: &RandomTapeContent, dkg_id: &NiDkgId) -> CryptoResult<ThresholdSigShareOf<RandomTapeContent>>;
+        pub fn sign_threshold_certification(
+            &self, message: &CertificationContent, dkg_id: &NiDkgId,
+        ) -> CryptoResult<ThresholdSigShareOf<CertificationContent>>;
+
+        pub fn sign_threshold_cup(
+            &self, message: &CatchUpContent, dkg_id: &NiDkgId,
+        ) -> CryptoResult<ThresholdSigShareOf<CatchUpContent>>;
+
+        pub fn sign_threshold_beacon(
+            &self, message: &RandomBeaconContent, dkg_id: &NiDkgId,
+        ) -> CryptoResult<ThresholdSigShareOf<RandomBeaconContent>>;
+
+        pub fn sign_threshold_tape(
+            &self, message: &RandomTapeContent, dkg_id: &NiDkgId,
+        ) -> CryptoResult<ThresholdSigShareOf<RandomTapeContent>>;
 
         // ── ThresholdSigVerifier<T> ─────────────────────────────────────
 
-        pub fn verify_threshold_sig_share_certification(&self, signature: &ThresholdSigShareOf<CertificationContent>, message: &CertificationContent, dkg_id: &NiDkgId, signer: NodeId) -> CryptoResult<()>;
-        pub fn combine_threshold_sig_shares_certification(&self, shares: BTreeMap<NodeId, ThresholdSigShareOf<CertificationContent>>, dkg_id: &NiDkgId) -> CryptoResult<CombinedThresholdSigOf<CertificationContent>>;
-        pub fn verify_threshold_sig_combined_certification(&self, signature: &CombinedThresholdSigOf<CertificationContent>, message: &CertificationContent, dkg_id: &NiDkgId) -> CryptoResult<()>;
+        // CertificationContent
+        pub fn verify_threshold_sig_share_certification(
+            &self,
+            signature: &ThresholdSigShareOf<CertificationContent>,
+            message: &CertificationContent, dkg_id: &NiDkgId,
+            signer: NodeId,
+        ) -> CryptoResult<()>;
 
-        pub fn verify_threshold_sig_share_cup(&self, signature: &ThresholdSigShareOf<CatchUpContent>, message: &CatchUpContent, dkg_id: &NiDkgId, signer: NodeId) -> CryptoResult<()>;
-        pub fn combine_threshold_sig_shares_cup(&self, shares: BTreeMap<NodeId, ThresholdSigShareOf<CatchUpContent>>, dkg_id: &NiDkgId) -> CryptoResult<CombinedThresholdSigOf<CatchUpContent>>;
-        pub fn verify_threshold_sig_combined_cup(&self, signature: &CombinedThresholdSigOf<CatchUpContent>, message: &CatchUpContent, dkg_id: &NiDkgId) -> CryptoResult<()>;
+        pub fn combine_threshold_sig_shares_certification(
+            &self,
+            shares: BTreeMap<NodeId, ThresholdSigShareOf<CertificationContent>>,
+            dkg_id: &NiDkgId,
+        ) -> CryptoResult<CombinedThresholdSigOf<CertificationContent>>;
 
-        pub fn verify_threshold_sig_share_beacon(&self, signature: &ThresholdSigShareOf<RandomBeaconContent>, message: &RandomBeaconContent, dkg_id: &NiDkgId, signer: NodeId) -> CryptoResult<()>;
-        pub fn combine_threshold_sig_shares_beacon(&self, shares: BTreeMap<NodeId, ThresholdSigShareOf<RandomBeaconContent>>, dkg_id: &NiDkgId) -> CryptoResult<CombinedThresholdSigOf<RandomBeaconContent>>;
-        pub fn verify_threshold_sig_combined_beacon(&self, signature: &CombinedThresholdSigOf<RandomBeaconContent>, message: &RandomBeaconContent, dkg_id: &NiDkgId) -> CryptoResult<()>;
+        pub fn verify_threshold_sig_combined_certification(
+            &self,
+            signature: &CombinedThresholdSigOf<CertificationContent>,
+            message: &CertificationContent, dkg_id: &NiDkgId,
+        ) -> CryptoResult<()>;
 
-        pub fn verify_threshold_sig_share_tape(&self, signature: &ThresholdSigShareOf<RandomTapeContent>, message: &RandomTapeContent, dkg_id: &NiDkgId, signer: NodeId) -> CryptoResult<()>;
-        pub fn combine_threshold_sig_shares_tape(&self, shares: BTreeMap<NodeId, ThresholdSigShareOf<RandomTapeContent>>, dkg_id: &NiDkgId) -> CryptoResult<CombinedThresholdSigOf<RandomTapeContent>>;
-        pub fn verify_threshold_sig_combined_tape(&self, signature: &CombinedThresholdSigOf<RandomTapeContent>, message: &RandomTapeContent, dkg_id: &NiDkgId) -> CryptoResult<()>;
+        // CatchUpContent
+        pub fn verify_threshold_sig_share_cup(
+            &self, signature: &ThresholdSigShareOf<CatchUpContent>,
+            message: &CatchUpContent, dkg_id: &NiDkgId, signer: NodeId,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_threshold_sig_shares_cup(
+            &self,
+            shares: BTreeMap<NodeId, ThresholdSigShareOf<CatchUpContent>>,
+            dkg_id: &NiDkgId,
+        ) -> CryptoResult<CombinedThresholdSigOf<CatchUpContent>>;
+
+        pub fn verify_threshold_sig_combined_cup(
+            &self, signature: &CombinedThresholdSigOf<CatchUpContent>,
+            message: &CatchUpContent, dkg_id: &NiDkgId,
+        ) -> CryptoResult<()>;
+
+        // RandomBeaconContent
+        pub fn verify_threshold_sig_share_beacon(
+            &self,
+            signature: &ThresholdSigShareOf<RandomBeaconContent>,
+            message: &RandomBeaconContent, dkg_id: &NiDkgId,
+            signer: NodeId,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_threshold_sig_shares_beacon(
+            &self,
+            shares: BTreeMap<NodeId, ThresholdSigShareOf<RandomBeaconContent>>,
+            dkg_id: &NiDkgId,
+        ) -> CryptoResult<CombinedThresholdSigOf<RandomBeaconContent>>;
+
+        pub fn verify_threshold_sig_combined_beacon(
+            &self,
+            signature: &CombinedThresholdSigOf<RandomBeaconContent>,
+            message: &RandomBeaconContent, dkg_id: &NiDkgId,
+        ) -> CryptoResult<()>;
+
+        // RandomTapeContent
+        pub fn verify_threshold_sig_share_tape(
+            &self, signature: &ThresholdSigShareOf<RandomTapeContent>,
+            message: &RandomTapeContent, dkg_id: &NiDkgId, signer: NodeId,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_threshold_sig_shares_tape(
+            &self,
+            shares: BTreeMap<NodeId, ThresholdSigShareOf<RandomTapeContent>>,
+            dkg_id: &NiDkgId,
+        ) -> CryptoResult<CombinedThresholdSigOf<RandomTapeContent>>;
+
+        pub fn verify_threshold_sig_combined_tape(
+            &self, signature: &CombinedThresholdSigOf<RandomTapeContent>,
+            message: &RandomTapeContent, dkg_id: &NiDkgId,
+        ) -> CryptoResult<()>;
 
         // ── ThresholdSigVerifierByPublicKey<T> ──────────────────────────
 
-        pub fn verify_threshold_by_pk_certification(&self, signature: &CombinedThresholdSigOf<CertificationContent>, message: &CertificationContent, subnet_id: SubnetId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn verify_threshold_by_pk_cup(&self, signature: &CombinedThresholdSigOf<CatchUpContent>, message: &CatchUpContent, subnet_id: SubnetId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn verify_threshold_by_pk_cup_proto(&self, signature: &CombinedThresholdSigOf<CatchUpContentProtobufBytes>, message: &CatchUpContentProtobufBytes, subnet_id: SubnetId, registry_version: RegistryVersion) -> CryptoResult<()>;
+        pub fn verify_threshold_by_pk_certification(
+            &self,
+            signature: &CombinedThresholdSigOf<CertificationContent>,
+            message: &CertificationContent, subnet_id: SubnetId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn verify_threshold_by_pk_cup(
+            &self, signature: &CombinedThresholdSigOf<CatchUpContent>,
+            message: &CatchUpContent, subnet_id: SubnetId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn verify_threshold_by_pk_cup_proto(
+            &self,
+            signature: &CombinedThresholdSigOf<CatchUpContentProtobufBytes>,
+            message: &CatchUpContentProtobufBytes, subnet_id: SubnetId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
 
         // ── MultiSigner<T> ──────────────────────────────────────────────
 
-        pub fn sign_multi_finalization(&self, message: &FinalizationContent, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<IndividualMultiSigOf<FinalizationContent>>;
-        pub fn sign_multi_notarization(&self, message: &NotarizationContent, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<IndividualMultiSigOf<NotarizationContent>>;
+        pub fn sign_multi_finalization(
+            &self, message: &FinalizationContent, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<IndividualMultiSigOf<FinalizationContent>>;
+
+        pub fn sign_multi_notarization(
+            &self, message: &NotarizationContent, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<IndividualMultiSigOf<NotarizationContent>>;
 
         // ── MultiSigVerifier<T> ─────────────────────────────────────────
 
-        pub fn verify_multi_sig_individual_finalization(&self, signature: &IndividualMultiSigOf<FinalizationContent>, message: &FinalizationContent, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn combine_multi_sig_individuals_finalization(&self, signatures: BTreeMap<NodeId, IndividualMultiSigOf<FinalizationContent>>, registry_version: RegistryVersion) -> CryptoResult<CombinedMultiSigOf<FinalizationContent>>;
-        pub fn verify_multi_sig_combined_finalization(&self, signature: &CombinedMultiSigOf<FinalizationContent>, message: &FinalizationContent, signers: BTreeSet<NodeId>, registry_version: RegistryVersion) -> CryptoResult<()>;
+        // FinalizationContent
+        pub fn verify_multi_sig_individual_finalization(
+            &self,
+            signature: &IndividualMultiSigOf<FinalizationContent>,
+            message: &FinalizationContent, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
 
-        pub fn verify_multi_sig_individual_notarization(&self, signature: &IndividualMultiSigOf<NotarizationContent>, message: &NotarizationContent, signer: NodeId, registry_version: RegistryVersion) -> CryptoResult<()>;
-        pub fn combine_multi_sig_individuals_notarization(&self, signatures: BTreeMap<NodeId, IndividualMultiSigOf<NotarizationContent>>, registry_version: RegistryVersion) -> CryptoResult<CombinedMultiSigOf<NotarizationContent>>;
-        pub fn verify_multi_sig_combined_notarization(&self, signature: &CombinedMultiSigOf<NotarizationContent>, message: &NotarizationContent, signers: BTreeSet<NodeId>, registry_version: RegistryVersion) -> CryptoResult<()>;
+        pub fn combine_multi_sig_individuals_finalization(
+            &self,
+            signatures: BTreeMap<NodeId, IndividualMultiSigOf<FinalizationContent>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<CombinedMultiSigOf<FinalizationContent>>;
+
+        pub fn verify_multi_sig_combined_finalization(
+            &self, signature: &CombinedMultiSigOf<FinalizationContent>,
+            message: &FinalizationContent, signers: BTreeSet<NodeId>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        // NotarizationContent
+        pub fn verify_multi_sig_individual_notarization(
+            &self,
+            signature: &IndividualMultiSigOf<NotarizationContent>,
+            message: &NotarizationContent, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_multi_sig_individuals_notarization(
+            &self,
+            signatures: BTreeMap<NodeId, IndividualMultiSigOf<NotarizationContent>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<CombinedMultiSigOf<NotarizationContent>>;
+
+        pub fn verify_multi_sig_combined_notarization(
+            &self, signature: &CombinedMultiSigOf<NotarizationContent>,
+            message: &NotarizationContent, signers: BTreeSet<NodeId>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
 
         // ── BasicSigVerifierByPublicKey<T> ──────────────────────────────
 
-        pub fn verify_basic_sig_by_pk_msg_id(&self, signature: &BasicSigOf<MessageId>, signed_bytes: &MessageId, public_key: &UserPublicKey) -> CryptoResult<()>;
-        pub fn verify_basic_sig_by_pk_webauthn(&self, signature: &BasicSigOf<WebAuthnEnvelope>, signed_bytes: &WebAuthnEnvelope, public_key: &UserPublicKey) -> CryptoResult<()>;
+        pub fn verify_basic_sig_by_pk_msg_id(
+            &self, signature: &BasicSigOf<MessageId>,
+            signed_bytes: &MessageId, public_key: &UserPublicKey,
+        ) -> CryptoResult<()>;
+
+        pub fn verify_basic_sig_by_pk_webauthn(
+            &self, signature: &BasicSigOf<WebAuthnEnvelope>,
+            signed_bytes: &WebAuthnEnvelope, public_key: &UserPublicKey,
+        ) -> CryptoResult<()>;
 
         // ── NiDkgAlgorithm (prefixed to avoid IDkgProtocol collision) ───
 
-        pub fn ni_dkg_create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError>;
-        pub fn ni_dkg_verify_dealing(&self, config: &NiDkgConfig, dealer: NodeId, dealing: &NiDkgDealing) -> Result<(), DkgVerifyDealingError>;
-        pub fn ni_dkg_create_transcript(&self, config: &NiDkgConfig, verified_dealings: &BTreeMap<NodeId, NiDkgDealing>) -> Result<NiDkgTranscript, DkgCreateTranscriptError>;
-        pub fn ni_dkg_load_transcript(&self, transcript: &NiDkgTranscript) -> Result<LoadTranscriptResult, DkgLoadTranscriptError>;
-        pub fn ni_dkg_retain_only_active_keys(&self, transcripts: HashSet<NiDkgTranscript>) -> Result<(), DkgKeyRemovalError>;
+        pub fn ni_dkg_create_dealing(
+            &self, config: &NiDkgConfig,
+        ) -> Result<NiDkgDealing, DkgCreateDealingError>;
+
+        pub fn ni_dkg_verify_dealing(
+            &self, config: &NiDkgConfig, dealer: NodeId,
+            dealing: &NiDkgDealing,
+        ) -> Result<(), DkgVerifyDealingError>;
+
+        pub fn ni_dkg_create_transcript(
+            &self, config: &NiDkgConfig,
+            verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        ) -> Result<NiDkgTranscript, DkgCreateTranscriptError>;
+
+        pub fn ni_dkg_load_transcript(
+            &self, transcript: &NiDkgTranscript,
+        ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError>;
+
+        pub fn ni_dkg_retain_only_active_keys(
+            &self, transcripts: HashSet<NiDkgTranscript>,
+        ) -> Result<(), DkgKeyRemovalError>;
 
         // ── IDkgProtocol (prefixed to avoid NiDkgAlgorithm collision) ───
 
-        pub fn idkg_create_dealing(&self, params: &IDkgTranscriptParams) -> Result<SignedIDkgDealing, IDkgCreateDealingError>;
-        pub fn idkg_verify_dealing_public(&self, params: &IDkgTranscriptParams, signed_dealing: &SignedIDkgDealing) -> Result<(), IDkgVerifyDealingPublicError>;
-        pub fn idkg_verify_dealing_private(&self, params: &IDkgTranscriptParams, signed_dealing: &SignedIDkgDealing) -> Result<(), IDkgVerifyDealingPrivateError>;
-        pub fn idkg_verify_initial_dealings(&self, params: &IDkgTranscriptParams, initial_dealings: &InitialIDkgDealings) -> Result<(), IDkgVerifyInitialDealingsError>;
-        pub fn idkg_create_transcript(&self, params: &IDkgTranscriptParams, dealings: &BatchSignedIDkgDealings) -> Result<IDkgTranscript, IDkgCreateTranscriptError>;
-        pub fn idkg_verify_transcript(&self, params: &IDkgTranscriptParams, transcript: &IDkgTranscript) -> Result<(), IDkgVerifyTranscriptError>;
-        pub fn idkg_load_transcript(&self, transcript: &IDkgTranscript) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError>;
-        pub fn idkg_verify_complaint(&self, transcript: &IDkgTranscript, complainer_id: NodeId, complaint: &IDkgComplaint) -> Result<(), IDkgVerifyComplaintError>;
-        pub fn idkg_open_transcript(&self, transcript: &IDkgTranscript, complainer_id: NodeId, complaint: &IDkgComplaint) -> Result<IDkgOpening, IDkgOpenTranscriptError>;
-        pub fn idkg_verify_opening(&self, transcript: &IDkgTranscript, opener: NodeId, opening: &IDkgOpening, complaint: &IDkgComplaint) -> Result<(), IDkgVerifyOpeningError>;
-        pub fn idkg_load_transcript_with_openings(&self, transcript: &IDkgTranscript, openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>) -> Result<(), IDkgLoadTranscriptError>;
-        pub fn idkg_retain_active_transcripts(&self, active_transcripts: &HashSet<IDkgTranscript>) -> Result<(), IDkgRetainKeysError>;
+        pub fn idkg_create_dealing(
+            &self, params: &IDkgTranscriptParams,
+        ) -> Result<SignedIDkgDealing, IDkgCreateDealingError>;
+
+        pub fn idkg_verify_dealing_public(
+            &self, params: &IDkgTranscriptParams,
+            signed_dealing: &SignedIDkgDealing,
+        ) -> Result<(), IDkgVerifyDealingPublicError>;
+
+        pub fn idkg_verify_dealing_private(
+            &self, params: &IDkgTranscriptParams,
+            signed_dealing: &SignedIDkgDealing,
+        ) -> Result<(), IDkgVerifyDealingPrivateError>;
+
+        pub fn idkg_verify_initial_dealings(
+            &self, params: &IDkgTranscriptParams,
+            initial_dealings: &InitialIDkgDealings,
+        ) -> Result<(), IDkgVerifyInitialDealingsError>;
+
+        pub fn idkg_create_transcript(
+            &self, params: &IDkgTranscriptParams,
+            dealings: &BatchSignedIDkgDealings,
+        ) -> Result<IDkgTranscript, IDkgCreateTranscriptError>;
+
+        pub fn idkg_verify_transcript(
+            &self, params: &IDkgTranscriptParams,
+            transcript: &IDkgTranscript,
+        ) -> Result<(), IDkgVerifyTranscriptError>;
+
+        pub fn idkg_load_transcript(
+            &self, transcript: &IDkgTranscript,
+        ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError>;
+
+        pub fn idkg_verify_complaint(
+            &self, transcript: &IDkgTranscript, complainer_id: NodeId,
+            complaint: &IDkgComplaint,
+        ) -> Result<(), IDkgVerifyComplaintError>;
+
+        pub fn idkg_open_transcript(
+            &self, transcript: &IDkgTranscript, complainer_id: NodeId,
+            complaint: &IDkgComplaint,
+        ) -> Result<IDkgOpening, IDkgOpenTranscriptError>;
+
+        pub fn idkg_verify_opening(
+            &self, transcript: &IDkgTranscript, opener: NodeId,
+            opening: &IDkgOpening, complaint: &IDkgComplaint,
+        ) -> Result<(), IDkgVerifyOpeningError>;
+
+        pub fn idkg_load_transcript_with_openings(
+            &self, transcript: &IDkgTranscript,
+            openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+        ) -> Result<(), IDkgLoadTranscriptError>;
+
+        pub fn idkg_retain_active_transcripts(
+            &self, active_transcripts: &HashSet<IDkgTranscript>,
+        ) -> Result<(), IDkgRetainKeysError>;
     }
 
-    // ── KeyManager (no conflicts, no lifetime issues) ───────────────────
+    // ── KeyManager ──────────────────────────────────────────────────────
 
     impl KeyManager for Crypto {
-        fn check_keys_with_registry(&self, registry_version: RegistryVersion) -> Result<(), CheckKeysWithRegistryError>;
-        fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>;
-        fn rotate_idkg_dealing_encryption_keys(&self, registry_version: RegistryVersion) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
+        fn check_keys_with_registry(
+            &self, registry_version: RegistryVersion,
+        ) -> Result<(), CheckKeysWithRegistryError>;
+
+        fn current_node_public_keys(
+            &self,
+        ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>;
+
+        fn rotate_idkg_dealing_encryption_keys(
+            &self, registry_version: RegistryVersion,
+        ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
     }
 }
 
@@ -622,17 +955,20 @@ impl IDkgProtocol for MockCrypto {
     }
 }
 
-// ── Traits with lifetime-bearing types ─────────────────────────────────────
+// ── Traits with lifetime-parameterized types ───────────────────────────────
 //
-// mockall cannot handle types like ThresholdEcdsaSigInputs<'_> or VetKdArgs<'_>.
-// These are stubbed; add closure-based overrides if tests need them.
+// mockall::mock! cannot express types like ThresholdEcdsaSigInputs<'a> or
+// VetKdArgs<'a>: '_ is forbidden, named lifetimes can't be declared, and
+// elision doesn't work inside the macro.  These traits also have method-name
+// collisions (Ecdsa vs Schnorr).  Stubbed with unimplemented!(); extend
+// with manual closure fields if tests need them.
 
 impl ThresholdEcdsaSigner for MockCrypto {
     fn create_sig_share(
         &self,
         _inputs: &ThresholdEcdsaSigInputs,
     ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
-        unimplemented!("MockCrypto::ThresholdEcdsaSigner")
+        unimplemented!("MockCrypto::ThresholdEcdsaSigner::create_sig_share")
     }
 }
 
@@ -643,21 +979,21 @@ impl ThresholdEcdsaSigVerifier for MockCrypto {
         _inputs: &ThresholdEcdsaSigInputs,
         _share: &ThresholdEcdsaSigShare,
     ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
-        unimplemented!("MockCrypto::ThresholdEcdsaSigVerifier")
+        unimplemented!("MockCrypto::ThresholdEcdsaSigVerifier::verify_sig_share")
     }
     fn combine_sig_shares(
         &self,
         _inputs: &ThresholdEcdsaSigInputs,
         _shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
     ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
-        unimplemented!("MockCrypto::ThresholdEcdsaSigVerifier")
+        unimplemented!("MockCrypto::ThresholdEcdsaSigVerifier::combine_sig_shares")
     }
     fn verify_combined_sig(
         &self,
         _inputs: &ThresholdEcdsaSigInputs,
         _signature: &ThresholdEcdsaCombinedSignature,
     ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
-        unimplemented!("MockCrypto::ThresholdEcdsaSigVerifier")
+        unimplemented!("MockCrypto::ThresholdEcdsaSigVerifier::verify_combined_sig")
     }
 }
 
@@ -666,7 +1002,7 @@ impl ThresholdSchnorrSigner for MockCrypto {
         &self,
         _inputs: &ThresholdSchnorrSigInputs,
     ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
-        unimplemented!("MockCrypto::ThresholdSchnorrSigner")
+        unimplemented!("MockCrypto::ThresholdSchnorrSigner::create_sig_share")
     }
 }
 
@@ -677,21 +1013,21 @@ impl ThresholdSchnorrSigVerifier for MockCrypto {
         _inputs: &ThresholdSchnorrSigInputs,
         _share: &ThresholdSchnorrSigShare,
     ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
-        unimplemented!("MockCrypto::ThresholdSchnorrSigVerifier")
+        unimplemented!("MockCrypto::ThresholdSchnorrSigVerifier::verify_sig_share")
     }
     fn combine_sig_shares(
         &self,
         _inputs: &ThresholdSchnorrSigInputs,
         _shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
     ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError> {
-        unimplemented!("MockCrypto::ThresholdSchnorrSigVerifier")
+        unimplemented!("MockCrypto::ThresholdSchnorrSigVerifier::combine_sig_shares")
     }
     fn verify_combined_sig(
         &self,
         _inputs: &ThresholdSchnorrSigInputs,
         _signature: &ThresholdSchnorrCombinedSignature,
     ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
-        unimplemented!("MockCrypto::ThresholdSchnorrSigVerifier")
+        unimplemented!("MockCrypto::ThresholdSchnorrSigVerifier::verify_combined_sig")
     }
 }
 
@@ -700,7 +1036,7 @@ impl VetKdProtocol for MockCrypto {
         &self,
         _args: VetKdArgs,
     ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
-        unimplemented!("MockCrypto::VetKdProtocol")
+        unimplemented!("MockCrypto::VetKdProtocol::create_encrypted_key_share")
     }
     fn verify_encrypted_key_share(
         &self,
@@ -708,21 +1044,21 @@ impl VetKdProtocol for MockCrypto {
         _key_share: &VetKdEncryptedKeyShare,
         _args: &VetKdArgs,
     ) -> Result<(), VetKdKeyShareVerificationError> {
-        unimplemented!("MockCrypto::VetKdProtocol")
+        unimplemented!("MockCrypto::VetKdProtocol::verify_encrypted_key_share")
     }
     fn combine_encrypted_key_shares(
         &self,
         _shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
         _args: &VetKdArgs,
     ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
-        unimplemented!("MockCrypto::VetKdProtocol")
+        unimplemented!("MockCrypto::VetKdProtocol::combine_encrypted_key_shares")
     }
     fn verify_encrypted_key(
         &self,
         _key: &VetKdEncryptedKey,
         _args: &VetKdArgs,
     ) -> Result<(), VetKdKeyVerificationError> {
-        unimplemented!("MockCrypto::VetKdProtocol")
+        unimplemented!("MockCrypto::VetKdProtocol::verify_encrypted_key")
     }
 }
 
