@@ -19,6 +19,7 @@ pub enum SshUser {
     Admin,
     Readonly,
     Backup,
+    Recovery,
     Other(String),
 }
 
@@ -28,6 +29,7 @@ impl fmt::Display for SshUser {
             SshUser::Admin => write!(f, "admin"),
             SshUser::Readonly => write!(f, "readonly"),
             SshUser::Backup => write!(f, "backup"),
+            SshUser::Recovery => write!(f, "recovery"),
             SshUser::Other(user) => write!(f, "{}", user),
         }
     }
@@ -75,6 +77,19 @@ pub fn node_id_from_str(s: &str) -> RecoveryResult<NodeId> {
         .map(NodeId::from)
 }
 
+pub fn node_id_and_pub_key_from_str(s: &str) -> RecoveryResult<(NodeId, String)> {
+    let parts: Vec<&str> = s.splitn(2, ':').collect();
+    let [node_id_str, pub_key_str] = parts.as_slice() else {
+        return Err(RecoveryError::UnexpectedError(format!(
+            "Unable to parse node_id and public key from string: {s}"
+        )));
+    };
+
+    let node_id = node_id_from_str(node_id_str)?;
+    let pub_key = pub_key_str.to_string();
+    Ok((node_id, pub_key))
+}
+
 pub fn make_logger() -> Logger {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
@@ -84,4 +99,58 @@ pub fn make_logger() -> Logger {
 
 pub fn write_public_key_to_file(der_bytes: &[u8], path: &Path) -> RecoveryResult<()> {
     write_bytes(path, public_key_der_to_pem(der_bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_node_id_and_pub_key_from_str() {
+        let valid_node_id_str = "igjkj-job4m-om7ug-cmzok-admxb-ag2xv-xqlgk-2bxsr-ro2mx-r5i7q-hqe";
+        let invalid_node_id_str = "igjkj-job4m";
+
+        let valid_pub_key_str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org";
+
+        let valid_input = format!("{}:{}", valid_node_id_str, valid_pub_key_str);
+        assert_eq!(
+            node_id_and_pub_key_from_str(&valid_input).unwrap(),
+            (
+                node_id_from_str(valid_node_id_str).unwrap(),
+                valid_pub_key_str.to_string()
+            )
+        );
+
+        // Works also with additional colons (same logic as in `ic-admin`)
+        let valid_input = format!("{}::{}", valid_node_id_str, valid_pub_key_str);
+        assert_eq!(
+            node_id_and_pub_key_from_str(&valid_input).unwrap(),
+            (
+                node_id_from_str(valid_node_id_str).unwrap(),
+                format!(":{}", valid_pub_key_str)
+            )
+        );
+
+        // Works also with additional colons (same logic as in `ic-admin`)
+        let valid_input = format!("{}:{}:", valid_node_id_str, valid_pub_key_str);
+        assert_eq!(
+            node_id_and_pub_key_from_str(&valid_input).unwrap(),
+            (
+                node_id_from_str(valid_node_id_str).unwrap(),
+                format!("{}:", valid_pub_key_str)
+            )
+        );
+
+        let invalid_input = format!("{}:{}", invalid_node_id_str, valid_pub_key_str);
+        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+
+        let invalid_input = String::new();
+        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+
+        let invalid_input = valid_node_id_str.to_string();
+        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+
+        let invalid_input = valid_pub_key_str.to_string();
+        assert!(node_id_and_pub_key_from_str(&invalid_input).is_err());
+    }
 }
