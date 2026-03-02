@@ -11322,6 +11322,7 @@ dependencies = [
  "build-info-build",
  "by_address",
  "bytes",
+ "dfn_core",
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-cdk",

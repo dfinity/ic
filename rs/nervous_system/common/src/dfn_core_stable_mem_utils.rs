@@ -2,6 +2,7 @@
 //! buffered serialization and deserialization to/from stable memory.
 
 use bytes::{Buf, BufMut, buf::UninitSlice};
+use dfn_core::stable;
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
 use std::{cmp::min, convert::TryFrom};
@@ -16,77 +17,32 @@ trait StableMemory {
 
     /// Size of the stable memory, in bytes
     ///
-    /// (Note: the IC stable memory API does not keep track of this.
-    /// This module uses 4 bytes at the beginning of the stable memory
-    /// for length.)
+    /// (Note: that IC stable memory API does not keep track of this.
+    /// `dfn_core::stable` uses 4 bytes at the beginning of the stable memory
+    /// for length)
     fn length(&self) -> u32;
 
     /// Sets the size of the stable memory, in bytes
     fn set_length(&mut self, len: u32);
 }
 
-/// Replicates the `dfn_core::stable` format using `ic_cdk::api::stable`.
-///
-/// The format stores a 4-byte little-endian length prefix at byte offset 0 of stable memory.
-/// All data is stored starting at byte offset LENGTH_BYTES (4).
 struct StableMemoryImplementation;
-
-impl StableMemoryImplementation {
-    const LENGTH_BYTES: u64 = 4;
-    const WASM_PAGE_SIZE: u64 = 65536;
-
-    fn ensure_capacity(capacity_bytes: u32) {
-        let required_bytes = u64::from(capacity_bytes) + Self::LENGTH_BYTES;
-        let required_pages = required_bytes.div_ceil(Self::WASM_PAGE_SIZE);
-        let current_pages = ic_cdk::stable::stable_size();
-
-        if required_pages > current_pages {
-            let difference = required_pages - current_pages;
-            let _ = ic_cdk::stable::stable_grow(difference);
-        }
-    }
-}
 
 impl StableMemory for StableMemoryImplementation {
     fn write(&mut self, content: &[u8], offset: u32) {
-        let min_len = u32::try_from(content.len() + usize::try_from(offset).unwrap())
-            .expect("stable::write: content size + offset is too large");
-
-        let current_pages = ic_cdk::stable::stable_size();
-        let old_len = if current_pages == 0 { 0 } else { self.length() };
-        let new_len = std::cmp::max(old_len, min_len);
-
-        if new_len > old_len {
-            Self::ensure_capacity(new_len);
-        }
-
-        if content.is_empty() {
-            return;
-        }
-
-        ic_cdk::stable::stable_write(Self::LENGTH_BYTES + u64::from(offset), content);
-
-        if new_len > old_len {
-            self.set_length(new_len);
-        }
+        stable::write(content, offset)
     }
 
-    fn read(&mut self, offset: u32, size: u32) -> Vec<u8> {
-        let mut out = vec![0u8; size as usize];
-        ic_cdk::stable::stable_read(Self::LENGTH_BYTES + u64::from(offset), &mut out);
-        out
+    fn read(&mut self, offset: u32, size: u32) -> std::vec::Vec<u8> {
+        stable::read(offset, size)
     }
 
     fn length(&self) -> u32 {
-        let mut len_bytes = [0u8; 4];
-        ic_cdk::stable::stable_read(0, &mut len_bytes);
-        u32::from_le_bytes(len_bytes)
+        stable::length()
     }
 
     fn set_length(&mut self, len: u32) {
-        Self::ensure_capacity(0);
-        let len_bytes = len.to_le_bytes();
-        ic_cdk::stable::stable_write(0, &len_bytes);
+        stable::set_length(len);
     }
 }
 
