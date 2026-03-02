@@ -15116,6 +15116,7 @@ dependencies = [
  "ic-validate-eq",
  "ic-validate-eq-derive",
  "maplit",
+ "more-asserts",
  "once_cell",
  "phantom_newtype",
  "pretty_assertions",
