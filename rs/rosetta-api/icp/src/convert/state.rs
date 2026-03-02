@@ -52,10 +52,13 @@ impl State {
         }
 
         // If you're preprocessing just continue with the default fee
-        if self.preprocessing && self.fee.is_none() && self.debit.is_some() {
+        if let Some(debit) = self.debit
+            && self.preprocessing
+            && self.fee.is_none()
+        {
             self.fee = Some(AccountTokens {
                 tokens: DEFAULT_TRANSFER_FEE,
-                account: self.debit.as_ref().unwrap().account,
+                account: debit.account,
             })
         }
 
