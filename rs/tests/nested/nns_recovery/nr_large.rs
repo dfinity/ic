@@ -29,7 +29,7 @@ use ic_nested_nns_recovery_common::{
 };
 use ic_system_test_driver::{
     driver::group::SystemTestGroup,
-    driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
+    driver::ic::{NrOfVCPUs, VmResources},
     systest,
 };
 use std::time::Duration;
