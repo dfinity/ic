@@ -815,14 +815,9 @@ pub trait CertifiedMembershipFetcher: Send + Sync {
 
 /// Implementation that uses the IC Agent to query the subnet's read_state endpoint
 /// and extracts the set of node Principals from the certified state tree.
+#[derive(new)]
 pub struct CertifiedMembershipFetcherImpl {
     agent: Agent,
-}
-
-impl CertifiedMembershipFetcherImpl {
-    pub fn new(agent: Agent) -> Self {
-        Self { agent }
-    }
 }
 
 #[async_trait]
