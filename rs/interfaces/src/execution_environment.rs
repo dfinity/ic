@@ -360,13 +360,12 @@ impl SubnetAvailableMemory {
         guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
     ) -> Self {
-        // We do not apply scaling in tests that create `SubnetAvailableMemory` manually.
-        let scaling_factor = NonZeroU64::new(1).expect("Must be not zero");
         SubnetAvailableMemory::new_scaled(
             execution_memory,
             guaranteed_response_message_memory,
             wasm_custom_sections_memory,
-            scaling_factor,
+            // We do not apply scaling in tests that create `SubnetAvailableMemory` manually.
+            NonZeroU64::new(1).expect("scaling_factor must be not zero"),
         )
     }
 
@@ -1654,7 +1653,7 @@ mod tests {
             20,
             10,
             4,
-            NonZeroU64::new(2).expect("Must be non zero"),
+            NonZeroU64::new(2).expect("scaling_factor must be non zero"),
         );
         assert_eq!(available.get_execution_memory(), 10);
         assert_eq!(available.get_guaranteed_response_message_memory(), 5);
