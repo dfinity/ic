@@ -124,15 +124,15 @@ jobs:
           # Update container image references
           set -xeuo pipefail
 
-          IMG_NAME=${{ github.repository_owner }}/ic-build
-          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ needs.ic-build-image.outputs.imageid }}"
+          IMG_NAME_IC_BUILD="ghcr.io/dfinity/ic-build@${{ needs.ic-build-image.outputs.imageid }}"
+          IMG_NAME_IC_DEV="ghcr.io/dfinity/ic-dev@${{ needs.ic-build-image.outputs.imageid }}"
 
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
           pushd .devcontainer
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
+          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_IC_DEV|g" -- *
           popd
           pushd .github
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- workflow*/*
+          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           popd
 
           git config --global user.name "IDX GitHub Automation"
