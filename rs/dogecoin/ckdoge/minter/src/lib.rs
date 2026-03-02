@@ -45,8 +45,8 @@ pub use ic_ckbtc_minter::{
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
 use std::time::Duration;
 
-/// Default maximum number of inputs for a Dogecoin transaction.
-pub const DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION: usize = 500;
+/// Maximum number of inputs for a Dogecoin transaction.
+pub const DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION: usize = 500;
 
 pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 
