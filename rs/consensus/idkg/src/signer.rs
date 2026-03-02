@@ -631,7 +631,7 @@ impl ThresholdSigner for ThresholdSignerImpl {
     }
 }
 
-pub(crate) trait ThresholdSignatureBuilder {
+pub(crate) trait ThresholdSignatureBuilder: Send + Sync {
     /// Returns the signature for the given context, if it can be successfully
     /// built from the current sig shares in the IDKG pool
     fn get_completed_signature(

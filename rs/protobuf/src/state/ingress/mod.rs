@@ -53,6 +53,9 @@ pub mod v1 {
                 ErrorCodePublic::CanisterNotStopped => ErrorCode::CanisterNotStopped,
                 ErrorCodePublic::CanisterStoppingCancelled => ErrorCode::CanisterStoppingCancelled,
                 ErrorCodePublic::CanisterInvalidController => ErrorCode::CanisterInvalidController,
+                ErrorCodePublic::CanisterInvalidControllerOrSubnetAdmin => {
+                    ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+                }
                 ErrorCodePublic::CanisterFunctionNotFound => ErrorCode::CanisterFunctionNotFound,
                 ErrorCodePublic::CanisterNonEmpty => ErrorCode::CanisterNonEmpty,
                 ErrorCodePublic::QueryCallGraphLoopDetected => {
@@ -180,6 +183,9 @@ pub mod v1 {
                 }
                 ErrorCode::CanisterInvalidController => {
                     Ok(ErrorCodePublic::CanisterInvalidController)
+                }
+                ErrorCode::CanisterInvalidControllerOrSubnetAdmin => {
+                    Ok(ErrorCodePublic::CanisterInvalidControllerOrSubnetAdmin)
                 }
                 ErrorCode::CanisterFunctionNotFound => {
                     Ok(ErrorCodePublic::CanisterFunctionNotFound)
