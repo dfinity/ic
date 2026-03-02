@@ -129,4 +129,5 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
 
+# Switch back from root:
 USER $CI_USER
