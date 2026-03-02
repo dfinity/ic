@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-02-10: Proposal 140315
+
+http://dashboard.internetcomputer.org/proposal/140315
+
+## Added
+
+- Pass through a `CustomProposalCriticality` field so that SNSes can specify additional critical proposal types at launch.
+
+
 # 2026-01-23: Proposal 140098
 
 http://dashboard.internetcomputer.org/proposal/140098

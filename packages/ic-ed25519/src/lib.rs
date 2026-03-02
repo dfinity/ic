@@ -15,6 +15,9 @@ use zeroize::ZeroizeOnDrop;
 
 pub use ic_principal::Principal as CanisterId;
 
+/// The length of an Ed25519 signature in bytes
+pub const SIGNATURE_BYTES: usize = 64;
+
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug, Error)]
 pub enum PrivateKeyDecodingError {
@@ -136,7 +139,7 @@ impl PrivateKey {
     /// Sign a message and return a signature
     ///
     /// This is the non-prehashed variant of Ed25519
-    pub fn sign_message(&self, msg: &[u8]) -> [u8; 64] {
+    pub fn sign_message(&self, msg: &[u8]) -> [u8; SIGNATURE_BYTES] {
         self.sk.sign(msg).into()
     }
 
@@ -358,7 +361,7 @@ impl DerivedPrivateKey {
     /// Sign a message and return a signature
     ///
     /// This is the non-prehashed variant of Ed25519
-    pub fn sign_message(&self, msg: &[u8]) -> [u8; 64] {
+    pub fn sign_message(&self, msg: &[u8]) -> [u8; SIGNATURE_BYTES] {
         ed25519_dalek::hazmat::raw_sign::<Sha512>(&self.esk, msg, &self.vk).to_bytes()
     }
 
@@ -445,7 +448,7 @@ struct Signature {
 
 impl Signature {
     fn from_slice(signature: &[u8]) -> Result<Self, SignatureError> {
-        if signature.len() != 64 {
+        if signature.len() != SIGNATURE_BYTES {
             return Err(SignatureError::InvalidLength);
         }
 
@@ -564,16 +567,25 @@ impl PublicKey {
     /// encoding of a point not in the prime order subgroup), then the DER
     /// encoding of that invalid key will be returned.
     pub fn convert_raw_to_der(raw: &[u8]) -> Result<Vec<u8>, PublicKeyDecodingError> {
-        // We continue to check the length, since otherwise the DER
-        // encoding itself would be invalid and unparsable.
-        if raw.len() != Self::BYTES {
-            return Err(PublicKeyDecodingError::InvalidKeyEncoding(format!(
+        let raw32: [u8; 32] = raw.try_into().map_err(|_| {
+            PublicKeyDecodingError::InvalidKeyEncoding(format!(
                 "Expected key of exactly {} bytes, got {}",
                 Self::BYTES,
                 raw.len()
-            )));
-        };
+            ))
+        })?;
 
+        Ok(Self::convert_raw32_to_der(raw32))
+    }
+
+    /// Convert a raw Ed25519 public key (32 bytes) to the DER encoding
+    ///
+    /// # Warning
+    ///
+    /// This performs no validity check on the public key. If you pass an invalid
+    /// key (ie a encoding of a point not in the prime order subgroup), then the
+    /// DER encoding of that invalid key will be returned.
+    pub fn convert_raw32_to_der(raw: [u8; 32]) -> Vec<u8> {
         const DER_PREFIX: [u8; 12] = [
             48, 42, // A sequence of 42 bytes follows
             48, 5, // An sequence of 5 bytes follows
@@ -584,8 +596,8 @@ impl PublicKey {
 
         let mut der_enc = Vec::with_capacity(DER_PREFIX.len() + Self::BYTES);
         der_enc.extend_from_slice(&DER_PREFIX);
-        der_enc.extend_from_slice(raw);
-        Ok(der_enc)
+        der_enc.extend_from_slice(&raw);
+        der_enc
     }
 
     /// Serialize this public key in raw format
@@ -635,7 +647,7 @@ impl PublicKey {
     ///
     /// See RFC 8410 for details on the format
     ///
-    /// This returns a Vec<u8> instead of a String for accidental/historical reasons
+    /// This returns a `Vec<u8>` instead of a `String` for accidental/historical reasons
     pub fn serialize_rfc8410_pem(&self) -> Vec<u8> {
         let der = self.serialize_rfc8410_der();
         pem::encode(&pem::Pem::new("PUBLIC KEY", der)).into()

@@ -163,7 +163,7 @@ fn convert_create_service_nervous_system(
     let dapp_canisters = dapp_canisters.clone();
     let initial_token_distribution = initial_token_distribution.clone().map(|x| x.into());
     let swap_parameters = swap_parameters.clone().map(|x| x.into());
-    let governance_parameters = governance_parameters.map(|x| x.into());
+    let governance_parameters = governance_parameters.clone().map(|x| x.into());
 
     let logo = if omit_large_fields {
         None

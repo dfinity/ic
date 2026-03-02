@@ -269,7 +269,7 @@ mod tests {
             let ReshareChainKeyResponse::IDkg(initial_idkg_dealings) = response else {
                 panic!("Expected an Idkg response");
             };
-            let dealings = InitialIDkgDealings::try_from(&initial_idkg_dealings)
+            let dealings = InitialIDkgDealings::try_from(initial_idkg_dealings)
                 .expect("Failed to convert dealings");
             assert_eq!(initial_dealings.get(&i).unwrap(), &dealings);
         }

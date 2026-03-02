@@ -388,6 +388,7 @@ impl SetupBuilder {
             .unwrap();
         let index_canister_init_args = ic_icp_index::InitArg {
             ledger_id: candid::Principal::from(LEDGER_CANISTER_ID),
+            retrieve_blocks_from_ledger_interval_seconds: None,
         };
 
         let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();

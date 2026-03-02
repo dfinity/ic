@@ -172,6 +172,19 @@ enum Opt {
         #[clap(long, required = true)]
         path: PathBuf,
     },
+
+    /// Extracts canister metrics from the replicated state and prints them in CSV format to the
+    /// specified file.
+    #[clap(name = "canister_metrics")]
+    CanisterMetrics {
+        /// Path to a checkpoint.
+        #[clap(long = "checkpoint")]
+        path: PathBuf,
+
+        /// Output path.
+        #[clap(long)]
+        output: PathBuf,
+    },
 }
 
 /// Command line arguments for the `copy` command with eith
@@ -285,6 +298,7 @@ pub(crate) fn main_inner(args: Vec<String>) {
             &mut std::io::stdout(),
         ),
         Opt::ParseOverlay { path } => commands::parse_overlay::do_parse_overlay(path),
+        Opt::CanisterMetrics { path, output } => commands::canister_metrics::get(path, &output),
     };
 
     if let Err(e) = result {

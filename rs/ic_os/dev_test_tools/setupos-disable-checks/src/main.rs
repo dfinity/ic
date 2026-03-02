@@ -17,11 +17,6 @@ struct Cli {
     #[arg(long, default_value = "disk.img")]
     /// Path to SetupOS disk image; its GRUB boot partition will be modified.
     image_path: PathBuf,
-
-    // TODO: Remove with NODE-1791
-    #[arg(long)]
-    /// Disable old flags for temporary backwards compatibility
-    compat: bool,
 }
 
 fn main() -> Result<()> {
@@ -38,10 +33,7 @@ fn main() -> Result<()> {
     let temp_boot_args = NamedTempFile::new()?;
     fs::write(
         temp_boot_args.path(),
-        process_cmdline(
-            std::str::from_utf8(&bootfs.read_file(boot_args_path)?)?,
-            cli.compat,
-        )?,
+        process_cmdline(std::str::from_utf8(&bootfs.read_file(boot_args_path)?)?)?,
     )
     .context("failed to write temporary boot args")?;
     fs::set_permissions(temp_boot_args.path(), Permissions::from_mode(0o755))?;
@@ -57,7 +49,7 @@ fn main() -> Result<()> {
 }
 
 /// Disable checks from the kernel command line
-fn process_cmdline(input: &str, compat: bool) -> Result<String> {
+fn process_cmdline(input: &str) -> Result<String> {
     let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
 
     let left;
@@ -87,14 +79,6 @@ fn process_cmdline(input: &str, compat: bool) -> Result<String> {
     let mut cmdline = KernelCommandLine::from_str(boot_args)?;
     cmdline.ensure_single_argument("ic.setupos.run_checks", Some("0"))?;
 
-    // TODO: Remove with NODE-1791
-    // Disable old flags for temporary backwards compatibility
-    if compat {
-        cmdline.ensure_single_argument("ic.setupos.check_hardware", Some("0"))?;
-        cmdline.ensure_single_argument("ic.setupos.check_network", Some("0"))?;
-        cmdline.ensure_single_argument("ic.setupos.check_age", Some("0"))?;
-    }
-
     Ok(format!(
         "# This file has been modified by setupos-disable-checks.\n{file_start}{indent}BOOT_ARGS=\"{cmdline}\"{tail}{file_end}",
         file_start = &input[..left],
@@ -107,7 +91,7 @@ mod tests {
     use super::*;
 
     fn test(input: &str, expected: &str) {
-        let result = process_cmdline(input, false).unwrap();
+        let result = process_cmdline(input).unwrap();
 
         assert_eq!(
             expected,

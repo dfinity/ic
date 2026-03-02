@@ -2446,6 +2446,7 @@ impl From<pb::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -2465,6 +2466,7 @@ impl From<api::create_service_nervous_system::GovernanceParameters>
             neuron_maximum_age_for_age_bonus: item.neuron_maximum_age_for_age_bonus,
             neuron_maximum_age_bonus: item.neuron_maximum_age_bonus,
             voting_reward_parameters: item.voting_reward_parameters.map(|x| x.into()),
+            custom_proposal_criticality: item.custom_proposal_criticality.map(|x| x.into()),
         }
     }
 }
@@ -2492,6 +2494,30 @@ impl From<api::create_service_nervous_system::governance_parameters::VotingRewar
             initial_reward_rate: item.initial_reward_rate,
             final_reward_rate: item.final_reward_rate,
             reward_rate_transition_duration: item.reward_rate_transition_duration,
+        }
+    }
+}
+impl From<pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for api::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: Some(item.additional_critical_native_action_ids),
+        }
+    }
+}
+impl From<api::create_service_nervous_system::governance_parameters::CustomProposalCriticality>
+    for pb::create_service_nervous_system::governance_parameters::CustomProposalCriticality
+{
+    fn from(
+        item: api::create_service_nervous_system::governance_parameters::CustomProposalCriticality,
+    ) -> Self {
+        Self {
+            additional_critical_native_action_ids: item
+                .additional_critical_native_action_ids
+                .unwrap_or_default(),
         }
     }
 }

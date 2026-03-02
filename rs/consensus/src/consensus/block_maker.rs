@@ -21,7 +21,7 @@ use ic_logger::{ReplicaLogger, debug, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, Height, NodeId, RegistryVersion, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
     consensus::{
         Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
@@ -390,7 +390,9 @@ impl BlockMaker {
 
                     self.metrics.report_byte_estimate_metrics(
                         batch_payload.xnet.size_bytes(),
-                        batch_payload.ingress.count_bytes(),
+                        (batch_payload.ingress.total_messages_size_estimate()
+                            + batch_payload.ingress.total_ids_size_estimate())
+                        .get() as usize,
                     );
 
                     BlockPayload::Data(DataPayload {

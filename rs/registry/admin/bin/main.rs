@@ -3787,6 +3787,9 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 neuron_maximum_age_bonus,
 
                 voting_reward_parameters,
+
+                // TODO: Support additional critical native action IDs
+                custom_proposal_criticality: None,
             })
         };
 

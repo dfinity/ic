@@ -7,12 +7,20 @@ use serde_bytes::ByteBuf;
 pub mod logs;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum IndexArg {
+    Init(InitArg),
+    Upgrade(UpgradeArg),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct InitArg {
     pub ledger_id: Principal,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct UpgradeArg {
+    pub ledger_id: Option<Principal>,
     pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
 

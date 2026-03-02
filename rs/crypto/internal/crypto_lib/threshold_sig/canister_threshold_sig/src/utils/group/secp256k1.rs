@@ -1,8 +1,8 @@
 use hex_literal::hex;
 use k256::elliptic_curve::{
-    Field, Group,
+    Group,
     group::{GroupEncoding, ff::PrimeField},
-    ops::{Invert, LinearCombination, MulByGenerator, Reduce},
+    ops::{Invert, LinearCombination, LinearCombinationExt, MulByGenerator, Reduce},
     scalar::IsHigh,
     sec1::FromEncodedPoint,
 };
@@ -174,11 +174,11 @@ impl Scalar {
     /// group order.
     pub fn from_wide_bytes(bytes: &[u8]) -> Option<Self> {
         /*
-        As the k256 crates is lacking a native function that reduces an input
+        As the k256 crate is lacking a native function that reduces an input
         modulo the group order we have to synthesize it using other operations.
 
         Do so by splitting up the input into two parts each of which is at most
-        scalar_len bytes long. Then compute s0*2^X + s1
+        scalar_len bytes long. Then compute s0*2^256 + s1
         */
 
         if bytes.len() > Self::BYTES * 2 {
@@ -192,15 +192,16 @@ impl Scalar {
         let fb0 = k256::FieldBytes::from_slice(&extended[..Self::BYTES]);
         let fb1 = k256::FieldBytes::from_slice(&extended[Self::BYTES..]);
 
-        let mut s0 = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb0);
+        let s0 = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb0);
         let s1 = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb1);
 
-        for _bit in 1..=Self::BYTES * 8 {
-            s0 = s0.double();
-        }
-        s0 += s1;
+        // 2^256 mod n (secp256k1 group order)
+        let shift = k256::Scalar::from_repr(k256::FieldBytes::from(hex!(
+            "000000000000000000000000000000014551231950b75fc4402da1732fc9bebf"
+        )))
+        .unwrap();
 
-        Some(Self::new(s0))
+        Some(Self::new(s0 * shift + s1))
     }
 
     /// Return constant zero
@@ -328,8 +329,27 @@ impl Point {
     ///
     /// Equivalent to p1*s1 + p2*s2
     #[inline]
-    pub fn lincomb(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
+    pub fn lincomb_vartime(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
         Self::new(k256::ProjectivePoint::lincomb(&p1.p, &s1.s, &p2.p, &s2.s))
+    }
+
+    /// Perform multi-exponentiation
+    ///
+    /// Equivalent to p1*s1 + p2*s2 + p3*s3
+    #[inline]
+    pub fn lincomb3_vartime(
+        p1: &Point,
+        s1: &Scalar,
+        p2: &Point,
+        s2: &Scalar,
+        p3: &Point,
+        s3: &Scalar,
+    ) -> Self {
+        Self::new(k256::ProjectivePoint::lincomb_ext(&[
+            (p1.p, s1.s),
+            (p2.p, s2.s),
+            (p3.p, s3.s),
+        ]))
     }
 
     pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {

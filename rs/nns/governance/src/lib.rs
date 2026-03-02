@@ -208,7 +208,7 @@ thread_local! {
         = const { Cell::new(true) };
 
     static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
-        = const { Cell::new(false) };
+        = const { Cell::new(true) };
 
     static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };

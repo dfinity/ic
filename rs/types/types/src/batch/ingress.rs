@@ -1,10 +1,11 @@
 use crate::{
-    CountBytes, Time,
+    Time,
     artifact::IngressMessageId,
     messages::{
         EXPECTED_MESSAGE_ID_LENGTH, HttpRequestError, MessageId, SignedIngress, SignedRequestBytes,
     },
 };
+use ic_base_types::NumBytes;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
@@ -140,17 +141,21 @@ impl IngressPayload {
     ) -> impl Iterator<Item = (&IngressMessageId, &SignedRequestBytes)> {
         self.serialized_ingress_messages.iter()
     }
-}
 
-impl CountBytes for IngressPayload {
-    fn count_bytes(&self) -> usize {
-        let IngressPayload {
-            serialized_ingress_messages,
-        } = &self;
-        serialized_ingress_messages
+    pub fn total_messages_size_estimate(&self) -> NumBytes {
+        let messages_total_size: usize = self
+            .serialized_ingress_messages
             .values()
-            .map(|message| EXPECTED_MESSAGE_ID_LENGTH + message.len())
-            .sum()
+            .map(SignedRequestBytes::len)
+            .sum();
+
+        NumBytes::new(messages_total_size as u64)
+    }
+
+    pub fn total_ids_size_estimate(&self) -> NumBytes {
+        let ids_total_size = self.serialized_ingress_messages.len() * EXPECTED_MESSAGE_ID_LENGTH;
+
+        NumBytes::new(ids_total_size as u64)
     }
 }
 

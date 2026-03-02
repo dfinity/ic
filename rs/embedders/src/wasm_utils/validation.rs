@@ -34,7 +34,7 @@ use wirm::{
         },
         types::{Body, Value},
     },
-    wasmparser::{ExternalKind, Operator, TypeRef, ValType},
+    wasmparser::{ExternalKind, Operator, RefType, TypeRef, ValType},
 };
 
 use crate::WASM_PAGE_SIZE;
@@ -1156,6 +1156,18 @@ fn validate_export_section(
     Ok(())
 }
 
+fn validate_table_section(module: &Module) -> Result<(), WasmValidationError> {
+    for table in module.tables.iter() {
+        if table.ty.element_type != RefType::FUNCREF {
+            return Err(WasmValidationError::InvalidTableSection(format!(
+                "Table element type must be funcref, got {:?}",
+                table.ty.element_type
+            )));
+        }
+    }
+    Ok(())
+}
+
 // Checks that offset-expressions in active data segments consist of only one constant
 // expression. Required because of OP. See also:
 // instrumentation.rs
@@ -1730,6 +1742,7 @@ pub(super) fn validate_wasm_binary<'a>(
         config.max_number_exported_functions,
         config.max_sum_exported_function_name_lengths,
     )?;
+    validate_table_section(&module)?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;

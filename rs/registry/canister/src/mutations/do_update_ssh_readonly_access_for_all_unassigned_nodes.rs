@@ -46,7 +46,7 @@ mod tests {
     use crate::{
         common::test_helpers::invariant_compliant_registry,
         mutations::{
-            common::{get_blessed_replica_versions, get_unassigned_nodes_record},
+            common::get_unassigned_nodes_record,
             do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         },
     };
@@ -54,7 +54,7 @@ mod tests {
     use super::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload;
 
     #[test]
-    #[should_panic(expected = "version is NOT blessed")]
+    #[should_panic(expected = "'version' is NOT blessed")]
     fn should_panic_if_version_not_blessed() {
         let mut registry = invariant_compliant_registry(0);
 
@@ -71,14 +71,7 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Create and bless version
-        let blessed_versions = registry
-            .get(
-                make_blessed_replica_versions_key().as_bytes(), // key
-                registry.latest_version(),                      // version
-            )
-            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
-            .expect("failed to decode blessed versions");
-        let blessed_versions = blessed_versions.blessed_version_ids;
+        let blessed_versions = registry.get_blessed_replica_version_ids();
 
         registry.maybe_apply_mutation_internal(vec![
             // Mutation to insert new replica version
@@ -118,11 +111,9 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // first we need to make sure that the unassigned nodes record has blessed replica version
-        let blessed_versions = get_blessed_replica_versions(&registry)
-            .expect("failed to get the blessed replica versions");
+        let blessed_versions = registry.get_blessed_replica_version_ids();
         let payload = DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: blessed_versions
-                .blessed_version_ids
                 .first()
                 .expect("there is no blessed replica version")
                 .to_string(),

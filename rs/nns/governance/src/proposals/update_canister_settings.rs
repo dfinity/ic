@@ -140,7 +140,7 @@ impl CallCanister for UpdateCanisterSettings {
 
 impl LocallyDescribableProposalAction for UpdateCanisterSettings {
     const TYPE_NAME: &'static str = "Update Canister Settings";
-    const TYPE_DESCRIPTION: &'static str = "Updates the settings of an NNS canister.";
+    const TYPE_DESCRIPTION: &'static str = "Update the settings of an NNS-controlled canister.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()

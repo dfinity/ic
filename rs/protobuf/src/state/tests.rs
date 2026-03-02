@@ -21,10 +21,6 @@ fn huge_proto_encoding_roundtrip() {
             receiver: Some(canister_id(&[1, 2, 3])),
             sender: Some(canister_id(&[4, 5, 6])),
             sender_reply_callback: 13,
-            payment: Some(Funds {
-                icp: 0,
-                cycles_struct: Some(cycles.clone()),
-            }),
             method_name: "do_update".into(),
             method_payload: vec![169; 2 << 20],
             cycles_payment: Some(cycles),

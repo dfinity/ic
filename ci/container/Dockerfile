@@ -5,11 +5,12 @@ FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30
 ENV TZ=UTC
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# copy config files
+# copy/write config files
 ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
+RUN echo "[storage]\nrootless_storage_path=\"/tmp/containers\"" > /etc/containers/storage.conf
 # marker for scripts to check if they are running in this container
 RUN touch /home/ubuntu/.ic-build-container
 
@@ -44,18 +45,10 @@ RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert
     echo "$mkcert_sha /usr/local/bin/mkcert" | sha256sum --check && \
     chmod +x /usr/local/bin/mkcert
 
-ARG bazelisk_sha=fd8fdff418a1758887520fa42da7e6ae39aefc788cf5e7f7bb8db6934d279fc4
-RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/bazelisk-linux-amd64 -o /usr/bin/bazel && \
+ARG bazelisk_sha=22e7d3a188699982f661cf4687137ee52d1f24fec1ec893d91a6c4d791a75de8
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
-
-# Add cocogitto
-ARG COCOGITTO_VERSION="5.4.0"
-ARG COCOGITTO_BIN="/usr/local/bin/cog"
-ARG COCOGITTO_OUT="cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOGITTO_VERSION}/cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "/usr/local/bin" && \
-    rm "/usr/local/bin/LICENSE" && \
-    echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
 
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
@@ -64,16 +57,8 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
     echo "98a45fcc651424551f56b8bc4f697ae7ae66930da59b1ef9dfeeaa4da64cb2c6  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
-# Add IC SDK (dfx)
-ARG sdk_version=0.25.1
-ARG sdk_sha=1e2118e0463aa44fed3a5dee8d638144c67e7b6ee8e0beaf75cfd56687bdb7e7
-RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
-    echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
-    tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/dfx
-
 # Add motoko compiler
-ARG motoko_version=0.14.7
+ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 # Create user groups needed for github actions runner
@@ -99,21 +84,9 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
-# Pre-populate the Bazel installation for root
-# (note: this is only used for bash completion; the actual bazel version comes from bazelisk)
-COPY .bazelversion /tmp/bazel/
-RUN cd /tmp/bazel && bazel version
-
-COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
-RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
-    echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
-
 USER ubuntu
 # Set PATH for ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-
-# Pre-populate the Bazel installation for ubuntu
-RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
 RUN mkdir -p /tmp/rust-version/
@@ -142,4 +115,18 @@ USER $CI_USER
 CMD ["/bin/bash"]
 
 FROM base as build
+
 FROM base as dev
+
+# Temporarily switch to root to install development packages.
+# We will switch back to the non-root user at the end of this stage.
+USER root
+
+# Install additional packages for development but not needed on CI:
+ARG PACKAGE_DEV_FILE=ci/container/files/packages.dev
+COPY ${PACKAGE_DEV_FILE} /tmp/
+RUN apt -yq update && \
+    apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
+    rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
+
+USER $CI_USER

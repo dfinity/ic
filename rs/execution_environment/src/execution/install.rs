@@ -22,7 +22,7 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_replicated_state::{
     CanisterState, metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
-use ic_types::funds::Cycles;
+use ic_types::Cycles;
 use ic_types::messages::{CanisterCall, RequestMetadata};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
@@ -122,8 +122,8 @@ pub(crate) fn execute_install(
         round_limits,
         original.compilation_cost_handling,
     );
+    helper.charge_for_compilation(instructions_from_compilation);
     if let Err(err) = helper.replace_execution_state_and_allocations(
-        instructions_from_compilation,
         result,
         CanisterMemoryHandling {
             stable_memory_handling: MemoryHandling::Replace,

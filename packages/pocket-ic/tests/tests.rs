@@ -30,8 +30,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
-#[cfg(windows)]
-use wslpath::windows_to_wsl;
 
 mod common;
 
@@ -2783,12 +2781,7 @@ fn test_specified_id_on_resumed_state() {
 #[should_panic(expected = "is not a (subnet state) directory")]
 fn with_subnet_state_file() {
     let state_file = NamedTempFile::new().unwrap();
-    #[cfg(not(windows))]
     let state_file_path_buf = state_file.path().to_path_buf();
-    #[cfg(windows)]
-    let state_file_path_buf = windows_to_wsl(state_file.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let _pic = PocketIcBuilder::new()
         .with_subnet_state(SubnetKind::Application, state_file_path_buf)
@@ -2799,12 +2792,7 @@ fn with_subnet_state_file() {
 #[should_panic(expected = "Provided an empty state directory at path")]
 fn with_empty_subnet_state() {
     let state_dir = TempDir::new().unwrap();
-    #[cfg(not(windows))]
     let state_dir_path_buf = state_dir.path().to_path_buf();
-    #[cfg(windows)]
-    let state_dir_path_buf = windows_to_wsl(state_dir.path().as_os_str().to_str().unwrap())
-        .unwrap()
-        .into();
 
     let _pic = PocketIcBuilder::new()
         .with_subnet_state(SubnetKind::Application, state_dir_path_buf)
@@ -2839,6 +2827,7 @@ fn with_http_gateway_config_but_no_auto_progress() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
@@ -2893,6 +2882,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
         server_binary: None,
         reuse: false,
         ttl: None,
+        hard_ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -2912,6 +2902,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_server_url(server_url.clone())
@@ -2979,6 +2970,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         server_binary: None,
         reuse: false,
         ttl: None,
+        hard_ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -2992,6 +2984,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let auto_progress_config = AutoProgressConfig {
         artificial_delay_ms: None,
@@ -3025,6 +3018,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         server_binary: None,
         reuse: false,
         ttl: None,
+        hard_ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3036,6 +3030,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_server_url(server_url.clone())
@@ -3093,6 +3088,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         server_binary: None,
         reuse: false,
         ttl: None,
+        hard_ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3105,6 +3101,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
             cert_path: "".to_string(),
             key_path: "".to_string(),
         }),
+        domain_custom_provider_local_file: None,
     };
     let subnet_config_set = SubnetConfigSet {
         application: 1,
@@ -3158,6 +3155,7 @@ fn canister_not_found() {
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
@@ -3230,13 +3228,15 @@ fn deterministic_registry() {
         let state_dir = TempDir::new().unwrap();
         let state_dir_path_buf = state_dir.path().to_path_buf();
 
-        let _pocket_ic = PocketIcBuilder::new()
+        let pocket_ic = PocketIcBuilder::new()
             .with_state_dir(state_dir_path_buf.clone())
             .with_nns_subnet()
             .with_ii_subnet()
             .with_fiduciary_subnet()
             .with_application_subnet()
             .build();
+        // On WSL, the registry file is only available after the PocketIC instance is dropped.
+        drop(pocket_ic);
 
         let registry_proto_path = state_dir_path_buf.join("registry.proto");
         std::fs::read(registry_proto_path).unwrap()

@@ -75,6 +75,7 @@ async fn prepare_network_for_test(
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pocket_ic = PocketIcBuilder::new()
         .with_state_dir(state_dir)
@@ -154,7 +155,7 @@ async fn test_sns_testing_dev_nns_neuron_id() {
 
     // The following NNS neuron ID is hard-coded in sns-testing README.
     // If the test fails, then the README must be updated.
-    assert_eq!(dev_nns_neuron_id.id, 3912484856864073044);
+    assert_eq!(dev_nns_neuron_id.id, 11129307823670308035);
 }
 
 #[tokio::test]

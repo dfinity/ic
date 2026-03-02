@@ -109,29 +109,14 @@ async fn create_hostos_upgrade_file(
     println!("Starting download from: {}", upgrade_url);
     let file_downloader = FileDownloader::new_with_timeout(None, Duration::from_secs(120));
 
-    let download_result = file_downloader
+    file_downloader
         .download_file(
             upgrade_url,
             Path::new(file_path),
             Some(target_hash.to_string()),
         )
-        .await;
-
-    match download_result {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            if let Ok(metadata) = std::fs::metadata(file_path) {
-                println!(
-                    "Download failed: {}. Partial file size: {} bytes",
-                    e,
-                    metadata.len()
-                );
-            } else {
-                println!("Download failed: {}", e);
-            }
-            Err(e.to_string())
-        }
-    }
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn run_upgrade() -> Response {

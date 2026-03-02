@@ -388,15 +388,15 @@ fn should_be_idempotent_when_opening_secret_key_store() {
 
 #[test]
 fn should_fail_to_write_to_read_only_secret_key_store_directory() {
+    let rng = &mut reproducible_rng();
     let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
         &SecretKeyStoreVersion::V2,
         CryptoMetrics::none(),
         None,
     );
-    let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
     ));
 
     // make the crypto root directory non-writeable, causing the subsequent call to insert a
@@ -423,10 +423,10 @@ fn should_fail_to_write_to_secret_key_store_directory_without_execute_permission
         CryptoMetrics::none(),
         None,
     );
-    let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
+    let rng = &mut reproducible_rng();
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
     ));
 
     // make the crypto root directory non-executable, causing the subsequent call to insert a
@@ -453,10 +453,10 @@ fn should_fail_to_write_to_secret_key_store_directory_without_write_permissions(
         CryptoMetrics::none(),
         None,
     );
-    let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
+    let rng = &mut reproducible_rng();
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
     ));
 
     // make the crypto root directory non-writeable, causing the subsequent call to insert a
@@ -485,10 +485,10 @@ fn should_successfully_write_to_secret_key_store_directory_with_write_and_execut
     );
     fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700))
         .expect("Could not set the permissions of the temp dir.");
-    let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
+    let rng = &mut reproducible_rng();
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
     ));
     assert_matches!(secret_key_store.insert(key_id, key, None), Ok(()));
 }

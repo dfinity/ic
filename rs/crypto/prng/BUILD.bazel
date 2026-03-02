@@ -9,7 +9,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha2",
+    "//rs/crypto/internal/crypto_lib/seed",
     "//rs/types/types",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",

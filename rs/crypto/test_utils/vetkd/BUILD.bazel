@@ -24,6 +24,7 @@ rust_test_suite(
         ":vetkd",
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:ic-vetkeys",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",

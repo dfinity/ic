@@ -64,7 +64,7 @@ mod tests {
             ExecutionState, ExportedFunctions, NumWasmPages,
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         },
-        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
+        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology, testing::NetworkTopologyTesting},
         page_map::PageMap,
         testing::{ReplicatedStateTesting, StreamTesting},
     };
@@ -82,7 +82,6 @@ mod tests {
     use maplit::btreemap;
     use std::collections::{BTreeSet, VecDeque};
     use std::convert::TryFrom;
-    use std::sync::Arc;
     use std::time::Duration;
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -768,7 +767,7 @@ mod tests {
     fn test_traverse_subnet() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.subnets = btreemap! {
+        state.metadata.network_topology.set_subnets(btreemap! {
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
                 nodes: BTreeSet::new(),
@@ -776,17 +775,19 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: BTreeSet::new(),
-                subnet_type: SubnetType::Application,
+                subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             }
-        };
-        state.metadata.network_topology.routing_table = Arc::new(
+        });
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 id_range(0, 10) => subnet_test_id(0),
                 id_range(11, 20) => subnet_test_id(1),
@@ -864,7 +865,15 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![1, 2, 3, 4]),
+                    E::VisitBlob(vec![1, 2, 3, 4])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EnterEdge(subnet_test_id(1).get().into_vec()),
                     E::StartSubtree,
@@ -909,13 +918,21 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![5, 6, 7, 8]),
+                    E::VisitBlob(vec![5, 6, 7, 8])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"system".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EndSubtree, // subnets
                     edge("time"),
                     leb_num(0),
                     E::EndSubtree, // global
-                ])
+                ]),
             ]
             .into_iter()
             .flat_map(Option::unwrap_or_default)
@@ -933,7 +950,7 @@ mod tests {
     fn test_traverse_large_or_empty_routing_table() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.subnets = btreemap! {
+        state.metadata.network_topology.set_subnets(btreemap! {
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
                 nodes: BTreeSet::new(),
@@ -941,17 +958,19 @@ mod tests {
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: BTreeSet::new(),
-                subnet_type: SubnetType::Application,
+                subnet_type: SubnetType::VerifiedApplication,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             }
-        };
-        state.metadata.network_topology.routing_table = Arc::new(
+        });
+        state.metadata.network_topology.set_routing_table(
             RoutingTable::try_from(btreemap! {
                 id_range(0, 10) => subnet_test_id(0),
                 id_range(21, 30) => subnet_test_id(0),
@@ -1100,7 +1119,15 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![1, 2, 3, 4]),
+                    E::VisitBlob(vec![1, 2, 3, 4])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EnterEdge(subnet_test_id(1).get().into_vec()),
                     E::StartSubtree,
@@ -1135,13 +1162,21 @@ mod tests {
                 ]),
                 Some(vec![
                     edge("public_key"),
-                    E::VisitBlob(vec![5, 6, 7, 8]),
+                    E::VisitBlob(vec![5, 6, 7, 8])
+                ]),
+                (certification_version >= V25).then_some(
+                    vec![
+                        edge("type"),
+                        E::VisitBlob(b"verified_application".to_vec())
+                    ]
+                ),
+                Some(vec![
                     E::EndSubtree, // subnet
                     E::EndSubtree, // subnets
                     edge("time"),
                     leb_num(0),
                     E::EndSubtree, // global
-                ])
+                ]),
             ]
             .into_iter()
             .flat_map(Option::unwrap_or_default)

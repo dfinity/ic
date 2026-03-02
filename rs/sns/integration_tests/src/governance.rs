@@ -3,12 +3,12 @@ use ic_sns_governance::pb::v1::{
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
 };
 use ic_sns_init::{SnsCanisterIds, pb::v1::SnsInitPayload};
-use ic_sns_test_utils::itest_helpers::{SnsCanisters, local_test_on_sns_subnet};
+use ic_sns_test_utils::itest_helpers::{SnsCanisters, state_machine_test_on_sns_subnet};
 use ic_types::PrincipalId;
 
 #[test]
 fn test_sns_initialization_parameters_are_set() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
 
         let sns_canisters_init_payload = sns_init_payload

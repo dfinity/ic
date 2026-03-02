@@ -1,6 +1,5 @@
 SELECT
-  -- Bazel's first_start_time is really the time the last attempt started.
-  bt.first_start_time AS "last started at (UTC)",
+  bt.first_start_time,
 
   bt.total_run_duration * INTERVAL '1 second' AS "duration",
 
@@ -11,18 +10,18 @@ SELECT
       WHEN bt.overall_status = 4 THEN 'FAILED'
   END AS "status",
 
-  'https://dash.idx.dfinity.network/invocation/' || bi.build_id AS "buildbuddy_url",
+  bi.build_id,
 
-  wr.head_branch AS "branch",
+  wr.head_branch,
 
   CASE
       -- This is to fix the weird reality that all master commits have pull_request_number 855
       -- and pull_request_url https://api.github.com/repos/bit-cook/ic/pulls/855.
       WHEN wr.event_type = 'pull_request' THEN CAST(wr.pull_request_number AS TEXT)
       ELSE ''
-  END AS "PR",
+  END AS "pull_request_number",
 
-  bi.head_sha AS "commit"
+  bi.head_sha
 
 FROM
   workflow_runs     AS wr JOIN
@@ -32,7 +31,7 @@ FROM
 WHERE
    bt.label = {test_target}
    AND bt.overall_status IN ({overall_statuses})
-   AND ('{period}' = '' OR bt.first_start_time > now() - ('1 {period}'::interval))
+   AND ({time_filter})
    AND (NOT {only_prs} OR wr.event_type = 'pull_request')
    AND ({branch} = '' OR wr.head_branch LIKE {branch})
 

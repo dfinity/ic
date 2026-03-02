@@ -181,6 +181,7 @@ impl InternalHttpQueryHandler {
         data_certificate_with_delegation_metadata: Option<DataCertificateWithDelegationMetadata>,
         enable_query_stats_tracking: bool,
         instruction_observation: Option<Arc<AtomicU64>>,
+        max_instructions: Option<NumInstructions>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
@@ -229,6 +230,7 @@ impl InternalHttpQueryHandler {
                             .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE),
                         state.get_ref().get_own_cost_schedule(),
                         ready_for_migration,
+                        &state.get_ref().get_own_subnet_admins(),
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
@@ -293,6 +295,10 @@ impl InternalHttpQueryHandler {
                 data_certificate_with_delegation_metadata.data_certificate
             },
         );
+        let max_instructions_per_query = match max_instructions {
+            Some(max_ins) => max_ins.min(self.max_instructions_per_query),
+            None => self.max_instructions_per_query,
+        };
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
@@ -306,7 +312,7 @@ impl InternalHttpQueryHandler {
             subnet_available_callbacks,
             subnet_memory_reservation,
             self.config.canister_guaranteed_callback_quota as u64,
-            self.max_instructions_per_query,
+            max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,
             self.config.max_query_call_walltime,
@@ -472,6 +478,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             Some(data_certificate_with_delegation_metadata),
                             enable_query_stats_tracking,
                             None,
+                            None,
                         );
 
                         Ok((response, time))
@@ -505,6 +512,7 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
         TransformExecutionInput {
             query,
             instruction_observation,
+            max_instructions,
         }: TransformExecutionInput,
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
@@ -543,6 +551,7 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
                             None,
                             enable_query_stats_tracking,
                             Some(instruction_observation),
+                            Some(max_instructions),
                         );
 
                         Ok((response, time))

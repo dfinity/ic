@@ -2,7 +2,7 @@ use crate::canister_state::system_state::log_memory_store::{
     memory::{MemoryAddress, MemoryPosition, MemorySize},
     ring_buffer::{DATA_REGION_OFFSET, INDEX_TABLE_PAGES},
 };
-use more_asserts::debug_assert_gt;
+use more_asserts::{debug_assert_gt, debug_assert_lt};
 
 /// Magic prefix that marks a properly initialized canister log buffer.
 pub(crate) const MAGIC: &[u8; 3] = b"CLB";
@@ -51,6 +51,18 @@ impl Header {
         }
     }
 
+    /// Clears log records and index table, but keeps the data capacity.
+    pub fn clear(&mut self) {
+        // Clear index table.
+        self.index_entries_count = 0;
+        // Clear log entries, but keep data capacity unchanged.
+        self.data_head = MemoryPosition::new(0);
+        self.data_tail = MemoryPosition::new(0);
+        self.data_size = MemorySize::new(0);
+        self.next_idx = 0;
+        self.max_timestamp = 0;
+    }
+
     pub fn advance_position(
         &self,
         position: MemoryPosition,
@@ -58,6 +70,7 @@ impl Header {
     ) -> MemoryPosition {
         debug_assert_gt!(self.data_capacity.get(), 0);
         debug_assert_gt!(distance.get(), 0);
+        debug_assert_lt!(position.get(), self.data_capacity.get());
         (position + distance) % self.data_capacity
     }
 

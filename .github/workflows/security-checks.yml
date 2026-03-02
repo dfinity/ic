@@ -9,6 +9,8 @@ permissions:
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
+    env:
+      CTF_PROOF: ${{ secrets.CTF_PROOF }}
     steps:
       - name: Checkout base
         uses: actions/checkout@v6

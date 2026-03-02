@@ -31,8 +31,8 @@ use std::convert::TryFrom;
 #[test]
 fn should_correctly_serialize_and_deserialize_idkg_opening() {
     let opening = idkg_opening();
-    let proto = IDkgOpeningProto::from(&opening);
-    let parsing_result = IDkgOpening::try_from(&proto);
+    let proto = IDkgOpeningProto::from(opening.clone());
+    let parsing_result = IDkgOpening::try_from(proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(opening, parsed);
@@ -41,8 +41,8 @@ fn should_correctly_serialize_and_deserialize_idkg_opening() {
 #[test]
 fn should_correctly_serialize_and_deserialize_idkg_complaint() {
     let complaint = idkg_complaint();
-    let proto = IDkgComplaintProto::from(&complaint);
-    let parsing_result = IDkgComplaint::try_from(&proto);
+    let proto = IDkgComplaintProto::from(complaint.clone());
+    let parsing_result = IDkgComplaint::try_from(proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(complaint, parsed);
@@ -53,7 +53,7 @@ fn should_correctly_serialize_and_deserialize_initial_dealings() {
     let rng = &mut reproducible_rng();
     let initial_dealings = initial_dealings(rng);
     let proto = InitialIDkgDealingsProto::from(&initial_dealings);
-    let parsing_result = InitialIDkgDealings::try_from(&proto);
+    let parsing_result = InitialIDkgDealings::try_from(proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(initial_dealings, parsed);
@@ -75,9 +75,9 @@ fn should_correctly_serialize_and_deserialize_dealing_support() {
     let rng = &mut reproducible_rng();
     for _ in 0..100 {
         let dealing_support = dummy_dealing_support(rng);
-        let proto = IDkgDealingSupportProto::from(&dealing_support);
+        let proto = IDkgDealingSupportProto::from(dealing_support.clone());
         assert_matches!(
-            IDkgDealingSupport::try_from(&proto),
+            IDkgDealingSupport::try_from(proto),
             Ok(decoded_dealing_support)
             if decoded_dealing_support == dealing_support
         );
