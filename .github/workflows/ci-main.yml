@@ -728,6 +728,7 @@ jobs:
           filters: |
             container-run:
               - '.github/workflows/ci-pr-only.yml'
+              - '.github/workflows/container-autobuild.yml'
               - 'ci/container/**'
       - name: Test Container Run
         if: |
