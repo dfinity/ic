@@ -1,3 +1,4 @@
+#[allow(clippy::test_attr_in_doctest)]
 //! This should probably not be used outside of test.
 //!
 //! This is for "feature flags". That is,
