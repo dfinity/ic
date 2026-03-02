@@ -66,8 +66,6 @@ jobs:
             target: build
           - image: ic-dev
             target: dev
-    outputs:
-      imageid: ${{ steps.set-imageid.outputs.imageid }} # both images share the same imageid
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,10 +92,6 @@ jobs:
           target: ${{ matrix.target }}
           build-args: |
             CI_USER=1001
-      - name: Set imageid output
-        id: set-imageid
-        if: matrix.image == 'ic-build'
-        run: echo "imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
 
   update-image-references:
     name: Update Image References in Repo
@@ -124,15 +118,16 @@ jobs:
           # Update container image references
           set -xeuo pipefail
 
-          IMG_NAME=${{ github.repository_owner }}/ic-build
-          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ needs.ic-build-image.outputs.imageid }}"
+          IMAGE_PREFIX="ghcr.io/dfinity/"
+          IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build:${{ needs.build-image-prep.outputs.image_tag }}"
+          IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev:${{ needs.build-image-prep.outputs.image_tag }}"
 
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
           pushd .devcontainer
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
+          sed -i -E "s|ghcr\.io/dfinity/ic-dev:[a-zA-Z0-9._-]+|$IMG_NAME_IC_DEV|g" -- *
           popd
           pushd .github
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- workflow*/*
+          sed -i -E "s|ghcr\.io/dfinity/ic-build:[a-zA-Z0-9._-]+|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           popd
 
           git config --global user.name "IDX GitHub Automation"
