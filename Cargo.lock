@@ -5443,6 +5443,7 @@ name = "guest_vm_runner"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "askama",
  "clap 4.5.27",
  "command_runner",
