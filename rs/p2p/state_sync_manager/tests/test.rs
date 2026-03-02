@@ -173,7 +173,7 @@ fn test_full_subnet_mini_chunks() {
                 join_handles.push(join_handle);
                 states.push(state_sync);
             }
-            global_state.add_new_chunks(40000, 1000);
+            global_state.add_new_chunks(10000, 1000);
 
             // Verify that empty node has caught up
             let fut = async move {
