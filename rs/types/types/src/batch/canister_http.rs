@@ -213,7 +213,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
-                signature: share.signature.signature.clone().get().0,
+                signature: share.signature.signature.get().0,
             }),
         }
     }

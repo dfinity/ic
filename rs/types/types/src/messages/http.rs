@@ -477,7 +477,12 @@ impl Delegation {
         Self {
             pubkey: Blob(pubkey),
             expiration,
-            targets: Some(targets.iter().map(|c| Blob(c.get().to_vec())).collect()),
+            targets: Some(
+                targets
+                    .into_iter()
+                    .map(|c| Blob(c.get().to_vec()))
+                    .collect(),
+            ),
         }
     }
 

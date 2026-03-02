@@ -494,7 +494,7 @@ impl IDkgPreSignerImpl {
                                 "validate_dealing_support",
                             ) else {
                                 return Some(IDkgChangeAction::HandleInvalid(
-                                    id.clone(),
+                                    id,
                                     format!("Failed to translate transcript_params_ref: {support}"),
                                 ));
                             };

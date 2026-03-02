@@ -229,7 +229,7 @@ fn update_ecdsa_quadruple_in_creation(
         } else {
             quadruple.kappa_times_lambda_config = Some(idkg::UnmaskedTimesMaskedParams::new(
                 uid_generator.next_transcript_id(),
-                receivers.clone(),
+                receivers,
                 registry_version,
                 (kappa_config, *kappa_unmasked),
                 (lambda_config, *lambda_masked),
