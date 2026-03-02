@@ -47,6 +47,7 @@ jobs:
           # Ensures we fetch the merge-base, which we compare against
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.commit-sha }}
+      - uses: ./.github/actions/netrc
       - name: Run candid compatibility checks
         uses: ./.github/actions/bazel
         with:
@@ -77,6 +78,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
           token: ${{ steps.app-token.outputs.token }}
+      - uses: ./.github/actions/netrc
       - name: Run Linter
         id: linter
         uses: ./.github/actions/bazel
