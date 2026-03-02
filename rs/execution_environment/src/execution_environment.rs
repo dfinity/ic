@@ -446,11 +446,6 @@ impl ExecutionEnvironment {
     /// Time complexity: `O(|canisters|)`.
     pub fn scaled_subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
         let memory_taken = state.memory_taken();
-        // We apply the scaling factor `self.scheduler_cores`
-        // consistently with the scaling factor of `ResourceSaturation`
-        // in the function `self.subnet_memory_saturation`.
-        let scaling_factor =
-            NonZeroU64::new(self.scheduler_cores.max(1) as u64).expect("Must be non zero");
         SubnetAvailableMemory::new_scaled(
             self.config.subnet_memory_capacity.get() as i64
                 - self.config.subnet_memory_reservation.get() as i64
@@ -463,7 +458,11 @@ impl ExecutionEnvironment {
                 .subnet_wasm_custom_sections_memory_capacity
                 .get() as i64
                 - memory_taken.wasm_custom_sections().get() as i64,
-            scaling_factor,
+            // We apply the scaling factor `self.scheduler_cores`
+            // consistently with the scaling factor of `ResourceSaturation`
+            // in the function `self.subnet_memory_saturation`.
+            NonZeroU64::new(self.scheduler_cores.max(1) as u64)
+                .expect("scaling_factor must be non zero"),
         )
     }
 
@@ -4564,7 +4563,7 @@ pub(crate) fn full_subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAva
         config.subnet_memory_capacity.get() as i64,
         config.guaranteed_response_message_memory_capacity.get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
-        NonZeroU64::new(1).expect("Must be non zero"),
+        NonZeroU64::new(1).expect("scaling_factor must be non zero"),
     )
 }
 
