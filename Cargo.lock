@@ -11534,6 +11534,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-query-instruction-logger"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "ic-cdk",
+ "quote",
+ "syn 2.0.110",
+]
+
+[[package]]
 name = "ic-nervous-system-rate-limits"
 version = "0.0.1"
 dependencies = [
@@ -11863,6 +11873,7 @@ dependencies = [
  "ic-nervous-system-lock",
  "ic-nervous-system-long-message",
  "ic-nervous-system-proto",
+ "ic-nervous-system-query-instruction-logger",
  "ic-nervous-system-rate-limits",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
