@@ -448,7 +448,7 @@ impl ExecutionEnvironment {
         // We apply the scaling factor `self.scheduler_cores`
         // consistently with the scaling factor of `ResourceSaturation`
         // in the function `self.subnet_memory_saturation`.
-        let scaling_factor = self.scheduler_cores as i64;
+        let scaling_factor = self.scheduler_cores as u64;
         SubnetAvailableMemory::new_scaled(
             self.config.subnet_memory_capacity.get() as i64
                 - self.config.subnet_memory_reservation.get() as i64

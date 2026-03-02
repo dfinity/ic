@@ -373,8 +373,9 @@ impl SubnetAvailableMemory {
         execution_memory: i64,
         guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
-        scaling_factor: i64,
+        scaling_factor: u64,
     ) -> Self {
+        let scaling_factor = scaling_factor.max(1) as i64;
         SubnetAvailableMemory {
             execution_memory: execution_memory / scaling_factor,
             guaranteed_response_message_memory: guaranteed_response_message_memory / scaling_factor,
