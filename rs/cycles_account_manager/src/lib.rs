@@ -209,7 +209,7 @@ impl CyclesAccountManager {
     ) -> Cycles {
         match cost_schedule {
             CanisterCyclesCostSchedule::Normal => {
-                (cycles * subnet_size) / self.config.reference_subnet_size
+                (cycles * subnet_size) / self.config.reference_subnet_size.max(1)
             }
             CanisterCyclesCostSchedule::Free => Cycles::new(0),
         }
