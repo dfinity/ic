@@ -1,8 +1,6 @@
-use crate::{
-    error::{OrchestratorError, OrchestratorResult},
-    registry_helper::RegistryHelper,
-};
+use crate::registry_helper::RegistryHelper;
 use backoff::{ExponentialBackoff, backoff::Backoff};
+use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_sys::utility_command::UtilityCommand;
@@ -63,7 +61,7 @@ impl HostosUpgrader {
         }
     }
 
-    async fn check_for_upgrade(&mut self) -> OrchestratorResult<()> {
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<()> {
         let latest_registry_version = self.registry.get_latest_version();
 
         let node_id = self.node_id;
@@ -92,7 +90,7 @@ impl HostosUpgrader {
         Ok(())
     }
 
-    async fn execute_upgrade(&mut self, version: &HostosVersion) -> OrchestratorResult<()> {
+    async fn execute_upgrade(&mut self, version: &HostosVersion) -> UpgradeResult<()> {
         let hostos_version_record = self
             .registry
             .get_hostos_version_record(version.clone(), self.registry.get_latest_version())?;
@@ -124,7 +122,7 @@ impl HostosUpgrader {
             }
         }
 
-        Err(OrchestratorError::UpgradeError(error))
+        Err(UpgradeError::GenericError(error))
     }
 
     fn get_load_balance_number(&self) -> usize {
