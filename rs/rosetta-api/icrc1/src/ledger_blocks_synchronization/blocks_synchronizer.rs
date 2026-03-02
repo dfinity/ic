@@ -5,7 +5,9 @@ use anyhow::{Context, bail};
 use candid::{Decode, Encode, Nat};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
-use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
+use icrc_ledger_types::icrc3::blocks::{
+    BlockRange, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc, time::Duration};
@@ -58,10 +60,20 @@ pub enum RecurrencyMode {
     Recurrent(RecurrencyConfig),
 }
 
+/// Specifies which endpoint to use for fetching blocks from the ledger.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GetBlocksMode {
+    /// Use the legacy `get_blocks` endpoint (default).
+    Legacy,
+    /// Use the standard ICRC-3 `icrc3_get_blocks` endpoint.
+    Icrc3,
+}
+
 async fn verify_and_fix_gaps(
     agent: Arc<Icrc1Agent>,
     storage_client: Arc<StorageClient>,
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
+    get_blocks_mode: GetBlocksMode,
 ) -> anyhow::Result<()> {
     let sync_ranges = derive_synchronization_gaps(storage_client.clone()).await?;
     let tip = get_tip_block_hash_and_index(agent.clone()).await?;
@@ -78,6 +90,7 @@ async fn verify_and_fix_gaps(
             archive_canister_ids.clone(),
             sync_range,
             tip_block_index,
+            get_blocks_mode,
         )
         .await?;
     }
@@ -151,6 +164,7 @@ pub async fn start_synching_blocks(
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
     recurrency_mode: RecurrencyMode,
     heartbeat: Box<dyn Fn() + Send + Sync>,
+    get_blocks_mode: GetBlocksMode,
 ) -> anyhow::Result<()> {
     let mut current_failure_streak = 0u32;
     let mut is_initial_sync = true;
@@ -166,6 +180,7 @@ pub async fn start_synching_blocks(
             agent.clone(),
             storage_client.clone(),
             archive_canister_ids.clone(),
+            get_blocks_mode,
         )
         .await;
         match result {
@@ -182,6 +197,7 @@ pub async fn start_synching_blocks(
                 storage_client.clone(),
                 maximum_blocks_per_request,
                 archive_canister_ids.clone(),
+                get_blocks_mode,
             )
             .await
             {
@@ -269,6 +285,7 @@ pub async fn sync_from_the_tip(
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
+    get_blocks_mode: GetBlocksMode,
 ) -> anyhow::Result<()> {
     let tip = get_tip_block_hash_and_index(agent.clone()).await?;
     let (tip_block_hash, tip_block_index) = match tip {
@@ -307,6 +324,7 @@ pub async fn sync_from_the_tip(
             archive_canister_ids,
             sync_range,
             tip_block_index,
+            get_blocks_mode,
         )
         .await?;
     }
@@ -375,6 +393,7 @@ async fn sync_blocks_interval(
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
     sync_range: SyncRange,
     tip_block_index: u64,
+    get_blocks_mode: GetBlocksMode,
 ) -> anyhow::Result<()> {
     // Create a progress bar for visualization.
     let mut pr = ProgressReport::new(
@@ -404,6 +423,7 @@ async fn sync_blocks_interval(
             agent.clone(),
             next_index_interval.clone(),
             archive_canister_ids.clone(),
+            get_blocks_mode,
         )
         .await;
 
@@ -492,10 +512,13 @@ async fn sync_blocks_interval(
 
 /// Fetches all blocks given a certain interval. The interval is expected to be smaller or equal to the maximum number of blocks than can be requested.
 /// Guarantees to return only if all blocks in the given interval were fetched.
+/// Uses [`GetBlocksMode::Icrc3`] for the standard ICRC-3 `icrc3_get_blocks` endpoint,
+/// or [`GetBlocksMode::Legacy`] for the legacy `get_blocks` endpoint.
 async fn fetch_blocks_interval(
     agent: Arc<Icrc1Agent>,
     index_range: RangeInclusive<u64>,
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
+    get_blocks_mode: GetBlocksMode,
 ) -> anyhow::Result<Vec<RosettaBlock>> {
     // Construct a hashmap which maps block indices to blocks. Blocks that have not been fetched are `None`.
     let mut fetched_blocks_result: HashMap<u64, Option<RosettaBlock>> = HashMap::new();
@@ -552,103 +575,205 @@ async fn fetch_blocks_interval(
                 length: Nat::from(*interval.end() - *interval.start() + 1),
             };
 
-            // Fetch blocks with a given request from the Icrc1Agent
-            let blocks_response: GetBlocksResponse = agent
-                .get_blocks(get_blocks_request)
-                .await
-                .with_context(|| {
-                    format!(
-                        "Icrc1Agent could not fetch blocks in interval {} to {}",
-                        interval.start().clone(),
-                        interval.end().clone()
-                    )
-                })?;
+            match get_blocks_mode {
+                GetBlocksMode::Icrc3 => {
+                    // Fetch blocks with a given request from the Icrc1Agent using ICRC-3 endpoint
+                    let blocks_result: GetBlocksResult = agent
+                        .icrc3_get_blocks(vec![get_blocks_request.clone()])
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "Icrc1Agent could not fetch blocks in interval {} to {}",
+                                interval.start().clone(),
+                                interval.end().clone()
+                            )
+                        })?;
 
-            // Convert all Generic Blocks into RosettaBlocks.
-            for (index, block) in blocks_response.blocks.into_iter().enumerate() {
-                // The index of the RosettaBlock is the starting index of the request plus the position of current block in the response object.
-                let block_index = blocks_response
-                    .first_index
-                    .0
-                    .to_u64()
-                    .context("Could not convert Nat to u64")?
-                    + index as u64;
-                fetched_blocks_result.insert(
-                    block_index,
-                    Some(
-                        RosettaBlock::from_generic_block(block, block_index).map_err(|e| {
-                            let old_context = e.to_string();
-                            e.context(format!(
-                                "Failed to parse block at index {block_index}: {old_context}"
-                            ))
-                        })?,
-                    ),
-                );
-            }
-
-            // Fetch all blocks that could not be returned by the ledger directly, from the
-            // archive.
-            for archive_query in blocks_response.archived_blocks {
-                let arg = Encode!(&GetBlocksRequest {
-                    start: archive_query.start.clone(),
-                    length: archive_query.length,
-                })?;
-
-                // Check if the provided archive canister id is in the list of trusted canister ids
-                // (without holding lock across await points)
-                let is_trusted = {
-                    let trusted_archive_canisters = archive_canister_ids.lock().await;
-                    trusted_archive_canisters.iter().any(|archive_info| {
-                        archive_info.canister_id == archive_query.callback.canister_id
-                    })
-                };
-
-                if !is_trusted {
-                    // Fetch updated archive info without holding the lock
-                    let new_archive_infos = fetch_archive_canister_infos(agent.clone()).await?;
-
-                    // Update the list and check again
-                    let mut trusted_archive_canisters = archive_canister_ids.lock().await;
-                    *trusted_archive_canisters = new_archive_infos;
-
-                    if !trusted_archive_canisters.iter().any(|archive_info| {
-                        archive_info.canister_id == archive_query.callback.canister_id
-                    }) {
-                        bail!(
-                            "Archive canister id {} is not in the list of trusted canister ids",
-                            archive_query.callback.canister_id
+                    // Convert all Generic Blocks into RosettaBlocks.
+                    for block_with_id in blocks_result.blocks.into_iter() {
+                        // The index of the RosettaBlock is stored in the BlockWithId.
+                        let block_index = block_with_id
+                            .id
+                            .0
+                            .to_u64()
+                            .context("Could not convert Nat to u64")?;
+                        fetched_blocks_result.insert(
+                            block_index,
+                            Some(
+                                RosettaBlock::from_icrc3_generic_block(
+                                    block_with_id.block,
+                                    block_index,
+                                )
+                                .map_err(|e| {
+                                    let old_context = e.to_string();
+                                    e.context(format!(
+                                        "Failed to parse block at index {block_index}: {old_context}"
+                                    ))
+                                })?,
+                            ),
                         );
                     }
+
+                    // Fetch all blocks that could not be returned by the ledger directly, from the
+                    // archive.
+                    for archived_blocks in blocks_result.archived_blocks {
+                        // Check if the provided archive canister id is in the list of trusted canister ids
+                        // (without holding lock across await points)
+                        let is_trusted = {
+                            let trusted_archive_canisters = archive_canister_ids.lock().await;
+                            trusted_archive_canisters.iter().any(|archive_info| {
+                                archive_info.canister_id == archived_blocks.callback.canister_id
+                            })
+                        };
+
+                        if !is_trusted {
+                            // Fetch updated archive info without holding the lock
+                            let new_archive_infos =
+                                fetch_archive_canister_infos(agent.clone()).await?;
+
+                            // Update the list and check again
+                            let mut trusted_archive_canisters = archive_canister_ids.lock().await;
+                            *trusted_archive_canisters = new_archive_infos;
+
+                            if !trusted_archive_canisters.iter().any(|archive_info| {
+                                archive_info.canister_id == archived_blocks.callback.canister_id
+                            }) {
+                                bail!(
+                                    "Archive canister id {} is not in the list of trusted canister ids",
+                                    archived_blocks.callback.canister_id
+                                );
+                            }
+                        }
+
+                        // Query the archive without holding any lock using ICRC-3 endpoint
+                        let archive_response = agent
+                            .agent
+                            .query(
+                                &archived_blocks.callback.canister_id,
+                                &archived_blocks.callback.method,
+                            )
+                            .with_arg(Encode!(&archived_blocks.args)?)
+                            .call()
+                            .await?;
+
+                        let arch_blocks_result = Decode!(&archive_response, GetBlocksResult)?;
+
+                        // Process blocks from archive result
+                        for block_with_id in arch_blocks_result.blocks.into_iter() {
+                            let block_index = block_with_id.id.0.to_u64().with_context(|| {
+                                anyhow::Error::msg("Nat could not be converted to u64")
+                            })?;
+                            fetched_blocks_result.insert(
+                                block_index,
+                                Some(RosettaBlock::from_icrc3_generic_block(
+                                    block_with_id.block,
+                                    block_index,
+                                )?),
+                            );
+                        }
+                    }
                 }
+                GetBlocksMode::Legacy => {
+                    // Legacy mode: use get_blocks endpoint
+                    let blocks_response: GetBlocksResponse = agent
+                        .get_blocks(get_blocks_request)
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "Icrc1Agent could not fetch blocks in interval {} to {}",
+                                interval.start().clone(),
+                                interval.end().clone()
+                            )
+                        })?;
 
-                // Query the archive without holding any lock
-                let archive_response = agent
-                    .agent
-                    .query(
-                        &archive_query.callback.canister_id,
-                        &archive_query.callback.method,
-                    )
-                    .with_arg(arg)
-                    .call()
-                    .await?;
+                    // Convert all Generic Blocks into RosettaBlocks.
+                    for (index, block) in blocks_response.blocks.into_iter().enumerate() {
+                        // The index of the RosettaBlock is the starting index of the request plus the position of current block in the response object.
+                        let block_index = blocks_response
+                            .first_index
+                            .0
+                            .to_u64()
+                            .context("Could not convert Nat to u64")?
+                            + index as u64;
+                        fetched_blocks_result.insert(
+                            block_index,
+                            Some(
+                                RosettaBlock::from_generic_block(block, block_index).map_err(
+                                    |e| {
+                                        let old_context = e.to_string();
+                                        e.context(format!(
+                                            "Failed to parse block at index {block_index}: {old_context}"
+                                        ))
+                                    },
+                                )?,
+                            ),
+                        );
+                    }
 
-                let arch_blocks_result = Decode!(&archive_response, BlockRange)?;
+                    // Fetch all blocks that could not be returned by the ledger directly, from the
+                    // archive.
+                    for archive_query in blocks_response.archived_blocks {
+                        let arg = Encode!(&GetBlocksRequest {
+                            start: archive_query.start.clone(),
+                            length: archive_query.length,
+                        })?;
 
-                // The archive guarantees that the first index of the blocks it returns is the same as requested.
-                let first_index = archive_query
-                    .start
-                    .0
-                    .to_u64()
-                    .with_context(|| anyhow::Error::msg("Nat could not be converted to u64"))?;
+                        // Check if the provided archive canister id is in the list of trusted canister ids
+                        // (without holding lock across await points)
+                        let is_trusted = {
+                            let trusted_archive_canisters = archive_canister_ids.lock().await;
+                            trusted_archive_canisters.iter().any(|archive_info| {
+                                archive_info.canister_id == archive_query.callback.canister_id
+                            })
+                        };
 
-                // Iterate over the blocks returned from the archive and add them to the hashmap.
-                for (index, block) in arch_blocks_result.blocks.into_iter().enumerate() {
-                    let block_index = first_index + index as u64;
-                    // The index of the RosettaBlock is the starting index of the request plus the position of the current block in the response object.
-                    fetched_blocks_result.insert(
-                        block_index,
-                        Some(RosettaBlock::from_generic_block(block, block_index)?),
-                    );
+                        if !is_trusted {
+                            // Fetch updated archive info without holding the lock
+                            let new_archive_infos =
+                                fetch_archive_canister_infos(agent.clone()).await?;
+
+                            // Update the list and check again
+                            let mut trusted_archive_canisters = archive_canister_ids.lock().await;
+                            *trusted_archive_canisters = new_archive_infos;
+
+                            if !trusted_archive_canisters.iter().any(|archive_info| {
+                                archive_info.canister_id == archive_query.callback.canister_id
+                            }) {
+                                bail!(
+                                    "Archive canister id {} is not in the list of trusted canister ids",
+                                    archive_query.callback.canister_id
+                                );
+                            }
+                        }
+
+                        // Query the archive without holding any lock
+                        let archive_response = agent
+                            .agent
+                            .query(
+                                &archive_query.callback.canister_id,
+                                &archive_query.callback.method,
+                            )
+                            .with_arg(arg)
+                            .call()
+                            .await?;
+
+                        let arch_blocks_result = Decode!(&archive_response, BlockRange)?;
+
+                        // The archive guarantees that the first index of the blocks it returns is the same as requested.
+                        let first_index = archive_query.start.0.to_u64().with_context(|| {
+                            anyhow::Error::msg("Nat could not be converted to u64")
+                        })?;
+
+                        // Iterate over the blocks returned from the archive and add them to the hashmap.
+                        for (index, block) in arch_blocks_result.blocks.into_iter().enumerate() {
+                            let block_index = first_index + index as u64;
+                            // The index of the RosettaBlock is the starting index of the request plus the position of the current block in the response object.
+                            fetched_blocks_result.insert(
+                                block_index,
+                                Some(RosettaBlock::from_generic_block(block, block_index)?),
+                            );
+                        }
+                    }
                 }
             }
         }
