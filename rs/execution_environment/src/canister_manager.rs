@@ -2049,7 +2049,7 @@ impl CanisterManager {
 
         // Delete old snapshot identified by `replace_snapshot`.
         if let Some(replace_snapshot) = replace_snapshot {
-            self.remove_snapshot(canister, replace_snapshot, state, replace_snapshot_size);
+            self.remove_snapshot(canister, replace_snapshot, replace_snapshot_size);
         }
 
         self.cycles_and_memory_usage_updates(
@@ -2523,7 +2523,6 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &CanisterState,
-        _state: &ReplicatedState,
     ) -> Result<Vec<CanisterSnapshotResponse>, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2580,7 +2579,7 @@ impl CanisterManager {
             resource_saturation,
         )?;
 
-        self.remove_snapshot(canister, delete_snapshot_id, state, old_snapshot_size);
+        self.remove_snapshot(canister, delete_snapshot_id, old_snapshot_size);
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
@@ -2821,7 +2820,7 @@ impl CanisterManager {
 
         // Delete old snapshot identified by `replace_snapshot`.
         if let Some(replace_snapshot) = args.replace_snapshot() {
-            self.remove_snapshot(canister, replace_snapshot, state, replace_snapshot_size);
+            self.remove_snapshot(canister, replace_snapshot, replace_snapshot_size);
         }
 
         // Create new snapshot.
@@ -3070,7 +3069,6 @@ impl CanisterManager {
         &self,
         canister: &mut CanisterState,
         snapshot_id: SnapshotId,
-        _state: &mut ReplicatedState,
         snapshot_size: NumBytes,
     ) {
         // Delete old snapshot identified by `snapshot_id`.

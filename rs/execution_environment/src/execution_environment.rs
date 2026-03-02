@@ -2743,7 +2743,7 @@ impl ExecutionEnvironment {
 
         let result = self
             .canister_manager
-            .list_canister_snapshot(sender, canister, state)
+            .list_canister_snapshot(sender, canister)
             .map_err(UserError::from)?;
 
         Ok(Encode!(&result).unwrap())
