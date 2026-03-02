@@ -217,8 +217,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         "ledger",
         "lifeline",
         "migration",
-        "node-rewards",
         "registry",
+        "node-rewards",
         "root",
         "sns-wasm",
     ]
