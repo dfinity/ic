@@ -328,15 +328,13 @@ pub fn test_with_chain_keys(env: TestEnv) {
     app_subnet_recovery_test(env, config);
 }
 
-pub fn test_without_chain_keys(env: TestEnv, corrupt_cup: CupCorruption)) {
+pub fn test_without_chain_keys(env: TestEnv, corrupt_cup: CupCorruption) {
     let config = TestConfig::new().with_corrupt_cup(corrupt_cup);
-
     app_subnet_recovery_test(env, config);
 }
 
-pub fn test_no_upgrade_with_chain_keys(env: TestEnv, corrupt_cup: CupCorruption)) {
+pub fn test_no_upgrade_with_chain_keys(env: TestEnv, corrupt_cup: CupCorruption) {
     let config = TestConfig::new().with_corrupt_cup(corrupt_cup);
-
     app_subnet_recovery_test(env, config);
 }
 
