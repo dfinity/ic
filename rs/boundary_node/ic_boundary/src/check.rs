@@ -370,20 +370,6 @@ impl SubnetActor {
         // Calculate the minimum height across this subnet
         let min_height = self.calc_min_height();
 
-        // Build preliminary healthy list based on health status and height.
-        let preliminary_healthy: Vec<(Arc<Node>, NodeState)> = self
-            .states
-            .iter()
-            // All states are Some() - it's checked above in self.init_done()
-            .map(|x| *x.as_ref().unwrap())
-            .enumerate()
-            // Map from idx to a node
-            .map(|(idx, state)| (self.subnet.nodes[idx].clone(), state))
-            // Discard unhealthy & lagging behind
-            .filter(|(_, state)| state.healthy && state.height >= min_height)
-            // Update the latency on the node
-            .collect();
-
         // Read the latest certified membership from the background MembershipActor.
         // Ignore the certified set if it covers fewer than 2/3 of the subnet's nodes,
         // since the subnet cannot make progress below that threshold anyway.
@@ -393,8 +379,16 @@ impl SubnetActor {
             .as_deref()
             .is_some_and(|m| m.len() >= min_members);
 
-        let healthy_nodes: Vec<Arc<Node>> = preliminary_healthy
-            .into_iter()
+        let healthy_nodes: Vec<Arc<Node>> = self
+            .states
+            .iter()
+            // All states are Some() - it's checked above in self.init_done()
+            .map(|x| *x.as_ref().unwrap())
+            .enumerate()
+            .map(|(idx, state)| (self.subnet.nodes[idx].clone(), state))
+            // Discard unhealthy & lagging behind
+            .filter(|(_, state)| state.healthy && state.height >= min_height)
+            // Discard nodes not in the certified membership set
             .filter(|(node, _)| {
                 if let Some(members) = certified_members.as_deref()
                     && certified_set_sufficient
