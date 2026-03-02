@@ -44,9 +44,9 @@ fn main() -> Result<()> {
                     dkg_interval: LARGE_DKG_INTERVAL,
                     nested_nodes_vm_resources: VmResources {
                         vcpus: Some(NrOfVCPUs::new(64)),
-                        memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
+                        memory_kibibytes: None,
                         boot_image_minimal_size_gibibytes: None,
-                    },
+                    }.or(&NNS_RECOVERY_VM_RESOURCES),
                 },
             )
         })
