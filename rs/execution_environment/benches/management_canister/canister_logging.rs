@@ -36,7 +36,7 @@ fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
                     .with_log_visibility(LogVisibilityV2::Public)
                     .build();
                 let log_message_size = initial_log_memory_limit.min(MAX_LOG_MESSAGE_LEN);
-                let log_message = vec!['a' as u8; log_message_size as usize];
+                let log_message = vec![b'a'; log_message_size as usize];
                 let canister_ids: Vec<_> = (0..canisters_number)
                     // Create all canisters.
                     .map(|_| {
@@ -47,7 +47,7 @@ fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
                         )
                     })
                     // Install wasm in all canisters.
-                    .map(|canister_id| {
+                    .inspect(|&canister_id| {
                         env.install_wasm_in_mode(
                             canister_id,
                             CanisterInstallMode::Install,
@@ -57,17 +57,15 @@ fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
                             vec![],
                         )
                         .unwrap();
-                        canister_id
                     })
                     // Prepopulate logs.
-                    .map(|canister_id| {
+                    .inspect(|&canister_id| {
                         // Make sure there are more logs written than the limit.
                         let mut logs_written = 0;
                         while logs_written <= initial_log_memory_limit {
                             let _ = env.execute_ingress(canister_id, "debug_print", vec![]);
                             logs_written += log_message_size;
                         }
-                        canister_id
                     })
                     .collect();
 
