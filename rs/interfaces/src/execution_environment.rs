@@ -369,6 +369,11 @@ impl SubnetAvailableMemory {
         )
     }
 
+    /// Creates a new `SubnetAvailableMemory` and scales down the provided memory limits
+    /// by dividing them by a given `scaling_factor`.
+    ///
+    /// This is typically used to safely divide the subnet's available memory among
+    /// concurrent execution threads (cores) to prevent overcommitting the total memory budget.
     pub fn new_scaled(
         execution_memory: i64,
         guaranteed_response_message_memory: i64,
