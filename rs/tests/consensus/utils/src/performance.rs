@@ -231,16 +231,17 @@ impl TestMetrics {
         Self {
             success_rate: (load_metrics.success_calls() as f64)
                 / (load_metrics.total_calls() as f64),
-            blocks_per_second: metrics_difference.histogram_metrics[&INGRESS_BYTES_DELIVERED_METRIC]
-                .count as f64
+            blocks_per_second: metrics_difference.histogram_metrics
+                [&INGRESS_BYTES_DELIVERED_METRIC]
+                .count
                 / duration.as_secs_f64(),
             throughput_bytes_per_second: metrics_difference.histogram_metrics
                 [&INGRESS_BYTES_DELIVERED_METRIC]
-                .sum as f64
+                .sum
                 / duration.as_secs_f64(),
             throughput_messages_per_second: metrics_difference.histogram_metrics
                 [&INGRESS_MESSAGES_DELIVERED_METRIC]
-                .sum as f64
+                .sum
                 / duration.as_secs_f64(),
             average_time_to_receive_block: metrics_difference.histogram_metrics
                 [&TIME_TO_RECEIVE_RANK_0_BLOCK_METRIC]
