@@ -484,9 +484,9 @@ pub fn extract_effective_canister_id(
         return Ok(None);
     }
     match Method::from_str(ingress.method_name()) {
-        Ok(Method::ProvisionalCreateCanisterWithCycles) | Ok(Method::ProvisionalTopUpCanister) => {
-            Ok(None)
-        }
+        Ok(Method::CreateCanister)
+        | Ok(Method::ProvisionalCreateCanisterWithCycles)
+        | Ok(Method::ProvisionalTopUpCanister) => Ok(None),
         Ok(Method::StartCanister)
         | Ok(Method::CanisterStatus)
         | Ok(Method::DeleteCanister)
@@ -576,8 +576,7 @@ pub fn extract_effective_canister_id(
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
 
-        Ok(Method::CreateCanister)
-        | Ok(Method::SetupInitialDKG)
+        Ok(Method::SetupInitialDKG)
         | Ok(Method::DepositCycles)
         | Ok(Method::HttpRequest)
         | Ok(Method::FlexibleHttpRequest)
