@@ -66,6 +66,7 @@ use ic_nns_governance_api::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
     },
 };
+use ic_nns_governance_conversions::convert_guest_launch_measurements_from_pb_to_api;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
@@ -1649,10 +1650,10 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
 
         let subnet_record = Self::fetch_subnet_record(&registry_canister, subnet).await;
         let node_ids: Vec<NodeId> = Self::get_subnet_member_node_ids(&subnet_record);
-        let chip_ids = get_chip_ids_from_node_ids(&registry_canister, &node_ids, false).await;
+        let chip_ids = Self::get_chip_ids_from_node_ids(&registry_canister, &node_ids, false).await;
 
         // Query the ReplicaVersionRecord to get guest_launch_measurements
-        let guest_launch_measurements = get_guest_launch_measurements_from_replica_version(
+        let guest_launch_measurements = Self::get_guest_launch_measurements_from_replica_version(
             &registry_canister,
             &subnet_record.replica_version_id,
         )
@@ -1666,8 +1667,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
             .membership
             .iter()
             .map(|id| {
-                let principal_id =
-                    PrincipalId::try_from(id.as_slice()).expect("Failed to parse PrincipalID");
+                let principal_id = PrincipalId::from_str(&id).expect("Failed to parse PrincipalID");
                 NodeId::from(principal_id)
             })
             .collect()
@@ -1690,14 +1690,14 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
                     subnet_id, err
                 )
             });
-        SubnetRecordProto::decode(&subnet_record_bytes[..])
-            .unwrap_or_else(|err| {
+        SubnetRecord::from(
+            &SubnetRecordProto::decode(&subnet_record_bytes[..]).unwrap_or_else(|err| {
                 panic!(
                     "Failed to decode SubnetRecord for subnet {}: {}",
                     subnet_id, err
                 )
-            })
-            .into()
+            }),
+        )
     }
 
     fn decode_chip_ids(chip_ids: &[String]) -> Vec<Vec<u8>> {
@@ -1808,9 +1808,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
                 )
             });
 
-        ic_nns_governance::pb::convert_guest_launch_measurements_from_pb_to_api(
-            guest_launch_measurements_proto,
-        )
+        convert_guest_launch_measurements_from_pb_to_api(guest_launch_measurements_proto)
     }
 }
 
@@ -1829,7 +1827,7 @@ impl ProposalAction for ProposeToBlessAlternativeGuestOsVersionCmd {
             if !node_ids.is_empty() {
                 let registry_canister = RegistryCanister::new_with_agent(agent.clone());
                 let chip_ids_from_node_ids =
-                    get_chip_ids_from_node_ids(&registry_canister, node_ids, true).await;
+                    Self::get_chip_ids_from_node_ids(&registry_canister, node_ids, true).await;
                 if chip_ids_from_node_ids.len() != node_ids.len() {
                     panic!("Not all node IDs provided have a chip ID in the registry.");
                 }
