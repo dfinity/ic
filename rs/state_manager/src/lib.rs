@@ -3051,6 +3051,18 @@ impl StateManager for StateManagerImpl {
 
         let states = self.states.read();
         let tip_height = states.tip_height.get();
+        let heights_with_certification_in_metadata: HashSet<_> = states
+            .certifications_metadata
+            .iter()
+            .filter_map(|(height, metadata)| {
+                if metadata.certification.is_some() {
+                    Some(height)
+                } else {
+                    None
+                }
+            })
+            .cloned()
+            .collect();
         let heights_with_certification: HashSet<_> =
             states.certifications.keys().cloned().collect();
         drop(states);
@@ -3064,7 +3076,10 @@ impl StateManager for StateManagerImpl {
         state_heights
             .into_iter()
             .map(Height::new)
-            .filter(|h| !heights_with_certification.contains(h))
+            .filter(|h| {
+                !heights_with_certification_in_metadata.contains(h)
+                    && !heights_with_certification.contains(h)
+            })
             .collect()
     }
 
