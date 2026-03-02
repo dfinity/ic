@@ -114,6 +114,8 @@ ARG CI_USER="root"
 USER $CI_USER
 CMD ["/bin/bash"]
 
+# test
+
 FROM base as build
 
 FROM base as dev
