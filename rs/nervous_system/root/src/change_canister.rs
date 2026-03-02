@@ -13,9 +13,9 @@
 #![allow(deprecated)]
 use crate::{LOG_PREFIX, private::exclusively_stop_and_start_canister};
 use candid::{CandidType, Deserialize, Encode, Principal};
-use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_base_types::CanisterId;
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs,
