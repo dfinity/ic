@@ -2434,7 +2434,6 @@ fn failed_upgrade_hooks_consume_instructions() {
         let canister_id = canister_manager
             .create_canister(
                 canister_change_origin_from_principal(&sender),
-                subnet_id,
                 *INITIAL_CYCLES,
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
@@ -2577,7 +2576,6 @@ fn failed_install_hooks_consume_instructions() {
         let canister_id = canister_manager
             .create_canister(
                 canister_change_origin_from_principal(&sender),
-                subnet_id,
                 *INITIAL_CYCLES,
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
@@ -2663,7 +2661,6 @@ fn install_code_respects_instruction_limit() {
     let canister_id = canister_manager
         .create_canister(
             canister_change_origin_from_principal(&sender),
-            subnet_id,
             *INITIAL_CYCLES,
             CanisterSettings::default(),
             MAX_NUMBER_OF_CANISTERS,
@@ -3409,6 +3406,60 @@ fn fails_when_keeping_main_memory_without_enhanced_orthogonal_persistence() {
             "Invalid upgrade option: The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence."
         );
     }
+}
+
+#[test]
+fn instructions_for_compilation_of_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let classical_persistence = r#"
+    (module
+        (memory 1)
+    )
+    "#;
+    let classical_persistence_wasm = wat::parse_str(classical_persistence).unwrap();
+
+    let orthogonal_persistence = r#"
+    (module
+        (memory 1)
+        (@custom "icp:private enhanced-orthogonal-persistence" "")
+    )
+    "#;
+    let orthogonal_persistence_wasm = wat::parse_str(orthogonal_persistence).unwrap();
+
+    // Make sure both classical and orthogonal persistence WASM are in compilation cache.
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, classical_persistence_wasm.clone())
+        .unwrap();
+    test.reinstall_canister(canister_id, orthogonal_persistence_wasm.clone())
+        .unwrap();
+
+    let original_execution_cost = test.canister_execution_cost(canister_id);
+    test.upgrade_canister_v2(
+        canister_id,
+        orthogonal_persistence_wasm.clone(),
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap();
+    let successful_execution_cost =
+        test.canister_execution_cost(canister_id) - original_execution_cost;
+
+    let original_execution_cost = test.canister_execution_cost(canister_id);
+    test.upgrade_canister_v2(
+        canister_id,
+        classical_persistence_wasm,
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap_err();
+    let failed_execution_cost = test.canister_execution_cost(canister_id) - original_execution_cost;
+
+    assert_eq!(successful_execution_cost, failed_execution_cost);
 }
 
 #[test]
@@ -7189,6 +7240,100 @@ fn create_canister_free() {
         0
     );
     assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
+}
+
+#[test]
+fn create_canister_as_subnet_admin_succeeds_on_free_cost_schedule() {
+    let subnet_admin = user_test_id(1);
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    test.set_user_id(subnet_admin);
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+    let result = test.subnet_message(Method::CreateCanister, create_canister_args.encode());
+    let reply = get_reply(result);
+    let canister_id = Decode!(reply.as_slice(), CanisterIdRecord)
+        .unwrap()
+        .get_canister_id();
+
+    let canister = test.canister_state(canister_id);
+    assert_eq!(
+        canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles()
+            .get(),
+        0
+    );
+    assert_eq!(canister.system_state.balance(), Cycles::new(0));
+}
+
+#[test]
+fn create_canister_as_subnet_admin_fails_on_normal_cost_schedule() {
+    let subnet_admin = user_test_id(1);
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+
+    test.set_user_id(subnet_admin);
+
+    let create_canister_args = CreateCanisterArgs {
+        settings: None,
+        sender_canister_version: None,
+    };
+    let err = test
+        .subnet_message(Method::CreateCanister, create_canister_args.encode())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesForCreateCanister);
+}
+
+#[test]
+fn create_canister_as_non_subnet_admin_fails() {
+    let subnet_admin = user_test_id(1);
+    let test_user = user_test_id(2);
+    for (subnet_admins, expected_err_code, expected_err_desc) in [
+        (
+            vec![subnet_admin.get()],
+            ErrorCode::InvalidSubnetAdmin,
+            "Only the subnet admins can perform certain actions",
+        ),
+        (
+            vec![],
+            ErrorCode::CanisterContractViolation,
+            "create_canister cannot be called by a user",
+        ),
+    ] {
+        for cost_schedule in [
+            CanisterCyclesCostSchedule::Normal,
+            CanisterCyclesCostSchedule::Free,
+        ] {
+            let mut test = ExecutionTestBuilder::new()
+                .with_cost_schedule(cost_schedule)
+                .with_subnet_admins(subnet_admins.clone())
+                .build();
+
+            test.set_user_id(test_user);
+
+            let create_canister_args = CreateCanisterArgs {
+                settings: None,
+                sender_canister_version: None,
+            };
+            let err = test
+                .subnet_message(Method::CreateCanister, create_canister_args.encode())
+                .unwrap_err();
+            assert_eq!(err.code(), expected_err_code);
+            assert!(err.description().contains(expected_err_desc));
+        }
+    }
 }
 
 #[test]
