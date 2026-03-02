@@ -124,7 +124,7 @@ jobs:
           # Update container image references
           set -xeuo pipefail
 
-          IMG_NAME_IC_BUILD="ghcr.io/dfinity/ic-build@${{ needs.ic-build-image.outputs.imageid }}"
+          IMG_NAME_IC_BUILD="ghcr.io/dfinity/ic-build@sha256:287877edb0f2b53e3c992a56313c1576eccd4abadfd7a3653dda6c9a54161988"
           IMG_NAME_IC_DEV="ghcr.io/dfinity/ic-dev@${{ needs.ic-build-image.outputs.imageid }}"
 
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
