@@ -154,7 +154,6 @@ pub struct QueryStatsTag {}
 pub type QueryStatsEpoch = AmountOf<QueryStatsTag, u64>;
 
 pub fn epoch_from_height(height: Height, epoch_length: u64) -> QueryStatsEpoch {
-    // TODO: possible refactoring to change epoch_length to NonZeroU64.
     debug_assert_gt!(epoch_length, 0, "epoch_length must not be zero");
     if epoch_length == 0 {
         return QueryStatsEpoch::from(0);
