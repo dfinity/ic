@@ -133,7 +133,7 @@ jobs:
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
           git add .
-          git commit -m 'Updating container image to ${{ needs.ic-build-image.outputs.imageid }}' -m 'Image tag: ${{ needs.build-image-prep.outputs.image_tag }}'
+          git commit -m 'Updating container image tag to ${{ needs.build-image-prep.outputs.image_tag }}'
           git push
 
       - name: Add PR Comment
@@ -142,7 +142,6 @@ jobs:
         with:
           script: |
             let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
-            message += 'New container image: `${{ needs.ic-build-image.outputs.imageid }}`\n'
             message += 'New container tag: `${{ needs.build-image-prep.outputs.image_tag }}`'
 
             // Find existing comment from this workflow
@@ -154,7 +153,7 @@ jobs:
 
             const botComment = comments.data.find(comment =>
               comment.user.type === 'Bot' &&
-              comment.body.includes('New container image:')
+              comment.body.includes('New container tag:')
             );
 
             if (botComment) {
