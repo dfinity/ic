@@ -12,23 +12,24 @@ thread_local! {
 // and basically structures the code correctly.
 mod ic_cdk {
     pub use ::ic_cdk::query;
-    
+
     pub mod api {
         pub fn call_context_instruction_counter() -> u64 {
-            super::super::WAS_CALLED.with(|c| c.borrow_mut().push("call_context_instruction_counter"));
+            super::super::WAS_CALLED
+                .with(|c| c.borrow_mut().push("call_context_instruction_counter"));
             42
         }
     }
-    
+
     // We mock the println macro by just logging to our tracking list
     #[macro_export]
     macro_rules! mock_println {
         ($fmt:expr $(, $arg:expr)* $(,)?) => {
             $( let _ = $arg; )* // Evaluate all arguments
-            crate::WAS_CALLED.with(|c| c.borrow_mut().push("println"));
+            $crate::WAS_CALLED.with(|c| c.borrow_mut().push("println"));
         }
     }
-    
+
     pub use mock_println as println;
 }
 
@@ -41,14 +42,18 @@ fn my_query_method() -> i32 {
 #[test]
 fn test_query_macro() {
     let result = my_query_method();
-    
+
     assert_eq!(result, 100);
-    
+
     let observed_calls = WAS_CALLED.with(|c| c.borrow().clone());
-    
+
     // The macro should have injected call_context_instruction_counter and println
     assert_eq!(
         observed_calls,
-        vec!["my_query_method", "call_context_instruction_counter", "println"]
+        vec![
+            "my_query_method",
+            "call_context_instruction_counter",
+            "println",
+        ],
     );
 }

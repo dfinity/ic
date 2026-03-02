@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{ToTokens, quote};
-use syn::{ItemFn, Meta, parse::Parser, parse_macro_input, punctuated::Punctuated, Token};
+use syn::{ItemFn, Meta, Token, parse::Parser, parse_macro_input, punctuated::Punctuated};
 
 /// Wraps the `#[ic_cdk::query]` macro and adds a statement to log the instructions used.
 #[proc_macro_attribute]
@@ -8,7 +8,7 @@ pub fn query(attr: TokenStream, item: TokenStream) -> TokenStream {
     let attr = Punctuated::<Meta, Token![,]>::parse_terminated
         .parse(attr)
         .expect("Failed to parse attribute arguments");
-    
+
     let query_attr = if attr.is_empty() {
         quote! { #[ic_cdk::query] }
     } else {
@@ -41,7 +41,7 @@ pub fn query(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #fn_name,
                 ic_cdk::api::call_context_instruction_counter()
             );
-            
+
             __result
         }
     };
