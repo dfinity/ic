@@ -61,6 +61,8 @@ fn main() -> Result<()> {
     let config = Config::new(NUM_NODES);
     let test = config.clone().test();
     SystemTestGroup::new()
+        .with_timeout_per_test(Duration::from_secs(20 * 60))
+        .with_overall_timeout(Duration::from_secs(25 * 60))
         .with_setup(config.build())
         .add_test(systest!(test))
         .execute_from_args()?;

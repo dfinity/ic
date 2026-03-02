@@ -1,15 +1,15 @@
 mod call_context_manager;
+pub mod log_memory_store;
 pub mod proto;
 mod task_queue;
 pub mod wasm_chunk_store;
 
-// TODO(DSM-11): remove testing cofiguration when log memory store is used in production.
-#[cfg(test)]
-pub mod log_memory_store;
-
 pub use self::task_queue::{TaskQueue, is_low_wasm_memory_hook_condition_satisfied};
 
-use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
+use self::{
+    log_memory_store::LogMemoryStore,
+    wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata},
+};
 use super::queues::refunds::RefundPool;
 use super::queues::{CanisterInput, can_push};
 pub use super::queues::{CanisterOutputQueuesIterator, memory_usage_of_request};
@@ -22,6 +22,7 @@ use crate::{
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::{EnvironmentVariables, NumSeconds};
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{ReplicaLogger, error};
@@ -481,12 +482,13 @@ pub struct SystemState {
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
 
-    /// The capacity of the canister log in bytes.
-    pub log_memory_limit: NumBytes,
-
     /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
+
+    /// The memory used for storing log entries.
+    #[validate_eq(CompareWithValidateEq)]
+    pub log_memory_store: LogMemoryStore,
 
     /// The Wasm memory limit. This is a field in developer-visible canister
     /// settings that allows the developer to limit the usage of the Wasm memory
@@ -635,6 +637,7 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
+            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 
@@ -646,6 +649,7 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
+        log_memory_store: LogMemoryStore,
     ) -> Self {
         Self {
             canister_id,
@@ -671,11 +675,11 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_memory_limit: NumBytes::new(0),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
+            log_memory_store,
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::new(0),
@@ -707,8 +711,8 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
-        log_memory_limit: NumBytes,
         canister_log: CanisterLog,
+        log_memory_store_data: Option<PageMap>,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
@@ -741,8 +745,11 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
-            log_memory_limit,
             canister_log,
+            log_memory_store: LogMemoryStore::from_checkpoint(
+                LOG_MEMORY_STORE_FEATURE,
+                log_memory_store_data,
+            ),
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
@@ -817,6 +824,7 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
+            LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
         )
     }
 
@@ -1531,21 +1539,22 @@ impl SystemState {
         }
     }
 
-    /// Returns `true` if there are any ingress messages in the queue that satisfy
-    /// the filter, `false` otherwise.
-    pub fn any_ingress_messages<F>(&self, filter: F) -> bool
+    /// Returns `true` if all ingress messages in the canister's ingress queue
+    /// satisfy the predicate, `false` otherwise.
+    pub fn all_ingress_messages<F>(&self, predicate: F) -> bool
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.queues.any_ingress_messages(filter)
+        self.queues.all_ingress_messages(predicate)
     }
 
-    /// See `IngressQueue::filter_messages()` for documentation.
-    pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
+    /// Retains only the ingress messages that satisfy the predicate, removing and
+    /// returning all the ingress messages that don't.
+    pub fn retain_ingress_messages<F>(&mut self, predicate: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Ingress) -> bool,
     {
-        self.queues.filter_ingress_messages(filter)
+        self.queues.retain_ingress_messages(predicate)
     }
 
     /// Returns the memory currently used by or reserved for guaranteed response
@@ -1676,7 +1685,6 @@ impl SystemState {
 
     /// Returns `true` if calling `garbage_collect_canister_queues()` would actually
     /// mutate the canister queues.
-    #[allow(dead_code)]
     pub(crate) fn can_garbage_collect_canister_queues(&self) -> bool {
         self.queues.can_garbage_collect()
     }
@@ -1699,7 +1707,7 @@ impl SystemState {
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) {
@@ -1738,7 +1746,7 @@ impl SystemState {
         &mut self,
         current_time: CoarseTime,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) -> (usize, Vec<StateError>) {
         if self.status == CanisterStatus::Stopped {
             // Stopped canisters have no call context manager, so no callbacks.
@@ -1794,7 +1802,7 @@ impl SystemState {
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) -> bool {
@@ -1818,7 +1826,7 @@ impl SystemState {
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) {
         self.queues
             .split_input_schedules(own_canister_id, local_canisters);
@@ -2312,7 +2320,7 @@ pub mod testing {
         fn split_input_schedules(
             &mut self,
             own_canister_id: &CanisterId,
-            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+            local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         );
     }
 
@@ -2389,7 +2397,7 @@ pub mod testing {
         fn split_input_schedules(
             &mut self,
             own_canister_id: &CanisterId,
-            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+            local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         ) {
             self.split_input_schedules(own_canister_id, local_canisters)
         }
@@ -2434,11 +2442,11 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
-            log_memory_limit: Default::default(),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
+            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),
