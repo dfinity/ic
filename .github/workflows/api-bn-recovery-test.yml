@@ -30,6 +30,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - uses: ./.github/actions/netrc
 
       - name: Install dfx
         run: |

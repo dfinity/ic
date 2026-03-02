@@ -51,7 +51,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+      - uses: ./.github/actions/netrc
       - name: Run Rust Benchmarks
         uses: ./.github/actions/bazel
         env:
