@@ -473,9 +473,7 @@ impl ExecutionEnvironment {
         // in the function `self.scaled_subnet_available_memory`.
         // and the scaling factor of `ResourceSaturation`
         // in the function `self.subnet_memory_saturation`.
-        let scaling_factor = self.scheduler_cores.max(1) as u64;
-        debug_assert_ne!(scaling_factor, 0);
-        NumBytes::from(self.config.subnet_memory_reservation.get() / scaling_factor)
+        NumBytes::from(self.config.subnet_memory_reservation.get() / self.scheduler_cores as u64)
     }
 
     /// Computes the current amount of guaranteed response message memory available
@@ -4466,10 +4464,9 @@ impl ExecutionEnvironment {
         // We apply the scaling factor `self.scheduler_cores`
         // consistently with the scaling factor of `SubnetAvailableMemory`
         // in the function `self.scaled_subnet_available_memory`.
-        let scaling_factor = self.scheduler_cores.max(1) as u64;
+        let scaling_factor = self.scheduler_cores as u64;
 
         // Compute the scaled memory usage as the scaled capacity minus the scaled available memory.
-        debug_assert_ne!(scaling_factor, 0);
         let scaled_subnet_memory_capacity: u64 =
             self.config.subnet_memory_capacity.get() / scaling_factor;
         let scaled_subnet_available_memory =
