@@ -1246,9 +1246,7 @@ fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
 #[unsafe(export_name = "canister_update update_subnet_admins")]
 fn update_subnet_admins() {
     check_caller_is_subnet_rental_canister_and_log("update_subnet_admins");
-    over(candid_one, |payload: UpdateSubnetAdminsPayload| {
-        update_subnet_admins_(payload)
-    });
+    over(candid_one, update_subnet_admins_);
 }
 
 #[candid_method(update, rename = "update_subnet_admins")]

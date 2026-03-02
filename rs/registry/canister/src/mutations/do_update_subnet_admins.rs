@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::{
@@ -9,14 +9,92 @@ use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::upsert;
 use prost::Message;
 use serde::Serialize;
+use std::collections::HashSet;
 
 const MAX_SUBNET_ADMINS: usize = 10;
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct EmptyRecord;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum OperationType {
     Add(Vec<PrincipalId>),
     Remove(Vec<PrincipalId>),
-    Clear(candid::Reserved),
+    Clear(EmptyRecord),
+}
+
+impl OperationType {
+    fn validate(
+        &self,
+        current_subnet_admins: &Vec<PrincipalIdPb>,
+    ) -> Result<(), UpdateSubnetAdminsError> {
+        match self {
+            OperationType::Add(principal_ids) => {
+                if principal_ids.is_empty() {
+                    return Err(UpdateSubnetAdminsError::PrincipalListEmpty);
+                }
+
+                if current_subnet_admins.len() + principal_ids.len() > MAX_SUBNET_ADMINS {
+                    return Err(UpdateSubnetAdminsError::TooManySubnetAdmins {
+                        provided: principal_ids.len() as u64,
+                        existing: current_subnet_admins.len() as u64,
+                        max_allowed: MAX_SUBNET_ADMINS as u64,
+                    });
+                }
+            }
+            OperationType::Remove(principal_ids) => {
+                if principal_ids.is_empty() {
+                    return Err(UpdateSubnetAdminsError::PrincipalListEmpty);
+                }
+
+                if principal_ids.len() > MAX_SUBNET_ADMINS {
+                    return Err(UpdateSubnetAdminsError::TooManySubnetAdmins {
+                        provided: principal_ids.len() as u64,
+                        existing: current_subnet_admins.len() as u64,
+                        max_allowed: MAX_SUBNET_ADMINS as u64,
+                    });
+                }
+            }
+            OperationType::Clear(_) => {}
+        }
+        Ok(())
+    }
+
+    fn apply(self, current_subnet_admins: Vec<PrincipalIdPb>) -> Vec<PrincipalIdPb> {
+        match self {
+            OperationType::Add(principal_ids) => {
+                let new_subnet_admins = current_subnet_admins
+                    .into_iter()
+                    .collect::<HashSet<PrincipalIdPb>>();
+                let deduped_provided_principal_ids = principal_ids
+                    .into_iter()
+                    .map(PrincipalIdPb::from)
+                    .collect::<HashSet<PrincipalIdPb>>();
+
+                new_subnet_admins
+                    .union(&deduped_provided_principal_ids)
+                    .into_iter()
+                    .cloned()
+                    .collect()
+            }
+            OperationType::Remove(principal_ids) => {
+                let new_subnet_admins = current_subnet_admins
+                    .into_iter()
+                    .collect::<HashSet<PrincipalIdPb>>();
+                let deduped_provided_principal_ids = principal_ids
+                    .into_iter()
+                    .map(PrincipalIdPb::from)
+                    .collect::<HashSet<PrincipalIdPb>>();
+
+                new_subnet_admins
+                    .difference(&deduped_provided_principal_ids)
+                    .into_iter()
+                    .cloned()
+                    .collect()
+            }
+            OperationType::Clear(_) => Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -27,12 +105,37 @@ pub struct UpdateSubnetAdminsPayload {
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum UpdateSubnetAdminsError {
-    TooManySubnetAdmins { provided: u64, max_allowed: u64 },
+    TooManySubnetAdmins {
+        provided: u64,
+        existing: u64,
+        max_allowed: u64,
+    },
     PrincipalListEmpty,
-    SubnetAdminsNotInList,
-    SubnetAdminsInCurrentList,
-    HasDuplicates,
     UnknownOperationType,
+}
+
+impl std::fmt::Display for UpdateSubnetAdminsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UpdateSubnetAdminsError::TooManySubnetAdmins {
+                provided,
+                existing,
+                max_allowed,
+            } => write!(
+                f,
+                "Too many subnet admins. Provided: {provided}, Existing: {existing}, Max allowed: {max_allowed}."
+            ),
+            UpdateSubnetAdminsError::PrincipalListEmpty => {
+                write!(f, "The list of provided principals cannot be empty.")
+            }
+            UpdateSubnetAdminsError::UnknownOperationType => {
+                write!(
+                    f,
+                    "The operation type provided is unknown. Expected one of: Add, Remove, Clear."
+                )
+            }
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -67,139 +170,40 @@ impl Registry {
 
         let current_subnet_admins = subnet_record.subnet_admins;
 
-        let new_subnet_admins = match payload.operation_type {
-            Some(OperationType::Add(principal_ids)) => {
-                if let Err(e) = Self::has_duplicates(&principal_ids) {
-                    return UpdateSubnetAdminsResult::Err(Some(e));
-                }
+        let res = match payload.operation_type {
+            Some(operation_type) => {
+                match operation_type.validate(&current_subnet_admins) {
+                    Ok(()) => {
+                        let new_subnet_admins = operation_type.apply(current_subnet_admins);
 
-                if principal_ids.is_empty() {
-                    println!(
-                        "{}do_update_subnet_admins: Error: No subnet admins provided to add.",
-                        LOG_PREFIX
-                    );
-                    return UpdateSubnetAdminsResult::Err(Some(
-                        UpdateSubnetAdminsError::PrincipalListEmpty,
-                    ));
-                }
-
-                if current_subnet_admins.len() + principal_ids.len() > MAX_SUBNET_ADMINS {
-                    println!(
-                        "{}do_update_subnet_admins: Error: Too many subnet admins to add: {}",
-                        LOG_PREFIX,
-                        principal_ids.len()
-                    );
-                    return UpdateSubnetAdminsResult::Err(Some(
-                        UpdateSubnetAdminsError::TooManySubnetAdmins {
-                            provided: current_subnet_admins.len() as u64
-                                + principal_ids.len() as u64,
-                            max_allowed: MAX_SUBNET_ADMINS as u64,
-                        },
-                    ));
-                }
-
-                let mut new_subnet_admins = Vec::new();
-
-                for principal_id in principal_ids {
-                    let principal_id_proto = PrincipalIdPb::from(principal_id);
-                    if current_subnet_admins.contains(&principal_id_proto) {
-                        println!(
-                            "{}do_update_subnet_admins: Error: Subnet admin {:?} is already in current list, so it cannot be added.",
-                            LOG_PREFIX, principal_id
+                        subnet_record.subnet_admins = new_subnet_admins;
+                        let subnet_record_mutation = upsert(
+                            make_subnet_record_key(subnet_id).into_bytes(),
+                            subnet_record.encode_to_vec(),
                         );
-                        return UpdateSubnetAdminsResult::Err(Some(
-                            UpdateSubnetAdminsError::SubnetAdminsInCurrentList,
-                        ));
-                    } else {
-                        new_subnet_admins.push(principal_id_proto);
+                        let mutations = vec![subnet_record_mutation];
+
+                        // Check invariants before applying mutations
+                        self.maybe_apply_mutation_internal(mutations);
+
+                        Ok(())
                     }
+                    Err(err) => Err(err),
                 }
-
-                new_subnet_admins.extend(current_subnet_admins.iter().cloned());
-                new_subnet_admins
             }
-            Some(OperationType::Remove(principal_ids)) => {
-                if let Err(e) = Self::has_duplicates(&principal_ids) {
-                    return UpdateSubnetAdminsResult::Err(Some(e));
-                }
-
-                if principal_ids.is_empty() {
-                    println!(
-                        "{}do_update_subnet_admins: Error: No subnet admins provided to remove.",
-                        LOG_PREFIX
-                    );
-                    return UpdateSubnetAdminsResult::Err(Some(
-                        UpdateSubnetAdminsError::PrincipalListEmpty,
-                    ));
-                }
-
-                if principal_ids.len() > MAX_SUBNET_ADMINS {
-                    println!(
-                        "{}do_update_subnet_admins: Error: Too many subnet admins to remove: {}",
-                        LOG_PREFIX,
-                        principal_ids.len()
-                    );
-                    return UpdateSubnetAdminsResult::Err(Some(
-                        UpdateSubnetAdminsError::TooManySubnetAdmins {
-                            provided: principal_ids.len() as u64,
-                            max_allowed: MAX_SUBNET_ADMINS as u64,
-                        },
-                    ));
-                }
-
-                let mut subnet_admins_to_be_removed = Vec::new();
-
-                for principal_id in principal_ids {
-                    let principal_id_proto = PrincipalIdPb::from(principal_id);
-                    if !current_subnet_admins.contains(&principal_id_proto) {
-                        println!(
-                            "{}do_update_subnet_admins: Error: Subnet admin {:?} is not in current list, so it cannot be removed.",
-                            LOG_PREFIX, principal_id
-                        );
-                        return UpdateSubnetAdminsResult::Err(Some(
-                            UpdateSubnetAdminsError::SubnetAdminsNotInList,
-                        ));
-                    } else {
-                        subnet_admins_to_be_removed.push(principal_id_proto);
-                    }
-                }
-
-                current_subnet_admins
-                    .iter()
-                    .filter(|p| !subnet_admins_to_be_removed.contains(p))
-                    .cloned()
-                    .collect()
-            }
-            Some(OperationType::Clear(_)) => Vec::new(),
-            None => {
-                return UpdateSubnetAdminsResult::Err(Some(
-                    UpdateSubnetAdminsError::UnknownOperationType,
-                ));
-            }
+            None => Err(UpdateSubnetAdminsError::UnknownOperationType),
         };
 
-        subnet_record.subnet_admins = new_subnet_admins;
-        let subnet_record_mutation = upsert(
-            make_subnet_record_key(subnet_id).into_bytes(),
-            subnet_record.encode_to_vec(),
-        );
-        let mutations = vec![subnet_record_mutation];
-
-        // Check invariants before applying mutations
-        self.maybe_apply_mutation_internal(mutations);
-
-        UpdateSubnetAdminsResult::Ok
-    }
-
-    fn has_duplicates(principal_ids: &Vec<PrincipalId>) -> Result<(), UpdateSubnetAdminsError> {
-        if has_duplicates(principal_ids) {
-            println!(
-                "{}do_update_subnet_admins: Error: Duplicate subnet admins found.",
-                LOG_PREFIX
-            );
-            return Err(UpdateSubnetAdminsError::HasDuplicates);
+        match res {
+            Ok(()) => UpdateSubnetAdminsResult::Ok,
+            Err(err) => {
+                println!(
+                    "{}do_update_subnet_admins: Error while updating subnet admins of {}: {}",
+                    LOG_PREFIX, subnet_id, err
+                );
+                UpdateSubnetAdminsResult::Err(Some(err))
+            }
         }
-        Ok(())
     }
 }
 
@@ -212,6 +216,7 @@ mod tests {
     };
     use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
     use maplit::btreemap;
+    use pretty_assertions::assert_eq;
 
     fn prepare_registry_for_update_subnet_admins_test(subnet_id: SubnetId) -> Registry {
         let mut registry = invariant_compliant_registry(0);
@@ -238,33 +243,33 @@ mod tests {
         registry
     }
 
-    #[test]
-    fn can_add_subnet_admins() {
-        let subnet_id = subnet_test_id(1);
-        let mut registry = prepare_registry_for_update_subnet_admins_test(subnet_id);
-
-        let user1 = user_test_id(100).get();
-        let user2 = user_test_id(101).get();
-        let payload = UpdateSubnetAdminsPayload {
-            subnet_id,
-            operation_type: Some(OperationType::Add(vec![user1, user2])),
-        };
-
-        registry.do_update_subnet_admins(payload);
-
-        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
-        assert_eq!(updated_subnet_admins.len(), 2);
-        assert!(updated_subnet_admins.contains(&PrincipalIdPb::from(user1)));
-        assert!(updated_subnet_admins.contains(&PrincipalIdPb::from(user2)));
+    // For the purposes of the below tests, the updated subnet admins list matches
+    // the expected one if the contain exactly the same elements regardless of order.
+    //
+    // Useful in cases the list contains more than 1 element (otherwise direct equality
+    // check is enough).
+    fn assert_updated_subnet_admins_match_expected(
+        updated_subnet_admins: &Vec<PrincipalIdPb>,
+        expected_subnet_admins: &Vec<PrincipalIdPb>,
+    ) {
+        let updated_subnet_admins = updated_subnet_admins
+            .into_iter()
+            .collect::<HashSet<&PrincipalIdPb>>();
+        let expected_subnet_admins = expected_subnet_admins
+            .into_iter()
+            .collect::<HashSet<&PrincipalIdPb>>();
+        assert_eq!(updated_subnet_admins, expected_subnet_admins);
     }
 
     #[test]
-    fn can_remove_subnet_admins() {
+    fn can_add_or_remove_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(subnet_id);
 
         let user1 = user_test_id(100).get();
         let user2 = user_test_id(101).get();
+
+        // Add two subnet admins, `user1` and `user2`.
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
             operation_type: Some(OperationType::Add(vec![user1, user2])),
@@ -273,19 +278,25 @@ mod tests {
         registry.do_update_subnet_admins(payload);
 
         let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
-        assert_eq!(updated_subnet_admins.len(), 2);
-        assert!(updated_subnet_admins.contains(&PrincipalIdPb::from(user1)));
-        assert!(updated_subnet_admins.contains(&PrincipalIdPb::from(user2)));
+        let expected_subnet_admins = vec![PrincipalIdPb::from(user1), PrincipalIdPb::from(user2)];
+        assert_updated_subnet_admins_match_expected(
+            &updated_subnet_admins,
+            &expected_subnet_admins,
+        );
 
+        // Remove `user1` from the subnet admins list.
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
             operation_type: Some(OperationType::Remove(vec![user1])),
         };
 
         registry.do_update_subnet_admins(payload);
-
         let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
-        assert_eq!(updated_subnet_admins, vec![PrincipalIdPb::from(user2)]);
+        let expected_subnet_admins = vec![PrincipalIdPb::from(user2)];
+        assert_updated_subnet_admins_match_expected(
+            &updated_subnet_admins,
+            &expected_subnet_admins,
+        );
     }
 
     #[test]
@@ -304,14 +315,19 @@ mod tests {
         registry.do_update_subnet_admins(payload);
 
         let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
-        assert_eq!(updated_subnet_admins.len(), 3);
-        assert!(updated_subnet_admins.contains(&PrincipalIdPb::from(user1)));
-        assert!(updated_subnet_admins.contains(&PrincipalIdPb::from(user2)));
-        assert!(updated_subnet_admins.contains(&PrincipalIdPb::from(user3)));
+        let expected_subnet_admins = vec![
+            PrincipalIdPb::from(user1),
+            PrincipalIdPb::from(user2),
+            PrincipalIdPb::from(user3),
+        ];
+        assert_updated_subnet_admins_match_expected(
+            &updated_subnet_admins,
+            &expected_subnet_admins,
+        );
 
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
-            operation_type: Some(OperationType::Clear(candid::Reserved {})),
+            operation_type: Some(OperationType::Clear(EmptyRecord)),
         };
 
         registry.do_update_subnet_admins(payload);
@@ -321,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn cannot_add_or_remove_empty_list_of_subnet_admins() {
+    fn can_not_add_or_remove_empty_list_of_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(subnet_id);
 
@@ -335,6 +351,8 @@ mod tests {
             result,
             UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::PrincipalListEmpty))
         );
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_eq!(updated_subnet_admins, vec![]);
 
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
@@ -346,10 +364,12 @@ mod tests {
             result,
             UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::PrincipalListEmpty))
         );
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_eq!(updated_subnet_admins, vec![]);
     }
 
     #[test]
-    fn can_not_add_or_remove_duplicate_subnet_admins() {
+    fn can_dedup_input_when_adding_or_removing_subnet_admins() {
         let subnet_id = subnet_test_id(1);
         let mut registry = prepare_registry_for_update_subnet_admins_test(subnet_id);
 
@@ -360,20 +380,18 @@ mod tests {
         };
 
         let result = registry.do_update_subnet_admins(payload);
-        assert_eq!(
-            result,
-            UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::HasDuplicates))
-        );
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_eq!(result, UpdateSubnetAdminsResult::Ok);
+        assert_eq!(updated_subnet_admins, vec![PrincipalIdPb::from(user1)]);
 
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
             operation_type: Some(OperationType::Remove(vec![user1, user1])),
         };
         let result = registry.do_update_subnet_admins(payload);
-        assert_eq!(
-            result,
-            UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::HasDuplicates))
-        );
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_eq!(result, UpdateSubnetAdminsResult::Ok);
+        assert_eq!(updated_subnet_admins, vec![]);
     }
 
     #[test]
@@ -396,13 +414,19 @@ mod tests {
             result,
             UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::TooManySubnetAdmins {
                 provided: (MAX_SUBNET_ADMINS + 1) as u64,
+                existing: 0,
                 max_allowed: MAX_SUBNET_ADMINS as u64,
             }))
         );
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_eq!(updated_subnet_admins, vec![]);
 
         let mut users_to_add = Vec::new();
+        let mut expected_subnet_admins = Vec::new();
         for i in 0..(MAX_SUBNET_ADMINS - 1) {
-            users_to_add.push(user_test_id(100 + i as u64).get());
+            let principal = user_test_id(100 + i as u64).get();
+            users_to_add.push(principal);
+            expected_subnet_admins.push(PrincipalIdPb::from(principal));
         }
 
         let payload = UpdateSubnetAdminsPayload {
@@ -410,6 +434,11 @@ mod tests {
             operation_type: Some(OperationType::Add(users_to_add)),
         };
         registry.do_update_subnet_admins(payload);
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_updated_subnet_admins_match_expected(
+            &updated_subnet_admins,
+            &expected_subnet_admins,
+        );
 
         let mut users_to_add = Vec::new();
         for i in 0..3 {
@@ -428,9 +457,15 @@ mod tests {
                 // We had already added MAX_subnet_admins_PER_SUBNET - 1 users
                 // and now we're trying to add 3 more, which would put us
                 // at MAX_subnet_admins_PER_SUBNET + 2.
-                provided: (MAX_SUBNET_ADMINS + 2) as u64,
+                provided: 3,
+                existing: (MAX_SUBNET_ADMINS - 1) as u64,
                 max_allowed: MAX_SUBNET_ADMINS as u64,
             }))
+        );
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_updated_subnet_admins_match_expected(
+            &updated_subnet_admins,
+            &expected_subnet_admins,
         );
     }
 
@@ -454,9 +489,12 @@ mod tests {
             result,
             UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::TooManySubnetAdmins {
                 provided: (MAX_SUBNET_ADMINS + 1) as u64,
+                existing: 0,
                 max_allowed: MAX_SUBNET_ADMINS as u64,
             }))
         );
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_eq!(updated_subnet_admins, vec![]);
     }
 
     #[test]
@@ -471,16 +509,20 @@ mod tests {
         };
 
         registry.do_update_subnet_admins(payload.clone());
-        assert_eq!(
-            registry.get_subnet_or_panic(subnet_id).subnet_admins,
-            vec![PrincipalIdPb::from(user1)]
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        let expected_subnet_admins = vec![PrincipalIdPb::from(user1)];
+        assert_updated_subnet_admins_match_expected(
+            &updated_subnet_admins,
+            &expected_subnet_admins,
         );
 
-        // Attempt to add the same user again.
+        // Attempt to add the same user again. Should be a no-op.
         let result = registry.do_update_subnet_admins(payload);
-        assert_eq!(
-            result,
-            UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::SubnetAdminsInCurrentList))
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_eq!(result, UpdateSubnetAdminsResult::Ok);
+        assert_updated_subnet_admins_match_expected(
+            &updated_subnet_admins,
+            &expected_subnet_admins,
         );
     }
 
@@ -496,16 +538,19 @@ mod tests {
             operation_type: Some(OperationType::Add(vec![user1, user2])),
         };
         registry.do_update_subnet_admins(payload);
+        let expected_subnet_admins = vec![PrincipalIdPb::from(user1), PrincipalIdPb::from(user2)];
 
+        // Attempt to remove a user that is not in the subnet admins list. Should be a no-op.
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
             operation_type: Some(OperationType::Remove(vec![user_test_id(200).get()])),
         };
-
         let result = registry.do_update_subnet_admins(payload);
-        assert_eq!(
-            result,
-            UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::SubnetAdminsNotInList))
+        let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
+        assert_eq!(result, UpdateSubnetAdminsResult::Ok);
+        assert_updated_subnet_admins_match_expected(
+            &updated_subnet_admins,
+            &expected_subnet_admins,
         );
     }
 }

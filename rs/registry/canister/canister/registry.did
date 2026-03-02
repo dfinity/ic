@@ -516,28 +516,28 @@ type NodeSshAccess = record {
 type OperationType = variant {
   Add: vec principal;
   Remove: vec principal;
-  Clear: reserved;
+  Clear: record {};
 };
 
 type UpdateSubnetAdminsPayload = record {
   subnet_id: principal;
+  // opt for future compatibility when removing operation types.
   operation_type: opt OperationType;
 };
 
 type UpdateSubnetAdminsError = variant {
   TooManySubnetAdmins: record {
     provided: nat64;
+    existing: nat64;
     max_allowed: nat64;
   };
   PrincipalListEmpty;
-  SubnetAdminsNotInList;
-  SubnetAdminsInCurrentList;
-  HasDuplicates;
   UnknownOperationType;
 };
 
 type UpdateSubnetAdminsResult = variant {
   Ok;
+  // opt for future compatibility when adding new errors.
   Err: opt UpdateSubnetAdminsError;
 };
 

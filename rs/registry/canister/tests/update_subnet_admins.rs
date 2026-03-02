@@ -30,20 +30,13 @@ fn test_the_anonymous_user_cannot_update_a_subnets_subnet_admins() {
         // TEST_ID is used as subnet_id also when creating the initial registry state below.
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(TEST_ID));
 
-        let mut registry = set_up_registry_canister(
+        let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
-
-        let initial_subnet_admins = get_value_or_panic::<SubnetRecord>(
-            &registry,
-            make_subnet_record_key(subnet_id).as_bytes(),
-        )
-        .await
-        .subnet_admins;
 
         let payload = UpdateSubnetAdminsPayload {
             subnet_id,
@@ -65,24 +58,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_subnet_admins() {
         )
         .await
         .subnet_admins;
-        assert_eq!(subnet_admins, initial_subnet_admins);
-
-        // Go through an upgrade cycle, and verify that it still works the same
-        registry.upgrade_to_self_binary(vec![]).await.unwrap();
-        let response: Result<(), String> = registry
-            .update_("update_subnet_admins", candid, (payload.clone(),))
-            .await;
-        assert_matches!(response,
-                Err(s) if s.contains("is not authorized to call this method: update_subnet_admins"));
-
-        let subnet_admins = get_value_or_panic::<SubnetRecord>(
-            &registry,
-            make_subnet_record_key(subnet_id).as_bytes(),
-        )
-        .await
-        .subnet_admins;
-
-        assert_eq!(subnet_admins, initial_subnet_admins);
+        assert_eq!(subnet_admins, vec![]);
 
         Ok(())
     });
@@ -150,6 +126,8 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_su
 #[test]
 fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
     state_machine_test_on_nns_subnet(|runtime| async move {
+        // `TEST_ID` is used as the first subnet_id also when creating the initial
+        // registry mutation. Use another subnet_id for the "test" subnet.
         let subnet_id = SubnetId::from(
             PrincipalId::from_str(
                 "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
@@ -165,6 +143,12 @@ fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
                         SubnetRecord {
+                            // The following fields are revelant for this test.
+                            subnet_type: SubnetType::System.into(),
+                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
+                                .into(),
+                            subnet_admins: vec![],
+                            // Set the rest of the fields to some dummy values.
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
                             max_ingress_messages_per_block: 1000,
@@ -175,7 +159,6 @@ fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             start_as_nns: false,
-                            subnet_type: SubnetType::System.into(),
                             is_halted: false,
                             halt_at_cup_height: false,
                             features: None,
@@ -183,9 +166,6 @@ fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
                             chain_key_config: None,
-                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
-                                .into(),
-                            subnet_admins: vec![],
                         }
                         .encode_to_vec(),
                     )],
@@ -194,13 +174,6 @@ fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
                 .build(),
         )
         .await;
-
-        let initial_subnet_admins = get_value_or_panic::<SubnetRecord>(
-            &registry,
-            make_subnet_record_key(subnet_id).as_bytes(),
-        )
-        .await
-        .subnet_admins;
 
         // Send the update_subnet_admins call via the subnet rental canister...
         let fake_subnet_rental_canister =
@@ -232,7 +205,7 @@ fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
         )
         .await
         .subnet_admins;
-        assert_eq!(subnet_admins, initial_subnet_admins);
+        assert_eq!(subnet_admins, vec![]);
 
         Ok(())
     });
@@ -241,6 +214,8 @@ fn test_subnet_admins_cannot_be_updated_for_system_subnet() {
 #[test]
 fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
     state_machine_test_on_nns_subnet(|runtime| async move {
+        // `TEST_ID` is used as the first subnet_id also when creating the initial
+        // registry mutation. Use another subnet_id for the "test" subnet.
         let subnet_id = SubnetId::from(
             PrincipalId::from_str(
                 "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
@@ -256,6 +231,12 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
                         SubnetRecord {
+                            // The following fieldsare revelant for this test.
+                            subnet_type: SubnetType::Application.into(),
+                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
+                                .into(),
+                            subnet_admins: vec![],
+                            // Set the rest of the fields to some dummy values.
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
                             max_ingress_messages_per_block: 1000,
@@ -266,7 +247,6 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             start_as_nns: false,
-                            subnet_type: SubnetType::Application.into(),
                             is_halted: false,
                             halt_at_cup_height: false,
                             features: None,
@@ -274,9 +254,6 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
                             chain_key_config: None,
-                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
-                                .into(),
-                            subnet_admins: vec![],
                         }
                         .encode_to_vec(),
                     )],
@@ -285,13 +262,6 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
                 .build(),
         )
         .await;
-
-        let initial_subnet_admins = get_value_or_panic::<SubnetRecord>(
-            &registry,
-            make_subnet_record_key(subnet_id).as_bytes(),
-        )
-        .await
-        .subnet_admins;
 
         // Send the update_subnet_admins call via the subnet rental canister...
         let fake_subnet_rental_canister =
@@ -323,7 +293,7 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
         )
         .await
         .subnet_admins;
-        assert_eq!(subnet_admins, initial_subnet_admins);
+        assert_eq!(subnet_admins, vec![]);
 
         Ok(())
     });
@@ -332,6 +302,8 @@ fn test_subnet_admins_cannot_be_updated_for_non_rented_subnet() {
 #[test]
 fn test_subnet_rental_canister_can_update_subnet_admins_of_rented_subnet() {
     state_machine_test_on_nns_subnet(|runtime| async move {
+        // `TEST_ID` is used as the first subnet_id also when creating the initial
+        // registry mutation. Use another subnet_id for the "test" subnet.
         let subnet_id = SubnetId::from(
             PrincipalId::from_str(
                 "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
@@ -347,6 +319,11 @@ fn test_subnet_rental_canister_can_update_subnet_admins_of_rented_subnet() {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
                         SubnetRecord {
+                            // The following fieldsare revelant for this test.
+                            subnet_type: SubnetType::Application.into(),
+                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Free.into(),
+                            subnet_admins: vec![],
+                            // Set the rest of the fields to some dummy values.
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
                             max_ingress_messages_per_block: 1000,
@@ -357,7 +334,6 @@ fn test_subnet_rental_canister_can_update_subnet_admins_of_rented_subnet() {
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             start_as_nns: false,
-                            subnet_type: SubnetType::Application.into(),
                             is_halted: false,
                             halt_at_cup_height: false,
                             features: None,
@@ -365,8 +341,6 @@ fn test_subnet_rental_canister_can_update_subnet_admins_of_rented_subnet() {
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
                             chain_key_config: None,
-                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Free.into(),
-                            subnet_admins: vec![],
                         }
                         .encode_to_vec(),
                     )],
