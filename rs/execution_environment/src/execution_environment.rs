@@ -95,6 +95,7 @@ use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
+use std::num::NonZeroU64;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::{Into, TryFrom},
