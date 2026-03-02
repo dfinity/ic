@@ -279,7 +279,6 @@ rust_ic_test_suite_with_extra_srcs(
         "JAVABASE": "$(JAVABASE)",
     },
     extra_srcs = ["src/lib.rs"],
-    flaky = True,  # flakiness rate of 1.29% over the month from 2025-02-11 till 2025-03-11 for the "governance_time_warp" test
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],  # for TLA/Apalache
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
