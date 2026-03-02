@@ -109,6 +109,9 @@ def image_deps(mode, malicious = False):
         # Dev guest_upgrade client
         deps["rootfs"].pop("//rs/ic_os/guest_upgrade/client", None)
         deps["rootfs"].update({"//rs/ic_os/guest_upgrade/client:client_dev": "/opt/ic/bin/guest_upgrade_client:0755"})
+
+        # THP + MADV_REMOVE kernel regression test
+        deps["rootfs"].update({"//rs/ic_os/dev_test_tools/thp-madv-remove-test": "/opt/ic/bin/thp-madv-remove-test:0755"})
     else:
         deps["component_files"].update({
             Label("//ic-os/components:misc/serial-getty@/guestos-prod/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
