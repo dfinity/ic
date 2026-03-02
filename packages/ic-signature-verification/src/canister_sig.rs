@@ -1,15 +1,11 @@
-use ic_certification::{
-    Certificate, Delegation, HashTree, LookupResult, SubtreeLookupResult, leaf,
-};
+use ic_certificate_verification::VerifyCertificate;
+use ic_certification::{Certificate, HashTree, SubtreeLookupResult, leaf};
 use ic_principal::Principal;
-use ic_verify_bls_signature::verify_bls_signature;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use sha2::{Digest, Sha256};
 
-pub const IC_STATE_ROOT_DOMAIN_SEPARATOR: &[u8; 14] = b"\x0Dic-state-root";
-
-use ic_canister_sig_creation::{CanisterSigPublicKey, extract_raw_root_pk_from_der};
+use ic_canister_sig_creation::{CanisterSigPublicKey, IC_ROOT_PK_DER_PREFIX};
 
 /// Verifies that `signature` is a valid canister signature on `message`.
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec#canister-signatures
@@ -101,62 +97,18 @@ fn verify_certificate(
     signing_canister_id: Principal,
     root_public_key_raw: &[u8],
 ) -> Result<(), String> {
-    let bls_pk_raw = match &certificate.delegation {
-        Some(delegation) => {
-            verify_delegation(delegation, signing_canister_id, root_public_key_raw)?
-        }
-        _ => root_public_key_raw.to_vec(),
-    };
-    check_bls_signature(certificate, &bls_pk_raw)
-}
-
-fn verify_delegation(
-    delegation: &Delegation,
-    signing_canister_id: Principal,
-    root_public_key: &[u8],
-) -> Result<Vec<u8>, String> {
-    let cert: Certificate = parse_certificate_cbor(&delegation.certificate)
-        .map_err(|e| format!("invalid delegation certificate: {e}"))?;
-
-    // disallow nested delegations
-    if cert.delegation.is_some() {
-        return Err("multiple delegations not allowed".to_string());
-    }
-
-    check_bls_signature(&cert, root_public_key)?;
-
-    // check delegation range
-    let canister_range_path = [
-        "subnet".as_bytes(),
-        delegation.subnet_id.as_ref(),
-        "canister_ranges".as_bytes(),
-    ];
-    let LookupResult::Found(canister_range) = cert.tree.lookup_path(&canister_range_path) else {
-        return Err("canister_ranges-entry not found".to_string());
-    };
-
-    let canister_ranges: Vec<(Principal, Principal)> = serde_cbor::from_slice(canister_range)
-        .map_err(|e| format!("invalid canister range: {e}"))?;
-    if !principal_is_within_ranges(&signing_canister_id, &canister_ranges[..]) {
-        return Err("signing canister id not in canister_ranges".to_string());
-    }
-
-    // lookup the public key delegated to
-    let public_key_path = [
-        "subnet".as_bytes(),
-        delegation.subnet_id.as_ref(),
-        "public_key".as_bytes(),
-    ];
-    let LookupResult::Found(subnet_public_key_der) = cert.tree.lookup_path(&public_key_path) else {
-        return Err("subnet public key not found".to_string());
-    };
-    extract_raw_root_pk_from_der(subnet_public_key_der)
-}
-
-fn principal_is_within_ranges(principal: &Principal, ranges: &[(Principal, Principal)]) -> bool {
-    ranges
-        .iter()
-        .any(|(start, end)| (start..=end).contains(&principal))
+    let mut root_public_key_der =
+        Vec::with_capacity(IC_ROOT_PK_DER_PREFIX.len() + root_public_key_raw.len());
+    root_public_key_der.extend_from_slice(IC_ROOT_PK_DER_PREFIX);
+    root_public_key_der.extend_from_slice(root_public_key_raw);
+    certificate
+        .verify(
+            signing_canister_id.as_slice(),
+            &root_public_key_der,
+            &u128::MIN,
+            &u128::MAX,
+        )
+        .map_err(|e| format!("{}", e))
 }
 
 const SHA256_DIGEST_LEN: usize = 32;
@@ -164,16 +116,4 @@ fn hash_sha256(data: &[u8]) -> [u8; SHA256_DIGEST_LEN] {
     let mut hash = Sha256::default();
     hash.update(data);
     <[u8; SHA256_DIGEST_LEN]>::from(hash.finalize())
-}
-
-fn check_bls_signature(certificate: &Certificate, signing_pk_raw: &[u8]) -> Result<(), String> {
-    let sig = certificate.signature.as_slice();
-    let root_hash = certificate.tree.digest();
-    let mut msg = vec![];
-    msg.extend_from_slice(IC_STATE_ROOT_DOMAIN_SEPARATOR);
-    msg.extend_from_slice(&root_hash);
-    if verify_bls_signature(sig, &msg, signing_pk_raw).is_err() {
-        return Err("invalid BLS signature".to_string());
-    }
-    Ok(())
 }

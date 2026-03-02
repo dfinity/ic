@@ -13560,17 +13560,17 @@ dependencies = [
 
 [[package]]
 name = "ic-signature-verification"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "assert_matches",
  "hex",
  "ic-canister-sig-creation",
+ "ic-certificate-verification",
  "ic-certification 3.1.0",
  "ic-crypto-internal-types",
  "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
- "ic-verify-bls-signature",
  "ic_principal",
  "serde",
  "serde_bytes",

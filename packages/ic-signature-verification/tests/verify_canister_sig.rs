@@ -128,7 +128,7 @@ fn should_fail_verify_canister_sig_on_wrong_root_pk() {
             &get_canister_sig_pk_der(&sig_data.canister_pk.key),
             &[42; 96],
         );
-        assert_matches!(result, Err(e) if e.contains("invalid BLS signature"));
+        assert_matches!(result, Err(e) if e.contains("Signature verification failed"));
     }
 }
 
@@ -143,7 +143,7 @@ fn should_fail_verify_canister_sig_on_invalid_root_pk() {
             &get_canister_sig_pk_der(&sig_data.canister_pk.key),
             &[42; 99], // invalid length
         );
-        assert_matches!(result, Err(e) if e.contains("invalid BLS signature"));
+        assert_matches!(result, Err(e) if e.contains("BLS DER-encoded public key must be 133 bytes long"));
     }
 }
 
