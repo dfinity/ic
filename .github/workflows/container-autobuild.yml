@@ -129,10 +129,10 @@ jobs:
 
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
           pushd .devcontainer
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_IC_DEV|g" -- *
+          sed -i -E "s|(ghcr.io/)?dfinity/ic-dev(:\|@)[^\"]{5,}|$IMG_NAME_IC_DEV|g" -- *
           popd
           pushd .github
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
+          sed -i -E "s|(ghcr.io/)?dfinity/ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           popd
 
           git config --global user.name "IDX GitHub Automation"
