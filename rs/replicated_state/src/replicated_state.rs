@@ -533,10 +533,10 @@ impl ReplicatedState {
     /// Makes a mutable reference to the canister state, cloning it if necessary.
     ///
     /// Make sure to only call this when actually mutating the canister state.
-    //
-    // TODO(DSM-102) Rename to `canister_state_make_mut`, to make it clearer that
-    // this is an expensive operation.
-    pub fn canister_state_mut(&mut self, canister_id: &CanisterId) -> Option<&mut CanisterState> {
+    pub fn canister_state_make_mut(
+        &mut self,
+        canister_id: &CanisterId,
+    ) -> Option<&mut CanisterState> {
         self.canister_states.get_mut(canister_id).map(Arc::make_mut)
     }
 
@@ -731,6 +731,17 @@ impl ReplicatedState {
             .subnets()
             .get(&subnet_id)
             .map(|x| x.cost_schedule)
+    }
+
+    /// Returns the list of subnet admins of this subnet.
+    pub fn get_own_subnet_admins(&self) -> BTreeSet<PrincipalId> {
+        let subnet_id = self.metadata.own_subnet_id;
+        self.metadata
+            .network_topology
+            .subnets()
+            .get(&subnet_id)
+            .map(|x| x.subnet_admins.clone())
+            .unwrap_or_default()
     }
 
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
@@ -986,7 +997,7 @@ impl ReplicatedState {
         };
 
         let receiver = msg.receiver();
-        match self.canister_state_mut(&receiver) {
+        match self.canister_state_make_mut(&receiver) {
             Some(receiver_canister) => receiver_canister.push_input(
                 msg,
                 subnet_available_guaranteed_response_memory,
@@ -1039,7 +1050,7 @@ impl ReplicatedState {
             self.subnet_queues.push_ingress(msg);
         } else {
             let canister_id = msg.receiver;
-            match self.canister_state_mut(&canister_id) {
+            match self.canister_state_make_mut(&canister_id) {
                 Some(canister) => canister.push_ingress(msg),
                 None => return Err(IngressInductionError::CanisterNotFound(canister_id)),
             }
@@ -1052,7 +1063,7 @@ impl ReplicatedState {
     /// Returns `true` if the recipient canister exists and was credited, `false`
     /// otherwise.
     pub fn credit_refund(&mut self, refund: &Refund) -> bool {
-        if let Some(canister) = self.canister_state_mut(&refund.recipient()) {
+        if let Some(canister) = self.canister_state_make_mut(&refund.recipient()) {
             canister
                 .system_state
                 .add_cycles(refund.amount(), CyclesUseCase::NonConsumed);

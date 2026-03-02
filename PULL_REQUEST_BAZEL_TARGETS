@@ -104,6 +104,8 @@ rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns
 rs/nns/governance/* //rs/nns/governance:governance_integration_test
                     //rs/nns/governance:merge_neurons_test
 
+rs/sns/* //rs/sns/integration_tests:neuron_test
+
 rs/ledger_suite/icp/index/* //rs/ledger_suite/icp/index:retrieve_blocks_from_ledger_interval_test
 
 rs/rosetta-api/icrc1/* //rs/rosetta-api/icrc1:ic-icrc-rosetta-unit-tests

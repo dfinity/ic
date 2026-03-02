@@ -206,9 +206,7 @@ fn compute_transcript(
             let indices = NodeIndices::from_slice(&reshare_x)
                 .expect("Cannot fail because all x are distinct.");
 
-            LagrangeCoefficients::at_zero(&indices)
-                .coefficients()
-                .to_vec()
+            LagrangeCoefficients::at_zero(&indices).into_coefficients()
         };
 
         let mut combined = Vec::with_capacity(threshold.get() as usize);

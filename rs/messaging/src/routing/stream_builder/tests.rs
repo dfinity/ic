@@ -974,7 +974,7 @@ fn build_streams_with_refunds(
         prop_assert_eq!(remote_stream_refunds, remote_stream.refund_count());
         let remote_stream_messages = match subnet_type {
             // On application subnets, there can be at most `N - refunds` canister messages.
-            SubnetType::Application | SubnetType::VerifiedApplication => {
+            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
                 (initial_messages + messages_to_route).min(N - remote_stream_refunds)
             }
             // On system subnets, also apply the `2 * system_subnet_stream_msg_limit` limit.
@@ -1187,7 +1187,9 @@ fn build_streams_with_oversized_payloads() {
         let mut expected_state = consume_output_queues(&provided_state);
 
         // Expecting a reject response for the remote request.
-        let local_canister = expected_state.canister_state_mut(&local_canister).unwrap();
+        let local_canister = expected_state
+            .canister_state_make_mut(&local_canister)
+            .unwrap();
         push_input(local_canister, remote_request_reject.into());
 
         // Expecting a loopback stream consisting of:

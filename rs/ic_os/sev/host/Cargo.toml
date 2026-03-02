@@ -9,9 +9,9 @@ mockall = { workspace = true }
 reqwest = { workspace = true }
 sev = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 pem = { workspace = true }
 rcgen = { workspace = true }
-tokio = { workspace = true }
 

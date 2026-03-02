@@ -19,6 +19,7 @@ use ic_system_test_driver::{
     systest,
     util::{MessageCanister, MetricsFetcher, block_on, runtime_from_url},
 };
+use ic_types::Height;
 use slog::info;
 
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
@@ -129,9 +130,13 @@ fn test(test_env: TestEnv) {
     });
 }
 
+fn setup(test_env: TestEnv) {
+    setup_without_ecdsa_on_nns(test_env, Height::from(19));
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup_without_ecdsa_on_nns)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
