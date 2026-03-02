@@ -380,11 +380,11 @@ impl SubnetAvailableMemory {
         wasm_custom_sections_memory: i64,
         scaling_factor: NonZeroU64,
     ) -> Self {
-        let divisor = scaling_factor.get() as i64;
+        let scaling_factor = scaling_factor.get() as i64;
         SubnetAvailableMemory {
-            execution_memory: execution_memory / divisor,
-            guaranteed_response_message_memory: guaranteed_response_message_memory / divisor,
-            wasm_custom_sections_memory: wasm_custom_sections_memory / divisor,
+            execution_memory: execution_memory / scaling_factor,
+            guaranteed_response_message_memory: guaranteed_response_message_memory / scaling_factor,
+            wasm_custom_sections_memory: wasm_custom_sections_memory / scaling_factor,
         }
     }
 
