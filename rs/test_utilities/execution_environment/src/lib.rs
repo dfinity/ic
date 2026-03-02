@@ -99,7 +99,7 @@ use tempfile::NamedTempFile;
 mod wat_canister;
 pub use wat_canister::{WatCanisterBuilder, WatFnCode, wat_canister, wat_fn};
 
-const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(2_500_000_000_000);
 
 // These are well formed example public keys.
 // We need to have well formed keys for the "*_public_key" tests, otherwise crypto will
