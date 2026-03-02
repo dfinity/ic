@@ -80,12 +80,15 @@ pub fn test(env: TestEnv) {
         }
         .encode_to_vec(),
     };
-    let mut mutations = RegistryCanisterInitPayloadBuilder::new();
-    mutations.push_init_mutate_request(RegistryAtomicMutateRequest {
-        mutations: vec![deleted_subnet_list_mutation],
-        preconditions: vec![],
-    });
-    install_registry_canister_with_testnet_topology(&env, Some(mutations));
+    install_registry_canister_with_testnet_topology(
+        &env,
+        Some(|builder: &mut RegistryCanisterInitPayloadBuilder| {
+            builder.push_init_mutate_request(RegistryAtomicMutateRequest {
+                mutations: vec![deleted_subnet_list_mutation],
+                preconditions: vec![],
+            });
+        }),
+    );
     let topology_snapshot = &env.topology_snapshot();
     let nns_subnet = topology_snapshot.root_subnet();
     let app_subnet = topology_snapshot
@@ -103,7 +106,7 @@ pub fn test(env: TestEnv) {
         engine_nodes.first().unwrap().subnet_id(),
         Some(engine_subnet.subnet_id)
     );
-    let app_subnet_2_node_ids = BTreeSet::from_iter(engine_nodes.iter().map(|x| x.node_id));
+    let engine_node_ids = BTreeSet::from_iter(engine_nodes.iter().map(|x| x.node_id));
     assert!(
         topology_snapshot
             .unassigned_nodes()
@@ -171,7 +174,7 @@ pub fn test(env: TestEnv) {
             .unassigned_nodes()
             .map(|x| x.node_id)
             .collect::<BTreeSet<_>>();
-        assert_eq!(unassigned_node_ids, app_subnet_2_node_ids);
+        assert_eq!(unassigned_node_ids, engine_node_ids);
 
         let final_subnets = get_subnet_list_from_registry(&client).await;
         info!(log, "final subnets: {:?}", final_subnets);

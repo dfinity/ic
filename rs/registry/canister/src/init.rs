@@ -66,16 +66,6 @@ impl RegistryCanisterInitPayloadBuilder {
         self
     }
 
-    pub fn push_front_mutations(
-        &mut self,
-        mut mutations: Vec<RegistryAtomicMutateRequest>,
-    ) -> &mut Self {
-        let initial_mutations = self.initial_mutations.clone();
-        mutations.extend(initial_mutations);
-        self.initial_mutations = mutations;
-        self
-    }
-
     pub fn build(&self) -> RegistryCanisterInitPayload {
         RegistryCanisterInitPayload {
             mutations: self.initial_mutations.clone(),
