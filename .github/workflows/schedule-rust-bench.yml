@@ -64,7 +64,7 @@ jobs:
             trap "rm -rf $CRITERION_HOME" INT TERM EXIT
 
             while IFS= read -r tgt; do
-                bazel run "$tgt" -- --criterion-home "$CRITERION_HOME"
+                CRITERION_HOME="$CRITERION_HOME" bazel run "$tgt"
             done < <(bazel query "attr(tags, 'rust_bench', ${{ matrix.target }})")
 
             while IFS= read -r bench_dir; do
