@@ -67,8 +67,8 @@ jobs:
           - image: ic-dev
             target: dev
     outputs:
-      ic-build-imageid: ${{ steps.set-ic-build-imageid.outputs.imageid }}
-      ic-dev-imageid: ${{ steps.set-ic-dev-imageid.outputs.imageid }}
+      ic-build-imageid: ${{ steps.set-output-imageid.outputs.ic-build-imageid }}
+      ic-dev-imageid: ${{ steps.set-output-imageid.outputs.ic-dev-imageid }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,14 +95,17 @@ jobs:
           target: ${{ matrix.target }}
           build-args: |
             CI_USER=1001
-      - name: Set ic-build-imageid output
-        id: set-ic-build-imageid
-        if: matrix.image == 'ic-build'
-        run: echo "ic-build-imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
-      - name: Set ic-dev-imageid output
-        id: set-ic-dev-imageid
-        if: matrix.image == 'ic-dev'
-        run: echo "ic-dev-imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
+      - name: Set output imageid
+        id: set-output-imageid
+        run: |
+          if [ "${{ matrix.image }}" == "ic-build" ]; then
+            echo "ic-build-imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.image }}" == "ic-dev" ]; then
+            echo "ic-dev-imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
+          else
+            echo "Unknown image: ${{ matrix.image }}"
+            exit 1
+          fi
 
   update-image-references:
     name: Update Image References in Repo
