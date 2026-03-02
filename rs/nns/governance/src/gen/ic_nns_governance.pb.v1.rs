@@ -3026,7 +3026,7 @@ pub mod governance {
         pub timestamp: u64,
         #[prost(
             oneof = "neuron_in_flight_command::Command",
-            tags = "2, 3, 5, 7, 8, 9, 10, 20, 21, 22, 23"
+            tags = "2, 3, 5, 7, 8, 9, 10, 20, 21, 22"
         )]
         pub command: ::core::option::Option<neuron_in_flight_command::Command>,
     }
@@ -3082,8 +3082,6 @@ pub mod governance {
             SyncCommand(SyncCommand),
             #[prost(message, tag = "22")]
             FinalizeDisburseMaturity(super::super::FinalizeDisburseMaturity),
-            #[prost(message, tag = "23")]
-            CreateNeuron(super::super::CreateNeuron),
         }
     }
     /// Stores metrics that are too costly to compute each time metrics are
@@ -4201,44 +4199,6 @@ pub struct FinalizeDisburseMaturity {
     /// The account identifer to which to transfer the ICPs.
     #[prost(message, optional, tag = "5")]
     pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
-}
-/// Records information needed to recover from a failed create_neuron call.
-/// Most fields are copied from the request/argument that was passed to the
-/// create_neuron canister method.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct CreateNeuron {
-    /// The neuron ID being created.
-    #[prost(message, optional, tag = "1")]
-    pub neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-    /// The neuron's subaccount.
-    #[prost(bytes = "vec", tag = "2")]
-    pub neuron_subaccount: ::prost::alloc::vec::Vec<u8>,
-    /// The source account from which to transfer ICP.
-    #[prost(message, optional, tag = "3")]
-    pub source_account: ::core::option::Option<Account>,
-    /// The amount to stake in e8s.
-    #[prost(uint64, tag = "4")]
-    pub amount_e8s: u64,
-    /// The controller of the neuron.
-    #[prost(message, optional, tag = "5")]
-    pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// The dissolve delay of the neuron in seconds.
-    #[prost(uint64, tag = "6")]
-    pub dissolve_delay_seconds: u64,
-    /// The timestamp when the operation started.
-    #[prost(uint64, tag = "7")]
-    pub timestamp_seconds: u64,
-    /// The followees to set for the neuron.
-    #[prost(message, optional, tag = "8")]
-    pub followees: ::core::option::Option<manage_neuron::SetFollowing>,
 }
 /// An ICRC-3-like value.
 #[derive(

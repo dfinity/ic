@@ -4538,22 +4538,3 @@ pub struct SelfDescribingProposalAction {
 pub struct GetPendingProposalsRequest {
     pub return_self_describing_action: Option<bool>,
 }
-
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
-pub struct CreateNeuronRequest {
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
-    pub source_subaccount: Option<Vec<u8>>,
-    pub amount_e8s: Option<u64>,
-    pub controller: Option<PrincipalId>,
-    pub followees: Option<manage_neuron::SetFollowing>,
-    pub dissolve_delay_seconds: Option<u64>,
-    pub dissolving: Option<bool>,
-    pub auto_stake_maturity: Option<bool>,
-}
-
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
-pub struct CreatedNeuron {
-    pub neuron_id: Option<NeuronId>,
-}
-
-pub type CreateNeuronResponse = Result<CreatedNeuron, GovernanceError>;

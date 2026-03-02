@@ -2014,7 +2014,6 @@ message Governance {
       ic_nns_common.pb.v1.NeuronId spawn = 20;
       SyncCommand sync_command = 21;
       FinalizeDisburseMaturity finalize_disburse_maturity = 22;
-      CreateNeuron create_neuron = 23;
     }
   }
 
@@ -2668,35 +2667,6 @@ message FinalizeDisburseMaturity {
 
   // The account identifer to which to transfer the ICPs.
   ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 5;
-}
-
-// Records information needed to recover from a failed create_neuron call.
-// Most fields are copied from the request/argument that was passed to the
-// create_neuron canister method.
-message CreateNeuron {
-  // The neuron ID being created.
-  ic_nns_common.pb.v1.NeuronId neuron_id = 1;
-
-  // The neuron's subaccount.
-  bytes neuron_subaccount = 2;
-
-  // The source account from which to transfer ICP.
-  Account source_account = 3;
-
-  // The amount to stake in e8s.
-  uint64 amount_e8s = 4;
-
-  // The controller of the neuron.
-  ic_base_types.pb.v1.PrincipalId controller = 5;
-
-  // The dissolve delay of the neuron in seconds.
-  uint64 dissolve_delay_seconds = 6;
-
-  // The timestamp when the operation started.
-  uint64 timestamp_seconds = 7;
-
-  // The followees to set for the neuron.
-  optional ManageNeuron.SetFollowing followees = 8;
 }
 
 // An ICRC-3-like value.
