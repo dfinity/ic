@@ -1,0 +1,14 @@
+[Unit]
+Description=Reserve Hugepages for the Guest VM
+DefaultDependencies=no
+RequiresMountsFor=/boot/config
+Before=dev-hugepages.mount
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/guest_vm_runner reserve-hugepages
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
+
