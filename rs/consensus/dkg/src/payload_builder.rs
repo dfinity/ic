@@ -77,15 +77,16 @@ pub fn create_payload(
         )
         .map(DkgPayload::Summary)
     } else {
-        // If the height is not a start height, create a payload with new dealings.
+        // If the height is not a start height, create a payload with new dealings,
+        // and possibly early remote transcripts.
         create_data_payload(
             pool_reader,
-            parent,
             dkg_pool,
-            crypto,
-            last_dkg_summary,
+            parent,
             max_dealings_per_block,
             &last_summary_block,
+            last_dkg_summary,
+            crypto,
             state_manager,
             validation_context,
             logger,
@@ -96,12 +97,12 @@ pub fn create_payload(
 
 fn create_data_payload(
     pool_reader: &PoolReader<'_>,
-    parent: &Block,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
-    crypto: &dyn ConsensusCrypto,
-    last_dkg_summary: &DkgSummary,
+    parent: &Block,
     max_dealings_per_block: usize,
     last_summary_block: &Block,
+    last_dkg_summary: &DkgSummary,
+    crypto: &dyn ConsensusCrypto,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
@@ -171,10 +172,10 @@ pub(crate) fn create_early_remote_transcripts(
         return Ok(vec![]);
     }
 
-    // Get all dealings that have not been used in a transcript already
+    // Get all dealings for DKGs that have not been completed yet
     let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent);
 
-    // Collect map of remote target_ids to dkg configs
+    // Collect map of remote target_ids to DKG configs
     let mut remote_configs: BTreeMap<NiDkgTargetId, Vec<&NiDkgConfig>> = BTreeMap::new();
     for config in last_dkg_summary.configs.values() {
         let dkg_id = config.dkg_id();
@@ -190,7 +191,7 @@ pub(crate) fn create_early_remote_transcripts(
     let state_ref = state.get_ref();
     let callback_id_map = build_target_id_callback_map(state_ref);
     let mut selected_transcripts = vec![];
-    'TARGET_ID: for (target_id, configs) in remote_configs {
+    for (target_id, configs) in remote_configs {
         // Lookup the callback id and the expected number of configs for this target_id
         let Some((expected_config_num, callback_id)) = callback_id_map.get(&target_id) else {
             continue;
@@ -214,37 +215,34 @@ pub(crate) fn create_early_remote_transcripts(
         }
 
         // For each config, try to build the necessary (dkg_id, callback_id, transcript) triple
-        let mut transcripts = vec![];
         for config in configs.iter() {
-            // Generate the transcript. We just skip reproducible errors, they will
-            // be handled in the summary block, if we fail to create an early transcript
-            let transcript = match create_transcript(crypto, config, &all_dealings, &logger) {
-                Ok(transcript) => transcript,
+            // Generate the transcript. We need to retry transient errors, as a payload containing
+            // transient errors may not be verifiable by peers.
+            let transcript_result = match create_transcript(crypto, config, &all_dealings, &logger)
+            {
+                Ok(transcript) => Ok(transcript),
+                // Note that we handled the reproducible error case of not having enough dealings
+                // already beforehand.
                 Err(err) if err.is_reproducible() => {
-                    warn!(
-                        logger,
-                        "Failed to create early remote transcript for dkg id {:?} at height {}: {:?}",
+                    // Including the error in the payload will cause the context to receive
+                    // a reject response.
+                    let error_message = format!(
+                        "Failed to create early remote transcript for dkg id {:?} at height {}: {}",
                         config.dkg_id(),
                         parent.height.increment(),
                         err
                     );
-                    continue 'TARGET_ID;
+                    warn!(logger, "{error_message}");
+                    Err(error_message)
                 }
                 Err(err) => {
                     // Return on transient crypto errors
                     return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
                 }
             };
-            // Push to an intermediate vector such that we append either all transcripts for the
-            // target_id or none of them.
-            transcripts.push((
-                config.dkg_id().clone(),
-                *callback_id,
-                Ok::<_, String>(transcript),
-            ));
+            selected_transcripts.push((config.dkg_id().clone(), *callback_id, transcript_result));
         }
 
-        selected_transcripts.append(&mut transcripts);
         if selected_transcripts.len() >= MAX_EARLY_REMOTE_TRANSCRIPTS {
             break;
         }
