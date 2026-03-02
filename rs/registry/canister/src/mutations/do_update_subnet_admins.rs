@@ -26,12 +26,14 @@ pub enum OperationType {
 impl OperationType {
     fn validate(
         &self,
-        current_subnet_admins: &Vec<PrincipalIdPb>,
+        current_subnet_admins: &[PrincipalIdPb],
     ) -> Result<(), UpdateSubnetAdminsError> {
         match self {
             OperationType::Add(principal_ids) => {
                 if principal_ids.is_empty() {
-                    return Err(UpdateSubnetAdminsError::PrincipalListEmpty);
+                    return Err(UpdateSubnetAdminsError::PrincipalListEmpty(
+                        candid::Reserved,
+                    ));
                 }
 
                 if current_subnet_admins.len() + principal_ids.len() > MAX_SUBNET_ADMINS {
@@ -44,7 +46,9 @@ impl OperationType {
             }
             OperationType::Remove(principal_ids) => {
                 if principal_ids.is_empty() {
-                    return Err(UpdateSubnetAdminsError::PrincipalListEmpty);
+                    return Err(UpdateSubnetAdminsError::PrincipalListEmpty(
+                        candid::Reserved,
+                    ));
                 }
 
                 if principal_ids.len() > MAX_SUBNET_ADMINS {
@@ -73,7 +77,6 @@ impl OperationType {
 
                 new_subnet_admins
                     .union(&deduped_provided_principal_ids)
-                    .into_iter()
                     .cloned()
                     .collect()
             }
@@ -88,7 +91,6 @@ impl OperationType {
 
                 new_subnet_admins
                     .difference(&deduped_provided_principal_ids)
-                    .into_iter()
                     .cloned()
                     .collect()
             }
@@ -110,8 +112,8 @@ pub enum UpdateSubnetAdminsError {
         existing: u64,
         max_allowed: u64,
     },
-    PrincipalListEmpty,
-    UnknownOperationType,
+    PrincipalListEmpty(candid::Reserved),
+    UnknownOperationType(candid::Reserved),
 }
 
 impl std::fmt::Display for UpdateSubnetAdminsError {
@@ -125,10 +127,10 @@ impl std::fmt::Display for UpdateSubnetAdminsError {
                 f,
                 "Too many subnet admins. Provided: {provided}, Existing: {existing}, Max allowed: {max_allowed}."
             ),
-            UpdateSubnetAdminsError::PrincipalListEmpty => {
+            UpdateSubnetAdminsError::PrincipalListEmpty(_) => {
                 write!(f, "The list of provided principals cannot be empty.")
             }
-            UpdateSubnetAdminsError::UnknownOperationType => {
+            UpdateSubnetAdminsError::UnknownOperationType(_) => {
                 write!(
                     f,
                     "The operation type provided is unknown. Expected one of: Add, Remove, Clear."
@@ -191,7 +193,9 @@ impl Registry {
                     Err(err) => Err(err),
                 }
             }
-            None => Err(UpdateSubnetAdminsError::UnknownOperationType),
+            None => Err(UpdateSubnetAdminsError::UnknownOperationType(
+                candid::Reserved,
+            )),
         };
 
         match res {
@@ -249,14 +253,14 @@ mod tests {
     // Useful in cases the list contains more than 1 element (otherwise direct equality
     // check is enough).
     fn assert_updated_subnet_admins_match_expected(
-        updated_subnet_admins: &Vec<PrincipalIdPb>,
-        expected_subnet_admins: &Vec<PrincipalIdPb>,
+        updated_subnet_admins: &[PrincipalIdPb],
+        expected_subnet_admins: &[PrincipalIdPb],
     ) {
         let updated_subnet_admins = updated_subnet_admins
-            .into_iter()
+            .iter()
             .collect::<HashSet<&PrincipalIdPb>>();
         let expected_subnet_admins = expected_subnet_admins
-            .into_iter()
+            .iter()
             .collect::<HashSet<&PrincipalIdPb>>();
         assert_eq!(updated_subnet_admins, expected_subnet_admins);
     }
@@ -349,7 +353,9 @@ mod tests {
         let result = registry.do_update_subnet_admins(payload);
         assert_eq!(
             result,
-            UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::PrincipalListEmpty))
+            UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::PrincipalListEmpty(
+                candid::Reserved
+            )))
         );
         let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
         assert_eq!(updated_subnet_admins, vec![]);
@@ -362,7 +368,9 @@ mod tests {
         let result = registry.do_update_subnet_admins(payload);
         assert_eq!(
             result,
-            UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::PrincipalListEmpty))
+            UpdateSubnetAdminsResult::Err(Some(UpdateSubnetAdminsError::PrincipalListEmpty(
+                candid::Reserved
+            )))
         );
         let updated_subnet_admins = registry.get_subnet_or_panic(subnet_id).subnet_admins;
         assert_eq!(updated_subnet_admins, vec![]);

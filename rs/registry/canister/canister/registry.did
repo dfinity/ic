@@ -533,8 +533,8 @@ type UpdateSubnetAdminsError = variant {
     existing: nat64;
     max_allowed: nat64;
   };
-  PrincipalListEmpty;
-  UnknownOperationType;
+  PrincipalListEmpty : reserved;
+  UnknownOperationType : reserved;
 };
 
 type UpdateSubnetAdminsResult = variant {
