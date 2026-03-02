@@ -4,7 +4,6 @@ use core::{
     fmt::Debug,
     ops::{Add, AddAssign, Div, Mul, Sub},
 };
-use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
 use ic_canister_log::{GlobalBuffer, LogBuffer, LogEntry, export};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -713,7 +712,7 @@ pub fn serve_metrics(
     encode_metrics: impl FnOnce(&mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()>,
 ) -> HttpResponse {
     let mut writer =
-        ic_metrics_encoder::MetricsEncoder::new(vec![], time_nanos() as i64 / 1_000_000);
+        ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
 
     match encode_metrics(&mut writer) {
         Ok(()) => HttpResponseBuilder::ok()
@@ -741,7 +740,7 @@ pub fn total_memory_size_bytes() -> usize {
 /// Returns the number of stable memory pages that the calling canister has allocated.
 #[cfg(target_arch = "wasm32")]
 pub fn stable_memory_num_pages() -> u64 {
-    dfn_core::stable::stable64_size()
+    ic_cdk::stable::stable_size()
 }
 
 #[cfg(not(any(target_arch = "wasm32")))]
@@ -752,7 +751,7 @@ pub fn stable_memory_num_pages() -> u64 {
 /// Returns the amount of stable memory that the calling canister has allocated.
 #[cfg(target_arch = "wasm32")]
 pub fn stable_memory_size_bytes() -> u64 {
-    dfn_core::stable::stable64_size() * (WASM_PAGE_SIZE_BYTES as u64)
+    ic_cdk::stable::stable_size() * (WASM_PAGE_SIZE_BYTES as u64)
 }
 
 #[cfg(not(any(target_arch = "wasm32")))]
