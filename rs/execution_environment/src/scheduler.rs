@@ -763,9 +763,8 @@ impl SchedulerImpl {
                 max_instructions_executed_per_thread.max(instructions_executed);
 
             let divisor = round_limits_per_thread.instructions.get();
-            debug_assert_ne!(divisor, 0);
+            debug_assert_ne!(divisor, 0, "prevent divide by zero panic");
             if divisor > 0 {
-                // Avoid division by zero.
                 let value = instructions_executed.get() as f64 / divisor as f64;
                 self.metrics.compute_utilization_per_core.observe(value);
             }

@@ -207,7 +207,10 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
-        debug_assert_ne!(self.config.reference_subnet_size, 0);
+        debug_assert_ne!(
+            self.config.reference_subnet_size, 0,
+            "prevent divide by zero panic"
+        );
         match cost_schedule {
             CanisterCyclesCostSchedule::Normal => {
                 (cycles * subnet_size) / self.config.reference_subnet_size.max(1)
