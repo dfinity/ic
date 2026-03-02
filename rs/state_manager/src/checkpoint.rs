@@ -622,7 +622,7 @@ impl CheckpointLoader {
         .collect()
     }
 
-    fn validate_eq_canister_snapshots(
+    fn validate_eq_canister_snapshots_ids(
         &self,
         ref_canister_snapshots: BTreeMap<CanisterId, &CanisterSnapshots>,
     ) -> Result<(), String> {
@@ -740,7 +740,7 @@ fn validate_eq_checkpoint_internal(
         .iter()
         .map(|(canister_id, canister)| (*canister_id, &canister.canister_snapshots))
         .collect();
-    checkpoint_loader.validate_eq_canister_snapshots(canister_snapshots)
+    checkpoint_loader.validate_eq_canister_snapshots_ids(canister_snapshots)
 }
 
 #[derive(Default)]
