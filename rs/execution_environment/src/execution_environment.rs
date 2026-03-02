@@ -95,6 +95,7 @@ use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
+use std::num::NonZeroU64;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::{Into, TryFrom},
@@ -445,10 +446,6 @@ impl ExecutionEnvironment {
     /// Time complexity: `O(|canisters|)`.
     pub fn scaled_subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
         let memory_taken = state.memory_taken();
-        // We apply the scaling factor `self.scheduler_cores`
-        // consistently with the scaling factor of `ResourceSaturation`
-        // in the function `self.subnet_memory_saturation`.
-        let scaling_factor = self.scheduler_cores as i64;
         SubnetAvailableMemory::new_scaled(
             self.config.subnet_memory_capacity.get() as i64
                 - self.config.subnet_memory_reservation.get() as i64
@@ -461,7 +458,11 @@ impl ExecutionEnvironment {
                 .subnet_wasm_custom_sections_memory_capacity
                 .get() as i64
                 - memory_taken.wasm_custom_sections().get() as i64,
-            scaling_factor,
+            // We apply the scaling factor `self.scheduler_cores`
+            // consistently with the scaling factor of `ResourceSaturation`
+            // in the function `self.subnet_memory_saturation`.
+            NonZeroU64::new(self.scheduler_cores.max(1) as u64)
+                .expect("scaling_factor must be non zero"),
         )
     }
 
@@ -473,7 +474,9 @@ impl ExecutionEnvironment {
         // in the function `self.scaled_subnet_available_memory`.
         // and the scaling factor of `ResourceSaturation`
         // in the function `self.subnet_memory_saturation`.
-        NumBytes::from(self.config.subnet_memory_reservation.get() / self.scheduler_cores as u64)
+        let scaling_factor = self.scheduler_cores.max(1) as u64;
+        debug_assert_ne!(scaling_factor, 0);
+        NumBytes::from(self.config.subnet_memory_reservation.get() / scaling_factor)
     }
 
     /// Computes the current amount of guaranteed response message memory available
@@ -761,49 +764,50 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::CreateCanister) => {
-                match &mut msg {
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::CreateCanister)
-                    }
-                    CanisterCall::Request(req) => {
-                        let cycles = Arc::make_mut(req).take_cycles();
-                        match CreateCanisterArgs::decode(req.method_payload()) {
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: cycles,
-                                instructions: NumInstructions::new(0),
-                            },
-                            Ok(args) => {
-                                // Start logging execution time for `create_canister`.
-                                let since = Instant::now();
+                let subnet_admins = state.get_own_subnet_admins();
+                if subnet_admins.is_empty()
+                    && let CanisterCall::Ingress(_) = msg
+                {
+                    self.reject_unexpected_ingress(Ic00Method::CreateCanister)
+                } else {
+                    match CreateCanisterArgs::decode(payload) {
+                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(err),
+                            refund: msg.take_cycles(),
+                            instructions: NumInstructions::new(0),
+                        },
+                        Ok(args) => {
+                            // Start logging execution time for `create_canister`.
+                            let since = Instant::now();
 
-                                let sender_canister_version = args.get_sender_canister_version();
+                            let cycles = msg.take_cycles();
 
-                                let settings = args.settings.unwrap_or_default();
-                                let result = match CanisterSettings::try_from(settings) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err.into()),
-                                        refund: cycles,
-                                        instructions: NumInstructions::new(0),
-                                    },
-                                    Ok(settings) => self.create_canister(
-                                        msg.canister_change_origin(sender_canister_version),
-                                        cycles,
-                                        settings,
-                                        registry_settings,
-                                        &mut state,
-                                        round_limits,
-                                    ),
-                                };
-                                info!(
-                                    self.log,
-                                    "Finished executing create_canister message after {:?} with result: {:?}",
-                                    since.elapsed().as_secs_f64(),
-                                    result
-                                );
+                            let sender_canister_version = args.get_sender_canister_version();
 
+                            let settings = args.settings.unwrap_or_default();
+                            let result = match CanisterSettings::try_from(settings) {
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err.into()),
+                                    refund: cycles,
+                                    instructions: NumInstructions::new(0),
+                                },
+                                Ok(settings) => self.create_canister(
+                                    msg.canister_change_origin(sender_canister_version),
+                                    cycles,
+                                    settings,
+                                    registry_settings,
+                                    &mut state,
+                                    round_limits,
+                                ),
+                            };
+                            info!(
+                                self.log,
+                                "Finished executing create_canister message after {:?} with result: {:?}",
+                                since.elapsed().as_secs_f64(),
                                 result
-                            }
+                            );
+
+                            result
                         }
                     }
                 }
@@ -2307,39 +2311,26 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
     ) -> ExecuteSubnetMessageResult {
-        let sender = origin.origin();
-        match state.find_subnet_id(sender) {
-            Ok(sender_subnet_id) => {
-                let (res, cycles) = self.canister_manager.create_canister(
-                    origin,
-                    sender_subnet_id,
-                    cycles,
-                    settings,
-                    registry_settings.max_number_of_canisters,
-                    state,
-                    registry_settings.subnet_size,
-                    round_limits,
-                    self.subnet_memory_saturation(&round_limits.subnet_available_memory),
-                    &self.metrics.canister_creation_error,
-                );
-                ExecuteSubnetMessageResult::Finished {
-                    response: res
-                        .map(|new_canister_id| {
-                            (
-                                CanisterIdRecord::from(new_canister_id).encode(),
-                                Some(new_canister_id),
-                            )
-                        })
-                        .map_err(|err| err.into()),
-                    refund: cycles,
-                    instructions: NumInstructions::new(0),
-                }
-            }
-            Err(err) => ExecuteSubnetMessageResult::Finished {
-                response: Err(err),
-                refund: cycles,
-                instructions: NumInstructions::new(0),
-            },
+        let (res, cycles) = self.canister_manager.create_canister(
+            origin,
+            cycles,
+            settings,
+            registry_settings.max_number_of_canisters,
+            state,
+            registry_settings.subnet_size,
+            round_limits,
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+            &self.metrics.canister_creation_error,
+        );
+        ExecuteSubnetMessageResult::Finished {
+            response: res.map(|new_canister_id| {
+                (
+                    CanisterIdRecord::from(new_canister_id).encode(),
+                    Some(new_canister_id),
+                )
+            }),
+            refund: cycles,
+            instructions: NumInstructions::new(0),
         }
     }
 
@@ -4464,9 +4455,10 @@ impl ExecutionEnvironment {
         // We apply the scaling factor `self.scheduler_cores`
         // consistently with the scaling factor of `SubnetAvailableMemory`
         // in the function `self.scaled_subnet_available_memory`.
-        let scaling_factor = self.scheduler_cores as u64;
+        let scaling_factor = self.scheduler_cores.max(1) as u64;
 
         // Compute the scaled memory usage as the scaled capacity minus the scaled available memory.
+        debug_assert_ne!(scaling_factor, 0);
         let scaled_subnet_memory_capacity: u64 =
             self.config.subnet_memory_capacity.get() / scaling_factor;
         let scaled_subnet_available_memory =
@@ -4562,7 +4554,7 @@ pub(crate) fn full_subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAva
         config.subnet_memory_capacity.get() as i64,
         config.guaranteed_response_message_memory_capacity.get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
-        1,
+        NonZeroU64::new(1).expect("scaling_factor must be non zero"),
     )
 }
 
