@@ -11286,9 +11286,9 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "candid",
- "dfn_core",
  "futures",
  "ic-base-types",
+ "ic-cdk",
  "ic-error-types 0.2.0",
  "ic-ledger-core",
  "ic-management-canister-types-private",
