@@ -52,7 +52,7 @@ impl State {
         }
 
         // If you're preprocessing just continue with the default fee
-        if let Some(debit) = self.debit
+        if let Some(debit) = &self.debit
             && self.preprocessing
             && self.fee.is_none()
         {
