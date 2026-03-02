@@ -7816,6 +7816,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-error-types 0.2.0",
  "ic-interfaces",
+ "ic-interfaces-mocks",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
@@ -10577,6 +10578,7 @@ dependencies = [
 name = "ic-interfaces-mocks"
 version = "0.9.0"
 dependencies = [
+ "ic-crypto-interfaces-sig-verification",
  "ic-interfaces",
  "ic-protobuf",
  "ic-types",
