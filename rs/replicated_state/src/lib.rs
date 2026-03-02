@@ -58,6 +58,7 @@ mod bitcoin;
 pub mod canister_state;
 pub(crate) mod hash;
 pub mod metadata_state;
+pub mod metrics;
 pub mod page_map;
 pub mod replicated_state;
 pub use canister_state::{

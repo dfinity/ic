@@ -19,7 +19,7 @@ use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
 };
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, MatchPatternPath, MixedHashTree, Path as LabeledTreePath,
+    Digest, Label, LabeledTree, MatchPatternPath, MixedHashTree, Path as LabeledTreePath, Witness,
     sparse_labeled_tree_from_paths,
 };
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
@@ -68,9 +68,9 @@ use ic_management_canister_types_private::{
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
     CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
-    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
-    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply, VetKdDeriveKeyResult,
+    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SetupInitialDKGResponse,
+    SignWithECDSAReply, SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    UploadChunkArgs, UploadChunkReply, VetKdDeriveKeyResult,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -377,6 +377,8 @@ fn add_subnet_local_registry_records(
     ni_dkg_transcript: NiDkgTranscript,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     registry_version: RegistryVersion,
+    cost_schedule: CanisterCyclesCostSchedule,
+    subnet_admins: Vec<PrincipalId>,
 ) {
     for node in nodes {
         let node_record = NodeRecord {
@@ -459,6 +461,7 @@ fn add_subnet_local_registry_records(
     let max_ingress_bytes_per_message = match subnet_type {
         SubnetType::Application => 2 * 1024 * 1024,
         SubnetType::VerifiedApplication => 2 * 1024 * 1024,
+        SubnetType::CloudEngine => 2 * 1024 * 1024,
         SubnetType::System => 3 * 1024 * 1024 + 512 * 1024,
     };
     let max_ingress_messages_per_block = 1000;
@@ -487,6 +490,8 @@ fn add_subnet_local_registry_records(
             max_parallel_pre_signature_transcripts_in_creation: None,
         })
         .with_features(features)
+        .with_cost_schedule(cost_schedule)
+        .with_subnet_admins(subnet_admins)
         .build();
 
     // Insert initial DKG transcripts
@@ -919,6 +924,10 @@ impl StateManager for StateMachineStateManager {
         self.deref().list_state_hashes_to_certify()
     }
 
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        self.deref().list_state_heights_to_certify()
+    }
+
     fn deliver_state_certification(&self, certification: Certification) {
         self.deref().deliver_state_certification(certification)
     }
@@ -1198,6 +1207,7 @@ pub struct StateMachineBuilder {
     /// Otherwise, no new registry records are created.
     create_at_registry_version: Option<RegistryVersion>,
     cost_schedule: CanisterCyclesCostSchedule,
+    subnet_admins: Vec<PrincipalId>,
 }
 
 impl StateMachineBuilder {
@@ -1238,6 +1248,7 @@ impl StateMachineBuilder {
             remove_old_states: true,
             create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_admins: vec![],
         }
     }
 
@@ -1470,6 +1481,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_subnet_admins(self, subnet_admins: Vec<PrincipalId>) -> Self {
+        Self {
+            subnet_admins,
+            ..self
+        }
+    }
+
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
     /// Otherwise, no new registry records are created.
@@ -1514,6 +1532,7 @@ impl StateMachineBuilder {
             self.remove_old_states,
             self.create_at_registry_version,
             self.cost_schedule,
+            self.subnet_admins,
         )
     }
 
@@ -1782,10 +1801,39 @@ impl StateMachine {
             self.query_stats_payload_builder.purge(query_stats);
         }
         let self_validating = Some(batch_payload.self_validating);
+        let mut consensus_responses = http_responses;
+        // `setup_initial_dkg` can only be called on the NNS subnet
+        // and thus the seed does not need to depend on the subnet ID
+        let mut rng = StdRng::seed_from_u64(certified_height.get());
+        for callback_id in state
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts
+            .keys()
+        {
+            let ni_dkg_transcript = dummy_initial_dkg_transcript_with_master_key(&mut rng).0;
+            let public_key = (&ni_dkg_transcript).try_into().unwrap();
+            let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+            let subnet_id = PrincipalId::new_self_authenticating(&public_key_der).into();
+            let mut high_threshold_transcript_record = ni_dkg_transcript.clone();
+            high_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::HighThreshold;
+            let mut low_threshold_transcript_record = ni_dkg_transcript;
+            low_threshold_transcript_record.dkg_id.dkg_tag = NiDkgTag::LowThreshold;
+            let initial_transcript_records = SetupInitialDKGResponse {
+                low_threshold_transcript_record: high_threshold_transcript_record.into(),
+                high_threshold_transcript_record: low_threshold_transcript_record.into(),
+                fresh_subnet_id: subnet_id,
+                subnet_threshold_public_key: public_key.into(),
+            };
+            consensus_responses.push(ConsensusResponse::new(
+                *callback_id,
+                MsgPayload::Data(initial_transcript_records.encode()),
+            ));
+        }
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
-            .with_consensus_responses(http_responses)
+            .with_consensus_responses(consensus_responses)
             .with_query_stats(query_stats)
             .with_self_validating(self_validating);
         if let Some(blockmaker_metrics) = blockmaker_metrics {
@@ -1852,9 +1900,12 @@ impl StateMachine {
         remove_old_states: bool,
         create_at_registry_version: Option<RegistryVersion>,
         cost_schedule: CanisterCyclesCostSchedule,
+        subnet_admins: Vec<PrincipalId>,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
-            SubnetType::Application | SubnetType::VerifiedApplication => 499,
+            SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
+                499
+            }
             SubnetType::System => 199,
         });
         let replica_logger = test_logger(log_level);
@@ -1927,6 +1978,8 @@ impl StateMachine {
                 ni_dkg_transcript,
                 registry_data_provider.clone(),
                 create_registry_version,
+                cost_schedule,
+                subnet_admins,
             );
         }
 
@@ -3404,6 +3457,8 @@ impl StateMachine {
             .collect();
 
         let chain_keys_enabled_status = Default::default();
+        let cost_schedule = CanisterCyclesCostSchedule::Normal;
+        let subnet_admins = vec![];
 
         add_subnet_local_registry_records(
             subnet_id,
@@ -3415,6 +3470,8 @@ impl StateMachine {
             ni_dkg_transcript,
             self.registry_data_provider.clone(),
             next_version,
+            cost_schedule,
+            subnet_admins,
         );
     }
 
@@ -5058,6 +5115,7 @@ fn certify_hash(
         CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
     Certification {
         height: *height,
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent { hash: hash.clone() },
             signature: ThresholdSignature {

@@ -11,6 +11,13 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-02-20: Proposal 140509
+
+http://dashboard.internetcomputer.org/proposal/140509
+
+* Populate the new subnet_admins field in SubnetRecord when creating a rented subnet.
+
+
 # 2026-02-10: Proposal 140314
 
 http://dashboard.internetcomputer.org/proposal/140314

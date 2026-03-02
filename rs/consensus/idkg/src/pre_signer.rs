@@ -210,9 +210,8 @@ impl IDkgPreSignerImpl {
                         ) {
                             // The node already sent a valid dealing for this transcript
                             self.metrics.pre_sign_errors_inc("duplicate_dealing");
-                            return Some(IDkgChangeAction::HandleInvalid(
-                                id,
-                                format!("Duplicate dealing: {signed_dealing}"),
+                            return Some(IDkgChangeAction::RemoveUnvalidated(
+                                id
                             ));
                         }
 
@@ -245,10 +244,7 @@ impl IDkgPreSignerImpl {
                 if !validated_dealings.insert(key) {
                     self.metrics
                         .pre_sign_errors_inc("duplicate_valid_dealing_in_batch");
-                    ret.push(IDkgChangeAction::HandleInvalid(
-                        dealing.message_id(),
-                        format!("Duplicate dealing in unvalidated batch: {:?}", key),
-                    ));
+                    ret.push(IDkgChangeAction::RemoveUnvalidated(dealing.message_id()));
                     continue;
                 }
             }
@@ -432,9 +428,9 @@ impl IDkgPreSignerImpl {
                             let valid_dealing_supports = self.validated_dealing_supports.read().unwrap();
                             let maybe_signers = valid_dealing_supports.get(&key);
                             if maybe_signers.is_some_and(|signers| signers.contains(&signer)) {
-                                return Some(IDkgChangeAction::HandleInvalid(
-                                    id,
-                                    format!("Duplicate support in unvalidated batch (cache hit): {support}"),
+                                self.metrics.pre_sign_errors_inc("duplicate_support_cache_hit");
+                                return Some(IDkgChangeAction::RemoveUnvalidated(
+                                    id
                                 ));
                             }
 
@@ -468,9 +464,8 @@ impl IDkgPreSignerImpl {
                             ) {
                                 // The node already sent a valid support for this dealing
                                 self.metrics.pre_sign_errors_inc("duplicate_support");
-                                return Some(IDkgChangeAction::HandleInvalid(
+                                return Some(IDkgChangeAction::RemoveUnvalidated(
                                     id,
-                                    format!("Duplicate support: {support}"),
                                 ))
                             }
 
@@ -511,7 +506,7 @@ impl IDkgPreSignerImpl {
                                 support,
                                 idkg_pool.stats(),
                             );
-                            if let Some(IDkgChangeAction::MoveToValidated(msg)) = &action {
+                            if let Some(IDkgChangeAction::MoveToValidated(_)) = &action {
                                 // Although we already checked the cache for duplicate shares above,
                                 // it could happen that a different thread validated a share for the
                                 // same (signer_id, transcript_id, dealer_id, dealing_hash) in the meantime,
@@ -520,9 +515,9 @@ impl IDkgPreSignerImpl {
                                 let mut valid_dealing_supports = self.validated_dealing_supports.write().unwrap();
                                 let signers = valid_dealing_supports.entry(key).or_default();
                                 if !signers.insert(signer) {
-                                    return Some(IDkgChangeAction::HandleInvalid(
-                                        id,
-                                        format!("Duplicate support in unvalidated batch (cache miss): {msg:?}"),
+                                    self.metrics.pre_sign_errors_inc("duplicate_support_cache_miss");
+                                    return Some(IDkgChangeAction::RemoveUnvalidated(
+                                        id
                                     ));
                                 }
                             }
@@ -1926,11 +1921,7 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(
-                    &change_set,
-                    &msg_id_2,
-                    "Duplicate dealing:"
-                ));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
             })
         })
     }
@@ -1991,17 +1982,9 @@ mod tests {
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
                 if is_moved_to_validated(&change_set, &msg_id_2_a) {
-                    assert!(is_handle_invalid(
-                        &change_set,
-                        &msg_id_2_b,
-                        "Duplicate dealing:"
-                    ));
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_2_b));
                 } else if is_moved_to_validated(&change_set, &msg_id_2_b) {
-                    assert!(is_handle_invalid(
-                        &change_set,
-                        &msg_id_2_a,
-                        "Duplicate dealing in unvalidated batch"
-                    ));
+                    assert!(is_removed_from_unvalidated(&change_set, &msg_id_2_a));
                 } else {
                     panic!("Neither dealing was accepted");
                 }
@@ -2412,15 +2395,8 @@ mod tests {
                         || is_moved_to_validated(&change_set, &msg_id_2_dupl)
                 );
                 assert!(
-                    is_handle_invalid(
-                        &change_set,
-                        &msg_id_2,
-                        "Duplicate support in unvalidated batch"
-                    ) || is_handle_invalid(
-                        &change_set,
-                        &msg_id_2_dupl,
-                        "Duplicate support in unvalidated batch"
-                    )
+                    is_removed_from_unvalidated(&change_set, &msg_id_2)
+                        || is_removed_from_unvalidated(&change_set, &msg_id_2_dupl)
                 );
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
@@ -2664,11 +2640,7 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(
-                    &change_set,
-                    &msg_id,
-                    "Duplicate support in unvalidated batch"
-                ));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
 
                 // The original validated dealing support should still be there
                 assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
@@ -2689,11 +2661,7 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(
-                    &change_set,
-                    &msg_id,
-                    "Duplicate support:"
-                ));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
             })
         })
     }

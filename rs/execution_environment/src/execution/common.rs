@@ -34,6 +34,7 @@ use ic_types::time::CoarseTime;
 use ic_types::{Cycles, NumInstructions, PrincipalId, Time, UserId};
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -350,6 +351,34 @@ pub(crate) fn validate_controller(
             controllers_expected: canister.system_state.controllers.clone(),
             controller_provided: *controller,
         });
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_controller_or_subnet_admin(
+    canister: &CanisterState,
+    subnet_admins: &BTreeSet<PrincipalId>,
+    sender: &PrincipalId,
+) -> Result<(), CanisterManagerError> {
+    if !canister.controllers().contains(sender) && !subnet_admins.contains(sender) {
+        // In case the subnet admins list is empty, return the same error as
+        // the legacy `validate_controller` would to maintain backward compatibility.
+        if subnet_admins.is_empty() {
+            return Err(CanisterManagerError::CanisterInvalidController {
+                canister_id: canister.canister_id(),
+                controllers_expected: canister.system_state.controllers.clone(),
+                controller_provided: *sender,
+            });
+        } else {
+            return Err(
+                CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin {
+                    canister_id: canister.canister_id(),
+                    controllers_expected: canister.system_state.controllers.clone(),
+                    subnet_admins_expected: subnet_admins.clone(),
+                    caller: *sender,
+                },
+            );
+        }
     }
     Ok(())
 }

@@ -14,7 +14,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
-    canister_state::{CanisterEnv, governance, governance_mut, set_governance},
+    canister_state::{CanisterEnv, governance, governance_mut, governance_ref, set_governance},
     encode_metrics,
     governance::Governance,
     neuron_data_validation::NeuronDataValidationSummary,
@@ -25,15 +25,15 @@ use ic_nns_governance::{
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
-    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
-    GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    GetPendingProposalsRequest, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListNodeProvidersResponse, ListProposalInfoRequest, ListProposalInfoResponse,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData, NeuronInfo,
-    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, CreateNeuronRequest,
+    CreateNeuronResponse, GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, GetPendingProposalsRequest, Governance as ApiGovernanceProto,
+    GovernanceError, ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse,
+    ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+    ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfoRequest,
+    ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData,
+    NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
     SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
     SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
@@ -296,6 +296,14 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
 fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     debug_log("simulate_manage_neuron");
     governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron))
+}
+
+#[update]
+async fn create_neuron(request: CreateNeuronRequest) -> CreateNeuronResponse {
+    debug_log("create_neuron");
+    Governance::create_neuron(governance_ref(), caller(), request)
+        .await
+        .map_err(GovernanceError::from)
 }
 
 #[query]

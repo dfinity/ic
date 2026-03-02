@@ -158,6 +158,7 @@ impl ReplicatedStateBuilder {
                 subnet_features: self.subnet_features,
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
+                subnet_admins: BTreeSet::new(),
             },
         );
 

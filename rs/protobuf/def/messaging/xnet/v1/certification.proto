@@ -4,6 +4,7 @@
 syntax = "proto3";
 package messaging.xnet.v1;
 
+import "messaging/xnet/v1/witness.proto";
 import "types/v1/signature.proto";
 
 // State tree root hash.
@@ -19,6 +20,7 @@ message Certification {
   uint64 height = 1;
   CertificationContent content = 2;
   types.v1.ThresholdSignature signature = 3;
+  messaging.xnet.v1.Witness height_witness = 4;
 }
 
 // Certification signed by a single replica
@@ -26,4 +28,5 @@ message CertificationShare {
   uint64 height = 1;
   CertificationContent content = 2;
   types.v1.ThresholdSignatureShare signature = 3;
+  messaging.xnet.v1.Witness height_witness = 4;
 }
