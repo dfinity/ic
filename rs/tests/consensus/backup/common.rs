@@ -349,9 +349,10 @@ pub fn test(env: TestEnv) {
 
     let canister_dir = checkpoint.join("canister_states").join(canister_id_hex);
     // Remove ALL vmemory_0 overlays to guarantee the state hash changes.
-    // A single arbitrary overlay may only contain zero-valued pages whose
-    // removal has no effect on the certification hash, causing the expected
-    // divergence detection to never trigger.
+    // A single arbitrary overlay might only delete outdated pages. If there is
+    // a merge in the next checkpoint interval, the deleted overlay might not affect
+    // the next checkpoint's hash. It would likely be sufficient to just delete the
+    // newest overlay, but that requires more assumptions on how LSMT works.
     let memory_artifact_paths: Vec<PathBuf> = fs::read_dir(canister_dir)
         .expect("Should read canister dir")
         .flatten()
