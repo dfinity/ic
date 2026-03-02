@@ -762,10 +762,12 @@ impl SchedulerImpl {
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
 
-            self.metrics.compute_utilization_per_core.observe(
-                instructions_executed.get() as f64
-                    / round_limits_per_thread.instructions.get() as f64,
-            );
+            let divisor = round_limits_per_thread.instructions.get();
+            debug_assert_ne!(divisor, 0, "prevent divide by zero panic");
+            if divisor > 0 {
+                let value = instructions_executed.get() as f64 / divisor as f64;
+                self.metrics.compute_utilization_per_core.observe(value);
+            }
 
             // Propagate the metrics from `execution_round_inner_iteration_thread`
             // to `execution_round_inner_iteration`.
