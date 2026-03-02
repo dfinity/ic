@@ -109,8 +109,12 @@ export VERSION="$(git rev-parse HEAD)"
 
 BAZEL_TARGETS=()
 
+BAZEL_STARTUP_OPTS=(
+    --noworkspace_rc
+    --bazelrc=./bazel/conf/.bazelrc.build
+)
+
 BAZEL_COMMON_ARGS=(
-    --config=local
     --color=yes
 )
 
@@ -144,11 +148,11 @@ if "$BUILD_IMG"; then BAZEL_TARGETS+=(
 
 echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
 
-bazel build "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
+bazel "${BAZEL_STARTUP_OPTS[@]}" build "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
 
 query="$(join_by "+" "${BAZEL_TARGETS[@]}")"
 
-for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"); do
+for artifact in $(bazel "${BAZEL_STARTUP_OPTS[@]}" cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"); do
     target_dir=
     case "$artifact" in
         *guestos*disk)
