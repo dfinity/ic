@@ -86,3 +86,57 @@ fn test_environment_variables_hash_output() {
     let actual = EnvironmentVariables::new(env_vars).hash();
     assert_eq!(actual, expected);
 }
+
+mod visibility_settings {
+    use crate::canister_settings::VisibilitySettings;
+    use ic_management_canister_types_private::BoundedAllowedViewers;
+    use ic_types::PrincipalId;
+    use proptest::prelude::*;
+    use std::collections::BTreeSet;
+
+
+    proptest! {
+        #[test]
+        fn public_always_grants_access(
+            caller in arb_principal_id(),
+            controllers in arb_controllers(),
+        ) {
+            prop_assert!(VisibilitySettings::Public.has_access(&caller, &controllers));
+        }
+
+        #[test]
+        fn controllers_grants_access_only_to_controllers(
+            caller in arb_principal_id(),
+            controllers in arb_controllers(),
+        ) {
+            prop_assert_eq!(
+                VisibilitySettings::Controllers.has_access(&caller, &controllers),
+                controllers.contains(&caller),
+            );
+        }
+
+        #[test]
+        fn allowed_viewers_grants_access_to_viewers_and_controllers(
+            caller in arb_principal_id(),
+            controllers in arb_controllers(),
+            viewers in proptest::collection::vec(arb_principal_id(), 0..=10),
+        ) {
+            let allowed = BoundedAllowedViewers::new(viewers.clone());
+            let settings = VisibilitySettings::AllowedViewers(&allowed);
+            prop_assert_eq!(
+                settings.has_access(&caller, &controllers),
+                viewers.contains(&caller) || controllers.contains(&caller),
+            );
+        }
+    }
+
+    fn arb_principal_id() -> BoxedStrategy<PrincipalId> {
+        (0..u64::MAX)
+            .prop_map(PrincipalId::new_user_test_id)
+            .boxed()
+    }
+
+    fn arb_controllers() -> BoxedStrategy<BTreeSet<PrincipalId>> {
+        proptest::collection::btree_set(arb_principal_id(), 0..=10).boxed()
+    }
+}
