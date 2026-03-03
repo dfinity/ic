@@ -428,13 +428,13 @@ pub struct FlexibleHttpRequestErr {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum FlexibleHttpGlobalError {
     #[serde(rename = "invalid_parameters")]
-    InvalidParameters,
+    InvalidParameters(candid::Reserved),
     #[serde(rename = "timeout")]
-    Timeout,
+    Timeout(candid::Reserved),
     #[serde(rename = "out_of_cycles")]
-    OutOfCycles,
+    OutOfCycles(candid::Reserved),
     #[serde(rename = "responses_too_large")]
-    ResponsesTooLarge,
+    ResponsesTooLarge(candid::Reserved),
 }
 
 /// Per-node detail in a flexible HTTP outcall error.
@@ -479,7 +479,7 @@ pub enum ResourceUsage<T> {
     #[serde(rename = "used")]
     Used(T),
     #[serde(rename = "exceeded")]
-    Exceeded,
+    Exceeded(candid::Reserved),
 }
 
 /// Error details from a specific node during a flexible HTTP outcall.
