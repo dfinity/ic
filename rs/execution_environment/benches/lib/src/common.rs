@@ -36,7 +36,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles128()`
@@ -176,6 +176,7 @@ where
         subnets,
         None,
         CanisterCyclesCostSchedule::Normal,
+        BTreeSet::new(),
     ));
 
     BenchmarkArgs {

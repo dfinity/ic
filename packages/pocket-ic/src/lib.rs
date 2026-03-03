@@ -359,6 +359,7 @@ impl PocketIcBuilder {
             SubnetKind::Fiduciary => config.fiduciary = Some(subnet_spec),
             SubnetKind::Bitcoin => config.bitcoin = Some(subnet_spec),
             SubnetKind::Application => config.application.push(subnet_spec),
+            SubnetKind::CloudEngine => config.cloud_engine.push(subnet_spec),
             SubnetKind::System => config.system.push(subnet_spec),
             SubnetKind::VerifiedApplication => config.verified_application.push(subnet_spec),
         };
@@ -1712,6 +1713,7 @@ pub enum ErrorCode {
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
     CanisterSnapshotImmutable = 409,
+    InvalidSubnetAdmin = 410,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
@@ -1747,6 +1749,7 @@ pub enum ErrorCode {
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
+    CanisterInvalidControllerOrSubnetAdmin = 541,
     // 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -1782,6 +1785,7 @@ impl TryFrom<u64> for ErrorCode {
             407 => Ok(ErrorCode::UnknownManagementMessage),
             408 => Ok(ErrorCode::InvalidManagementPayload),
             409 => Ok(ErrorCode::CanisterSnapshotImmutable),
+            410 => Ok(ErrorCode::InvalidSubnetAdmin),
             // 5xx -- `RejectCode::CanisterError`
             502 => Ok(ErrorCode::CanisterTrapped),
             503 => Ok(ErrorCode::CanisterCalledTrap),
@@ -1817,6 +1821,7 @@ impl TryFrom<u64> for ErrorCode {
             538 => Ok(ErrorCode::CanisterAlreadyInstalled),
             539 => Ok(ErrorCode::CanisterWasmMemoryLimitExceeded),
             540 => Ok(ErrorCode::ReservedCyclesLimitIsTooLow),
+            541 => Ok(ErrorCode::CanisterInvalidControllerOrSubnetAdmin),
             // 6xx -- `RejectCode::SysUnknown`
             601 => Ok(ErrorCode::DeadlineExpired),
             602 => Ok(ErrorCode::ResponseDropped),
