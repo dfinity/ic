@@ -6,7 +6,7 @@ use crate::{
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
-    get_member_ips, get_node_heights_from_metrics,
+    get_available_nodes_heights_from_metrics, get_member_node_ids_and_ips,
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
@@ -91,7 +91,9 @@ impl Step for DownloadCertificationsStep {
         let output_dir = self.work_dir.join("certifications");
         create_dir(&output_dir)?;
 
-        let ips = get_member_ips(&self.registry_helper, self.subnet_id)?;
+        let ips = get_member_node_ids_and_ips(&self.registry_helper, self.subnet_id)?
+            .into_values()
+            .collect::<Vec<_>>();
 
         let n = ips.len();
         let f = (n.max(1) - 1) / 3;
@@ -518,8 +520,13 @@ impl Step for ValidateReplayStep {
         let latest_height =
             replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
 
-        let heights =
-            get_node_heights_from_metrics(&self.logger, &self.registry_helper, self.subnet_id)?;
+        let heights = get_available_nodes_heights_from_metrics(
+            &self.logger,
+            &self.registry_helper,
+            self.subnet_id,
+        )?
+        .into_values()
+        .collect::<Vec<_>>();
         let cert_height = &heights
             .iter()
             .max_by_key(|v| v.certification_height)
@@ -556,6 +563,7 @@ impl Step for ValidateReplayStep {
 
 pub struct UploadStateAndRestartStep {
     pub logger: Logger,
+    pub ssh_user: SshUser,
     pub upload_method: DataLocation,
     pub work_dir: PathBuf,
     pub data_src: PathBuf,
@@ -607,7 +615,6 @@ impl Step for UploadStateAndRestartStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let ssh_user = SshUser::Admin;
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
@@ -635,7 +642,7 @@ impl Step for UploadStateAndRestartStep {
         if let DataLocation::Remote(node_ip) = self.upload_method {
             let ssh_helper = SshHelper::new(
                 self.logger.clone(),
-                ssh_user.clone(),
+                self.ssh_user.clone(),
                 node_ip,
                 self.require_confirmation,
                 self.key_file.clone(),
@@ -664,6 +671,7 @@ impl Step for UploadStateAndRestartStep {
             let cmd_create_and_copy_checkpoint_dir = format!(
                 "sudo mkdir -p {copy_to_parent}; {cp}; sudo chown -R {ssh_user} {upload_dir};",
                 copy_to_parent = copy_to.parent().unwrap().display(),
+                ssh_user = self.ssh_user,
                 upload_dir = upload_dir.display()
             );
 
@@ -1184,6 +1192,7 @@ impl Step for UploadAndHostTarStep {
 
 #[cfg(test)]
 mod tests {
+    use ic_crypto_tree_hash::{Digest, Witness};
     use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
@@ -1198,6 +1207,7 @@ mod tests {
     fn make_certification(height: u64, hash: Vec<u8>) -> CertificationMessage {
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignature::fake(),
@@ -1208,6 +1218,7 @@ mod tests {
     fn make_share(height: u64, hash: Vec<u8>, node_id: u64) -> CertificationMessage {
         CertificationMessage::CertificationShare(CertificationShare {
             height: Height::from(height),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
             signed: Signed {
                 content: CertificationContent::new(CryptoHash(hash).into()),
                 signature: ThresholdSignatureShare::fake(node_test_id(node_id)),

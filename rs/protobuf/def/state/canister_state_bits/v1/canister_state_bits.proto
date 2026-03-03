@@ -205,6 +205,8 @@ message ExecutionTask {
   }
 
   message AbortedExecution {
+    reserved 2;
+
     message AbortedResponse {
       state.queues.v1.Response response = 7;
       Callback callback = 8;
@@ -212,8 +214,6 @@ message ExecutionTask {
 
     oneof input {
       state.queues.v1.Request request = 1;
-      // TODO(DSM-95): Remove after we have switched to `AbortedResponse`.
-      state.queues.v1.Response response = 2;
       AbortedResponse aborted_response = 6;
       ingress.v1.Ingress ingress = 3;
       CanisterTask task = 5;

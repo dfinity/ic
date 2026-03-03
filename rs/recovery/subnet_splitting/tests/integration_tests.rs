@@ -32,6 +32,7 @@ macro_rules! assert_near {
 /// 3. `subnet-splitting-tool`, which takes the outputs from the above two tools, and returns
 ///    estimated loads/sizes after splitting a subnet.
 fn load_metrics_e2e_test() {
+    println!("Creating state machines");
     let dir = ic_test_utilities_tmpdir::tmpdir("testdir");
     let (state_machine, other_state_machine) = two_subnets_simple();
 
@@ -49,11 +50,13 @@ fn load_metrics_e2e_test() {
     ic_state_tool::commands::canister_metrics::get(checkpoint_dir, &load_samples_baseline_path)
         .expect("Should compute canister metrics for a valid checkpoint");
 
+    println!("Setting up state machines");
     set_up(
         state_machine.as_ref(),
         other_state_machine.as_ref(),
         /*canisters_count=*/ 100,
     );
+    println!("Creating a checkpoint");
     state_machine.checkpointed_tick();
     state_machine.state_manager.flush_tip_channel();
     let state_layout = state_machine.state_manager.state_layout();
@@ -67,14 +70,14 @@ fn load_metrics_e2e_test() {
         "There should be at least one checkpoint because we did `checkpointed_tick()` above",
     );
 
-    // Use `state-tool` to compute the state manifest.
+    println!("Using `state-tool` to compute the state manifest.");
     let manifest_path = dir.path().join("manifest.data");
     let content = ic_state_tool::commands::manifest::compute_manifest(checkpoint_dir)
         .expect("Should compute the manifest for a valid checkpoint");
     let mut output_file = std::fs::File::create(&manifest_path).unwrap();
     write!(output_file, "{content}").unwrap();
 
-    // Use `state-tool` to extract the canister metrics from the replicated state.
+    println!("Using `state-tool` to extract the canister metrics from the replicated state.");
     let load_samples_path = dir.path().join("load_samples.csv");
     ic_state_tool::commands::canister_metrics::get(checkpoint_dir.clone(), &load_samples_path)
         .expect("Should compute canister metrics for a valid checkpoint");
@@ -181,7 +184,8 @@ fn set_up(
     let canister_id_on_the_other_subnet = create_canister(other_state_machine, uc_wasm.to_vec());
 
     let mut previous_canister_id = None;
-    for _ in 0..canisters_count {
+    for i in 1..=canisters_count {
+        println!("Setting up {i}th canister");
         let canister_id = create_canister(state_machine, uc_wasm.to_vec());
         let http_outcalls_canister_id = create_canister(state_machine, http_outcalls_wasm.to_vec());
 

@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-02-20: Proposal 140510
+
+http://dashboard.internetcomputer.org/proposal/140510
+
+## Added
+
+* Add type4 node reward type for Cloud Engine nodes.
+* Invariant about cycles cost schedule and subnet types allowing only application subnets to be put on "Free" schedule.
+* New subnet admins field in the SubnetRecord.
+
+
 # 2026-02-11: Proposal 140316
 
 http://dashboard.internetcomputer.org/proposal/140316

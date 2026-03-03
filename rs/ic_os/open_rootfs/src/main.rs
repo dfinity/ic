@@ -55,8 +55,16 @@ pub fn run(
         .get_argument("root_hash")
         .with_context(|| format!("Missing root_hash from kernel cmdline: {kernel_cmdline}"))?;
 
+    // Try to get SEV Firmware handle
+    let sev_firmware = sev_firmware_provider();
+
     eprintln!("Attempting to open root device with base root hash from kernel cmdline");
-    match veritysetup(root_device, &base_root_hash, command_runner) {
+    match veritysetup(
+        root_device,
+        &base_root_hash,
+        command_runner,
+        sev_firmware.is_ok(),
+    ) {
         Ok(_) => {
             eprintln!("Successfully opened root device with base root hash");
             return Ok(());
@@ -70,7 +78,7 @@ pub fn run(
 
     let recovery_hash = extract_and_verify_recovery_rootfs_hash(
         root_device,
-        sev_firmware_provider()?.as_mut(),
+        sev_firmware.context("unable to get SEV Firmware")?.as_mut(),
         command_runner,
         partition_provider,
     )
@@ -80,7 +88,7 @@ pub fn run(
         "Found and verified alternative GuestOS proposal, attempting to open with recovery root \
         hash"
     );
-    veritysetup(root_device, &recovery_hash, command_runner)?;
+    veritysetup(root_device, &recovery_hash, command_runner, true)?;
     eprintln!("Successfully opened root device with recovery root hash");
 
     Ok(())

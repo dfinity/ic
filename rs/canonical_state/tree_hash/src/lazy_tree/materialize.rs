@@ -8,7 +8,7 @@ use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MatchPattern};
 /// materialized. A [`LabeledTree`] with no values.
 pub type TreePattern = LabeledTree<()>;
 
-fn materialize(
+pub fn materialize(
     lazy_tree: &LazyTree<'_>,
     exclusion: Option<&[MatchPattern]>,
 ) -> LabeledTree<Vec<u8>> {
