@@ -298,7 +298,7 @@ fn ic0_grow_handles_overflow() {
 #[test]
 fn ic0_grow_can_reach_max_number_of_pages() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(8_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -395,7 +395,7 @@ fn ic0_stable64_grow_beyond_max_pages_returns_neg_one() {
 #[test]
 fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(8_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -431,7 +431,7 @@ fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(8_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -460,7 +460,7 @@ fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_read_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(8_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -492,7 +492,7 @@ fn ic0_stable_read_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_write_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(8_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -524,7 +524,7 @@ fn ic0_stable_write_traps_if_memory_exceeds_4gb() {
 #[test]
 fn ic0_stable_grow_traps_if_memory_exceeds_4gb() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(8_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -762,7 +762,7 @@ fn ic0_stable_write_traps_if_heap_is_out_of_bounds() {
 #[test]
 fn ic0_stable_write_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(8_000_000_000_000)
         .with_default_wasm_memory_limit(0)
         .build();
     let wat = r#"
@@ -809,7 +809,7 @@ fn ic0_stable_read_does_not_trap_if_in_bounds() {
 #[test]
 fn ic0_stable_read_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(8_000_000_000_000)
         .with_default_wasm_memory_limit(0)
         .build();
     let wat = r#"
@@ -994,7 +994,7 @@ fn ic0_stable64_read_does_not_trap_if_in_bounds() {
 #[test]
 fn ic0_stable64_read_and_write_work() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(3_000_000_000_000)
+        .with_initial_canister_cycles(8_000_000_000_000)
         .build();
     let wat = r#"
         (module
