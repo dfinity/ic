@@ -810,7 +810,7 @@ pub trait CertifiedMembershipFetcher: Send + Sync {
     async fn fetch_certified_members(
         &self,
         subnet_id: Principal,
-    ) -> Result<HashSet<Principal>, CheckError>;
+    ) -> Result<HashSet<Principal>, Error>;
 }
 
 /// Implementation that uses the IC Agent to query the subnet's read_state endpoint
@@ -825,7 +825,7 @@ impl CertifiedMembershipFetcher for CertifiedMembershipFetcherImpl {
     async fn fetch_certified_members(
         &self,
         subnet_id: Principal,
-    ) -> Result<HashSet<Principal>, CheckError> {
+    ) -> Result<HashSet<Principal>, Error> {
         let paths: Vec<Vec<Label<Vec<u8>>>> = vec![vec![
             Label::from("subnet"),
             Label::from(subnet_id.as_slice()),
@@ -836,7 +836,7 @@ impl CertifiedMembershipFetcher for CertifiedMembershipFetcherImpl {
             .agent
             .read_subnet_state_raw(paths, subnet_id)
             .await
-            .map_err(|e| CheckError::Generic(format!("read_state failed: {e}")))?;
+            .map_err(|e| anyhow::anyhow!("read_state failed: {e}"))?;
 
         extract_node_ids_from_tree(&certificate.tree, subnet_id)
     }
@@ -845,19 +845,15 @@ impl CertifiedMembershipFetcher for CertifiedMembershipFetcherImpl {
 fn extract_node_ids_from_tree(
     tree: &HashTree<Vec<u8>>,
     subnet_id: Principal,
-) -> Result<HashSet<Principal>, CheckError> {
+) -> Result<HashSet<Principal>, Error> {
     let node_subtree =
         match tree.lookup_subtree(&[b"subnet" as &[u8], subnet_id.as_slice(), b"node"]) {
             SubtreeLookupResult::Found(subtree) => subtree,
             SubtreeLookupResult::Absent => {
-                return Err(CheckError::Generic(
-                    "Node subtree absent in certificate".into(),
-                ));
+                anyhow::bail!("Node subtree absent in certificate");
             }
             SubtreeLookupResult::Unknown => {
-                return Err(CheckError::Generic(
-                    "Node subtree unknown/pruned in certificate".into(),
-                ));
+                anyhow::bail!("Node subtree unknown/pruned in certificate");
             }
         };
 
@@ -865,9 +861,7 @@ fn extract_node_ids_from_tree(
     collect_node_ids(node_subtree.as_ref(), &mut members);
 
     if members.is_empty() {
-        return Err(CheckError::Generic(
-            "Certificate contained no node members".into(),
-        ));
+        anyhow::bail!("Certificate contained no node members");
     }
 
     Ok(members)
@@ -998,7 +992,7 @@ pub(crate) mod test {
         let mut fetcher = MockCertifiedMembershipFetcher::new();
         fetcher
             .expect_fetch_certified_members()
-            .returning(|_| Err(CheckError::Generic("test: not implemented".into())));
+            .returning(|_| Err(anyhow::anyhow!("test: not implemented")));
         Arc::new(fetcher)
     }
 
