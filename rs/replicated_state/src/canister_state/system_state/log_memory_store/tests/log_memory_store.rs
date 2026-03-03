@@ -120,6 +120,32 @@ fn test_memory_usage_after_appending_logs() {
 }
 
 #[test]
+fn test_memory_usage_after_appending_empty_log_records() {
+    // Collect some delta logs with no messages.
+    let mut delta = CanisterLog::default_delta();
+    delta.add_record(100, b"".to_vec());
+    delta.add_record(200, b"".to_vec());
+    delta.add_record(300, b"".to_vec());
+
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+    s.append_delta_log(&mut delta);
+
+    // Assert memory usage.
+    assert!(!s.is_empty());
+    assert_eq!(s.memory_usage(), 4 * KIB + 4 * KIB + TEST_LOG_MEMORY_LIMIT);
+    assert_eq!(
+        s.total_virtual_memory_usage(),
+        4 * KIB + 4 * KIB + TEST_LOG_MEMORY_LIMIT // header + index + data
+    );
+    assert_eq!(s.byte_capacity(), TEST_LOG_MEMORY_LIMIT);
+    assert_gt!(s.bytes_used(), 0);
+    assert_lt!(s.bytes_used(), TEST_LOG_MEMORY_LIMIT);
+    assert_eq!(s.records(None).len(), 3);
+    assert_eq!(s.next_idx(), 3);
+}
+
+#[test]
 fn append_preserves_order_and_metadata() {
     // Append a small delta and verify ordering + metadata.
     let mut delta = CanisterLog::default_delta();
