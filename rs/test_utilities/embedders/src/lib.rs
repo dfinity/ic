@@ -3,6 +3,7 @@ use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -124,6 +125,15 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
+        self.config.feature_flags.deterministic_memory_tracker = if enabled {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
+        self
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
@@ -145,6 +155,7 @@ impl WasmtimeInstanceBuilder {
             SubnetType::Application => SchedulerConfig::application_subnet(),
             SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
             SubnetType::System => SchedulerConfig::system_subnet(),
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
         }
         .dirty_page_overhead;
         let subnet_available_callbacks =

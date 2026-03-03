@@ -52,7 +52,7 @@ fn get_hostos_vsock_version() -> Response {
 
 fn is_manual_recovery_running() -> bool {
     match procfs::process::all_processes() {
-        Ok(processes) => processes.into_iter().any(|process| {
+        Ok(processes) => processes.into_iter().filter_map(Result::ok).any(|process| {
             process.cmdline().is_ok_and(|args| {
                 let cmd = args.join(" ");
                 cmd.contains("hostos_tool") && cmd.contains("manual-recovery")
@@ -109,29 +109,14 @@ async fn create_hostos_upgrade_file(
     println!("Starting download from: {}", upgrade_url);
     let file_downloader = FileDownloader::new_with_timeout(None, Duration::from_secs(120));
 
-    let download_result = file_downloader
+    file_downloader
         .download_file(
             upgrade_url,
             Path::new(file_path),
             Some(target_hash.to_string()),
         )
-        .await;
-
-    match download_result {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            if let Ok(metadata) = std::fs::metadata(file_path) {
-                println!(
-                    "Download failed: {}. Partial file size: {} bytes",
-                    e,
-                    metadata.len()
-                );
-            } else {
-                println!("Download failed: {}", e);
-            }
-            Err(e.to_string())
-        }
-    }
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn run_upgrade() -> Response {

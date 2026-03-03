@@ -33,17 +33,12 @@ oci_tar(
 
 uvm_config_image(
     name = "http_uvm_config_image",
-    srcs = [
-        ":minica.tar",
-        ":universal_vm_activation.sh",
-        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
-        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
-        "//rs/tests/httpbin-rs:httpbin.tar",
-    ],
-    remap_paths = {
-        "universal_vm_activation.sh": "activate",
-        "canister_http_test_ca.cert": "cert.pem",
-        "canister_http_test_ca.key": "key.pem",
+    srcmap = {
+        ":minica.tar": "minica.tar",
+        ":universal_vm_activation.sh": "activate",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert": "cert.pem",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key": "key.pem",
+        "//rs/tests/httpbin-rs:httpbin.tar": "httpbin.tar",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

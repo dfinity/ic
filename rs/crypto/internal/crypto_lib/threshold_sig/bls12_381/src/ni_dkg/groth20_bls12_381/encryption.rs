@@ -102,6 +102,7 @@ pub fn encrypt_and_prove(
 ) -> Result<(FsEncryptionCiphertextBytes, ZKProofDec, ZKProofShare), EncryptAndZKProveError> {
     let receivers = key_message_pairs.len();
 
+    // TODO(CRP-2550) the deserialization step can run in parallel
     let public_keys = {
         let mut public_keys = Vec::with_capacity(receivers);
         for receiver_index in 0..receivers {
@@ -145,6 +146,8 @@ pub fn encrypt_and_prove(
         crypto::SysParam::global(),
         rng,
     );
+
+    // TODO(CRP-2550) generating the chunking and sharing proofs can happen in parallel
 
     let chunking_proof = prove_chunking(
         &public_keys,
@@ -366,8 +369,6 @@ pub fn verify_zk_proofs(
         })
     })?;
 
-    // TODO(CRP-2525) The proofs can be verified independently
-
     crypto::verify_ciphertext_integrity(
         &ciphertext,
         epoch,
@@ -403,6 +404,8 @@ pub fn verify_zk_proofs(
     })?;
 
     // More conversions
+
+    // TODO(CRP-2550) this loop can run in parallel
     let public_coefficients = public_coefficients
         .coefficients
         .iter()

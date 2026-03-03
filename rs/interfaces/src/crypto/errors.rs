@@ -41,9 +41,9 @@ impl ErrorReproducibility for CryptoError {
             // true, as secret material is specific to a replica (other replicas may not encounter the same error)
             // but retrying the same operation on this replica will not change the outcome
             CryptoError::MalformedSecretKey { .. } => true,
-            // true, but this error may be removed TODO(CRP-224)
+            // true
             CryptoError::MalformedSignature { .. } => true,
-            // true, but this error may be removed TODO(CRP-224)
+            // true
             CryptoError::MalformedPop { .. } => true,
             // true, as signature verification is stable across replicas
             CryptoError::SignatureVerification { .. } => true,

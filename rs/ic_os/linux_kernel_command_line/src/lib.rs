@@ -130,7 +130,7 @@ impl KernelCommandLine {
         });
 
         self.tokenized_arguments.iter().find_map(|arg| {
-            if *arg == argument_name {
+            if arg == argument_name {
                 Some(String::new())
             } else {
                 REGEX.captures(arg).and_then(|caps| {
@@ -184,7 +184,7 @@ impl FromStr for KernelCommandLine {
                     inside_quote = false;
                 }
                 // space outside quoted string
-                (' ', false) => {
+                (c, false) if c.is_ascii_whitespace() => {
                     if !current_token.is_empty() {
                         tokenized_arguments.push(std::mem::take(&mut current_token));
                     }
@@ -398,6 +398,14 @@ Actual:
                 "rd.debug rd.initrd=/bin/bash",
                 "rd.debug",
                 Some(String::new()),
+            ),
+            (
+                "full kernel cmdline with newline",
+                "BOOT_IMAGE=/vmlinuz root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A security=selinux selinux=1 enforcing=1 root_hash=79d5a042bc6dcf1e5953abae8d2a6a77d10a35cc8ea29c2b2f58094388f8534b\n",
+                "root_hash",
+                Some(
+                    "79d5a042bc6dcf1e5953abae8d2a6a77d10a35cc8ea29c2b2f58094388f8534b".to_string(),
+                ),
             ),
             (
                 "get existing argument with value",

@@ -10,11 +10,15 @@ service RemoteAttestationService {
 }
 
 message AttestRequest {
-  // 64-byte long custom data
+  // 32-byte long custom data that will be included in the attestation report.
   optional bytes custom_data = 1;
 }
 
 message AttestResponse {
-  // The SEV attestation package provided by the node
+  // The SEV attestation package provided by the node.
+  // The attestation report's custom data field has the following format which the attester should verify.
+  // - first 4 bytes: [1, 0, 0, 0]
+  // - following 28 bytes: undefined - may be used in the future
+  // - last 32 bytes: the custom data provided in the request
   optional attestation.SevAttestationPackage attestation_package = 1;
 }

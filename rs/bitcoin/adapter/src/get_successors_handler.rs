@@ -121,6 +121,8 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
         &self,
         request: GetSuccessorsRequest,
     ) -> Result<GetSuccessorsResponse<Network::Header>, Status> {
+        let start_time = std::time::Instant::now();
+
         self.metrics
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
@@ -219,6 +221,20 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
                 obsolete_blocks,
             ))
             .ok();
+
+        // Record response metrics
+        let blocks_size: usize = response.blocks.iter().map(|b| b.len()).sum();
+        self.metrics
+            .response_blocks_size
+            .observe(blocks_size as f64);
+        let empty_label = match response.blocks.is_empty() {
+            true => "true",
+            false => "false",
+        };
+        self.metrics
+            .response_build_duration
+            .with_label_values(&[empty_label])
+            .observe(start_time.elapsed().as_secs_f64());
 
         Ok(response)
     }

@@ -6,6 +6,15 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 
+/// SSH authentication method
+#[derive(Debug, Clone)]
+pub enum SshAuthMethod {
+    /// Use SSH agent (requires SSH_AUTH_SOCK to be set)
+    Agent,
+    /// Use a private key file
+    KeyFile(PathBuf),
+}
+
 /// Error type for bare metal deployment operations
 #[derive(Debug, Error)]
 pub enum DeploymentError {
@@ -50,7 +59,7 @@ pub struct DeploymentConfig {
 pub fn deploy_to_bare_metal(
     config: &DeploymentConfig,
     ip: IpAddr,
-    ssh_private_key_path: &Path,
+    ssh_auth_method: &SshAuthMethod,
 ) -> Result<(), DeploymentError> {
     if config.hostos_upgrade_image.is_none()
         && config.guestos_image.is_none()
@@ -63,7 +72,7 @@ pub fn deploy_to_bare_metal(
 
     println!("Starting bare metal deployment to {ip}");
 
-    let ssh_session = establish_ssh_connection(ip, ssh_private_key_path)?;
+    let ssh_session = establish_ssh_connection(ip, ssh_auth_method)?;
     copy_via_scp(
         &ssh_session,
         RELOAD_ICOS_CMD,
@@ -120,7 +129,7 @@ pub fn deploy_to_bare_metal(
 
 pub fn establish_ssh_connection(
     host_ip: IpAddr,
-    private_key_path: &Path,
+    auth_method: &SshAuthMethod,
 ) -> Result<Session, DeploymentError> {
     let tcp = TcpStream::connect_timeout(&SocketAddr::new(host_ip, 22), SSH_CONNECT_TIMEOUT)
         .map_err(|e| DeploymentError::SshConnectionFailed(e.to_string()))?;
@@ -130,8 +139,42 @@ pub fn establish_ssh_connection(
     sess.handshake()
         .map_err(|e| DeploymentError::SshConnectionFailed(e.to_string()))?;
 
-    sess.userauth_pubkey_file("admin", None, private_key_path, None)
-        .map_err(|_| DeploymentError::SshAuthFailed)?;
+    match auth_method {
+        SshAuthMethod::Agent => {
+            let mut agent = sess.agent().map_err(|e| DeploymentError::Other(e.into()))?;
+            agent.connect().map_err(|e| {
+                DeploymentError::Other(anyhow::anyhow!(
+                    "Failed to connect to SSH agent: {}. Is SSH_AUTH_SOCK set?",
+                    e
+                ))
+            })?;
+            agent
+                .list_identities()
+                .map_err(|e| DeploymentError::Other(e.into()))?;
+
+            let identities = agent
+                .identities()
+                .map_err(|e| DeploymentError::Other(e.into()))?;
+
+            if identities.is_empty() {
+                return Err(DeploymentError::Other(anyhow::anyhow!(
+                    "No identities found in SSH agent"
+                )));
+            }
+
+            let authenticated = identities
+                .iter()
+                .any(|id| agent.userauth("admin", id).is_ok());
+
+            if !authenticated {
+                return Err(DeploymentError::SshAuthFailed);
+            }
+        }
+        SshAuthMethod::KeyFile(private_key_path) => {
+            sess.userauth_pubkey_file("admin", None, private_key_path, None)
+                .map_err(|_| DeploymentError::SshAuthFailed)?;
+        }
+    }
 
     if !sess.authenticated() {
         return Err(DeploymentError::SshAuthFailed);

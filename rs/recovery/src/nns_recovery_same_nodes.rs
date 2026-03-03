@@ -1,9 +1,6 @@
 use crate::{
     RecoveryArgs, RecoveryResult,
-    cli::{
-        consent_given, print_height_info, read_optional, read_optional_data_location,
-        read_optional_version,
-    },
+    cli::{consent_given, print_height_info, read_optional, read_optional_data_location},
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
@@ -11,6 +8,7 @@ use crate::{
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::Logger;
@@ -131,6 +129,10 @@ pub struct NNSRecoverySameNodesArgs {
     /// SHA256 hash of the upgrade image
     #[clap(long)]
     pub upgrade_image_hash: Option<String>,
+
+    /// Path to the file containing the guest launch measurements for the upgrade image
+    #[clap(long)]
+    pub upgrade_image_launch_measurements_path: Option<PathBuf>,
 
     /// Whether to add and bless the upgrade version before upgrading the subnet to it.
     #[clap(long)]
@@ -285,8 +287,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::ICReplay => {
                 if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version =
-                        read_optional_version(&self.logger, "Upgrade version: ");
+                    self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
                 };
                 if self.params.upgrade_version.is_some()
                     && self.params.add_and_bless_upgrade_version.is_none()
@@ -325,7 +326,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                             &format!(
                                 "Would you like to recover the admin node now, i.e. upload the CUP and registry local store to it? ({ip})"
                             ),
-                            ).then_some(ip)
+                        ).then_some(ip)
                     } else {
                         read_optional(
                             &self.logger,
@@ -394,20 +395,32 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             },
 
             StepType::ICReplay => {
-                if let Some(upgrade_version) = self.params.upgrade_version.clone() {
+                if let Some(upgrade_version) = &self.params.upgrade_version {
                     let params = self.params.clone();
-                    let (url, hash) = params
-                        .upgrade_image_url
-                        .and_then(|url| params.upgrade_image_hash.map(|hash| (url, hash)))
-                        .or_else(|| Recovery::get_img_url_and_sha(&upgrade_version).ok())
-                        .ok_or(RecoveryError::UnexpectedError(
-                            "couldn't retrieve the upgrade image params".into(),
-                        ))?;
+                    let (url, hash, measurements) = match (
+                        params.upgrade_image_url,
+                        params.upgrade_image_hash,
+                        params.upgrade_image_launch_measurements_path,
+                    ) {
+                        (Some(url), Some(hash), Some(measurements_path)) => {
+                            let measurements_json = std::fs::read(&measurements_path)
+                                .map_err(|e| RecoveryError::file_error(&measurements_path, e))?;
+                            let measurements = serde_json::from_slice::<GuestLaunchMeasurements>(
+                                &measurements_json,
+                            )
+                            .map_err(RecoveryError::parsing_error)?;
+
+                            (url, hash, measurements)
+                        }
+                        _ => Recovery::get_img_url_sha_and_measurements(upgrade_version)?,
+                    };
+
                     Ok(Box::new(self.recovery.get_replay_with_upgrade_step(
                         self.params.subnet_id,
                         upgrade_version,
                         url,
                         hash,
+                        measurements,
                         params.add_and_bless_upgrade_version == Some(true),
                         self.params.replay_until_height,
                         !self.interactive(),
@@ -454,9 +467,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::UploadState => {
                 if let Some(method) = self.params.admin_access_location {
-                    Ok(Box::new(
-                        self.recovery.get_upload_state_and_restart_step(method),
-                    ))
+                    Ok(Box::new(self.recovery.get_upload_state_and_restart_step(
+                        SshUser::Admin,
+                        method,
+                        self.recovery.admin_key_file.clone(),
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

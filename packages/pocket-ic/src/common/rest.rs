@@ -39,6 +39,7 @@ pub struct InstanceHttpGatewayConfig {
     pub port: Option<u16>,
     pub domains: Option<Vec<String>>,
     pub https_config: Option<HttpsConfig>,
+    pub domain_custom_provider_local_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -48,6 +49,7 @@ pub struct HttpGatewayConfig {
     pub forward_to: HttpGatewayBackend,
     pub domains: Option<Vec<String>>,
     pub https_config: Option<HttpsConfig>,
+    pub domain_custom_provider_local_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -552,8 +554,6 @@ pub enum IcpConfigFlag {
 pub struct IcpConfig {
     /// Beta features (disabled on the ICP mainnet).
     pub beta_features: Option<IcpConfigFlag>,
-    /// Canister backtraces (enabled on the ICP mainnet).
-    pub canister_backtrace: Option<IcpConfigFlag>,
     /// Limits on function name length in canister WASM (enabled on the ICP mainnet).
     pub function_name_length_limits: Option<IcpConfigFlag>,
     /// Rate-limiting of canister execution (enabled on the ICP mainnet).
@@ -648,6 +648,7 @@ pub struct InstanceConfig {
     pub icp_features: Option<IcpFeatures>,
     pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
+    pub mainnet_nns_subnet_id: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -959,6 +960,8 @@ pub enum CanisterHttpMethod {
     GET,
     POST,
     HEAD,
+    PUT,
+    DELETE,
 }
 
 #[derive(

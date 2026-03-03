@@ -37,6 +37,7 @@ use crate::execution::common::{apply_canister_state_changes, update_round_limits
 use crate::execution_environment::{CompilationCostHandling, RoundLimits, as_round_instructions};
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use more_asserts::assert_ge;
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -309,8 +310,8 @@ impl Hypervisor {
             cost_schedule,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
-                (slice, output, system_state_modifications)
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+                (slice, output, canister_state_changes)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");
@@ -352,9 +353,9 @@ impl Hypervisor {
         network_topology: &NetworkTopology,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> WasmExecutionResult {
-        assert!(
-            execution_parameters.instruction_limits.message()
-                >= execution_parameters.instruction_limits.slice()
+        assert_ge!(
+            execution_parameters.instruction_limits.message(),
+            execution_parameters.instruction_limits.slice()
         );
         let caller = api_type.caller();
         let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;

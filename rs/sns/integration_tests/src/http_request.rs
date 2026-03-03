@@ -5,7 +5,7 @@ use ic_sns_governance::pb::v1::{
     NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
 };
 use ic_sns_test_utils::itest_helpers::{
-    SnsCanisters, SnsTestsInitPayloadBuilder, local_test_on_sns_subnet,
+    SnsCanisters, SnsTestsInitPayloadBuilder, state_machine_test_on_sns_subnet,
 };
 use serde_bytes::ByteBuf;
 
@@ -45,7 +45,7 @@ async fn test_http_request_decoding_quota_for_canister(canister: &Canister<'_>) 
 
 #[test]
 fn test_http_request_decoding_quota() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let system_params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),

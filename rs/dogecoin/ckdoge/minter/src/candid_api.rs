@@ -131,5 +131,6 @@ pub enum EstimateWithdrawalFeeError {
 #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize, Serialize)]
 pub struct MinterInfo {
     pub min_confirmations: u32,
+    pub deposit_doge_min_amount: u64,
     pub retrieve_doge_min_amount: u64,
 }

@@ -1,6 +1,8 @@
 use crate::state_machine::{StateMachine, StateMachineImpl};
 use crate::{routing, scheduling};
-use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
+use ic_config::execution_environment::{
+    BitcoinConfig, Config as HypervisorConfig, DEFAULT_MAX_NUMBER_OF_CANISTERS,
+};
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
@@ -11,7 +13,7 @@ use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKe
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::{SMALL_APP_SUBNET_MAX_SIZE, SYSTEM_SUBNET_STREAM_MSG_LIMIT};
 use ic_logger::{ReplicaLogger, debug, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
@@ -41,7 +43,8 @@ use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
-    Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
+    Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
+    Time,
 };
 use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
@@ -127,6 +130,7 @@ const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_all
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
+const CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS: &str = "mr_illegal_non_empty_subnet_admins";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -361,6 +365,8 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
+    /// Critical error: a non-rental subnet has a non-empty subnet admins list.
+    critical_error_illegal_non_empty_subnet_admins: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -520,6 +526,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
             critical_error_induct_response_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
+            critical_error_illegal_non_empty_subnet_admins: metrics_registry
+                .error_counter(CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
 
@@ -704,6 +712,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             subnet_id,
             max_stream_messages,
             target_stream_size_bytes,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
@@ -748,7 +757,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let mut total_memory_usage = NumBytes::new(0);
         let mut wasm_custom_sections_memory_usage = NumBytes::new(0);
         let mut canister_history_memory_usage = NumBytes::new(0);
-        for canister in state.canister_states.values() {
+        for canister in state.canisters_iter() {
             // Export the total canister memory usage; execution and wasm custom section
             // memory are included in `memory_usage()`; message memory is added separately.
             total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
@@ -868,7 +877,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let node_public_keys = self.try_to_populate_node_public_keys(&nodes, registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
-        let max_number_of_canisters = subnet_record.max_number_of_canisters;
+        let max_number_of_canisters = if subnet_record.max_number_of_canisters == 0 {
+            DEFAULT_MAX_NUMBER_OF_CANISTERS
+        } else {
+            subnet_record.max_number_of_canisters
+        };
 
         let chain_key_settings = if let Some(chain_key_config) = subnet_record.chain_key_config {
             let chain_key_config = ChainKeyConfig::try_from(chain_key_config).map_err(|err| {
@@ -910,15 +923,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
-        let canister_cycles_cost_schedule = CanisterCyclesCostSchedule::from(
-            CanisterCyclesCostScheduleProto::try_from(subnet_record.canister_cycles_cost_schedule)
-                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
-        );
 
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
             .subnet_info
-            .with_label_values(&[&own_subnet_id.to_string(), own_subnet_type.as_ref()])
+            .with_label_values(&[own_subnet_id.to_string().as_str(), own_subnet_type.as_ref()])
             .set(1);
         self.metrics.subnet_size.set(subnet_size as i64);
         self.metrics
@@ -932,7 +941,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .set(subnet_record.max_block_payload_size as i64);
         self.metrics
             .canister_ranges_count
-            .set(network_topology.routing_table.ranges(own_subnet_id).len() as i64);
+            .set(network_topology.routing_table().ranges(own_subnet_id).len() as i64);
         // Please export any new features via the `subnet_features` metric below.
         let SubnetFeatures {
             canister_sandboxing,
@@ -962,7 +971,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 subnet_size,
                 node_ids: nodes,
                 registry_version,
-                canister_cycles_cost_schedule,
             },
             node_public_keys,
             api_boundary_nodes,
@@ -1071,6 +1079,41 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     ))
                 })?,
             );
+            let mut subnet_admins = BTreeSet::new();
+            // Only rented subnets, i.e., application subnets on a "free" cost
+            // schedule, and cloud engines on a "free" cost schedule can have a non-empty subnet admins list. In this case,
+            // parse the protobuf field to populate the list.
+            #[allow(clippy::nonminimal_bool)]
+            if (subnet_type == SubnetType::Application
+                && cost_schedule == CanisterCyclesCostSchedule::Free)
+                || (subnet_type == SubnetType::CloudEngine
+                    && cost_schedule == CanisterCyclesCostSchedule::Free)
+            {
+                for p in subnet_record.subnet_admins.into_iter() {
+                    let subnet_admin = PrincipalId::try_from(p).map_err(|err| {
+                        ReadRegistryError::Persistent(format!(
+                            "'failed to read subnet admins from subnet record', err: {err:?}"
+                        ))
+                    })?;
+                    subnet_admins.insert(subnet_admin);
+                }
+            } else if !subnet_record.subnet_admins.is_empty() {
+                // If the subnet is not rented and it has a non-empty subnet
+                // admins list, it indicates a bug and a critical error is
+                // raised. No admins are parsed out in that case and the list
+                // remains empty.
+                self.metrics
+                    .critical_error_illegal_non_empty_subnet_admins
+                    .inc();
+                warn!(
+                    self.log,
+                    "{}: subnet {} is a non-rental subnet, but has a non-empty list of subnet admins {:?}.",
+                    CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS,
+                    subnet_id,
+                    subnet_admins,
+                );
+            }
+
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -1080,6 +1123,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     subnet_features,
                     chain_keys_held,
                     cost_schedule,
+                    subnet_admins,
                 },
             );
         }
@@ -1107,15 +1151,15 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
             .unwrap_or_default();
 
-        Ok(NetworkTopology {
+        Ok(NetworkTopology::new(
             subnets,
-            routing_table: Arc::new(routing_table),
+            Arc::new(routing_table),
+            Arc::new(canister_migrations),
             nns_subnet_id,
-            canister_migrations: Arc::new(canister_migrations),
             chain_key_enabled_subnets,
-            bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
-            bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
-        })
+            self.bitcoin_config.testnet_canister_id,
+            self.bitcoin_config.mainnet_canister_id,
+        ))
     }
 
     /// Tries to populate node public keys from the registry at a specific version.
@@ -1327,7 +1371,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
-        let commit_height = Height::from(batch.batch_number.get());
 
         let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
@@ -1373,12 +1416,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             node_public_keys,
             api_boundary_nodes,
         );
+        // Prune any orphaned canister priorities.
+        state_after_round.garbage_collect_subnet_schedule();
         // Garbage collect empty canister queue pairs before checkpointing.
         if certification_scope == CertificationScope::Full {
             state_after_round.garbage_collect_canister_queues();
         }
         state_after_round.metadata.subnet_metrics.num_canisters =
-            state_after_round.canister_states.len() as u64;
+            state_after_round.canister_states().len() as u64;
         let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
         state_after_round
             .metadata
@@ -1394,7 +1439,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
 
         self.state_manager.commit_and_certify(
             state_after_round,
-            commit_height,
             certification_scope,
             batch_summary,
         );
@@ -1458,7 +1502,6 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         };
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
-        let commit_height = Height::from(batch.batch_number.get());
 
         let time = batch.time;
         state.metadata.batch_time = time;
@@ -1504,7 +1547,6 @@ impl BatchProcessor for FakeBatchProcessorImpl {
 
         self.state_manager.commit_and_certify(
             state_after_stream_builder,
-            commit_height,
             certification_scope,
             batch.batch_summary,
         );
@@ -1600,6 +1642,7 @@ impl MessageRoutingImpl {
             subnet_id,
             MAX_STREAM_MESSAGES,
             TARGET_STREAM_SIZE_BYTES,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(

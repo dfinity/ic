@@ -88,6 +88,9 @@ pub fn create_dealing(
             .zip(&threshold_secret_key_shares)
             .map(|(index, share)| {
                 let share = share.clone();
+
+                // verify_receiver_indices checks that the keys of receiver_keys is
+                // exactly the set 0..number_of_receivers
                 let key = *receiver_keys
                     .get(&index)
                     .expect("There should be a public key for each share");
@@ -184,6 +187,9 @@ pub fn create_resharing_dealing(
             .zip(&threshold_secret_key_shares)
             .map(|(index, share)| {
                 let share = share.clone();
+
+                // verify_receiver_indices checks that the keys of receiver_keys is
+                // exactly the set 0..number_of_receivers
                 let key = *receiver_keys
                     .get(&index)
                     .expect("There should be a public key for each share");

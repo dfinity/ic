@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic"
-version = "11.0.0"
+version = "12.0.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"
@@ -32,7 +32,6 @@ reqwest = { workspace = true }
 schemars = "0.8.16"
 semver = { workspace = true }
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -70,8 +69,14 @@ registry-canister = { path = "../../rs/registry/canister" }
 wat = { workspace = true }
 
 [target.'cfg(not(windows))'.dev-dependencies]
+ic-config = { path = "../../rs/config" }
+ic-crypto-node-key-generation = { path = "../../rs/crypto/node_key_generation" }
+ic-protobuf = { path = "../../rs/protobuf" }
+ic-registry-canister-api = { path = "../../rs/registry/canister/api" }
 ic-registry-client = { path = "../../rs/registry/client" }
 ic-registry-client-helpers = { path = "../../rs/registry/helpers" }
 ic-registry-proto-data-provider = { path = "../../rs/registry/proto_data_provider" }
 ic-registry-transport = { path = "../../rs/registry/transport" }
+ic-types = { path = "../../rs/types/types" }
+maplit = "1.0.2"
 prost = { workspace = true }

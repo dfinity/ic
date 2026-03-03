@@ -2,8 +2,10 @@
 mod tests;
 
 use crate::address::DogecoinAddress;
+use ic_ckbtc_minter::tx::FeeRate;
 use ic_ckbtc_minter::{CanisterRuntime, ECDSAPublicKey, management, tx::SignedRawTransaction};
 use icrc_ledger_types::icrc1::account::Account;
+use std::num::NonZeroU32;
 
 pub struct DogecoinTransactionSigner {
     key_name: String,
@@ -31,6 +33,17 @@ impl DogecoinTransactionSigner {
             accounts.len(),
             "BUG: expected one account per input"
         );
+
+        let sum_inputs = unsigned_tx
+            .inputs
+            .iter()
+            .map(|input| input.value)
+            .sum::<u64>();
+        let sum_outputs = unsigned_tx
+            .outputs
+            .iter()
+            .map(|output| output.value)
+            .sum::<u64>();
 
         let dogecoin_tx = into_bitcoin_transaction(unsigned_tx);
         let cache = bitcoin::sighash::SighashCache::new(&dogecoin_tx);
@@ -87,11 +100,19 @@ impl DogecoinTransactionSigner {
             .for_each(|(input, script_sig)| {
                 input.script_sig = script_sig;
             });
+
         let txid = ic_ckbtc_minter::Txid::from(signed_tx.compute_txid().to_byte_array());
+        let serialized_signed_tx = bitcoin::consensus::encode::serialize(&signed_tx);
+        let fee_rate = FeeRate::from_tx_ceil(
+            sum_inputs - sum_outputs,
+            NonZeroU32::try_from(serialized_signed_tx.len() as u32)
+                .expect("BUG: signed transaction cannot have zero size"),
+        );
 
         Ok(SignedRawTransaction::new(
-            bitcoin::consensus::encode::serialize(&signed_tx),
+            serialized_signed_tx,
             txid,
+            fee_rate,
         ))
     }
 

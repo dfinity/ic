@@ -32,8 +32,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             reserved_balance: Some(item.reserved_balance.into()),
             reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
             canister_status: Some((&item.status).into()),
+            rounds_scheduled: item.rounds_scheduled,
             scheduled_as_first: item.scheduled_as_first,
-            skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
             executed: item.executed,
             interrupted_during_execution: item.interrupted_during_execution,
             certified_data: item.certified_data.clone(),
@@ -72,6 +72,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
             tasks: Some((&item.task_queue).into()),
             environment_variables: item.environment_variables.into_iter().collect(),
+            instructions_executed: item.instructions_executed.get(),
+            ingress_messages_executed: item.ingress_messages_executed,
+            remote_subnet_messages_executed: item.remote_subnet_messages_executed,
+            local_subnet_messages_executed: item.local_subnet_messages_executed,
+            http_outcalls_executed: item.http_outcalls_executed,
+            heartbeats_and_global_timers_executed: item.heartbeats_and_global_timers_executed,
         }
     }
 }
@@ -124,7 +130,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let tasks: pb_canister_state_bits::TaskQueue =
             try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
-
         let task_queue = TaskQueue::try_from(tasks)?;
 
         Ok(Self {
@@ -155,8 +160,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 value.canister_status,
                 "CanisterStateBits::canister_status",
             )?,
+            rounds_scheduled: value.rounds_scheduled,
             scheduled_as_first: value.scheduled_as_first,
-            skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
             executed: value.executed,
             interrupted_during_execution: value.interrupted_during_execution,
             certified_data: value.certified_data,
@@ -206,6 +211,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
             task_queue,
             environment_variables: value.environment_variables.into_iter().collect(),
+            instructions_executed: NumInstructions::from(value.instructions_executed),
+            ingress_messages_executed: value.ingress_messages_executed,
+            remote_subnet_messages_executed: value.remote_subnet_messages_executed,
+            local_subnet_messages_executed: value.local_subnet_messages_executed,
+            http_outcalls_executed: value.http_outcalls_executed,
+            heartbeats_and_global_timers_executed: value.heartbeats_and_global_timers_executed,
         })
     }
 }

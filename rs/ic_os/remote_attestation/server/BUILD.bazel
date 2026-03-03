@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -7,14 +7,23 @@ rust_binary(
     srcs = ["src/main.rs"],
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
-        "//rs/ic_os/attestation",
         "//rs/ic_os/config/tool:config_lib",
         "//rs/ic_os/config/types:config_types",
         "//rs/ic_os/remote_attestation/shared",
-        "//rs/ic_os/sev",
+        "//rs/ic_os/sev/attestation",
+        "//rs/ic_os/sev/guest",
         "@crate_index//:anyhow",
+        "@crate_index//:rand",
         "@crate_index//:sev",
         "@crate_index//:tokio",
         "@crate_index//:tonic",
+    ],
+)
+
+rust_test(
+    name = "server_test",
+    crate = ":server",
+    deps = [
+        "//rs/ic_os/sev/guest/testing",
     ],
 )

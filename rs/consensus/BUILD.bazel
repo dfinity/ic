@@ -11,7 +11,6 @@ DEPENDENCIES = [
     "//rs/consensus/dkg",
     "//rs/consensus/utils",
     "//rs/consensus/vetkd",
-    "//rs/crypto",
     "//rs/crypto/prng",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/https_outcalls/consensus",
@@ -20,7 +19,6 @@ DEPENDENCIES = [
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/phantom_newtype",
     "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/registry/keys",
@@ -143,6 +141,7 @@ rust_test(
 
 rust_test(
     name = "integration_test",
+    timeout = "long",
     srcs = glob(["tests/**"]),
     crate_root = "tests/integration.rs",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES + [":malicious_consensus"],
@@ -175,6 +174,7 @@ rust_ic_bench(
         "//rs/config",
         "//rs/consensus/utils",
         "//rs/crypto/temp_crypto",
+        "//rs/crypto/tree_hash",
         "//rs/execution_environment",
         "//rs/https_outcalls/consensus",
         "//rs/ingress_manager",

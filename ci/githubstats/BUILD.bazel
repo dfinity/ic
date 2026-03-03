@@ -1,0 +1,27 @@
+load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+py_binary(
+    name = "query",
+    srcs = ["query.py"],
+    data = glob(["*.sql"]) + ["//.github:CODEOWNERS"],
+    env = {"CODEOWNERS_PATH": "$(rootpath //.github:CODEOWNERS)"},
+    deps = [
+        "@buildbuddy_proto//:buildbuddy_py_proto",
+        requirement("pandas"),
+        requirement("psycopg"),
+        requirement("requests"),
+        requirement("codeowners"),
+        requirement("tabulate"),
+        requirement("protobuf"),
+        requirement("dacite"),
+    ],
+)
+
+sh_test(
+    name = "query_help_test",
+    srcs = ["query_help_test.sh"],
+    data = [":query"],
+    env = {"QUERY_PATH": "$(rootpath :query)"},
+)

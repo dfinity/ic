@@ -38,7 +38,6 @@ use slog::{Logger, debug, info};
 use std::process::Command;
 use std::time::Duration;
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "read";
 // Size of the payload sent to the counter canister in query("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;
@@ -98,7 +97,10 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
         "Node with id={} from the Application subnet will be used as a target for the workload.",
         app_node.node_id
     );
-    let app_canister = app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+    let app_canister = app_node.create_and_install_canister_with_arg(
+        &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+        None,
+    );
     info!(&log, "Installation of counter canister has succeeded.");
     info!(
         &log,

@@ -3,7 +3,6 @@
 // We disable clippy warnings for the whole module because they apply to
 // generated code, meaning we can't locally disable the warnings (the code is
 // defined in another module).
-// (cf. DFN-467).
 #![allow(clippy::unit_arg)]
 
 pub use conversions::CspSecretKeyConversionError;

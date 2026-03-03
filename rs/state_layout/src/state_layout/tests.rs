@@ -3,8 +3,9 @@ use super::*;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
-use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::canister_state::system_state::testing::CallContextManagerTesting;
+use ic_replicated_state::{CallContextManager, ExecutionTask};
 use ic_replicated_state::{
     NumWasmPages, canister_state::system_state::CanisterHistory,
     metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard,
@@ -13,8 +14,11 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
-use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
-use ic_types::time::UNIX_EPOCH;
+use ic_types::messages::{
+    CallContextId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, NO_DEADLINE,
+};
+use ic_types::methods::{Callback, WasmClosure};
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use itertools::Itertools;
 use proptest::prelude::*;
 use std::fs::File;
@@ -37,8 +41,8 @@ fn default_canister_state_bits() -> CanisterStateBits {
         reserved_balance: Cycles::zero(),
         reserved_balance_limit: None,
         status: CanisterStatus::Stopped,
+        rounds_scheduled: 0,
         scheduled_as_first: 0,
-        skipped_round_due_to_no_messages: 0,
         executed: 0,
         interrupted_during_execution: 0,
         certified_data: vec![],
@@ -61,6 +65,12 @@ fn default_canister_state_bits() -> CanisterStateBits {
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
         environment_variables: BTreeMap::new(),
+        instructions_executed: NumInstructions::new(0),
+        ingress_messages_executed: 0,
+        remote_subnet_messages_executed: 0,
+        local_subnet_messages_executed: 0,
+        http_outcalls_executed: 0,
+        heartbeats_and_global_timers_executed: 0,
     }
 }
 
@@ -301,6 +311,17 @@ fn test_encode_decode_task_queue() {
             .respondent(canister_test_id(42))
             .build(),
     );
+    let callback = Arc::new(Callback {
+        call_context_id: 1.into(),
+        respondent: canister_test_id(43),
+        cycles_sent: Cycles::new(6),
+        prepayment_for_response_execution: Cycles::new(169),
+        prepayment_for_response_transmission: Cycles::new(2197),
+        on_reply: WasmClosure::new(13, 14),
+        on_reject: WasmClosure::new(15, 16),
+        on_cleanup: Some(WasmClosure::new(17, 18)),
+        deadline: CoarseTime::from_secs_since_unix_epoch(44),
+    });
     for task in [
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
@@ -317,7 +338,10 @@ fn test_encode_decode_task_queue() {
             call_id: InstallCodeCallId::new(3u64),
         },
         ExecutionTask::AbortedExecution {
-            input: CanisterMessageOrTask::Message(CanisterMessage::Response(Arc::clone(&response))),
+            input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+                response: Arc::clone(&response),
+                callback: Arc::clone(&callback),
+            }),
             prepaid_execution_cycles: Cycles::new(4),
         },
         ExecutionTask::AbortedExecution {
@@ -385,20 +409,20 @@ fn test_removal_when_last_dropped() {
         cp3.finalize_and_remove_unverified_marker(None).unwrap();
         assert_eq!(
             vec![Height::new(1), Height::new(2), Height::new(3)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
         std::mem::drop(cp1);
         state_layout.remove_checkpoint_when_unused(Height::new(1));
         state_layout.remove_checkpoint_when_unused(Height::new(2));
         assert_eq!(
             vec![Height::new(2), Height::new(3)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
 
         std::mem::drop(cp2);
         assert_eq!(
             vec![Height::new(3)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
     });
 }
@@ -449,7 +473,7 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
         // from the checkpoints directory, leaving only checkpoint @20.
         assert_eq!(
             vec![Height::new(20)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
 
         state_layout.flush_checkpoint_removal_channel();
@@ -871,7 +895,7 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
         // The checkpoint at height 1 still exists because `wasm_on_disk` is alive.
         assert_eq!(
             vec![Height::new(1), Height::new(2)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
 
         // The wasm file is still accessible and the content can be correctly read.
@@ -879,7 +903,7 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
         assert_eq!(wasm_in_memory.as_slice(), wasm_on_disk.as_slice());
         assert_eq!(
             vec![Height::new(2)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
 
         // The cached mmap is still accessible after the checkpoint is removed.
@@ -1047,7 +1071,7 @@ fn read_back_checkpoint_directory_names(
             std::fs::create_dir(checkpoint).unwrap();
         }
 
-        let existing_heights = state_layout.checkpoint_heights().unwrap();
+        let existing_heights = state_layout.verified_checkpoint_heights().unwrap();
 
         // We expect the list of heights to be the same including ordering.
         assert_eq!(heights, existing_heights);
@@ -1179,4 +1203,141 @@ fn test_encode_task_queue_with_paused_task_fails() {
     };
 
     let _ = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+}
+
+/// These tests are used to check the compatibility with the mainnet version.
+/// They are not meant to be run as part of the regular test suite (hence the ignore attributes),
+/// but instead invoked from the compiled test binary by a separate compatibility test.
+mod mainnet_compatibility_tests {
+    use prost::Message;
+
+    #[cfg(test)]
+    mod task_queue_compatibility_test {
+        use ic_types::CanisterId;
+
+        use super::super::*;
+        use super::*;
+
+        const OUTPUT_NAME: &str = "canister.pbuf";
+
+        fn make_task_queue_and_status() -> CanisterStateBits {
+            let make_callback = |respondent: CanisterId| Callback {
+                call_context_id: CallContextId::new(1),
+                respondent,
+                cycles_sent: Cycles::new(100),
+                prepayment_for_response_execution: Cycles::zero(),
+                prepayment_for_response_transmission: Cycles::zero(),
+                on_reply: WasmClosure::new(1, 2),
+                on_reject: WasmClosure::new(3, 4),
+                on_cleanup: None,
+                deadline: NO_DEADLINE,
+            };
+
+            // A call context manager that will in the end only hold callback 3.
+            let mut call_context_manager = CallContextManager::default();
+
+            // Callback 1 and matching response.
+            let callback1 = make_callback(canister_test_id(1));
+            let callback_id1 = call_context_manager.with_callback(callback1.clone());
+            let response1 = Arc::new(
+                ResponseBuilder::new()
+                    .respondent(canister_test_id(1))
+                    .originator_reply_callback(callback_id1)
+                    .build(),
+            );
+
+            // Consume callback ID 2.
+            let callback_id2 =
+                call_context_manager.with_callback(make_callback(canister_test_id(2)));
+            call_context_manager.unregister_callback(callback_id2);
+
+            // Retain callback 3.
+            let callback3 = make_callback(canister_test_id(3));
+            call_context_manager.with_callback(callback3.clone());
+
+            // A task queue with a `Response` aborted execution bundling `response1` and
+            // `callback1`.
+            let mut task_queue = TaskQueue::default();
+            // Unregister callback 1, and put it with its response in the task queue.
+            call_context_manager.unregister_callback(callback_id1);
+            task_queue.enqueue(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+                    response: response1,
+                    callback: Arc::new(callback1),
+                }),
+                prepaid_execution_cycles: Cycles::new(10),
+            });
+
+            CanisterStateBits {
+                task_queue: task_queue.clone(),
+                status: CanisterStatus::Running {
+                    call_context_manager,
+                },
+                ..default_canister_state_bits()
+            }
+        }
+
+        #[test]
+        #[ignore]
+        fn serialize() {
+            let mut canister_state_bits = make_task_queue_and_status();
+
+            // Backward compatibility hack: the old version did not use `with_callback()`,
+            // so it was not bumping `next_callback_id`. Temporarily reset it to 0.
+            //
+            // TODO(DSM-95): Drop in next release.
+            if let CanisterStatus::Running {
+                call_context_manager,
+            } = &mut canister_state_bits.status
+            {
+                call_context_manager.set_next_callback_id(0);
+            }
+
+            let proto_state_bits: pb_canister_state_bits::CanisterStateBits =
+                canister_state_bits.into();
+            let serialized = proto_state_bits.encode_to_vec();
+
+            let output_path = std::path::Path::new(OUTPUT_NAME);
+            File::create(output_path)
+                .unwrap()
+                .write_all(&serialized)
+                .unwrap();
+        }
+
+        #[test]
+        #[ignore]
+        fn deserialize() {
+            let serialized = std::fs::read(OUTPUT_NAME).expect("Could not read file");
+            let proto_state_bits =
+                pb_canister_state_bits::CanisterStateBits::decode(&serialized as &[u8])
+                    .expect("Failed to deserialize the protobuf");
+            let canister_state_bits = CanisterStateBits::try_from(proto_state_bits)
+                .expect("Failed to convert the protobuf to CanisterStateBits");
+
+            let CanisterStateBits {
+                task_queue,
+                mut status,
+                ..
+            } = canister_state_bits;
+            let CanisterStateBits {
+                task_queue: expected_task_queue,
+                status: expected_status,
+                ..
+            } = make_task_queue_and_status();
+
+            // Forward compatibility hack: the old version did not use `with_callback()`,
+            // so it was not bumping `next_callback_id`. Explicitly set it to 3.
+            //
+            // TODO(DSM-95): Drop in the release after the next.
+            if let CanisterStatus::Running {
+                call_context_manager,
+            } = &mut status
+            {
+                call_context_manager.set_next_callback_id(3);
+            }
+
+            assert_eq!(expected_task_queue, task_queue);
+            assert_eq!(expected_status, status);
+        }
+    }
 }

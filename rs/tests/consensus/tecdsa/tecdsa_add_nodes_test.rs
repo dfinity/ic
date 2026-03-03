@@ -52,7 +52,7 @@ use ic_system_test_driver::{
     systest,
     util::*,
 };
-use ic_types::{Height, consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE};
+use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
@@ -137,27 +137,26 @@ fn test(env: TestEnv) {
             }
         });
     }
-    if STORE_PRE_SIGNATURES_IN_STATE {
-        // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
-        await_pre_signature_stash_size(
-            &nns_subnet,
-            PRE_SIGNATURES_TO_CREATE_IN_ADVANCE as usize,
-            idkg_keys.as_slice(),
-            &log,
-        );
-        // Turn off pre-signature generation, so we can check that the stash is purged
-        // during the membership change
-        info!(log, "Disabling pre-signature generation");
-        block_on(set_pre_signature_stash_size(
-            &governance,
-            nns_subnet.subnet_id,
-            key_ids.as_slice(),
-            /* max_parallel_pre_signatures */ 0,
-            /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
-            /* key_rotation_period */ None,
-            &log,
-        ));
-    }
+    // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
+    await_pre_signature_stash_size(
+        &nns_subnet,
+        PRE_SIGNATURES_TO_CREATE_IN_ADVANCE as usize,
+        idkg_keys.as_slice(),
+        &log,
+    );
+    // Turn off pre-signature generation, so we can check that the stash is purged
+    // during the membership change
+    info!(log, "Disabling pre-signature generation");
+    block_on(set_pre_signature_stash_size(
+        &governance,
+        nns_subnet.subnet_id,
+        key_ids.as_slice(),
+        /* max_parallel_pre_signatures */ 0,
+        /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+        /* key_rotation_period */ None,
+        &log,
+    ));
+
     info!(
         log,
         "Sending a proposal for the nodes to join NNS subnet via the governance canister."
@@ -216,20 +215,18 @@ fn test(env: TestEnv) {
         );
     }
 
-    if STORE_PRE_SIGNATURES_IN_STATE {
-        // The stash size should be 0 after the nodes are added
-        await_pre_signature_stash_size(&nns_subnet, 0, idkg_keys.as_slice(), &log);
-        // Re-enable pre-signature generation
-        block_on(set_pre_signature_stash_size(
-            &governance,
-            nns_subnet.subnet_id,
-            key_ids.as_slice(),
-            /* max_parallel_pre_signatures */ 10,
-            /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
-            /* key_rotation_period */ None,
-            &log,
-        ));
-    }
+    // The stash size should be 0 after the nodes are added
+    await_pre_signature_stash_size(&nns_subnet, 0, idkg_keys.as_slice(), &log);
+    // Re-enable pre-signature generation
+    block_on(set_pre_signature_stash_size(
+        &governance,
+        nns_subnet.subnet_id,
+        key_ids.as_slice(),
+        /* max_parallel_pre_signatures */ 10,
+        /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+        /* key_rotation_period */ None,
+        &log,
+    ));
 
     info!(log, "Run through signature test.");
     let msg_can = MessageCanister::from_canister_id(&agent, msg_can.canister_id());

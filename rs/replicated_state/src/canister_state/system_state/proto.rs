@@ -126,12 +126,17 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                 prepaid_execution_cycles,
             } => {
                 use pb::execution_task::{
-                    CanisterTask as PbCanisterTask, aborted_execution::Input as PbInput,
+                    CanisterTask as PbCanisterTask, aborted_execution::AbortedResponse,
+                    aborted_execution::Input as PbInput,
                 };
                 let input = match input {
-                    CanisterMessageOrTask::Message(CanisterMessage::Response(v)) => {
-                        PbInput::Response(v.as_ref().into())
-                    }
+                    CanisterMessageOrTask::Message(CanisterMessage::Response {
+                        response,
+                        callback,
+                    }) => PbInput::AbortedResponse(AbortedResponse {
+                        response: Some(response.as_ref().into()),
+                        callback: Some(callback.as_ref().into()),
+                    }),
                     CanisterMessageOrTask::Message(CanisterMessage::Request(v)) => {
                         PbInput::Request(v.as_ref().into())
                     }
@@ -194,9 +199,20 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     PbInput::Request(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Request(Arc::new(v.try_into()?)),
                     ),
-                    PbInput::Response(v) => CanisterMessageOrTask::Message(
-                        CanisterMessage::Response(Arc::new(v.try_into()?)),
-                    ),
+                    PbInput::AbortedResponse(v) => {
+                        let response = v
+                            .response
+                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::response"))?
+                            .try_into()?;
+                        let callback = v
+                            .callback
+                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?
+                            .try_into()?;
+                        CanisterMessageOrTask::Message(CanisterMessage::Response {
+                            response: Arc::new(response),
+                            callback: Arc::new(callback),
+                        })
+                    }
                     PbInput::Ingress(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Ingress(Arc::new(v.try_into()?)),
                     ),

@@ -54,9 +54,52 @@ use ic_types::{
 };
 use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc, time::Duration};
-#[allow(clippy::disallowed_types)]
-use tokio::sync::Mutex;
 use tokio::time::timeout;
+
+/// A struct that can be shared among multiple components
+/// that only need to read the local CUP.
+#[derive(Clone)]
+pub(crate) struct LocalCUPReader {
+    cup_dir: PathBuf,
+    logger: ReplicaLogger,
+}
+
+impl LocalCUPReader {
+    /// Create a new `LocalCUPReader` instance.
+    pub(crate) fn new(cup_dir: PathBuf, logger: ReplicaLogger) -> Self {
+        Self { cup_dir, logger }
+    }
+
+    /// Returns the locally persisted CUP in deserialized form
+    pub(crate) fn get_local_cup(&self) -> Option<CatchUpPackage> {
+        let local_cup_proto = self.get_local_cup_proto()?;
+        CatchUpPackage::try_from(&local_cup_proto)
+            .inspect_err(|err| warn!(self.logger, "Deserialization of CUP failed: {}", err))
+            .ok()
+    }
+
+    /// Returns the locally persisted CUP in protobuf form
+    pub(crate) fn get_local_cup_proto(&self) -> Option<pb::CatchUpPackage> {
+        let path = self.get_cup_path();
+        if !path.exists() {
+            return None;
+        }
+        match File::open(&path) {
+            Ok(reader) => pb::CatchUpPackage::read_from_reader(reader)
+                .inspect_err(|e| warn!(self.logger, "Failed to read CUP from file {:?}", e))
+                .ok(),
+            Err(err) => {
+                warn!(self.logger, "Couldn't open file {:?}: {:?}", path, err);
+                None
+            }
+        }
+    }
+
+    /// The path that should be used to read the CUP for the assigned subnet.
+    pub(crate) fn get_cup_path(&self) -> PathBuf {
+        self.cup_dir.join("cup.types.v1.CatchUpPackage.pb")
+    }
+}
 
 /// Fetches catch-up packages from peers and local storage.
 ///
@@ -64,23 +107,20 @@ use tokio::time::timeout;
 /// and hence which version of the IC this node should be starting.
 pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
-    cup_dir: PathBuf,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
     crypto_tls_config: Arc<dyn TlsConfig>,
     logger: ReplicaLogger,
     node_id: NodeId,
-    #[allow(clippy::disallowed_types)]
-    // Use a tokio mutex because the lock needs to be held across an await point,
-    // and this code isn't performance-critical.
-    backoff: Mutex<Duration>,
+    backoff: Duration,
     initial_backoff: Duration,
+    local_cup_reader: LocalCUPReader,
 }
 
 impl CatchUpPackageProvider {
     /// Instantiate a new `CatchUpPackageProvider`
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
-        cup_dir: PathBuf,
+        local_cup_reader: LocalCUPReader,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
         crypto_tls_config: Arc<dyn TlsConfig>,
         logger: ReplicaLogger,
@@ -88,7 +128,7 @@ impl CatchUpPackageProvider {
     ) -> Self {
         Self::new_with_initial_backoff(
             registry,
-            cup_dir,
+            local_cup_reader,
             crypto,
             crypto_tls_config,
             logger,
@@ -99,7 +139,7 @@ impl CatchUpPackageProvider {
 
     fn new_with_initial_backoff(
         registry: Arc<RegistryHelper>,
-        cup_dir: PathBuf,
+        local_cup_reader: LocalCUPReader,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
         crypto_tls_config: Arc<dyn TlsConfig>,
         logger: ReplicaLogger,
@@ -109,13 +149,12 @@ impl CatchUpPackageProvider {
         Self {
             node_id,
             registry,
-            cup_dir,
             crypto,
             crypto_tls_config,
             logger,
-            #[allow(clippy::disallowed_types)]
-            backoff: Mutex::new(initial_backoff),
+            backoff: initial_backoff,
             initial_backoff,
+            local_cup_reader,
         }
     }
 
@@ -130,7 +169,7 @@ impl CatchUpPackageProvider {
 
         let mut nodes: Vec<(NodeId, NodeRecord)> = self
             .registry
-            .registry_client
+            .get_registry_client()
             .get_subnet_node_records(subnet_id, registry_version)
             .ok()
             .flatten()
@@ -170,7 +209,7 @@ impl CatchUpPackageProvider {
     /// we will attempt to fetch the CUP from our own replica first, before trying a
     /// second random node.
     async fn get_peer_cup(
-        &self,
+        &mut self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
         current_cup: Option<&pb::CatchUpPackage>,
@@ -220,7 +259,7 @@ impl CatchUpPackageProvider {
     //
     // Also checks the signature of the downloaded catch up package.
     async fn fetch_and_verify_catch_up_package(
-        &self,
+        &mut self,
         node_id: &NodeId,
         node_record: &NodeRecord,
         param: Option<CatchUpPackageParam>,
@@ -263,7 +302,7 @@ impl CatchUpPackageProvider {
     // Does not check the signature of the CUP. This has to be done by the
     // caller.
     async fn fetch_catch_up_package(
-        &self,
+        &mut self,
         node_id: &NodeId,
         url: String,
         param: Option<CatchUpPackageParam>,
@@ -307,13 +346,12 @@ impl CatchUpPackageProvider {
             .map_err(|e| format!("Failed to query CUP endpoint at {url}: {e:?}"))?;
 
         let status = res.status();
-        let mut backoff = self.backoff.lock().await;
-        let body_req = timeout(*backoff, res.into_body().collect());
+        let body_req = timeout(self.backoff, res.into_body().collect());
 
         let bytes = match body_req.await {
             Ok(result) => {
                 // Reset backoff on success
-                *backoff = self.initial_backoff;
+                self.backoff = self.initial_backoff;
                 match result {
                     Ok(bytes) => bytes.to_bytes(),
                     Err(e) => {
@@ -324,14 +362,14 @@ impl CatchUpPackageProvider {
                 }
             }
             Err(timeout_err) => {
-                let old_backoff = *backoff;
-                *backoff = old_backoff.saturating_mul(2);
+                let old_backoff = self.backoff;
+                self.backoff = old_backoff.saturating_mul(2);
                 return Err(format!(
                     "Timed out while reading CUP response body of {} after {} secs: {:?}. Setting backoff to {} secs",
                     url,
                     old_backoff.as_secs(),
                     timeout_err,
-                    backoff.as_secs()
+                    self.backoff.as_secs()
                 ));
             }
         };
@@ -393,7 +431,7 @@ impl CatchUpPackageProvider {
     /// Includes the specific type encoded in the file for future-proofing and
     /// ease of debugging.
     pub(crate) fn get_cup_path(&self) -> PathBuf {
-        self.cup_dir.join("cup.types.v1.CatchUpPackage.pb")
+        self.local_cup_reader.get_cup_path()
     }
 
     /// Return the most up to date CUP.
@@ -402,7 +440,7 @@ impl CatchUpPackageProvider {
     /// the locally persisted CUP (if one exists) and the CUP that is specified
     /// by the registry. If we manage to find a newer CUP we also persist it.
     pub(crate) async fn get_latest_cup(
-        &self,
+        &mut self,
         local_cup: Option<pb::CatchUpPackage>,
         subnet_id: SubnetId,
     ) -> OrchestratorResult<CatchUpPackage> {
@@ -463,32 +501,9 @@ impl CatchUpPackageProvider {
         Ok(latest_cup)
     }
 
-    // Returns the locally persisted CUP in deserialized form
-    pub(crate) fn get_local_cup(&self) -> Option<CatchUpPackage> {
-        match self.get_local_cup_proto() {
-            None => None,
-            Some(cup_proto) => (&cup_proto)
-                .try_into()
-                .map_err(|err| warn!(self.logger, "Deserialization of CUP failed: {}", err))
-                .ok(),
-        }
-    }
-
     /// Returns the locally persisted CUP in protobuf form
     pub(crate) fn get_local_cup_proto(&self) -> Option<pb::CatchUpPackage> {
-        let path = self.get_cup_path();
-        if !path.exists() {
-            return None;
-        }
-        match File::open(&path) {
-            Ok(reader) => pb::CatchUpPackage::read_from_reader(reader)
-                .map_err(|e| warn!(self.logger, "Failed to read CUP from file {:?}", e))
-                .ok(),
-            Err(err) => {
-                warn!(self.logger, "Couldn't open file {:?}: {:?}", path, err);
-                None
-            }
-        }
+        self.local_cup_reader.get_local_cup_proto()
     }
 }
 
@@ -501,11 +516,8 @@ fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    use crate::{
-        catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
-    };
     use assert_matches::assert_matches;
     use http_body_util::{StreamBody, combinators::BoxBody};
     use hyper::{
@@ -690,7 +702,7 @@ mod tests {
         ))
     }
 
-    fn mock_tls_config() -> MockTlsConfig {
+    pub(crate) fn mock_tls_config() -> MockTlsConfig {
         #[derive(Debug)]
         struct NoVerify;
         impl ServerCertVerifier for NoVerify {
@@ -755,7 +767,7 @@ mod tests {
     ) -> CatchUpPackageProvider {
         CatchUpPackageProvider::new_with_initial_backoff(
             registry,
-            cup_dir,
+            LocalCUPReader::new(cup_dir, no_op_logger()),
             Arc::new(CryptoReturningOk::default()),
             Arc::new(mock_tls_config()),
             no_op_logger(),
@@ -773,7 +785,7 @@ mod tests {
         let node_id = node_test_id(1);
 
         let initial_backoff = Duration::from_secs(5);
-        let cup_provider =
+        let mut cup_provider =
             make_cup_provider(tmp_dir.path().to_path_buf(), node_id, initial_backoff);
 
         let err = cup_provider
@@ -787,10 +799,7 @@ mod tests {
         );
 
         // Verify that the backoff was increased
-        {
-            let backoff = cup_provider.backoff.lock().await;
-            assert_eq!(*backoff, Duration::from_secs(10));
-        }
+        assert_eq!(cup_provider.backoff, Duration::from_secs(10));
 
         // Allow the next request to succeed
         *send_cup.lock().unwrap() = true;
@@ -804,10 +813,7 @@ mod tests {
         assert_eq!(cup, fake_cup());
 
         // Verify that the backoff was reset after a successful request
-        {
-            let backoff = cup_provider.backoff.lock().await;
-            assert_eq!(*backoff, initial_backoff);
-        }
+        assert_eq!(cup_provider.backoff, initial_backoff);
     }
 
     #[tokio::test]
@@ -817,7 +823,7 @@ mod tests {
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
-        let cup_provider = make_cup_provider(
+        let mut cup_provider = make_cup_provider(
             tmp_dir.path().to_path_buf(),
             node_id,
             Duration::from_secs(5),
@@ -838,7 +844,7 @@ mod tests {
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
-        let cup_provider = make_cup_provider(
+        let mut cup_provider = make_cup_provider(
             tmp_dir.path().to_path_buf(),
             node_id,
             Duration::from_secs(5),
@@ -859,7 +865,7 @@ mod tests {
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
-        let cup_provider = make_cup_provider(
+        let mut cup_provider = make_cup_provider(
             tmp_dir.path().to_path_buf(),
             node_id,
             Duration::from_secs(5),

@@ -1,0 +1,7 @@
+[package]
+name = "sev_guest_firmware"
+edition.workspace = true
+
+[dependencies]
+mockall = { workspace = true }
+sev = { workspace = true }

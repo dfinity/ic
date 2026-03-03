@@ -155,7 +155,7 @@ impl TryFrom<pb::GetIDkgDealingInBlockResponse> for GetIDkgDealingInBlockRespons
 
     fn try_from(value: pb::GetIDkgDealingInBlockResponse) -> Result<Self, Self::Error> {
         Ok(Self {
-            signed_dealing: try_from_option_field(value.signed_dealing.as_ref(), "signed_dealing")?,
+            signed_dealing: try_from_option_field(value.signed_dealing, "signed_dealing")?,
         })
     }
 }
@@ -163,7 +163,7 @@ impl TryFrom<pb::GetIDkgDealingInBlockResponse> for GetIDkgDealingInBlockRespons
 impl From<GetIDkgDealingInBlockResponse> for pb::GetIDkgDealingInBlockResponse {
     fn from(value: GetIDkgDealingInBlockResponse) -> Self {
         pb::GetIDkgDealingInBlockResponse {
-            signed_dealing: Some((&value.signed_dealing).into()),
+            signed_dealing: Some(value.signed_dealing.into()),
         }
     }
 }

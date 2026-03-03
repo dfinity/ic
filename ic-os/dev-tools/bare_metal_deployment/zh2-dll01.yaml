@@ -9,3 +9,4 @@ inject_image_ipv4_gateway: 212.71.126.54
 inject_image_ipv4_prefix_length: 29
 inject_image_domain: bare-metal-deployment.icp5.io
 inject_image_verbose: false
+inject_enable_trusted_execution_environment: false

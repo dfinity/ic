@@ -25,7 +25,7 @@ use super::{
     config::NODES_INFO,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
     test_env::TestEnv,
-    test_env_api::get_dependency_path,
+    test_env_api::get_dependency_path_from_env,
     universal_vm::UniversalVm,
 };
 
@@ -66,9 +66,7 @@ impl VectorVm {
     pub fn new() -> Self {
         Self {
             universal_vm: UniversalVm::new("vector".to_string())
-                .with_config_img(get_dependency_path(
-                    std::env::var("VECTOR_VM_PATH").expect("VECTOR_VM_PATH not set"),
-                ))
+                .with_config_img(get_dependency_path_from_env("VECTOR_VM_PATH"))
                 .with_vm_resources(VmResources {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
@@ -135,8 +133,7 @@ impl VectorVm {
         info!(log, "Syncing vector targets.");
 
         let testnet_nodes = env
-            .read_json_object::<NodesInfo, _>(NODES_INFO)
-            .expect("Couldn't read info of the nodes from file")
+            .read_json_object::<NodesInfo, _>(NODES_INFO)?
             .into_keys()
             .collect::<Vec<NodeId>>();
         match env.safe_topology_snapshot() {

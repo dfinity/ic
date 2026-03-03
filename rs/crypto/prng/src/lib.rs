@@ -1,10 +1,10 @@
 //! Offers cryptographically secure pseudorandom number generation (CSPRNG).
 use RandomnessPurpose::*;
-use ic_crypto_sha2::{DomainSeparationContext, Sha256};
+use ic_crypto_internal_seed::Seed;
 use ic_types::Randomness;
 use ic_types::consensus::RandomBeacon;
-use ic_types::crypto::CryptoHashable;
-use rand::{CryptoRng, Error, RngCore, SeedableRng};
+use ic_types::crypto::randomness_from_crypto_hashable;
+use rand::{CryptoRng, Error, RngCore};
 use rand_chacha::ChaCha20Rng;
 use std::fmt;
 use strum_macros::{EnumCount, EnumIter};
@@ -35,31 +35,22 @@ impl Csprng {
         random_beacon: &RandomBeacon,
         purpose: &RandomnessPurpose,
     ) -> Self {
-        let seed = Self::seed_from_crypto_hashable(random_beacon);
-        Csprng::from_seed_and_purpose(&seed, purpose)
+        let randomness = randomness_from_crypto_hashable(random_beacon);
+        Self::from_randomness_and_purpose(&randomness, purpose)
     }
 
-    /// Creates a CSPRNG from the given seed for the given purpose.
-    pub fn from_seed_and_purpose(seed: &Randomness, purpose: &RandomnessPurpose) -> Self {
-        let mut hasher = Sha256::new();
-        hasher.write(&seed.get());
-        hasher.write(&purpose.domain_separator());
-        Csprng::from_seed(hasher.finish())
+    /// Creates a CSPRNG from the Randomness value for the given purpose.
+    pub fn from_randomness_and_purpose(seed: &Randomness, purpose: &RandomnessPurpose) -> Self {
+        let seed = Seed::from_bytes(&seed.get());
+        let seed_for_purpose = seed.derive(&purpose.domain_separator());
+        Csprng::from_seed(seed_for_purpose)
     }
 
     /// Creates a CSPRNG from the given seed.
-    fn from_seed(seed: [u8; 32]) -> Self {
+    fn from_seed(seed: ic_crypto_internal_seed::Seed) -> Self {
         Csprng {
-            rng: ChaCha20Rng::from_seed(seed),
+            rng: seed.into_rng(),
         }
-    }
-
-    /// Creates a CSPRNG seed from the given crypto hashable.
-    fn seed_from_crypto_hashable<T: CryptoHashable>(crypto_hashable: &T) -> Randomness {
-        let mut hasher =
-            Sha256::new_with_context(&DomainSeparationContext::new(crypto_hashable.domain()));
-        crypto_hashable.hash(&mut hasher);
-        Randomness::from(hasher.finish())
     }
 }
 
@@ -68,26 +59,15 @@ impl Csprng {
 pub enum RandomnessPurpose {
     CommitteeSampling,
     BlockmakerRanking,
-    DkgCommitteeSampling,
     ExecutionThread(u32),
 }
 
-const COMMITTEE_SAMPLING_SEPARATOR_BYTE: u8 = 1;
-const BLOCKMAKER_RANKING_SEPARATOR_BYTE: u8 = 2;
-const DKG_COMMITTEE_SAMPLING_SEPARATOR_BYTE: u8 = 3;
-const EXECUTION_THREAD_SEPARATOR_BYTE: u8 = 4;
-
 impl RandomnessPurpose {
-    fn domain_separator(&self) -> Vec<u8> {
+    fn domain_separator(&self) -> String {
         match self {
-            CommitteeSampling => vec![COMMITTEE_SAMPLING_SEPARATOR_BYTE],
-            BlockmakerRanking => vec![BLOCKMAKER_RANKING_SEPARATOR_BYTE],
-            DkgCommitteeSampling => vec![DKG_COMMITTEE_SAMPLING_SEPARATOR_BYTE],
-            ExecutionThread(thread_id) => {
-                let mut bytes = vec![EXECUTION_THREAD_SEPARATOR_BYTE];
-                bytes.extend_from_slice(&thread_id.to_be_bytes());
-                bytes
-            }
+            CommitteeSampling => "ic-crypto-prng-committee-sampling".to_string(),
+            BlockmakerRanking => "ic-crypto-prng-blockmaker-ranking".to_string(),
+            ExecutionThread(thread_id) => format!("ic-crypto-prng-execution-thread-{}", thread_id),
         }
     }
 }

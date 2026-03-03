@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use icp_ledger::AccountIdentifier;
 use std::path::PathBuf;
@@ -97,8 +98,9 @@ pub struct GetRecoveryCupCmd {
 pub struct UpgradeSubnetToReplicaVersionCmd {
     /// The Replica version ID.
     pub replica_version_id: String,
-    /// JSON value of the replica version record.
-    pub replica_version_value: String,
+    /// The Replica version record.
+    #[clap(value_parser = parse_json::<ReplicaVersionRecord>)]
+    pub replica_version_record: ReplicaVersionRecord,
     /// If true, the replica version will be added and blessed in the registry
     /// before upgrading the subnet to it.
     #[clap(long)]
@@ -169,4 +171,8 @@ pub struct WithNeuronCmd {
     pub neuron_controller: PrincipalId,
     /// How much stake the neuron will have.
     pub neuron_stake_e8s: u64,
+}
+
+fn parse_json<T: serde::de::DeserializeOwned>(s: &str) -> Result<T, String> {
+    serde_json::from_str(s).map_err(|e| e.to_string())
 }

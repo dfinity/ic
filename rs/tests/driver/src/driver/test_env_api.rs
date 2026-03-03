@@ -145,7 +145,7 @@ use crate::{
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
     retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
-    util::{block_on, create_agent},
+    util::{MetricsFetcher, block_on, create_agent},
 };
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
@@ -161,7 +161,10 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
-use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{self, NnsCanisters},
+};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
@@ -195,7 +198,6 @@ use std::{
     cmp::max,
     collections::{HashMap, HashSet},
     convert::TryFrom,
-    ffi::OsStr,
     fs,
     future::Future,
     io::{Read, Write},
@@ -209,14 +211,19 @@ use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
 pub use super::ic_images::*;
+pub use tempfile::tempdir;
 
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
-// It usually takes below 60 secs to install nns canisters.
-const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+// NNS canister installation involves sequential canister creation at specific
+// IDs followed by parallel installation and controller setup. With ~12
+// canisters being created sequentially (~5s each) plus parallel installation
+// and controller setting, this typically takes 120-180s but can exceed 160s
+// under load.
+const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(300);
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -226,6 +233,9 @@ const FW_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
+
+pub(crate) const REPLICA_METRICS_PORT: u16 = 9090;
+pub(crate) const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
@@ -933,6 +943,56 @@ impl IcNodeSnapshot {
             .contains(&self.node_id)
     }
 
+    pub fn await_api_bn_healthy(&self) -> Result<()> {
+        block_on(self.await_api_bn_healthy_async())
+    }
+
+    pub async fn await_api_bn_healthy_async(&self) -> Result<()> {
+        let domain = self
+            .get_domain()
+            .ok_or_else(|| anyhow!("API BN has no domain configured"))?;
+        let api_bn_addr = SocketAddr::new(self.get_ip_addr(), 443);
+        let log = self.env.logger();
+
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .danger_accept_invalid_certs(true)
+            .resolve(&domain, api_bn_addr)
+            .build()
+            .map_err(|e| anyhow!("Failed to build HTTP client: {e}"))?;
+
+        retry_with_msg_async!(
+            format!("await_api_bn_healthy for {domain}"),
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let url = format!("https://{domain}/health");
+                info!(log, "Checking API BN health endpoint {url}");
+
+                let response = client.get(&url).send().await;
+
+                match response {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            info!(log, "API BN with domain {domain} is healthy");
+                            Ok(())
+                        } else {
+                            bail!(
+                                "API BN with domain {domain} returned non-success status: {}",
+                                resp.status()
+                            )
+                        }
+                    }
+                    Err(e) => {
+                        bail!("API BN with domain {domain} not reachable: {e}")
+                    }
+                }
+            }
+        )
+        .await
+    }
+
     pub fn effective_canister_id(&self) -> PrincipalId {
         match self.subnet_id() {
             Some(subnet_id) => {
@@ -1127,6 +1187,71 @@ impl IcNodeSnapshot {
             "Failed to insert egress {action} rule on node {node_id} for target {target}"
         ))
     }
+
+    pub fn assert_no_metrics_errors(&self, metrics_to_check: Vec<String>, port: u16) {
+        if metrics_to_check.is_empty() {
+            return;
+        }
+
+        block_on(async {
+            let metrics_fetcher = MetricsFetcher::new_with_port(
+                std::iter::once(self.clone()),
+                metrics_to_check,
+                port,
+            );
+            let metrics = match metrics_fetcher.fetch::<u64>().await {
+                Ok(metrics) => metrics,
+                Err(e) => {
+                    info!(
+                        self.env.logger(),
+                        "Could not fetch replica metrics for node {}: {e:?}", self.node_id
+                    );
+                    return;
+                }
+            };
+            assert!(
+                !metrics.is_empty(),
+                "No error counters were found in metrics for node {} on port {port}",
+                self.node_id
+            );
+            for (name, value) in metrics {
+                assert_eq!(
+                    value[0], 0,
+                    "The metric `{name}` on node {} has non-zero value. \
+                    If the metric is allowed to be non-zero in the test, \
+                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")`",
+                    self.node_id,
+                );
+            }
+        });
+    }
+
+    pub fn assert_no_replica_restarts(&self) {
+        block_on(async {
+            let orchestrator_metric_name = "orchestrator_replica_process_start_attempts_total";
+            let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
+                std::iter::once(self.clone()),
+                vec![orchestrator_metric_name.to_string()],
+                ORCHESTRATOR_METRICS_PORT,
+            );
+            let orchestrator_metrics_result = orchestrator_metrics_fetcher.fetch::<u64>().await;
+            let orchestrator_metrics = match orchestrator_metrics_result {
+                Ok(orchestrator_metrics) => orchestrator_metrics,
+                Err(e) => {
+                    info!(
+                        self.env.logger(),
+                        "Could not fetch orchestrator metrics for node {}: {e:?}", self.node_id
+                    );
+                    return;
+                }
+            };
+            assert_eq!(
+                orchestrator_metrics[orchestrator_metric_name][0], 1,
+                "The replica process on node {} was restarted during test. Create `SystemTestGroup` using `without_assert_no_replica_restarts` if replica restarts are expected in your test",
+                self.node_id
+            );
+        });
+    }
 }
 
 pub trait HasTopologySnapshot {
@@ -1292,11 +1417,11 @@ impl<T: HasTestEnv> HasFarmUrl for T {
     }
 }
 
-pub fn get_current_branch_version() -> ReplicaVersion {
-    ReplicaVersion::try_from(
-        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap(),
-    )
-    .expect("Invalid ReplicaVersion")
+/// Returns the build version specified by the build. May be an actual version or a
+/// placeholder version. See build files for exact semantics.
+pub fn get_ic_build_version() -> ReplicaVersion {
+    ReplicaVersion::try_from(read_dependency_from_env_to_string("IC_VERSION_FILE").unwrap())
+        .expect("Invalid ReplicaVersion")
 }
 
 pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
@@ -1433,9 +1558,7 @@ impl HasIcName for IcNodeSnapshot {
 }
 
 pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
-    let runfiles =
-        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
-    Path::new(&runfiles).join(p)
+    p.as_ref().to_path_buf()
 }
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
@@ -1492,6 +1615,26 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
+fn execute_bash_script_from_session(session: &Session, script: &str) -> Result<String> {
+    let mut channel = session.channel_session()?;
+    channel.exec("bash").map_err(|e| {
+        anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
+    })?;
+
+    channel.write_all(script.as_bytes())?;
+    channel.flush()?;
+    channel.send_eof()?;
+    let mut out = String::new();
+    channel.read_to_string(&mut out)?;
+    let mut err = String::new();
+    channel.stderr().read_to_string(&mut err)?;
+    let exit_status = channel.exit_status()?;
+    if exit_status != 0 {
+        bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
+    }
+    Ok(out)
+}
+
 #[async_trait]
 pub trait SshSession: HasTestEnv {
     /// Return the address of the SSH server to connect to.
@@ -1499,8 +1642,23 @@ pub trait SshSession: HasTestEnv {
 
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
     fn get_ssh_session(&self) -> Result<Session> {
-        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
-            .context("Failed to get SSH session")
+        let env = self.test_env();
+        let ip = self.get_host_ip()?;
+
+        get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
+    }
+
+    /// Return an SSH session to the machine referenced from self authenticating with the given user.
+    /// This is the async version of `get_ssh_session`.
+    async fn get_ssh_session_async(&self) -> Result<Session> {
+        let env = self.test_env();
+        let ip = self.get_host_ip()?;
+
+        tokio::task::spawn_blocking(move || {
+            get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
+        })
+        .await
+        .expect("Getting SSH session task panicked")
     }
 
     /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
@@ -1529,39 +1687,26 @@ pub trait SshSession: HasTestEnv {
             &self.test_env().logger(),
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
-            || async { self.get_ssh_session() }
+            || self.get_ssh_session_async()
         )
         .await
     }
 
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
-        self.block_on_bash_script_from_session(&session, script)
+        execute_bash_script_from_session(&session, script)
     }
 
     async fn block_on_bash_script_async(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session_async().await?;
-        self.block_on_bash_script_from_session(&session, script)
+        let script = script.to_string();
+        tokio::task::spawn_blocking(move || execute_bash_script_from_session(&session, &script))
+            .await
+            .expect("Executing bash script task panicked")
     }
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
-        let mut channel = session.channel_session()?;
-        channel.exec("bash").map_err(|e| {
-            anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
-        })?;
-
-        channel.write_all(script.as_bytes())?;
-        channel.flush()?;
-        channel.send_eof()?;
-        let mut out = String::new();
-        channel.read_to_string(&mut out)?;
-        let mut err = String::new();
-        channel.stderr().read_to_string(&mut err)?;
-        let exit_status = channel.exit_status()?;
-        if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
-        }
-        Ok(out)
+        execute_bash_script_from_session(session, script)
     }
 
     /// Is it accessible via ssh with the `admin` user.
@@ -1605,7 +1750,7 @@ impl HasMetricsUrl for IcNodeSnapshot {
         let node_record = self.raw_node_record();
         node_record.http.map(|me| {
             let mut url = IcNodeSnapshot::http_endpoint_to_url(&me);
-            let _ = url.set_port(Some(9090));
+            let _ = url.set_port(Some(REPLICA_METRICS_PORT));
             url
         })
     }
@@ -1967,16 +2112,49 @@ impl NnsInstallationBuilder {
     }
 }
 
-/// Set environment variable `env_name` to `file_path`
-/// or to wherever `file_path` points to in case it's a symlink.
-pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
-    let path = if file_path.is_symlink() {
-        std::fs::read_link(file_path).unwrap()
-    } else {
-        file_path
-    };
-    // TODO: Audit that the environment access only happens in single-threaded code.
-    unsafe { std::env::set_var(env_name, path) };
+/// Installs the registry canister on the NNS subnet, initializing it with the testnet's topology.
+///
+/// An optional `customizations` builder allows configuring additional registry init parameters.
+pub fn install_registry_canister_with_testnet_topology(
+    env: &TestEnv,
+    customizations: Option<RegistryCanisterInitPayloadBuilder>,
+) {
+    let node = env.get_first_healthy_nns_node_snapshot();
+    let url = node.get_public_url();
+    let prep_dir = env
+        .prep_dir(&node.ic_name())
+        .expect("Prep Dir does not exist");
+
+    let registry_local_store = prep_dir.registry_local_store_path();
+    let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
+
+    let mut builder = customizations.unwrap_or_else(RegistryCanisterInitPayloadBuilder::new);
+    for mutation in initial_mutations {
+        builder.push_init_mutate_request(mutation);
+    }
+    let registry_init_payload = builder.build();
+
+    let agent = InternalAgent::new(
+        url,
+        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+    );
+    let runtime = Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: REGISTRY_CANISTER_ID.into(),
+    });
+
+    block_on(async {
+        let mut canister = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Failed to create registry canister");
+        assert_eq!(
+            canister.canister_id(),
+            REGISTRY_CANISTER_ID,
+            "Failed to create registry canister at expected ID 0. Call this method before creating any other canisters."
+        );
+        itest_helpers::install_registry_canister(&mut canister, registry_init_payload).await;
+    });
 }
 
 pub trait HasRegistryVersion {

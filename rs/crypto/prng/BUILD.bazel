@@ -9,7 +9,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha2",
+    "//rs/crypto/internal/crypto_lib/seed",
     "//rs/types/types",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
@@ -29,7 +29,7 @@ rust_library(
         # Keep sorted.
         "@crate_index//:strum_macros",
     ],
-    version = "0.1.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

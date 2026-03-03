@@ -1,0 +1,15 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+rust_library(
+    name = "testing",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "sev_guest_testing",
+    deps = [
+        "//rs/ic_os/sev/attestation/testing",
+        "//rs/ic_os/sev/guest/firmware",
+        "@crate_index//:sev",
+    ],
+)

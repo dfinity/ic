@@ -46,7 +46,7 @@ use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{Logger, info};
 
 const NODES_COUNT: usize = 4;
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const MR_REGISTRY_VERSION: &str = "mr_registry_version";
 
 fn setup(env: TestEnv) {
@@ -58,7 +58,7 @@ fn setup(env: TestEnv) {
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs: vec![KeyConfig {
                         max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-                        pre_signatures_to_create_in_advance: 5,
+                        pre_signatures_to_create_in_advance: Some(5),
                         key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
                     }],
                     signature_request_timeout_ns: None,

@@ -15,7 +15,7 @@ config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
 libcryptsetup-rs = { workspace = true }
 ic_device = { path = "../../device" }
-ic_sev = { path = "../../sev" }
+sev_guest = { path = "../../sev/guest" }
 ic-sys = { path = "../../../sys" }
 itertools = { workspace = true }
 nix = { workspace = true }
@@ -25,3 +25,4 @@ tempfile = { workspace = true }
 
 [dev-dependencies]
 parking_lot = { workspace = true }
+sev_guest_testing = { path = "../../sev/guest/testing" }

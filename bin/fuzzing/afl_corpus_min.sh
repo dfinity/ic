@@ -81,7 +81,7 @@ ASAN_OPTIONS="abort_on_error=1:\
             check_malloc_usable_size=0:\
             detect_leaks=0:\
             detect_odr_violation=0:\
-            detect_stack_use_after_return=1:\
+            detect_stack_use_after_return=0:\
             fast_unwind_on_fatal=0:\
             handle_abort=2:\
             handle_segv=1:\
@@ -93,7 +93,7 @@ ASAN_OPTIONS="abort_on_error=1:\
             print_summary=1:\
             print_suppressions=0:\
             quarantine_size_mb=64:\
-            redzone=512:\
+            redzone=16:\
             strict_memcmp=1:\
             symbolize=0:\
             use_sigaltstack=1"

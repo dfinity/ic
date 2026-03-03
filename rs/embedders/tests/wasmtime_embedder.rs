@@ -12,9 +12,7 @@ use ic_embedders::{
         system_api_complexity,
     },
 };
-use ic_interfaces::execution_environment::{
-    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
-};
+use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
@@ -316,9 +314,11 @@ fn stack_overflow_traps() {
                 panic!("Unexpected error {err:?}");
             };
             assert_eq!(trap_code, TrapCode::StackOverflow);
-            for (_index, name) in backtrace.unwrap().0 {
-                assert_eq!(name, Some("f".to_string()));
-            }
+            // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
+            // for (_index, name) in backtrace.unwrap().0 {
+            //     assert_eq!(name, Some("f".to_string()));
+            // }
+            assert!(backtrace.is_none());
         })
         .unwrap();
 
@@ -595,6 +595,7 @@ fn read_before_write_stats() {
                 )
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(direct_wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -623,6 +624,7 @@ fn read_before_write_stats() {
                 )
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(read_then_write_wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -1652,11 +1654,19 @@ fn wasm_heap_oob_access() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
+    // TODO(DSM): Re-enable backtrace checking when backtraces are enabled again.
+    // assert_eq!(
+    //     err,
+    //     HypervisorError::Trapped {
+    //         trap_code: TrapCode::HeapOutOfBounds,
+    //         backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
+    //     }
+    // );
     assert_eq!(
         err,
         HypervisorError::Trapped {
             trap_code: TrapCode::HeapOutOfBounds,
-            backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
+            backtrace: None
         }
     );
 }
@@ -2129,7 +2139,7 @@ fn wasm64_import_system_api_functions() {
       )
       (import "ic0" "call_on_cleanup"
         (func $ic0_call_on_cleanup (param $fun i64) (param $env i64)))
-      (import "ic0" "call_data_append" 
+      (import "ic0" "call_data_append"
         (func $ic0_call_data_append (param i64) (param i64)))
 
       (import "ic0" "canister_cycle_balance128"
@@ -2703,7 +2713,7 @@ fn wasm64_canister_self_copy() {
 
     // This is the system state used by WasmtimeInstanceBuilder
     let system_state = ic_test_utilities_state::SystemStateBuilder::default().build();
-    let canister_id = system_state.canister_id.get_ref().as_slice();
+    let canister_id = system_state.canister_id().get_ref().to_vec();
 
     // After this call, we expect the instance to have a memory with size of 1 wasm page
     // of which the first OS page was touched and contains relevant data at offset 0
@@ -2729,7 +2739,7 @@ fn wasm64_canister_self_copy() {
     };
 
     let mut expected_heap = vec![0; dirty_heap_size];
-    expected_heap[0..canister_id.len()].copy_from_slice(canister_id);
+    expected_heap[0..canister_id.len()].copy_from_slice(canister_id.as_slice());
 
     assert_eq!(wasm_heap, expected_heap);
 }
@@ -3234,14 +3244,14 @@ fn large_wasm64_stable_read_write_test() {
             (i64.store (i64.const 4294967314) (i64.const 108))
             (i64.store (i64.const 4294967315) (i64.const 108))
             (i64.store (i64.const 4294967316) (i64.const 111))
-           
+
             (drop (call $stable_grow (i64.const 10)))
 
             ;; Write to stable memory from large heap offset.
             (call $ic0_stable64_write (i64.const 0) (i64.const 4294967312) (i64.const 5))
             ;; Read from stable memory at a different heap offset.
             (call $ic0_stable64_read (i64.const 4294967320) (i64.const 0) (i64.const 5))
-           
+
             ;; Return the result of the read operation.
             (call $msg_reply_data_append (i64.const 4294967320) (i64.const 5))
             (call $msg_reply)
@@ -3415,7 +3425,7 @@ fn test_environment_variable_system_api() {
             (call $trap (i32.const 0) (i32.const 0))
           )
         )
-       
+
         ;; Copy first name to memory
         (local.set $index (i32.const 0))
         (local.set $name_size (call $env_var_name_size (local.get $index)))
@@ -3425,7 +3435,7 @@ fn test_environment_variable_system_api() {
             (i32.const 0)          ;; offset
             (local.get $name_size) ;; (name) size
         )
-        
+
         ;; Assert that the first name exists:
         (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
           (then
@@ -3548,5 +3558,266 @@ fn test_environment_variable_system_api_not_enabled() {
     assert_matches!(
         instance.err().unwrap().0,
         HypervisorError::WasmEngineError { .. }
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn run_instance_and_check_stats(
+    wat: &str,
+    use_deterministic_tracker: bool,
+    expected_os_pages: usize,
+    expected_wasm_pages: usize,
+) {
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(use_deterministic_tracker)
+        .with_wat(wat)
+        .with_api_type(ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            PrincipalId::new_user_test_id(0),
+            0.into(),
+        ))
+        .build();
+
+    instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+
+    let stats = instance.get_stats();
+
+    if use_deterministic_tracker {
+        // Deterministic tracker gives exact counts
+        assert_eq!(
+            stats.wasm_accessed_os_pages_count, expected_os_pages,
+            "Expected exactly {} accessed OS pages, got {}",
+            expected_os_pages, stats.wasm_accessed_os_pages_count
+        );
+        assert_eq!(
+            stats.wasm_accessed_wasm_pages_count, expected_wasm_pages,
+            "Expected exactly {} accessed Wasm pages, got {}",
+            expected_wasm_pages, stats.wasm_accessed_wasm_pages_count
+        );
+    } else {
+        // Prefetching tracker gives at least the expected counts
+        assert!(
+            stats.wasm_accessed_os_pages_count >= expected_os_pages,
+            "Expected at least {} accessed OS pages, got {}",
+            expected_os_pages,
+            stats.wasm_accessed_os_pages_count
+        );
+        assert!(
+            stats.wasm_accessed_wasm_pages_count >= expected_wasm_pages,
+            "Expected at least {} accessed Wasm pages, got {}",
+            expected_wasm_pages,
+            stats.wasm_accessed_wasm_pages_count
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn wasm_accessed_os_pages_count_is_correct() {
+    // Access a single OS page within the first Wasm page
+    // With prefetching enabled, accessing one page will prefetch multiple pages.
+    run_instance_and_check_stats(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 2)
+            (func (export "canister_update test")
+                ;; Read from offset 0 (first OS page of first Wasm page)
+                (drop (i32.load (i32.const 0)))
+                (call $msg_reply)
+            )
+        )"#,
+        false,
+        1,
+        1,
+    );
+
+    // Access multiple OS pages within the same Wasm page
+    // With prefetching, we should access at least 3 OS pages, but likely more.
+    run_instance_and_check_stats(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 2)
+            (func (export "canister_update test")
+                ;; Read from offset 0 (OS page 0)
+                (drop (i32.load (i32.const 0)))
+                ;; Read from offset 4096 (OS page 1)
+                (drop (i32.load (i32.const 4096)))
+                ;; Read from offset 8192 (OS page 2)
+                (drop (i32.load (i32.const 8192)))
+                (call $msg_reply)
+            )
+        )"#,
+        false,
+        3,
+        1,
+    );
+
+    // Access OS pages across multiple Wasm pages
+    // With prefetching, we should access at least 4 OS pages across 3 Wasm pages.
+    run_instance_and_check_stats(
+        &format!(
+            r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 3)
+            (func (export "canister_update test")
+                ;; Access first OS page of first Wasm page (offset 0)
+                (drop (i32.load (i32.const 0)))
+                ;; Access first OS page of second Wasm page (offset 65536)
+                (drop (i32.load (i32.const {})))
+                ;; Access second OS page of second Wasm page (offset 65536 + 4096)
+                (drop (i32.load (i32.const {})))
+                ;; Access first OS page of third Wasm page (offset 131072)
+                (drop (i32.load (i32.const {})))
+                (call $msg_reply)
+            )
+        )"#,
+            WASM_PAGE_SIZE_IN_BYTES,
+            WASM_PAGE_SIZE_IN_BYTES + ic_sys::PAGE_SIZE,
+            2 * WASM_PAGE_SIZE_IN_BYTES
+        ),
+        false,
+        4,
+        3,
+    );
+
+    // Verify that both reads and writes are counted
+    // With prefetching, we should access at least 4 OS pages (2 reads + 2 writes).
+    run_instance_and_check_stats(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 2)
+            (func (export "canister_update test")
+                ;; Read from OS page 0
+                (drop (i32.load (i32.const 100)))
+                ;; Write to OS page 1
+                (i32.store (i32.const 5000) (i32.const 42))
+                ;; Read from OS page 2
+                (drop (i32.load (i32.const 9000)))
+                ;; Write to OS page 3
+                (i32.store (i32.const 13000) (i32.const 43))
+                (call $msg_reply)
+            )
+        )"#,
+        false,
+        4,
+        1,
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn wasm_accessed_os_pages_count_deterministic_tracker() {
+    const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+    // Access a single Wasm page - should report exactly 16 OS pages
+    run_instance_and_check_stats(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 2)
+            (func (export "canister_update test")
+                ;; Read from offset 0 (first OS page of first Wasm page)
+                (drop (i32.load (i32.const 0)))
+                (call $msg_reply)
+            )
+        )"#,
+        true,
+        OS_PAGES_PER_WASM_PAGE,
+        1,
+    );
+
+    // Access multiple locations within the same Wasm page
+    // Should still report exactly 16 OS pages
+    run_instance_and_check_stats(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 2)
+            (func (export "canister_update test")
+                ;; Multiple reads within first Wasm page
+                (drop (i32.load (i32.const 0)))
+                (drop (i32.load (i32.const 4096)))
+                (drop (i32.load (i32.const 8192)))
+                (drop (i32.load (i32.const 12288)))
+                (call $msg_reply)
+            )
+        )"#,
+        true,
+        OS_PAGES_PER_WASM_PAGE,
+        1,
+    );
+
+    // Access multiple OS pages with reads and writes in same Wasm page
+    // Accessing beginning and end of Wasm page - still exactly 16 OS pages
+    run_instance_and_check_stats(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 2)
+            (func (export "canister_update test")
+                ;; Read from first OS page (offset 0)
+                (drop (i32.load (i32.const 100)))
+                ;; Write to middle OS page (offset ~32KB)
+                (i32.store (i32.const 32768) (i32.const 42))
+                ;; Read from near end of Wasm page (offset ~60KB)
+                (drop (i32.load (i32.const 61440)))
+                (call $msg_reply)
+            )
+        )"#,
+        true,
+        OS_PAGES_PER_WASM_PAGE,
+        1,
+    );
+
+    // Access multiple Wasm pages (3 Wasm pages = 3 * 16 = 48 OS pages)
+    run_instance_and_check_stats(
+        &format!(
+            r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 3)
+            (func (export "canister_update test")
+                ;; Access first Wasm page (offset 0)
+                (drop (i32.load (i32.const 0)))
+                ;; Access second Wasm page (offset 65536)
+                (drop (i32.load (i32.const {})))
+                ;; Access third Wasm page (offset 131072)
+                (drop (i32.load (i32.const {})))
+                (call $msg_reply)
+            )
+        )"#,
+            WASM_PAGE_SIZE_IN_BYTES,
+            2 * WASM_PAGE_SIZE_IN_BYTES
+        ),
+        true,
+        3 * OS_PAGES_PER_WASM_PAGE,
+        3,
+    );
+
+    // Verify both reads and writes are counted (2 Wasm pages = 32 OS pages)
+    run_instance_and_check_stats(
+        r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (memory (export "memory") 3)
+            (func (export "canister_update test")
+                ;; Read from first Wasm page
+                (drop (i32.load (i32.const 100)))
+                ;; Write to second Wasm page
+                (i32.store (i32.const 65636) (i32.const 42))
+                (call $msg_reply)
+            )
+        )"#,
+        true,
+        2 * OS_PAGES_PER_WASM_PAGE,
+        2,
     );
 }

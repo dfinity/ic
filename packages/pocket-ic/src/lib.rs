@@ -102,11 +102,11 @@ pub mod nonblocking;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
-const MIN_SERVER_VERSION: &str = "11.0.0";
-const MAX_SERVER_VERSION: &str = "12";
+const MIN_SERVER_VERSION: &str = "12.0.0";
+const MAX_SERVER_VERSION: &str = "13";
 
 /// Public to facilitate downloading the PocketIC server.
-pub const LATEST_SERVER_VERSION: &str = "11.0.0";
+pub const LATEST_SERVER_VERSION: &str = "12.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -172,6 +172,7 @@ pub struct PocketIcBuilder {
     dogecoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
     initial_time: Option<InitialTime>,
+    mainnet_nns_subnet_id: Option<bool>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -191,6 +192,7 @@ impl PocketIcBuilder {
             dogecoind_addr: None,
             icp_features: IcpFeatures::default(),
             initial_time: None,
+            mainnet_nns_subnet_id: None,
         }
     }
 
@@ -215,6 +217,7 @@ impl PocketIcBuilder {
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
+            self.mainnet_nns_subnet_id,
         )
     }
 
@@ -233,6 +236,7 @@ impl PocketIcBuilder {
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
+            self.mainnet_nns_subnet_id,
         )
         .await
     }
@@ -343,7 +347,11 @@ impl PocketIcBuilder {
     ///  `-- tmp
     pub fn with_subnet_state(mut self, subnet_kind: SubnetKind, path_to_state: PathBuf) -> Self {
         let mut config = self.config.unwrap_or_default();
-        let subnet_spec = SubnetSpec::default().with_state_dir(path_to_state);
+        #[cfg(not(windows))]
+        let state_dir = path_to_state;
+        #[cfg(windows)]
+        let state_dir = wsl_path(&path_to_state, "subnet state").into();
+        let subnet_spec = SubnetSpec::default().with_state_dir(state_dir);
         match subnet_kind {
             SubnetKind::NNS => config.nns = Some(subnet_spec),
             SubnetKind::SNS => config.sns = Some(subnet_spec),
@@ -479,6 +487,11 @@ impl PocketIcBuilder {
         self.http_gateway_config = Some(http_gateway_config);
         self
     }
+
+    pub fn with_mainnet_nns_subnet_id(mut self) -> Self {
+        self.mainnet_nns_subnet_id = Some(true);
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -598,6 +611,7 @@ impl PocketIc {
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
+        mainnet_nns_subnet_id: Option<bool>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -624,6 +638,7 @@ impl PocketIc {
                 icp_features,
                 initial_time,
                 http_gateway_config,
+                mainnet_nns_subnet_id,
             )
             .await
         });
@@ -1697,6 +1712,7 @@ pub enum ErrorCode {
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
     CanisterSnapshotImmutable = 409,
+    InvalidSubnetAdmin = 410,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
@@ -1732,6 +1748,7 @@ pub enum ErrorCode {
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
+    CanisterInvalidControllerOrSubnetAdmin = 541,
     // 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -1767,6 +1784,7 @@ impl TryFrom<u64> for ErrorCode {
             407 => Ok(ErrorCode::UnknownManagementMessage),
             408 => Ok(ErrorCode::InvalidManagementPayload),
             409 => Ok(ErrorCode::CanisterSnapshotImmutable),
+            410 => Ok(ErrorCode::InvalidSubnetAdmin),
             // 5xx -- `RejectCode::CanisterError`
             502 => Ok(ErrorCode::CanisterTrapped),
             503 => Ok(ErrorCode::CanisterCalledTrap),
@@ -1802,6 +1820,7 @@ impl TryFrom<u64> for ErrorCode {
             538 => Ok(ErrorCode::CanisterAlreadyInstalled),
             539 => Ok(ErrorCode::CanisterWasmMemoryLimitExceeded),
             540 => Ok(ErrorCode::ReservedCyclesLimitIsTooLow),
+            541 => Ok(ErrorCode::CanisterInvalidControllerOrSubnetAdmin),
             // 6xx -- `RejectCode::SysUnknown`
             601 => Ok(ErrorCode::DeadlineExpired),
             602 => Ok(ErrorCode::ResponseDropped),
@@ -1982,8 +2001,16 @@ fn check_pocketic_server_version(version_line: &str) -> Result<(), String> {
 fn get_and_check_pocketic_server_version(server_binary: &PathBuf) -> Result<(), String> {
     let mut cmd = pocket_ic_server_cmd(server_binary);
     cmd.arg("--version");
-    let version = cmd.output().map_err(|e| e.to_string())?.stdout;
-    let version_str = String::from_utf8(version)
+    let output = cmd.output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(format!(
+            "PocketIC server failed to print its version.\nStatus: {}\nStdout: {}\nStderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        ));
+    }
+    let version_str = String::from_utf8(output.stdout)
         .map_err(|e| format!("Failed to parse PocketIC server version: {e}."))?;
     let version_line = version_str.trim_end_matches('\n');
     check_pocketic_server_version(version_line)
@@ -2012,12 +2039,20 @@ pub struct StartServerParams {
     /// Reuse an existing PocketIC server spawned by this process.
     pub reuse: bool,
     /// TTL for the PocketIC server.
-    /// The server stops if no request has been received during its TTL
-    /// and if there are no more pending requests.
+    /// The server stops gracefully if no request has been received for the duration of its TTL
+    /// after the last request finished and if there are no more pending requests.
     /// A default value of TTL is used if no `ttl` is specified here.
-    /// Note: The TTL might not be overriden if the same process sets `reuse` to `true`
+    /// Note: The TTL might not be overriden if the same test process sets `reuse` to `true`
     /// and passes different values of `ttl`.
     pub ttl: Option<Duration>,
+    /// Hard TTL for the PocketIC server.
+    /// The server stops with a hard exit after the duration of its hard TTL
+    /// since its launch.
+    /// If no `hard_ttl` is specified here, then the PocketIC server
+    /// does not use any default hard TTL.
+    /// Note: The hard TTL might not be overriden if the same test process sets `reuse` to `true`
+    /// and passes different values of `hard_ttl`.
+    pub hard_ttl: Option<Duration>,
 }
 
 /// Attempt to start a new PocketIC server.
@@ -2106,6 +2141,9 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
     let mut cmd = pocket_ic_server_cmd(&bin_path);
     if let Some(ttl) = params.ttl {
         cmd.arg("--ttl").arg(ttl.as_secs().to_string());
+    }
+    if let Some(hard_ttl) = params.hard_ttl {
+        cmd.arg("--hard-ttl").arg(hard_ttl.as_secs().to_string());
     }
     cmd.arg("--port-file");
     #[cfg(windows)]
@@ -2257,25 +2295,25 @@ mod test {
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic 11.0.0")
+            check_pocketic_server_version("pocket-ic 12.0.0")
                 .unwrap_err()
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 11 0 0")
+            check_pocketic_server_version("pocket-ic-server 12 0 0")
                 .unwrap_err()
                 .contains("Failed to parse PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 10.0.0")
+            check_pocketic_server_version("pocket-ic-server 11.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
-        check_pocketic_server_version("pocket-ic-server 11.0.0").unwrap();
-        check_pocketic_server_version("pocket-ic-server 11.0.1").unwrap();
-        check_pocketic_server_version("pocket-ic-server 11.1.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 12.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 12.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 12.1.0").unwrap();
         assert!(
-            check_pocketic_server_version("pocket-ic-server 12.0.0")
+            check_pocketic_server_version("pocket-ic-server 13.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );

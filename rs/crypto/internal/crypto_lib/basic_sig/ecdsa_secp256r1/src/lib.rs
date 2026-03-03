@@ -6,5 +6,3 @@
 mod api;
 pub mod types;
 pub use api::*;
-
-pub mod test_utils;

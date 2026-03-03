@@ -35,8 +35,8 @@ use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::prometheus_vm::PrometheusUrls;
+use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*; // to use the universal canister
@@ -53,9 +53,6 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -69,7 +66,6 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-    env.sync_with_prometheus();
 }
 
 const MSG: &[u8] = b"this beautiful prose should be persisted for future generations";
@@ -202,4 +198,53 @@ pub fn test(env: TestEnv) {
             .expect("Node not healthy");
         })
     }
+
+    info!(
+        log,
+        "Check if the PrometheusVm is correctly configured to scrape the IC..."
+    );
+    block_on(async move {
+        let p8s_urls = PrometheusUrls::read_attribute(&env);
+        let p8s_url = p8s_urls.prometheus_url;
+        let node_id = nodes[0].node_id.to_string();
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Failed to build HTTP client");
+
+        let response = client
+            .get(format!("{p8s_url}/api/v1/targets"))
+            .send()
+            .await
+            .expect("Failed to query Prometheus targets");
+
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .expect("Failed to parse Prometheus response");
+
+        let is_healthy = json["data"]["activeTargets"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .any(|target| {
+                target["discoveredLabels"]["ic_node"]
+                    .as_str()
+                    .map(|id| id == node_id)
+                    .unwrap_or(false)
+                    && target["health"].as_str() == Some("up")
+            });
+
+        assert!(
+            is_healthy,
+            "Prometheus is not scraping target with ic_node={} or target is not healthy",
+            node_id
+        );
+
+        info!(
+            log,
+            "Prometheus is successfully scraping node {} with healthy status", node_id
+        );
+    });
 }

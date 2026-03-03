@@ -16,7 +16,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CheckpointLoadingMetrics, ReplicatedState, SystemMetadata,
+    CheckpointLoadingMetrics, ReplicatedState, SubnetSchedule, SystemMetadata,
     canister_snapshots::CanisterSnapshot, page_map::TestPageAllocatorFileDescriptorImpl,
     testing::ReplicatedStateTesting,
 };
@@ -141,7 +141,7 @@ fn read_write_roundtrip() {
         let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
         let mut thread_pool = Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
         // Sanity check: ensure that we have a single checkpoint.
-        assert_eq!(1, layout.checkpoint_heights().unwrap().len());
+        assert_eq!(1, layout.verified_checkpoint_heights().unwrap().len());
 
         // Compute the manifest of the original checkpoint.
         let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
@@ -169,7 +169,7 @@ fn read_write_roundtrip() {
         )
         .expect("failed to write checkpoint");
         // Sanity check: ensure that we now have exactly two checkpoints.
-        assert_eq!(2, layout.checkpoint_heights().unwrap().len());
+        assert_eq!(2, layout.verified_checkpoint_heights().unwrap().len());
 
         // Compute the manifest of the newly written checkpoint.
         let (manifest_after, height_after) = compute_manifest(&layout, manifest_metrics, &log);
@@ -428,7 +428,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     .unwrap();
 
     // Sanity checks.
-    assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
+    assert_eq!(layout.verified_checkpoint_heights().unwrap(), vec![HEIGHT]);
     let checkpoint = layout.checkpoint_verified(HEIGHT).unwrap();
     assert_eq!(
         checkpoint.canister_ids().unwrap(),
@@ -511,7 +511,11 @@ fn compute_manifest(
     manifest_metrics: &ManifestMetrics,
     log: &ReplicaLogger,
 ) -> (Manifest, Height) {
-    let last_checkpoint_height = state_layout.checkpoint_heights().unwrap().pop().unwrap();
+    let last_checkpoint_height = state_layout
+        .verified_checkpoint_heights()
+        .unwrap()
+        .pop()
+        .unwrap();
     let last_checkpoint_layout = state_layout
         .checkpoint_verified(last_checkpoint_height)
         .unwrap();
@@ -592,6 +596,7 @@ fn deserialize_system_metadata(root: &Path, height: Height, log: &ReplicaLogger)
         .into();
     (
         system_metadata.deserialize().unwrap(),
+        SubnetSchedule::default(),
         &CheckpointMetrics::new(&MetricsRegistry::new(), log.clone())
             as &dyn CheckpointLoadingMetrics,
     )

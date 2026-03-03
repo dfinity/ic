@@ -532,7 +532,7 @@ mod privately_verify {
                     setup.dealer_index,
                     0
                 ),
-                Err(CanisterThresholdError::CurveMismatch)
+                Err(CanisterThresholdError::MalformedCiphertext)
             );
         }
     }

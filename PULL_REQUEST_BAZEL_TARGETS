@@ -89,10 +89,24 @@ rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
 
 rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_colocate
 
-rs/bitcoin/* //rs/tests/ckbtc:btc_adapter_basics_test
-             //rs/tests/ckbtc:doge_adapter_basics_test
-             //rs/tests/execution:btc_get_balance_test_colocate
+rs/bitcoin/* //rs/tests/cross_chain:btc_adapter_basics_test
+             //rs/tests/cross_chain:doge_adapter_basics_test
+             //rs/tests/cross_chain:btc_get_balance_test_colocate
+
+rs/dogecoin/ckdoge/* //rs/tests/ckbtc:ckdoge_minter_basics_test
+
+rs/bitcoin/ckbtc/*   //rs/tests/ckbtc:ckdoge_minter_basics_test
 
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test
 
 rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns
+
+rs/nns/governance/* //rs/nns/governance:governance_integration_test
+                    //rs/nns/governance:merge_neurons_test
+
+rs/sns/* //rs/sns/integration_tests:neuron_test
+
+rs/ledger_suite/icp/index/* //rs/ledger_suite/icp/index:retrieve_blocks_from_ledger_interval_test
+
+rs/rosetta-api/icrc1/* //rs/rosetta-api/icrc1:ic-icrc-rosetta-unit-tests
+rs/rosetta-api/icp/*   //rs/rosetta-api/icp:icp_rosetta_system_tests

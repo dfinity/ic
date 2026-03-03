@@ -104,7 +104,7 @@ execute_command() {
             if [ -n "$gateway" ]; then
                 echo "Gateway: $gateway"
                 echo ""
-                /bin/ping6 -c 4 "$gateway" 2>&1
+                /bin/ping -6 -c 4 "$gateway" 2>&1
             else
                 echo "No IPv6 gateway found in routing table"
                 echo "IPv6 routes:"

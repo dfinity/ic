@@ -1,21 +1,23 @@
 use crate::canister_state::system_state::log_memory_store::{
     header::{Header, MAGIC},
     log_record::LogRecord,
-    memory::{MemoryAddress, MemorySize},
+    memory::{MemoryAddress, MemoryPosition, MemorySize},
     struct_io::StructIO,
 };
-use crate::page_map::{PAGE_SIZE, PageMap};
+use crate::page_map::PageMap;
 use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
+use more_asserts::assert_le;
 
 // PageMap file layout.
+pub(crate) const VIRTUAL_PAGE_SIZE: usize = 4_096;
 // Header layout constants.
 pub(crate) const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
-pub(crate) const HEADER_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
+pub(crate) const HEADER_SIZE: MemorySize = MemorySize::new(VIRTUAL_PAGE_SIZE as u64);
 // Index table layout constants.
 pub(crate) const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
 pub(crate) const INDEX_TABLE_PAGES: usize = 1;
 pub(crate) const INDEX_TABLE_SIZE: MemorySize =
-    MemorySize::new((INDEX_TABLE_PAGES * PAGE_SIZE) as u64);
+    MemorySize::new((INDEX_TABLE_PAGES * VIRTUAL_PAGE_SIZE) as u64);
 pub(crate) const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
 pub(crate) const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE.get();
 // Data region layout constants.
@@ -37,8 +39,13 @@ const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_M
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 
-pub(crate) const DATA_CAPACITY_MIN: usize = PAGE_SIZE;
-const _: () = assert!(PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
+/// The minimum non-zero size of a ring-buffer.
+///
+/// Log memory limit can be zero to disable logging,
+/// but when it is non-zero it must be at least this value
+/// to properly account for the size of at least one OS page.
+pub(crate) const DATA_CAPACITY_MIN: usize = VIRTUAL_PAGE_SIZE;
+const _: () = assert!(VIRTUAL_PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
 
 pub(super) struct RingBuffer {
     io: StructIO,
@@ -47,21 +54,15 @@ pub(super) struct RingBuffer {
 impl RingBuffer {
     /// Creates a new ring buffer with the given data capacity.
     pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
-        assert!(
-            data_capacity <= DATA_CAPACITY_MAX,
+        assert_le!(
+            data_capacity,
+            DATA_CAPACITY_MAX,
             "data capacity exceeds maximum"
         );
         let mut io = StructIO::new(page_map);
         io.save_header(&Header::new(data_capacity));
 
         Self { io }
-    }
-
-    /// Loads a raw ring buffer from given `page_map` without validating its contents.
-    pub fn load_raw(page_map: PageMap) -> Self {
-        Self {
-            io: StructIO::new(page_map),
-        }
     }
 
     /// Returns an existing ring buffer if present.
@@ -73,17 +74,14 @@ impl RingBuffer {
         Some(Self { io })
     }
 
+    /// Returns the page map of the ring buffer.
     pub fn to_page_map(&self) -> PageMap {
         self.io.to_page_map()
     }
 
-    /// Returns the total allocated bytes for the ring buffer
-    /// including header, index table and data region.
-    pub fn total_allocated_bytes(&self) -> usize {
-        let header = self.io.load_header();
-        HEADER_SIZE.get() as usize
-            + header.index_table_pages as usize * PAGE_SIZE
-            + header.data_capacity.get() as usize
+    /// Returns the header of the ring buffer.
+    pub fn get_header(&self) -> Header {
+        self.io.load_header()
     }
 
     /// Returns the data capacity of the ring buffer.
@@ -96,20 +94,25 @@ impl RingBuffer {
         self.io.load_header().data_size.get() as usize
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.bytes_used() == 0
+    /// Clears the ring buffer.
+    pub fn clear(&mut self) {
+        let mut h = self.io.load_header();
+        h.clear();
+        self.io.save_header(&h);
     }
 
-    pub fn next_idx(&self) -> u64 {
-        self.io.load_header().next_idx
-    }
-
+    /// Convenience method for adding a single log record in tests.
     #[cfg(test)]
     fn append(&mut self, record: &CanisterLogRecord) {
         self.append_log(vec![record.clone()]);
     }
 
     pub fn append_log(&mut self, records: Vec<CanisterLogRecord>) {
+        self.append_log_iter(records);
+    }
+
+    /// Appends records from an iterator.
+    pub fn append_log_iter(&mut self, records: impl IntoIterator<Item = CanisterLogRecord>) {
         let mut index_table = self.io.load_index_table();
         for r in records {
             let record = LogRecord::from(r);
@@ -263,28 +266,48 @@ impl RingBuffer {
         }
     }
 
-    pub fn all_records(&self) -> Vec<CanisterLogRecord> {
+    /// Returns an iterator over all records in the ring buffer.
+    pub fn iter(&self) -> RingBufferIterator<'_> {
         let header = self.io.load_header();
-        let mut records: Vec<CanisterLogRecord> = Vec::new();
-        let mut pos = header.data_head;
+        RingBufferIterator {
+            io: &self.io,
+            pos: header.data_head,
+            remaining_size: header.data_size.get() as usize,
+            header,
+        }
+    }
+}
 
-        while let Some(record) = self.io.load_record(pos) {
-            let distance = MemorySize::new(record.bytes_len() as u64);
-            records.push(CanisterLogRecord::from(record));
+pub struct RingBufferIterator<'a> {
+    io: &'a StructIO,
+    header: Header,
+    pos: MemoryPosition,
+    remaining_size: usize,
+}
 
-            let new_pos = header.advance_position(pos, distance);
-            // corrupted or zero-length record — avoid infinite loop
-            if new_pos == pos {
-                break;
-            }
-            pos = new_pos;
-            // stop when we've reached the tail position — handles full-buffer case
-            if pos == header.data_tail {
-                break;
-            }
+impl<'a> Iterator for RingBufferIterator<'a> {
+    type Item = CanisterLogRecord;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining_size == 0 {
+            return None;
         }
 
-        records
+        let record = self.io.load_record(self.pos)?;
+        let len = record.bytes_len();
+
+        // Safety check to prevent infinite loops or panics on corruption
+        if len == 0 || len > self.remaining_size {
+            self.remaining_size = 0;
+            return None;
+        }
+
+        self.remaining_size -= len;
+        self.pos = self
+            .header
+            .advance_position(self.pos, MemorySize::new(len as u64));
+
+        Some(CanisterLogRecord::from(record))
     }
 }
 
@@ -294,6 +317,7 @@ mod tests {
     use crate::canister_state::system_state::log_memory_store::memory::MemorySize;
     use crate::page_map::PageMap;
     use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsRange};
+    use more_asserts::assert_gt;
 
     const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(2_000_000); // 2 MB
 
@@ -319,7 +343,6 @@ mod tests {
 
         assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
         assert_eq!(rb.bytes_used(), 0);
-        assert_eq!(rb.next_idx(), 0);
     }
 
     #[test]
@@ -460,5 +483,75 @@ mod tests {
             res,
             vec![log_record(1, 2000, "beta"), log_record(2, 3000, "gamma")]
         );
+    }
+
+    #[test]
+    fn test_clear() {
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = TEST_DATA_CAPACITY;
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+
+        rb.append(&log_record(0, 100, "12345"));
+        assert_gt!(rb.bytes_used(), 0);
+
+        rb.clear();
+
+        assert_eq!(rb.bytes_used(), 0);
+        assert_eq!(rb.byte_capacity(), TEST_DATA_CAPACITY.get() as usize);
+        assert!(rb.pop_front().is_none());
+        assert!(rb.records(None).is_empty());
+    }
+
+    #[test]
+    fn test_iter() {
+        let mut rb = RingBuffer::new(PageMap::new_for_testing(), TEST_DATA_CAPACITY);
+
+        let r0 = log_record(0, 100, "a");
+        let r1 = log_record(1, 200, "bb");
+        let r2 = log_record(2, 300, "ccc");
+
+        rb.append(&r0);
+        rb.append(&r1);
+        rb.append(&r2);
+
+        let records: Vec<CanisterLogRecord> = rb.iter().collect();
+
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0], r0);
+        assert_eq!(records[1], r1);
+        assert_eq!(records[2], r2);
+    }
+
+    #[test]
+    fn test_iter_empty() {
+        let rb = RingBuffer::new(PageMap::new_for_testing(), TEST_DATA_CAPACITY);
+
+        let records: Vec<CanisterLogRecord> = rb.iter().collect();
+
+        assert!(records.is_empty());
+    }
+
+    #[test]
+    fn test_load_checked() {
+        let mut page_map = PageMap::new_for_testing();
+        let data_capacity = TEST_DATA_CAPACITY;
+
+        // Create a valid ring buffer and persist it.
+        {
+            let mut rb = RingBuffer::new(page_map, data_capacity);
+            rb.append(&log_record(0, 100, "test"));
+            page_map = rb.to_page_map();
+            // Make sure rb is dropped.
+        }
+
+        // Load it back successfully.
+        let rb =
+            RingBuffer::load_checked(page_map).expect("Should load valid existing ring buffer");
+        assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
+        assert_eq!(rb.records(None).len(), 1);
+
+        // Try to load from a fresh (empty/invalid) page map.
+        let empty_page_map = PageMap::new_for_testing();
+        assert!(RingBuffer::load_checked(empty_page_map).is_none());
     }
 }

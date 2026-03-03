@@ -11,7 +11,6 @@ use ic_recovery::{
 };
 use ic_system_test_driver::{
     driver::{
-        constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         test_env::{SshKeyGen, TestEnv},
         test_env_api::{
@@ -28,54 +27,37 @@ use url::Url;
 
 pub const READONLY_USERNAME: &str = "readonly";
 pub const BACKUP_USERNAME: &str = "backup";
+pub const RECOVERY_USERNAME: &str = "recovery";
 
-pub struct AdminAndUserKeys {
-    pub ssh_admin_priv_key_path: PathBuf,
-    pub admin_auth: AuthMean,
-    pub ssh_user_priv_key_path: PathBuf,
-    pub user_auth: AuthMean,
-    pub ssh_user_pub_key_path: PathBuf,
-    pub ssh_user_pub_key: String,
+pub struct SshKeys {
+    pub ssh_priv_key_path: PathBuf,
+    pub auth: AuthMean,
+    pub ssh_pub_key: String,
 }
 
-pub fn get_admin_keys_and_generate_readonly_keys(env: &TestEnv) -> AdminAndUserKeys {
-    get_admin_keys_and_generate_keys_for_user(env, READONLY_USERNAME)
-}
+pub fn get_ssh_keys_for_user(env: &TestEnv, username: &str) -> SshKeys {
+    // Generate a new keypair for the given username if it doesn't exist
+    env.ssh_keygen_for_user(username)
+        .unwrap_or_else(|_| panic!("ssh-keygen failed for {username} key"));
 
-pub fn get_admin_keys_and_generate_backup_keys(env: &TestEnv) -> AdminAndUserKeys {
-    get_admin_keys_and_generate_keys_for_user(env, BACKUP_USERNAME)
-}
-
-fn get_admin_keys_and_generate_keys_for_user(env: &TestEnv, username: &str) -> AdminAndUserKeys {
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
-    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
-    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
-        .expect("Failed to read admin SSH private key");
-    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
-
-    // Generate a new keypair for the given username
-    env.ssh_keygen_for_user(username)
-        .unwrap_or_else(|_| panic!("ssh-keygen failed for {username} key"));
-    let ssh_user_priv_key_path = ssh_authorized_priv_keys_dir.join(username);
-    let ssh_user_priv_key = std::fs::read_to_string(&ssh_user_priv_key_path)
+    let ssh_priv_key_path = ssh_authorized_priv_keys_dir.join(username);
+    let ssh_priv_key = std::fs::read_to_string(&ssh_priv_key_path)
         .unwrap_or_else(|_| panic!("Failed to read {username} SSH private key"));
-    let user_auth = AuthMean::PrivateKey(ssh_user_priv_key);
+    let auth = AuthMean::PrivateKey(ssh_priv_key);
 
-    let ssh_user_pub_key_path = ssh_authorized_pub_keys_dir.join(username);
-    let ssh_user_pub_key = std::fs::read_to_string(&ssh_user_pub_key_path)
+    let ssh_pub_key_path = ssh_authorized_pub_keys_dir.join(username);
+    let ssh_pub_key = std::fs::read_to_string(&ssh_pub_key_path)
         .unwrap_or_else(|_| panic!("Failed to read {username} SSH public key"))
         .trim()
         .to_string();
 
-    AdminAndUserKeys {
-        ssh_admin_priv_key_path,
-        admin_auth,
-        ssh_user_priv_key_path,
-        user_auth,
-        ssh_user_pub_key_path,
-        ssh_user_pub_key,
+    SshKeys {
+        ssh_priv_key_path,
+        auth,
+        ssh_pub_key,
     }
 }
 
@@ -257,6 +239,9 @@ pub mod local {
 
     // Remote path where SSH keys will be uploaded
     const ADMIN_HOME: &str = "/var/lib/admin";
+    // Remote path where guest launch measurements will be uploaded
+    const GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH: &str =
+        "/var/lib/ic/data/recovery/guest_launch_measurements.json";
     // Remote path where recovery output will be stored in case of a NNS recovery on same nodes
     pub const NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH: &str = "/var/lib/ic/data/recovery/output";
 
@@ -443,10 +428,13 @@ pub mod local {
             upgrade_version,
             upgrade_image_url,
             upgrade_image_hash,
+            upgrade_image_launch_measurements_path,
             replacement_nodes,
             replay_until_height,
             readonly_pub_key,
             readonly_key_file,
+            write_node_id_and_pub_key,
+            recovery_key_file,
             download_pool_node,
             download_state_method: _, // ignored to choose "local" in local recoveries, see below
             keep_downloaded_state,
@@ -462,6 +450,22 @@ pub mod local {
         let upgrade_version_cli = opt_cli_arg!(upgrade_version);
         let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
         let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
+        let upgrade_image_launch_measurements_path =
+            if let Some(measurements_path) = &upgrade_image_launch_measurements_path {
+                scp_send_to(
+                    logger.clone(),
+                    session,
+                    measurements_path.as_ref(),
+                    &PathBuf::from(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH),
+                    0o400,
+                );
+
+                Some(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH)
+            } else {
+                None
+            };
+        let upgrade_image_launch_measurements_path_cli =
+            opt_cli_arg!(upgrade_image_launch_measurements_path);
         let replacement_nodes_cli = opt_vec_cli_arg!(replacement_nodes);
         let replay_until_height_cli = opt_cli_arg!(replay_until_height);
         let readonly_pub_key_cli = opt_cli_arg!(readonly_pub_key);
@@ -471,6 +475,18 @@ pub mod local {
             &node_ip,
             READONLY_USERNAME,
             readonly_key_file.as_deref(),
+            logger,
+        );
+        let write_node_id_and_pub_key = write_node_id_and_pub_key
+            .as_ref()
+            .map(|(node_id, pub_key)| format!("{}:{}", node_id, pub_key));
+        let write_node_id_and_pub_key_cli = opt_cli_arg!(write_node_id_and_pub_key);
+        let recovery_key_file_cli = upload_ssh_key_and_return_cli_arg(
+            session,
+            &node_id,
+            &node_ip,
+            RECOVERY_USERNAME,
+            recovery_key_file.as_deref(),
             logger,
         );
         let download_pool_node_cli = opt_cli_arg!(download_pool_node);
@@ -491,10 +507,13 @@ pub mod local {
             {upgrade_version_cli} \
             {upgrade_image_url_cli} \
             {upgrade_image_hash_cli} \
+            {upgrade_image_launch_measurements_path_cli} \
             {replacement_nodes_cli} \
             {replay_until_height_cli} \
             {readonly_pub_key_cli} \
             {readonly_key_file_cli} \
+            {write_node_id_and_pub_key_cli} \
+            {recovery_key_file_cli} \
             {download_pool_node_cli} \
             {download_state_method_cli} \
             {keep_downloaded_state_cli} \
@@ -533,6 +552,7 @@ pub mod local {
             upgrade_version,
             upgrade_image_url,
             upgrade_image_hash,
+            upgrade_image_launch_measurements_path,
             add_and_bless_upgrade_version,
             replay_until_height,
             download_pool_node,
@@ -550,6 +570,22 @@ pub mod local {
         let upgrade_version_cli = opt_cli_arg!(upgrade_version);
         let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
         let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
+        let upgrade_image_launch_measurements_path =
+            if let Some(measurements_path) = &upgrade_image_launch_measurements_path {
+                scp_send_to(
+                    logger.clone(),
+                    session,
+                    measurements_path.as_ref(),
+                    &PathBuf::from(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH),
+                    0o400,
+                );
+
+                Some(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH)
+            } else {
+                None
+            };
+        let upgrade_image_launch_measurements_path_cli =
+            opt_cli_arg!(upgrade_image_launch_measurements_path);
         let add_and_bless_upgrade_version_cli = opt_cli_arg!(add_and_bless_upgrade_version);
         let replay_until_height_cli = opt_cli_arg!(replay_until_height);
         let download_pool_node_cli = opt_cli_arg!(download_pool_node);
@@ -577,6 +613,7 @@ pub mod local {
             {upgrade_version_cli} \
             {upgrade_image_url_cli} \
             {upgrade_image_hash_cli} \
+            {upgrade_image_launch_measurements_path_cli} \
             {add_and_bless_upgrade_version_cli} \
             {replay_until_height_cli} \
             {download_pool_node_cli} \

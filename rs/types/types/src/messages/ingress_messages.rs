@@ -429,10 +429,7 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
             try_from_option_field(item.effective_canister_id, "Ingress::effective_canister_id")
                 .ok();
         Ok(Self {
-            source: crate::user_id_try_from_protobuf(try_from_option_field(
-                item.source,
-                "Ingress::source",
-            )?)?,
+            source: crate::user_id_try_from_option(item.source, "Ingress::source")?,
             receiver: try_from_option_field(item.receiver, "Ingress::receiver")?,
             effective_canister_id,
             method_name: item.method_name,
@@ -487,9 +484,9 @@ pub fn extract_effective_canister_id(
         return Ok(None);
     }
     match Method::from_str(ingress.method_name()) {
-        Ok(Method::ProvisionalCreateCanisterWithCycles) | Ok(Method::ProvisionalTopUpCanister) => {
-            Ok(None)
-        }
+        Ok(Method::CreateCanister)
+        | Ok(Method::ProvisionalCreateCanisterWithCycles)
+        | Ok(Method::ProvisionalTopUpCanister) => Ok(None),
         Ok(Method::StartCanister)
         | Ok(Method::CanisterStatus)
         | Ok(Method::DeleteCanister)
@@ -579,10 +576,10 @@ pub fn extract_effective_canister_id(
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
 
-        Ok(Method::CreateCanister)
-        | Ok(Method::SetupInitialDKG)
+        Ok(Method::SetupInitialDKG)
         | Ok(Method::DepositCycles)
         | Ok(Method::HttpRequest)
+        | Ok(Method::FlexibleHttpRequest)
         | Ok(Method::RawRand)
         | Ok(Method::ECDSAPublicKey)
         | Ok(Method::SignWithECDSA)

@@ -1,9 +1,10 @@
 use crate::address::BitcoinAddress;
-use crate::dashboard::build_dashboard;
+use crate::dashboard::{Dashboard, DashboardBuilder};
 use crate::fees::FeeEstimator;
 use crate::metrics::encode_metrics;
 use crate::state::read_state;
 use crate::state::utxos::UtxoSet;
+use crate::tx::FeeRate;
 use crate::updates::update_balance::UpdateBalanceArgs;
 use crate::{BuildTxError, build_unsigned_transaction_from_inputs, utxos_selection};
 use crate::{CKBTC_LEDGER_MEMO_SIZE, memo};
@@ -45,7 +46,7 @@ pub fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
 pub fn estimate_withdrawal_fee<F: FeeEstimator>(
     available_utxos: &mut UtxoSet,
     withdrawal_amount: u64,
-    median_fee_millisatoshi_per_vbyte: u64,
+    median_fee_millisatoshi_per_vbyte: FeeRate,
     minter_address: BitcoinAddress,
     recipient_address: BitcoinAddress,
     max_num_inputs_in_transaction: usize,
@@ -74,7 +75,10 @@ pub fn estimate_withdrawal_fee<F: FeeEstimator>(
     })
 }
 
-pub fn http_request(req: HttpRequest) -> HttpResponse {
+pub fn http_request<Builder: DashboardBuilder>(
+    req: HttpRequest,
+    dashboard: &Dashboard<Builder>,
+) -> HttpResponse {
     match req.path() {
         "/metrics" => {
             let mut writer = ic_metrics_encoder::MetricsEncoder::new(
@@ -108,7 +112,7 @@ pub fn http_request(req: HttpRequest) -> HttpResponse {
                 },
                 None => 0,
             };
-            let dashboard: Vec<u8> = build_dashboard(account_to_utxos_start);
+            let dashboard: Vec<u8> = dashboard.build(account_to_utxos_start);
             HttpResponseBuilder::ok()
                 .header("Content-Type", "text/html; charset=utf-8")
                 .with_body_and_content_length(dashboard)

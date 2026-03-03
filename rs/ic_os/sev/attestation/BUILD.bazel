@@ -1,0 +1,52 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:prost.bzl", "generated_files_check")
+
+package(default_visibility = [
+    "//rs:ic-os-pkg",
+    "//rs/orchestrator:__pkg__",
+    "//rs/registry/canister:__pkg__",
+    "//rs/registry/canister/api:__pkg__",
+])
+
+rust_library(
+    name = "attestation",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "attestation",
+    deps = [
+        "//rs/interfaces/registry",
+        "//rs/protobuf",
+        "//rs/registry/helpers",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:candid",
+        "@crate_index//:der",
+        "@crate_index//:hex",
+        "@crate_index//:itertools",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:sev",
+        "@crate_index//:sha2",
+        "@crate_index//:thiserror",
+    ],
+)
+
+rust_test(
+    name = "attestation_test",
+    crate = ":attestation",
+    deps = [
+        "//rs/ic_os/sev/attestation/testing",
+    ],
+)
+
+generated_files_check(
+    name = "check_generated_files",
+    srcs = ["tests/check_generated_files.rs"],
+    data = glob(["src/proto_gen/**"]) + glob(["proto/**"]),
+    manifest_dir = "rs/ic_os/sev/attestation",
+    deps = [
+        "//rs/utils/rustfmt",
+        "@crate_index//:prost-build",
+        "@crate_index//:tempfile",
+    ],
+)

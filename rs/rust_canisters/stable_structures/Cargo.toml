@@ -10,9 +10,7 @@ documentation.workspace = true
 candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-stable-structures = { workspace = true }
-serde = { workspace = true }
 
 [[bin]]
 name = "stable_structures"
 path = "src/main.rs"
-

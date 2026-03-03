@@ -32,9 +32,9 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:983a02b1360e0215d519e749c4393c9c0f31589a461e992bf4b693cc30363320
+      image: ghcr.io/dfinity/ic-build@sha256:59e782e6278dd127f8c19344403cc61f73dcb6f446247b22e1c8214cff5ba26a
       options: >-
-         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 180
     steps:
       - &checkout
@@ -42,6 +42,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
+      - uses: ./.github/actions/netrc
       - name: Run Bazel System Tests
         uses: ./.github/actions/bazel
         with:
@@ -60,41 +61,6 @@ jobs:
     secrets: inherit
     with:
       commit-sha: ${{ github.sha }}
-
-  dependency-scan-release-cut:
-    name: Dependency Scan for Release
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 180
-    env:
-      SHELL_WRAPPER: "/usr/bin/time"
-      CI_PROJECT_PATH: ${{ github.repository }}
-      CI_PIPELINE_ID: ${{ github.run_id }}
-      CI_COMMIT_SHA: ${{ github.sha }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
-      REPO_NAME: ${{ github.repository }}
-    steps:
-      - *checkout
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Setup python deps
-        id: setup-python-deps
-        shell: bash
-        run: |
-          # Ignore externally-managed-environment pip error, install packages system-wide.
-          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
-      - name: Dependency Scan for Release
-        id: dependency-scan-release-cut
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          cd ci/src/dependencies/
-          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
 
   setup-guest-os-qualification:
     name: Setting up guest os qualification pipeline
@@ -131,6 +97,7 @@ jobs:
     timeout-minutes: 180
     steps:
       - *checkout
+      - uses: ./.github/actions/netrc
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel
         with:

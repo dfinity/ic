@@ -12,6 +12,7 @@ use ic_ckdoge_minter::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
+    ckdoge_dashboard,
     event::CkDogeMinterEvent,
     lifecycle::MinterArg,
     updates,
@@ -204,6 +205,7 @@ fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
 fn get_minter_info() -> MinterInfo {
     ic_ckbtc_minter::state::read_state(|s| MinterInfo {
         min_confirmations: s.min_confirmations,
+        deposit_doge_min_amount: s.effective_deposit_min_btc_amount(),
         retrieve_doge_min_amount: s.fee_based_retrieve_btc_min_amount,
     })
 }
@@ -233,8 +235,10 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
-
-    ic_ckbtc_minter::queries::http_request(req)
+    let network = ic_ckbtc_minter::state::read_state(|s| s.btc_network)
+        .try_into()
+        .unwrap_or_else(|err| ic_cdk::trap(err));
+    ic_ckbtc_minter::queries::http_request(req, &ckdoge_dashboard(network))
 }
 
 fn main() {}

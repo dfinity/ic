@@ -2,6 +2,8 @@ use candid::{CandidType, Deserialize, Int, Nat};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 
+pub use crate::icrc::metadata_key::{MetadataKey, MetadataKeyError};
+
 /// Variant type for the `icrc1_metadata` endpoint values. The corresponding metadata keys are
 /// arbitrary Unicode strings and must follow the pattern `<namespace>:<key>`, where `<namespace>`
 /// is a string not containing colons. The namespace `icrc1` is reserved for keys defined in the
@@ -17,9 +19,20 @@ pub enum MetadataValue {
 }
 
 impl MetadataValue {
-    /// Create a `(String, MetadataValue)` tuple for use in metadata maps.
-    pub fn entry(key: impl ToString, val: impl Into<MetadataValue>) -> (String, Self) {
-        (key.to_string(), val.into())
+    /// Create a `(MetadataKey, MetadataValue)` tuple for use in metadata maps.
+    ///
+    /// The key must be a valid metadata key in the format `<namespace>:<key>`.
+    /// This is typically used with the predefined constants like `MetadataKey::ICRC1_NAME`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the key is not a valid metadata key format.
+    pub fn entry(
+        key: &str,
+        val: impl Into<MetadataValue>,
+    ) -> Result<(MetadataKey, Self), MetadataKeyError> {
+        let metadata_key = MetadataKey::parse(key)?;
+        Ok((metadata_key, val.into()))
     }
 }
 
@@ -74,5 +87,23 @@ impl From<Vec<u8>> for MetadataValue {
 impl<'a> From<&'a [u8]> for MetadataValue {
     fn from(bytes: &'a [u8]) -> MetadataValue {
         MetadataValue::Blob(ByteBuf::from(bytes.to_vec()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metadata_value_entry() {
+        let entry = MetadataValue::entry(MetadataKey::ICRC1_NAME, "My Token").unwrap();
+        assert_eq!(entry.0.as_str(), "icrc1:name");
+        assert_eq!(entry.1, MetadataValue::Text("My Token".to_string()));
+    }
+
+    #[test]
+    fn test_metadata_value_entry_invalid_key() {
+        let result = MetadataValue::entry("invalid_no_colon", "value");
+        assert!(result.is_err());
     }
 }

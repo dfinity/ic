@@ -9,11 +9,9 @@ version.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
-ic-btc-interface = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-crypto-prng = { path = "../crypto/prng" }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
@@ -26,11 +24,8 @@ ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-nns-constants = { path = "../nns/constants" }
 ic-query-stats = { path = "../query_stats" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
-ic-registry-routing-table = { path = "../registry/routing_table" }
-ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
@@ -43,7 +38,7 @@ ic-vetkeys = { workspace = true }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
-more-asserts = "0.3.1"
+more-asserts = { workspace = true }
 num-rational = "0.2.2"
 num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
@@ -51,12 +46,10 @@ prometheus = { workspace = true }
 rand = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
-threadpool = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
@@ -68,8 +61,13 @@ canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 execution-environment-bench = { path = "benches/lib" }
 flate2 = { workspace = true }
+ic-btc-interface = { workspace = true }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
+ic-nns-constants = { path = "../nns/constants" }
+ic-registry-routing-table = { path = "../registry/routing_table" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
@@ -87,6 +85,7 @@ maplit = "1.0.2"
 proptest = { workspace = true }
 regex-lite = { workspace = true }
 rstest = { workspace = true }
+serde_bytes = { workspace = true }
 test-strategy = "0.3.1"
 wat = { workspace = true }
 wirm = { workspace = true }

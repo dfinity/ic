@@ -59,13 +59,12 @@ use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     group::SystemTestGroup,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use nns_dapp::{nns_dapp_customizations, set_authorized_subnets};
 use slog::{Logger, info};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 
 const NUM_IC_GATEWAYS: u64 = 1;
@@ -82,7 +81,9 @@ fn main() -> Result<()> {
         .ok()
         .and_then(|s| s.parse::<u64>().ok());
 
-    let config = Config::new(perf_hosts, num_hosts);
+    let hostuser = std::env::var("HOSTUSER").expect("HOSTUSER environment variable must be set");
+
+    let config = Config::new(perf_hosts, num_hosts, hostuser);
 
     SystemTestGroup::new()
         .with_setup(config.build())
@@ -91,7 +92,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn switch_to_ssd(log: &Logger, hostname: &str) {
+fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
     let script = r##"
         #!/bin/bash
         set -e
@@ -109,9 +110,12 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
         fi
         VMNAME=$(echo "$virsh_list" | awk '{ if (NR==3) print $2 }')
 
+        # Give the VM a moment to start, in case this script runs too quickly after it turns on.
+        sleep 5
+
         # Shutdown the VM
         echo "Shutting down $VMNAME"
-        for i in {1..300}; do
+        for i in $(seq 1 300); do
                 if [ $(sudo virsh list | grep $VMNAME | wc -l) -eq 0 ]; then
                         break
                 fi
@@ -122,7 +126,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 
         # Get the file name and dd it to disk device
         CONFIG=$(mktemp)
-        trap "rm -f $CONFIG" INT TERM EXIT
+        trap "rm -f $CONFIG; sudo losetup -d ${LOOP_DEVICE} >/dev/null 2>&1 || true" INT TERM EXIT
         sudo virsh dumpxml $VMNAME > $CONFIG
         IMAGE="$(xmlstarlet sel -t -v "string(/domain/devices/disk[target[@dev='vda']]/source/@file)" "$CONFIG")"
         echo "Moving $VMNAME to /dev/hostlvm/guest"
@@ -138,10 +142,10 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 
         # Clear any old partition and fs signatures
         sudo vgscan --mknodes
-        loop_device=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
-        if [ "${loop_device}" != "" ]; then
-            sudo wipefs --all --force "${loop_device}"*
-            sudo losetup -d "${loop_device}"
+        LOOP_DEVICE=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
+        if [ "${LOOP_DEVICE}" != "" ]; then
+            sudo wipefs --all --force "${LOOP_DEVICE}"*
+            sudo losetup -d "${LOOP_DEVICE}"
         fi
         sudo wipefs --all --force /dev/mapper/hostlvm-guestos
 
@@ -151,21 +155,22 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 
         # NOTE: This is not needed if we can avoid starting the VM.
         # Reset to initial state
-        loop_device=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
-        if [ "${loop_device}" != "" ]; then
+        LOOP_DEVICE=$(sudo losetup -P -f /dev/mapper/hostlvm-guestos --show)
+        if [ "${LOOP_DEVICE}" != "" ]; then
             # Clear var
-            sudo wipefs --all --force "${loop_device}"p6
+            sudo wipefs --all --force "${LOOP_DEVICE}"p6
             # Delete encrypted data
-            sudo sfdisk --force --no-reread --delete "${loop_device}" 10
+            if [ -e "${LOOP_DEVICE}"p10 ]; then
+                sudo sfdisk --force --no-reread --delete "${LOOP_DEVICE}" 10
+            fi
 
             # Reset config partition
             CONF_DIR=$(mktemp -d)
-            sudo mount "${loop_device}p3" "${CONF_DIR}"
-            sudo rm "${CONF_DIR}/CONFIGURED" "${CONF_DIR}/store.keyfile"
+            sudo mount "${LOOP_DEVICE}p3" "${CONF_DIR}"
+            sudo rm -f "${CONF_DIR}/CONFIGURED" "${CONF_DIR}/store.keyfile"
             sudo umount "${CONF_DIR}"
             sudo rm -rf "${CONF_DIR}"
-
-            sudo losetup -d "${loop_device}"
+            sudo losetup -d "${LOOP_DEVICE}"
         fi
 
         sudo virsh create $CONFIG
@@ -178,11 +183,23 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
     let mut ssh = Command::new("ssh")
         .arg("-o")
         .arg("StrictHostKeyChecking=no")
-        .arg("farm@".to_owned() + hostname)
-        .arg(script)
+        .arg(hostuser.to_owned() + "@" + hostname)
+        .arg("bash -s")
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
+
+    // Write the script to stdin
+    ssh.stdin
+        .as_mut()
+        .unwrap()
+        .write_all(script.as_bytes())
+        .unwrap();
+
+    // Drop stdin to signal EOF, so the remote command starts executing
+    drop(ssh.stdin.take());
+
     for l in BufReader::new(ssh.stdout.as_mut().unwrap()).lines() {
         info!(&log, "SSH {} out: {}", hostname, l.unwrap());
     }
@@ -197,11 +214,16 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 pub struct Config {
     hosts: Option<Vec<String>>,
     num_hosts: Option<u64>,
+    hostuser: String,
 }
 
 impl Config {
-    pub fn new(hosts: Option<Vec<String>>, num_hosts: Option<u64>) -> Config {
-        Config { hosts, num_hosts }
+    pub fn new(hosts: Option<Vec<String>>, num_hosts: Option<u64>, hostuser: String) -> Config {
+        Config {
+            hosts,
+            num_hosts,
+            hostuser,
+        }
     }
 
     /// Builds the IC instance.
@@ -211,12 +233,6 @@ impl Config {
 }
 
 pub fn setup(env: TestEnv, config: Config) {
-    // start p8s for metrics and dashboards
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
@@ -279,7 +295,10 @@ pub fn setup(env: TestEnv, config: Config) {
                 "Node {} is allocated to host: {}", node_id, hostname
             );
             let log = logger.clone();
-            switch_to_ssd_handles.push(std::thread::spawn(move || switch_to_ssd(&log, &hostname)));
+            let hostuser = config.hostuser.clone();
+            switch_to_ssd_handles.push(std::thread::spawn(move || {
+                switch_to_ssd(&log, &hostname, &hostuser)
+            }));
         }
     }
     for handle in switch_to_ssd_handles {
@@ -303,5 +322,4 @@ pub fn setup(env: TestEnv, config: Config) {
             .start(&env)
             .expect("failed to setup ic-gateway");
     }
-    env.sync_with_prometheus();
 }

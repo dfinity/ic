@@ -32,7 +32,11 @@ pub fn account_to_p2pkh_address_from_state(
         .as_ref()
         .cloned()
         .expect("bug: the ECDSA public key must be initialized");
-    DogecoinAddress::p2pkh_from_public_key(&derive_public_key(&ecdsa_public_key, account))
+    account_to_p2pkh_address(&ecdsa_public_key, account)
+}
+
+pub fn account_to_p2pkh_address(public_key: &ECDSAPublicKey, account: &Account) -> DogecoinAddress {
+    DogecoinAddress::p2pkh_from_public_key(&derive_public_key(public_key, account))
 }
 
 /// Returns the derivation path that should be used to sign a message from a

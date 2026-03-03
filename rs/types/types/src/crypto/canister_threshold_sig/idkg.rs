@@ -1363,7 +1363,7 @@ fn should_fail_deserializing_invalid_initial_idkg_dealings() {
         let invalid_serialization = InitialIDkgDealingsProto::from(&initial_dealings);
 
         assert_matches::assert_matches!(
-            InitialIDkgDealings::try_from(&invalid_serialization),
+            InitialIDkgDealings::try_from(invalid_serialization),
             Err(ProxyDecodeError::Other(s))
             if s == "InvalidTranscriptOperation" || s == "Unspecified transcript operation in IDkgTranscriptParams"
         );

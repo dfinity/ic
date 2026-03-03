@@ -23,7 +23,6 @@ use ic_system_test_driver::{
         farm::HostFeature,
         group::SystemTestGroup,
         ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
         simulate_network::{FixedNetworkSimulation, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
@@ -58,10 +57,6 @@ pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
     "state_sync_duration_seconds_count{status=\"ok\"}";
 
 fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     InternetComputer::new()
         .with_default_vm_resources(VmResources {
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
@@ -100,7 +95,6 @@ fn setup(env: TestEnv) {
             .with_latency(LATENCY)
             .with_bandwidth(BANDWIDTH_MBITS),
     );
-    env.sync_with_prometheus();
 
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     NnsInstallationBuilder::new()
@@ -177,7 +171,6 @@ fn test(env: TestEnv) {
             .block_for_newer_registry_version()
             .await
             .expect("Failed to wait for new topology version");
-        env.sync_with_prometheus();
 
         // Wait for the new nodes to report healthy
         for subnet in topology.subnets() {

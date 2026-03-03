@@ -1,0 +1,8 @@
+[package]
+name = "sev_guest_testing"
+edition.workspace = true
+
+[dependencies]
+attestation_testing = { path = "../../attestation/testing" }
+sev = { workspace = true }
+sev_guest_firmware = { path = "../firmware" }

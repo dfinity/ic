@@ -3,6 +3,7 @@ use candid::Principal;
 use candid::types::number::Nat;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -55,7 +56,7 @@ impl<R: Runtime> ICRC1Client<R> {
             .map(untuple)
     }
 
-    pub async fn metadata(&self) -> Result<Vec<(String, Value)>, (i32, String)> {
+    pub async fn metadata(&self) -> Result<Vec<(MetadataKey, Value)>, (i32, String)> {
         self.runtime
             .call(self.ledger_canister_id, "icrc1_metadata", ())
             .await

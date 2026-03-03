@@ -13,7 +13,6 @@ rust_library(
         "//rs/protobuf",
         "//rs/utils",
         "@crate_index//:chrono",
-        "@crate_index//:serde",
         "@crate_index//:slog",
         "@crate_index//:slog-async",
         "@crate_index//:slog-json",

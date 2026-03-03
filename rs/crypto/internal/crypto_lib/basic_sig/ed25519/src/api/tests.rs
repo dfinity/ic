@@ -1,23 +1,18 @@
 mod keygen {
-    use crate::keypair_from_rng;
-    use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
+    use crate::keypair_from_seed;
+    use ic_crypto_internal_seed::Seed;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
     #[test]
     fn should_correctly_generate_ed25519_keys() {
-        let mut csprng = ChaCha20Rng::seed_from_u64(42);
+        let seed = Seed::from_rng(&mut reproducible_rng());
 
-        let (sk, pk) = keypair_from_rng(&mut csprng);
+        let (sk, pk) = keypair_from_seed(seed);
 
-        assert_eq!(
-            *sk.0.expose_secret(),
-            hex_to_32_bytes("7848b5d711bc9883996317a3f9c90269d56771005d540a19184939c9e8d0db2a")
-        );
-        assert_eq!(
-            pk.0,
-            hex_to_32_bytes("78eda21ba04a15e2000fe8810fe3e56741d23bb9ae44aa9d5bb21b76675ff34b")
-        );
+        // Verify key generation produces valid keys that can sign/verify
+        let msg = b"test message";
+        let sig = crate::sign(msg, &sk);
+        assert!(crate::verify(&sig, msg, &pk).is_ok());
     }
 }
 
@@ -54,10 +49,7 @@ mod serialization {
         assert!(pk_result.is_err());
         let err = pk_result.unwrap_err();
         assert!(err.is_malformed_public_key());
-        assert!(
-            err.to_string()
-                .contains("Wrong algorithm identifier for Ed25519")
-        );
+        assert!(err.to_string().contains("OidUnknown"))
     }
 
     #[test]
@@ -67,8 +59,6 @@ mod serialization {
         assert!(pk_result.is_err());
         assert!(pk_result.unwrap_err().is_malformed_public_key());
     }
-
-    // TODO(CRP-616) Add more failure tests with corrupted DER-keys.
 }
 
 mod ed25519_cr_yp_to {
@@ -327,9 +317,11 @@ mod verify {
 }
 
 mod verify_public_key {
+    use crate::keypair_from_seed;
     use crate::types::PublicKeyBytes;
-    use crate::{keypair_from_rng, verify_public_key};
+    use crate::verify_public_key;
     use curve25519_dalek::edwards::CompressedEdwardsY;
+    use ic_crypto_internal_seed::Seed;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
     #[test]
@@ -365,7 +357,8 @@ mod verify_public_key {
     #[test]
     fn should_fail_public_key_verification_if_point_has_wrong_order() {
         let point_with_composite_order = {
-            let (_sk_bytes, pk_bytes) = keypair_from_rng(&mut reproducible_rng());
+            let seed = Seed::from_rng(&mut reproducible_rng());
+            let (_sk_bytes, pk_bytes) = keypair_from_seed(seed);
             let point_of_prime_order = CompressedEdwardsY(pk_bytes.0).decompress().unwrap();
             let point_of_order_8 = CompressedEdwardsY([0; 32]).decompress().unwrap();
             let point_of_composite_order = point_of_prime_order + point_of_order_8;

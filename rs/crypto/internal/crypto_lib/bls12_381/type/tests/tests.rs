@@ -2012,6 +2012,16 @@ test_point_operation!(muln, [g1, g2], {
 
     assert_eq!(Projective::muln_vartime(&[], &[]), Projective::identity());
 
+    // Verify that extra arguments for either points or scalars are ignored
+    assert_eq!(
+        Projective::muln_vartime(&[], &[Scalar::random(rng)]),
+        Projective::identity()
+    );
+    assert_eq!(
+        Projective::muln_vartime(&[Projective::biased(rng)], &[]),
+        Projective::identity()
+    );
+
     for t in 1..100 {
         let mut points = Vec::with_capacity(t);
         let mut scalars = Vec::with_capacity(t);
@@ -2019,6 +2029,18 @@ test_point_operation!(muln, [g1, g2], {
         for _ in 0..t {
             points.push(Projective::biased(rng));
             scalars.push(Scalar::biased(rng));
+        }
+
+        // Verify that extra arguments for either points or scalars are ignored
+        let extra_terms = rng.r#gen::<u8>() % 8;
+        if t % 2 == 0 {
+            for _extra in 0..extra_terms {
+                points.push(Projective::biased(rng));
+            }
+        } else {
+            for _extra in 0..extra_terms {
+                scalars.push(Scalar::biased(rng));
+            }
         }
 
         let reference_val = points
@@ -2040,6 +2062,12 @@ test_point_operation!(muln_affine, [g1, g2], {
         Projective::identity()
     );
 
+    // Verify that extra arguments are ignored
+    assert_eq!(
+        Projective::muln_vartime(&[], &[Scalar::random(rng)]),
+        Projective::identity()
+    );
+
     for t in 1..100 {
         let mut points = Vec::with_capacity(t);
         let mut scalars = Vec::with_capacity(t);
@@ -2047,6 +2075,19 @@ test_point_operation!(muln_affine, [g1, g2], {
         for _ in 0..t {
             points.push(Projective::biased(rng));
             scalars.push(Scalar::biased(rng));
+        }
+
+        // Verify that extra arguments for either points or scalars are ignored
+
+        let extra_terms = rng.r#gen::<u8>() % 8;
+        if t % 2 == 0 {
+            for _extra in 0..extra_terms {
+                points.push(Projective::biased(rng));
+            }
+        } else {
+            for _extra in 0..extra_terms {
+                scalars.push(Scalar::biased(rng));
+            }
         }
 
         let points = Projective::batch_normalize(&points);

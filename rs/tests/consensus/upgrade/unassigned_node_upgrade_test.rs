@@ -103,7 +103,7 @@ fn test(env: TestEnv) {
         info!(logger, "Initial: {:?}", blessed_versions);
         let sha256 = get_guestos_update_img_sha256();
         info!(logger, "Update image SHA256: {}", sha256);
-        let guest_launch_measurements = get_guestos_launch_measurements();
+        let guest_launch_measurements = get_guestos_update_launch_measurements();
 
         // prepare for the 1. proposal
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());

@@ -22,7 +22,6 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "@crate_index//:base64",
     "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hex",
@@ -41,6 +40,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/tree_hash",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/tmpdir",
     "//rs/test_utilities/types",

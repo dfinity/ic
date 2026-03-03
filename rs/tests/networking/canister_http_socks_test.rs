@@ -31,7 +31,7 @@ use ic_system_test_driver::driver::test_env_api::{HasTopologySnapshot, IcNodeSna
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF, get_dependency_path},
+    test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF, get_dependency_path_from_env},
     universal_vm::UniversalVm,
 };
 use ic_system_test_driver::systest;
@@ -58,9 +58,7 @@ pub fn setup(env: TestEnv) {
 
     // Set up Universal VM with HTTP Bin testing service
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path(
-            "rs/tests/networking/canister_http/http_uvm_config_image.zst",
-        ))
+        .with_config_img(get_dependency_path_from_env("HTTP_UVM_CONFIG_IMAGE_PATH"))
         .enable_ipv4()
         .start(&env)
         .expect("failed to set up universal VM");

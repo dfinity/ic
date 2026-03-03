@@ -70,7 +70,7 @@ use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
@@ -91,7 +91,7 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
-const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
+const SUCCESS_THRESHOLD: f64 = 0.5; // If more than 50% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
 const COOLDOWN_PERIOD: Duration = Duration::from_secs(300); // sleep time before downloading p8s data
@@ -100,17 +100,16 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 // Network parameters
-const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
+const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
 const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 40;
-const MAX_QUEUE_SIZE: u32 = 30;
+const MAX_PARALLEL_PRE_SIGNATURE_TRANSCRIPTS: u32 = 20;
+const PRE_SIGNATURES_TO_CREATE: u32 = 200;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 9.0;
 
 const SMALL_MSG_SIZE_BYTES: usize = 32;
 #[allow(dead_code)]
@@ -121,6 +120,22 @@ const LARGE_MSG_SIZE_BYTES: usize = 10_484_000; // 10MiB minus some message over
 const MSG_SIZE_BYTES: usize = SMALL_MSG_SIZE_BYTES;
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
+
+fn get_max_queue_size(key_id: &MasterPublicKeyId) -> u32 {
+    match key_id {
+        MasterPublicKeyId::Ecdsa(_) => 20,
+        MasterPublicKeyId::Schnorr(_) => 50,
+        MasterPublicKeyId::VetKd(_) => 80,
+    }
+}
+
+fn get_requests_per_second(key_id: &MasterPublicKeyId) -> f64 {
+    match key_id {
+        MasterPublicKeyId::Ecdsa(_) => 3.0,
+        MasterPublicKeyId::Schnorr(_) => 15.0,
+        MasterPublicKeyId::VetKd(_) => 60.0,
+    }
+}
 
 // The signature schemes and key names to be used during the test.
 // Requests will be sent to each key in round robin order.
@@ -181,11 +196,6 @@ pub fn setup(env: TestEnv) {
     let key_ids = make_key_ids();
     info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
 
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Supermicro])
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
@@ -211,14 +221,18 @@ pub fn setup(env: TestEnv) {
                     key_configs: key_ids
                         .into_iter()
                         .map(|key_id| KeyConfig {
-                            max_queue_size: MAX_QUEUE_SIZE,
-                            pre_signatures_to_create_in_advance: PRE_SIGNATURES_TO_CREATE,
+                            max_queue_size: get_max_queue_size(&key_id),
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(PRE_SIGNATURES_TO_CREATE),
                             key_id,
                         })
                         .collect(),
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
-                    max_parallel_pre_signature_transcripts_in_creation: None,
+                    max_parallel_pre_signature_transcripts_in_creation: Some(
+                        MAX_PARALLEL_PRE_SIGNATURE_TRANSCRIPTS,
+                    ),
                 })
                 .add_nodes(nodes_count),
         )
@@ -229,13 +243,12 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    env.sync_with_prometheus();
 }
 
 pub fn test(env: TestEnv) {
     let download_p8s_data =
         std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
-    tecdsa_performance_test(env, false, download_p8s_data);
+    tecdsa_performance_test(env, true, download_p8s_data);
 }
 
 pub fn tecdsa_performance_test(
@@ -246,7 +259,11 @@ pub fn tecdsa_performance_test(
     let log = env.logger();
 
     let duration: Duration = TESTING_PERIOD;
-    let rps = SIGNATURE_REQUESTS_PER_SECOND;
+    let rps = make_key_ids()
+        .iter()
+        .map(get_requests_per_second)
+        .reduce(f64::max)
+        .unwrap();
 
     let topology_snapshot = env.topology_snapshot();
     let nns_node = get_nns_node(&topology_snapshot);

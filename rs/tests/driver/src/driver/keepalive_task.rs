@@ -33,10 +33,7 @@ pub(crate) fn keepalive_task(group_ctx: GroupContext) -> () {
                     };
                     debug!(
                         logger,
-                        "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
-                        group_name,
-                        GROUP_TTL,
-                        farm_url
+                        "Group {} TTL set to +{:?} from now.", group_name, GROUP_TTL,
                     );
                 }
                 _ => {

@@ -73,10 +73,10 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
             MAX_WASM_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64)
         };
         let min = ty.minimum().min(max_pages) as usize;
-        let max = ty
-            .maximum()
-            .expect("Instrumentation should add a maximum limit for all memories")
-            as usize;
+        let Some(max) = ty.maximum() else {
+            return Err("Instrumentation should add a maximum limit for all memories".to_string());
+        };
+        let max = max as usize;
 
         let Some(reserved_size_in_bytes) = reserved_size_in_bytes else {
             panic!(

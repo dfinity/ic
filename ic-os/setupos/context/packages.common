@@ -22,7 +22,6 @@ ca-certificates
 curl
 ethtool
 efibootmgr
-faketime
 gdisk
 ipmitool
 iproute2
@@ -33,7 +32,6 @@ less
 locales
 lshw
 lvm2
-net-tools
 parted
 python-is-python3
 smartmontools

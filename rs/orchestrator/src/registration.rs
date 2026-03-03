@@ -5,6 +5,7 @@ use crate::{
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
     utils::http_endpoint_to_url,
 };
+use attestation::SevAttestationPackage;
 use candid::Encode;
 use ic_agent::{Agent, export::Principal};
 use ic_config::{
@@ -20,10 +21,12 @@ use ic_crypto_utils_threshold_sig_der::{
 };
 use ic_interfaces::crypto::{CheckKeysWithRegistryError, IDkgKeyRotationResult};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{ReplicaLogger, info, warn};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_registry_canister_api::{AddNodePayload, IPv4Config, UpdateNodeDirectlyPayload};
+use ic_registry_canister_api::{
+    AddNodePayload, IPv4Config, NodeRegistrationAttestationCustomData, UpdateNodeDirectlyPayload,
+};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
@@ -181,9 +184,26 @@ impl NodeRegistration {
             }
 
             if let Err(error_message) = self.do_register_node(&add_node_payload).await {
-                warn!(self.log, "{}", error_message);
+                // Log full payload for debugging
+                warn!(
+                    self.log,
+                    "{}. Used payload: {:?}", error_message, add_node_payload
+                );
+                // Send a length-capped summary to the host ensuring message is not dropped
+                const CONSOLE_ERR_MAX: usize = 1500;
+                let trimmed_error = if error_message.chars().count() > CONSOLE_ERR_MAX {
+                    format!(
+                        "{} (see replica logs for full error)",
+                        error_message
+                            .chars()
+                            .take(CONSOLE_ERR_MAX)
+                            .collect::<String>(),
+                    )
+                } else {
+                    error_message
+                };
                 UtilityCommand::notify_host(
-                    format!("node-id {}: {}", self.node_id, error_message).as_str(),
+                    format!("node-id {}: {}", self.node_id, trimmed_error).as_str(),
                     1,
                 );
             };
@@ -240,8 +260,8 @@ impl NodeRegistration {
             .await
             .map_err(|e| {
                 format!(
-                    "Node {} registration request failed with error: {}\nUsed payload: {:?}",
-                    self.node_id, e, add_node_payload
+                    "Node {} registration request failed with error: {}",
+                    self.node_id, e
                 )
             })?;
 
@@ -255,9 +275,15 @@ impl NodeRegistration {
                 .await
                 .unwrap()
                 .expect("Failed to retrieve current node public keys");
+
+        let node_signing_pk = protobuf_to_vec(node_pub_keys.node_signing_public_key.unwrap());
+
+        let node_registration_attestation =
+            generate_node_registration_attestation(&self.log, &node_signing_pk);
+
         AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...
-            node_signing_pk: protobuf_to_vec(node_pub_keys.node_signing_public_key.unwrap()),
+            node_signing_pk,
             committee_signing_pk: protobuf_to_vec(
                 node_pub_keys.committee_signing_public_key.unwrap(),
             ),
@@ -275,7 +301,7 @@ impl NodeRegistration {
             .expect("Invalid endpoints in message routing config."),
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
-            chip_id: None,
+            node_registration_attestation,
             public_ipv4_config: process_ipv4_config(
                 &self.log,
                 &self.node_config.initial_ipv4_config,
@@ -786,6 +812,146 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::new();
     entry.encode(&mut buf).expect("This must not fail");
     buf
+}
+
+/// Generates an SEV-SNP attestation package for node registration.
+///
+/// This function checks if SEV is active and if so, generates an attestation package
+/// with the NodeRegistration custom data namespace. The attestation report can be
+/// verified by the registry canister to extract and store the chip_id.
+///
+/// Returns `None` if SEV is not active or if attestation package generation fails.
+#[cfg(target_os = "linux")]
+fn generate_node_registration_attestation(
+    log: &ReplicaLogger,
+    node_signing_pk: &[u8],
+) -> Option<SevAttestationPackage> {
+    use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
+    use config_types::GuestOSConfig;
+    use der::asn1::OctetStringRef;
+    use sev::firmware::guest::Firmware;
+    use sev_guest::attestation_package::generate_attestation_package;
+    use sev_guest::is_sev_active;
+
+    // Check if SEV is active
+    let is_sev_active = match is_sev_active() {
+        Ok(active) => active,
+        Err(err) => {
+            info!(
+                log,
+                "Failed to check if SEV is active, assuming it is not: {:?}", err
+            );
+            return None;
+        }
+    };
+
+    if !is_sev_active {
+        info!(
+            log,
+            "SEV is not active, skipping node registration attestation"
+        );
+        return None;
+    }
+
+    info!(
+        log,
+        "SEV is active, generating node registration attestation package"
+    );
+
+    // Read the GuestOS config to get the trusted execution environment config
+    let guestos_config: GuestOSConfig = match deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
+    {
+        Ok(config) => config,
+        Err(e) => {
+            error!(log, "Failed to read GuestOS config for attestation: {}", e);
+            UtilityCommand::notify_host(
+                &format!("Failed to read GuestOS config for attestation: {e}"),
+                1,
+            );
+            return None;
+        }
+    };
+
+    let trusted_execution_config = match guestos_config.trusted_execution_environment_config {
+        Some(config) => config,
+        None => {
+            error!(
+                log,
+                "TrustedExecutionEnvironmentConfig missing in GuestOS config"
+            );
+            UtilityCommand::notify_host(
+                "TrustedExecutionEnvironmentConfig missing in GuestOS config",
+                1,
+            );
+            return None;
+        }
+    };
+
+    // Open the SEV firmware
+    let mut firmware = match Firmware::open() {
+        Ok(fw) => fw,
+        Err(e) => {
+            error!(log, "Failed to open SEV firmware: {:?}", e);
+            UtilityCommand::notify_host(&format!("Failed to open SEV firmware: {e:?}"), 1);
+            return None;
+        }
+    };
+
+    let node_signing_pk = match OctetStringRef::new(node_signing_pk) {
+        Ok(pk) => pk,
+        Err(e) => {
+            error!(
+                log,
+                "Failed to create OctetStringRef from public key: {:?}", e
+            );
+            UtilityCommand::notify_host(
+                &format!("Failed to create OctetStringRef from public key: {e:?}"),
+                1,
+            );
+            return None;
+        }
+    };
+
+    let custom_data = NodeRegistrationAttestationCustomData { node_signing_pk };
+
+    // Generate the attestation package with NodeRegistration custom data
+    let attestation_package = match generate_attestation_package(
+        &mut firmware,
+        &trusted_execution_config,
+        &custom_data,
+    ) {
+        Ok(package) => package,
+        Err(e) => {
+            error!(
+                log,
+                "Failed to generate node registration attestation package: {:?}", e
+            );
+            UtilityCommand::notify_host(
+                &format!("Failed to generate node registration attestation package: {e:?}"),
+                1,
+            );
+            return None;
+        }
+    };
+
+    // Convert ParsedSevAttestationPackage to SevAttestationPackage
+    let sev_attestation_package: SevAttestationPackage = attestation_package.into();
+
+    info!(
+        log,
+        "Successfully generated node registration attestation package"
+    );
+
+    Some(sev_attestation_package)
+}
+
+/// Non-Linux stub that always returns None.
+#[cfg(not(target_os = "linux"))]
+fn generate_node_registration_attestation(
+    _log: &ReplicaLogger,
+    _node_signing_pk: &[u8],
+) -> Option<SevAttestationPackage> {
+    None
 }
 
 fn encode_as_qrcode(node_id: NodeId) -> String {

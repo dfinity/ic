@@ -17,13 +17,13 @@ icos_images = icos_build(
 file_size_check(
     name = "update_img_size_check",
     file = icos_images.update_image,
-    max_file_size = 900 * 1000 * 1000,  # 835 MB on 2025-03-21
+    max_file_size = 950 * 1000 * 1000,  # 877 MB on 2026-01-29
 )
 
 file_size_check(
     name = "disk_img_size_check",
     file = icos_images.disk_image,
-    max_file_size = 900 * 1000 * 1000,  # 837 MB on 2025-03-21
+    max_file_size = 950 * 1000 * 1000,  # 880 MB on 2026-01-29
 )
 
 # Export checksums & build artifacts

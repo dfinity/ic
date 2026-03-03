@@ -1,0 +1,34 @@
+[package]
+name = "ic-icp-test-ledger"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+name = "ic_icp_test_ledger"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ic-icp-test-ledger"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+dfn_protobuf = { path = "../../../../rust_canisters/dfn_protobuf" }
+ic-cdk = { workspace = true }
+ic-ledger-canister-core = { path = "../../../common/ledger_canister_core" }
+ic-ledger-core = { path = "../../../common/ledger_core" }
+icp-ledger = { path = "../.." }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-base-types = { path = "../../../../types/base_types" }
+ic-icp-index = { path = "../../index" }
+ic-ledger-suite-state-machine-helpers = { path = "../../../test_utils/state_machine_helpers" }
+ic-ledger-suite-state-machine-tests = { path = "../../../tests/sm-tests" }
+ic-state-machine-tests = { path = "../../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../../test_utilities/load_wasm" }

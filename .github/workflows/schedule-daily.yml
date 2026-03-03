@@ -4,7 +4,7 @@ on:
   schedule:
     # Note that we would like there to be no overlap between the system-tests-benchmarks-nightly job below
     # and the Release Testing workflow triggered by the Schedule RC workflow.
-    - cron: "0 0 * * *"
+    - cron: "0 1 * * *"
   workflow_dispatch:
 
 env:
@@ -20,15 +20,16 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:983a02b1360e0215d519e749c4393c9c0f31589a461e992bf4b693cc30363320
+      image: ghcr.io/dfinity/ic-build@sha256:59e782e6278dd127f8c19344403cc61f73dcb6f446247b22e1c8214cff5ba26a
       options: >-
-        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
     environment: Nightly Tests
     steps:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
+      - uses: ./.github/actions/netrc
       - &backup-pod-access
         name: Set up backup pod access
         run: |
@@ -67,7 +68,7 @@ jobs:
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
-          echo "$ZH2_DLL01_CSV_SECRETS" > file1
+          echo "$ZH2_DLL01_INI_SECRET" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
           launch_bare_metal() {
@@ -76,7 +77,7 @@ jobs:
             bazel --output_base=/var/tmp/bazel-output run \
               //ic-os/setupos/envs/dev:launch_bare_metal -- \
                 --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-                --csv_filename "$(realpath file1)" \
+                --ini_filename "$(realpath file1)" \
                 --file_share_ssh_key "$(realpath file2)" \
                 --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
                 --file_share_username ci_interim \
@@ -92,10 +93,13 @@ jobs:
 
           # Run bare metal node hostOS metrics check
           launch_bare_metal --check_hostos_metrics
+          
+          # Run SEV tests
+          bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
 
           bazel clean
         env:
-          ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
+          ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
   nns-tests-nightly:
@@ -106,6 +110,7 @@ jobs:
     environment: Nightly Tests
     steps:
       - *checkout
+      - uses: ./.github/actions/netrc
       - *backup-pod-access
       - name: Run NNS Tests Nightly
         uses: ./.github/actions/bazel
@@ -134,6 +139,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - *checkout
+      - uses: ./.github/actions/netrc
       - name: Run PocketIC Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -161,6 +167,7 @@ jobs:
     timeout-minutes: 480
     steps:
       - *checkout
+      - uses: ./.github/actions/netrc
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel

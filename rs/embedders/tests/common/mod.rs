@@ -1,4 +1,4 @@
-use std::{convert::TryFrom, rc::Rc, sync::Arc};
+use std::rc::Rc;
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
@@ -12,8 +12,10 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     CallOrigin, Memory, NetworkTopology, NumWasmPages, SubnetTopology, SystemState,
 };
@@ -28,7 +30,6 @@ use ic_types::{
     methods::SystemMethod,
     time::UNIX_EPOCH,
 };
-use maplit::btreemap;
 use std::collections::BTreeMap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
@@ -53,19 +54,24 @@ pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameter
 }
 
 fn make_network_topology(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> NetworkTopology {
-    let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => own_subnet_id,
-        }).unwrap());
-    NetworkTopology {
-        routing_table,
-        subnets: btreemap! {
-            own_subnet_id => SubnetTopology {
-                subnet_type: own_subnet_type,
-                ..SubnetTopology::default()
-            }
+    let mut topo = NetworkTopology::default();
+    topo.routing_table_mut()
+        .insert(
+            CanisterIdRange {
+                start: CanisterId::from(0),
+                end: CanisterId::from(0xff),
+            },
+            own_subnet_id,
+        )
+        .unwrap();
+    topo.subnets_mut().insert(
+        own_subnet_id,
+        SubnetTopology {
+            subnet_type: own_subnet_type,
+            ..SubnetTopology::default()
         },
-        ..NetworkTopology::default()
-    }
+    );
+    topo
 }
 
 // Not used in all test crates
@@ -261,6 +267,6 @@ pub fn get_system_state() -> SystemState {
 
 pub fn get_cmc_system_state() -> SystemState {
     let mut system_state = get_system_state();
-    system_state.canister_id = CYCLES_MINTING_CANISTER_ID;
+    system_state.set_canister_id(CYCLES_MINTING_CANISTER_ID);
     system_state
 }

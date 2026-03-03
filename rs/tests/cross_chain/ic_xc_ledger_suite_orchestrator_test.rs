@@ -18,13 +18,14 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCustomizations, get_dependency_path,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
+    get_dependency_path_from_env,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_wasm_types::CanisterModule;
 use slog::info;
-use std::{future::Future, path::Path, time::Duration};
+use std::{future::Future, time::Duration};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -74,9 +75,7 @@ fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
         )
     };
 
-    let ledger_orchestrator_wasm = wasm_from_path(
-        "rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm.gz",
-    );
+    let ledger_orchestrator_wasm = wasm_from_env("LEDGER_SUITE_ORCHESTRATOR_WASM_PATH");
     let ledger_orchestrator = block_on(async {
         use std::str::FromStr;
         let init_args = OrchestratorArg::InitArg(InitArg {
@@ -318,8 +317,8 @@ async fn add_erc_20_by_nns_proposal<'a>(
     ManagedCanisters::from(orchestrator.as_ref().runtime(), created_canister_ids)
 }
 
-fn wasm_from_path<P: AsRef<Path>>(path: P) -> CanisterModule {
-    CanisterModule::new(Wasm::from_file(get_dependency_path(path)).bytes())
+fn wasm_from_env(env_var: &str) -> CanisterModule {
+    CanisterModule::new(Wasm::from_file(get_dependency_path_from_env(env_var)).bytes())
 }
 
 fn usdc_contract() -> Erc20Contract {

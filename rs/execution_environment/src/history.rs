@@ -294,12 +294,12 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
 
                     self.metrics
                         .message_state_transition_failed_ic_duration_seconds
-                        .with_label_values(&[&reject_code, user_error_code_string])
+                        .with_label_values(&[reject_code.as_str(), user_error_code_string])
                         .observe(ic_duration);
 
                     self.metrics
                         .message_state_transition_failed_wall_clock_duration_seconds
-                        .with_label_values(&[&reject_code, user_error_code_string])
+                        .with_label_values(&[reject_code.as_str(), user_error_code_string])
                         .observe(wall_duration);
                 }
             }
@@ -385,6 +385,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterRejectedMessage => "Canister rejected the message",
         UnknownManagementMessage => "Unknown management method",
         InvalidManagementPayload => "Invalid management message payload",
+        InvalidSubnetAdmin => "Invalid Subnet Admin",
         // 5xx -- `RejectCode::CanisterError`
         CanisterTrapped => "Canister Trapped",
         CanisterCalledTrap => "Canister Called Trap",
@@ -397,6 +398,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterNotStopped => "Canister Not Stopped",
         CanisterStoppingCancelled => "Canister Stopping Cancelled",
         CanisterInvalidController => "Canister Invalid Controller",
+        CanisterInvalidControllerOrSubnetAdmin => "Canister Invalid Controller Or Subnet Admin",
         CanisterFunctionNotFound => "Canister Function Not Found",
         CanisterNonEmpty => "Canister Non-Empty",
         QueryCallGraphLoopDetected => "Loop in inter-canister query call graph",

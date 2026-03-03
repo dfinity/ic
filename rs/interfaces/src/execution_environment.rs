@@ -10,19 +10,20 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
     ReplicaVersion, Time,
-    batch::{CanisterCyclesCostSchedule, ChainKeyData},
+    batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
     messages::{
         CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
     },
 };
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU64;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{Infallible, TryFrom},
     fmt,
     ops::{AddAssign, SubAssign},
-    sync::Arc,
+    sync::{Arc, atomic::AtomicU64},
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -359,22 +360,27 @@ impl SubnetAvailableMemory {
         guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
     ) -> Self {
-        // We do not apply scaling in tests that create `SubnetAvailableMemory` manually.
-        let scaling_factor = 1;
         SubnetAvailableMemory::new_scaled(
             execution_memory,
             guaranteed_response_message_memory,
             wasm_custom_sections_memory,
-            scaling_factor,
+            // We do not apply scaling in tests that create `SubnetAvailableMemory` manually.
+            NonZeroU64::new(1).expect("scaling_factor must be not zero"),
         )
     }
 
+    /// Creates a new `SubnetAvailableMemory` and scales down the provided memory limits
+    /// by dividing them by a given `scaling_factor`.
+    ///
+    /// This is typically used to safely divide the subnet's available memory among
+    /// concurrent execution threads (cores) to prevent overcommitting the total memory budget.
     pub fn new_scaled(
         execution_memory: i64,
         guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
-        scaling_factor: i64,
+        scaling_factor: NonZeroU64,
     ) -> Self {
+        let scaling_factor = scaling_factor.get() as i64;
         SubnetAvailableMemory {
             execution_memory: execution_memory / scaling_factor,
             guaranteed_response_message_memory: guaranteed_response_message_memory / scaling_factor,
@@ -590,6 +596,8 @@ pub type QueryExecutionService =
 #[derive(Debug)]
 pub struct TransformExecutionInput {
     pub query: Query,
+    pub instruction_observation: Arc<AtomicU64>,
+    pub max_instructions: NumInstructions,
 }
 
 /// Interface for the component to execute canister http transform.
@@ -1455,14 +1463,13 @@ pub struct RegistryExecutionSettings {
     pub subnet_size: usize,
     pub node_ids: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
-    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
 }
 
 /// Chain key configuration of execution that comes from the registry.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
-    pub pre_signatures_to_create_in_advance: u32,
+    pub pre_signatures_to_create_in_advance: Option<u32>,
 }
 
 pub trait Scheduler: Send {
@@ -1647,7 +1654,12 @@ mod tests {
         assert_eq!(available.get_guaranteed_response_message_memory(), 10);
         assert_eq!(available.get_wasm_custom_sections_memory(), 4);
 
-        let available = SubnetAvailableMemory::new_scaled(20, 10, 4, 2);
+        let available = SubnetAvailableMemory::new_scaled(
+            20,
+            10,
+            4,
+            NonZeroU64::new(2).expect("scaling_factor must be non zero"),
+        );
         assert_eq!(available.get_execution_memory(), 10);
         assert_eq!(available.get_guaranteed_response_message_memory(), 5);
         assert_eq!(available.get_wasm_custom_sections_memory(), 2);

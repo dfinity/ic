@@ -734,7 +734,7 @@ async fn collect_timer_metric(
 
     metrics
         .request_body_size_bytes
-        .with_label_values(&[&path, LABEL_UNKNOWN])
+        .with_label_values(&[path.as_str(), LABEL_UNKNOWN])
         .observe(request.body().size_hint().lower() as f64);
 
     let request_timer = HistogramVecTimer::start_timer(

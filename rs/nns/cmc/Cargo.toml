@@ -21,27 +21,21 @@ ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-metrics-encoder = "1"
-ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 lazy_static = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 
-base64 = { workspace = true }
-ic-certified-map = "0.3.1"
 ic-xrc-types = "1.0.0"
-prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
-sha2 = { workspace = true }
 yansi = "0.5.0"
 
 [dev-dependencies]

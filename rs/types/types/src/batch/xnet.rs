@@ -45,7 +45,10 @@ impl TryFrom<pb::XNetPayload> for XNetPayload {
                 .into_iter()
                 .map(|subnet_stream_slice| {
                     Ok((
-                        subnet_id_try_from_option(subnet_stream_slice.subnet_id)?,
+                        subnet_id_try_from_option(
+                            subnet_stream_slice.subnet_id,
+                            "XNetPayload::subnet_stream_slices::subnet_id",
+                        )?,
                         try_from_option_field(
                             subnet_stream_slice.stream_slice,
                             "XNetPayload::subnet_stream_slices::stream_slice",

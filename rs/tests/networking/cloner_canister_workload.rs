@@ -27,7 +27,7 @@ use ic_system_test_driver::{
         farm::HostFeature,
         group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        prometheus_vm::HasPrometheus,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, load_wasm},
     },
@@ -40,8 +40,6 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60); // 4 hours
 
 /// Time to keep the testnet alive once all canisters are installed
 const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 1 hour
-
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 
 const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
@@ -65,10 +63,6 @@ fn main() -> Result<()> {
 
 pub fn setup(env: TestEnv) {
     let logger = env.logger();
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     info!(
         &logger,
         "Step 1: Starting the IC with a subnet of size {SUBNET_SIZE}.",
@@ -91,7 +85,6 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus();
 
     // Await Replicas
     info!(
@@ -119,7 +112,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
-    let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
+    let counter_canister_bytes = load_wasm(std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap());
 
     info!(
         &logger,

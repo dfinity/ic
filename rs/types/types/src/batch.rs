@@ -359,7 +359,8 @@ mod tests {
             vetkd,
         } = BatchPayload::default();
 
-        assert_eq!(ingress.count_bytes(), 0);
+        assert_eq!(ingress.total_ids_size_estimate(), NumBytes::new(0));
+        assert_eq!(ingress.total_messages_size_estimate(), NumBytes::new(0));
         assert_eq!(self_validating.count_bytes(), 0);
         assert_eq!(canister_http.len(), 0);
         assert_eq!(query_stats.len(), 0);

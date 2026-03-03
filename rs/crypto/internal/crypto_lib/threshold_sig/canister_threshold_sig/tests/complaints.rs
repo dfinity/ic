@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use strum::IntoEnumIterator;
 
 #[test]
-fn should_complaint_system_work() -> CanisterThresholdResult<()> {
+fn complaint_system_works() -> CanisterThresholdResult<()> {
     use strum::IntoEnumIterator;
     let rng = &mut reproducible_rng();
 
@@ -201,7 +201,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
 }
 
 #[test]
-fn should_complaint_verification_reject_spurious_complaints() -> CanisterThresholdResult<()> {
+fn complaint_verification_rejects_spurious_complaints() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for alg in IdkgProtocolAlgorithm::iter() {

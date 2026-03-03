@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "canisters": {
+    "minter": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/dogecoin/ckdoge/minter:ckdoge_minter.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/dogecoin/ckdoge/minter/ckdoge_minter.wasm.gz",
+      "candid": "../minter/ckdoge_minter.did",
+      "shrink": false
+    },
+    "ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/ledger/ledger_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "index": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    },
+    "archive": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/archive/archive_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/archive/archive.did",
+      "shrink": false
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "",
+      "args": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  }
+}

@@ -41,6 +41,11 @@ allow syslogd_t syslogd_t : capability { dac_read_search };
 ###############################################################################
 # systemd-networkd
 
+require {
+    type unconfined_t;
+    class dbus send_msg;
+}
+
 # not clear why, but harmless
 require_read_efivarfs_files(systemd_networkd_t)
 # read dynamically generated network config files
@@ -54,6 +59,8 @@ corenet_udp_bind_dhcpc_port(systemd_networkd_t)
 corenet_udp_bind_generic_node(systemd_networkd_t)
 # allow self-signal
 allow systemd_networkd_t systemd_networkd_t : process { signal };
+# allow dbus access (needed for the DHCP client to work properly)
+allow systemd_networkd_t unconfined_t:dbus send_msg;
 
 ###############################################################################
 # systemd-detect-virt

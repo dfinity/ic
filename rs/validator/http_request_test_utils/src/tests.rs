@@ -1,7 +1,6 @@
 use crate::DirectAuthenticationScheme::UserKeyPair;
 use assert_matches::assert_matches;
 use ic_canister_client_sender::Ed25519KeyPair;
-use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::Signable;
 use ic_types::messages::{Authentication, MessageId, SignedDelegation, UserSignature};
@@ -30,10 +29,7 @@ mod delegation_chain {
         assert_eq!(chain.signed_delegations.len(), 2);
 
         let first_delegation = &chain.signed_delegations[0];
-        verify_signature(
-            first_delegation,
-            &ed25519::types::PublicKeyBytes(first_key_pair.public_key),
-        );
+        verify_signature(first_delegation, &first_key_pair.public_key);
         assert_eq!(
             first_delegation.delegation().pubkey(),
             &ed25519_public_key_to_der(second_key_pair.public_key.to_vec())
@@ -44,10 +40,7 @@ mod delegation_chain {
         );
 
         let second_delegation = &chain.signed_delegations[1];
-        verify_signature(
-            second_delegation,
-            &ed25519::types::PublicKeyBytes(second_key_pair.public_key),
-        );
+        verify_signature(second_delegation, &second_key_pair.public_key);
         assert_eq!(
             second_delegation.delegation().pubkey(),
             &ed25519_public_key_to_der(third_key_pair.public_key.to_vec())
@@ -101,29 +94,22 @@ mod delegation_chain {
             .build();
 
         assert_matches!(request.authentication(), Authentication::Authenticated(user_signature)
-            if is_request_signature_correct(user_signature, &request.id(), &ed25519::types::PublicKeyBytes(second_key_pair.public_key))
+            if is_request_signature_correct(user_signature, &request.id(), &second_key_pair.public_key)
         )
     }
 
-    fn verify_signature(
-        delegation: &SignedDelegation,
-        public_key: &ed25519::types::PublicKeyBytes,
-    ) {
-        assert_matches!(
-            ed25519::verify(
-                &ed25519::types::SignatureBytes(
-                    delegation
-                        .signature()
-                        .0
-                        .clone()
-                        .try_into()
-                        .expect("invalid signature")
+    fn verify_signature(delegation: &SignedDelegation, pk_bytes: &[u8]) {
+        if let Ok(pk) = ic_ed25519::PublicKey::deserialize_raw(pk_bytes) {
+            assert_matches!(
+                pk.verify_signature(
+                    &delegation.delegation().as_signed_bytes(),
+                    delegation.signature()
                 ),
-                &delegation.delegation().as_signed_bytes(),
-                public_key,
-            ),
-            Ok(())
-        );
+                Ok(())
+            );
+        } else {
+            panic!("Failed to parse public key");
+        }
     }
 }
 
@@ -147,7 +133,7 @@ mod change_authentication {
 
         assert_eq!(request.sender().get().0.as_slice(), &new_sender);
         assert_matches!(request.authentication(), Authentication::Authenticated(user_signature)
-            if is_request_signature_correct(user_signature, &request.id(), &ed25519::types::PublicKeyBytes(key_pair.public_key))
+            if is_request_signature_correct(user_signature, &request.id(), &key_pair.public_key)
         );
     }
 
@@ -166,7 +152,7 @@ mod change_authentication {
 
         assert_matches!(request.authentication(), Authentication::Authenticated(user_signature)
         if user_signature.signer_pubkey == other_public_key &&
-            is_request_signature_correct(user_signature, &request.id(), &ed25519::types::PublicKeyBytes(key_pair.public_key))
+            is_request_signature_correct(user_signature, &request.id(), &key_pair.public_key)
         );
     }
 
@@ -187,27 +173,20 @@ mod change_authentication {
             (Authentication::Authenticated(valid_signature), Authentication::Authenticated(corrupted_signature))
             if valid_signature.signature != corrupted_signature.signature &&
                 valid_signature.signer_pubkey == corrupted_signature.signer_pubkey &&
-                is_request_signature_correct(valid_signature, &valid_request.id(), &ed25519::types::PublicKeyBytes(key_pair.public_key)) &&
-                !is_request_signature_correct(corrupted_signature, &corrupted_request.id(), &ed25519::types::PublicKeyBytes(key_pair.public_key))
-        )
+                is_request_signature_correct(valid_signature, &valid_request.id(), &key_pair.public_key) &&
+                        !is_request_signature_correct(corrupted_signature, &corrupted_request.id(), &key_pair.public_key));
     }
 }
 
 fn is_request_signature_correct(
     signature: &UserSignature,
     message_id: &MessageId,
-    public_key: &ed25519::types::PublicKeyBytes,
+    pk_bytes: &[u8],
 ) -> bool {
-    ed25519::verify(
-        &ed25519::types::SignatureBytes(
-            signature
-                .signature
-                .clone()
-                .try_into()
-                .expect("invalid signature"),
-        ),
-        &message_id.as_signed_bytes(),
-        public_key,
-    )
-    .is_ok()
+    if let Ok(pk) = ic_ed25519::PublicKey::deserialize_raw(pk_bytes) {
+        pk.verify_signature(&message_id.as_signed_bytes(), &signature.signature)
+            .is_ok()
+    } else {
+        false
+    }
 }

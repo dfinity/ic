@@ -49,6 +49,7 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-rusqlite",
     "@crate_index//:tower-http",
     "@crate_index//:tower-request-id",
     "@crate_index//:tracing",
@@ -84,7 +85,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.2.7"
+ROSETTA_VERSION = "1.2.9"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -111,15 +112,8 @@ rust_test(
     aliases = ALIASES,
     crate = ":ic-icrc-rosetta",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["long_test"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_test(
-    name = "storage-operations-tests",
-    srcs = ["src/common/storage/storage_operations_test.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":ic-icrc-rosetta"],
 )
 
 LOCAL_REPLICA_DATA = [
@@ -186,7 +180,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
@@ -210,7 +203,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:4"],
     deps = DEV_DEPENDENCIES + DEPENDENCIES,

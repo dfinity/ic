@@ -4,6 +4,7 @@ use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::RosettaApiServer;
 use std::process::Command;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tracing::log::debug;
 
 mod test_utils;
@@ -40,7 +41,11 @@ async fn rosetta_cli_data_test() {
     }
 
     let ledger = Arc::new(TestLedger::new());
-    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
+    let initial_sync_complete = Arc::new(AtomicBool::new(true));
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        ledger.clone(),
+        Arc::clone(&initial_sync_complete),
+    );
     for b in &scribe.blockchain {
         ledger.add_block(b.clone()).await.ok();
     }
@@ -49,8 +54,16 @@ async fn rosetta_cli_data_test() {
     let serv_req_handler = req_handler.clone();
 
     let serv = Arc::new(
-        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), None, false, 60)
-            .unwrap(),
+        RosettaApiServer::new(
+            serv_ledger,
+            serv_req_handler,
+            addr.clone(),
+            None,
+            false,
+            60,
+            Arc::clone(&initial_sync_complete),
+        )
+        .unwrap(),
     );
     let serv_run = serv.clone();
     let arbiter = actix_rt::Arbiter::new();
@@ -104,7 +117,11 @@ async fn rosetta_cli_construction_create_account_test() {
     }
 
     let ledger = Arc::new(TestLedger::new());
-    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
+    let initial_sync_complete = Arc::new(AtomicBool::new(true));
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        ledger.clone(),
+        Arc::clone(&initial_sync_complete),
+    );
     for b in &scribe.blockchain {
         ledger.add_block(b.clone()).await.ok();
     }
@@ -113,8 +130,16 @@ async fn rosetta_cli_construction_create_account_test() {
     let serv_req_handler = req_handler.clone();
 
     let serv = Arc::new(
-        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), None, false, 60)
-            .unwrap(),
+        RosettaApiServer::new(
+            serv_ledger,
+            serv_req_handler,
+            addr.clone(),
+            None,
+            false,
+            60,
+            Arc::clone(&initial_sync_complete),
+        )
+        .unwrap(),
     );
     let serv_run = serv.clone();
     let arbiter = actix_rt::Arbiter::new();
@@ -187,7 +212,11 @@ async fn rosetta_cli_construction_test() {
     );
 
     let ledger = Arc::new(TestLedger::new());
-    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
+    let initial_sync_complete = Arc::new(AtomicBool::new(true));
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(
+        ledger.clone(),
+        Arc::clone(&initial_sync_complete),
+    );
     for b in &scribe.blockchain {
         ledger.add_block(b.clone()).await.ok();
     }
@@ -196,8 +225,16 @@ async fn rosetta_cli_construction_test() {
     let serv_req_handler = req_handler.clone();
 
     let serv = Arc::new(
-        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), None, false, 60)
-            .unwrap(),
+        RosettaApiServer::new(
+            serv_ledger,
+            serv_req_handler,
+            addr.clone(),
+            None,
+            false,
+            60,
+            Arc::clone(&initial_sync_complete),
+        )
+        .unwrap(),
     );
     let serv_run = serv.clone();
     let arbiter = actix_rt::Arbiter::new();

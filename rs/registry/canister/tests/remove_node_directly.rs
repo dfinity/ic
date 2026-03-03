@@ -10,7 +10,7 @@ use ic_nns_test_utils::registry::{
     get_transport_tls_certificate, new_node_keys_and_node_id,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
+    itest_helpers::{set_up_registry_canister, state_machine_test_on_nns_subnet},
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -37,7 +37,7 @@ const TEST_NODE_ALLOWANCE: u64 = 5;
 
 #[test]
 fn node_is_removed_on_receiving_the_request() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let test_node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
@@ -113,7 +113,7 @@ fn node_is_removed_on_receiving_the_request() {
 
 #[test]
 fn node_cannot_be_removed_by_non_node_operator() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let test_node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
@@ -143,7 +143,7 @@ fn node_cannot_be_removed_by_non_node_operator() {
 
 #[test]
 fn node_cannot_be_removed_if_in_subnet() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let test_node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),

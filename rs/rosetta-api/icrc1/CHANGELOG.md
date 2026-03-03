@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.2.9] - 2026-02-02
+### Added
+- Add ICRC-107 fee collector block handling ([#7697](https://github.com/dfinity/ic/pull/7697))
+
+### Changed
+- Bumped database schema version from 1 to 2
+
+## [1.2.8] - 2026-01-12
+### Added
+- Add database schema versioning ([#8041](https://github.com/dfinity/ic/pull/8041))
+
+### Changed
+- Use `tokio-rusqlite` for database operations ([#8109](https://github.com/dfinity/ic/pull/8109))
+- Make balance sync batch size configurable ([#7694](https://github.com/dfinity/ic/pull/7694))
+- Add configurable SQLite cache size limit and flushing ([#7690](https://github.com/dfinity/ic/pull/7690))
+
 ## [1.2.7] - 2025-10-29
 ### Added
 - Metrics for `rosetta_synched_block_height` and `rosetta_target_block_height` ([#6896](https://github.com/dfinity/ic/pull/6896))

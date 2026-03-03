@@ -215,6 +215,7 @@ pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,
 
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_ingress_bytes_per_block: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
     pub unit_delay_millis: Option<u64>,
@@ -278,7 +279,7 @@ impl From<ChainKeyConfigInternal> for ChainKeyConfig {
                      max_queue_size,
                  }| KeyConfig {
                     key_id: Some(key_id),
-                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+                    pre_signatures_to_create_in_advance,
                     max_queue_size: Some(max_queue_size),
                 },
             )
@@ -349,7 +350,7 @@ impl From<KeyConfigInternal> for KeyConfig {
 
         Self {
             key_id: Some(key_id),
-            pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+            pre_signatures_to_create_in_advance,
             max_queue_size: Some(max_queue_size),
         }
     }
@@ -376,6 +377,12 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
                 "KeyConfig.pre_signatures_to_create_in_advance must be specified for key {key_id}."
             ));
         };
+        // Ensure absence of `pre_signatures_to_create_in_advance` for keys that do not require it.
+        if !key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_some() {
+            return Err(format!(
+                "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key {key_id} because it does not require pre-signatures."
+            ));
+        };
 
         let Some(max_queue_size) = max_queue_size else {
             return Err("KeyConfig.max_queue_size must be specified.".to_string());
@@ -383,7 +390,7 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
 
         Ok(Self {
             key_id,
-            pre_signatures_to_create_in_advance: pre_signatures_to_create_in_advance.unwrap_or(0),
+            pre_signatures_to_create_in_advance,
             max_queue_size,
         })
     }
@@ -422,6 +429,7 @@ fn merge_subnet_record(
     let UpdateSubnetPayload {
         subnet_id: _subnet_id,
         max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block,
         max_ingress_messages_per_block,
         max_block_payload_size,
         unit_delay_millis,
@@ -454,6 +462,7 @@ fn merge_subnet_record(
     let features: Option<SubnetFeaturesPb> = features.map(|v| SubnetFeatures::from(v).into());
 
     maybe_set!(subnet_record, max_ingress_bytes_per_message);
+    maybe_set!(subnet_record, max_ingress_bytes_per_block);
     maybe_set!(subnet_record, max_ingress_messages_per_block);
     maybe_set!(subnet_record, max_block_payload_size);
     maybe_set!(subnet_record, unit_delay_millis);
@@ -495,7 +504,7 @@ mod tests {
         prepare_registry_with_nodes,
     };
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
@@ -515,6 +524,7 @@ mod tests {
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -549,6 +559,7 @@ mod tests {
         let subnet_record = SubnetRecordPb {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -566,6 +577,7 @@ mod tests {
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            subnet_admins: vec![],
         };
 
         let key_id = EcdsaKeyId {
@@ -592,6 +604,7 @@ mod tests {
             ),
             max_ingress_bytes_per_message: Some(256),
             max_ingress_messages_per_block: Some(256),
+            max_ingress_bytes_per_block: Some(257),
             max_block_payload_size: Some(200),
             unit_delay_millis: Some(300),
             initial_notary_delay_millis: Some(200),
@@ -633,6 +646,7 @@ mod tests {
                 membership: vec![],
                 max_ingress_bytes_per_message: 256,
                 max_ingress_messages_per_block: 256,
+                max_ingress_bytes_per_block: 257,
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
@@ -658,6 +672,7 @@ mod tests {
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
             }
         );
     }
@@ -667,6 +682,7 @@ mod tests {
         let subnet_record = SubnetRecordPb {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -684,6 +700,7 @@ mod tests {
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            subnet_admins: vec![],
         };
 
         let payload = UpdateSubnetPayload {
@@ -695,6 +712,7 @@ mod tests {
             ),
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
@@ -727,6 +745,7 @@ mod tests {
             SubnetRecordPb {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_bytes_per_block: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
@@ -744,6 +763,7 @@ mod tests {
                 ssh_backup_access: vec![],
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
             }
         );
     }
@@ -1312,5 +1332,64 @@ mod tests {
 
         // Should panic because we are trying to delete an existing key
         registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must be specified for key ecdsa:Secp256k1:some_key_name"
+    )]
+    fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let payload = update_subnet_payload_with_key_config(
+            subnet_id,
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "some_key_name".to_string(),
+            }),
+            None,
+        );
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
+    )]
+    fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let payload = update_subnet_payload_with_key_config(
+            subnet_id,
+            MasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: "some_key_name".to_string(),
+            }),
+            Some(99),
+        );
+
+        registry.do_update_subnet(payload);
+    }
+
+    fn update_subnet_payload_with_key_config(
+        subnet_id: SubnetId,
+        key_id: MasterPublicKeyId,
+        pre_signatures_to_create_in_advance: Option<u32>,
+    ) -> UpdateSubnetPayload {
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.chain_key_config = Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(key_id),
+                pre_signatures_to_create_in_advance,
+                max_queue_size: Some(155),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+        payload
     }
 }

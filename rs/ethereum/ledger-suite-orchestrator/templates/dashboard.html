@@ -59,7 +59,7 @@
         {% if !managed_canisters.is_empty() -%}
         <h1 id="managed-canisters">Managed Canisters</h1>
         {%- for (contract, canisters) in managed_canisters %}
-        <h2 id="managed-canisters-{{contract.chain_id().as_ref()}}-{{contract.address()}}">{{canisters.ckerc20_token_symbol.clone()}}({% call etherscan_address_link(contract.chain_id().as_ref(), contract.address()) %})</h2>
+        <h2 id="managed-canisters-{{contract.chain_id().as_ref()}}-{{contract.address()}}">{{canisters.ckerc20_token_symbol.clone()}}({% call etherscan_address_link(contract.chain_id().as_ref(), contract.address()) %}{% endcall %})</h2>
         <table>
             <thead>
             <tr>

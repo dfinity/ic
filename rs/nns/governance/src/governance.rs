@@ -42,8 +42,8 @@ use crate::{
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
-            SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
-            UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
+            SettleNeuronsFundParticipationResponse, StopOrStartCanister, TakeCanisterSnapshot,
+            Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
             WaitForQuietState, archived_monthly_node_provider_rewards,
             create_service_nervous_system::LedgerParameters,
             get_neurons_fund_audit_info_response,
@@ -150,22 +150,22 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-pub mod disburse_maturity;
+#[cfg(feature = "canbench-rs")]
+mod benches;
 mod ledger_helper;
 mod merge_neurons;
 mod split_neuron;
-pub mod test_data;
 #[cfg(test)]
 mod tests;
-pub mod voting_power_snapshots;
 
-#[cfg(feature = "canbench-rs")]
-mod benches;
-
-#[macro_use]
-pub mod tla_macros;
+pub mod create_neuron;
+pub mod disburse_maturity;
+pub mod test_data;
 #[cfg(feature = "tla")]
 pub mod tla;
+#[macro_use]
+pub mod tla_macros;
+pub mod voting_power_snapshots;
 
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
@@ -240,7 +240,7 @@ pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 20;
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
 /// The maximum number of neurons returned by `list_neurons`
-pub const MAX_LIST_NEURONS_RESULTS: usize = 500;
+pub const MAX_LIST_NEURONS_RESULTS: usize = 50;
 
 const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 
@@ -266,9 +266,9 @@ pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
-/// The number of seconds between automated Node Provider reward events
-/// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
-pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
+/// The amount of time between when node providers are rewarded (for hosting
+/// canisters). (Such rewards come in the form of minted ICP.)
+pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = ONE_MONTH_SECONDS;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
@@ -512,6 +512,8 @@ impl Action {
             Action::BlessAlternativeGuestOsVersion(_) => {
                 "ACTION_BLESS_ALTERNATIVE_GUEST_OS_VERSION"
             }
+            Action::TakeCanisterSnapshot(_) => "ACTION_TAKE_CANISTER_SNAPSHOT",
+            Action::LoadCanisterSnapshot(_) => "ACTION_LOAD_CANISTER_SNAPSHOT",
         }
     }
 }
@@ -4174,6 +4176,14 @@ impl Governance {
                 pid,
                 bless_alternative_guest_os_version,
             ),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                self.perform_take_canister_snapshot(pid, take_canister_snapshot)
+                    .await;
+            }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                self.perform_load_canister_snapshot(pid, load_canister_snapshot)
+                    .await;
+            }
         }
     }
 
@@ -4245,12 +4255,34 @@ impl Governance {
         self.set_proposal_execution_status(proposal_id, result);
     }
 
+    async fn perform_load_canister_snapshot(
+        &mut self,
+        proposal_id: u64,
+        load_canister_snapshot: pb::v1::LoadCanisterSnapshot,
+    ) {
+        let result = self
+            .perform_call_canister(proposal_id, load_canister_snapshot)
+            .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
     fn perform_bless_alternative_guest_os_version(
         &mut self,
         proposal_id: u64,
         bless_alternative_guest_os_version: BlessAlternativeGuestOsVersion,
     ) {
         let result = bless_alternative_guest_os_version.execute();
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_take_canister_snapshot(
+        &mut self,
+        proposal_id: u64,
+        take_canister_snapshot: TakeCanisterSnapshot,
+    ) {
+        let result = self
+            .perform_call_canister(proposal_id, take_canister_snapshot)
+            .await;
         self.set_proposal_execution_status(proposal_id, result);
     }
 
@@ -4771,6 +4803,12 @@ impl Governance {
             ValidProposalAction::BlessAlternativeGuestOsVersion(
                 bless_alternative_guest_os_version,
             ) => bless_alternative_guest_os_version.validate(),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                take_canister_snapshot.validate()
+            }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                load_canister_snapshot.validate()
+            }
         }
     }
 
@@ -4999,14 +5037,16 @@ impl Governance {
             ));
         }
 
-        let self_describing_action =
-            if is_self_describing_proposal_actions_enabled() && cfg!(target_arch = "wasm32") {
-                // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-                // implemented.
-                action.to_self_describing(self.env.clone()).await.ok()
-            } else {
-                None
-            };
+        let self_describing_action = if is_self_describing_proposal_actions_enabled()
+            && cfg!(target_arch = "wasm32")
+            && !cfg!(feature = "canbench-rs")
+        {
+            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
+            // implemented.
+            action.to_self_describing(self.env.clone()).await.ok()
+        } else {
+            None
+        };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the

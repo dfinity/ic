@@ -8,12 +8,10 @@
 //! - Tuple structs: NOT supported (compile error)
 //!
 //! For enums:
-//! - If all variants are unit types: uses `Text(VariantName)`
-//! - Otherwise:
-//!   - Single-field tuple variants: map `{ "VariantName": inner_value }`
-//!   - Unit variants: map `{ "VariantName": [] }`
-//!   - Multi-field tuple variants: NOT supported (compile error)
-//!   - Named field variants: NOT supported (compile error)
+//! - Unit variants: uses `Text(VariantName)`
+//! - Single-field tuple variants: map `{ "VariantName": inner_value }`
+//! - Multi-field tuple variants: NOT supported (compile error)
+//! - Named field variants: NOT supported (compile error)
 //!
 //! # Example
 //!
@@ -48,12 +46,10 @@ use syn::{Data, DataEnum, DeriveInput, Fields, FieldsNamed, Ident, parse_macro_i
 /// - Tuple structs: NOT supported (compile error)
 ///
 /// For enums:
-/// - If all variants are unit types: uses `Text(VariantName)`
-/// - Otherwise:
-///   - Single-field tuple variants: Map with variant name as key and inner value as value
-///   - Unit variants: Map with variant name as key and empty array as value
-///   - Multi-field tuple variants: NOT supported (compile error)
-///   - Named field variants: NOT supported (compile error)
+/// - Unit variants: uses `Text(VariantName)`
+/// - Single-field tuple variants: Map with variant name as key and inner value as value
+/// - Multi-field tuple variants: NOT supported (compile error)
+/// - Named field variants: NOT supported (compile error)
 #[proc_macro_derive(SelfDescribing)]
 pub fn derive_self_describing(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -83,18 +79,10 @@ pub fn derive_self_describing(input: TokenStream) -> TokenStream {
                 .into();
             }
         },
-        Data::Enum(data_enum) => {
-            let all_unit = data_enum
-                .variants
-                .iter()
-                .all(|v| matches!(v.fields, Fields::Unit));
-
-            if all_unit {
-                derive_all_unit_enum(name, data_enum)
-            } else {
-                derive_mixed_enum(name, data_enum).unwrap_or_else(|err| err)
-            }
-        }
+        Data::Enum(data_enum) => match derive_enum(name, data_enum) {
+            Ok(tokens) => tokens,
+            Err(err) => return err.into(),
+        },
         Data::Union(_) => {
             return syn::Error::new_spanned(&input, "SelfDescribing does not support unions")
                 .to_compile_error()
@@ -127,89 +115,17 @@ fn derive_struct_with_named_fields(name: &Ident, fields_named: &FieldsNamed) -> 
     }
 }
 
-/// Generates `From` impl for an enum where all variants are unit types.
-/// Uses `Text(VariantName)` for each variant.
-fn derive_all_unit_enum(name: &Ident, data_enum: &DataEnum) -> TokenStream2 {
-    let match_arms = data_enum.variants.iter().map(|variant| {
-        let variant_name = &variant.ident;
-        let variant_name_str = variant_name.to_string();
-
-        quote! {
-            #name::#variant_name => {
-                crate::pb::v1::SelfDescribingValue::from(#variant_name_str)
-            }
-        }
-    });
-
-    quote! {
-        impl From<#name> for crate::pb::v1::SelfDescribingValue {
-            fn from(value: #name) -> Self {
-                match value {
-                    #(#match_arms)*
-                }
-            }
-        }
-    }
-}
-
-/// Generates `From` impl for a mixed enum (not all unit variants).
+/// Generates `From` impl for an enum.
+/// - Unit variants: uses `Text(VariantName)`
 /// - Single-field tuple variants: map with variant name as key, inner value as value
-/// - Unit variants: map with variant name as key, empty array as value
 ///
 /// Returns an error if the enum contains unsupported variants (multi-field tuples or named fields).
-fn derive_mixed_enum(name: &Ident, data_enum: &DataEnum) -> Result<TokenStream2, TokenStream2> {
-    let match_arms: Vec<_> = data_enum
+fn derive_enum(name: &Ident, data_enum: &DataEnum) -> Result<TokenStream2, TokenStream2> {
+    let match_arms = data_enum
         .variants
         .iter()
-        .map(|variant| {
-            let variant_name = &variant.ident;
-            let variant_name_str = variant_name.to_string();
-
-            match &variant.fields {
-                Fields::Unnamed(fields) if fields.unnamed.len() > 1 => {
-                    let field_count = fields.unnamed.len();
-                    // We could have supported this with an array, but we don't expect it to
-                    // be useful. It can be extended in the future if needed.
-                    let error_msg = format!(
-                        "SelfDescribing does not support enum variants with multiple tuple fields. \
-                        Variant `{}` has {} fields.",
-                        variant_name, field_count
-                    );
-                    Err(syn::Error::new_spanned(variant, error_msg).to_compile_error())
-                }
-                Fields::Unnamed(_) => {
-                    // Single field: map with variant name as key, inner value as value
-                    Ok(quote! {
-                        #name::#variant_name(inner) => {
-                            crate::proposals::self_describing::ValueBuilder::new()
-                                .add_field(#variant_name_str, inner)
-                                .build()
-                        }
-                    })
-                }
-                Fields::Unit => {
-                    // Unit variant in mixed enum: map with variant name as key, null value as value
-                    Ok(quote! {
-                        #name::#variant_name => {
-                            crate::proposals::self_describing::ValueBuilder::new()
-                                .add_field(#variant_name_str, crate::proposals::self_describing::SelfDescribingValue::NULL)
-                                .build()
-                        }
-                    })
-                }
-                Fields::Named(_) => {
-                    // We could have supported this with a map, but we don't expect it to
-                    // be useful. It can be extended in the future if needed.
-                    let error_msg = format!(
-                        "SelfDescribing does not support enum variants with named fields. \
-                        Variant `{}` has named fields.",
-                        variant_name
-                    );
-                    Err(syn::Error::new_spanned(variant, error_msg).to_compile_error())
-                }
-            }
-        })
-        .collect::<Result<_, _>>()?;
+        .map(|variant| derive_enum_variant_match_arm(name, variant))
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(quote! {
         impl From<#name> for crate::pb::v1::SelfDescribingValue {
@@ -220,4 +136,55 @@ fn derive_mixed_enum(name: &Ident, data_enum: &DataEnum) -> Result<TokenStream2,
             }
         }
     })
+}
+
+/// Generates a match arm for an enum variant.
+fn derive_enum_variant_match_arm(
+    name: &Ident,
+    variant: &syn::Variant,
+) -> Result<TokenStream2, TokenStream2> {
+    let variant_name = &variant.ident;
+    let variant_name_str = variant_name.to_string();
+
+    match &variant.fields {
+        Fields::Unnamed(fields) if fields.unnamed.len() > 1 => {
+            let field_count = fields.unnamed.len();
+            // We could have supported this with an array, but we don't expect it to
+            // be useful. It can be extended in the future if needed.
+            let error_msg = format!(
+                "SelfDescribing does not support enum variants with multiple tuple fields. \
+                Variant `{}` has {} fields.",
+                variant_name, field_count
+            );
+            Err(syn::Error::new_spanned(variant, error_msg).to_compile_error())
+        }
+        Fields::Unnamed(_) => {
+            // Single field: map with variant name as key, inner value as value
+            Ok(quote! {
+                #name::#variant_name(inner) => {
+                    crate::proposals::self_describing::ValueBuilder::new()
+                        .add_field(#variant_name_str, inner)
+                        .build()
+                }
+            })
+        }
+        Fields::Unit => {
+            // Unit variant: convert to text
+            Ok(quote! {
+                #name::#variant_name => {
+                    crate::pb::v1::SelfDescribingValue::from(#variant_name_str)
+                }
+            })
+        }
+        Fields::Named(_) => {
+            // We could have supported this with a map, but we don't expect it to
+            // be useful. It can be extended in the future if needed.
+            let error_msg = format!(
+                "SelfDescribing does not support enum variants with named fields. \
+                Variant `{}` has named fields.",
+                variant_name
+            );
+            Err(syn::Error::new_spanned(variant, error_msg).to_compile_error())
+        }
+    }
 }

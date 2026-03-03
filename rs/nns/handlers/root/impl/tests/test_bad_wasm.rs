@@ -11,8 +11,8 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
-    set_up_universal_canister,
+    forward_call_via_universal_canister, set_up_root_canister, set_up_universal_canister,
+    state_machine_test_on_nns_subnet,
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM_SHA256;
 
@@ -91,7 +91,7 @@ async fn install_invalid_wasm(
 
 #[test]
 fn test_try_to_upgrade_to_invalid_does_nothing_reinstall_dont_stop() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         install_invalid_wasm(&runtime, Reinstall, false).await;
         Ok(())
     });
@@ -99,7 +99,7 @@ fn test_try_to_upgrade_to_invalid_does_nothing_reinstall_dont_stop() {
 
 #[test]
 fn test_try_to_upgrade_to_invalid_does_nothing_upgrade_dont_stop() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         install_invalid_wasm(&runtime, Upgrade, false).await;
         Ok(())
     });
@@ -107,7 +107,7 @@ fn test_try_to_upgrade_to_invalid_does_nothing_upgrade_dont_stop() {
 
 #[test]
 fn test_try_to_upgrade_to_invalid_does_nothing_reinstall_stop() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         install_invalid_wasm(&runtime, Reinstall, true).await;
         Ok(())
     });
@@ -115,7 +115,7 @@ fn test_try_to_upgrade_to_invalid_does_nothing_reinstall_stop() {
 
 #[test]
 fn test_try_to_upgrade_to_invalid_does_nothing_upgrade_stop() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         install_invalid_wasm(&runtime, Upgrade, true).await;
         Ok(())
     });

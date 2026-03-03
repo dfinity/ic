@@ -393,7 +393,7 @@ impl ThresholdSignatureBuilder for TestThresholdSignatureBuilder {
         callback_id: CallbackId,
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
-        let height = context.matched_pre_signature.map(|(_, h)| h)?;
+        let height = context.height()?;
         self.signatures
             .get(&RequestId {
                 callback_id,
@@ -1117,10 +1117,15 @@ pub(crate) fn is_removed_from_unvalidated(
 }
 
 // Checks that artifact is being dropped as invalid
-pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
+pub(crate) fn is_handle_invalid(
+    change_set: &[IDkgChangeAction],
+    msg_id: &IDkgMessageId,
+    expected_reason: &str,
+) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::HandleInvalid(id, _) = action
+        if let IDkgChangeAction::HandleInvalid(id, reason) = action
             && *id == *msg_id
+            && reason.contains(expected_reason)
         {
             return true;
         }

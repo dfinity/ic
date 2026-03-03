@@ -118,16 +118,16 @@ pub fn make_key_ids_for_all_idkg_schemes() -> Vec<MasterPublicKeyId> {
 
 /// Creates one system subnet without signing enabled and one application subnet
 /// with signing enabled.
-pub fn setup_without_ecdsa_on_nns(test_env: TestEnv) {
+pub fn setup_without_ecdsa_on_nns(test_env: TestEnv, dkg_interval_length: Height) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_dkg_interval_length(Height::from(19))
+                .with_dkg_interval_length(dkg_interval_length)
                 .add_nodes(NUMBER_OF_NODES),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_dkg_interval_length(dkg_interval_length)
                 .add_nodes(NUMBER_OF_NODES),
         )
         .with_unassigned_nodes(NUMBER_OF_NODES)
@@ -205,6 +205,7 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
         subnet_id: subnet_test_id(0),
         max_ingress_bytes_per_message: None,
         max_ingress_messages_per_block: None,
+        max_ingress_bytes_per_block: None,
         max_block_payload_size: None,
         unit_delay_millis: None,
         initial_notary_delay_millis: None,
@@ -995,13 +996,9 @@ pub async fn add_chain_keys_with_timeout_and_rotation_period(
                 .into_iter()
                 .map(|key_id| KeyConfigUpdate {
                     key_id: Some(key_id.clone()),
-                    pre_signatures_to_create_in_advance: Some(
-                        if key_id.requires_pre_signatures() {
-                            5
-                        } else {
-                            0
-                        },
-                    ),
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(5),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 })
                 .collect(),
@@ -1061,13 +1058,9 @@ pub async fn create_new_subnet_with_keys(
             .into_iter()
             .map(|(key_id, subnet_id)| KeyConfigRequest {
                 key_config: Some(KeyConfigCreate {
-                    pre_signatures_to_create_in_advance: Some(
-                        if key_id.requires_pre_signatures() {
-                            5
-                        } else {
-                            0
-                        },
-                    ),
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(5),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                     key_id: Some(key_id),
                 }),
@@ -1086,6 +1079,7 @@ pub async fn create_new_subnet_with_keys(
         node_ids,
         subnet_id_override: None,
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block: Some(config.max_ingress_bytes_per_block),
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,
         replica_version_id: replica_version.to_string(),
@@ -1104,6 +1098,7 @@ pub async fn create_new_subnet_with_keys(
         ssh_backup_access: vec![],
         chain_key_config: Some(chain_key_config),
         canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+        subnet_admins: Some(vec![]),
 
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
@@ -1179,7 +1174,9 @@ pub async fn set_pre_signature_stash_size(
                 .iter()
                 .map(|key_id| KeyConfigUpdate {
                     key_id: Some(key_id.clone()),
-                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(pre_signatures_to_create_in_advance),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 })
                 .collect(),
