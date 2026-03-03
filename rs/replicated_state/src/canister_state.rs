@@ -5,7 +5,7 @@ pub mod system_state;
 #[cfg(test)]
 mod tests;
 
-use crate::canister_state::canister_snapshots::{CanisterSnapshot, CanisterSnapshots};
+use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::{NextScheduledMethod, WasmExecutionMode};
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{
@@ -13,7 +13,6 @@ use crate::canister_state::system_state::{
 };
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
-use ic_base_types::SnapshotId;
 use ic_config::embedders::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
@@ -620,27 +619,6 @@ impl CanisterState {
             let deallocated_bytes = old_allocated_bytes - new_allocated_bytes;
             SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes)
         }
-    }
-
-    /// Adds a new snapshot to the list of snapshots.
-    ///
-    /// This function is used by the management canister's TakeSnapshot function to change the state.
-    /// Note that the rest of the logic, e.g. constructing the `snapshot` is done in the calling code.
-    pub fn take_snapshot(
-        &mut self,
-        snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
-    ) -> SnapshotId {
-        self.canister_snapshots.push(snapshot_id, snapshot)
-    }
-
-    /// Adds a new snapshot to the list of snapshots.
-    pub fn create_snapshot_from_metadata(
-        &mut self,
-        snapshot_id: SnapshotId,
-        snapshot: Arc<CanisterSnapshot>,
-    ) {
-        self.canister_snapshots.push(snapshot_id, snapshot);
     }
 }
 

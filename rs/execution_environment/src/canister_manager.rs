@@ -2116,7 +2116,9 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        canister.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+        canister
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
         state
             .metadata
             .unflushed_checkpoint_ops
@@ -2895,7 +2897,9 @@ impl CanisterManager {
 
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        canister.create_snapshot_from_metadata(snapshot_id, Arc::new(new_snapshot));
+        canister
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage

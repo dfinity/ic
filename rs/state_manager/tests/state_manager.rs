@@ -278,7 +278,7 @@ fn take_canister_snapshot(
 ) {
     let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
     let canister = Arc::make_mut(&mut canister_arc);
-    canister.take_snapshot(snapshot_id, Arc::new(snapshot));
+    canister.canister_snapshots.push(snapshot_id, Arc::new(snapshot));
     state
         .metadata
         .unflushed_checkpoint_ops
