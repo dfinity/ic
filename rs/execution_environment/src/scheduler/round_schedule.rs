@@ -413,7 +413,6 @@ impl RoundSchedule {
         current_round: ExecutionRound,
         metrics: &SchedulerMetrics,
     ) {
-        let number_of_canisters = state.canister_states().len();
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
 
         // Charge canisters for full executions in this round.
@@ -456,7 +455,7 @@ impl RoundSchedule {
         // Fully distribute the free allocation among all canisters, ensuring that we
         // end up with exactly zero at the end of the loop.
         let mut accumulated_priority_deviation = 0.0;
-        let mut remaining_canisters = number_of_canisters as i64;
+        let mut remaining_canisters = subnet_schedule.len() as i64;
         // We called `SubnetSchedule::get_mut()` for all canisters above (which inserts
         // a default priority when not found), so this iteration covers all canisters.
         for (_, canister_priority) in subnet_schedule.iter_mut() {
@@ -473,7 +472,7 @@ impl RoundSchedule {
 
         metrics
             .scheduler_accumulated_priority_deviation
-            .set((accumulated_priority_deviation / subnet_schedule.len() as f64).sqrt());
+            .set((accumulated_priority_deviation / subnet_schedule.len().max(1) as f64).sqrt());
     }
 
     /// Returns scheduler compute capacity in percent.

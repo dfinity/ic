@@ -216,7 +216,9 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
         chain_key_settings: BTreeMap::new(),
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
-        node_ids: BTreeSet::new(),
+        node_ids: (0..SMALL_APP_SUBNET_MAX_SIZE)
+            .map(|i| node_test_id(i as u64))
+            .collect(),
         registry_version: RegistryVersion::default(),
     }
 }
