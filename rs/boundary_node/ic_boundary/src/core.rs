@@ -218,19 +218,24 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // Snapshot update notification channels
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
 
-    // Registry Client
-    let registry_client = if cli.registry.registry_local_store_path.is_some() {
-        Some(
-            setup_registry(
-                &cli,
-                registry_snapshot.clone(),
-                &metrics_registry,
-                channel_snapshot_send,
-                &mut tasks,
-            )
-            .await
-            .context("unable to init Registry")?,
+    // Registry Client, IC Agent, and health checking
+    let (registry_client, agent) = if cli.registry.registry_local_store_path.is_some() {
+        let (registry_client, agent) = setup_registry(
+            &cli,
+            registry_snapshot.clone(),
+            persister,
+            http_client_check.clone(),
+            &metrics_registry,
+            channel_snapshot_send,
+            channel_snapshot_recv.clone(),
+            &mut tasks,
         )
+        .await
+        .context("unable to init Registry")?;
+
+        set_agent_root_key(&agent, &registry_client)?;
+
+        (Some(registry_client), Some(agent))
     } else {
         // Prepare a stub routing table and snapshot if there's no local store specified
         let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
@@ -238,74 +243,22 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         let _ = persister.persist(vec![subnet]);
         registry_snapshot.store(Some(Arc::new(snapshot)));
 
-        None
+        (None, None)
     };
 
-    // IC Agent
-    let agent = if registry_client.is_some()
-        || cli.rate_limiting.rate_limit_generic_canister_id.is_some()
-        || cli.obs.obs_log_anonymization_canister_id.is_some()
+    // IC Agent for non-registry use cases (rate limiting, observability)
+    let agent = if agent.is_none()
+        && (cli.rate_limiting.rate_limit_generic_canister_id.is_some()
+            || cli.obs.obs_log_anonymization_canister_id.is_some())
     {
-        if cli.misc.crypto_config.is_some() && registry_client.is_none() {
+        if cli.misc.crypto_config.is_some() {
             bail!("IC-Agent: registry client is required when crypto-config is in use");
         }
 
-        if cli.misc.crypto_config.is_none() {
-            warn!("IC-Agent: crypto-config is missing, using anonymous principal");
-        }
-
-        let agent = create_agent(
-            cli.misc.crypto_config.clone(),
-            registry_client.clone(),
-            cli.listen.listen_http_port_loopback,
-        )
-        .await?;
-
-        if let Some(v) = &registry_client {
-            // Fetch the NNS root key from the local registry snapshot
-            let ver = v.get_latest_version();
-            let nns_subnet_id = v
-                .get_root_subnet_id(ver)
-                .context("unable to get root subnet id")?
-                .context("no root subnet")?;
-            let root_key = v
-                .get_threshold_signing_public_key_for_subnet(nns_subnet_id, ver)
-                .context("unable to get root NNS key")?
-                .context("no root NNS key")?;
-
-            let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
-                .context("failed to convert root NNS key to DER")?;
-
-            agent.set_root_key(der_encoded_root_key);
-        }
-
-        Some(agent)
+        Some(create_agent(None, None, cli.listen.listen_http_port_loopback).await?)
     } else {
-        None
+        agent
     };
-
-    // Start the health checking and certified membership fetching
-    if registry_client.is_some() {
-        let persister = WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry));
-        let membership_fetcher = CertifiedMembershipFetcherImpl::new(
-            agent
-                .clone()
-                .expect("Agent must be available when registry is present"),
-        );
-        let checker = Checker::new(http_client_check.clone(), cli.health.health_check_timeout);
-        let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&metrics_registry));
-        let check_runner = CheckRunner::new(
-            cli.health.health_max_height_lag,
-            cli.health.health_check_interval,
-            cli.health.health_update_interval,
-            cli.health.health_membership_fetch_interval,
-            Arc::new(checker),
-            Arc::new(persister),
-            Mutex::new(channel_snapshot_recv.clone()),
-            Arc::new(membership_fetcher),
-        );
-        tasks.add("check_runner", Arc::new(check_runner));
-    }
 
     // Caching
     let cache_state = if cli.cache.cache_size.is_some() {
@@ -634,14 +587,40 @@ async fn create_agent(
     Ok(agent)
 }
 
-/// Sets up registry-related stuff
+/// Fetches the NNS root key from the registry and sets it on the agent,
+/// enabling it to verify certified responses.
+fn set_agent_root_key(
+    agent: &Agent,
+    registry_client: &Arc<dyn RegistryClient>,
+) -> Result<(), Error> {
+    let ver = registry_client.get_latest_version();
+    let nns_subnet_id = registry_client
+        .get_root_subnet_id(ver)
+        .context("unable to get root subnet id")?
+        .context("no root subnet")?;
+    let root_key = registry_client
+        .get_threshold_signing_public_key_for_subnet(nns_subnet_id, ver)
+        .context("unable to get root NNS key")?
+        .context("no root NNS key")?;
+
+    let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
+        .context("failed to convert root NNS key to DER")?;
+
+    agent.set_root_key(der_encoded_root_key);
+    Ok(())
+}
+
+/// Sets up registry client, snapshotter, IC agent, and health check runner.
 async fn setup_registry(
     cli: &Cli,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    persister: Persister,
+    http_client_check: Arc<dyn Client>,
     metrics_registry: &Registry,
     channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
+    channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     tasks: &mut TaskManager,
-) -> Result<Arc<dyn RegistryClient>, Error> {
+) -> Result<(Arc<dyn RegistryClient>, Agent), Error> {
     let local_store = Arc::new(LocalStoreImpl::new(
         cli.registry.registry_local_store_path.clone().unwrap(),
     ));
@@ -663,7 +642,32 @@ async fn setup_registry(
     );
     tasks.add_interval("snapshotter", Arc::new(snapshotter), 5 * SECOND);
 
-    Ok(registry_client)
+    // IC Agent
+    let agent = create_agent(
+        cli.misc.crypto_config.clone(),
+        Some(registry_client.clone()),
+        cli.listen.listen_http_port_loopback,
+    )
+    .await?;
+
+    // Health checking and certified membership fetching
+    let persister = WithMetricsPersist(persister, MetricParamsPersist::new(metrics_registry));
+    let membership_fetcher = CertifiedMembershipFetcherImpl::new(agent.clone());
+    let checker = Checker::new(http_client_check, cli.health.health_check_timeout);
+    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(metrics_registry));
+    let check_runner = CheckRunner::new(
+        cli.health.health_max_height_lag,
+        cli.health.health_check_interval,
+        cli.health.health_update_interval,
+        cli.health.health_membership_fetch_interval,
+        Arc::new(checker),
+        Arc::new(persister),
+        Mutex::new(channel_snapshot_recv),
+        Arc::new(membership_fetcher),
+    );
+    tasks.add("check_runner", Arc::new(check_runner));
+
+    Ok((registry_client, agent))
 }
 
 fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
