@@ -183,7 +183,7 @@ pub struct RecoveryArgs {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetSplittingArgs {
-    /// / The id of subnet the subnet will be split into.
+    /// / The ID of the subnet created by the split.
     #[prost(message, optional, tag = "1")]
     pub destination_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
