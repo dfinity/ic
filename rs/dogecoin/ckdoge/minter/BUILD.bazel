@@ -118,6 +118,7 @@ rust_test(
 
 rust_ic_test(
     name = "integration_tests",
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         ":ckdoge_minter_debug.wasm.gz",
@@ -133,7 +134,6 @@ rust_ic_test(
         # dogecoind daemon processes competing for ports and system resources.
         "RUST_TEST_THREADS": "4",
     },
-    timeout = "long",
     # Because dogecoind binary package is not available on darwin or arm64.
     target_compatible_with = [
         "@platforms//cpu:x86_64",
