@@ -68,7 +68,7 @@ pub fn log_memory_store_resize_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("log_memory_store_resize");
 
     //for message_len in [1, 10, 100, 1_000, 10_000] {
-    for message_len in [1, 10] {
+    for message_len in [0] {
         run_bench_resize(
             &mut group,
             &format!("from:2MiB/to:-1/msg:{message_len}"),
