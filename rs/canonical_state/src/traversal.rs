@@ -799,8 +799,7 @@ mod tests {
             subnet_test_id(3) => SubnetTopology {
                 public_key: vec![13, 14, 15, 16],
                 nodes: BTreeSet::new(),
-                //TODO: make this a cloud engine
-                subnet_type: SubnetType::VerifiedApplication,
+                subnet_type: SubnetType::CloudEngine,
                 subnet_features: SubnetFeatures::default(),
                 chain_keys_held: BTreeSet::new(),
                 cost_schedule: CanisterCyclesCostSchedule::Normal,
@@ -1007,7 +1006,7 @@ mod tests {
                 (certification_version >= V25).then_some(
                     vec![
                         edge("type"),
-                        E::VisitBlob(b"verified_application".to_vec())
+                        E::VisitBlob(b"cloud_engine".to_vec())
                     ]
                 ),
                 Some(vec![
