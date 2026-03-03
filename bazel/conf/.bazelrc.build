@@ -39,8 +39,6 @@ build --strategy_regexp=ic-os[:/].*=local
 
 build --workspace_status_command='$(pwd)/bazel/workspace_status.sh'
 
-build --experimental_repository_downloader_retries=3 # https://bazel.build/reference/command-line-reference#flag--experimental_repository_downloader_retries
-
 common --flag_alias=release_build=//bazel:release_build
 common --flag_alias=s3_endpoint=//ci/src/artifacts:s3_endpoint
 common --flag_alias=timeout_value=//bazel:timeout_value
@@ -48,17 +46,14 @@ common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
 
-# configure some tests to retry automatically, best used unattened (not locally).
-# default all tests to fail ...
-#   ... after three attempts for tests marked as flaky
-#   ... after three attempts for all tests in //rs/tests
-#   ... after the first attempt for other tests
-#   see also:
-#     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+# Configure all tests to retry automatically on failure (up to 3 times)
+# such that we can detect flaky tests ASAP and fix them.
+# The //pre-commit/... tests are excluded since they have never been flaky.
+# See also: https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
 #
 # (NOTE: for convenience, applied to 'common' instead of just 'test' so that it doesn't
 # fail on 'bazel build')
-common:flaky_retry --flaky_test_attempts=default --flaky_test_attempts=//rs/tests/.*@3
+common:flaky_retry --flaky_test_attempts=.*,-//pre-commit:.*@3
 
 # Exclude fuzz tests by default
 # https://github.com/bazelbuild/bazel/issues/8439

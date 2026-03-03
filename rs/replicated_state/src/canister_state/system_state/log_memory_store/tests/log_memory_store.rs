@@ -53,9 +53,11 @@ fn total_size(records: &[CanisterLogRecord]) -> usize {
     records.iter().map(|r| r.data_size()).sum()
 }
 
+const TEST_LOG_MEMORY_STORE_FEATURE: FlagStatus = FlagStatus::Enabled;
+
 #[test]
 fn initialization_defaults() {
-    let s = LogMemoryStore::new();
+    let s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     assert!(s.is_empty());
     assert_eq!(s.memory_usage(), 0);
     assert_eq!(s.byte_capacity(), 0);
@@ -66,7 +68,7 @@ fn initialization_defaults() {
 
 #[test]
 fn test_appending_to_uninitialized_store_is_no_op() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     let mut delta = CanisterLog::default_delta();
     delta.add_record(1, b"data".to_vec());
 
@@ -84,7 +86,7 @@ fn test_appending_to_uninitialized_store_is_no_op() {
 
 #[test]
 fn test_minimal_allowed_capacity() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
 
     s.resize_for_testing(1); // Set a small limit.
 
@@ -99,7 +101,7 @@ fn test_memory_usage_after_appending_logs() {
     delta.add_record(200, b"bb".to_vec());
     delta.add_record(300, b"ccc".to_vec());
 
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
     s.append_delta_log(&mut delta);
 
@@ -125,7 +127,7 @@ fn append_preserves_order_and_metadata() {
     delta.add_record(200, b"bb".to_vec());
     delta.add_record(300, b"ccc".to_vec());
 
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
     s.append_delta_log(&mut delta);
 
@@ -150,7 +152,7 @@ fn filtering_by_idx_and_timestamp() {
     delta.add_record(20, b"b".to_vec());
     delta.add_record(30, b"c".to_vec());
 
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
     s.append_delta_log(&mut delta);
 
@@ -174,7 +176,7 @@ fn eviction_when_capacity_reached() {
     // Force repeated large appends so aggregate log approaches capacity — beginning records should be dropped.
     let aggregate_capacity = 50_000; // keep small for the test.
     let start_idx = 0;
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(aggregate_capacity);
 
     // Append 100k records in batches of 10k deltas of ~1KB record each.
@@ -208,7 +210,7 @@ fn max_response_size_respected_without_filtering() {
         "large enough capacity"
     );
 
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(aggregate_capacity);
     // Append 5 MB records in batches of 1 MB deltas of ~1KB record each.
     append_deltas(&mut s, start_idx, 5_000_000, 1_000_000, 1_000);
@@ -231,7 +233,7 @@ fn max_response_size_respected_with_filtering_by_idx() {
         "large enough capacity"
     );
 
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(aggregate_capacity);
     // Append 5 MB records in batches of 1 MB deltas of ~1KB record each.
     append_deltas(&mut s, start_idx, 5_000_000, 1_000_000, 1_000);
@@ -271,7 +273,7 @@ fn max_response_size_respected_with_filtering_by_timestamp() {
         "large enough capacity"
     );
 
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(aggregate_capacity);
     // Append 5 MB records in batches of 1 MB deltas of ~1KB record each.
     append_deltas(&mut s, start_idx, 5_000_000, 1_000_000, 1_000);
@@ -302,7 +304,7 @@ fn max_response_size_respected_with_filtering_by_timestamp() {
 
 #[test]
 fn test_increasing_capacity_preserves_records() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(1_000_000); // 1 MB
 
     // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
@@ -324,7 +326,7 @@ fn test_increasing_capacity_preserves_records() {
 
 #[test]
 fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(500_000); // 500 KB
 
     // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
@@ -349,7 +351,7 @@ fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
 
 #[test]
 fn test_small_capacity_indexing() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     // Set a very small capacity, smaller than 146 bytes (INDEX_ENTRY_COUNT_MAX).
     // 146 entries. If capacity is 100. 100 / 146 = 0.
     s.resize_for_testing(100);
@@ -377,7 +379,7 @@ fn test_small_capacity_indexing() {
 
 #[test]
 fn test_multiple_records_in_same_segment() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     // Capacity 100KB. Segment size ~685 bytes.
     s.resize_for_testing(100_000);
 
@@ -406,7 +408,7 @@ fn test_multiple_records_in_same_segment() {
 
 #[test]
 fn test_very_small_capacity_single_byte() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     // Set capacity to 1 byte - this will be clamped to DATA_CAPACITY_MIN (4096 bytes).
     s.resize_for_testing(1);
 
@@ -430,7 +432,7 @@ fn test_very_small_capacity_single_byte() {
 
 #[test]
 fn test_small_capacity_with_eviction() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     let capacity = 4096;
     s.resize_for_testing(capacity);
 
@@ -469,7 +471,7 @@ fn test_small_capacity_with_eviction() {
 
 #[test]
 fn test_filtering_with_multiple_records_in_same_segment() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     // Capacity 100KB. Segment size ~685 bytes.
     s.resize_for_testing(100_000);
 
@@ -501,45 +503,42 @@ fn test_filtering_with_multiple_records_in_same_segment() {
     assert_eq!(records[0].idx, 10);
     assert_eq!(records[4].idx, 14);
 }
-mod cache_tests {
-    use super::*;
 
-    #[test]
-    fn test_cache_lifecycle() {
-        let mut s = LogMemoryStore::new();
+#[test]
+fn test_cache_lifecycle() {
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
 
-        // 1. Initial state: Uninitialized (None in OnceLock)
-        assert!(s.header_cache.get().is_none());
+    // 1. Initial state: Uninitialized (None in OnceLock)
+    assert!(s.header_cache.get().is_none());
 
-        // 2. Read triggers load: Uninitialized -> Empty (since no ring buffer yet)
-        assert_eq!(s.byte_capacity(), 0);
-        assert_eq!(s.header_cache.get(), Some(&None));
+    // 2. Read triggers load: Uninitialized -> Empty (since no ring buffer yet)
+    assert_eq!(s.byte_capacity(), 0);
+    assert_eq!(s.header_cache.get(), Some(&None));
 
-        // 3. Set limit: Empty -> Initialized
-        s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
-        match s.header_cache.get() {
-            Some(Some(h)) => {
-                assert_eq!(h.data_capacity.get() as usize, TEST_LOG_MEMORY_LIMIT);
-            }
-            state => panic!("Expected Initialized, got {:?}", state),
+    // 3. Set limit: Empty -> Initialized
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+    match s.header_cache.get() {
+        Some(Some(h)) => {
+            assert_eq!(h.data_capacity.get() as usize, TEST_LOG_MEMORY_LIMIT);
         }
-
-        // 4. Append: Initialized -> Initialized (updated)
-        let mut delta = CanisterLog::default_delta();
-        delta.add_record(1, b"test".to_vec());
-        s.append_delta_log(&mut delta);
-
-        match s.header_cache.get() {
-            Some(Some(h)) => {
-                assert_gt!(h.data_size.get(), 0);
-            }
-            state => panic!("Expected Initialized, got {:?}", state),
-        }
-
-        // 5. Invalidate: Initialized -> Uninitialized
-        s.maybe_page_map_mut();
-        assert!(s.header_cache.get().is_none());
+        state => panic!("Expected Initialized, got {:?}", state),
     }
+
+    // 4. Append: Initialized -> Initialized (updated)
+    let mut delta = CanisterLog::default_delta();
+    delta.add_record(1, b"test".to_vec());
+    s.append_delta_log(&mut delta);
+
+    match s.header_cache.get() {
+        Some(Some(h)) => {
+            assert_gt!(h.data_size.get(), 0);
+        }
+        state => panic!("Expected Initialized, got {:?}", state),
+    }
+
+    // 5. Strip deltas: cache is preserved.
+    s.maybe_page_map_mut();
+    assert!(s.header_cache.get().is_some());
 }
 
 #[test]
@@ -548,7 +547,7 @@ fn test_clear() {
     delta.add_record(1, b"a".to_vec());
     delta.add_record(2, b"b".to_vec());
 
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
     s.append_delta_log(&mut delta);
 
@@ -568,7 +567,7 @@ fn test_clear() {
 
 #[test]
 fn test_deallocate() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
     assert!(s.maybe_page_map().is_some());
     assert_eq!(s.byte_capacity(), TEST_LOG_MEMORY_LIMIT);
@@ -584,7 +583,7 @@ fn test_deallocate() {
 
 #[test]
 fn test_deallocate_when_resize_to_zero() {
-    let mut s = LogMemoryStore::new();
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
     assert!(s.maybe_page_map().is_some());
     assert_eq!(s.byte_capacity(), TEST_LOG_MEMORY_LIMIT);
@@ -593,4 +592,56 @@ fn test_deallocate_when_resize_to_zero() {
 
     assert!(s.maybe_page_map().is_none());
     assert_eq!(s.byte_capacity(), 0);
+}
+
+#[test]
+fn test_delta_log_sizes() {
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+
+    // Batch A.
+    let mut delta = CanisterLog::new_delta_with_next_index(0, TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(1, b"a1".to_vec());
+    delta.add_record(2, b"a2".to_vec());
+    let size_a = delta.bytes_used();
+    s.append_delta_log(&mut delta);
+
+    // Batch B.
+    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(3, b"b1".to_vec());
+    delta.add_record(4, b"b2".to_vec());
+    delta.add_record(5, b"b3".to_vec());
+    let size_b = delta.bytes_used();
+    s.append_delta_log(&mut delta);
+
+    // Batch C.
+    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(6, b"c1".to_vec());
+    delta.add_record(7, b"c2".to_vec());
+    delta.add_record(8, b"c3".to_vec());
+    delta.add_record(9, b"c4".to_vec());
+    let size_c = delta.bytes_used();
+    s.append_delta_log(&mut delta);
+
+    // Assert main log has all records and correct used space.
+    assert_eq!(s.records(None).len(), 9);
+    assert_eq!(s.delta_log_sizes(), vec![size_a, size_b, size_c]);
+    s.clear_delta_log_sizes();
+    assert_eq!(s.delta_log_sizes(), Vec::<usize>::new()); // Call after clear_delta_log_sizes.
+}
+
+#[test]
+fn test_from_checkpoint_feature_enabled() {
+    let some_page_map = Some(PageMap::new_for_testing());
+
+    let s = LogMemoryStore::from_checkpoint(FlagStatus::Enabled, some_page_map);
+    assert!(s.maybe_page_map().is_some());
+}
+
+#[test]
+fn test_from_checkpoint_feature_disabled() {
+    let some_page_map = Some(PageMap::new_for_testing());
+
+    let s = LogMemoryStore::from_checkpoint(FlagStatus::Disabled, some_page_map);
+    assert!(s.maybe_page_map().is_none());
 }

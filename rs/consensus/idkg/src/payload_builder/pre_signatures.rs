@@ -1,13 +1,9 @@
-// TODO(CON-1530): Remove this once the new code is called
-#![allow(dead_code)]
-use crate::payload_builder::IDkgPayloadError;
+use crate::{payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder};
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{ReplicaLogger, debug, error};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::{
-    ReplicatedState, metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext,
-};
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion,
     consensus::idkg::{
@@ -17,11 +13,7 @@ use ic_types::{
         ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
         schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
     },
-    crypto::{
-        AlgorithmId,
-        canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId},
-    },
-    messages::CallbackId,
+    crypto::{AlgorithmId, canister_threshold_sig::idkg::IDkgTranscript},
 };
 use std::{
     cmp::Ordering,
@@ -37,7 +29,7 @@ use std::{
 /// Returns the newly created transcripts.
 pub(super) fn update_pre_signatures_in_creation(
     payload: &mut idkg::IDkgPayload,
-    mut transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+    transcript_builder: &dyn IDkgTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<Vec<IDkgTranscript>, IDkgPayloadError> {
@@ -63,7 +55,7 @@ pub(super) fn update_pre_signatures_in_creation(
                 *pre_signature_id,
                 quadruple,
                 key_transcript,
-                &mut transcripts,
+                transcript_builder,
                 &mut payload.uid_generator,
                 height,
                 log,
@@ -71,7 +63,7 @@ pub(super) fn update_pre_signatures_in_creation(
             PreSignatureInCreation::Schnorr(transcript) => update_schnorr_transcript_in_creation(
                 *pre_signature_id,
                 transcript,
-                &mut transcripts,
+                transcript_builder,
                 height,
                 log,
             )?,
@@ -136,7 +128,7 @@ fn update_ecdsa_quadruple_in_creation(
     pre_signature_id: PreSigId,
     quadruple: &mut QuadrupleInCreation,
     key_transcript: &UnmaskedTranscriptWithAttributes,
-    transcripts: &mut BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+    transcript_builder: &dyn IDkgTranscriptBuilder,
     uid_generator: &mut IDkgUIDGenerator,
     height: Height,
     log: &ReplicaLogger,
@@ -146,8 +138,8 @@ fn update_ecdsa_quadruple_in_creation(
     let receivers = key_transcript.receivers().clone();
     // Update quadruple with completed transcripts
     if quadruple.lambda_masked.is_none()
-        && let Some(transcript) =
-            transcripts.remove(&quadruple.lambda_config.as_ref().transcript_id)
+        && let Some(transcript) = transcript_builder
+            .get_completed_transcript(quadruple.lambda_config.as_ref().transcript_id)
     {
         debug!(
             log,
@@ -158,8 +150,8 @@ fn update_ecdsa_quadruple_in_creation(
         new_transcripts.push(transcript);
     }
     if quadruple.kappa_unmasked.is_none()
-        && let Some(transcript) =
-            transcripts.remove(&quadruple.kappa_unmasked_config.as_ref().transcript_id)
+        && let Some(transcript) = transcript_builder
+            .get_completed_transcript(quadruple.kappa_unmasked_config.as_ref().transcript_id)
     {
         debug!(
             log,
@@ -173,7 +165,8 @@ fn update_ecdsa_quadruple_in_creation(
     }
     if quadruple.key_times_lambda.is_none()
         && let Some(config) = &quadruple.key_times_lambda_config
-        && let Some(transcript) = transcripts.remove(&config.as_ref().transcript_id)
+        && let Some(transcript) =
+            transcript_builder.get_completed_transcript(config.as_ref().transcript_id)
     {
         debug!(
             log,
@@ -185,7 +178,8 @@ fn update_ecdsa_quadruple_in_creation(
     }
     if quadruple.kappa_times_lambda.is_none()
         && let Some(config) = &quadruple.kappa_times_lambda_config
-        && let Some(transcript) = transcripts.remove(&config.as_ref().transcript_id)
+        && let Some(transcript) =
+            transcript_builder.get_completed_transcript(config.as_ref().transcript_id)
     {
         debug!(
             log,
@@ -256,15 +250,15 @@ fn update_ecdsa_quadruple_in_creation(
 fn update_schnorr_transcript_in_creation(
     pre_signature_id: PreSigId,
     pre_signature: &mut TranscriptInCreation,
-    transcripts: &mut BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+    transcript_builder: &dyn IDkgTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
     let mut new_transcripts = Vec::new();
     // Update pre_signature with completed transcripts
     if pre_signature.blinder_unmasked.is_none()
-        && let Some(transcript) =
-            transcripts.remove(&pre_signature.blinder_unmasked_config.as_ref().transcript_id)
+        && let Some(transcript) = transcript_builder
+            .get_completed_transcript(pre_signature.blinder_unmasked_config.as_ref().transcript_id)
     {
         debug!(
             log,
@@ -276,134 +270,6 @@ fn update_schnorr_transcript_in_creation(
         new_transcripts.push(transcript);
     }
     Ok((pre_signature.blinder_unmasked.is_some(), new_transcripts))
-}
-
-/// Purge all available but unmatched pre-signatures that are referencing a different key transcript
-/// than the one currently used.
-pub(super) fn purge_old_key_pre_signatures(
-    idkg_payload: &mut idkg::IDkgPayload,
-    all_signing_requests: &BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>>,
-) {
-    let matched_pre_signatures = all_signing_requests
-        .values()
-        .flat_map(|context| context.matched_pre_signature)
-        .map(|(pre_sig_id, _)| pre_sig_id)
-        .collect::<BTreeSet<_>>();
-
-    idkg_payload.available_pre_signatures.retain(|id, pre_sig| {
-        matched_pre_signatures.contains(id)
-            || idkg_payload
-                .key_transcripts
-                .get(&pre_sig.key_id())
-                .and_then(|key_transcript| key_transcript.current.as_ref())
-                .is_some_and(|current_key_transcript| {
-                    pre_sig.key_unmasked().as_ref().transcript_id
-                        == current_key_transcript.transcript_id()
-                })
-    });
-}
-
-/// Creating new pre-signatures if necessary by updating pre_signatures_in_creation,
-/// considering currently available pre-signatures, pre-signatures in creation, and
-/// chain key configs.
-pub(super) fn make_new_pre_signatures_if_needed(
-    chain_key_config: &ChainKeyConfig,
-    idkg_payload: &mut idkg::IDkgPayload,
-    matched_pre_signatures_per_key_id: &BTreeMap<IDkgMasterPublicKeyId, usize>,
-) {
-    for (key_id, key_transcript) in &idkg_payload.key_transcripts {
-        let Some(key_transcript) = key_transcript.current.as_ref() else {
-            continue;
-        };
-
-        let matched_pre_signature = matched_pre_signatures_per_key_id
-            .get(key_id)
-            .copied()
-            .unwrap_or_default();
-
-        let unassigned_pre_signatures = idkg_payload
-            .iter_pre_signature_ids(key_id)
-            .count()
-            .saturating_sub(matched_pre_signature);
-
-        let node_ids: Vec<_> = key_transcript.receivers().iter().copied().collect();
-        let new_pre_signatures = make_new_pre_signatures_if_needed_helper(
-            &node_ids,
-            key_transcript.registry_version(),
-            chain_key_config,
-            key_id,
-            &mut idkg_payload.uid_generator,
-            unassigned_pre_signatures,
-        );
-
-        idkg_payload
-            .pre_signatures_in_creation
-            .extend(new_pre_signatures);
-    }
-}
-
-fn make_new_pre_signatures_if_needed_helper(
-    subnet_nodes: &[NodeId],
-    registry_version: RegistryVersion,
-    chain_key_config: &ChainKeyConfig,
-    key_id: &IDkgMasterPublicKeyId,
-    uid_generator: &mut IDkgUIDGenerator,
-    unassigned_pre_signatures: usize,
-) -> BTreeMap<PreSigId, PreSignatureInCreation> {
-    let mut new_pre_signatures = BTreeMap::new();
-
-    let Some(pre_signatures_to_create) = chain_key_config
-        .key_configs
-        .iter()
-        .find(|key_config| &key_config.key_id == key_id.inner())
-        .and_then(|key_config| key_config.pre_signatures_to_create_in_advance)
-        .map(|pre_sigs_to_create| pre_sigs_to_create as usize)
-    else {
-        return new_pre_signatures;
-    };
-
-    if pre_signatures_to_create <= unassigned_pre_signatures {
-        return new_pre_signatures;
-    }
-
-    for _ in 0..(pre_signatures_to_create - unassigned_pre_signatures) {
-        match key_id.inner() {
-            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
-                let kappa_config = new_random_unmasked_config(
-                    key_id,
-                    subnet_nodes,
-                    registry_version,
-                    uid_generator,
-                );
-                let lambda_config =
-                    new_random_config(key_id, subnet_nodes, registry_version, uid_generator);
-                let pre_signature = PreSignatureInCreation::Ecdsa(QuadrupleInCreation::new(
-                    ecdsa_key_id.clone(),
-                    kappa_config,
-                    lambda_config,
-                ));
-                new_pre_signatures.insert(uid_generator.next_pre_signature_id(), pre_signature);
-            }
-            MasterPublicKeyId::Schnorr(schnorr_key_id) => {
-                let blinder_config = new_random_unmasked_config(
-                    key_id,
-                    subnet_nodes,
-                    registry_version,
-                    uid_generator,
-                );
-                let pre_signature = PreSignatureInCreation::Schnorr(TranscriptInCreation::new(
-                    schnorr_key_id.clone(),
-                    blinder_config,
-                ));
-                new_pre_signatures.insert(uid_generator.next_pre_signature_id(), pre_signature);
-            }
-            MasterPublicKeyId::VetKd(_vetkd_key_id) => {
-                // vetKD does not have pre-signatures
-            }
-        };
-    }
-
-    new_pre_signatures
 }
 
 /// Count the number of pre-signatures for each key ID in the given state,
@@ -741,25 +607,23 @@ pub(super) mod tests {
     use super::{test_utils::*, *};
     use crate::{
         test_utils::{
-            IDkgPayloadTestHelper, TestIDkgBlockReader, create_available_pre_signature,
-            create_available_pre_signature_with_key_transcript, into_idkg_contexts,
-            set_up_idkg_payload,
+            IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+            create_available_pre_signature, set_up_idkg_payload,
         },
         utils::block_chain_reader,
     };
-    use assert_matches::assert_matches;
     use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
-        mock_transcript, mock_unmasked_transcript_type,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, mock_transcript,
+        mock_unmasked_transcript_type,
     };
     use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::SchnorrAlgorithm;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::idkg::*;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         SubnetId,
         batch::BatchPayload,
@@ -773,7 +637,6 @@ pub(super) mod tests {
         },
         crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     };
-    use idkg::IDkgTranscriptOperationRef;
     use rand::prelude::SliceRandom;
     use strum::IntoEnumIterator;
 
@@ -1406,145 +1269,6 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn test_schnorr_make_new_pre_signatures_if_needed_helper() {
-        let nodes = &[node_test_id(0)];
-        let registry_version = RegistryVersion::from(1);
-        let subnet_id = subnet_test_id(1);
-        let height = Height::new(10);
-        let mut uid_generator = IDkgUIDGenerator::new(subnet_id, height);
-        let pre_signatures_to_create_in_advance = 4;
-
-        let mut create_pre_signatures = |key_id: &IDkgMasterPublicKeyId, unassigned| {
-            let chain_key_config = ChainKeyConfig {
-                key_configs: vec![KeyConfig {
-                    key_id: key_id.clone().into(),
-                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
-                    max_queue_size: 1,
-                }],
-                ..ChainKeyConfig::default()
-            };
-
-            make_new_pre_signatures_if_needed_helper(
-                nodes,
-                registry_version,
-                &chain_key_config,
-                key_id,
-                &mut uid_generator,
-                unassigned,
-            )
-        };
-
-        let key_id_bib340 =
-            fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1);
-        let key_id_eddsa = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
-
-        for key_id in &[key_id_bib340, key_id_eddsa] {
-            assert!(create_pre_signatures(key_id, 4).is_empty());
-            let pre_sigs = create_pre_signatures(key_id, 1);
-            assert_eq!(pre_sigs.len(), 3);
-            for pre_sig in pre_sigs.values() {
-                let PreSignatureInCreation::Schnorr(transcript) = pre_sig else {
-                    panic!("Expected Schnorr pre-signature");
-                };
-                assert!(transcript.blinder_unmasked.is_none());
-                assert_eq!(
-                    MasterPublicKeyId::from(key_id.clone()),
-                    MasterPublicKeyId::Schnorr(transcript.key_id.clone())
-                );
-                let config = transcript.blinder_unmasked_config.as_ref();
-                assert_eq!(config.algorithm_id, AlgorithmId::from(key_id.inner()));
-                assert_eq!(config.registry_version, registry_version);
-                assert_eq!(config.dealers, config.receivers);
-                assert_eq!(config.dealers, BTreeSet::from(*nodes));
-                assert_eq!(
-                    config.operation_type_ref,
-                    IDkgTranscriptOperationRef::RandomUnmasked
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_make_new_pre_signatures_if_needed_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            println!("Running test for key ID {key_id}");
-            test_make_new_pre_signatures_if_needed(key_id);
-        }
-    }
-
-    fn test_make_new_pre_signatures_if_needed(key_id: IDkgMasterPublicKeyId) {
-        let mut rng = reproducible_rng();
-        let subnet_id = subnet_test_id(1);
-        let height = Height::new(10);
-        let (mut idkg_payload, _env, _block_reader) =
-            set_up(&mut rng, subnet_id, vec![key_id.clone()], height);
-
-        // 4 pre-signatures should be created in advance (in creation + unmatched available = 4)
-        let pre_signatures_to_create_in_advance = 4;
-        let chain_key_config = ChainKeyConfig {
-            key_configs: vec![KeyConfig {
-                key_id: key_id.clone().into(),
-                pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
-                max_queue_size: 1,
-            }],
-            ..ChainKeyConfig::default()
-        };
-
-        // Add 3 available pre-signatures
-        for i in 0..3 {
-            create_available_pre_signature(&mut idkg_payload, key_id.clone(), i);
-        }
-
-        // 2 available pre-signatures are already matched
-        let pre_signature_already_matched = 2;
-
-        // We expect 3 pre-signatures in creation to be added
-        let expected_pre_signatures_in_creation = pre_signatures_to_create_in_advance as usize
-            - (idkg_payload.available_pre_signatures.len() - pre_signature_already_matched);
-        assert_eq!(expected_pre_signatures_in_creation, 3);
-
-        make_new_pre_signatures_if_needed(
-            &chain_key_config,
-            &mut idkg_payload,
-            &BTreeMap::from([(key_id.clone(), pre_signature_already_matched)]),
-        );
-
-        assert_eq!(
-            idkg_payload.pre_signatures_in_creation.len()
-                + idkg_payload.available_pre_signatures.len()
-                - pre_signature_already_matched,
-            pre_signatures_to_create_in_advance as usize
-        );
-        // Verify the generated transcript ids.
-        let mut transcript_ids = BTreeSet::new();
-        for pre_signature in idkg_payload.pre_signatures_in_creation.values() {
-            match pre_signature {
-                PreSignatureInCreation::Ecdsa(pre_sig) => {
-                    assert_matches!(key_id.clone().into(), MasterPublicKeyId::Ecdsa(_));
-                    let kappa_unmasked_config = pre_sig.kappa_unmasked_config.clone();
-                    let kappa_transcript_id = kappa_unmasked_config.as_ref().transcript_id;
-                    transcript_ids.insert(kappa_transcript_id);
-                    transcript_ids.insert(pre_sig.lambda_config.as_ref().transcript_id);
-                }
-                PreSignatureInCreation::Schnorr(pre_sig) => {
-                    assert_matches!(key_id.clone().into(), MasterPublicKeyId::Schnorr(_));
-                    transcript_ids.insert(pre_sig.blinder_unmasked_config.as_ref().transcript_id);
-                }
-            }
-        }
-        let expected_transcript_ids = match key_id.inner() {
-            MasterPublicKeyId::Ecdsa(_) => 2 * expected_pre_signatures_in_creation,
-            MasterPublicKeyId::Schnorr(_) => expected_pre_signatures_in_creation,
-            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
-        };
-        assert_eq!(transcript_ids.len(), expected_transcript_ids);
-        assert_eq!(
-            idkg_payload.peek_next_transcript_id().id() as usize,
-            expected_transcript_ids,
-        );
-    }
-
-    #[test]
     fn test_update_schnorr_transcript_in_creation() {
         let mut rng = reproducible_rng();
         let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
@@ -1553,7 +1277,7 @@ pub(super) mod tests {
             &mut rng,
         );
         let block_reader = TestIDkgBlockReader::new();
-        let mut transcripts = BTreeMap::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
         let height = Height::from(1);
         let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(0), height);
 
@@ -1573,7 +1297,7 @@ pub(super) mod tests {
             let (finished, new_transcripts) = update_schnorr_transcript_in_creation(
                 PreSigId(0),
                 &mut pre_sig,
-                &mut transcripts,
+                &transcript_builder,
                 height,
                 &no_op_logger(),
             )
@@ -1588,12 +1312,12 @@ pub(super) mod tests {
                 &param.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcripts.insert(param.transcript_id, blinder_unmasked_transcript);
+            transcript_builder.add_transcript(param.transcript_id, blinder_unmasked_transcript);
 
             let (finished, new_transcripts) = update_schnorr_transcript_in_creation(
                 PreSigId(0),
                 &mut pre_sig,
-                &mut transcripts,
+                &transcript_builder,
                 height,
                 &no_op_logger(),
             )
@@ -1605,7 +1329,7 @@ pub(super) mod tests {
             let (finished, new_transcripts) = update_schnorr_transcript_in_creation(
                 PreSigId(0),
                 &mut pre_sig,
-                &mut transcripts,
+                &transcript_builder,
                 height,
                 &no_op_logger(),
             )
@@ -1623,7 +1347,7 @@ pub(super) mod tests {
         let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
-        let mut transcripts = BTreeMap::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
 
         // Start quadruple creation
         let [ref lambda_config_ref, ref kappa_unmasked_config_ref] =
@@ -1644,7 +1368,7 @@ pub(super) mod tests {
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            transcripts.clone(),
+            &transcript_builder,
             cur_height,
             &no_op_logger(),
         );
@@ -1661,13 +1385,13 @@ pub(super) mod tests {
             &lambda_config_ref.translate(&block_reader).unwrap(),
             &mut rng,
         );
-        transcripts.insert(lambda_config_ref.transcript_id, lambda_transcript);
+        transcript_builder.add_transcript(lambda_config_ref.transcript_id, lambda_transcript);
         let cur_height = Height::new(2000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            transcripts.clone(),
+            &transcript_builder,
             cur_height,
             &no_op_logger(),
         )
@@ -1692,7 +1416,7 @@ pub(super) mod tests {
             &kappa_unmasked_config_ref.translate(&block_reader).unwrap(),
             &mut rng,
         );
-        transcripts.insert(
+        transcript_builder.add_transcript(
             kappa_unmasked_config_ref.transcript_id,
             kappa_unmasked_transcript,
         );
@@ -1701,7 +1425,7 @@ pub(super) mod tests {
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            transcripts.clone(),
+            &transcript_builder,
             cur_height,
             &no_op_logger(),
         )
@@ -1733,7 +1457,8 @@ pub(super) mod tests {
                 &mut rng,
             )
         };
-        transcripts.insert(kappa_times_lambda_config_id, kappa_times_lambda_transcript);
+        transcript_builder
+            .add_transcript(kappa_times_lambda_config_id, kappa_times_lambda_transcript);
         let key_times_lambda_transcript = {
             let param = payload
                 .iter_transcript_configs_in_creation()
@@ -1745,13 +1470,13 @@ pub(super) mod tests {
                 &mut rng,
             )
         };
-        transcripts.insert(key_times_lambda_config_id, key_times_lambda_transcript);
+        transcript_builder.add_transcript(key_times_lambda_config_id, key_times_lambda_transcript);
         let cur_height = Height::new(5000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            transcripts,
+            &transcript_builder,
             cur_height,
             &no_op_logger(),
         )
@@ -1792,7 +1517,7 @@ pub(super) mod tests {
         let key_id: IDkgMasterPublicKeyId = fake_schnorr_idkg_master_public_key_id(algorithm);
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
-        let mut transcripts = BTreeMap::new();
+        let transcript_builder = TestIDkgTranscriptBuilder::new();
 
         // Start pre-signature creation
         let [ref blinder_config_ref] = create_new_pre_signature_in_creation(
@@ -1811,7 +1536,7 @@ pub(super) mod tests {
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            transcripts.clone(),
+            &transcript_builder,
             cur_height,
             &no_op_logger(),
         );
@@ -1828,13 +1553,13 @@ pub(super) mod tests {
             &blinder_config_ref.translate(&block_reader).unwrap(),
             &mut rng,
         );
-        transcripts.insert(blinder_config_ref.transcript_id, blinder_transcript);
+        transcript_builder.add_transcript(blinder_config_ref.transcript_id, blinder_transcript);
         let cur_height = Height::new(2000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            transcripts.clone(),
+            &transcript_builder,
             cur_height,
             &no_op_logger(),
         )
@@ -1867,181 +1592,6 @@ pub(super) mod tests {
         assert_eq!(
             translated.blinder_unmasked().algorithm_id,
             AlgorithmId::from(key_id.inner())
-        );
-    }
-
-    fn get_current_unmasked_key_transcript(payload: &IDkgPayload) -> UnmaskedTranscript {
-        let transcript = payload.single_key_transcript().current.clone();
-        transcript.unwrap().unmasked_transcript()
-    }
-
-    #[test]
-    fn test_matched_pre_signatures_are_not_purged_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            println!("Running test for key ID {key_id}");
-            test_matched_pre_signatures_are_not_purged(key_id);
-        }
-    }
-
-    fn test_matched_pre_signatures_are_not_purged(key_id: IDkgMasterPublicKeyId) {
-        let mut rng = reproducible_rng();
-        let (mut payload, env, _) = set_up(
-            &mut rng,
-            subnet_test_id(1),
-            vec![key_id.clone()],
-            Height::from(100),
-        );
-        let key_transcript = get_current_unmasked_key_transcript(&payload);
-
-        let (dealers, receivers) = env.choose_dealers_and_receivers(
-            &IDkgParticipants::AllNodesAsDealersAndReceivers,
-            &mut rng,
-        );
-        let transcript = generate_key_transcript(
-            &env,
-            &dealers,
-            &receivers,
-            AlgorithmId::from(key_id.inner()),
-            &mut rng,
-        );
-        let key_transcript2 =
-            UnmaskedTranscript::try_from((Height::from(200), &transcript)).unwrap();
-
-        // Create three pre-signatures, with the current, a different, no key transcript.
-        let pre_sig_ids = vec![
-            create_available_pre_signature_with_key_transcript(
-                &mut payload,
-                1,
-                key_id.clone(),
-                Some(key_transcript),
-            ),
-            create_available_pre_signature_with_key_transcript(
-                &mut payload,
-                2,
-                key_id.clone(),
-                Some(key_transcript2),
-            ),
-            create_available_pre_signature_with_key_transcript(
-                &mut payload,
-                3,
-                key_id.clone(),
-                None,
-            ),
-        ];
-
-        // All three pre-signatures are matched with a context
-        let contexts = BTreeMap::from_iter(pre_sig_ids.into_iter().map(|id| {
-            fake_signature_request_context_with_pre_sig(
-                request_id(id.id(), Height::from(300)),
-                key_id.clone(),
-                Some(id),
-            )
-        }));
-        let contexts = into_idkg_contexts(&contexts);
-
-        // None of them should be purged
-        assert_eq!(payload.available_pre_signatures.len(), 3);
-        purge_old_key_pre_signatures(&mut payload, &contexts);
-        assert_eq!(payload.available_pre_signatures.len(), 3);
-    }
-
-    #[test]
-    fn test_unmatched_pre_signatures_of_current_key_are_not_purged_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            println!("Running test for key ID {key_id}");
-            test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id);
-        }
-    }
-
-    fn test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id: IDkgMasterPublicKeyId) {
-        let mut rng = reproducible_rng();
-        let height = Height::from(100);
-        let (mut payload, _, _) = set_up(&mut rng, subnet_test_id(1), vec![key_id.clone()], height);
-        let key_transcript = get_current_unmasked_key_transcript(&payload);
-
-        // Create three pre-signatures of the current key transcript
-        for i in 0..3 {
-            create_available_pre_signature_with_key_transcript(
-                &mut payload,
-                i,
-                key_id.clone(),
-                Some(key_transcript),
-            );
-        }
-
-        // None of them are matched to a context
-        let contexts = BTreeMap::from_iter([fake_signature_request_context_with_pre_sig(
-            request_id(1, height),
-            key_id.clone(),
-            None,
-        )]);
-        let contexts = into_idkg_contexts(&contexts);
-
-        // None of them should be purged
-        assert_eq!(payload.available_pre_signatures.len(), 3);
-        purge_old_key_pre_signatures(&mut payload, &contexts);
-        assert_eq!(payload.available_pre_signatures.len(), 3);
-    }
-
-    #[test]
-    fn test_unmatched_pre_signatures_of_different_key_are_purged_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            println!("Running test for key ID {key_id}");
-            test_unmatched_pre_signatures_of_different_key_are_purged(key_id);
-        }
-    }
-
-    fn test_unmatched_pre_signatures_of_different_key_are_purged(key_id: IDkgMasterPublicKeyId) {
-        let mut rng = reproducible_rng();
-        let (mut payload, env, _) = set_up(
-            &mut rng,
-            subnet_test_id(1),
-            vec![key_id.clone()],
-            Height::from(100),
-        );
-
-        let (dealers, receivers) = env.choose_dealers_and_receivers(
-            &IDkgParticipants::AllNodesAsDealersAndReceivers,
-            &mut rng,
-        );
-        let transcript = generate_key_transcript(
-            &env,
-            &dealers,
-            &receivers,
-            AlgorithmId::from(key_id.inner()),
-            &mut rng,
-        );
-        let other_key_transcript =
-            UnmaskedTranscript::try_from((Height::from(200), &transcript)).unwrap();
-
-        // Create two pre-signatures of the other key transcript
-        let pre_sig_ids = (0..2)
-            .map(|i| {
-                create_available_pre_signature_with_key_transcript(
-                    &mut payload,
-                    i,
-                    key_id.clone(),
-                    Some(other_key_transcript),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        // The first one is matched to a context
-        let contexts = BTreeMap::from_iter([fake_signature_request_context_with_pre_sig(
-            request_id(1, Height::from(300)),
-            key_id.clone(),
-            Some(pre_sig_ids[0]),
-        )]);
-        let contexts = into_idkg_contexts(&contexts);
-
-        // The second one should be purged
-        assert_eq!(payload.available_pre_signatures.len(), 2);
-        purge_old_key_pre_signatures(&mut payload, &contexts);
-        assert_eq!(payload.available_pre_signatures.len(), 1);
-
-        assert_eq!(
-            payload.available_pre_signatures.into_keys().next().unwrap(),
-            pre_sig_ids[0]
         );
     }
 }

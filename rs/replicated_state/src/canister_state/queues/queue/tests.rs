@@ -385,18 +385,20 @@ fn ingress_filter() {
     queue.push(msg3.clone());
 
     assert_eq!(IngressQueue::size_bytes(&queue.queues), queue.count_bytes());
+    assert!(!queue.all_messages(|ingress| ingress != &msg2));
 
-    queue.filter_messages(|ingress| *ingress != Arc::new(msg2.clone()));
+    queue.retain_messages(|ingress| ingress != &msg2);
     assert_eq!(queue.size(), 2);
     assert_eq!(IngressQueue::size_bytes(&queue.queues), queue.count_bytes());
+    assert!(queue.all_messages(|ingress| ingress != &msg2));
 
     assert_eq!(queue.pop(), Some(msg1.into()));
-    assert_eq!(queue.size(), 1);
     assert_eq!(IngressQueue::size_bytes(&queue.queues), queue.count_bytes());
 
     assert_eq!(queue.pop(), Some(msg3.into()));
-    assert_eq!(queue.size(), 0);
     assert_eq!(IngressQueue::size_bytes(&queue.queues), queue.count_bytes());
+
+    assert_eq!(queue.pop(), None);
 }
 
 #[test]

@@ -180,8 +180,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             //    new key added, between the time that retain on the crypto component was called,
             //    and the time that we actually call retain here. However:
             //     - This issue is neither fixed, nor exacerbated by the race condition here
-            //     - The issue is tracked in CRP-1094: It is currently not a problem due to how
-            //       these functions are called from consensus
             self.sks_write_lock()
                 .retain(filter, NIDKG_THRESHOLD_SCOPE)
                 .unwrap_or_else(|e| panic!("error retaining threshold keys: {e}"));
@@ -478,9 +476,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     let maybe_key_set = self.sks_read_lock().get(&fs_key_id);
                     let key_set = maybe_key_set.ok_or_else(||
                         ni_dkg_errors::CspDkgLoadPrivateKeyError::KeyNotFoundError(
-                            // TODO (CRP-820): This name is inconsistent with the other error enums,
-                            // where this is now called FsKeyNotInSecretKeyStoreError or some
-                            // such paragraph-of-a-name.
                             ni_dkg_errors::KeyNotFoundError {
                                 internal_error: "Cannot decrypt shares if the forward secure key encryption key is missing".to_string(),
                                 key_id: fs_key_id.to_string(),

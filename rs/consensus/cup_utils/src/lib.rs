@@ -64,7 +64,7 @@ pub fn make_registry_cup_from_cup_contents(
     let cup_height = Height::new(cup_contents.height);
 
     let idkg_summary = match bootstrap_idkg_summary(
-        &cup_contents,
+        cup_contents.clone(),
         subnet_id,
         registry_version,
         registry,
@@ -190,13 +190,13 @@ pub fn make_registry_cup(
 }
 
 fn bootstrap_idkg_summary_from_cup_contents(
-    cup_contents: &CatchUpPackageContents,
+    cup_contents: CatchUpPackageContents,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
     let initial_dealings = inspect_idkg_chain_key_initializations(
-        &cup_contents.ecdsa_initializations,
-        &cup_contents.chain_key_initializations,
+        cup_contents.ecdsa_initializations,
+        cup_contents.chain_key_initializations,
     )?;
     if initial_dealings.is_empty() {
         return Ok(None);
@@ -212,12 +212,13 @@ fn bootstrap_idkg_summary_from_cup_contents(
 }
 
 fn bootstrap_idkg_summary(
-    cup_contents: &CatchUpPackageContents,
+    cup_contents: CatchUpPackageContents,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
+    let height = Height::new(cup_contents.height);
     if let Some(summary) =
         bootstrap_idkg_summary_from_cup_contents(cup_contents, subnet_id, logger)?
     {
@@ -235,7 +236,7 @@ fn bootstrap_idkg_summary(
                 .map(|key_config| key_config.key_id.clone())
                 .filter_map(|key_id| key_id.try_into().ok())
                 .collect(),
-            Height::new(cup_contents.height),
+            height,
         )),
         None => Ok(None),
     }

@@ -39,6 +39,7 @@ pub struct InstanceHttpGatewayConfig {
     pub port: Option<u16>,
     pub domains: Option<Vec<String>>,
     pub https_config: Option<HttpsConfig>,
+    pub domain_custom_provider_local_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -48,6 +49,7 @@ pub struct HttpGatewayConfig {
     pub forward_to: HttpGatewayBackend,
     pub domains: Option<Vec<String>>,
     pub https_config: Option<HttpsConfig>,
+    pub domain_custom_provider_local_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -958,6 +960,8 @@ pub enum CanisterHttpMethod {
     GET,
     POST,
     HEAD,
+    PUT,
+    DELETE,
 }
 
 #[derive(

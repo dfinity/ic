@@ -315,6 +315,22 @@ impl RegistryHelper {
         node_operator_record.map(|v| v.dc_id)
     }
 
+    pub(crate) fn get_ssh_recovery_access(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> OrchestratorResult<Vec<String>> {
+        match self
+            .registry_client
+            .get_node_record(self.node_id, registry_version)?
+        {
+            Some(record) => Ok(record.ssh_node_state_write_access),
+            None => Err(OrchestratorError::NodeRecordMissingError(
+                self.node_id,
+                registry_version,
+            )),
+        }
+    }
+
     /// Get the HostOS version of this node in the given registry version
     pub(crate) fn get_node_hostos_version(
         &self,

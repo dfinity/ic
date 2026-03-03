@@ -12,10 +12,8 @@ VERSION_FILE="/opt/ic/share/version.txt"
 get_version_noreport() {
     if [ -r "${VERSION_FILE}" ]; then
         VERSION=$(cat ${VERSION_FILE})
-        VERSION_OK=1
     else
         VERSION="unknown"
-        VERSION_OK=0
     fi
 }
 
@@ -113,10 +111,10 @@ Usage:
       be the other system (if newly upgraded system has not "confirmed"
       yet).
 
-    current_root
+    current_partition
       Output root partition of currently running system.
 
-    target_root
+    target_partition
       Output target root partition for incoming upgrade on stdout and exit.
 EOF
 }
@@ -149,12 +147,13 @@ done
 
 SYSTEM_TYPE="$1"
 ACTION="$2"
-shift 2
 
 if [ -z "${SYSTEM_TYPE}" ] || [ -z "${ACTION}" ]; then
     usage >&2
     exit 1
 fi
+
+shift 2
 
 if [[ "${SYSTEM_TYPE}" != "guestos" && "${SYSTEM_TYPE}" != "hostos" ]]; then
     write_log "Invalid system type. Must be 'guestos' or 'hostos'."
@@ -173,10 +172,6 @@ CURRENT_ALTERNATIVE="${boot_alternative}"
 NEXT_BOOT="${CURRENT_ALTERNATIVE}"
 IS_STABLE=1
 if [ "${boot_cycle}" == "first_boot" ]; then
-    # If the next system to be booted according to bootloader has never been
-    # booted yet, then we must still be in the other system.
-    write_log "WARNING: ${SYSTEM_TYPE} detected first_boot state - adjusting CURRENT_ALTERNATIVE from ${CURRENT_ALTERNATIVE} to $(swap_alternative "${CURRENT_ALTERNATIVE}")"
-    CURRENT_ALTERNATIVE=$(swap_alternative "${CURRENT_ALTERNATIVE}")
     IS_STABLE=0
     write_log "${SYSTEM_TYPE} system marked as unstable due to first_boot state"
 
@@ -236,7 +231,7 @@ case "${ACTION}" in
             ROOT_IMG="$2"
         elif [ "$#" == 1 ]; then
             TMPDIR=$(mktemp -d -t upgrade-image-XXXXXXXXXXXX)
-            trap "rm -rf $TMPDIR" exit
+            trap "rm -rf '${TMPDIR}'" EXIT
             tar -xaf "$1" -C "${TMPDIR}"
             BOOT_IMG="${TMPDIR}"/boot.img
             ROOT_IMG="${TMPDIR}"/root.img
@@ -276,6 +271,13 @@ case "${ACTION}" in
         ;;
     upgrade-commit)
         write_log "${SYSTEM_TYPE} upgrade-commit action called - IS_STABLE: ${IS_STABLE}, boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}"
+
+        boot_alternative_in_grubenv="$(read_boot_alternative_from_grubenv "${GRUBENV_FILE}")"
+        if [ "${boot_cycle}" == "first_boot" ] && [ "${boot_alternative_in_grubenv}" == "${TARGET_ALTERNATIVE}" ]; then
+            write_log "${SYSTEM_TYPE} upgrade-commit was already called before for target slot ${TARGET_ALTERNATIVE} - skipping"
+            exit 0
+        fi
+
         if [ "${IS_STABLE}" != 1 ]; then
             if [ "${NOCHECK}" == 1 ]; then
                 write_log "WARNING: System stability check failed (IS_STABLE=${IS_STABLE}) but --nocheck flag is set, proceeding anyway"
@@ -306,16 +308,16 @@ case "${ACTION}" in
 
         write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
         # Use systemd-run to ensure the reboot happens after the script exits
-        systemd-run --on-active=2 systemctl reboot
+        systemd-run --on-active=2 --timer-property=AccuracySec=1s systemctl reboot
         ;;
     confirm)
         write_log "${SYSTEM_TYPE} confirm action called - current boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}, IS_STABLE: ${IS_STABLE}"
         if [ "$boot_cycle" != "stable" ]; then
-            write_log "${SYSTEM_TYPE} transitioning from boot_cycle '${boot_cycle}' to 'stable' at slot ${CURRENT_ALTERNATIVE}"
+            write_log "${SYSTEM_TYPE} transitioning from boot_cycle '${boot_cycle}' to 'stable' at slot $boot_alternative"
             write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "stable"
             # Only update boot_cycle after successful write_grubenv
             boot_cycle=stable
-            write_log "${SYSTEM_TYPE} stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
+            write_log "${SYSTEM_TYPE} stable boot confirmed at slot $boot_alternative"
             write_metric "${SYSTEM_TYPE}_boot_stable" \
                 "1" \
                 "${SYSTEM_TYPE} is boot stable" \

@@ -1688,7 +1688,7 @@ mod tests {
                 local_cup.subnet_id,
                 local_cup.registry_version,
             );
-            let cup_proto = pb::CatchUpPackage::from(&cup);
+            let cup_proto = pb::CatchUpPackage::from(cup);
             let cup_file = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
             std::fs::write(&cup_file, cup_proto.encode_to_vec()).unwrap();
         }

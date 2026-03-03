@@ -1080,7 +1080,7 @@ mod tests {
         ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            (&catch_up_package).into(),
+            catch_up_package.into(),
             config,
             registry,
             log,

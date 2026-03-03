@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-sha2 = { path = "../sha2" }
+ic-crypto-internal-seed = { path = "../internal/crypto_lib/seed" }
 ic-types = { path = "../../types/types" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

@@ -7,10 +7,10 @@ use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, Replica
 use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::{
-    CanisterCyclesCostSchedule, CatchUpPackageContents, InitialNiDkgTranscriptRecord,
-    SubnetListRecord, SubnetRecord,
+    CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
+    InitialNiDkgTranscriptRecord, SubnetListRecord, SubnetRecord,
 };
-use ic_protobuf::types::v1::master_public_key_id::KeyId;
+use ic_protobuf::types::v1::{PrincipalId as PrincipalIdPb, master_public_key_id::KeyId};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_catch_up_package_contents_key,
@@ -22,6 +22,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use ic_types::{
@@ -255,6 +256,7 @@ pub fn test_subnet_record() -> SubnetRecord {
     SubnetRecord {
         membership: vec![],
         max_ingress_bytes_per_message: 2 * 1024 * 1024,
+        max_ingress_bytes_per_block: 0,
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
@@ -271,7 +273,8 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
-        canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedulePb::Normal as i32,
+        subnet_admins: vec![],
     }
 }
 
@@ -382,6 +385,17 @@ impl SubnetRecordBuilder {
 
     pub fn with_dkg_dealings_per_block(mut self, dkg_dealings_per_block: u64) -> Self {
         self.record.dkg_dealings_per_block = dkg_dealings_per_block;
+        self
+    }
+
+    pub fn with_cost_schedule(mut self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        self.record.canister_cycles_cost_schedule =
+            i32::from(CanisterCyclesCostSchedulePb::from(cost_schedule));
+        self
+    }
+
+    pub fn with_subnet_admins(mut self, subnet_admins: Vec<PrincipalId>) -> Self {
+        self.record.subnet_admins = subnet_admins.into_iter().map(PrincipalIdPb::from).collect();
         self
     }
 

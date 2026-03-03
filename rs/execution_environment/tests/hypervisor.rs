@@ -763,6 +763,7 @@ fn ic0_stable_write_traps_if_heap_is_out_of_bounds() {
 fn ic0_stable_write_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
         .with_initial_canister_cycles(3_000_000_000_000)
+        .with_default_wasm_memory_limit(0)
         .build();
     let wat = r#"
         (module
@@ -809,6 +810,7 @@ fn ic0_stable_read_does_not_trap_if_in_bounds() {
 fn ic0_stable_read_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
         .with_initial_canister_cycles(3_000_000_000_000)
+        .with_default_wasm_memory_limit(0)
         .build();
     let wat = r#"
         (module
@@ -10597,12 +10599,12 @@ const REPLY_REJECT_CLEANUP_CALLBACK_WAT: &str = r#"
         (import "ic0" "msg_reply" (func $msg_reply))
         (import "ic0" "msg_reply_data_append"
             (func $msg_reply_data_append (param i32) (param i32)))
-        
+
         (func $dummy
             (call $msg_reply_data_append
                 (i32.const 300) (i32.const 1))  ;; refers to 9 on the heap
             (call $msg_reply)
-        )   
+        )
 
 
         (func $test
@@ -10611,24 +10613,24 @@ const REPLY_REJECT_CLEANUP_CALLBACK_WAT: &str = r#"
                 (i32.const 0) (i32.const 4)      ;; refers to "test" on the heap
                 (i32.const 0) (i32.const 200)    ;; on_reply closure at table index 0
                 (i32.const 1) (i32.const 200))   ;; on_reject closure at table index 1
-            (call $ic0_call_on_cleanup 
+            (call $ic0_call_on_cleanup
                 (i32.const 2) (i32.const 200))   ;; cleanup closure at table index 2
             (drop (call $ic0_call_perform))
         )
 
         (func $on_reply (param i32)
-            (call $ic0_trap 
+            (call $ic0_trap
                 (i32.const 200) (i32.const 12))  ;; reply callback traps
         )
 
-        (func $on_reject (param i32) 
-            (call $ic0_trap 
+        (func $on_reject (param i32)
+            (call $ic0_trap
                 (i32.const 200) (i32.const 12))  ;; reject callback traps
         )
 
         (func $on_cleanup (param i32)
             (i32.store8                                      ;; cleanup can't reply, so
-                (i32.const 300) (call $ic0_msg_reject_code)) ;; we write cleanup code to memory and retrieve it via $dummy                    
+                (i32.const 300) (call $ic0_msg_reject_code)) ;; we write cleanup code to memory and retrieve it via $dummy
         )
 
         (export "canister_update test" (func $test))

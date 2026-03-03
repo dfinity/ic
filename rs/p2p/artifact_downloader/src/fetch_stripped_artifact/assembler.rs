@@ -496,7 +496,7 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
 
         for transcript in &mut payload.idkg_transcripts {
             let transcript_id =
-                try_from_option_field(transcript.transcript_id.as_ref(), "transcript_id")
+                try_from_option_field(transcript.transcript_id.clone(), "transcript_id")
                     .map_err(AssemblyError::DeserializationFailed)?;
             for dealing in &mut transcript.verified_dealings {
                 let dealer_index = dealing.dealer_index;

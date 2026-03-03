@@ -76,11 +76,11 @@ $ ./ci/container/container-run.sh
 $ bazel build //rs/rosetta-api/icp:rosetta_image.tar
 
 # Move the resulting TAR file to a place that can be accessed outside the dev container
-$ mv bazel-bin/rs/rosetta-api/icp/rosetta_image.tar /tmp
+$ mv bazel-bin/rs/rosetta-api/icp/rosetta_image_tarball/tarball.tar /tmp/rosetta_image.tar
 
 # Same for ICRC1
 $ bazel build //rs/rosetta-api/icrc1:icrc_rosetta_image.tar
-$ mv bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image.tar /tmp
+$ mv  bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image_tarball/tarball.tar /tmp/icrc_rosetta_image.tar
 
 # Exit the dev container
 $ exit
@@ -102,13 +102,13 @@ Example that deploys local versions for both:
 Example that deploys local ICRC1 Rosetta with multiple ledgers:
 
 ```bash
-./deploy.sh --local-icrc1-image-tar ~/workspaces/ic/ic-master/bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image.tar --icrc1-ledgers 'lkwrt-vyaaa-aaaaq-aadhq-cai,xsi2v-cyaaa-aaaaq-aabfq-cai'
+./deploy.sh --local-icrc1-image-tar ~/workspaces/ic/ic-master/bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image_tarball/tarball.tar --icrc1-ledgers 'lkwrt-vyaaa-aaaaq-aadhq-cai,xsi2v-cyaaa-aaaaq-aabfq-cai'
 ```
 
 Example that deploys **only** your local ICRC1 Rosetta build (skipping the latest image):
 
 ```bash
-./deploy.sh --local-icrc1-image-tar ~/workspaces/ic/ic-master/bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image.tar --icrc1-ledgers 'lkwrt-vyaaa-aaaaq-aadhq-cai,xsi2v-cyaaa-aaaaq-aabfq-cai' --no-icrc1-latest
+./deploy.sh --local-icrc1-image-tar ~/workspaces/ic/ic-master/bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image_tarball/tarball.tar --icrc1-ledgers 'lkwrt-vyaaa-aaaaq-aadhq-cai,xsi2v-cyaaa-aaaaq-aabfq-cai' --no-icrc1-latest
 ```
 
 The services and pods deployed with those images will have a `-local` in their names.
@@ -168,7 +168,7 @@ bazel build //rs/rosetta-api/icrc1:icrc_rosetta_image.tar
 
 # Redeploy only the ICRC local instance (other instances keep running)
 ./deploy.sh --use-persistent-volumes \
-  --local-icrc1-image-tar bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image.tar
+  --local-icrc1-image-tar bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image_tarball/tarball.tar
 ```
 
 The script will:
