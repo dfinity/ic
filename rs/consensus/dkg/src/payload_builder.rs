@@ -1195,11 +1195,17 @@ mod tests {
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+    use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
     use ic_registry_client_helpers::subnet::SubnetRegistry;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+        ReshareChainKeyContext, SetupInitialDkgContext, SubnetCallContext,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::RequestBuilder,
+    };
     use ic_types::{
         RegistryVersion,
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
@@ -2076,5 +2082,117 @@ mod tests {
 
         let result = get_completed_target_ids(config_ids.iter(), &completed);
         assert_eq!(result, BTreeSet::from([targets[0]]));
+    }
+
+    #[test]
+    fn test_process_subnet_call_context_ignores_completed_targets() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let node_ids = vec![node_test_id(0), node_test_id(1)];
+            let subnet_id = subnet_test_id(0);
+            let Dependencies { registry, .. } =
+                dependencies_with_subnet_records_with_raw_state_manager(
+                    pool_config,
+                    subnet_id,
+                    vec![(
+                        10,
+                        SubnetRecordBuilder::from(&node_ids)
+                            .with_dkg_interval_length(99)
+                            .build(),
+                    )],
+                );
+
+            let key_id = VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: String::from("some_vetkey"),
+            };
+            let ni_dkg_key_id = NiDkgMasterPublicKeyId::VetKd(key_id.clone());
+            let tag = NiDkgTag::HighThresholdForKey(ni_dkg_key_id);
+
+            let registry_version = registry.get_latest_version();
+            let completed_init_dkg_target = NiDkgTargetId::new([1u8; 32]);
+            let pending_init_dkg_target = NiDkgTargetId::new([2u8; 32]);
+            let completed_reshare_target = NiDkgTargetId::new([3u8; 32]);
+            let pending_reshare_target = NiDkgTargetId::new([4u8; 32]);
+
+            let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+            let target_nodes: BTreeSet<_> =
+                vec![10, 11, 12].into_iter().map(node_test_id).collect();
+
+            for target_id in [completed_init_dkg_target, pending_init_dkg_target] {
+                state.metadata.subnet_call_context_manager.push_context(
+                    SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
+                        request: RequestBuilder::new().build(),
+                        nodes_in_target_subnet: target_nodes.clone(),
+                        target_id,
+                        registry_version,
+                        time: state.time(),
+                    }),
+                );
+            }
+
+            for target_id in [completed_reshare_target, pending_reshare_target] {
+                state.metadata.subnet_call_context_manager.push_context(
+                    SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
+                        request: RequestBuilder::new().build(),
+                        key_id: MasterPublicKeyId::VetKd(key_id.clone()),
+                        nodes: target_nodes.clone(),
+                        registry_version,
+                        time: state.time(),
+                        target_id,
+                    }),
+                );
+            }
+
+            let reshared_transcripts = BTreeMap::from([(
+                tag.clone(),
+                dummy_transcript_for_tests_with_params(
+                    node_ids.clone(),
+                    tag.clone(),
+                    tag.threshold_for_subnet_of_size(node_ids.len()) as u32,
+                    10,
+                ),
+            )]);
+
+            let validation_context = ValidationContext {
+                registry_version,
+                certified_height: Height::from(0),
+                time: UNIX_EPOCH,
+            };
+
+            let completed_target_ids =
+                BTreeSet::from([completed_init_dkg_target, completed_reshare_target]);
+
+            let (configs, errors, valid_target_ids) = process_subnet_call_context(
+                subnet_id,
+                Height::from(0),
+                registry.as_ref(),
+                &state,
+                &validation_context,
+                &reshared_transcripts,
+                &completed_target_ids,
+                &no_op_logger(),
+            )
+            .unwrap();
+
+            // One setup_initial_dkg group (low + high) and one reshare_chain_key group
+            assert_eq!(configs.len(), 2);
+            assert_eq!(configs[0].len(), 2);
+            for config in &configs[0] {
+                assert_eq!(
+                    config.dkg_id().target_subnet,
+                    NiDkgTargetSubnet::Remote(pending_init_dkg_target)
+                );
+            }
+            assert_eq!(configs[1].len(), 1);
+            assert_eq!(
+                configs[1][0].dkg_id().target_subnet,
+                NiDkgTargetSubnet::Remote(pending_reshare_target)
+            );
+            assert!(errors.is_empty());
+            assert_eq!(
+                valid_target_ids,
+                vec![pending_init_dkg_target, pending_reshare_target]
+            );
+        });
     }
 }
