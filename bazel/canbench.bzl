@@ -7,16 +7,15 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:canisters.bzl", "wasm_rust_binary_rule")
 
-def rust_canbench(name, results_file, add_test = False, opt = "3", noise_threshold = None, data = [], env = {}, **kwargs):
-    """ Run a Rust benchmark using canbench. 
+def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = [], env = {}, **kwargs):
+    """ Run a Rust benchmark using canbench.
 
     This creates 2 executable rules: :${name} for running the benchmark and :${name}_update for
-    updating the results file and optionally a :${name}_test rule.
+    updating the results file and a :${name}_test rule.
 
     Args:
         name: The name of the rule.
         results_file: The file used store the benchmark results for future comparison.
-        add_test: If True add an additional :${name}_test rule that fails if canbench benchmark fails.
         opt: The optimization level to use for the rust_binary compilation.
         data: Additional data resources passthrough.
         env: Additional environment variables passthrough.
@@ -88,13 +87,12 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
         args = ["--debug"],
     )
 
-    if add_test:
-        sh_test(
-            name = name + "_test",
-            srcs = [
-                "//bazel:canbench.sh",
-            ],
-            data = data,
-            env = env,
-            args = ["--test"],
-        )
+    sh_test(
+        name = name + "_test",
+        srcs = [
+            "//bazel:canbench.sh",
+        ],
+        data = data,
+        env = env,
+        args = ["--test"],
+    )
