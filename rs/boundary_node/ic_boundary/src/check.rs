@@ -371,13 +371,13 @@ impl SubnetActor {
         let min_height = self.calc_min_height();
 
         // Read the latest certified membership from the background MembershipActor.
-        // Ignore the certified set if it covers fewer than 2/3 of the subnet's nodes,
+        // Ignore the certified set if it doesn't reach the subnet bft_threshold
         // since the subnet cannot make progress below that threshold anyway.
         let certified_members = self.certified_members.load();
-        let min_members = (self.subnet.nodes.len() * 2).div_ceil(3);
+        let bft_threshold = (self.subnet.nodes.len() * 2) / 3 + 1;
         let certified_set_sufficient = certified_members
             .as_deref()
-            .is_some_and(|m| m.len() >= min_members);
+            .is_some_and(|m| m.len() >= bft_threshold);
 
         let healthy_nodes: Vec<Arc<Node>> = self
             .states
@@ -397,6 +397,7 @@ impl SubnetActor {
                 }
                 true
             })
+            // Update the latency on the node
             .map(|(node, state)| {
                 node.avg_latency_us
                     .store(state.avg_latency_us, Ordering::SeqCst);
@@ -1269,13 +1270,12 @@ pub(crate) mod test {
         let mut checker = MockCheck::new();
         checker.expect_check().returning(|_| Ok(check_result(1000)));
 
-        // 1 subnet with 3 nodes: node_id(0), node_id(1), node_id(2)
-        let snapshot = generate_custom_registry_snapshot(1, 3, 0);
+        // 1 subnet with 4 nodes: node_id(0), node_id(1), node_id(2), node_id(3)
+        let snapshot = generate_custom_registry_snapshot(1, 4, 0);
         let subnet_id = subnet_test_id(0).get().0;
 
-        // Return only node_id(0) and node_id(1) as certified members.
-        // 2 out of 3 meets the 2/3 threshold, so the filter will apply.
-        let certified = HashSet::from([node_id(0), node_id(1)]);
+        // Return 3 out of 4 as certified members
+        let certified = HashSet::from([node_id(0), node_id(1), node_id(2)]);
         let mut fetcher = MockCertifiedMembershipFetcher::new();
         fetcher
             .expect_fetch_certified_members()
@@ -1308,10 +1308,11 @@ pub(crate) mod test {
         }
 
         let rt = routes.load_full().unwrap();
-        assert_eq!(rt.node_count, 2);
+        assert_eq!(rt.node_count, 3);
         assert!(rt.node_exists(node_id(0)));
         assert!(rt.node_exists(node_id(1)));
-        assert!(!rt.node_exists(node_id(2)));
+        assert!(rt.node_exists(node_id(2)));
+        assert!(!rt.node_exists(node_id(3)));
 
         Ok(())
     }
