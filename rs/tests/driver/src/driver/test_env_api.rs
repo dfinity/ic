@@ -2105,7 +2105,8 @@ impl NnsInstallationBuilder {
 
 /// Installs the registry canister on the NNS subnet, initializing it with the testnet's topology.
 ///
-/// An optional `customizations` builder allows configuring additional registry init parameters.
+/// An optional `customize` closure allows additional registry init parameters to be set. Any mutations
+/// will be added _after_ the initial mutations.
 pub fn install_registry_canister_with_testnet_topology(
     env: &TestEnv,
     customize: Option<impl FnOnce(&mut RegistryCanisterInitPayloadBuilder)>,
