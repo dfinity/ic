@@ -40,10 +40,8 @@ impl<M: Memory> BlobStore<M> {
         }
     }
 
-    pub fn get(&self, hash: &Hash) -> Option<Blob> {
-        self.store
-            .get(hash)
-            .map(|b| Blob::new_unchecked(b, hash.clone()))
+    pub fn get(&self, hash: Hash) -> Option<Blob> {
+        self.store.get(&hash).map(|b| Blob::new_unchecked(b, hash))
     }
 
     pub fn insert<B: Into<Blob>>(&mut self, blob: B) -> Option<Hash> {
@@ -51,7 +49,7 @@ impl<M: Memory> BlobStore<M> {
         if self.store.contains_key(&hash) {
             return None;
         }
-        assert_eq!(self.store.insert(hash.clone(), data), None);
+        assert_eq!(self.store.insert(hash, data), None);
         Some(hash)
     }
 }

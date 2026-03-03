@@ -8,7 +8,7 @@ pub fn get(hash: &str) -> Result<Vec<u8>, GetError> {
         .map_err(|e: hex::FromHexError| GetError::InvalidHash {
             reason: e.to_string(),
         })?;
-    read_blob_store(|store| store.get(&parsed_hash))
+    read_blob_store(|store| store.get(parsed_hash))
         .map(|blob| blob.into_data())
         .ok_or(GetError::NotFound)
 }
