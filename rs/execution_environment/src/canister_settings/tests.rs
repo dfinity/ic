@@ -94,7 +94,6 @@ mod visibility_settings {
     use proptest::prelude::*;
     use std::collections::BTreeSet;
 
-
     proptest! {
         #[test]
         fn public_always_grants_access(
