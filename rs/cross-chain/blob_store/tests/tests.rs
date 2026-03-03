@@ -45,7 +45,7 @@ mod insert {
 
         assert!(matches!(
             blob_store.insert(Setup::CONTROLLER, "not-a-hex-hash", data),
-            Err(InsertError::InvalidHash(_))
+            Err(InsertError::InvalidHash { .. })
         ));
     }
 }
@@ -76,7 +76,7 @@ mod get {
             );
             assert_matches!(
                 blob_store.get(principal, "not-a-hex-hash"),
-                Err(GetError::InvalidHash(_))
+                Err(GetError::InvalidHash { .. })
             );
         }
     }

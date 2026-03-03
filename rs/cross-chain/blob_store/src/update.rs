@@ -6,9 +6,11 @@ pub fn insert(caller: candid::Principal, hash: &str, data: Vec<u8>) -> Result<Ha
     if !ic_cdk::api::is_controller(&caller) {
         return Err(InsertError::NotAuthorized);
     }
-    let expected_hash: Hash = hash
-        .parse()
-        .map_err(|e: hex::FromHexError| InsertError::InvalidHash(e.to_string()))?;
+    let expected_hash: Hash =
+        hash.parse()
+            .map_err(|e: hex::FromHexError| InsertError::InvalidHash {
+                reason: e.to_string(),
+            })?;
     let blob = Blob::from(data);
     let actual_hash = blob.hash();
 

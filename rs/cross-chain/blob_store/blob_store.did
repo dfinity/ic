@@ -6,7 +6,7 @@ type HexHash = text;
 // Errors returned by the `get` query.
 //   - InvalidHash: hash string is not valid hex.
 //   - NotFound: no blob stored with this hash.
-type GetError = variant { InvalidHash : text; NotFound };
+type GetError = variant { InvalidHash : record { reason : text }; NotFound };
 
 // Errors returned by the `insert` update.
 //   - NotAuthorized: caller is not a controller.
@@ -15,7 +15,7 @@ type GetError = variant { InvalidHash : text; NotFound };
 //   - HashMismatch: provided hash does not match the SHA-256 of the data.
 type InsertError = variant {
     NotAuthorized;
-    InvalidHash : text;
+    InvalidHash : record { reason : text };
     AlreadyExists;
     HashMismatch : record { actual : text; expected : text };
 };

@@ -10,13 +10,13 @@ pub struct InsertRequest {
 #[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub enum InsertError {
     NotAuthorized,
-    InvalidHash(String),
+    InvalidHash { reason: String },
     HashMismatch { expected: String, actual: String },
     AlreadyExists,
 }
 
 #[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub enum GetError {
-    InvalidHash(String),
+    InvalidHash { reason: String },
     NotFound,
 }
