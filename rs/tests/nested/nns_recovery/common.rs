@@ -68,6 +68,7 @@ pub struct SetupConfig {
     pub impersonate_upstreams: bool,
     pub subnet_size: usize,
     pub dkg_interval: u64,
+    pub nested_nodes_vm_resources: VmResources,
 }
 
 #[derive(Debug)]
@@ -179,7 +180,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    NestedNodes::new_with_resources(&host_vm_names, NNS_RECOVERY_VM_RESOURCES)
+    NestedNodes::new_with_resources(&host_vm_names, cfg.nested_nodes_vm_resources)
         .setup_and_start(&env)
         .unwrap();
 }
