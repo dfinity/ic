@@ -9,7 +9,7 @@ source /opt/ic/bin/metrics.sh
 
 function mount_config_device() {
     CONFIG_DEVICE="/dev/disk/by-label/CONFIG"
-    TIMEOUT=10
+    TIMEOUT="10"
     echo "Trigger udev and wait up to ${TIMEOUT} seconds for all events to be handled and exit early if ${CONFIG_DEVICE} appears ..."
     udevadm trigger --subsystem-match=block --action=add
     udevadm settle --timeout="${TIMEOUT}" --exit-if-exists="${CONFIG_DEVICE}"
