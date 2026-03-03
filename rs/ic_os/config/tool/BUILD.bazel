@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
+    "@crate_index//:base64",
     "@crate_index//:clap",
     "@crate_index//:fs_extra",
     "@crate_index//:get_if_addrs",

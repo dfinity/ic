@@ -48,6 +48,7 @@ impl IpAddressInfo {
             )
         }
     }
+
     pub fn new_ipv6_address(address_with_prefix: &str, gateway: &str) -> Result<IpAddressInfo> {
         if Self::verify_ipv6_address(address_with_prefix, gateway)? {
             eprintln!(
@@ -212,6 +213,7 @@ fn generate_network_config_ipv6_contents(
                     {IPV6_NAME_SERVER_NETWORKD_CONTENTS}
                 "#,
             );
+
             if disable_dad {
                 // Explicitly turn off router advertisements. Otherwise, we may
                 // end up with two (distinct) addresses on the same interface
@@ -221,8 +223,11 @@ fn generate_network_config_ipv6_contents(
                 ipv6_contents
             }
         }
-        // Default configuration when no IPv6 address is provided
-        None => "[Network]\nIPv6AcceptRA=true\n".to_string(),
+
+        // Default configuration when no IPv6 address is provided.
+        // Enables reception of the Router-Advertisement packets and enables DHCP for both v4/v6.
+        // DHCP for v4 is needed to allow working with Metadata servers in the Cloud environments.
+        None => "[Network]\nIPv6AcceptRA=true\nDHCP=yes\n".to_string(),
     }
 }
 

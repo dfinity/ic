@@ -9,6 +9,8 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
+use crate::guestos::cloud::CloudType;
+
 #[derive(Template)]
 #[template(path = "ic.json5.template", escape = "none")]
 pub struct IcConfigTemplate {
@@ -211,7 +213,16 @@ fn get_router_advertisement_ipv6_address() -> Result<String> {
 
     for attempt in 1..=MAX_RETRIES {
         match get_router_advertisement_ipv6_address_helper() {
-            Ok(ipv6_addr) => return Ok(ipv6_addr.to_string()),
+            Ok(ipv6_addr) => {
+                // Check if returned address is not link-local
+                if !ipv6_addr.is_unicast_link_local() {
+                    return Ok(ipv6_addr.to_string());
+                }
+
+                // Otherwise we might be in the cloud environment - try to discover our external IP
+                let cloud_type = CloudType::discover().context("unable to discover cloud type")?;
+            }
+
             Err(e) => {
                 if attempt < MAX_RETRIES {
                     eprintln!(

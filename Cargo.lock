@@ -2558,6 +2558,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "askama",
+ "base64 0.13.1",
  "clap 4.5.27",
  "config_types",
  "deterministic_ips",
@@ -2568,6 +2569,7 @@ dependencies = [
  "network",
  "once_cell",
  "regex",
+ "reqwest",
  "rust-ini",
  "securefmt",
  "serde",
@@ -5477,14 +5479,12 @@ name = "guestos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "base64 0.13.1",
  "clap 4.5.27",
  "config_tool",
  "config_types",
  "indoc 1.0.9",
  "network",
  "nix 0.24.3",
- "reqwest",
  "serde",
  "serde_json",
  "utils",
