@@ -40,7 +40,7 @@ fn append_deltas(
     let mut total = 0;
     loop {
         let mut delta = make_full_delta(next_idx, delta_log_byte_capacity, content_len);
-        total += delta.bytes_used();
+        total += LogMemoryStore::estimate_storage_size(&delta);
         if total > volume_bytes {
             return;
         }

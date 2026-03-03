@@ -7,6 +7,7 @@ mod struct_io;
 
 use crate::canister_state::system_state::log_memory_store::{
     header::Header,
+    log_record::LogRecord,
     memory::MemorySize,
     ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
 };
@@ -262,6 +263,18 @@ impl LogMemoryStore {
     /// Clears the delta_log sizes.
     pub fn clear_delta_log_sizes(&mut self) {
         self.delta_log_sizes.clear();
+    }
+
+    /// Calculates the total memory footprint of canister log records
+    /// when encoded and stored within the `LogMemoryStore`.
+    ///
+    /// `CanisterLog` and `LogMemoryStore` use different structures for storing
+    /// log records, so we need to calculate the storage size for each type separately.
+    pub fn estimate_storage_size(log: &CanisterLog) -> usize {
+        log.records()
+            .iter()
+            .map(|r| LogRecord::estimate_bytes_len(r.content.len()))
+            .sum()
     }
 }
 

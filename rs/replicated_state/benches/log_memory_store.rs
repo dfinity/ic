@@ -26,9 +26,8 @@ fn create_populated_store(capacity: u64, message_len: u64) -> LogMemoryStore {
     while logs_written <= capacity as usize {
         let mut delta = CanisterLog::new_delta_with_next_index(idx, TEST_DELTA_LOG_CAPACITY);
         delta.add_record(idx, log_message.clone());
+        logs_written += LogMemoryStore::estimate_storage_size(&delta);
         idx += 1;
-        // Count message len without metadata to ensure more than capacity was written.
-        logs_written += len;
         store.append_delta_log(&mut delta);
     }
 
