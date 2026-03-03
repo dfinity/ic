@@ -305,16 +305,19 @@ fn max_response_size_respected_with_filtering_by_timestamp() {
 #[test]
 fn test_increasing_capacity_preserves_records() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
-    s.resize_for_testing(1_000_000); // 1 MB
+    let big_size = 100 * KIB;
+    let delta_size = 10 * KIB;
+    let message_len = 10;
+    s.resize_for_testing(big_size - 2 * message_len); // Initial size is smaller.
 
-    // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
-    append_deltas(&mut s, 0, 200_000, 100_000, 1_000);
+    // Append more records than current capacity.
+    append_deltas(&mut s, 0, 2 * big_size, delta_size, message_len);
 
     let records_before = s.records(None);
     let bytes_used_before = s.bytes_used();
 
     // Increase capacity.
-    s.resize_for_testing(2_000_000); // 2 MB
+    s.resize_for_testing(big_size);
 
     let records_after = s.records(None);
     let bytes_used_after = s.bytes_used();
@@ -327,17 +330,20 @@ fn test_increasing_capacity_preserves_records() {
 #[test]
 fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
-    s.resize_for_testing(500_000); // 500 KB
+    let big_size = 100 * KIB;
+    let delta_size = 10 * KIB;
+    let message_len = 10;
+    s.resize_for_testing(big_size); // Initial size is bigger.
 
-    // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
-    append_deltas(&mut s, 0, 200_000, 100_000, 1_000);
+    // Append more records than current capacity.
+    append_deltas(&mut s, 0, 2 * big_size, delta_size, message_len);
 
     let records_before = s.records(None);
     let bytes_used_before = s.bytes_used();
     let next_idx_before = s.next_idx();
 
     // Decrease capacity.
-    s.resize_for_testing(100_000); // 100 KB
+    s.resize_for_testing(big_size - 2 * message_len);
 
     let records_after = s.records(None);
     let bytes_used_after = s.bytes_used();
