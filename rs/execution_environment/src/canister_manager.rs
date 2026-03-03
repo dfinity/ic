@@ -67,7 +67,6 @@ use ic_types::{
         CanisterCall, Payload, RejectContext, Response as CanisterResponse, SignedIngressContent,
         StopCanisterContext,
     },
-    nominal_cycles::NominalCycles,
 };
 use ic_wasm_types::WasmHash;
 use more_asserts::{debug_assert_ge, debug_assert_le};
@@ -1313,8 +1312,10 @@ impl CanisterManager {
             NumBytes::from(0),
         );
 
-        // Leftover cycles in the balance are considered `consumed`.
-        let leftover_cycles = NominalCycles::from(canister_to_delete.system_state.balance());
+        // Leftover cycles in the canister are considered `consumed`.
+        let leftover_cycles = self
+            .cycles_account_manager
+            .leftover_cycles_for_canister_to_deleted(&canister_to_delete.system_state);
         let consumed_cycles_by_canister_to_delete = leftover_cycles
             + canister_to_delete
                 .system_state
