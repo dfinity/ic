@@ -17,9 +17,9 @@ use crate::{
         ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
         Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
         ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-        RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
-        TransferSnsTreasuryFunds, UpgradeExtension, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
+        RegisterExtension, SetTopicsForCustomProposals, SnapshotVisibility, SnsVersion, Tally,
+        Topic, Topic as TopicPb, TransferSnsTreasuryFunds, UpgradeExtension,
+        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
         governance::{SnsMetadata, Version},
         governance_error::ErrorType,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
@@ -1848,6 +1848,13 @@ fn validate_and_render_manage_dapp_canister_settings(
         render += &format!(
             "# Set log visibility to: {:?} \n",
             LogVisibility::try_from(*log_visibility).unwrap_or_default()
+        );
+        no_change = false;
+    }
+    if let Some(snapshot_visibility) = &manage_dapp_canister_settings.snapshot_visibility {
+        render += &format!(
+            "# Set snapshot visibility to: {:?} \n",
+            SnapshotVisibility::try_from(*snapshot_visibility).unwrap_or_default()
         );
         no_change = false;
     }

@@ -1916,6 +1916,15 @@ message UpdateCanisterSettings {
     LOG_VISIBILITY_PUBLIC = 2;
   }
 
+  // Snapshot visibility of a canister.
+  enum SnapshotVisibility {
+    SNAPSHOT_VISIBILITY_UNSPECIFIED = 0;
+    // Snapshots are visible to the controllers of the dapp canister.
+    SNAPSHOT_VISIBILITY_CONTROLLERS = 1;
+    // Snapshots are visible to the public.
+    SNAPSHOT_VISIBILITY_PUBLIC = 2;
+  }
+
   // The controllers of the canister. We use a message to wrap the repeated field because prost does
   // not generate `Option<Vec<T>>` for repeated fields.
   message Controllers {
@@ -1933,6 +1942,7 @@ message UpdateCanisterSettings {
     optional LogVisibility log_visibility = 5;
     optional uint64 wasm_memory_limit = 6;
     optional uint64 wasm_memory_threshold = 7;
+    optional SnapshotVisibility snapshot_visibility = 8;
   }
 
   // The settings to update. Required.

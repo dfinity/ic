@@ -18,7 +18,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
     management_canister_client::ManagementCanisterClient,
-    update_settings::{CanisterSettings, LogVisibility, UpdateSettings},
+    update_settings::{CanisterSettings, LogVisibility, SnapshotVisibility, UpdateSettings},
 };
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
@@ -194,6 +194,7 @@ impl ValidatedManageDappCanisterSettingsRequest {
             freezing_threshold: request.freezing_threshold.map(Nat::from),
             reserved_cycles_limit: request.reserved_cycles_limit.map(Nat::from),
             log_visibility: LogVisibility::try_from(request.log_visibility()).ok(),
+            snapshot_visibility: SnapshotVisibility::try_from(request.snapshot_visibility()).ok(),
             wasm_memory_limit: request.wasm_memory_limit.map(Nat::from),
             wasm_memory_threshold: request.wasm_memory_threshold.map(Nat::from),
         };

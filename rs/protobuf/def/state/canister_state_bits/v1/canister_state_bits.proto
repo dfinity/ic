@@ -377,6 +377,18 @@ message LogVisibilityV2 {
   }
 }
 
+message SnapshotVisibilityAllowedViewers {
+  repeated types.v1.PrincipalId principals = 1;
+}
+
+message SnapshotVisibility {
+  oneof snapshot_visibility {
+    int32 controllers = 1;
+    int32 public = 2;
+    SnapshotVisibilityAllowedViewers allowed_viewers = 3;
+  }
+}
+
 message CanisterLogRecord {
   uint64 idx = 1;
   uint64 timestamp_nanos = 2;
@@ -410,7 +422,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 64
+// Next ID: 65
 message CanisterStateBits {
   reserved 1, 3, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 53;
 
@@ -491,4 +503,6 @@ message CanisterStateBits {
   TaskQueue tasks = 54;
   // A map of environment variable names to their values
   map<string, string> environment_variables = 55;
+  // Snapshot visibility for the canister.
+  SnapshotVisibility snapshot_visibility = 64;
 }
