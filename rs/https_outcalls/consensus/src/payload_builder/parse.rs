@@ -7,7 +7,9 @@ use ic_protobuf::{
 };
 use ic_types::{
     NumBytes,
-    batch::{CanisterHttpPayload, iterator_to_bytes, slice_to_messages},
+    batch::{
+        CanisterHttpPayload, FlexibleCanisterHttpResponses, iterator_to_bytes, slice_to_messages,
+    },
     messages::CallbackId,
 };
 use std::collections::HashSet;
@@ -24,6 +26,9 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
             Some(MessageType::DivergenceResponse(response)) => {
                 payload.divergence_responses.push(response.try_into()?)
             }
+            Some(MessageType::FlexibleResponses(flex_responses)) => payload
+                .flexible_responses
+                .push(FlexibleCanisterHttpResponses::try_from(flex_responses)?),
             None => return Err(ProxyDecodeError::MissingField("message_type")),
         }
     }
@@ -55,7 +60,14 @@ pub(crate) fn payload_to_bytes(payload: &CanisterHttpPayload, max_size: NumBytes
                             pb::CanisterHttpResponseWithConsensus::from(response),
                         )),
                     }),
-            );
+            )
+            .chain(payload.flexible_responses.iter().map(|flex_responses| {
+                CanisterHttpResponseMessage {
+                    message_type: Some(MessageType::FlexibleResponses(
+                        pb::FlexibleCanisterHttpResponses::from(flex_responses),
+                    )),
+                }
+            }));
 
     iterator_to_bytes(message_iterator, max_size)
 }
@@ -94,6 +106,7 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
             .shares
             .first()
             .and_then(|share| share.metadata.as_ref().map(|md| md.id)),
+        Some(MessageType::FlexibleResponses(flex_responses)) => Some(flex_responses.callback_id),
         Some(MessageType::Timeout(id)) => Some(id),
         None => None,
     }

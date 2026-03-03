@@ -29,17 +29,41 @@ pub struct CanisterHttpPayload {
     pub responses: Vec<CanisterHttpResponseWithConsensus>,
     pub timeouts: Vec<CallbackId>,
     pub divergence_responses: Vec<CanisterHttpResponseDivergence>,
+    pub flexible_responses: Vec<FlexibleCanisterHttpResponses>,
+}
+
+/// A group of flexible HTTP outcall responses for a single callback.
+///
+/// Unlike regular outcalls, each response carries a single-signer share
+/// rather than an aggregated threshold proof, because flexible responses
+/// from individual committee members don't need to agree.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct FlexibleCanisterHttpResponses {
+    pub callback_id: CallbackId,
+    pub responses: Vec<FlexibleCanisterHttpResponseWithProof>,
+}
+
+/// A single flexible HTTP outcall response paired with its single-signer proof.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct FlexibleCanisterHttpResponseWithProof {
+    pub response: CanisterHttpResponse,
+    pub proof: CanisterHttpResponseShare,
 }
 
 impl CanisterHttpPayload {
     /// Returns the number of responses that this payload contains
     pub fn num_responses(&self) -> usize {
-        self.responses.len() + self.timeouts.len() + self.divergence_responses.len()
+        self.responses.len()
+            + self.timeouts.len()
+            + self.divergence_responses.len()
+            + self.flexible_responses.len()
     }
 
     /// Returns the number of non_timeout responses
     pub fn num_non_timeout_responses(&self) -> usize {
-        self.responses.len()
+        self.responses.len() + self.flexible_responses.len()
     }
 
     /// Returns true, if this is an empty payload
@@ -250,6 +274,57 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
     }
 }
 
+impl From<&FlexibleCanisterHttpResponseWithProof> for pb::FlexibleCanisterHttpResponseWithProof {
+    fn from(entry: &FlexibleCanisterHttpResponseWithProof) -> Self {
+        pb::FlexibleCanisterHttpResponseWithProof {
+            response: Some(pb::CanisterHttpResponse::from(entry.response.clone())),
+            proof: Some(pb::CanisterHttpShare::from(entry.proof.clone())),
+        }
+    }
+}
+
+impl TryFrom<pb::FlexibleCanisterHttpResponseWithProof> for FlexibleCanisterHttpResponseWithProof {
+    type Error = ProxyDecodeError;
+
+    fn try_from(entry: pb::FlexibleCanisterHttpResponseWithProof) -> Result<Self, Self::Error> {
+        Ok(FlexibleCanisterHttpResponseWithProof {
+            response: try_from_option_field(
+                entry.response,
+                "FlexibleCanisterHttpResponseWithProof::response",
+            )?,
+            proof: try_from_option_field(
+                entry.proof,
+                "FlexibleCanisterHttpResponseWithProof::proof",
+            )?,
+        })
+    }
+}
+
+
+impl From<&FlexibleCanisterHttpResponses> for pb::FlexibleCanisterHttpResponses {
+    fn from(responses: &FlexibleCanisterHttpResponses) -> Self {
+        pb::FlexibleCanisterHttpResponses {
+            callback_id: responses.callback_id.get(),
+            responses: responses.responses.iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl TryFrom<pb::FlexibleCanisterHttpResponses> for FlexibleCanisterHttpResponses {
+    type Error = ProxyDecodeError;
+
+    fn try_from(responses: pb::FlexibleCanisterHttpResponses) -> Result<Self, Self::Error> {
+        Ok(FlexibleCanisterHttpResponses {
+            callback_id: CallbackId::new(responses.callback_id),
+            responses: responses
+                .responses
+                .into_iter()
+                .map(TryFrom::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+
 impl TryFrom<pb::CanisterHttpResponse> for CanisterHttpResponse {
     type Error = ProxyDecodeError;
 
@@ -454,5 +529,70 @@ mod tests {
         let new_artifact_without_response =
             CanisterHttpResponseArtifact::try_from(pb_artifact_without_response).unwrap();
         assert_eq!(artifact_without_response, new_artifact_without_response);
+    }
+
+    #[test]
+    fn flexible_canister_http_responses_conversion() {
+        let callback_id = CallbackId::new(42);
+        let timeout = Time::from_nanos_since_unix_epoch(5000);
+        let registry_version = RegistryVersion::new(1);
+        let replica_version = ReplicaVersion::default();
+
+        let flexible_responses = FlexibleCanisterHttpResponses {
+            callback_id,
+            responses: vec![
+                FlexibleCanisterHttpResponseWithProof {
+                    response: CanisterHttpResponse {
+                        id: callback_id,
+                        timeout,
+                        canister_id: crate::CanisterId::from(1),
+                        content: CanisterHttpResponseContent::Success(b"response_a".to_vec()),
+                    },
+                    proof: Signed {
+                        content: CanisterHttpResponseMetadata {
+                            id: callback_id,
+                            timeout,
+                            content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(
+                                vec![10, 11, 12],
+                            )),
+                            registry_version,
+                            replica_version,
+                        },
+                        signature: BasicSignature {
+                            signer: NodeId::from(PrincipalId::new_node_test_id(1)),
+                            signature: BasicSigOf::new(BasicSig(vec![20, 21])),
+                        },
+                    },
+                },
+                FlexibleCanisterHttpResponseWithProof {
+                    response: CanisterHttpResponse {
+                        id: callback_id,
+                        timeout,
+                        canister_id: crate::CanisterId::from(1),
+                        content: CanisterHttpResponseContent::Success(b"response_b".to_vec()),
+                    },
+                    proof: Signed {
+                        content: CanisterHttpResponseMetadata {
+                            id: callback_id,
+                            timeout,
+                            content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(
+                                vec![30, 31, 32],
+                            )),
+                            registry_version,
+                            replica_version,
+                        },
+                        signature: BasicSignature {
+                            signer: NodeId::from(PrincipalId::new_node_test_id(2)),
+                            signature: BasicSigOf::new(BasicSig(vec![40, 41])),
+                        },
+                    },
+                },
+            ],
+        };
+
+        let pb_flex_responses = pb::FlexibleCanisterHttpResponses::from(&flexible_responses);
+        let new_flex_responses =
+            FlexibleCanisterHttpResponses::try_from(pb_flex_responses).unwrap();
+        assert_eq!(flexible_responses, new_flex_responses);
     }
 }

@@ -401,6 +401,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 .collect(),
             timeouts,
             divergence_responses,
+            // TODO(flexible-http-outcalls): implement flexible responses
+            flexible_responses: vec![],
         }
     }
 

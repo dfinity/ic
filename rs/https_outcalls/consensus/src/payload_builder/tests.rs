@@ -217,6 +217,7 @@ fn multiple_payload_test() {
                 }],
                 timeouts: vec![],
                 divergence_responses: vec![],
+                flexible_responses: vec![],
             };
             let past_payload = payload_to_bytes(&past_payload, NumBytes::new(4 * 1024 * 1024));
 
@@ -644,6 +645,7 @@ fn duplicate_validation() {
             responses: vec![response_and_metadata_to_proof(&response, &metadata)],
             timeouts: vec![],
             divergence_responses: vec![],
+            flexible_responses: vec![],
         };
         let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
         let past_payloads = vec![PastPayload {
@@ -697,6 +699,7 @@ fn divergence_response_validation_test() {
                         }))
                         .collect(),
                 }],
+                flexible_responses: vec![],
             };
             let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
 
@@ -717,6 +720,7 @@ fn divergence_response_validation_test() {
                         .map(|node_id| metadata_to_share(node_id.try_into().unwrap(), &metadata))
                         .collect(),
                 }],
+                flexible_responses: vec![],
             };
             let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
 
@@ -754,6 +758,7 @@ fn divergence_response_validation_test() {
                         }))
                         .collect(),
                 }],
+                flexible_responses: vec![],
             };
             let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
 
@@ -1790,6 +1795,7 @@ where
             responses: vec![response_and_metadata_to_proof(&response, &metadata)],
             timeouts: vec![],
             divergence_responses: vec![],
+            flexible_responses: vec![],
         };
 
         let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
