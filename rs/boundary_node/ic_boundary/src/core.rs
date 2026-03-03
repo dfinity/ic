@@ -633,11 +633,11 @@ async fn setup_registry(
         cli.registry.registry_local_store_path.clone().unwrap(),
     ));
 
-    let registry_client: Arc<dyn RegistryClient> =
-        Arc::new(RegistryClientImpl::new(local_store, None));
+    let registry_client = Arc::new(RegistryClientImpl::new(local_store, None));
     registry_client
         .fetch_and_start_polling()
         .context("failed to start registry client")?;
+    let registry_client: Arc<dyn RegistryClient> = registry_client;
 
     // Snapshots
     let snapshotter = WithMetricsSnapshot(
