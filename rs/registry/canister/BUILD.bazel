@@ -14,7 +14,6 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/consensus/features",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
