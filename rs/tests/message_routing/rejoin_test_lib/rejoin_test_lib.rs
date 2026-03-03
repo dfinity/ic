@@ -497,10 +497,8 @@ pub fn rejoin_test_long_rounds(
 
     info!(logger, "Checking that all nodes are healthy.");
     for node in &nodes {
-        let health_status = node
-            .status_is_healthy()
-            .expect("Failed to get replica health status");
-        assert!(health_status, "Node {} is not healthy.", node.node_id);
+        node.await_status_is_healthy()
+            .unwrap_or_else(|_| panic!("Node {} is not healthy.", node.node_id));
     }
 
     // finally check the metrics for "fast-forward" mode
