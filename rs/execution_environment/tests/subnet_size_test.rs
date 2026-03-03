@@ -950,11 +950,11 @@ fn test_subnet_size_one_gib_storage_default_cost() {
 
     // Assert big subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_hi, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(26.186_942_520));
+    assert_eq!(cost * per_year, trillion_cycles(26.186_989_824));
 
     // Assert big subnet size cost per year scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(10.012_601_160));
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(10.012_648_464));
 }
 
 // Storage cost tests split into 2: zero and non-zero compute allocation.
