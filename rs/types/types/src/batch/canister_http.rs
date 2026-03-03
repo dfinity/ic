@@ -300,7 +300,6 @@ impl TryFrom<pb::FlexibleCanisterHttpResponseWithProof> for FlexibleCanisterHttp
     }
 }
 
-
 impl From<&FlexibleCanisterHttpResponses> for pb::FlexibleCanisterHttpResponses {
     fn from(responses: &FlexibleCanisterHttpResponses) -> Self {
         pb::FlexibleCanisterHttpResponses {
@@ -556,7 +555,7 @@ mod tests {
                                 vec![10, 11, 12],
                             )),
                             registry_version,
-                            replica_version,
+                            replica_version: replica_version.clone(),
                         },
                         signature: BasicSignature {
                             signer: NodeId::from(PrincipalId::new_node_test_id(1)),

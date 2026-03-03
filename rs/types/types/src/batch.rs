@@ -10,8 +10,8 @@ mod xnet;
 
 pub use self::{
     canister_http::{
-        CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     execution_environment::{
         CanisterCyclesCostSchedule, CanisterQueryStats, LocalQueryStats, QueryStats,
