@@ -284,7 +284,27 @@ fn strip_page_map_deltas(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
     for canister in state.canisters_iter_mut() {
-        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
+        let should_mutate = canister
+            .system_state
+            .wasm_chunk_store
+            .page_map()
+            .should_strip_deltas()
+            || canister
+                .system_state
+                .log_memory_store
+                .maybe_page_map()
+                .is_some_and(|page_map| page_map.should_strip_deltas())
+            || canister
+                .execution_state
+                .as_ref()
+                .is_some_and(|execution_state| {
+                    execution_state.wasm_memory.page_map.should_strip_deltas()
+                        || execution_state.stable_memory.page_map.should_strip_deltas()
+                });
+        if !should_mutate {
+            continue;
+        }
+
         let canister = Arc::make_mut(canister);
         canister
             .system_state
@@ -327,8 +347,17 @@ fn strip_page_map_deltas(
     // Reset the sandbox state to force full synchronization on the next execution
     // since the page deltas are out of sync now.
     for canister in state.canisters_iter_mut() {
-        if canister.execution_state.is_none() {
-            continue;
+        match &canister.execution_state {
+            Some(xs) => {
+                if !xs.wasm_memory.sandbox_memory.lock().unwrap().is_synced()
+                    && !xs.stable_memory.sandbox_memory.lock().unwrap().is_synced()
+                {
+                    continue;
+                }
+            }
+            None => {
+                continue;
+            }
         }
         let canister = Arc::make_mut(canister);
         if let Some(execution_state) = &mut canister.execution_state {
@@ -347,7 +376,16 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
 ) {
     let mut pagemaps = Vec::new();
 
+    // Returns `true` if a call to `add_to_pagemaps_and_strip()` would either add a
+    // `PageMapToFlush` or its `PageMap::strip_unflushed_delta()` call would
+    // actually mutate the `PageMap`.
+    let should_add_or_strip = |page_map: &PageMap| -> bool {
+        page_map.has_stripped_unflushed_deltas() || !page_map.unflushed_delta_is_empty()
+    };
+
     let mut add_to_pagemaps_and_strip = |entry, page_map: &mut PageMap| {
+        // debug_assert!(should_add_or_strip(page_map));
+
         // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
         // created one. In these cases, we also need to wipe the data from the file on disk.
         // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
@@ -375,7 +413,23 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
     };
 
     for canister in tip_state.canisters_iter_mut() {
-        // TODO(DSM-102): Test if canister has deltas before making a mutable reference.
+        let should_mutate = should_add_or_strip(canister.system_state.wasm_chunk_store.page_map())
+            || canister
+                .system_state
+                .log_memory_store
+                .maybe_page_map()
+                .is_some_and(should_add_or_strip)
+            || canister
+                .execution_state
+                .as_ref()
+                .is_some_and(|execution_state| {
+                    should_add_or_strip(&execution_state.wasm_memory.page_map)
+                        || should_add_or_strip(&execution_state.stable_memory.page_map)
+                });
+        if !should_mutate {
+            continue;
+        }
+
         let canister = Arc::make_mut(canister);
         let id = canister.canister_id();
         add_to_pagemaps_and_strip(

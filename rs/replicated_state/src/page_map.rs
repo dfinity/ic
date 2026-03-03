@@ -802,11 +802,21 @@ impl PageMap {
         self.page_allocator = PageAllocator::new(Arc::clone(&fd_factory));
     }
 
+    pub fn should_strip_deltas(&self) -> bool {
+        !self.page_delta.is_empty()
+            || !self.unflushed_delta.is_empty()
+            || self.page_allocator.is_active()
+    }
+
     /// Removes the unflushed delta from this page map.
     pub fn strip_unflushed_delta(&mut self) {
         self.has_stripped_unflushed_deltas = true;
 
         std::mem::take(&mut self.unflushed_delta);
+    }
+
+    pub fn should_strip_unflushed_delta(&self) -> bool {
+        !self.has_stripped_unflushed_deltas || !self.unflushed_delta.is_empty()
     }
 
     pub fn get_page_delta_indices(&self) -> Vec<PageIndex> {

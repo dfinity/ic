@@ -229,6 +229,10 @@ impl SandboxMemory {
     pub fn synced(handle: SandboxMemoryHandle) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(SandboxMemory::Synced(handle)))
     }
+
+    pub fn is_synced(&self) -> bool {
+        matches!(self, SandboxMemory::Synced(_))
+    }
 }
 
 /// The owner of the sandbox memory. It's destructor must close the

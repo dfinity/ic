@@ -310,6 +310,12 @@ impl PageAllocatorInner {
             })
             .collect()
     }
+
+    /// Returns `true` if the page allocator is active, i.e. if it has allocated any
+    /// pages and thus has a backing file descriptor.
+    pub fn is_active(&self) -> bool {
+        self.core_allocator.lock().unwrap().is_some()
+    }
 }
 
 #[allow(clippy::new_without_default)]
