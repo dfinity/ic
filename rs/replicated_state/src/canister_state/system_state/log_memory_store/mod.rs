@@ -201,7 +201,7 @@ impl LogMemoryStore {
         self.bytes_used() == 0
     }
 
-    fn bytes_used(&self) -> usize {
+    pub fn bytes_used(&self) -> usize {
         self.get_header()
             .map(|h| h.data_size.get() as usize)
             .unwrap_or(0)

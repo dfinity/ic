@@ -37,6 +37,12 @@ fn run_bench_resize<M: criterion::measurement::Measurement>(
                     store.append_delta_log(&mut delta);
                 }
 
+                let approx_threshold = (90 * initial_log_memory_limit) / 100;
+                assert!(
+                    store.bytes_used() > approx_threshold as usize,
+                    "Store is expected to be almost full (>90%)"
+                );
+
                 store
             },
             // Test measurement.
