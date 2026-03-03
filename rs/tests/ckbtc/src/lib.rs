@@ -7,6 +7,8 @@ use ic_btc_adapter_test_utils::rpc_client::RpcClientType;
 use ic_btc_checker::{
     CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
 };
+use ic_btc_interface::InitConfig as BitcoinInitConfig;
+use ic_btc_interface::InitConfig;
 use ic_ckbtc_minter::{
     CKBTC_LEDGER_MEMO_SIZE,
     lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
@@ -20,6 +22,7 @@ use ic_config::{
 use ic_consensus_threshold_sig_system_test_utils::{
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
 };
+use ic_doge_interface::InitConfig as DogecoinInitConfig;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_management_canister_types::{CanisterIdRecord, ProvisionalCreateCanisterWithCyclesArgs};
 use ic_management_canister_types_private::{BitcoinNetwork, EcdsaCurve, MasterPublicKeyId};
@@ -39,8 +42,6 @@ use ic_system_test_driver::{
     },
     util::{MessageCanister, assert_create_agent, block_on},
 };
-use ic_doge_interface::{InitConfig as DogecoinInitConfig};
-use ic_btc_interface::{InitConfig as BitcoinInitConfig};
 use ic_types::Height;
 use icp_ledger::ArchiveOptions;
 use slog::{Logger, info};
@@ -49,7 +50,6 @@ use std::{
     str::FromStr,
     time::Duration,
 };
-use ic_btc_interface::InitConfig;
 
 pub mod adapter;
 pub mod utils;
