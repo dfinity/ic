@@ -39,6 +39,8 @@ use ic_system_test_driver::{
     },
     util::{MessageCanister, assert_create_agent, block_on},
 };
+use ic_doge_interface::{InitConfig as DogecoinInitConfig};
+use ic_btc_interface::{InitConfig as BitcoinInitConfig};
 use ic_types::Height;
 use icp_ledger::ArchiveOptions;
 use slog::{Logger, info};
@@ -47,6 +49,7 @@ use std::{
     str::FromStr,
     time::Duration,
 };
+use ic_btc_interface::InitConfig;
 
 pub mod adapter;
 pub mod utils;
@@ -523,6 +526,14 @@ pub async fn install_bitcoin_canister(runtime: &Runtime, logger: &Logger) -> Can
     install_bitcoin_canister_with_network(runtime, logger, ic_btc_interface::Network::Regtest).await
 }
 
+/// Bitcoin canister init arg (release/2026-02-18+).
+/// TODO(DEFI-2686): once new version of ic-btc-interface is released, use type from this crate.
+#[derive(candid::CandidType)]
+#[allow(non_camel_case_types)]
+enum BitcoinCanisterArg {
+    init(BitcoinInitConfig),
+}
+
 pub async fn install_bitcoin_canister_with_network(
     runtime: &Runtime,
     logger: &Logger,
@@ -537,12 +548,12 @@ pub async fn install_bitcoin_canister_with_network(
     let mut bitcoin_canister =
         create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
 
-    let args = Config {
-        stability_threshold: BTC_MIN_CONFIRMATIONS as u128,
-        network,
-        blocks_source: Principal::management_canister(),
-        syncing: Flag::Enabled,
-        fees: Fees {
+    let init_config = BitcoinInitConfig {
+        stability_threshold: Some(BTC_MIN_CONFIRMATIONS as u128),
+        network: Some(network),
+        blocks_source: Some(Principal::management_canister()),
+        syncing: Some(Flag::Enabled),
+        fees: Some(Fees {
             get_utxos_base: 0,
             get_utxos_cycles_per_ten_instructions: 0,
             get_utxos_maximum: 0,
@@ -555,14 +566,14 @@ pub async fn install_bitcoin_canister_with_network(
             get_block_headers_base: 0,
             get_block_headers_cycles_per_ten_instructions: 0,
             get_block_headers_maximum: 0,
-        },
-        api_access: Flag::Enabled,
-        disable_api_if_not_fully_synced: Flag::Disabled,
+        }),
+        api_access: Some(Flag::Enabled),
+        disable_api_if_not_fully_synced: Some(Flag::Disabled),
         watchdog_canister: None,
-        burn_cycles: Flag::Enabled,
-        lazily_evaluate_fee_percentiles: Flag::Enabled,
+        burn_cycles: Some(Flag::Enabled),
+        lazily_evaluate_fee_percentiles: Some(Flag::Enabled),
     };
-
+    let args = BitcoinCanisterArg::init(init_config);
     install_rust_canister_from_path(
         &mut bitcoin_canister,
         get_dependency_path_from_env("BTC_WASM_PATH"),
@@ -583,17 +594,17 @@ pub async fn install_bitcoin_canister_with_network(
 #[derive(candid::CandidType)]
 #[allow(non_camel_case_types)]
 enum DogecoinCanisterArg {
-    init(ic_doge_interface::InitConfig),
+    init(DogecoinInitConfig),
 }
 
 pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
-    use ic_doge_interface::{Fees, Flag, InitConfig, Network};
+    use ic_doge_interface::{Fees, Flag, Network};
     info!(&logger, "Installing dogecoin canister ...");
     let canister_id = DOGECOIN_MAINNET_CANISTER_ID;
     let mut dogecoin_canister =
         create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
 
-    let init_config = InitConfig {
+    let init_config = DogecoinInitConfig {
         stability_threshold: Some(1440), //Proposal 139760
         network: Some(Network::Regtest),
         blocks_source: Some(Principal::management_canister()),
