@@ -14,6 +14,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+#[cfg(test)]
+mod tests;
+
 /// A fixed multiplier for accumulated priority, one order of magnitude larger
 /// than the maximum number of canisters, so we can meaningfully divide 1% of
 /// free capacity among them.
