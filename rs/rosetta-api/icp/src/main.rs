@@ -92,8 +92,9 @@ impl ParsedNetworkConfig {
             Some(url_str) => url_str.as_str(),
             None => MAINNET_URL,
         };
-        let is_mainnet_url = url_str == MAINNET_URL;
         let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {e}"))?;
+        let mainnet_url = Url::parse(MAINNET_URL).expect("Unable to parse mainnet URL");
+        let is_mainnet_url = ic_url == mainnet_url;
 
         let root_key = match config.root_key {
             Some(root_key_path) => Some(
