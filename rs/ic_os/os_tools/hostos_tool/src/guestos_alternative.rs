@@ -118,7 +118,7 @@ fn swap_guestos_alternative_impl(
 ) -> Result<()> {
     println!("Stopping GuestOS service...");
     command_runner
-        .status(&mut Command::new("systemctl").args([
+        .status(Command::new("systemctl").args([
             "stop",
             "guestos.service",
             "upgrade-guestos.service",
@@ -130,7 +130,7 @@ fn swap_guestos_alternative_impl(
 
     println!("Restarting GuestOS...");
     command_runner
-        .status(&mut Command::new("systemctl").args(["start", "guestos.service"]))
+        .status(Command::new("systemctl").args(["start", "guestos.service"]))
         .context("Failed to restart guestos.service after swapping GuestOS boot alternative")?;
 
     match target_boot_alternative {
