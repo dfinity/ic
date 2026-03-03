@@ -173,7 +173,7 @@ fn test_full_subnet_mini_chunks() {
                 join_handles.push(join_handle);
                 states.push(state_sync);
             }
-            global_state.add_new_chunks(40000, 1000);
+            global_state.add_new_chunks(40_000, 1_000);
 
             // Verify that empty node has caught up
             let fut = async move {
@@ -184,9 +184,10 @@ fn test_full_subnet_mini_chunks() {
             };
 
             // It should take about 40'000 / (12 * 10) * 0.16s ~= 53s to download all the chunks,
-            // not taking into account the time needed to process them, so just to be on a safe side
-            // we roughly triple the expected time to finish the state sync.
-            tokio::time::timeout(Duration::from_secs(3 * 60), fut)
+            // where 12 is the number of peers, and 10 is the max number of parallel chunks downloads
+            // per peer; not taking into account the time needed to process them. To account for that
+            // extra time, we add some cushion to the timeout.
+            tokio::time::timeout(Duration::from_secs(53 + 2 * 60), fut)
                 .await
                 .unwrap();
         });
