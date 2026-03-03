@@ -627,8 +627,7 @@ async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, Strin
 
 #[unsafe(export_name = "canister_update delete_subnet")]
 fn delete_subnet() {
-    // TODO: access control.
-    // check_caller_is_governance_and_log("delete_subnet");
+    check_caller_is_governance_and_log("delete_subnet");
     over_async(candid_one, |payload: DeleteSubnetPayload| async move {
         delete_subnet_(payload).await
     });

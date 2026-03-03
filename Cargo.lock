@@ -18126,6 +18126,7 @@ dependencies = [
  "num-traits",
  "on_wire",
  "prost 0.13.4",
+ "protobuf",
  "registry-canister",
  "reqwest",
  "serde",

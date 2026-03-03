@@ -2127,7 +2127,7 @@ pub fn install_registry_canister_with_testnet_topology(
         f(&mut builder)
     }
 
-    let mut registry_init_payload = builder.build();
+    let registry_init_payload = builder.build();
 
     let agent = InternalAgent::new(
         url,
