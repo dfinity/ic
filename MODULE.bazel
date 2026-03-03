@@ -351,8 +351,8 @@ http_file(
 http_file(
     name = "btc_canister",
     downloaded_file_path = "ic-btc-canister.wasm.gz",
-    sha256 = "f18d28cbebf49cbd2b6a3dba8f6da1399b95714c7cf100d3fb31ba9c33941daa",
-    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release/2024-07-28/ic-btc-canister.wasm.gz",
+    sha256 = "b7829e6ae6100c789bb967bc9ba49c72d12c6bdf56a28c0188d688a22d75ef47",
+    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release/2026-02-18/ic-btc-canister.wasm.gz",
 )
 
 # Dogecoin canister
