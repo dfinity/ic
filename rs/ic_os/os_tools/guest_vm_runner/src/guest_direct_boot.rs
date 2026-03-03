@@ -6,6 +6,7 @@ use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use ic_device::mount::{FileSystem, MountOptions, PartitionProvider, PartitionSelector};
 use std::fs::File;
+use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 use uuid::Uuid;
 
@@ -52,6 +53,29 @@ impl DirectBoot {
 
 /// Prepares a direct boot configuration by reading the GRUB environment and boot partition.
 ///
+/// Find a boot file by prefix, preferring the exact name (e.g. "vmlinuz") but
+/// falling back to versioned variants (e.g. "vmlinuz-6.19.3-thp-fix").
+fn find_boot_file(mount_point: &Path, prefix: &str) -> Result<PathBuf> {
+    let exact = mount_point.join(prefix);
+    if exact.exists() {
+        return Ok(exact);
+    }
+    let dash_prefix = format!("{prefix}-");
+    let mut matches: Vec<_> = std::fs::read_dir(mount_point)?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_name()
+                .to_str()
+                .is_some_and(|n| n.starts_with(&dash_prefix))
+        })
+        .collect();
+    matches.sort_by_key(|e| e.file_name());
+    matches
+        .last()
+        .map(|e| e.path())
+        .ok_or_else(|| anyhow::anyhow!("No {prefix} or {dash_prefix}* found in boot partition"))
+}
+
 /// # Arguments
 /// * `should_refresh_grubenv` - Whether the code should refresh the GRUB environment based on the
 ///   boot state transition rules
@@ -145,10 +169,14 @@ pub async fn prepare_direct_boot(
     let initrd = NamedTempFile::with_prefix("initrd")?;
     let ovmf_sev = NamedTempFile::with_prefix("ovmf_sev")?;
 
-    tokio::fs::copy(boot_partition.mount_point().join("vmlinuz"), &kernel)
+    let vmlinuz_path = find_boot_file(boot_partition.mount_point(), "vmlinuz")
+        .context("Could not find vmlinuz")?;
+    let initrd_path = find_boot_file(boot_partition.mount_point(), "initrd.img")
+        .context("Could not find initrd.img")?;
+    tokio::fs::copy(&vmlinuz_path, &kernel)
         .await
         .context("Could not copy vmlinuz")?;
-    tokio::fs::copy(boot_partition.mount_point().join("initrd.img"), &initrd)
+    tokio::fs::copy(&initrd_path, &initrd)
         .await
         .context("Could not copy initrd.img")?;
     tokio::fs::copy(ovmf_sev_path, &ovmf_sev)
