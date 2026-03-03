@@ -29,7 +29,7 @@ use ic_interfaces::execution_environment::{
     InstanceStats, MessageMemoryUsage, RegistryExecutionSettings, Scheduler, SystemApiCallCounters,
     WasmExecutionOutput,
 };
-use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
+use ic_logger::{ReplicaLogger, replica_logger::test_logger};
 use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterStatusType, IC_00, InstallCodeArgs, MasterPublicKeyId, Method,
     Payload,
@@ -736,7 +736,7 @@ impl Default for SchedulerTestBuilder {
             allocatable_compute_capacity_in_percent: 100,
             rate_limiting_of_instructions: false,
             rate_limiting_of_heap_delta: false,
-            log: no_op_logger(),
+            log: test_logger(Some(slog::Level::Info)),
             master_public_key_ids: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
