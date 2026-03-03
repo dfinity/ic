@@ -9,15 +9,10 @@ source /opt/ic/bin/metrics.sh
 
 function mount_config_device() {
     CONFIG_DEVICE="/dev/disk/by-label/CONFIG"
-
-    # Proactively trigger udev to re-discover block devices and wait for all
-    # events (including /dev/disk/by-label/ symlink creation) to be processed.
-    # This is more reliable than passive polling with sleep because it forces
-    # the kernel to re-emit device events and deterministically waits for udev
-    # to finish processing them.
-    echo "Triggering udev to discover block devices"
+    TIMEOUT=10
+    echo "Trigger udev and wait up to ${TIMEOUT} seconds for all events to be handled and exit early if ${CONFIG_DEVICE} appears ..."
     udevadm trigger --subsystem-match=block --action=add
-    udevadm settle --timeout=10 --exit-if-exists="${CONFIG_DEVICE}"
+    udevadm settle --timeout="${TIMEOUT}" --exit-if-exists="${CONFIG_DEVICE}"
 
     echo "Checking for ${CONFIG_DEVICE} device"
 
