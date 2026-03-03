@@ -198,7 +198,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
     assert_eq!(test.ingress_queue_size(canister_id), 1);
     assert_eq!(rounds_skipped_metric(&test), 2);
 
-    // An new round execution should finally execute the message.
+    // A new round execution should finally execute the message.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test.ingress_queue_size(canister_id), 0);
     assert_eq!(rounds_skipped_metric(&test), 2);
