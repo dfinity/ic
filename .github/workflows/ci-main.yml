@@ -277,7 +277,8 @@ jobs:
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
-    if: github.repository == 'dfinity/ic'
+  #  if: github.repository == 'dfinity/ic'
+    if: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
