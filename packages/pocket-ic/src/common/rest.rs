@@ -790,29 +790,35 @@ impl ExtendedSubnetConfigSet {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        let mut all_but_cloud_engine = self
+        let all_but_cloud_engine = self
             .nns
             .iter()
-            .chain(self.sns.iter())
-            .chain(self.ii.iter())
-            .chain(self.fiduciary.iter())
-            .chain(self.bitcoin.iter())
-            .chain(self.system.iter())
-            .chain(self.application.iter())
-            .chain(self.verified_application.iter())
-            .peekable();
-        let mut all = all_but_cloud_engine
-            .by_ref()
-            .chain(self.cloud_engine.iter())
-            .peekable();
-        if all.peek().is_none() {
-            return Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned());
-        }
-        if all_but_cloud_engine.any(|spec| spec.subnet_admins.is_some()) {
+            .chain(&self.sns)
+            .chain(&self.ii)
+            .chain(&self.fiduciary)
+            .chain(&self.bitcoin)
+            .chain(&self.system)
+            .chain(&self.application)
+            .chain(&self.verified_application);
+
+        // 1. Check for invalid admins using a clone of the iterator (to prevent its consumption).
+        if all_but_cloud_engine
+            .clone()
+            .any(|spec| spec.subnet_admins.is_some())
+        {
             return Err(
-                "Subnet admins can only be specified for subnet of kind `CloudEngine`".to_owned(),
+                "Subnet admins can only be specified for subnet of kind `CloudEngine`".into(),
             );
         }
+
+        // 2. Check for existence across everything (again cloning the iterator to prevent its consumption)
+        let has_any =
+            all_but_cloud_engine.clone().next().is_some() || !self.cloud_engine.is_empty();
+
+        if !has_any {
+            return Err("ExtendedSubnetConfigSet must contain at least one subnet".into());
+        }
+
         Ok(())
     }
 
