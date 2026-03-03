@@ -125,11 +125,9 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_post_call))
                 .add_test(systest!(test_head_call))
                 .add_test(systest!(test_put_call))
-                // TODO(CON-1636): Uncomment this test when PUT is supported in non-replicated mode.
-                // .add_test(systest!(test_put_without_non_replicated_rejected))
+                .add_test(systest!(test_put_without_non_replicated_rejected))
                 .add_test(systest!(test_delete_call))
-                // TODO(CON-1636): Uncomment this test when DELETE is supported in non-replicated mode.
-                // .add_test(systest!(test_delete_without_non_replicated_rejected))
+                .add_test(systest!(test_delete_without_non_replicated_rejected))
                 .add_test(systest!(test_max_possible_request_size))
                 .add_test(systest!(test_max_possible_request_size_exceeded))
                 // This section tests the request headers limits scenarios
@@ -1842,19 +1840,14 @@ fn test_put_call(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err(RejectResponse { reject_code: RejectCode::CanisterReject, reject_message, .. }) => {
-        assert!(reject_message.contains("PUT and DELETE are not supported yet"));
+    assert_matches!(response, Ok(response) => {
+        assert_matches!(response, RemoteHttpResponse { status: 200, .. });
+        assert_distinct_headers(&response);
+        assert_http_json_response(&request, &response);
     });
-
-    // TODO(CON-1636): Switch to this assertion once PUT is supported in non-replicated mode.
-    // assert_matches!(response, Ok(response) => {
-    //     assert_matches!(response, RemoteHttpResponse { status: 200, .. });
-    //     assert_distinct_headers(&response);
-    //     assert_http_json_response(&request, &response);
-    // });
 }
 
-fn _test_put_without_non_replicated_rejected(env: TestEnv) {
+fn test_put_without_non_replicated_rejected(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1911,19 +1904,14 @@ fn test_delete_call(env: TestEnv) {
         },
     ));
 
-    assert_matches!(response, Err(RejectResponse { reject_code: RejectCode::CanisterReject, reject_message, .. }) => {
-        assert!(reject_message.contains("PUT and DELETE are not supported yet"));
+    assert_matches!(response, Ok(response) => {
+        assert_matches!(response, RemoteHttpResponse { status: 200, .. });
+        assert_distinct_headers(&response);
+        assert_http_json_response(&request, &response);
     });
-
-    // TODO(CON-1636): Switch to this assertion once DELETE is supported in non-replicated mode.
-    // assert_matches!(response, Ok(response) => {
-    //     assert_matches!(response, RemoteHttpResponse { status: 200, .. });
-    //     assert_distinct_headers(&response);
-    //     assert_http_json_response(&request, &response);
-    // });
 }
 
-fn _test_delete_without_non_replicated_rejected(env: TestEnv) {
+fn test_delete_without_non_replicated_rejected(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
