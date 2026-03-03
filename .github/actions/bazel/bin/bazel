@@ -146,10 +146,6 @@ bazel_bes() {
     return "$bazel_exitcode"
 }
 
-startup_options=(
-    --output_base=/var/tmp/bazel-output # Output base wiped after run
-)
-
 # Add the original arguments back
 bazel_args+=( "$@" )
 

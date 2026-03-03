@@ -291,14 +291,14 @@ jobs:
         with:
           invocation-names: eval
           run: |
-            bazel build \
+            bazel --output_base=/var/tmp/bazel-output build \
               --config=stamped \
               --build_tag_filters=test_all_platforms \
               //... --nobuild
 
             # make sure the artifacts always evaluate successfully even if we don't
             # upload them
-            bazel build \
+            bazel --output_base=/var/tmp/bazel-output build \
               --config=stamped \
               //:upload-artifacts --nobuild
 
