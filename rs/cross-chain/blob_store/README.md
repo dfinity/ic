@@ -31,8 +31,16 @@ icp deploy
 Compute the SHA-256 hash of the file and call `insert`:
 
 ```bash
-HASH=$(sha256sum ic-icrc1-ledger-u256.wasm.gz | awk '{print $1}')
-icp canister call blob_store insert "(record { hash = \"$HASH\"; data = blob \"$(xxd -p ic-icrc1-ledger-u256.wasm.gz | tr -d '\n')\" })"
+FILE=ic-icrc1-ledger-u256.wasm.gz
+HASH=$(sha256sum "$FILE" | awk '{print $1}')
+
+{
+printf '(record { data = blob "'
+xxd -p "$FILE" | tr -d '\n' | sed 's/\(..\)/\\\1/g'
+printf '"; hash = "%s"; })' "$HASH"
+} > args.did
+
+icp canister call blob_store insert args.did
 ```
 
 ### Retrieve a file
