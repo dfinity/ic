@@ -1325,7 +1325,9 @@ fn online_split() {
         let snapshot = CanisterSnapshot::from_canister(canister, UNIX_EPOCH).unwrap();
         let snapshot_id =
             SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
-        canister.canister_snapshots.push(snapshot_id, snapshot.into());
+        canister
+            .canister_snapshots
+            .push(snapshot_id, snapshot.into());
         snapshot_id
     };
     let canister_1_snapshot_id = take_shapshot(CANISTER_1);
