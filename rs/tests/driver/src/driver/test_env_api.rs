@@ -2114,10 +2114,11 @@ impl NnsInstallationBuilder {
 
 /// Installs the registry canister on the NNS subnet, initializing it with the testnet's topology.
 ///
-/// An optional `customizations` builder allows configuring additional registry init parameters.
+/// An optional `customize` closure allows additional registry init parameters to be set. Any mutations
+/// will be added _after_ the initial mutations.
 pub fn install_registry_canister_with_testnet_topology(
     env: &TestEnv,
-    customizations: Option<RegistryCanisterInitPayloadBuilder>,
+    customize: Option<impl FnOnce(&mut RegistryCanisterInitPayloadBuilder)>,
 ) {
     let node = env.get_first_healthy_nns_node_snapshot();
     let url = node.get_public_url();
@@ -2128,10 +2129,14 @@ pub fn install_registry_canister_with_testnet_topology(
     let registry_local_store = prep_dir.registry_local_store_path();
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
 
-    let mut builder = customizations.unwrap_or_else(RegistryCanisterInitPayloadBuilder::new);
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
     for mutation in initial_mutations {
         builder.push_init_mutate_request(mutation);
     }
+    if let Some(f) = customize {
+        f(&mut builder)
+    }
+
     let registry_init_payload = builder.build();
 
     let agent = InternalAgent::new(
