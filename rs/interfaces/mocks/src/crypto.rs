@@ -1061,8 +1061,3 @@ impl VetKdProtocol for MockCrypto {
         unimplemented!("MockCrypto::VetKdProtocol::verify_encrypted_key")
     }
 }
-
-// SAFETY: MockCrypto's internal state is protected by mockall's Mutex-based
-// expectations, making it safe to send and share across threads in tests.
-unsafe impl Send for MockCrypto {}
-unsafe impl Sync for MockCrypto {}
