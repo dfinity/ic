@@ -6,7 +6,6 @@ use std::{
 };
 
 use anyhow::Error;
-use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use bytes::Buf;
 use candid::Principal;
@@ -186,14 +185,12 @@ impl NodeActor {
     }
 }
 
-type SharedMembership = Arc<ArcSwapOption<HashSet<Principal>>>;
-
 /// MembershipActor periodically fetches the certified membership set for a subnet
-/// via a [CertifiedMembershipFetcher] and stores the result in shared state.
+/// via a [CertifiedMembershipFetcher] and sends updates over a watch channel.
 struct MembershipActor {
     subnet_id: Principal,
     membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
-    certified_members: SharedMembership,
+    membership_tx: watch::Sender<Option<Arc<HashSet<Principal>>>>,
     token: CancellationToken,
 }
 
@@ -212,7 +209,7 @@ impl MembershipActor {
         {
             Ok(members) => {
                 debug!("{self}: certified membership: {} nodes", members.len());
-                self.certified_members.store(Some(Arc::new(members)));
+                let _ = self.membership_tx.send(Some(Arc::new(members)));
             }
             Err(e) => {
                 warn!("{self}: certified membership fetch failed: {e}");
@@ -254,7 +251,8 @@ struct SubnetActor {
     healthy_nodes: Option<Vec<Arc<Node>>>,
     state_changed: bool,
     init_done: bool,
-    certified_members: SharedMembership,
+    certified_members: Option<Arc<HashSet<Principal>>>,
+    membership_recv: watch::Receiver<Option<Arc<HashSet<Principal>>>>,
 }
 
 impl Display for SubnetActor {
@@ -293,12 +291,12 @@ impl SubnetActor {
             });
         }
 
-        let certified_members: SharedMembership = Arc::new(ArcSwapOption::empty());
+        let (membership_tx, membership_recv) = watch::channel(None);
 
         let membership_actor = MembershipActor {
             subnet_id: subnet.id,
             membership_fetcher,
-            certified_members: certified_members.clone(),
+            membership_tx,
             token: token_nodes.child_token(),
         };
 
@@ -320,7 +318,8 @@ impl SubnetActor {
             healthy_nodes: None,
             state_changed: false,
             init_done: false,
-            certified_members,
+            certified_members: None,
+            membership_recv,
         }
     }
 
@@ -369,12 +368,11 @@ impl SubnetActor {
         // Calculate the minimum height across this subnet
         let min_height = self.calc_min_height();
 
-        // Read the latest certified membership from the background MembershipActor.
         // Ignore the certified set if it doesn't reach the subnet bft_threshold
         // since the subnet cannot make progress below that threshold anyway.
-        let certified_members = self.certified_members.load();
         let bft_threshold = (self.subnet.nodes.len() * 2) / 3 + 1;
-        let certified_set_sufficient = certified_members
+        let certified_set_sufficient = self
+            .certified_members
             .as_deref()
             .is_some_and(|m| m.len() >= bft_threshold);
 
@@ -389,7 +387,7 @@ impl SubnetActor {
             .filter(|(_, state)| state.healthy && state.height >= min_height)
             // Discard nodes not in the certified membership set
             .filter(|(node, _)| {
-                if let Some(members) = certified_members.as_deref()
+                if let Some(members) = self.certified_members.as_deref()
                     && certified_set_sufficient
                 {
                     return members.contains(&node.id);
@@ -464,6 +462,15 @@ impl SubnetActor {
                     } else {
                         // Otherwise it'll be handled by a periodic job
                         self.state_changed = true;
+                    }
+                }
+
+                // Refresh healthy nodes when membership changes
+                Ok(()) = self.membership_recv.changed() => {
+                    let new_members = self.membership_recv.borrow_and_update().clone();
+                    if new_members.as_deref() != self.certified_members.as_deref() {
+                        self.certified_members = new_members;
+                        self.update().await;
                     }
                 }
 
