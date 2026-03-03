@@ -134,17 +134,17 @@ struct State {
     /// This fee is used if no fee nor effetive_fee is found in Approve blocks.
     pub last_fee: Option<Tokens>,
 
-    /// The minimum interval for retrieving blocks from the ledger.
-    min_retrieve_blocks_from_ledger_interval: Option<Duration>,
-
-    /// The maximum interval for retrieving blocks from the ledger.
-    max_retrieve_blocks_from_ledger_interval: Option<Duration>,
-
     /// The ICRC-107 fee collector. Example values:
     /// - `None` - legacy fee collector is used.
     /// - `Some(None)` - 107 fee collector is enabled but fees are burned.
     /// - `Some(Some(account1))` - 107 fee collector is enabled, `account1` collects the fees.
     fee_collector_107: Option<Option<Account>>,
+
+    /// The minimum interval for retrieving blocks from the ledger.
+    min_retrieve_blocks_from_ledger_interval: Option<Duration>,
+
+    /// The maximum interval for retrieving blocks from the ledger.
+    max_retrieve_blocks_from_ledger_interval: Option<Duration>,
 }
 
 impl State {
