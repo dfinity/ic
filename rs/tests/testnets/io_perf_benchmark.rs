@@ -64,7 +64,7 @@ use ic_system_test_driver::driver::{
 };
 use nns_dapp::{nns_dapp_customizations, set_authorized_subnets};
 use slog::{Logger, info};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 
 const NUM_IC_GATEWAYS: u64 = 1;
@@ -115,7 +115,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
 
         # Shutdown the VM
         echo "Shutting down $VMNAME"
-        for i in {1..300}; do
+        for i in $(seq 1 300); do
                 if [ $(sudo virsh list | grep $VMNAME | wc -l) -eq 0 ]; then
                         break
                 fi
@@ -126,7 +126,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
 
         # Get the file name and dd it to disk device
         CONFIG=$(mktemp)
-        trap "rm -f $CONFIG; sudo losetup -d ${LOOP_DEVICE} &>/dev/null || true" INT TERM EXIT
+        trap "rm -f $CONFIG; sudo losetup -d ${LOOP_DEVICE} >/dev/null 2>&1 || true" INT TERM EXIT
         sudo virsh dumpxml $VMNAME > $CONFIG
         IMAGE="$(xmlstarlet sel -t -v "string(/domain/devices/disk[target[@dev='vda']]/source/@file)" "$CONFIG")"
         echo "Moving $VMNAME to /dev/hostlvm/guest"
@@ -184,10 +184,22 @@ fn switch_to_ssd(log: &Logger, hostname: &str, hostuser: &str) {
         .arg("-o")
         .arg("StrictHostKeyChecking=no")
         .arg(hostuser.to_owned() + "@" + hostname)
-        .arg(script)
+        .arg("bash -s")
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
+
+    // Write the script to stdin
+    ssh.stdin
+        .as_mut()
+        .unwrap()
+        .write_all(script.as_bytes())
+        .unwrap();
+
+    // Drop stdin to signal EOF, so the remote command starts executing
+    drop(ssh.stdin.take());
+
     for l in BufReader::new(ssh.stdout.as_mut().unwrap()).lines() {
         info!(&log, "SSH {} out: {}", hostname, l.unwrap());
     }
