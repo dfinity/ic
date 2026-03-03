@@ -4,11 +4,11 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/config/types:config_types",
-    "//rs/ic_os/networking/deterministic_ips",
-    "//rs/ic_os/command_runner",
     "//rs/ic_os/boot/grub",
+    "//rs/ic_os/command_runner",
+    "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/device",
+    "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/networking/network",
     "//rs/ic_os/os_tools/manual_guestos_recovery",
     "//rs/ic_os/utils",
