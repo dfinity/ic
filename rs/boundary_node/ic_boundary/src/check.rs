@@ -1259,6 +1259,63 @@ pub(crate) mod test {
         Ok(())
     }
 
+    // Ensure that when the membership fetcher returns a subset of nodes,
+    // only those nodes appear in the final routes (membership filtering).
+    #[tokio::test]
+    async fn test_membership_filters_non_members() -> Result<(), Error> {
+        let routes = Arc::new(ArcSwapOption::empty());
+        let persister = Arc::new(Persister::new(routes.clone()));
+
+        let mut checker = MockCheck::new();
+        checker.expect_check().returning(|_| Ok(check_result(1000)));
+
+        // 1 subnet with 3 nodes: node_id(0), node_id(1), node_id(2)
+        let snapshot = generate_custom_registry_snapshot(1, 3, 0);
+        let subnet_id = subnet_test_id(0).get().0;
+
+        // Return only node_id(0) and node_id(1) as certified members.
+        // 2 out of 3 meets the 2/3 threshold, so the filter will apply.
+        let certified = HashSet::from([node_id(0), node_id(1)]);
+        let mut fetcher = MockCertifiedMembershipFetcher::new();
+        fetcher
+            .expect_fetch_certified_members()
+            .withf(move |id| *id == subnet_id)
+            .returning(move |_| Ok(certified.clone()));
+
+        let (channel_send, channel_recv) = watch::channel(None);
+        let runner = Runner::new(
+            10,
+            Duration::from_millis(100),
+            Duration::from_millis(1),
+            Duration::from_millis(1),
+            Arc::new(checker),
+            persister,
+            #[allow(clippy::disallowed_types)]
+            Mutex::new(channel_recv),
+            Arc::new(fetcher),
+        );
+        tokio::spawn(async move {
+            let _ = runner.run(CancellationToken::new()).await;
+        });
+
+        channel_send.send(Some(Arc::new(snapshot))).unwrap();
+
+        for _ in 1..10 {
+            if routes.load().is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        let rt = routes.load_full().unwrap();
+        assert_eq!(rt.node_count, 2);
+        assert!(rt.node_exists(node_id(0)));
+        assert!(rt.node_exists(node_id(1)));
+        assert!(!rt.node_exists(node_id(2)));
+
+        Ok(())
+    }
+
     fn build_node_tree(subnet_id: Principal, node_ids: &[Principal]) -> HashTree<Vec<u8>> {
         let node_subtree: HashTree<Vec<u8>> = match node_ids.len() {
             0 => empty(),
