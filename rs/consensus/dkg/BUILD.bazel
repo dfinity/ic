@@ -23,10 +23,12 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
+    "//rs/config",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/crypto/test_utils/ni-dkg",
+    "//rs/interfaces/mocks",
     "//rs/interfaces/registry/mocks",
     "//rs/registry/keys",
     "//rs/registry/subnet_features",
