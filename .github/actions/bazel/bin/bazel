@@ -22,6 +22,11 @@ if [ -n "${BAZEL_ACTION_BAZEL_WRAPPED:-}" ]; then
 fi
 export BAZEL_ACTION_BAZEL_WRAPPED="1"
 
+startup_options=()
+if [ -n "${STARTUP_OPTIONS:-}" ]; then
+    export startup_options=( $STARTUP_OPTIONS )
+fi
+
 # Basic argument parsing, just making sure startup options are not
 # used (because we can't easily parse e.g. `bazel --some_key some-val build :target`
 while [[ $# -gt 0 ]]

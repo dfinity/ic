@@ -290,15 +290,16 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           invocation-names: eval
+          startup-options: --output_base=/var/tmp/bazel-output # Output base wiped after run
           run: |
-            bazel --output_base=/var/tmp/bazel-output build \
+            bazel build \
               --config=stamped \
               --build_tag_filters=test_all_platforms \
               //... --nobuild
 
             # make sure the artifacts always evaluate successfully even if we don't
             # upload them
-            bazel --output_base=/var/tmp/bazel-output build \
+            bazel build \
               --config=stamped \
               //:upload-artifacts --nobuild
 
