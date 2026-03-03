@@ -201,6 +201,10 @@ impl LogMemoryStore {
         self.bytes_used() == 0
     }
 
+    /// Returns the number of bytes used by the ring buffer.
+    ///
+    /// This is the actual number of bytes used by the ring buffer, not the
+    /// allocated capacity.
     pub fn bytes_used(&self) -> usize {
         self.get_header()
             .map(|h| h.data_size.get() as usize)
