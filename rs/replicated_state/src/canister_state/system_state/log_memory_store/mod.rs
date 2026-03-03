@@ -157,6 +157,9 @@ impl LogMemoryStore {
         self.resize_impl(limit, || PageMap::new(fd_factory))
     }
 
+    /// Resizes the ring buffer to the specified limit, preserving existing records.
+    ///
+    /// This method is used for testing purposes and does not use file descriptors.
     pub fn resize_for_testing(&mut self, limit: usize) {
         self.resize_impl(limit, PageMap::new_for_testing)
     }
