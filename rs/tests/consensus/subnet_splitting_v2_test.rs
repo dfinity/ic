@@ -40,7 +40,7 @@ use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::nns::vote_and_execute_proposal;
-use ic_system_test_driver::util::{MetricsFetcher, block_on};
+use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
     driver::{
