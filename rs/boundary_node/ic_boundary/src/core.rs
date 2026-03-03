@@ -219,7 +219,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
 
     // Registry Client, IC Agent, and health checking
-    let (registry_client, agent) = if cli.registry.registry_local_store_path.is_some() {
+    let agent = if cli.registry.registry_local_store_path.is_some() {
         let (registry_client, agent) = setup_registry(
             &cli,
             registry_snapshot.clone(),
@@ -235,7 +235,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
 
         set_agent_root_key(&agent, &registry_client)?;
 
-        (Some(registry_client), Some(agent))
+        Some(agent)
     } else {
         // Prepare a stub routing table and snapshot if there's no local store specified
         let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
@@ -243,7 +243,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         let _ = persister.persist(vec![subnet]);
         registry_snapshot.store(Some(Arc::new(snapshot)));
 
-        (None, None)
+        None
     };
 
     // IC Agent for non-registry use cases (rate limiting, observability)
