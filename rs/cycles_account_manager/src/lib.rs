@@ -31,6 +31,7 @@ use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
+    nominal_cycles::NominalCycles,
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -1427,6 +1428,15 @@ impl CyclesAccountManager {
             subnet_size,
             cost_schedule,
         )
+    }
+
+    /// Returns the amount of cycles that are leftover and would be discarded when
+    /// the canister is deleted.
+    pub fn leftover_cycles_for_canister_to_deleted(
+        &self,
+        system_state: &SystemState,
+    ) -> NominalCycles {
+        NominalCycles::from(system_state.balance() + system_state.reserved_balance())
     }
 }
 
