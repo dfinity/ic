@@ -216,7 +216,6 @@ impl MembershipActor {
             }
             Err(e) => {
                 warn!("{self}: certified membership fetch failed: {e}");
-                self.certified_members.store(None);
             }
         }
     }
