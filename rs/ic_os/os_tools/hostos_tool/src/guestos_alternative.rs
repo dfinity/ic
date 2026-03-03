@@ -72,21 +72,12 @@ pub fn swap_guestos_alternative(target: Option<grub::BootAlternative>) -> Result
     )
 }
 
-fn swap_guestos_alternative_impl(
+/// Mounts the GRUB partition, updates `boot_alternative` and `boot_cycle` in grubenv, then
+/// unmounts. Returns the resolved boot alternative that was written.
+fn update_grubenv(
     partition_provider: &dyn ic_device::mount::PartitionProvider,
     target_boot_alternative: Option<grub::BootAlternative>,
-    command_runner: &dyn command_runner::CommandRunner,
-) -> Result<()> {
-    println!("Stopping GuestOS service...");
-    command_runner
-        .status(&mut Command::new("systemctl").args([
-            "stop",
-            "guestos.service",
-            "upgrade-guestos.service",
-        ]))
-        .context("Failed to stop guestos.service and upgrade-guestos.service")?;
-
-    println!("Swapping GuestOS boot alternative...");
+) -> Result<grub::BootAlternative> {
     let grub_partition = partition_provider
         .mount_partition(
             PartitionSelector::ByUuid(GRUB_PARTITION_UUID),
@@ -117,14 +108,38 @@ fn swap_guestos_alternative_impl(
         .write_to_file(&grubenv_path)
         .context("Failed to write grubenv")?;
 
-    drop(grub_partition);
+    Ok(target_boot_alternative)
+}
+
+fn swap_guestos_alternative_impl(
+    partition_provider: &dyn ic_device::mount::PartitionProvider,
+    target_boot_alternative: Option<grub::BootAlternative>,
+    command_runner: &dyn command_runner::CommandRunner,
+) -> Result<()> {
+    println!("Stopping GuestOS service...");
+    command_runner
+        .status(&mut Command::new("systemctl").args([
+            "stop",
+            "guestos.service",
+            "upgrade-guestos.service",
+        ]))
+        .context("Failed to stop guestos.service and upgrade-guestos.service")?;
+
+    println!("Swapping GuestOS boot alternative...");
+    let target_boot_alternative = update_grubenv(partition_provider, target_boot_alternative);
 
     println!("Restarting GuestOS...");
     command_runner
         .status(&mut Command::new("systemctl").args(["start", "guestos.service"]))
         .context("Failed to restart guestos.service after swapping GuestOS boot alternative")?;
 
-    println!("Successfully swapped GuestOS boot alternative to {target_boot_alternative}");
+    match target_boot_alternative {
+        Ok(alternative) => {
+            println!("Successfully swapped GuestOS boot alternative to {alternative}")
+        }
+        Err(e) => return Err(e.context("Failed to swap GuestOS boot alternative")),
+    }
+
     Ok(())
 }
 
@@ -132,6 +147,7 @@ fn swap_guestos_alternative_impl(
 mod tests {
     use super::*;
     use command_runner::MockCommandRunner;
+    use grub::GrubEnv;
     use ic_device::mount::testing::MockPartitionProvider;
     use std::collections::HashMap;
     use std::fs;
@@ -146,10 +162,10 @@ mod tests {
         let grub_partition = Arc::new(TempDir::new().expect("Failed to create temp dir"));
         let grubenv_path = grub_partition.path().join("grubenv");
 
-        let grubenv = grub::GrubEnv {
+        let grubenv = GrubEnv {
             boot_alternative: boot_alternative.ok_or(grub::GrubEnvVariableError::Undefined),
             boot_cycle: boot_cycle.ok_or(grub::GrubEnvVariableError::Undefined),
-            ..grub::GrubEnv::default()
+            ..GrubEnv::default()
         };
         grubenv
             .write_to_file(&grubenv_path)
@@ -162,6 +178,32 @@ mod tests {
         );
 
         (MockPartitionProvider::new(partitions), grub_partition)
+    }
+
+    fn create_mock_command_runner(
+        expect_stop_guestos: bool,
+        expect_start_guestos: bool,
+    ) -> MockCommandRunner {
+        let mut mock_runner = MockCommandRunner::new();
+        if expect_stop_guestos {
+            mock_runner
+                .expect_status()
+                .withf(|cmd| {
+                    format!("{cmd:?}")
+                        == r#""systemctl" "stop" "guestos.service" "upgrade-guestos.service""#
+                })
+                .once()
+                .return_once(|_| Ok(std::process::ExitStatus::default()));
+        }
+        if expect_start_guestos {
+            mock_runner
+                .expect_status()
+                .withf(|cmd| format!("{cmd:?}") == r#""systemctl" "start" "guestos.service""#)
+                .once()
+                .return_once(|_| Ok(std::process::ExitStatus::default()));
+        }
+
+        mock_runner
     }
 
     #[test]
@@ -178,21 +220,18 @@ mod tests {
         let (provider, grub_partition) =
             create_mock_partition_provider(Some(grub::BootAlternative::B), Some(BootCycle::Stable));
 
-        let mut mock_runner = MockCommandRunner::new();
-        mock_runner
-            .expect_status()
-            .once()
-            .returning(|_| Ok(std::process::ExitStatus::default()));
-
-        let result =
-            swap_guestos_alternative_impl(&provider, Some(grub::BootAlternative::A), &mock_runner);
+        let result = swap_guestos_alternative_impl(
+            &provider,
+            Some(grub::BootAlternative::A),
+            &create_mock_command_runner(true, true),
+        );
         assert!(result.is_ok());
 
         // Verify the grubenv was updated correctly
         let grubenv_path = grub_partition.path().join("grubenv");
         let grubenv_content = fs::read(&grubenv_path).expect("Failed to read grubenv");
         let grubenv =
-            grub::GrubEnv::read_from(grubenv_content.as_slice()).expect("Failed to parse grubenv");
+            GrubEnv::read_from(grubenv_content.as_slice()).expect("Failed to parse grubenv");
 
         assert_eq!(grubenv.boot_alternative, Ok(grub::BootAlternative::A));
         assert_eq!(grubenv.boot_cycle, Ok(BootCycle::FirstBoot));
@@ -203,21 +242,16 @@ mod tests {
         let (provider, grub_partition) =
             create_mock_partition_provider(Some(grub::BootAlternative::A), Some(BootCycle::Stable));
 
-        let mut mock_runner = MockCommandRunner::new();
-        mock_runner
-            .expect_status()
-            .once()
-            .returning(|_| Ok(std::process::ExitStatus::default()));
-
         // No explicit target - should toggle to opposite
-        let result = swap_guestos_alternative_impl(&provider, None, &mock_runner);
+        let result =
+            swap_guestos_alternative_impl(&provider, None, &create_mock_command_runner(true, true));
         assert!(result.is_ok());
 
         // Verify the grubenv was updated correctly
         let grubenv_path = grub_partition.path().join("grubenv");
         let grubenv_content = fs::read(&grubenv_path).expect("Failed to read grubenv");
         let grubenv =
-            grub::GrubEnv::read_from(grubenv_content.as_slice()).expect("Failed to parse grubenv");
+            GrubEnv::read_from(grubenv_content.as_slice()).expect("Failed to parse grubenv");
 
         assert_eq!(grubenv.boot_alternative, Ok(grub::BootAlternative::B));
         assert_eq!(grubenv.boot_cycle, Ok(BootCycle::FirstBoot));
@@ -230,19 +264,12 @@ mod tests {
             Some(BootCycle::Stable),
         );
 
-        let mut mock_runner = MockCommandRunner::new();
-        mock_runner
-            .expect_status()
-            .once()
-            .returning(|_| Ok(std::process::ExitStatus::default()));
-
         // No explicit target and undefined boot alternative should fail
-        let result = swap_guestos_alternative_impl(&provider, None, &mock_runner);
+        let result =
+            swap_guestos_alternative_impl(&provider, None, &create_mock_command_runner(true, true));
         assert!(result.is_err());
         assert!(
-            result
-                .unwrap_err()
-                .to_string()
+            format!("{:#}", result.unwrap_err())
                 .contains("Invalid/missing boot alternative in grubenv")
         );
     }
