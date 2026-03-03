@@ -281,6 +281,13 @@ impl NetworkTopology {
             .map(|subnet_topology| subnet_topology.nodes.len())
     }
 
+    /// Returns the cycles cost schedule of the given subnet.
+    pub fn get_cost_schedule(&self, subnet_id: &SubnetId) -> Option<CanisterCyclesCostSchedule> {
+        self.subnets
+            .get(subnet_id)
+            .map(|subnet_topology| subnet_topology.cost_schedule)
+    }
+
     /// Find the subnet for `principal_id`. The input can either be a canister id, or a subnet id.
     pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
         let as_subnet_id = SubnetId::from(principal_id);
@@ -406,7 +413,7 @@ impl SubnetMetrics {
                 CyclesUseCase::ECDSAOutcalls
                 | CyclesUseCase::HTTPOutcalls
                 | CyclesUseCase::DeletedCanisters => {}
-                // Non consumed cycles should not be counted towards the total consumed.
+                // Non consumed and reserved cycles should not be counted towards the total consumed.
                 CyclesUseCase::NonConsumed => {}
                 // For the remaining use cases simply add the values to the total.
                 CyclesUseCase::Memory

@@ -29,7 +29,7 @@ use ic_types::{
     CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
 use ic_wasm_types::WasmHash;
 
 use crate::{
@@ -303,7 +303,11 @@ impl InstallCodeHelper {
             &mut self.canister.system_state,
             instructions_left,
             message_instruction_limit,
-            original.prepaid_execution_cycles,
+            CompoundCycles::new(
+                original.prepaid_execution_cycles,
+                Instructions,
+                round.cost_schedule,
+            ),
             round.counters.execution_refund_error,
             original.subnet_size,
             round.cost_schedule,
@@ -315,6 +319,7 @@ impl InstallCodeHelper {
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -358,7 +363,7 @@ impl InstallCodeHelper {
             match self
                 .canister
                 .system_state
-                .reserve_cycles(reservation_cycles)
+                .reserve_cycles(reservation_cycles.real())
             {
                 Ok(()) => {}
                 Err(err) => {
@@ -873,6 +878,7 @@ pub(crate) fn finish_err(
         .system_state
         .apply_ingress_induction_cycles_debit(
             new_canister.canister_id(),
+            round.cost_schedule,
             round.log,
             round.counters.charging_from_balance_error,
         );
@@ -883,7 +889,11 @@ pub(crate) fn finish_err(
         &mut new_canister.system_state,
         instructions_left,
         message_instruction_limit,
-        original.prepaid_execution_cycles,
+        CompoundCycles::new(
+            original.prepaid_execution_cycles,
+            Instructions,
+            round.cost_schedule,
+        ),
         round.counters.execution_refund_error,
         original.subnet_size,
         round.cost_schedule,

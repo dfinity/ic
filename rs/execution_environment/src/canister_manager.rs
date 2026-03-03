@@ -69,7 +69,10 @@ use ic_types::{
         StopCanisterContext,
     },
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
+use ic_types_cycles::{
+    CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
+    Instructions, NonConsumed,
+};
 use ic_wasm_types::WasmHash;
 use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_traits::{SaturatingAdd, SaturatingSub};
@@ -96,7 +99,7 @@ struct ValidatedCyclesAndMemoryUsage {
     new_memory_usage: NumBytes,
     allocated_bytes: NumBytes,
     deallocated_bytes: NumBytes,
-    new_storage_reservation_cycles: Cycles,
+    new_storage_reservation_cycles: CompoundCycles<ic_types_cycles::Memory>,
 }
 
 /// The entity responsible for managing canisters (creation, installing, etc.)
@@ -470,12 +473,15 @@ impl CanisterManager {
         }
 
         let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
-        let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
-            allocated_bytes,
-            subnet_memory_saturation,
-            subnet_size,
-            cost_schedule,
-        );
+        let reservation_cycles = self
+            .cycles_account_manager
+            .storage_reservation_cycles(
+                allocated_bytes,
+                subnet_memory_saturation,
+                subnet_size,
+                cost_schedule,
+            )
+            .real();
         let reserved_balance_limit = settings
             .reserved_cycles_limit()
             .or(canister_reserved_balance_limit);
@@ -801,11 +807,11 @@ impl CanisterManager {
         let fee = self
             .cycles_account_manager
             .canister_creation_fee(subnet_size, state.get_own_cost_schedule());
-        if cycles < fee {
+        if cycles < fee.real() {
             return (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
                     sent: cycles,
-                    required: fee,
+                    required: fee.real(),
                 }
                 .into()),
                 cycles,
@@ -827,7 +833,7 @@ impl CanisterManager {
             round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
             &subnet_memory_saturation,
-            cycles - fee,
+            cycles - fee.real(),
             subnet_size,
             state.get_own_cost_schedule(),
         ) {
@@ -927,7 +933,7 @@ impl CanisterManager {
                     reveal_top_up,
                     wasm_execution_mode,
                 ) {
-                    Ok(cycles) => cycles,
+                    Ok(cycles) => cycles.real(),
                     Err(err) => {
                         return DtsInstallCodeResult::Finished {
                             canister,
@@ -1260,6 +1266,8 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<(), CanisterManagerError> {
+        let cost_schedule = state.get_own_cost_schedule();
+
         if let Ok(canister_id) = CanisterId::try_from(sender)
             && canister_id == canister_id_to_delete
         {
@@ -1296,8 +1304,11 @@ impl CanisterManager {
         // Leftover cycles in the canister are considered `consumed`.
         let leftover_cycles = self
             .cycles_account_manager
-            .leftover_cycles_for_canister_to_deleted(&canister_to_delete.system_state);
-        let consumed_cycles_by_canister_to_delete = leftover_cycles
+            .leftover_cycles_for_canister_to_deleted(
+                &canister_to_delete.system_state,
+                cost_schedule,
+            );
+        let consumed_cycles_by_canister_to_delete = leftover_cycles.nominal()
             + canister_to_delete
                 .system_state
                 .canister_metrics()
@@ -1308,7 +1319,7 @@ impl CanisterManager {
             .subnet_metrics
             .observe_consumed_cycles_with_use_case(
                 CyclesUseCase::DeletedCanisters,
-                leftover_cycles,
+                leftover_cycles.nominal(),
             );
 
         state
@@ -1396,7 +1407,11 @@ impl CanisterManager {
             Ok(validated_settings) => self.create_canister_helper(
                 origin,
                 cycles,
-                Cycles::new(0),
+                CompoundCycles::new(
+                    Cycles::zero(),
+                    CanisterCreation,
+                    state.get_own_cost_schedule(),
+                ),
                 validated_settings,
                 max_number_of_canisters,
                 state,
@@ -1446,7 +1461,7 @@ impl CanisterManager {
         &self,
         origin: CanisterChangeOrigin,
         cycles: Cycles,
-        creation_fee: Cycles,
+        creation_fee: CompoundCycles<CanisterCreation>,
         settings: ValidatedCanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
@@ -1481,7 +1496,7 @@ impl CanisterManager {
             Arc::clone(&self.fd_factory),
         );
 
-        system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
+        system_state.remove_cycles(creation_fee);
         let mut new_canister = CanisterState::new(
             system_state,
             None,
@@ -1559,6 +1574,7 @@ impl CanisterManager {
         cycles_amount: Option<u128>,
         canister: &mut CanisterState,
         provisional_whitelist: &ProvisionalWhitelist,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterManagerError> {
         if !provisional_whitelist.contains(&sender) {
             return Err(CanisterManagerError::SenderNotInWhitelist(sender));
@@ -1569,9 +1585,11 @@ impl CanisterManager {
             None => self.config.default_provisional_cycles_balance,
         };
 
-        canister
-            .system_state
-            .add_cycles(cycles_amount, CyclesUseCase::NonConsumed);
+        canister.system_state.add_cycles(CompoundCycles::new(
+            cycles_amount,
+            NonConsumed,
+            cost_schedule,
+        ));
 
         Ok(())
     }
@@ -1857,11 +1875,10 @@ impl CanisterManager {
         }
 
         // Check that cycles for instructions can be withdrawn (in particular, the canister is not frozen afterwards).
-        let cycles_for_instructions = self.cycles_account_manager.management_canister_cost(
-            instructions,
-            subnet_size,
-            cost_schedule,
-        );
+        let cycles_for_instructions = self
+            .cycles_account_manager
+            .management_canister_cost(instructions, subnet_size, cost_schedule)
+            .real();
         self.cycles_account_manager
             .can_withdraw_cycles_with_threshold(
                 &canister.system_state,
@@ -1886,7 +1903,7 @@ impl CanisterManager {
         let main_balance = canister.system_state.balance() - cycles_for_instructions; // `-` on `Cycles` is saturating
         canister
             .system_state
-            .can_reserve_cycles(new_storage_reservation_cycles, main_balance)
+            .can_reserve_cycles(new_storage_reservation_cycles.real(), main_balance)
             .map_err(|err| match err {
                 ReservationError::InsufficientCycles {
                     requested,
@@ -1949,10 +1966,13 @@ impl CanisterManager {
                 &mut canister.system_state,
                 validated_cycles_and_memory_usage.new_memory_usage,
                 message_memory_usage,
-                validated_cycles_and_memory_usage.cycles_for_instructions,
+                CompoundCycles::new(
+                    validated_cycles_and_memory_usage.cycles_for_instructions,
+                    Instructions,
+                    cost_schedule,
+                ),
                 subnet_size,
                 cost_schedule,
-                CyclesUseCase::Instructions,
                 reveal_top_up,
             )
             .unwrap();
@@ -1960,7 +1980,11 @@ impl CanisterManager {
         // Reserve cycles for storage.
         canister
             .system_state
-            .reserve_cycles(validated_cycles_and_memory_usage.new_storage_reservation_cycles)
+            .reserve_cycles(
+                validated_cycles_and_memory_usage
+                    .new_storage_reservation_cycles
+                    .real(),
+            )
             .unwrap();
     }
 

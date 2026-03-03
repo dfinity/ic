@@ -43,28 +43,34 @@ fn test_scale_cost() {
 
     let cost = Cycles::new(13_000);
     assert_eq!(
-        cam.scale_cost(cost, 0, CanisterCyclesCostSchedule::Normal),
+        cam.scale_cost(cost, 0, Memory, CanisterCyclesCostSchedule::Normal)
+            .real(),
         Cycles::new(0)
     );
     assert_eq!(
-        cam.scale_cost(cost, 1, CanisterCyclesCostSchedule::Normal),
+        cam.scale_cost(cost, 1, Memory, CanisterCyclesCostSchedule::Normal)
+            .real(),
         Cycles::new(1_000)
     );
     assert_eq!(
-        cam.scale_cost(cost, 6, CanisterCyclesCostSchedule::Normal),
+        cam.scale_cost(cost, 6, Memory, CanisterCyclesCostSchedule::Normal)
+            .real(),
         Cycles::new(6_000)
     );
     assert_eq!(
-        cam.scale_cost(cost, 13, CanisterCyclesCostSchedule::Normal),
+        cam.scale_cost(cost, 13, Memory, CanisterCyclesCostSchedule::Normal)
+            .real(),
         Cycles::new(13_000)
     );
     assert_eq!(
-        cam.scale_cost(cost, 26, CanisterCyclesCostSchedule::Normal),
+        cam.scale_cost(cost, 26, Memory, CanisterCyclesCostSchedule::Normal)
+            .real(),
         Cycles::new(26_000)
     );
 
     assert_eq!(
-        cam.scale_cost(cost, 26, CanisterCyclesCostSchedule::Free),
+        cam.scale_cost(cost, 26, Memory, CanisterCyclesCostSchedule::Free)
+            .real(),
         Cycles::new(0)
     );
 
@@ -73,8 +79,10 @@ fn test_scale_cost() {
         cam.scale_cost(
             Cycles::new(u128::MAX),
             1_000_000,
+            Memory,
             CanisterCyclesCostSchedule::Normal
-        ),
+        )
+        .real(),
         Cycles::new(u128::MAX) / reference_subnet_size
     );
 }
@@ -106,23 +114,27 @@ fn http_requests_fee_scale() {
 
     // Check the fee for a 13-node subnet.
     assert_eq!(
-        cycles_account_manager.http_request_fee(
-            request_size,
-            None,
-            reference_subnet_size as usize,
-            CanisterCyclesCostSchedule::Normal,
-        ),
+        cycles_account_manager
+            .http_request_fee(
+                request_size,
+                None,
+                reference_subnet_size as usize,
+                CanisterCyclesCostSchedule::Normal,
+            )
+            .real(),
         Cycles::from(1_603_786_800u64) * reference_subnet_size
     );
 
     // Check the fee for a 34-node subnet.
     assert_eq!(
-        cycles_account_manager.http_request_fee(
-            request_size,
-            None,
-            subnet_size as usize,
-            CanisterCyclesCostSchedule::Normal,
-        ),
+        cycles_account_manager
+            .http_request_fee(
+                request_size,
+                None,
+                subnet_size as usize,
+                CanisterCyclesCostSchedule::Normal,
+            )
+            .real(),
         Cycles::from(1_605_046_800u64) * subnet_size
     );
 }

@@ -29,7 +29,8 @@ use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};
 use ic_types::{CanisterId, CountBytes};
 use ic_types_cycles::{
-    Cycles, CyclesUseCase::DroppedMessages, NominalCycles, NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, DroppedMessages,
+    NominalCycles, NominalCyclesTesting,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -1259,10 +1260,10 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
             // Cycles attached to the request / reject response are lost.
-            expected_state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::new(
-                message_in_stream(state.get_stream(&REMOTE_SUBNET), 21)
-                    .cycles()
-                    .get(),
+            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                message_in_stream(state.get_stream(&REMOTE_SUBNET), 21).cycles(),
+                DroppedMessages,
+                CanisterCyclesCostSchedule::Normal,
             ));
 
             // Act and compare to expected.
@@ -1558,8 +1559,11 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
 
             // Cycles attached to the dropped reply are lost.
             let cycles_lost = message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1).cycles();
-            expected_state
-                .observe_lost_cycles_due_to_dropped_messages(NominalCycles::new(cycles_lost.get()));
+            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                cycles_lost,
+                DroppedMessages,
+                CanisterCyclesCostSchedule::Normal,
+            ));
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -1964,10 +1968,10 @@ fn duplicate_best_effort_response_is_dropped() {
             });
             expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
             // Cycles of the duplicate response are refunded.
-            expected_state.credit_refund(&ic_types::messages::Refund::anonymous(
-                *LOCAL_CANISTER,
-                response.cycles(),
-            ));
+            expected_state.credit_refund(
+                &ic_types::messages::Refund::anonymous(*LOCAL_CANISTER, response.cycles()),
+                CanisterCyclesCostSchedule::Normal,
+            );
 
             // Push the clone of the best effort response onto the loopback stream.
             state.modify_streams(|streams| streams.get_mut(&LOCAL_SUBNET).unwrap().push(response));
@@ -2047,10 +2051,10 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
         },
         |expected_state, refund| {
             // Cycles attached to the late response are refunded.
-            expected_state.credit_refund(&ic_types::messages::Refund::anonymous(
-                *LOCAL_CANISTER,
-                refund,
-            ));
+            expected_state.credit_refund(
+                &ic_types::messages::Refund::anonymous(*LOCAL_CANISTER, refund),
+                CanisterCyclesCostSchedule::Normal,
+            );
         },
     );
 }
@@ -2071,7 +2075,7 @@ fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_ra
                 .metadata
                 .subnet_metrics
                 .observe_consumed_cycles_with_use_case(
-                    DroppedMessages,
+                    CyclesUseCase::DroppedMessages,
                     NominalCycles::new(refund.get()),
                 );
         },
@@ -2158,8 +2162,11 @@ fn induct_stream_slices_partial_success() {
             let cycles_lost = message_in_slice(slices.get(&REMOTE_SUBNET), 48).cycles()
                 + message_in_slice(slices.get(&REMOTE_SUBNET), 49).cycles()
                 + message_in_slice(slices.get(&REMOTE_SUBNET), 51).cycles();
-            expected_state
-                .observe_lost_cycles_due_to_dropped_messages(NominalCycles::new(cycles_lost.get()));
+            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                cycles_lost,
+                DroppedMessages,
+                CanisterCyclesCostSchedule::Normal,
+            ));
 
             let initial_available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -2740,12 +2747,14 @@ fn induct_stream_slices_with_refunds() {
 
             // Refund to `LOCAL_CANISTER` (@43) was applied.
             let refund43 = refund_in_slice(slices.get(&REMOTE_SUBNET), 43);
-            expected_state.credit_refund(refund43);
+            expected_state.credit_refund(refund43, CanisterCyclesCostSchedule::Normal);
 
             // Cycles in refund @44 are lost
             let refund44 = refund_in_slice(slices.get(&REMOTE_SUBNET), 44);
-            expected_state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::new(
-                refund44.amount().get(),
+            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                refund44.amount(),
+                DroppedMessages,
+                CanisterCyclesCostSchedule::Normal,
             ));
 
             // Act.
@@ -3645,7 +3654,7 @@ fn push_input(state: &mut ReplicatedState, msg: StreamMessage) {
                 .unwrap();
         }
         StreamMessage::Refund(refund) => {
-            assert!(state.credit_refund(&refund));
+            assert!(state.credit_refund(&refund, CanisterCyclesCostSchedule::Normal));
         }
     }
 }

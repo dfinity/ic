@@ -29,7 +29,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, NumBytes, NumInstructions, Time};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -111,7 +111,7 @@ pub fn execute_call_or_task(
                         );
                     }
                 };
-                (canister, prepaid_execution_cycles, false)
+                (canister, prepaid_execution_cycles.real(), false)
             }
         };
 
@@ -263,6 +263,7 @@ fn finish_err(
 
     canister.system_state.apply_ingress_induction_cycles_debit(
         canister.canister_id(),
+        round.cost_schedule,
         round.log,
         round.counters.charging_from_balance_error,
     );
@@ -277,7 +278,11 @@ fn finish_err(
         &mut canister.system_state,
         instructions_left,
         instruction_limit,
-        original.prepaid_execution_cycles,
+        CompoundCycles::new(
+            original.prepaid_execution_cycles,
+            Instructions,
+            round.cost_schedule,
+        ),
         round.counters.execution_refund_error,
         original.subnet_size,
         round.cost_schedule,
@@ -474,6 +479,7 @@ impl CallOrTaskHelper {
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -644,7 +650,11 @@ impl CallOrTaskHelper {
             &mut self.canister.system_state,
             output.num_instructions_left,
             original.execution_parameters.instruction_limits.message(),
-            original.prepaid_execution_cycles,
+            CompoundCycles::new(
+                original.prepaid_execution_cycles,
+                Instructions,
+                round.cost_schedule,
+            ),
             round.counters.execution_refund_error,
             original.subnet_size,
             round.cost_schedule,

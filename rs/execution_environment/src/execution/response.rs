@@ -26,7 +26,10 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
-use ic_types_cycles::{Cycles, CyclesUseCase};
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions, NonConsumed,
+    RequestAndResponseTransmission,
+};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -171,10 +174,15 @@ impl ResponseHelper {
                 round.log,
                 round.counters.response_cycles_refund_error,
                 &response.response_payload,
-                original.callback.prepayment_for_response_transmission,
+                CompoundCycles::new(
+                    original.callback.prepayment_for_response_transmission,
+                    RequestAndResponseTransmission,
+                    round.cost_schedule,
+                ),
                 original.subnet_size,
                 round.cost_schedule,
-            );
+            )
+            .real();
 
         let canister = clean_canister.clone();
         let initial_cycles_balance = canister.system_state.balance();
@@ -197,15 +205,18 @@ impl ResponseHelper {
     ///
     /// These are the only state changes to the initial canister state before
     /// executing Wasm code.
-    fn apply_initial_refunds(&mut self) {
-        self.canister
-            .system_state
-            .add_cycles(self.refund_for_sent_cycles, CyclesUseCase::NonConsumed);
+    fn apply_initial_refunds(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+        self.canister.system_state.add_cycles(CompoundCycles::new(
+            self.refund_for_sent_cycles,
+            NonConsumed,
+            cost_schedule,
+        ));
 
-        self.canister.system_state.add_cycles(
+        self.canister.system_state.add_cycles(CompoundCycles::new(
             self.refund_for_response_transmission,
-            CyclesUseCase::RequestAndResponseTransmission,
-        );
+            RequestAndResponseTransmission,
+            cost_schedule,
+        ));
     }
 
     /// Checks that the canister has not been uninstalled:
@@ -327,7 +338,7 @@ impl ResponseHelper {
 
         helper.apply_subnet_memory_reservation(round_limits);
 
-        helper.apply_initial_refunds();
+        helper.apply_initial_refunds(round.cost_schedule);
 
         // This validation succeeded in `execute_response()` and we expect it to
         // succeed here too.
@@ -364,6 +375,7 @@ impl ResponseHelper {
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -471,6 +483,7 @@ impl ResponseHelper {
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -567,7 +580,11 @@ impl ResponseHelper {
             &mut self.canister.system_state,
             instructions_left,
             original.message_instruction_limit,
-            original.callback.prepayment_for_response_execution,
+            CompoundCycles::new(
+                original.callback.prepayment_for_response_execution,
+                Instructions,
+                round.cost_schedule,
+            ),
             round.counters.execution_refund_error,
             original.subnet_size,
             round.cost_schedule,
@@ -959,7 +976,7 @@ pub fn execute_response(
         round_limits,
         deallocation_sender,
     );
-    helper.apply_initial_refunds();
+    helper.apply_initial_refunds(round.cost_schedule);
     let helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
         Err(result) => {
