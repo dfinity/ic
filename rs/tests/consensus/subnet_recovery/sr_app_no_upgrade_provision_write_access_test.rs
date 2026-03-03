@@ -1,4 +1,5 @@
 use anyhow::Result;
+
 use ic_consensus_system_test_subnet_recovery::common::{
     setup_same_nodes as setup, test_no_upgrade_provision_write_access as test,
 };
