@@ -909,11 +909,12 @@ fn cycles_withdraw_for_execution() {
 
     assert!(
         cycles_account_manager
-            .can_withdraw_cycles(
+            .can_withdraw_cycles_with_threshold(
                 &system_state,
                 exec_cycles_max,
                 memory_usage,
                 message_memory_usage,
+                system_state.reserved_balance(),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
                 false,
@@ -936,11 +937,12 @@ fn cycles_withdraw_for_execution() {
     );
     assert_eq!(system_state.balance(), freeze_threshold_cycles);
     assert_eq!(
-        cycles_account_manager.can_withdraw_cycles(
+        cycles_account_manager.can_withdraw_cycles_with_threshold(
             &system_state,
             Cycles::new(10),
             memory_usage,
             message_memory_usage,
+            system_state.reserved_balance(),
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
             false,
@@ -1068,11 +1070,12 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
 
     assert!(
         cycles_account_manager
-            .can_withdraw_cycles(
+            .can_withdraw_cycles_with_threshold(
                 &system_state,
                 exec_cycles_max,
                 memory_usage,
                 message_memory_usage,
+                system_state.reserved_balance(),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
                 false,

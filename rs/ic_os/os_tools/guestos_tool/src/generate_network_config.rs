@@ -257,7 +257,7 @@ fn pick_best_interface(mut interfaces: Vec<String>) -> Option<String> {
         .cloned()
 }
 
-fn get_interface_name() -> Result<String> {
+pub fn get_interface_name() -> Result<String> {
     // Get a list of all network interfaces in the system
     let interfaces = get_interface_paths()
         .into_iter()

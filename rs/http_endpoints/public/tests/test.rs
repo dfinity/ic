@@ -22,7 +22,9 @@ use ic_certification_test_utils::{
 };
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tree_hash::{Label, LabeledTree, MatchPatternPath, MixedHashTree, Path, flatmap};
+use ic_crypto_tree_hash::{
+    Digest, Label, LabeledTree, MatchPatternPath, MixedHashTree, Path, Witness, flatmap,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
@@ -765,6 +767,7 @@ fn can_retrieve_subnet_metrics(
         let state: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
         let certification = Certification {
             height: Height::from(1),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 signature: ThresholdSignature {
                     signer: NiDkgId {
@@ -1191,6 +1194,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
 
                     let certification = Certification {
                         height: Height::from(1),
+                        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
                         signed: Signed {
                             signature: ThresholdSignature {
                                 signer: NiDkgId {

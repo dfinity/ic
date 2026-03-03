@@ -125,10 +125,7 @@ impl IDkgComplaintHandlerImpl {
             if validated_complaints.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_complaints_in_batch");
-                ret.push(IDkgChangeAction::HandleInvalid(
-                    id,
-                    format!("Duplicate complaint in unvalidated batch: {signed_complaint}"),
-                ));
+                ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                 continue;
             }
 
@@ -146,10 +143,7 @@ impl IDkgComplaintHandlerImpl {
                         &signed_complaint.signature.signer,
                     ) {
                         self.metrics.complaint_errors_inc("duplicate_complaint");
-                        ret.push(IDkgChangeAction::HandleInvalid(
-                            id,
-                            format!("Duplicate complaint: {signed_complaint}"),
-                        ));
+                        ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                     } else {
                         let action = self.crypto_verify_complaint(id, transcript, signed_complaint);
                         if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
@@ -222,10 +216,7 @@ impl IDkgComplaintHandlerImpl {
             if validated_openings.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_openings_in_batch");
-                ret.push(IDkgChangeAction::HandleInvalid(
-                    id,
-                    format!("Duplicate opening in unvalidated batch: {signed_opening}"),
-                ));
+                ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                 continue;
             }
 
@@ -244,10 +235,7 @@ impl IDkgComplaintHandlerImpl {
                         &signed_opening.signature.signer,
                     ) {
                         self.metrics.complaint_errors_inc("duplicate_opening");
-                        ret.push(IDkgChangeAction::HandleInvalid(
-                            id,
-                            format!("Duplicate opening: {signed_opening}"),
-                        ));
+                        ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                     } else if let Some(signed_complaint) =
                         self.get_complaint_for_opening(idkg_pool, &signed_opening)
                     {
@@ -1406,11 +1394,7 @@ mod tests {
                     &active_transcripts,
                 );
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(
-                    &change_set,
-                    &msg_id,
-                    "Duplicate complaint:"
-                ));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
             })
         })
     }
@@ -1507,11 +1491,7 @@ mod tests {
                 );
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
-                assert!(is_handle_invalid(
-                    &change_set,
-                    &msg_id_1,
-                    "Duplicate complaint in unvalidated batch"
-                ));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
                 // One is considered valid
                 assert!(is_moved_to_validated(&change_set, &msg_id_2));
             })
@@ -1825,11 +1805,7 @@ mod tests {
                     &active_transcripts,
                 );
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(
-                    &change_set,
-                    &msg_id,
-                    "Duplicate opening:"
-                ));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
             })
         })
     }
@@ -1890,11 +1866,7 @@ mod tests {
                 );
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
-                assert!(is_handle_invalid(
-                    &change_set,
-                    &msg_id_2,
-                    "Duplicate opening in unvalidated batch"
-                ));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
                 // One is considered valid
                 assert!(is_moved_to_validated(&change_set, &msg_id_1));
             })
