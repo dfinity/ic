@@ -157,8 +157,7 @@ impl LogMemoryStore {
         self.resize_impl(limit, || PageMap::new(fd_factory))
     }
 
-    #[cfg(test)]
-    fn resize_for_testing(&mut self, limit: usize) {
+    pub fn resize_for_testing(&mut self, limit: usize) {
         self.resize_impl(limit, PageMap::new_for_testing)
     }
 
